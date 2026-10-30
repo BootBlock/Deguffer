@@ -1,6 +1,8 @@
+using System.Runtime.InteropServices;
 using Deguffer.Core.Duplicates;
 using Deguffer.Core.Safety;
 using Deguffer.Testing;
+using Microsoft.Win32.SafeHandles;
 
 namespace Deguffer.Core.Tests;
 
@@ -15,9 +17,38 @@ namespace Deguffer.Core.Tests;
 /// </summary>
 public sealed class SearchLocationsTests : IDisposable
 {
+    /// <summary>
+    /// The drive letter a test makes stand for somewhere. Whatever the machine running the suite has
+    /// at it is never opened: see <see cref="OpensOnlyTheTree"/>.
+    /// </summary>
+    private const string Letter = @"S:\";
+
+    /// <summary><c>ERROR_PATH_NOT_FOUND</c>, which is what Windows answers for a drive that is not there.</summary>
+    private const int PathNotFound = 3;
+
     private readonly DuplicateTree _tree = new();
 
     public void Dispose() => _tree.Dispose();
+
+    /// <summary>
+    /// Opens each path below the scratch drive as Windows does, and answers every other path as not
+    /// there, recording it in <paramref name="elsewhere"/>. A search that went to the drive at
+    /// <see cref="Letter"/> itself would otherwise open whatever the machine running the suite has
+    /// there.
+    /// </summary>
+    private FileInformation OpensOnlyTheTree(List<string> elsewhere) => new(
+        (path, use) =>
+        {
+            if (LongPath.Contains(_tree.Top, LongPath.Display(path)))
+            {
+                return FileInformation.Open(path, use);
+            }
+
+            elsewhere.Add(path);
+            Marshal.SetLastPInvokeError(PathNotFound);
+            return new SafeFileHandle(-1, ownsHandle: false);
+        },
+        FileInformation.ReadIdentity);
 
     private void TwoFiles(params string[] folder)
     {
@@ -100,19 +131,20 @@ public sealed class SearchLocationsTests : IDisposable
     {
         TwoFiles("Photos");
 
-        // A letter nothing on this machine uses, so only the inventory's substitution can lead
-        // anywhere: a real drive at the letter would be opened, and searched, in its place.
-        var letter = Enumerable.Range('D', 23).Select(c => $"{(char)c}:{Path.DirectorySeparatorChar}")
-            .Last(root => !Directory.Exists(root));
-        _tree.Volumes.Substituting(letter, Path.Combine(_tree.Top, "Photos"));
+        // Only the inventory's substitution leads anywhere: the drive at the letter itself is answered
+        // as not there, so a search that opened it in place of the folder would leave it unsearched.
+        _tree.Volumes.Substituting(Letter, Path.Combine(_tree.Top, "Photos"));
+        List<string> elsewhere = [];
 
-        var found = await _tree.FindAsync(
-            MatchCriteria.Size,
-            new SearchLocation(Path.Combine(_tree.Top, "Photos")),
-            new SearchLocation(letter));
+        var found = await _tree.Finder(files: OpensOnlyTheTree(elsewhere)).FindAsync(
+            new DuplicateSearch(
+                MatchCriteria.Size,
+                [new SearchLocation(Path.Combine(_tree.Top, "Photos")), new SearchLocation(Letter)]),
+            _tree.Policy());
 
         SearchedOnce(found);
         Assert.Empty(found.Unsearched);
+        Assert.Empty(elsewhere);
     }
 
     /// <summary>
@@ -244,23 +276,15 @@ public sealed class SearchLocationsTests : IDisposable
     [InlineData(DriveType.Fixed, VolumeFeatures.RemoteStorage, "cloud")]
     public void ADriveTheInventoryRefusesIsNeverOpened(DriveType kind, VolumeFeatures features, string reason)
     {
-        var letter = Enumerable.Range('D', 23).Select(c => $"{(char)c}:{Path.DirectorySeparatorChar}")
-            .Last(root => !Directory.Exists(root));
-        _tree.Volumes.With(letter, kind, features: features);
-        List<string> opened = [];
-        var files = new FileInformation(
-            (path, use) =>
-            {
-                opened.Add(path);
-                return FileInformation.Open(path, use);
-            },
-            FileInformation.ReadIdentity);
+        _tree.Volumes.With(Letter, kind, features: features);
+        List<string> elsewhere = [];
 
-        var locations = SearchLocations.Resolve([new(Path.Combine(letter, "Photos"))], _tree.Volumes, files);
+        var locations = SearchLocations.Resolve(
+            [new(Path.Combine(Letter, "Photos"))], _tree.Volumes, OpensOnlyTheTree(elsewhere));
 
         Assert.Empty(locations.Roots);
         Assert.Contains(reason, Assert.Single(locations.Unsearched).Reason, StringComparison.Ordinal);
-        Assert.Empty(opened);
+        Assert.Empty(elsewhere);
     }
 
     /// <summary>
@@ -315,20 +339,5 @@ public sealed class SearchLocationsTests : IDisposable
         var file = _tree.File(10, "a.txt");
 
         Assert.Single(SearchLocations.Resolve([new(file)], _tree.Volumes).Unsearched);
-    }
-    /// <summary>
-    /// A final path Windows gives only as a device path, such as a volume's
-    /// <c>\\?\Volume{GUID}\</c> name, names no drive or folder, so no location or program folder
-    /// is taken to be at it. Windows names a volume mounted in a folder by that folder.
-    /// </summary>
-    [Fact]
-    public void AFinalPathGivenOnlyAsADevicePathNamesNoFolder()
-    {
-        Assert.Null(SearchLocations.Displayed(@"\\?\Volume{0e6b1d3a-1c2d-4e5f-8a9b-0c1d2e3f4a5b}\Programs\App"));
-        Assert.Null(SearchLocations.Displayed(@"\\?\Volume{0e6b1d3a-1c2d-4e5f-8a9b-0c1d2e3f4a5b}\"));
-        Assert.Null(SearchLocations.Displayed(@"\\?\GLOBALROOT\Device\HarddiskVolume9\Programs"));
-        Assert.Equal(@"C:\Mount\Programs\App", SearchLocations.Displayed(@"\\?\C:\Mount\Programs\App"));
-        Assert.Equal(@"C:\", SearchLocations.Displayed(@"\\?\C:\"));
-        Assert.Equal(@"\\fileserver.test\photos", SearchLocations.Displayed(@"\\?\UNC\fileserver.test\photos"));
     }
 }

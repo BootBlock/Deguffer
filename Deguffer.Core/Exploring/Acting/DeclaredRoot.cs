@@ -14,6 +14,10 @@ namespace Deguffer.Core.Exploring.Acting;
 /// <see cref="VolumeRoot.Places"/> follows a letter to the folder it stands for and never back, so
 /// both sides are followed.</para>
 ///
+/// <para><b>Followed through a link too.</b> A tool's folder moved by a junction is scanned at the
+/// link's far side, where its declaration does not name it, and its unrecognised children were
+/// allowed there. <see cref="FinalPlaces"/> says why that only adds places.</para>
+///
 /// <para><b>Followed once, when the policy is built.</b> A policy asks about every row a selection
 /// touches, and a declaration is one of hundreds. The item is followed at each question, which is what
 /// keeps a volume mounted after the policy was built covered on that side.</para>
@@ -21,13 +25,13 @@ namespace Deguffer.Core.Exploring.Acting;
 /// <param name="Path">The root in display form, as <see cref="LongPath.Configured(string?)"/> resolves it.</param>
 internal sealed record DeclaredRoot(ToolRoot Root, string Path, ReachedFolder Folder)
 {
-    /// <summary>Each of <paramref name="roots"/> that resolves, followed through <paramref name="volumes"/>.</summary>
-    public static IReadOnlyList<DeclaredRoot> Follow(IEnumerable<ToolRoot> roots, IVolumeInventory volumes) =>
+    /// <summary>Each of <paramref name="roots"/> that resolves, followed through <paramref name="finalPlaces"/>.</summary>
+    public static IReadOnlyList<DeclaredRoot> Follow(IEnumerable<ToolRoot> roots, FinalPlaces finalPlaces) =>
     [
         .. roots
             .Select(root => (Root: root, Path: LongPath.Configured(root.Path)))
             .Where(root => root.Path is not null)
-            .Select(root => new DeclaredRoot(root.Root, root.Path!, ReachedFolder.At(root.Path!, volumes))),
+            .Select(root => new DeclaredRoot(root.Root, root.Path!, finalPlaces.Rule(root.Path!))),
     ];
 
     /// <summary>

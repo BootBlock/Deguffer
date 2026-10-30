@@ -27,7 +27,12 @@ internal sealed class RegionTable
     /// would resolve that by declaration order instead.
     /// </param>
     /// <param name="volumes">Asked every other path each region is reachable at, once.</param>
-    public RegionTable(IEnumerable<ProtectedRegion> regions, IVolumeInventory volumes)
+    /// <param name="finalPlaces">
+    /// Asked where a refusing region leads, once, so a folder protected at one end of a link is
+    /// protected at the other. A permitting region is not followed, for the reason
+    /// <see cref="FinalPlaces"/> gives.
+    /// </param>
+    public RegionTable(IEnumerable<ProtectedRegion> regions, IVolumeInventory volumes, FinalPlaces finalPlaces)
     {
         // A region whose path will not resolve is dropped, not kept with the value it arrived
         // with. An empty one is the case that matters: LongPath.Contains("", candidate) reads the
@@ -41,7 +46,7 @@ internal sealed class RegionTable
                 .Where(r => r.Path is not null)
                 .Select(r => r.Region with { Path = r.Path! })
                 .OrderBy(r => r.Scope == RegionScope.PathOnly ? 0 : 1)
-                .Select(r => (r, ReachedFolder.At(r.Path, volumes))),
+                .Select(r => (r, r.Verdict.IsAllowed ? ReachedFolder.At(r.Path, volumes) : finalPlaces.Rule(r.Path))),
         ];
     }
 

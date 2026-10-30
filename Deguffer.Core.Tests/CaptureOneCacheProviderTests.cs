@@ -29,6 +29,12 @@ public sealed class CaptureOneCacheProviderTests : IDisposable
     /// <summary>Where the catalogs and sessions are, which would be a shoot drive.</summary>
     private string ShootDrive => Path.Combine(_temp.Path, "shoot-drive");
 
+    /// <summary>
+    /// A drive on the shelf: no volume <see cref="_volumes"/> lists holds it, so a folder on it reads
+    /// as a drive that is not connected rather than as a folder that was deleted.
+    /// </summary>
+    private string ShelfDrive => Path.Combine(_temp.Path, "shelf-drive");
+
     private CaptureOneCacheProvider CreateProvider(
         FakeLiveTreeInspector? liveTrees = null,
         FakeProcessInspector? inspector = null) =>
@@ -108,14 +114,6 @@ public sealed class CaptureOneCacheProviderTests : IDisposable
     /// <summary><paramref name="path"/> reached through another mount of its volume at <paramref name="mountPoint"/>.</summary>
     private static string Through(string mountPoint, string path) =>
         Path.Join(mountPoint, path[Path.GetPathRoot(path)!.Length..]);
-
-    /// <summary>
-    /// The root of a drive letter nothing is mounted on, so a folder on it reads as a drive that is not
-    /// connected rather than as a folder that was deleted.
-    /// </summary>
-    private static string UnmountedDrive() =>
-        Enumerable.Range('D', 'Z' - 'D' + 1).Select(letter => $"{(char)letter}:\\").Reverse()
-            .First(root => !Directory.Exists(root));
 
     [Fact]
     public async Task ReportsNotPresentWhereCaptureOneHasNeverRun()
@@ -392,7 +390,7 @@ public sealed class CaptureOneCacheProviderTests : IDisposable
     [Fact]
     public async Task ASessionThatIsTheProfileOrInItsDataThroughASubstitutedLetterIsNotSearched()
     {
-        var letter = UnmountedDrive();
+        const string letter = @"S:\";
         _volumes.Substituting(letter, _temp.Path);
         var profile = Path.Join(letter, Path.GetRelativePath(_temp.Path, _environment.UserProfile));
         var styles = Path.Join(letter, Path.GetRelativePath(_temp.Path, _environment.LocalAppData), "CaptureOne", "Styles");
@@ -649,7 +647,7 @@ public sealed class CaptureOneCacheProviderTests : IDisposable
     [Fact]
     public async Task OnlyADisconnectedCatalogIsNotClear()
     {
-        var missing = Path.Combine(UnmountedDrive(), "Shoots", "Away.cocatalog");
+        var missing = Path.Combine(ShelfDrive, "Shoots", "Away.cocatalog");
         List(missing);
 
         var plan = await CreateProvider().PlanAsync();
@@ -667,7 +665,7 @@ public sealed class CaptureOneCacheProviderTests : IDisposable
     public async Task ACatalogOnADisconnectedDriveIsNamed()
     {
         var present = Catalog("Here");
-        var missing = Path.Combine(UnmountedDrive(), "Shoots", "Away.cocatalog");
+        var missing = Path.Combine(ShelfDrive, "Shoots", "Away.cocatalog");
         List(present, missing);
 
         var plan = await CreateProvider().PlanAsync();
@@ -683,6 +681,7 @@ public sealed class CaptureOneCacheProviderTests : IDisposable
     [Fact]
     public async Task ADeletedCatalogOnAConnectedDriveLeavesTheRowClear()
     {
+        _volumes.With(Path.GetPathRoot(ShootDrive)!);
         List(Path.Combine(ShootDrive, "Deleted.cocatalog"));
 
         var plan = await CreateProvider().PlanAsync();

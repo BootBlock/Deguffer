@@ -45,4 +45,6 @@ public sealed class UnlistableFileSystem(IFileSystem inner, string refused) : IF
     public FileAttributes? TryGetAttributes(string path) => inner.TryGetAttributes(path);
 
     public bool MayExist(string path) => inner.MayExist(path);
+
+    public string? FinalPath(string path) => inner.FinalPath(path);
 }

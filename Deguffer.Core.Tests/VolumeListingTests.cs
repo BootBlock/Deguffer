@@ -39,6 +39,31 @@ public sealed class VolumeListingTests
     }
 
     /// <summary>
+    /// The list is remembered for the life of a pass (G4), so the same instance has to come back
+    /// until it is dropped, and a drive mounted while the app was open has to be seen after.
+    ///
+    /// <para>The drive is mounted between the two readings, so the second list differs from the
+    /// first only if the machine was read again. Two readings of a real machine agree only while
+    /// nothing is mounted or removed between them.</para>
+    /// </summary>
+    [Fact]
+    public void RemembersTheListUntilItIsInvalidated()
+    {
+        using var machine = new FakeVolumeQueries().Letter(@"C:\", DriveType.Fixed);
+        var inventory = new VolumeInventory(machine);
+
+        var first = inventory.Volumes;
+        machine.Letter(@"E:\", DriveType.Removable);
+
+        Assert.Same(first, inventory.Volumes);
+
+        inventory.Invalidate();
+
+        Assert.Equal([@"C:\"], first.Select(volume => volume.RootPath));
+        Assert.Equal([@"C:\", @"E:\"], inventory.Volumes.Select(volume => volume.RootPath));
+    }
+
+    /// <summary>
     /// The window's reading is taken on another thread, and the list as it was answers anyone who
     /// reads it meanwhile. Read on the caller's own thread, the call would not come back until the
     /// machine had answered, and that is the freeze.
