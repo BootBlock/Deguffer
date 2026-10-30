@@ -56,15 +56,12 @@ public sealed class PlanVerifierTests : IDisposable
         Verify(plan, reach).Checks.Single(c => c.Subject == path).Outcome;
 
     /// <summary>
-    /// A volume root this machine has not mounted, chosen rather than written down. A literal drive
-    /// letter makes the test's answer depend on what happens to be mapped here, which is what G8's
-    /// "test through the fakes, never against the real machine" refuses.
+    /// The root of a volume no machine has: Windows names every volume by a GUID it generates, and
+    /// never the nil one. Any drive letter may be mounted or mapped on the machine running the suite,
+    /// so a letter would make the answer depend on that machine, and a disconnected share on it would
+    /// hold the probe for the network's timeout. This one is answered "not found" at once.
     /// </summary>
-    private static string UnmountedVolumeRoot() =>
-        Enumerable.Range('D', 'Z' - 'D' + 1)
-            .Select(letter => $"{(char)letter}:\\")
-            .FirstOrDefault(root => !LongPath.DirectoryExists(root))
-        ?? throw new InvalidOperationException("Every drive letter from D: to Z: is in use here.");
+    private const string VolumeNoMachineHas = @"\\?\Volume{00000000-0000-0000-0000-000000000000}\";
 
     [Fact]
     public void APathStillStandingSurvived()
@@ -351,7 +348,7 @@ public sealed class PlanVerifierTests : IDisposable
     [Fact]
     public void APathWithNoFolderAboveItStaysAFailure()
     {
-        var root = UnmountedVolumeRoot();
+        const string root = VolumeNoMachineHas;
         var plan = Plan([new DeleteDirectoryStep(_temp.CreateDirectory("obj"), "Output")], Protect(root));
 
         Assert.Equal(VerificationOutcome.Failed, OutcomeFor(plan, root));
@@ -814,12 +811,12 @@ public sealed class PlanVerifierTests : IDisposable
         new($@"C:\Users\testuser\src\{outcome}", "It must survive.", outcome, "Whatever was found.");
 
     /// <summary>
-    /// A letter that is not mounted here, made by a fake <c>subst</c> to stand for the scratch tree,
-    /// and the inventory that says so.
+    /// A letter a fake <c>subst</c> made to stand for the scratch tree, and the inventory that says so.
+    /// Nothing reads the letter on the machine, so whatever is mounted there is never asked.
     /// </summary>
     private (string Letter, FakeVolumeInventory Volumes) Substituted()
     {
-        var letter = UnmountedVolumeRoot();
+        const string letter = @"S:\";
 
         return (letter, new FakeVolumeInventory().Substituting(letter, _temp.Path));
     }

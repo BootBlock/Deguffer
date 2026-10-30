@@ -35,7 +35,7 @@ public sealed class PassesRunOffThePoolTests : IDisposable
     [Fact]
     public async Task AVolumesIndexIsBuiltOffThePool()
     {
-        var letter = DriveLetters.Unused();
+        const char letter = DriveLetters.Faked;
         var cache = new MftVolumeIndexCache(FakeMftSourceFactory.Serving(letter, Volume()), ScanTuner.Shipped);
         MftVolumeIndexCache.Built built = default;
 
@@ -50,7 +50,7 @@ public sealed class PassesRunOffThePoolTests : IDisposable
     [Fact]
     public async Task ABuildWithNoThreadClosesTheVolumeItOpened()
     {
-        var letter = DriveLetters.Unused();
+        const char letter = DriveLetters.Faked;
         var sources = new HeldMftSourceFactory(letter, Volume());
 
         // Its reads go ahead, so a build that started after all ends, and the test fails rather than waits.
@@ -66,8 +66,8 @@ public sealed class PassesRunOffThePoolTests : IDisposable
     [Fact]
     public async Task AnExploreScanReadsItsTableOffThePool()
     {
-        var letter = DriveLetters.Unused();
-        var scanner = new ExploreScanner(FakeMftSourceFactory.Serving(letter, Volume()));
+        const char letter = DriveLetters.Faked;
+        var scanner = new ExploreScanner(FakeMftSourceFactory.Serving(letter, Volume())) { Walker = new WalkRecorder().Walk };
         ExploreScan? scan = null;
 
         CrewThreads.AssertOffThePool(await CrewThreads.MadeBy(async () => scan = await scanner.ScanAsync($@"{letter}:\")));
@@ -77,8 +77,8 @@ public sealed class PassesRunOffThePoolTests : IDisposable
     [Fact]
     public async Task AFolderScanReadsItsTableOffThePool()
     {
-        var letter = DriveLetters.Unused();
-        var scanner = new ExploreScanner(FakeMftSourceFactory.Serving(letter, Volume()));
+        const char letter = DriveLetters.Faked;
+        var scanner = new ExploreScanner(FakeMftSourceFactory.Serving(letter, Volume())) { Walker = new WalkRecorder().Walk };
         IReadOnlyList<ScannedFolder> scans = [];
 
         CrewThreads.AssertOffThePool(await CrewThreads.MadeBy(async () => scans = await scanner.ScanFoldersAsync([$@"{letter}:\Users"])));

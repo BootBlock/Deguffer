@@ -237,7 +237,8 @@ public interface IVolumeInventory
     /// volume mounted a moment ago, and the list is remembered until the next
     /// <see cref="Invalidate"/>. A volume mounted at a folder after the list was read would
     /// otherwise have its paging file and its Recycle Bin read as ordinary folders of the disk the
-    /// folder sits on.</para>
+    /// folder sits on. The Capture One provider asks it too, whether the drive holding a missing
+    /// catalog is there, and a shoot drive plugged in after the list was read is.</para>
     ///
     /// <para>The answer is not always a prefix of the path. A path that passes through a junction
     /// is answered with the volume on the junction's far side, so a caller that reads a position
