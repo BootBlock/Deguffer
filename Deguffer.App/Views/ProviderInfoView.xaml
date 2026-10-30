@@ -3,7 +3,8 @@
     x:Class="Deguffer.App.Views.ProviderInfoView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:vm="using:Deguffer.App.ViewModels">
+    xmlns:vm="using:Deguffer.App.ViewModels"
+    xmlns:controls="using:Deguffer.App.Controls">
 
     <UserControl.Resources>
         <!-- §7: nothing is deleted without a preview, so the exact step is inspectable before the user
@@ -52,7 +53,8 @@
 
     <!--
         Two questions, kept apart. "What is this?" is answerable the moment the dialog opens and is
-        the same every time; "Contents" is this scan's plan.
+        the same every time; "Contents" is this scan's plan. "Size history" is what earlier scans
+        measured here, which neither of the other two can say.
     -->
     <Pivot x:Name="Sections">
 
@@ -171,6 +173,83 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                </StackPanel>
+            </ScrollViewer>
+        </PivotItem>
+
+        <!-- What each kept scan measured here (#358). §7.1: numbers against dates. Nothing on this
+             tab is offered, and a cause that grew is ticked or not exactly as it would be without it. -->
+        <PivotItem x:Name="HistorySection" Header="Size history">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,4,16,0">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="Its size at each scan" Style="{StaticResource FieldLabel}" />
+
+                    <TextBlock Visibility="{x:Bind HasNoHistory}"
+                               Style="{StaticResource SecondaryText}"
+                               TextWrapping="Wrap"
+                               Text="No scan has measured this location yet. Each scan from now on keeps its size here." />
+
+                    <StackPanel Spacing="12" Visibility="{x:Bind HasHistory}">
+                        <!-- One series, so no legend. The list under it states every figure for a
+                             reader who cannot see the bars, which rise from a zero baseline against
+                             the largest figure kept. -->
+                        <Grid Height="49" HorizontalAlignment="Left">
+                            <ItemsControl ItemsSource="{x:Bind History}"
+                                          VerticalAlignment="Bottom"
+                                          AutomationProperties.Name="Size at each kept scan">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" Spacing="2" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:ProviderSizeRow">
+                                        <!-- Transparent and full height, so the tooltip is reached
+                                             over the whole column rather than only over the bar. -->
+                                        <Grid Width="10" Height="48" Background="Transparent"
+                                              ToolTipService.ToolTip="{x:Bind Description}"
+                                              AutomationProperties.Name="{x:Bind Description}">
+                                            <controls:ColumnBar Value="{x:Bind Share}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <Border Height="1"
+                                    VerticalAlignment="Bottom"
+                                    Background="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                    AutomationProperties.AccessibilityView="Raw" />
+                        </Grid>
+
+                        <ItemsControl ItemsSource="{x:Bind HistoryNewestFirst}"
+                                      AutomationProperties.Name="Size at each kept scan, newest first">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ProviderSizeRow">
+                                    <Grid ColumnSpacing="16" Margin="0,2" ColumnDefinitions="*,Auto,150"
+                                          AutomationProperties.Name="{x:Bind Description}">
+                                        <TextBlock Text="{x:Bind When}"
+                                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                                   FontSize="13" />
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{x:Bind Size}"
+                                                   Style="{StaticResource SecondaryText}"
+                                                   TextAlignment="Right"
+                                                   FontSize="13" />
+                                        <TextBlock Grid.Column="2"
+                                                   Text="{x:Bind Change}"
+                                                   Style="{StaticResource SecondaryText}"
+                                                   TextAlignment="Right"
+                                                   FontSize="13" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <TextBlock Style="{StaticResource SecondaryText}"
+                               FontSize="12"
+                               TextWrapping="Wrap"
+                               Text="{x:Bind vm:StorageSizeChanges.HistoryNote}" />
                 </StackPanel>
             </ScrollViewer>
         </PivotItem>

@@ -2,6 +2,7 @@ using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Execution.Sizes;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Working;
 using Deguffer.Testing;
@@ -41,6 +42,7 @@ internal sealed class StoragePage : IDisposable
         Keeps = new KeepService(new KeepStore(Environment));
         Selections = new SelectionService(new SelectionStore(Environment));
         Preferences = new PreferenceService(new PreferenceStore(Environment));
+        Sizes = new ProviderSizeHistory(new ProviderSizeStore(Environment));
 
         var planner = new CleanupPlanner(providers);
         ViewModel = new CleanViewModel(
@@ -64,7 +66,8 @@ internal sealed class StoragePage : IDisposable
             },
             appVersion: "0.0.0-test",
             new WhenCompleteViewModel(Preferences, Session),
-            new ScanChoiceViewModel(planner.Providers, Preferences));
+            new ScanChoiceViewModel(planner.Providers, Preferences),
+            Sizes);
     }
 
     public CleanViewModel ViewModel { get; }
@@ -78,6 +81,9 @@ internal sealed class StoragePage : IDisposable
     public KeepService Keeps { get; }
 
     public SelectionService Selections { get; }
+
+    /// <summary>Each provider's figure at each scan, in this test's own profile.</summary>
+    public ProviderSizeHistory Sizes { get; }
 
     /// <summary>The stored settings, in this test's own profile.</summary>
     public PreferenceService Preferences { get; }

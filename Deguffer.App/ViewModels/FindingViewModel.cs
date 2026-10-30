@@ -183,6 +183,21 @@ public sealed partial class FindingViewModel : ObservableObject
     public partial bool IsListed { get; set; } = true;
 
     /// <summary>
+    /// How far this row's figure moved since the scan before it, or empty where there is no earlier
+    /// figure (#358). Owned by the parent for the reason <see cref="SharePercent"/> is: the earlier
+    /// figure is the page's history, not this finding's. §7.1: a number only, which nothing here
+    /// reads to decide what is ticked.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasChange), nameof(ChangeTip))]
+    public partial string ChangeLabel { get; set; } = string.Empty;
+
+    public bool HasChange => ChangeLabel.Length > 0;
+
+    /// <summary>The change for the compact figure's tooltip, or null, which shows none rather than an empty box.</summary>
+    public string? ChangeTip => HasChange ? ChangeLabel : null;
+
+    /// <summary>
     /// The finding with the keep list applied, which is what this row describes and what a run is
     /// built from. It changes when the keep list does; see <see cref="ApplyKeepList"/>.
     /// </summary>

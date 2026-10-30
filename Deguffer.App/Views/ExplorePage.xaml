@@ -939,6 +939,14 @@
                                    Style="{StaticResource SecondaryText}"
                                    FontSize="12"
                                    TextWrapping="Wrap" />
+
+                        <!-- When the drive fills at the rate used space rose since the last fall or
+                             change of size among the bars above, with what that was measured over,
+                             or why there is no forecast (#358). -->
+                        <TextBlock x:Name="FillForecastText"
+                                   Text="{x:Bind ViewModel.Growth.Forecast, Mode=OneWay}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap" />
                     </StackPanel>
 
                     <!-- Largest growth first and largest shrinkage last. A click opens the folder in

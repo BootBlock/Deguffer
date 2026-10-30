@@ -31,12 +31,14 @@ public sealed record UsedSpaceBar(double Share, string Description);
 
 /// <summary>
 /// The Explore page's answer to "what grew since the last scan": the comparison the map is coloured
-/// by, the list of folders by growth, and the used space at each kept scan.
+/// by, the list of folders by growth, the used space at each kept scan, and when the drive fills at
+/// the rate those rose (#358).
 ///
 /// <para>Separate from <see cref="ExploreViewModel"/>, as <see cref="ExploreSelection"/> is, because
 /// it holds state of its own that the rest of the page only reads. The decisions in it are Core's:
 /// what is compared with what (<see cref="ScanHistory"/>), what is listed
-/// (<see cref="ScanGrowth.Listing"/>) and how a change is worded (<see cref="GrowthText"/>).</para>
+/// (<see cref="ScanGrowth.Listing"/>), how a change is worded (<see cref="GrowthText"/>), and what a
+/// forecast is taken over and says (<see cref="FillForecast"/>, <see cref="ForecastText"/>).</para>
 /// </summary>
 public sealed partial class ExploreGrowth : ObservableObject
 {
@@ -70,6 +72,13 @@ public sealed partial class ExploreGrowth : ObservableObject
     /// <summary>The used space at the first and the last kept scan, in words, or empty.</summary>
     [ObservableProperty]
     public partial string UsedSpaceSummary { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// When the drive fills at the rate its kept scans rose, with the run that was measured over, or
+    /// why that cannot be said. Empty where no scan of the drive is kept.
+    /// </summary>
+    [ObservableProperty]
+    public partial string Forecast { get; private set; } = string.Empty;
 
     /// <summary>
     /// What the panel has to say beyond the list: why nothing is compared, or why the comparison is
@@ -164,6 +173,7 @@ public sealed partial class ExploreGrowth : ObservableObject
         Since = string.Empty;
         Note = string.Empty;
         UsedSpaceSummary = string.Empty;
+        Forecast = string.Empty;
         Rows.Clear();
         UsedSpace.Clear();
 
@@ -232,7 +242,13 @@ public sealed partial class ExploreGrowth : ObservableObject
             _ => $"Used space at each kept scan, from {FreeSpace.Format(kept[0].UsedBytes)} on "
                 + $"{Local(kept[0].TakenUtc)} to {FreeSpace.Format(kept[^1].UsedBytes)} on {Local(kept[^1].TakenUtc)}",
         };
+
+        // From the same kept scans as the strip, so a removal in Settings takes the forecast with it.
+        Forecast = kept.Count > 0 ? ForecastText.Of(FillForecast.From(kept), Day) : string.Empty;
     }
+
+    /// <summary>A date alone, in the user's own format: a forecast is no finer than a day.</summary>
+    private static string Day(DateTime utc) => utc.ToLocalTime().ToString("d");
 
     /// <summary>A date in the user's own format, at the last moment before a person reads it.</summary>
     private static string Local(DateTime utc) => utc.ToLocalTime().ToString("g");
