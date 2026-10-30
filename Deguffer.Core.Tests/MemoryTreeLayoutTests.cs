@@ -70,7 +70,7 @@ public sealed class MemoryTreeLayoutTests
     {
         var sunburst = SunburstLayout.Compute(Tree, Tree.RootNode, Width, Height, LayoutLimits.Default);
         var total = (double)Tree.SizeOf(Tree.RootNode);
-        var ring = sunburst.Sectors.Where(sector => sector.Depth == 1 && !sector.IsAggregate).ToArray();
+        var ring = sunburst.Sectors.Where(sector => sector.Depth == 1 && sector.Block != MapBlock.Aggregate).ToArray();
 
         // Each part is measured by its own node, so a wedge drawn at one part's size and labelled
         // with another fails here. The three parts' sizes differ, so no borrowed size can match.

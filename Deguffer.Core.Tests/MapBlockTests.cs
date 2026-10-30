@@ -47,6 +47,24 @@ public sealed class MapBlockTests
         }
     }
 
+    /// <summary>
+    /// The one vocabulary, word for word: what the map and a screen reader call each block, and what
+    /// the line under the map says of it on every page that draws one.
+    /// </summary>
+    [Theory]
+    [InlineData(ExploreTile.Aggregated, "Too small to draw one by one", "Too small to draw one by one")]
+    [InlineData(ExploreTile.FreeSpace, "Free space", "Free space available on this drive")]
+    [InlineData(ExploreTile.Unaccounted, "Not accounted for", "Not accounted for by this scan, but in use")]
+    [InlineData(ExploreTile.ShadowCopies, "Restore points and shadow copies", "Restore points and shadow copies, by Windows' own figure")]
+    [InlineData(ExploreTile.ReservedStorage, "Reserved storage", "Reserved storage, by Windows' own figure")]
+    public void EachBlockIsNamedAsDecided(int node, string name, string readout)
+    {
+        var block = Assert.IsType<MapBlock>(MapBlock.Of(node));
+
+        Assert.Equal(name, block.Name);
+        Assert.Equal(readout, block.Readout);
+    }
+
     /// <summary>Every block says that nothing on the map acts on it (§7.1).</summary>
     [Fact]
     public void EveryBlockSaysItCannotBeActedOn()

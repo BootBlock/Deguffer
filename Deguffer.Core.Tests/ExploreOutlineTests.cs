@@ -121,7 +121,7 @@ public sealed class ExploreOutlineTests
 
         Assert.Contains(
             SunburstLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default).Sectors,
-            sector => sector.IsAggregate);
+            sector => sector.Block == MapBlock.Aggregate);
 
         Assert.Empty(Sunburst(tree).Outlines(new HashSet<int> { ExploreSector.Aggregated }));
     }
