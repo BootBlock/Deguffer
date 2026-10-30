@@ -341,10 +341,12 @@ process, which Deguffer is not, so there is no correct interpretation available.
   the failure looks like an application bug and appears only when running the built app.
 - ~~**Per-item selection is not yet exposed for a Tier 3 subject.**~~ **Done:**
   `ClaudeCodeFileHistoryProvider` and `ClaudeCodeConversationProvider` are Tier 3 with per-item
-  steps. `workspaceStorage` still waits on whether to offer it at all, which stays with issue #84.
+  steps. ~~`workspaceStorage` still waits on whether to offer it at all, which stays with issue #84.
   The mechanism is subject-agnostic,
   so `workspaceStorage` needs the §8 q2 grouping decision rather than new UI — sizes summed over a
-  group, deletion targeting the group, absent metadata classified Tier 4.
+  group, deletion targeting the group, absent metadata classified Tier 4.~~ **Decided** in issue
+  #84: its chat history is offered one conversation at a time, so no workspace grouping is needed.
+  `_spec.md` §4.3 has the rules, and issue #404 builds the row.
 
 ### Still open from item 2
 

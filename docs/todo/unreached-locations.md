@@ -780,6 +780,10 @@ That is a different shape of work from the five that shipped: those remove a who
 project regenerates, and this one has to name disposable *children* inside a directory that is
 mostly not disposable. It is its own row in the sequencing table now.
 
+Issue #84 has since decided the same question for Visual Studio Code: its chat history is offered at
+Tier 3, one conversation at a time, through `CacheLevel` (`_spec.md` §4.3). Issue #404 builds that
+row, and whichever of the two is built first sets the shape for the other.
+
 ### The rest of the shape — `node_modules` and `.venv` ✅ done; `dist` and Dart `build` declined
 
 Outside Unity, the audited machine held 1.24 GB in a `dist`, 1.17 GB in a Dart `build`, 803 MB in a
