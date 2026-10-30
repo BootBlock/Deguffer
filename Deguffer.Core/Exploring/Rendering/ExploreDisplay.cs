@@ -8,7 +8,7 @@ namespace Deguffer.Core.Exploring.Rendering;
 /// which colours the picture and its legend are in, what is measured for them, and the sentence that
 /// names a view the page could not draw as asked.
 ///
-/// <para>One value for all of them because each answers from the same four facts, and a panel that
+/// <para>One value for all of them because each answers from the same five facts, and a panel that
 /// read them for itself is how the legend comes to name a scale the map is not drawn in.</para>
 /// </summary>
 /// <param name="Tree">The tree on screen, or null before anything has been scanned.</param>
