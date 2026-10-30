@@ -42,6 +42,75 @@ Two rules from the spec explain nearly every design decision below:
 
 ---
 
+## NuGet package cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | Wherever `dotnet nuget locals all --list` reports, ordinarily `%USERPROFILE%\.nuget\packages`, `%LOCALAPPDATA%\NuGet\v3-cache`, `%LOCALAPPDATA%\NuGet\plugins-cache` and `NuGetScratch` in the temporary folder |
+| **Method** | `dotnet nuget locals all --clear` (the tool's own command) |
+| **Typical size** | About 10 GB on the machine the spec was written against |
+
+### What it is
+
+NuGet is the package manager for .NET. It keeps four separate caches, and only one of them is under
+`.nuget`:
+
+- **`global-packages`** — every package a restore has extracted, which is the folder each project
+  actually builds against.
+- **`http-cache`** — the responses from the package feeds NuGet has queried, in `v3-cache`.
+- **`plugins-cache`** — what each credential plugin said it can do, so that NuGet need not ask it
+  again.
+- **`temp`** — `NuGetScratch`, the scratch folder NuGet works in while it restores.
+
+### What Deguffer does
+
+It runs `dotnet nuget locals all --clear` and lets NuGet decide what to remove. This is the case §5.1
+was written for: on the machine the spec was written against, that command cleared about 3 GB that
+a rule deleting `.nuget\packages` would have missed.
+
+Before that, it asks `dotnet nuget locals all --list` where the four caches are, because
+`NUGET_PACKAGES`, `NUGET_HTTP_CACHE_PATH` and a `NuGet.Config` setting can all move them. The answer
+is used only to measure what the command will free. Where NuGet gives no answer, Deguffer measures
+the documented defaults, and NuGet's own command still clears wherever its caches really are. A
+location it cannot reach is named in the plan and left out of the figure.
+
+`NuGetScratch` sits in a temporary folder, and this row claims it, so
+[Tool caches in temporary folders](#tool-caches-in-temporary-folders) leaves it to NuGet.
+
+A clean that you cancel while this command runs is left to finish. NuGet takes a package folder that
+holds its `.nupkg.metadata` file as installed, so a clean stopped part-way could leave a half-removed
+package that the next restore trusts.
+
+### What is protected
+
+**`NuGet.Config`**, which can hold credentials for a private feed. Deguffer checks both places it
+can be, `%APPDATA%\NuGet` and `.nuget`, because it is not always where you expect. Also **`plugins`**
+in `.nuget`, the credential plugins NuGet runs to sign in to those feeds, and the `.nuget` and
+`%LOCALAPPDATA%\NuGet` folders themselves. Every other child of those two folders that is not one of
+NuGet's caches, a link included, is asserted to have survived the run, along with everything above.
+
+In Explore, Deguffer refuses everything in `.nuget` except `packages`, everything in
+`%LOCALAPPDATA%\NuGet` except the two caches, and `NuGet.Config`.
+
+Visual Studio, MSBuild and the compiler server can hold packages open, so Deguffer warns you when
+one of them is running.
+
+### What it costs you
+
+The next restore of each project downloads its packages again from the feeds you already have
+configured, and extracts them. On a slow connection, or a project with many dependencies, that
+first restore takes noticeably longer. Your projects and your configuration are untouched.
+
+### Why Tier 1
+
+Every package came from a feed and is still on that feed, and a restore fetches what is missing
+without being asked. The one way this can fail is a package that a feed has since removed, and that
+is a property of the feed rather than of the cache.
+
+---
+
 ## pip package cache
 
 **Tier 1 — regenerable cache.** Pre-selected.
@@ -166,6 +235,63 @@ never removed.
 
 ---
 
+## uv package cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\uv\cache`, unless moved |
+| **Method** | `uv cache clean` (the tool's own command) |
+| **Typical size** | About 3.5 GB on the machine the spec was written against |
+
+### What it is
+
+uv is a Python package and project manager. Its cache holds the archives it downloaded and the
+wheels it unpacked from them, and every environment uv creates links to or copies from those
+wheels. That is why a second environment with the same dependencies costs almost nothing to make.
+
+The cache is one child of `%LOCALAPPDATA%\uv`, and that folder is uv's whole state directory, not a
+cache directory. Beside the cache it holds:
+
+- **`tools`** — every command-line tool you installed with `uv tool install`.
+- **`python`** — the Python interpreters uv downloaded and manages.
+
+### What Deguffer does
+
+It asks `uv cache dir` where the cache is, because `UV_CACHE_DIR`, `--cache-dir` and the `cache-dir`
+key in `uv.toml` can all move it. It then runs `uv cache clean`, which removes the cache directory,
+and uv makes it again on the next use. Where uv gives no answer, Deguffer measures the default
+location, and uv's own command still clears wherever its cache really is.
+
+Deguffer does **not** pass `--force`. That flag tells uv to ignore its own check for a cache in use,
+so Deguffer warns you when `uv` or `uvx` is running and leaves the judgement to uv.
+
+A clean that you cancel while this command runs is left to finish. uv's cache links its entries to
+one another, and nothing shows that a clean stopped part-way leaves only whole entries behind.
+
+### What is protected
+
+`%LOCALAPPDATA%\uv` itself, **`tools`** and **`python`**. Deguffer asserts that all three survived the
+run. Reclaiming the cache by deleting its parent folder would uninstall every tool you installed with
+uv and every interpreter it manages, and none of them is a cache.
+
+In Explore, Deguffer refuses everything in `%LOCALAPPDATA%\uv` except `cache`.
+
+### What it costs you
+
+The next `uv sync`, `uv pip install` or `uvx` run downloads and unpacks its packages again. Your
+existing virtual environments, the tools you installed and the interpreters uv manages are
+untouched.
+
+### Why Tier 1
+
+Everything removed came from a package index, or was built from something that did, and uv fetches
+it again on demand. The parts of the folder that are not regenerable on demand are its siblings,
+and they are never a candidate.
+
+---
+
 ## Cargo crate cache
 
 **Tier 1 — regenerable cache.** Pre-selected.
@@ -286,8 +412,9 @@ home is a link to somewhere else, Deguffer says so and leaves it alone.
 **`gradle.properties`** can hold signing keys and repository credentials, and it sits in the same
 folder as the caches. Deguffer asserts that it survived the run, along with the init scripts
 Gradle runs before every build (**`init.d`**, **`init.gradle`** and **`init.gradle.kts`**),
-**`gradle.encrypted.properties`** and the home itself. Anything else in the home stays in Tier 4 and
-is reported as left alone.
+**`gradle.encrypted.properties`** and the home itself. Anything else in the home stays in Tier 4, is
+reported as left alone, and is asserted to have survived the run. That includes `jdks`, `native` and
+`daemon` where they exist, which sit beside the two targets.
 
 In Explore, Deguffer refuses everything in the home except `caches` and `wrapper`. Where
 `GRADLE_USER_HOME` moved the home, it refuses the same things in the `.gradle` left in your profile
@@ -530,6 +657,60 @@ untouched.
 
 Everything removed is compiler output from source that is still on your disk, and sccache stores it
 again the next time a build compiles it.
+
+---
+
+## npm package cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `_cacache` in `%LOCALAPPDATA%\npm-cache`, unless moved |
+| **Method** | `npm cache clean --force` (the tool's own command) |
+| **Typical size** | About 2.4 GB on the machine the spec was written against |
+
+### What it is
+
+npm is the package manager that comes with Node.js. Every package archive it downloads goes into one
+cache that all your projects share, so installing the same version again is served from disk. The
+archives and their index are in `_cacache`. The same folder also holds **`_npx`**, the packages `npx`
+ran, and **`_logs`**, npm's own logs.
+
+### What Deguffer does
+
+It asks `npm config get cache` where the cache folder is, because `npm config set cache` and the
+`npm_config_cache` environment variable can move it. It then runs `npm cache clean --force`. Where npm
+gives no answer, Deguffer measures the default location, and npm's own command still clears wherever
+its cache really is.
+
+`--force` does not override a safety check. npm refuses to clean its cache without it, and suggests
+`npm cache verify` instead, because the cache checks itself. Deguffer is asked to free the space, so
+it answers that refusal.
+
+The command removes `_cacache` and nothing else, so `_cacache` is all Deguffer measures. Measuring the
+whole folder would offer bytes that no run frees. If `_cacache` does not exist, the row offers
+nothing.
+
+A clean that you cancel while this command runs is ended. npm checks every cache entry against its
+hash when it reads it, so a clean stopped part-way leaves entries missing, never a wrong package.
+
+### What is protected
+
+**`.npmrc`** in your profile, which can hold registry authentication tokens, and **`%APPDATA%\npm`**,
+which holds the packages you installed globally and the commands that run them. Also the cache folder
+itself and `_npx` inside it. Deguffer asserts that all four survived the run, and Explore refuses
+`.npmrc` and everything in `%APPDATA%\npm`.
+
+### What it costs you
+
+The next `npm install` downloads its packages from the registry again. Every `node_modules` folder
+that is already installed is untouched, and so is everything you installed globally.
+
+### Why Tier 1
+
+Every archive is a copy of something the registry still serves, and npm fetches it again when an
+install needs it.
 
 ---
 
@@ -851,6 +1032,87 @@ this is not about environments being expensive to rebuild.
   does not see an environment linked by symlink instead.** Windows environments use hard links or
   copies unless symlinks were deliberately enabled, so the case is unlikely here — but a rule that
   can be wrong in the destructive direction belongs at the tier that is never ticked for you.
+
+---
+
+## PlatformIO cache and unused packages
+
+**Tier 2 — regenerable, with cost.** Not pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `.cache` and `packages` in `%USERPROFILE%\.platformio`, unless moved |
+| **Method** | `pio system prune --cache` for the cache. `pio system prune --core-packages --platform-packages` for the installed packages PlatformIO reports that nothing needs, offered only where it reports some |
+| **Typical size** | The cache is small: 0.9 MB was measured on one workstation. Superseded toolchains can be hundreds of MB each |
+
+### What it is
+
+PlatformIO is a build system for embedded development. Its core directory, `.platformio`, holds
+everything it installed as well as its cache:
+
+- **`.cache`** — the package archives it downloaded and the registry responses it received.
+- **`packages`** — the toolchains, frameworks and tools that the installed development platforms
+  use. These are gigabytes, and they are nearly all of the folder's size.
+- **`platforms`** — the development platforms you installed.
+- **`penv`** and **`python3`** — the Python that PlatformIO itself runs on.
+- **`lib`** — the libraries you installed globally.
+
+`packages` is not a package cache, whatever its name suggests. Most of it is required by a platform
+you have installed. Part of it can be dead weight: when a platform is upgraded in place, the
+toolchain versions it no longer requires stay behind, and nothing removes them.
+
+### What Deguffer does
+
+It asks `pio system info` where the core directory, the cache and the packages are, because
+`PLATFORMIO_CORE_DIR` moves the core directory, and on Windows a `.platformio` at the root of your
+profile's drive takes priority over the one in your profile. Where PlatformIO does not report a
+location, Deguffer uses the default inside the core directory.
+
+The row then offers up to two steps, each one chosen separately:
+
+- **The cache.** Deguffer runs `pio system prune --cache --force`. `--cache` keeps the command to
+  the cache alone, so agreeing to the cache never also agrees to the toolchains. `--force` answers
+  the command's own prompt, which the confirmation you gave Deguffer has already answered.
+- **The unused packages.** Deguffer first runs the same prune for the core and platform packages
+  with `--dry-run`, which removes nothing, and offers only what PlatformIO names. The core packages
+  it names are superseded versions of PlatformIO's own dependencies. The platform packages are ones
+  that no installed platform requires. The step shows PlatformIO's list, largest first, so you can
+  check a named package against your own boards before you agree. Where PlatformIO names nothing,
+  no step appears. Where its answer cannot be read, only the cache is offered.
+
+**The package figure is PlatformIO's own, not a measurement.** Measuring `packages` would count every
+toolchain an installed platform still needs. On one workstation that was 5.7 GB, against a true
+reclaim of zero. PlatformIO prints its total rounded, so the figure is shown as approximate.
+
+Deguffer never decides for itself which toolchains are unused. That judgement belongs to the tool
+that installed them, and no rule based on folder names can reproduce it.
+
+A clean that you cancel while either command runs is left to finish. PlatformIO takes a package
+folder that holds its `.piopm` record as installed, so a prune stopped part-way could leave a
+half-removed package that the next build uses.
+
+### What is protected
+
+The core directory itself, **`packages`**, **`platforms`**, **`penv`**, **`python3`** and **`lib`**.
+Deguffer builds these paths from the core directory PlatformIO reported, not from the default, and
+asserts that all six survived the run. `packages` is on the list even though a step may remove
+packages inside it. PlatformIO removes individual packages and never the folder, so a missing
+`packages` folder afterwards would mean that something went wrong.
+
+In Explore, Deguffer refuses everything in the core directory except `.cache`, and everything in
+`packages`. Which packages nothing needs is PlatformIO's answer, and Explore cannot ask it.
+
+### What it costs you
+
+The next build downloads any archive it needs from the cache again. Where you also took the unused
+packages, a build that wants one of them again downloads it, and a toolchain can be a download of
+several gigabytes. Your installed platforms, every toolchain they require and your global libraries
+are untouched.
+
+### Why Tier 2, not Tier 1
+
+Getting either part back is a download, and embedded toolchains are commonly fetched over
+connections where that is a real cost.
 
 ---
 
@@ -1345,6 +1607,75 @@ Tier 1 requires that whatever produced the content re-creates it on demand, so t
 Nothing re-creates a record of something that happened. This is the same judgement as [crash dumps
 and error reports](#crash-dumps-and-error-reports) and [Windows servicing
 logs](#windows-servicing-logs) below, for the same reason.
+
+---
+
+## VS Code C/C++ IntelliSense cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\Microsoft\vscode-cpptools` |
+| **Method** | Delete `ipch`, and each workspace's database folder |
+| **Typical size** | 6.0 GB on the machine the spec was written against |
+
+### What it is
+
+The C/C++ extension for Visual Studio Code keeps an IntelliSense database for every workspace in
+which you opened C or C++ files. It is what makes go-to-definition and completion answer quickly.
+The folder holds two kinds of thing:
+
+- **`ipch`** — precompiled headers, shared by every workspace, that only speed up IntelliSense.
+- **One folder per workspace**, named by a hash, each holding that workspace's browse database
+  (`.BROWSE.VC.DB`) and the SQLite files beside it.
+
+The folder is never trimmed. It gains a database for every workspace you open and keeps it after the
+project is gone.
+
+### What Deguffer does
+
+It deletes `ipch`, and each workspace's database folder. Each one is its own item, listed with when
+it was last written, so you can keep the workspaces you still use. `ipch` covers every workspace at
+once, so it shows no date.
+
+There is no eviction command to prefer under §5.1. The extension's own reset is a command in the
+editor's command palette, which has no command-line form and clears only the workspace that is open.
+
+**A workspace's folder is recognised by what it holds, not by its name.** A hash proves nothing, so
+Deguffer reads the folder's listing, and opens no file in it. The folder qualifies only if it holds at least
+one file, no subfolder, and nothing but browse database files. The leading part of the database's
+file name comes from the workspace, and the `C_Cpp.default.browse.databaseFilename` setting can
+change it, so only the end of the name is matched. One unexpected entry, or a folder Deguffer cannot
+read, keeps the whole folder in Tier 4.
+
+A child that is a link is named in the plan and left alone, because Deguffer does not delete through
+a link.
+
+### What is protected
+
+The `vscode-cpptools` folder itself, and every child of it that Deguffer did not recognise, links
+included. The deleted folders and the spared ones look the same and differ only in what they hold,
+so the run asserts that each spared folder survived by name, not only the folder around them.
+
+In Explore, Deguffer refuses everything in the folder except `ipch`, because Explore cannot see what
+a workspace folder holds.
+
+The extension keeps its databases open while the editor runs, and Microsoft's own advice is to clear
+them with the editor closed. Deguffer warns you when VS Code or the extension's language server is
+running.
+
+### What it costs you
+
+The next time you open a C or C++ workspace, the extension rebuilds its database and its precompiled
+headers. Go-to-definition, completion and the error squiggles are slow or incomplete until that
+finishes, and then everything behaves as before.
+
+### Why Tier 1
+
+Everything removed is derived from source files that are still on your disk, by an extension that
+is still installed, and the extension rebuilds it without being asked. Microsoft's own guidance is
+that everything the extension writes to this folder may be deleted.
 
 ---
 
@@ -6370,7 +6701,7 @@ contents, different answer.
 
 `%LOCALAPPDATA%\Pub\Cache` measured ~451 MB. It ships a `README.md` stating its contents "should
 only be modified using the `dart pub` and `flutter pub` commands", which rules out a path-based
-provider outright. That leaves `dart pub cache clean` — and it is the uv trap, confirmed.
+provider outright. That leaves `dart pub cache clean` — and it is the [uv](#uv-package-cache) trap, confirmed.
 
 **`dart pub cache clean` empties the whole `PUB_CACHE`, not just the cached downloads.** Pub's own
 cache-layout documentation splits the directory in two:
