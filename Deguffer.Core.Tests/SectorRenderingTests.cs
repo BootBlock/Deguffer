@@ -1,3 +1,4 @@
+using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Testing;
@@ -183,7 +184,7 @@ public sealed class SectorRenderingTests
         new SectorRasteriser(
             new SectorHitTest(sunburst), Size, Size, Ground,
             (node, _) => node == ExploreTile.Aggregated
-                ? TilePalette.Aggregate
+                ? MapBlock.Aggregate.Colour
                 : Hues.Colour(0, 0),
             ShapeFinish.Cushioned)
             .PaintRegions(pixels);

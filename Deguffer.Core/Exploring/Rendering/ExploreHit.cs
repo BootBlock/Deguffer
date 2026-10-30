@@ -1,5 +1,3 @@
-using Deguffer.Core.Exploring.Layout;
-
 namespace Deguffer.Core.Exploring.Rendering;
 
 /// <summary>
@@ -12,15 +10,8 @@ namespace Deguffer.Core.Exploring.Rendering;
 /// </param>
 public readonly record struct ExploreHit(int Node, long Bytes)
 {
-    public bool IsAggregate => Node == ExploreTile.Aggregated;
-
-    public bool IsFreeSpace => Node == ExploreTile.FreeSpace;
-
-    public bool IsUnaccounted => Node == ExploreTile.Unaccounted;
-
-    public bool IsShadowCopies => Node == ExploreTile.ShadowCopies;
-
-    public bool IsReservedStorage => Node == ExploreTile.ReservedStorage;
+    /// <summary>The block that was pointed at, or null where it was a node of the tree.</summary>
+    public MapBlock? Block => MapBlock.Of(Node);
 
     /// <summary>
     /// Whether what was pointed at is a node of the tree, and so something a click may pick (§7.1).

@@ -252,7 +252,7 @@ public class AgeColouringTests
         {
             for (var x = 0; x < size; x++)
             {
-                if (surface.At(x, y) is { IsAggregate: true })
+                if (surface.At(x, y)?.Block == MapBlock.Aggregate)
                 {
                     return (x, y);
                 }

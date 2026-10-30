@@ -381,7 +381,7 @@ public abstract class ExploreSurface
     /// <para>No block is ever coloured by either scheme. An aggregate stands for a run of siblings
     /// too small to draw, and the others for the rest of the volume, so none belongs to a branch
     /// or has a date. Giving one a colour that reads as a thing on the disk would invite the user to
-    /// act on it.</para>
+    /// act on it, so each is its own <see cref="MapBlock.Colour"/>.</para>
     ///
     /// <para>In a high contrast theme's colours every shape and block is the theme's window colour, and
     /// only its edges tell it from its neighbour (<see cref="Finish"/>).</para>
@@ -392,20 +392,13 @@ public abstract class ExploreSurface
     /// that grey, so it recedes as a grey one does and still says which branch it is.</para>
     /// </summary>
     /// <param name="framed">Whether the shape is a folder drawn round what it holds.</param>
-    protected TileColour ColourFor(int node, int depth, bool framed = false) => _colours.Contrast is { } contrast
-        ? contrast.Window
-        : node switch
-        {
-            ExploreTile.Aggregated => TilePalette.Aggregate,
-            ExploreTile.FreeSpace => TilePalette.FreeSpace,
-            ExploreTile.Unaccounted => TilePalette.Unaccounted,
-            ExploreTile.ShadowCopies => TilePalette.ShadowCopies,
-            ExploreTile.ReservedStorage => TilePalette.ReservedStorage,
-            _ when framed && Style.FolderFill == MapFolderFill.Grey => TilePalette.FolderFrame,
-            _ when framed && Style.FolderFill == MapFolderFill.Tinted =>
-                ShapeFinish.Mix(_colours.For(this, node, depth), TilePalette.FolderFrame, ShapeFinish.Whole / 2),
-            _ => _colours.For(this, node, depth),
-        };
+    protected TileColour ColourFor(int node, int depth, bool framed = false) =>
+        _colours.Contrast is { } contrast ? contrast.Window
+        : MapBlock.Of(node) is { } block ? block.Colour
+        : framed && Style.FolderFill == MapFolderFill.Grey ? TilePalette.FolderFrame
+        : framed && Style.FolderFill == MapFolderFill.Tinted
+            ? ShapeFinish.Mix(_colours.For(this, node, depth), TilePalette.FolderFrame, ShapeFinish.Whole / 2)
+        : _colours.For(this, node, depth);
 
     /// <summary>What a rectangle of this drawing is painted. See <see cref="ColourFor(int, int, bool)"/>.</summary>
     protected TileColour ColourOf(ExploreTile tile) => ColourFor(tile.Node, tile.Depth, tile.Framed);

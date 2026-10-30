@@ -58,7 +58,7 @@ public sealed class SunburstSurface : ExploreSurface
 
         for (var i = 0; i < sectors.Count && holder is null; i++)
         {
-            holder = !sectors[i].IsAggregate && sectors[i].Node == inside ? sectors[i] : null;
+            holder = sectors[i].Block != MapBlock.Aggregate && sectors[i].Node == inside ? sectors[i] : null;
         }
 
         if (holder is not { } outer)
@@ -73,7 +73,7 @@ public sealed class SunburstSurface : ExploreSurface
             var sector = sectors[i];
 
             if (sector.Depth == outer.Depth + 1
-                && (sector.IsAggregate
+                && (sector.Block == MapBlock.Aggregate
                     ? sector.StartAngle >= outer.StartAngle - Rounding
                         && sector.StartAngle + sector.SweepAngle <= outer.StartAngle + outer.SweepAngle + Rounding
                     : Tree.ParentOf(sector.Node) == inside))
@@ -137,7 +137,7 @@ public sealed class SunburstSurface : ExploreSurface
         {
             var sector = sectors[i];
 
-            if (!sector.IsAggregate && path.Contains(sector.Node) && (deepest is not { } found || sector.Depth > found.Depth))
+            if (sector.Block != MapBlock.Aggregate && path.Contains(sector.Node) && (deepest is not { } found || sector.Depth > found.Depth))
             {
                 deepest = sector;
             }
@@ -163,7 +163,7 @@ public sealed class SunburstSurface : ExploreSurface
 
     /// <summary>Each node once: a sunburst draws no node twice, and every sector but a lump is one.</summary>
     public override IEnumerable<int> NodesDrawn =>
-        _hits.Sunburst.Sectors.Where(sector => !sector.IsAggregate).Select(sector => sector.Node);
+        _hits.Sunburst.Sectors.Where(sector => sector.Block != MapBlock.Aggregate).Select(sector => sector.Node);
 
     public override IReadOnlyList<MorphShape> MorphShapes(IReadOnlySet<int> nodes)
     {
@@ -177,7 +177,7 @@ public sealed class SunburstSurface : ExploreSurface
         {
             var sector = sectors[i];
 
-            if (!sector.IsAggregate && nodes.Contains(sector.Node))
+            if (sector.Block != MapBlock.Aggregate && nodes.Contains(sector.Node))
             {
                 var colour = ColourFor(sector.Node, sector.Depth);
 
@@ -198,7 +198,7 @@ public sealed class SunburstSurface : ExploreSurface
         {
             var sector = sectors[i];
 
-            if (!sector.IsAggregate && nodes(sector.Node))
+            if (sector.Block != MapBlock.Aggregate && nodes(sector.Node))
             {
                 Trace(sunburst, sector, outlines);
             }
@@ -323,7 +323,7 @@ public sealed class SunburstSurface : ExploreSurface
 
             // The disc in the middle is the node the page is already showing, and the breadcrumb
             // above the picture names it.
-            if (sector.IsAggregate || sector.Depth == 0)
+            if (sector.Block == MapBlock.Aggregate || sector.Depth == 0)
             {
                 continue;
             }

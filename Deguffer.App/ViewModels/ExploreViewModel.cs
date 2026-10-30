@@ -719,26 +719,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator
     {
         (Hovered, HoveredFigures, HoveredNote) = (Tree, hit) switch
         {
-            (_, { IsAggregate: true } aggregate) => (
-                "Items too small to draw separately", FreeSpace.Format(aggregate.Bytes), string.Empty),
-
-            (_, { IsFreeSpace: true } free) => (
-                "Free space available on this drive", FreeSpace.Format(free.Bytes), string.Empty),
-
-            ({ } tree, { IsUnaccounted: true } unaccounted) => (
-                "In use, but not accounted for by this scan",
-                FreeSpace.Format(unaccounted.Bytes),
-                ExploreUnaccountedNote.For(_isElevated, Volume, tree.TotalBytes, _strategy)),
-
-            (_, { IsShadowCopies: true } shadowCopies) => (
-                "Restore points and shadow copies, by Windows' own figure",
-                FreeSpace.Format(shadowCopies.Bytes),
-                HiddenSpaceNote.ShadowCopies(Volume.Hidden.ShadowCopies)),
-
-            (_, { IsReservedStorage: true } reserved) => (
-                "Reserved storage, by Windows' own figure",
-                FreeSpace.Format(reserved.Bytes),
-                HiddenSpaceNote.ReservedStorage()),
+            ({ } tree, { Block: { } block, Bytes: var bytes }) => (block.Readout, FreeSpace.Format(bytes), NoteOn(tree, block)),
 
             ({ } tree, { IsNode: true } node) => Over(tree, node.Node),
 
@@ -751,6 +732,16 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator
         Types.Point(Tree, pointed);
         Growth.Point(Tree, pointed);
     }
+
+    /// <summary>
+    /// Why the space a block stands for is there, where the page can say: what the scan could not
+    /// count, and what Windows states of the space it keeps.
+    /// </summary>
+    private string NoteOn(ExploreTree tree, MapBlock block) =>
+        block == MapBlock.Unaccounted ? ExploreUnaccountedNote.For(_isElevated, Volume, tree.TotalBytes, _strategy)
+        : block == MapBlock.ShadowCopies ? HiddenSpaceNote.ShadowCopies(Volume.Hidden.ShadowCopies)
+        : block == MapBlock.ReservedStorage ? HiddenSpaceNote.ReservedStorage()
+        : string.Empty;
 
     /// <summary>
     /// The three things a pointer settling on one shape says: where it is, how big and how old it

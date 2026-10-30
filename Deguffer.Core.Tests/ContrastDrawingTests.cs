@@ -59,8 +59,8 @@ public sealed class ContrastDrawingTests
         Assert.All(quads, quad => Assert.Equal(Window, quad.Colour));
 
         var tiles = Treemap().Tiles;
-        Assert.Contains(tiles, tile => tile.IsAggregate);
-        Assert.Contains(tiles, tile => tile.IsFreeSpace);
+        Assert.Contains(tiles, tile => tile.Block == MapBlock.Aggregate);
+        Assert.Contains(tiles, tile => tile.Block == MapBlock.FreeSpace);
     }
 
     /// <summary>
