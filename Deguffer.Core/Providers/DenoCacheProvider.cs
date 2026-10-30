@@ -190,6 +190,24 @@ public sealed class DenoCacheProvider : CleanupProviderBase
             : [];
 
     /// <summary>
+    /// A folder a variable names but this declines is still where Deno keeps what its programs saved
+    /// and the REPL history, so Explore refuses those there and nothing else. Declared here rather
+    /// than in <see cref="ToolRoots"/> because a declaration made here only ever adds a refusal. See
+    /// <see cref="ToolRoot.Sparing"/>.
+    /// </summary>
+    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<ToolRoot>>(
+            Resolve().DeclinedFolder is { } declined
+                ?
+                [
+                    ToolRoot.Sparing(
+                        declined,
+                        "Deno keeps what its programs saved and your REPL history here, so Deguffer leaves those alone.",
+                        [.. Folders.KeptNames, .. Files.KeptNames]),
+                ]
+                : []);
+
+    /// <summary>
     /// The recognised children of the folder in use and of the default one, because a variable can be
     /// unset again after a duplicate search has read it. Never <c>location_data</c>.
     /// </summary>
@@ -219,8 +237,8 @@ public sealed class DenoCacheProvider : CleanupProviderBase
         if (setting.Folder is not { } root)
         {
             return EmptyPlan(
-                $"Deno's folder is set to '{setting.Value}', and Deguffer will not treat that as Deno's cache: "
-                + $"{setting.Declined} It is leaving it alone.");
+                $"{SettingVariable} is set to '{setting.Value}', and Deguffer will not treat the folder it names "
+                + $"as Deno's: {setting.Declined} It is leaving it alone.");
         }
 
         if (NothingToPlanFor(root, $"Deno has not cached anything for this user — no {root} directory.") is { } nothing)
@@ -328,35 +346,16 @@ public sealed class DenoCacheProvider : CleanupProviderBase
 
     /// <summary>
     /// The folder as <c>resolve_deno_dir</c> resolves it: <see cref="DirectoryVariable"/>, then
-    /// <see cref="XdgCacheVariable"/> joined with <c>deno</c>, then <see cref="DefaultRoot"/>. A value
-    /// for either is examined as Deno's only where <see cref="ConfiguredFolder"/> allows the folder it
-    /// names, which for the second is the <c>deno</c> folder inside it: a cache home is often the
-    /// profile's own <c>.cache</c>, and only Deno's folder in it is Deno's.
+    /// <see cref="XdgCacheVariable"/> joined with <c>deno</c>, then <see cref="DefaultRoot"/>. For the
+    /// second, the <c>deno</c> folder inside is what <see cref="ConfiguredFolder"/> judges: a cache
+    /// home is often the profile's own <c>.cache</c>, and only Deno's folder in it is Deno's.
     /// </summary>
-    private ConfiguredFolder.Setting Resolve()
-    {
-        if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(DirectoryVariable)))
-        {
-            return ConfiguredFolder.FromVariable(DirectoryVariable, DefaultRoot, Environment, _system, Volumes);
-        }
+    private ConfiguredFolder.Setting Resolve() =>
+        SettingVariable == DirectoryVariable
+            ? ConfiguredFolder.FromVariable(DirectoryVariable, DefaultRoot, Environment, _system, Volumes)
+            : ConfiguredFolder.FromVariable(XdgCacheVariable, DefaultRoot, Environment, _system, Volumes, within: "deno");
 
-        var cacheHome = Environment.GetEnvironmentVariable(XdgCacheVariable)?.Trim();
-
-        if (string.IsNullOrEmpty(cacheHome))
-        {
-            return new ConfiguredFolder.Setting(null, null, DefaultRoot, null);
-        }
-
-        if (LongPath.Configured(cacheHome) is not { } home)
-        {
-            return new ConfiguredFolder.Setting(cacheHome, null, null, "it is not a full path, so Deguffer cannot tell which folder it means.");
-        }
-
-        var folder = Path.Combine(home, "deno");
-        var accountTemp = TempRoots.Resolve(Environment, _system, Volumes).AccountFolders;
-
-        return ConfiguredFolder.WhyNotOwned(folder, Environment, _system, Volumes, accountTemp) is { } declined
-            ? new ConfiguredFolder.Setting(folder, folder, null, declined)
-            : new ConfiguredFolder.Setting(folder, folder, folder, null);
-    }
+    /// <summary>The variable Deno reads its folder from: <see cref="DirectoryVariable"/> wherever it is set.</summary>
+    private string SettingVariable =>
+        string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(DirectoryVariable)) ? XdgCacheVariable : DirectoryVariable;
 }

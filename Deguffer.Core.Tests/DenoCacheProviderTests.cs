@@ -188,7 +188,47 @@ public sealed class DenoCacheProviderTests : IDisposable
 
         var plan = await provider.PlanAsync();
         Assert.True(plan.IsEmpty);
-        Assert.Contains(plan.Notes, n => n.Message.Contains("not a full path", StringComparison.Ordinal));
+        Assert.Contains(plan.Notes, n => n.Message.Contains("not a full path", StringComparison.Ordinal)
+            && n.Message.StartsWith($@"{variable} is set to '..\cache'", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A folder a setting names and this declines is still where Deno keeps what its programs saved, so
+    /// Explore refuses those entries there and nothing else. <c>DENO_DIR</c> naming the profile is
+    /// declined for being the profile, and the <c>deno</c> folder in a cache home for holding the
+    /// temporary folder.
+    /// </summary>
+    [Theory]
+    [InlineData(DenoCacheProvider.DirectoryVariable)]
+    [InlineData(DenoCacheProvider.XdgCacheVariable)]
+    public async Task ADeclinedFolderStillRefusesWhatProgramsSaved(string variable)
+    {
+        string declined;
+
+        if (variable == DenoCacheProvider.DirectoryVariable)
+        {
+            declined = _environment.UserProfile;
+            _environment.WithEnvironmentVariable(variable, declined);
+        }
+        else
+        {
+            var home = Path.Combine(_environment.UserProfile, ".cache");
+            declined = Path.Combine(home, "deno");
+            _environment.WithTempPath(Directory.CreateDirectory(Path.Combine(declined, "tmp")).FullName);
+            _environment.WithEnvironmentVariable(variable, home);
+        }
+
+        var provider = CreateProvider();
+
+        Assert.Empty(provider.ToolRoots);
+        Assert.True((await provider.PlanAsync()).IsEmpty);
+
+        var root = Assert.Single(await provider.DiscoverToolRootsAsync());
+        Assert.Equal(declined, root.Path, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(ToolRootClaim.NamedEntries, root.Claim);
+        Assert.False(root.Recognises(new ToolRootChild("location_data", ChildKind.Folder)));
+        Assert.False(root.Recognises(new ToolRootChild("deno_history.txt", ChildKind.File)));
+        Assert.True(root.Recognises(new ToolRootChild("Documents", ChildKind.Folder)));
     }
 
     /// <summary>
