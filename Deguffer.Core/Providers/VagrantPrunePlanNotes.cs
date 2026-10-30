@@ -107,9 +107,9 @@ internal static class VagrantPrunePlanNotes
         return rest > 0 ? $"{named}, and {rest} more" : named;
     }
 
-    private static string Describe(VagrantBoxVersion box) => $"{box.Name} {box.Version} ({box.Provider})";
+    public static string Describe(VagrantBoxVersion box) => $"{box.Name} {box.Version} ({box.Provider})";
 
-    private static string Describe(VagrantMachine machine) =>
+    public static string Describe(VagrantMachine machine) =>
         machine.Project is { } project
             ? $"the machine '{machine.Name}' in {project}"
             : $"the machine '{machine.Name}'";

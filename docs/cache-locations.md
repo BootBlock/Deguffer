@@ -5144,6 +5144,12 @@ versions, because Vagrant's own in-use check does not reliably recognise one, an
 clone's disk depends on the image in the box's folder. It is also not offered while a version is
 installed for two architectures, because the prune stops with an error part-way through.
 
+The prune decides again when it runs which versions are older than the newest, so immediately
+before it runs Deguffer reads the box folders and the machine index again. It does not run the
+prune if any box version has been added or removed since the preview, if a machine is now recorded
+as created from a version it would remove, or if either cannot be read. Scanning again shows what
+the prune would remove now.
+
 Vagrant is never started for a home with no `boxes` folder, because every Vagrant command creates
 its home. Running Vagrant loads the Vagrantfile in its home and any Vagrantfile in the folder
 Deguffer runs tools in or above it, such as your profile. It also contacts HashiCorp unless
