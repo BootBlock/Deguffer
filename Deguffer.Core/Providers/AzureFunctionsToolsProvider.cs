@@ -26,13 +26,15 @@ namespace Deguffer.Core.Providers;
 /// offers a command that evicts a downloaded release, and the tooling's documented remedy for a bad
 /// download is to delete the directory. That leaves §5.2's path-based route.</para>
 ///
-/// <para><b>Every release is offered, including the ones the tooling still points at.</b> That is
+/// <para><b>Every release is offered, including the ones the tooling still points at, unless a
+/// running program may be using it.</b> That is
 /// the judgement Playwright's browsers get, and for the same reason: Deguffer cannot know whether
 /// the developer still has a Functions v2 project, and withholding 166 MB on the assumption that
 /// they might is Deguffer making their decision. What it can do is say which is which, so each row
 /// carries the age of the release and, where the tooling's own records reach it, whether they still
-/// name it — see <see cref="AzureFunctionsToolTags"/>. The one release held back is one a running
-/// program is using, which is a fact about the machine rather than a guess about the developer.</para>
+/// name it — see <see cref="AzureFunctionsToolTags"/>. A release is held back only where a running
+/// program is using it, or where Deguffer could not tell whether one is: a fact about the machine,
+/// or the lack of one, rather than a guess about the developer.</para>
 ///
 /// <para>§5.2 bites the way it does for Playwright: the disposable children are versioned, so an
 /// exact-name <see cref="DisposableChildSet"/> cannot express them, and the answer is a stricter

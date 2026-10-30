@@ -14,7 +14,8 @@ namespace Deguffer.Core.Providers;
 /// knowledge of a tool's folder for the tool's own.</para>
 ///
 /// <para>It changes nothing about what is offered. Every release is a download the tooling can
-/// repeat, so every release is offered and none is pre-selected; this decides only what each row
+/// repeat, so every release no running program may be using is offered and none is pre-selected;
+/// this decides only what each row
 /// <em>says</em>, which is the difference between "the release your v4 projects use" and "one
 /// nothing points at any more".</para>
 /// </summary>
