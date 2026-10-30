@@ -439,7 +439,9 @@ public sealed class ExploreActionPolicyTests : IDisposable
     /// A region whose path will not resolve is dropped rather than kept with the value it arrived
     /// with. An empty one prefix-matches every UNC path, so admitting it would refuse a whole network
     /// share with a sentence naming no directory at all — and <c>%ProgramFiles(x86)%</c> is genuinely
-    /// empty on a 32-bit Windows.
+    /// empty on a 32-bit Windows. Asked of the search's question, because a removal on a share is
+    /// refused for being on one (<see cref="ExploreActionPolicyShareTests"/>), and the search's
+    /// question is the one whose answer the empty region alone would decide.
     /// </summary>
     [Fact]
     public void ARegionThatNamesNothingProtectsNothing()
@@ -448,7 +450,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
             [ProtectedRegion.Refusing(string.Empty, RegionScope.PathAndBelow, "Nowhere.")],
             [], new FakeVolumeInventory());
 
-        Assert.True(policy.MayRemove(@"\\server\share\folder").IsAllowed);
+        Assert.Null(policy.RefusedAtAndBelow(@"\\server\share\folder"));
         Assert.True(policy.MayRemove(@"C:\anywhere\at\all").IsAllowed);
     }
 
