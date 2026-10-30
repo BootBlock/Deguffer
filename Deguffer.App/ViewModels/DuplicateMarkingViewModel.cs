@@ -1,10 +1,8 @@
-using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Deguffer.Core.Duplicates;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring.Acting;
-using Deguffer.Core.Viewing;
 using Deguffer.Core.Working;
 
 namespace Deguffer.App.ViewModels;

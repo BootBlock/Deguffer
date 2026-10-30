@@ -16,16 +16,12 @@ namespace Deguffer.App.ViewModels;
 public sealed partial class StatusLineViewModel : ObservableObject
 {
     /// <param name="first">What the line says before anything is said on it.</param>
-    public StatusLineViewModel(StatusLine first)
-    {
-        Line = first;
-        Say(first);
-    }
+    public StatusLineViewModel(StatusLine first) => Say(first);
 
     /// <summary>What the line holds now, which a page reads to decide what replaces it.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Sentence))]
-    public partial StatusLine Line { get; private set; }
+    public partial StatusLine Line { get; private set; } = StatusLine.Empty;
 
     /// <summary>What the line says.</summary>
     public string Sentence => Line.Sentence;
