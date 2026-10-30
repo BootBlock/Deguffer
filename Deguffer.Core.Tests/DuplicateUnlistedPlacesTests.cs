@@ -112,7 +112,7 @@ public sealed class DuplicateUnlistedPlacesTests : IDisposable
         _tree.File(Length, "Data", "m.txt");
         _tree.File(Length, "Data", "Other", "n.txt");
         Assert.True(VolumePath.TryParse(_tree.Top, out var top));
-        var (fixture, parent, next) = Through(top.Components);
+        var (fixture, parent, next) = MftFolders.Through(top.Components);
         Mirror(fixture, _tree.Top, parent, ref next);
         var search = new DuplicateSearch(MatchCriteria.Size, [new SearchLocation(_tree.Top)]);
 
@@ -188,22 +188,5 @@ public sealed class DuplicateUnlistedPlacesTests : IDisposable
                 Mirror(fixture, entry.FullName, record, ref next);
             }
         }
-    }
-
-    /// <summary>A table holding <paramref name="folders"/>, each inside the one before it, below the volume's top.</summary>
-    /// <returns>The table, the record of the last folder, and the first record number still free.</returns>
-    private static (MftFixture Fixture, uint Parent, uint Next) Through(IEnumerable<string> folders)
-    {
-        var fixture = new MftFixture();
-        uint parent = MftRecord.RootRecordNumber;
-        uint next = MftRecord.ReservedRecordCount;
-
-        foreach (var folder in folders)
-        {
-            fixture.AddDirectory(next, parent, folder);
-            parent = next++;
-        }
-
-        return (fixture, parent, next);
     }
 }

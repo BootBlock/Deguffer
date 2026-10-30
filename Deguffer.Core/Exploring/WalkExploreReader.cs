@@ -18,6 +18,21 @@ internal delegate LeavesFolderUnlisted LeavesUnlisted(string parent, bool parent
 internal delegate bool LeavesFolderUnlisted(string name);
 
 /// <summary>
+/// A walk of <paramref name="root"/> into a tree, as
+/// <see cref="WalkExploreReader.Read(string, ScanTuner, IOccupancyProbe, IProgress{ExploreProgress}?, TimeProvider, CancellationToken, LeavesUnlisted?, Func{Action, Task}?)"/>
+/// does it.
+/// </summary>
+internal delegate ExploreTree ExploreWalk(
+    string root,
+    ScanTuner tuning,
+    IOccupancyProbe probe,
+    IProgress<ExploreProgress>? progress,
+    TimeProvider clock,
+    CancellationToken ct,
+    LeavesUnlisted? unlisted,
+    Func<Action, Task>? assembleSnapshot);
+
+/// <summary>
 /// Builds an <see cref="ExploreTree"/> by walking directories — §5.5's guaranteed route, the one
 /// that needs no rights beyond the ones the user already has.
 ///

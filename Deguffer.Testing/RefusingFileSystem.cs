@@ -89,6 +89,8 @@ public sealed class RefusingFileSystem(IFileSystem inner, IReadOnlyDictionary<st
 
     public bool MayExist(string path) => inner.MayExist(path);
 
+    public string? FinalPath(string path) => inner.FinalPath(path);
+
     private RefusalReason? ReasonFor(string path) =>
         _refused.TryGetValue(LongPath.Display(path), out var reason) ? reason : null;
 }

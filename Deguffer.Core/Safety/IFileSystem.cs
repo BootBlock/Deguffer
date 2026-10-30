@@ -135,6 +135,18 @@ public interface IFileSystem
     /// it refuses to remove, and "I cannot tell" has to read as the answer that stops the removal.</para>
     /// </summary>
     bool MayExist(string path);
+
+    /// <summary>
+    /// Where <paramref name="path"/> really is once Windows has followed every link on the way to it,
+    /// its own name included, in the extended form Windows answers with, or null where Windows would
+    /// not open it. Null may mean the path is absent or that Windows refused: ask
+    /// <see cref="MayExist"/> to tell them apart.
+    ///
+    /// <para>The caller is <see cref="Exploring.Acting.ExploreActionPolicy"/>, whose rules are asked of
+    /// paths, and a junction makes two paths one folder. See
+    /// <see cref="Exploring.Acting.FinalPlaces"/>.</para>
+    /// </summary>
+    string? FinalPath(string path);
 }
 
 /// <summary>The real filesystem. Stateless, so a single instance serves the process (G5).</summary>
@@ -212,4 +224,6 @@ public sealed class WindowsFileSystem : IFileSystem
         return FileAttributeRead.Read(extended, out _)
             is not (FileAttributeRead.FileNotFound or FileAttributeRead.PathNotFound);
     }
+
+    public string? FinalPath(string path) => FileInformation.Default.FinalPath(path);
 }

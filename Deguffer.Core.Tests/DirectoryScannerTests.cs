@@ -168,18 +168,30 @@ public class DirectoryScannerTests
     /// The table resolved the path and then could not say how big it was. That is not an empty
     /// cache, so the walk answers — the same fail-closed choice as a path the table cannot
     /// resolve at all.
+    ///
+    /// <para>The table names the scratch folder the test builds, so the walk reads that tree and
+    /// nothing the machine running the suite has.</para>
     /// </summary>
     [Fact]
     public async Task FallsBackWhenTheTableCannotEstablishASizeInTheSubtree()
     {
-        var volume = Volume().AddFileWithDataInAnExtensionRecord(
-            21, Cache, "fragmented.tgz", allocated: 4096, logical: 4096, extension: 22, ListMismatch.ItsOwnSequence);
-        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving('C', volume), tuning: RouteTuners.Table);
+        using var temp = new TempDirectory();
+        var cache = temp.CreateDirectory("cache");
+        File.WriteAllBytes(Path.Combine(cache, "fragmented.tgz"), new byte[3000]);
 
-        var result = await scanner.MeasureAsync(@"C:\Users\testuser\.npm-cache");
+        Assert.True(VolumePath.TryParse(cache, out var path));
+        var (volume, folder, next) = MftFolders.Through(path.Components);
+        volume.AddFileWithDataInAnExtensionRecord(
+            next, folder, "fragmented.tgz", allocated: 4096, logical: 4096, extension: next + 1, ListMismatch.ItsOwnSequence);
+        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving(path.DriveLetter, volume), tuning: RouteTuners.Table);
+
+        var result = await scanner.MeasureAsync(cache);
 
         Assert.Equal(ScanStrategy.ParallelEnumeration, result.Strategy);
         Assert.Equal(FallbackReason.MasterFileTableIncomplete, result.Fallback);
+
+        // The file the test wrote, not the 4096 the table records: the walk read the scratch tree.
+        Assert.Equal(3000, result.Size.Logical);
     }
 
     /// <summary>

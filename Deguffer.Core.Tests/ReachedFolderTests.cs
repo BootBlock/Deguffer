@@ -101,4 +101,20 @@ public sealed class ReachedFolderTests
         Assert.Equal(@"S:\app", At(@"S:\").Naming(At(@"C:\Source\app"), @"S:\"));
         Assert.Null(At(@"C:\Source").Naming(At(@"C:\Elsewhere\app"), @"C:\Source"));
     }
+
+    /// <summary>
+    /// A final path Windows gives only as a device path, such as a volume's
+    /// <c>\\?\Volume{GUID}\</c> name, names no drive or folder, so no location or program folder
+    /// is taken to be at it. Windows names a volume mounted in a folder by that folder.
+    /// </summary>
+    [Fact]
+    public void AFinalPathGivenOnlyAsADevicePathNamesNoFolder()
+    {
+        Assert.Null(ReachedFolder.Displayed(@"\\?\Volume{0e6b1d3a-1c2d-4e5f-8a9b-0c1d2e3f4a5b}\Programs\App"));
+        Assert.Null(ReachedFolder.Displayed(@"\\?\Volume{0e6b1d3a-1c2d-4e5f-8a9b-0c1d2e3f4a5b}\"));
+        Assert.Null(ReachedFolder.Displayed(@"\\?\GLOBALROOT\Device\HarddiskVolume9\Programs"));
+        Assert.Equal(@"C:\Mount\Programs\App", ReachedFolder.Displayed(@"\\?\C:\Mount\Programs\App"));
+        Assert.Equal(@"C:\", ReachedFolder.Displayed(@"\\?\C:\"));
+        Assert.Equal(@"\\fileserver.test\photos", ReachedFolder.Displayed(@"\\?\UNC\fileserver.test\photos"));
+    }
 }
