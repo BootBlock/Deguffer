@@ -1,3 +1,4 @@
+using System.Security.Principal;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -141,6 +142,18 @@ public sealed class ScratchSyncRootsTests : IDisposable
     }
 
     /// <summary>
+    /// Every identifier names this account, asked of the account rather than of the prefix, so a
+    /// prefix that dropped the SID would recognise another user's scratch roots as ours.
+    /// </summary>
+    [Fact]
+    public void NamesThisAccountInEveryIdentifier()
+    {
+        var user = WindowsIdentity.GetCurrent().User!.Value;
+
+        Assert.StartsWith($"{ScratchSyncRoot.ProviderName}!{user}!", ScratchSyncRoots.NewId(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Identifiers the recogniser has to refuse: another account's scratch root, a different case of
     /// the provider name, which the registry would treat as the same key, an identifier the suite
     /// never writes, and a real sync app's root.
@@ -154,7 +167,7 @@ public sealed class ScratchSyncRootsTests : IDisposable
     [InlineData("OneDrive!{user}!Personal")]
     public void RefusesAnIdentifierNoScratchRootWouldCarry(string template)
     {
-        var user = ScratchSyncRoots.IdPrefix.Split('!')[1];
+        var user = WindowsIdentity.GetCurrent().User!.Value;
 
         Assert.False(ScratchSyncRoots.IsScratchId(template.Replace("{user}", user, StringComparison.Ordinal)));
     }
