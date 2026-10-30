@@ -82,8 +82,8 @@ public sealed class CanvasRedraws
     /// rather than a region at a time, and nothing is painted on the CPU at all.</para>
     /// </summary>
     /// <param name="layout">
-    /// Called on a worker thread, as for <see cref="Start"/>. It must make a drawing whose
-    /// <see cref="ExploreSurface.Quads"/> are not null.
+    /// Called on a worker thread, as for <see cref="Start"/>. It must make a drawing of
+    /// rectangles, a <see cref="TiledSurface"/>.
     /// </param>
     public CanvasRedraw Shade(Func<ExploreSurface> layout, TileColour ground, ICanvasRedrawTarget target)
     {

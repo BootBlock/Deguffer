@@ -101,9 +101,24 @@ public sealed class MapHitTestTests
         var older = Drawings.Tree(files: 3);
         var old = Drawings.Covering(older, Old);
 
-        Assert.Null(MapHitTest.Locate(MapViewport.Whole, 0.5, 0.5, old, arriving: null, ReadingIn(older.Without([Old])))?.Hit);
-        Assert.Null(MapHitTest.Locate(MapViewport.Whole, 0.5, 0.5, old, arriving: null, ReadingIn(Drawings.Tree(files: 3, root: @"D:\"))));
+        Assert.Null(MapHitTest.Locate(MapViewport.Whole, 0.5, 0.5, old, arriving: null, ReadingIn(older.Without([Old])), Drawings.NoTile)?.Hit);
+        Assert.Null(MapHitTest.Locate(MapViewport.Whole, 0.5, 0.5, old, arriving: null, ReadingIn(Drawings.Tree(files: 3, root: @"D:\")), Drawings.NoTile));
         Assert.Equal(Old, NodeAt(0.5, 0.5, old, arriving: null, older.Without([Old + 1])));
+    }
+
+    /// <summary>
+    /// Both lookups are refused when missing, before any drawing is looked in, so a map with nothing
+    /// drawn yet is refused as one with a drawing would be.
+    /// </summary>
+    [Fact]
+    public void ALocateWithoutItsLookupsIsRefused()
+    {
+        var tree = Drawings.Tree();
+
+        Assert.Throws<ArgumentNullException>(
+            "readingOf", () => MapHitTest.Locate(MapViewport.Whole, 0.5, 0.5, drawing: null, arriving: null, null!, Drawings.NoTile));
+        Assert.Throws<ArgumentNullException>(
+            "tileOver", () => MapHitTest.Locate(MapViewport.Whole, 0.5, 0.5, drawing: null, arriving: null, ReadingIn(tree), null!));
     }
 
     /// <summary>
@@ -117,15 +132,15 @@ public sealed class MapHitTestTests
         var zoomedIn = MapViewport.Anchored(2, 0, 0, 0, 0, MapCeiling.Least);
         var drawing = Drawings.Covering(tree, Old, zoomedIn);
 
-        var middle = MapHitTest.Locate(zoomedIn, 0.5, 0.5, drawing, arriving: null, ReadingIn(tree));
+        var middle = MapHitTest.Locate(zoomedIn, 0.5, 0.5, drawing, arriving: null, ReadingIn(tree), Drawings.NoTile);
 
         Assert.NotNull(middle);
         Assert.Equal(Drawings.Size / 2f, middle.Value.X, 1);
         Assert.Equal(Drawings.Size / 2f, middle.Value.Y, 1);
 
         // Zoomed out to the whole picture, the drawing of its top left quarter covers only that.
-        Assert.NotNull(MapHitTest.Locate(MapViewport.Whole, 0.25, 0.25, drawing, arriving: null, ReadingIn(tree)));
-        Assert.Null(MapHitTest.Locate(MapViewport.Whole, 0.75, 0.75, drawing, arriving: null, ReadingIn(tree)));
+        Assert.NotNull(MapHitTest.Locate(MapViewport.Whole, 0.25, 0.25, drawing, arriving: null, ReadingIn(tree), Drawings.NoTile));
+        Assert.Null(MapHitTest.Locate(MapViewport.Whole, 0.75, 0.75, drawing, arriving: null, ReadingIn(tree), Drawings.NoTile));
     }
 
     /// <summary>
@@ -236,8 +251,8 @@ public sealed class MapHitTestTests
     private static Func<ISizedTree, MapReading?> ReadingIn(ISizedTree tree) => drawn => MapReading.Of(drawn, tree);
 
     /// <summary>What shows <paramref name="tile"/> at the points of the picture it covers, and no tile anywhere else.</summary>
-    private static Func<double, double, MapTile?>? Shown(MapTile? tile) =>
-        tile is null ? null : (x, y) => tile.Frame.Contains(x, y) ? tile : null;
+    private static Func<double, double, MapTile?> Shown(MapTile? tile) =>
+        tile is null ? Drawings.NoTile : (x, y) => tile.Frame.Contains(x, y) ? tile : null;
 
     /// <summary>
     /// The tile of <paramref name="drawing"/>'s picture at its bottom right, cut from it at

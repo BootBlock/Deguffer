@@ -189,8 +189,8 @@ public class GrowthReplayTests
             ShapeColours.ForReplay(frame), ExploreSpacing.Comfortable, VolumeSpace.None);
 
         Assert.NotNull(drawing.At(200, 150));
-        Assert.Null(MapHitTest.Locate(MapViewport.Whole, 0.5, 0.5, drawing, null, tree => MapReading.Of(tree, frame)));
-        Assert.Null(MapHitTest.Locate(MapViewport.Whole, 0.5, 0.5, drawing, null, tree => MapReading.Of(tree, after)));
+        Assert.Null(MapHitTest.Locate(MapViewport.Whole, 0.5, 0.5, drawing, null, tree => MapReading.Of(tree, frame), Drawings.NoTile));
+        Assert.Null(MapHitTest.Locate(MapViewport.Whole, 0.5, 0.5, drawing, null, tree => MapReading.Of(tree, after), Drawings.NoTile));
     }
 
     /// <summary>
