@@ -238,6 +238,40 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.True(File.Exists(archive));
     }
 
+    /// <summary>
+    /// The look on the disk before a command walks everything it clears and can take minutes, and a
+    /// target check guards against what the machine does in that time: a build started, or a handle
+    /// given to another item. So the check is asked again once the look is done, and a change it finds
+    /// then stops the command as surely as one found before.
+    /// </summary>
+    [Fact]
+    public async Task AsksATargetCheckAgainAfterTheLookAndBeforeTheCommand()
+    {
+        var cache = _temp.CreateDirectory("tool-cache");
+        _temp.CreateFile(4096, "tool-cache", "blob");
+        var check = new ChangesAnswerAfterFirstAsk("a build started while the folders were looked over");
+
+        var command = new RunCommandStep("tool.exe", "clean", "Clear the tool's cache")
+        {
+            WhenCancelled = CancelledCommand.Ended,
+            Estimated = new ScanSize(4096, 4096),
+            MeasuredPaths = [cache],
+            TargetCheck = check,
+        };
+
+        // The program answers, so a command that ran anyway fails the assertion rather than the fake.
+        var runner = new FakeProcessRunner().Responding(command.FileName, command.Arguments, string.Empty);
+        var executor = new PlanExecutor(runner, ParallelEnumerationScanner.Default, RefusalLog);
+        var result = await executor.ExecuteAsync(PlanDeleting(command), runReach: null, residue: null, progress: null, default);
+
+        var step = Assert.Single(result.Steps);
+
+        Assert.Equal(2, check.Asked);
+        Assert.Empty(runner.Invocations);
+        Assert.False(step.Succeeded);
+        Assert.Equal("Not run: a build started while the folders were looked over.", step.Message);
+    }
+
     /// <summary>The same for a Recycle Bin Windows would empty whole: a store deleted into it after the preview.</summary>
     [Fact]
     public async Task DoesNotEmptyABinWhenAStoreArrivedInItAfterThePreview()
@@ -1494,4 +1528,12 @@ public sealed class PlanExecutorTests : IDisposable
             residue: null,
             progress: null,
             ct: CancellationToken.None);
+
+    /// <summary>A target check that finds nothing wrong the first time it is asked, and <paramref name="why"/> every time after.</summary>
+    private sealed class ChangesAnswerAfterFirstAsk(string why) : ICommandTargetCheck
+    {
+        public int Asked { get; private set; }
+
+        public string? WhyNot(RunCommandStep step, CancellationToken ct) => ++Asked == 1 ? null : why;
+    }
 }
