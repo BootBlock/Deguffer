@@ -26,7 +26,7 @@ under the MIT licence. Download the zip for your processor from the
 
 ## What it does
 
-- **Storage** checks 84 sources of waste, from package-manager and browser caches to `Windows.old`
+- **Storage** checks 86 sources of waste, from package-manager and browser caches to `Windows.old`
   and old restore points, and sorts each one into a [safety tier](#safety-tiers). You tick what
   goes, and after the clean Deguffer checks that everything it promised to leave alone is still
   there.
@@ -103,7 +103,7 @@ because they can be saved anywhere, and Deguffer will never remove one by any ro
 
 ## What Storage cleans
 
-Each of the 84 sources has its own provider, which knows what that location is and what sits beside
+Each of the 86 sources has its own provider, which knows what that location is and what sits beside
 it. Rows for tools you do not have are hidden unless you ask the Storage page to show them. Build
 output such as `node_modules`, `obj` and Rust's `target` folders is searched for only in the source
 folders you add in Settings. [What Deguffer cleans, and what it costs you](docs/cache-locations.md)
@@ -202,6 +202,7 @@ explains most of these sources in detail.
 | Windows update uninstall data | `DISM /StartComponentCleanup /ResetBase`, a row of its own: afterwards no update installed so far can be uninstalled |
 | Older restore points | Every restore point but the newest, removed one at a time by System Restore itself as administrator; never the newest, a shadow copy that cannot be a restore point's, or System Protection's limit |
 | Windows File History | Windows' own command drops saved versions past an age you set; the backup drive itself is never touched |
+| Files discarded by a Windows upgrade | What an upgrade kept aside rather than move, which can include your own files: removed by Windows' own Disk Cleanup handler, and only once the upgrade can no longer be undone |
 | Crash dumps and error reports | |
 | Windows servicing logs | The logs a reset of this PC leaves are cleared by Windows' own cleanup for them, never by path |
 | VS Code editor logs and crash reports | |

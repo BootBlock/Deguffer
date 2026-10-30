@@ -24,7 +24,9 @@ public sealed partial class TestAssemblySeamTests
     ///
     /// <list type="bullet">
     /// <item><c>WindowsServicingTests</c> asks the real Disk Cleanup host to run and to survey a handler
-    /// Windows never registers, so a broken guard reaches a registry lookup that finds nothing.</item>
+    /// Windows never registers, so a broken guard reaches a registry lookup that finds nothing, and to
+    /// survey, never to run, the <c>DownloadsFolder</c> handler it refuses, so a broken guard measures
+    /// and clears nothing.</item>
     /// <item><c>CloudFilesTests</c> acts only on a sync root it registers in its own scratch
     /// folder.</item>
     /// </list>
@@ -32,7 +34,7 @@ public sealed partial class TestAssemblySeamTests
     private static readonly SortedDictionary<string, int> Allowed = new(StringComparer.Ordinal)
     {
         ["Deguffer.Core.Tests/CloudFilesTests.cs: CloudFiles.Default"] = 1,
-        ["Deguffer.Core.Tests/WindowsServicingTests.cs: DiskCleanupHandlers.Default"] = 2,
+        ["Deguffer.Core.Tests/WindowsServicingTests.cs: DiskCleanupHandlers.Default"] = 3,
     };
 
     [Fact]
