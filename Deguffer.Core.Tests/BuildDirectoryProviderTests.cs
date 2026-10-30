@@ -184,6 +184,45 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The marker is read, not only found. A file called <c>CACHEDIR.TAG</c> whose first 43 bytes are
+    /// not the specification's header says nothing marked the directory as a cache, so a
+    /// <c>target</c> holding one beside a manifest is still somebody's own folder.
+    /// </summary>
+    [Theory]
+    [InlineData("Signature: 8a477f597d28d172789f06886806bc56")]
+    [InlineData("signature: 8a477f597d28d172789f06886806bc55")]
+    [InlineData("\uFEFFSignature: 8a477f597d28d172789f06886806bc55")]
+    [InlineData("")]
+    public async Task ACargoTargetWhoseTagHasTheWrongHeaderIsNotRecognised(string tag)
+    {
+        var root = ApproveRoot();
+        var target = BuildDirectoryFixture.CreateCargoProject(Path.Combine(root, "crate"));
+        File.WriteAllText(Path.Combine(target, "CACHEDIR.TAG"), tag, new System.Text.UTF8Encoding(false));
+
+        var plan = await PlanWith(Cargo);
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == target);
+        Assert.True(LongPath.DirectoryExists(target));
+    }
+
+    /// <summary>
+    /// Cargo's own tag, as Cargo writes it, is still recognised: the header, then its comment lines.
+    /// </summary>
+    [Fact]
+    public async Task ACargoTargetWithCargosOwnTagIsRecognised()
+    {
+        var root = ApproveRoot();
+        var target = BuildDirectoryFixture.CreateCargoProject(Path.Combine(root, "crate"));
+        File.WriteAllText(
+            Path.Combine(target, "CACHEDIR.TAG"),
+            "Signature: 8a477f597d28d172789f06886806bc55\n# This file is a cache directory tag created by cargo.\n"
+            + "# For information about cache directory tags see https://bford.info/cachedir/\n");
+
+        Assert.Equal([target], (await PlanWith(Cargo)).TargetedPaths);
+    }
+
+    /// <summary>
     /// The other direction: the tool's own marker without the manifest beside it. Either half alone
     /// is a coincidence, and it is the conjunction that identifies the directory.
     /// </summary>

@@ -180,13 +180,11 @@ public static class AfterEffectsPreferenceText
 
         try
         {
-            return StrictUtf8.GetString([.. bytes]);
+            return BoundedFile.StrictUtf8.GetString([.. bytes]);
         }
         catch (DecoderFallbackException)
         {
             return null;
         }
     }
-
-    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 }

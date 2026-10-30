@@ -15,8 +15,9 @@ public sealed record BuildDirectoryRecognition(string Project, IReadOnlyList<str
 /// Checks a candidate directory against a <see cref="BuildDirectoryKind"/>, on disk.
 ///
 /// Separate from the declaration it applies for §6.4's G2: the kind is a table a reader can audit,
-/// and this is the one place that touches the filesystem to test it. Only directory entries are
-/// read; no file is opened.
+/// and this is the one place that touches the filesystem to test it. Directory entries are read,
+/// and the only files opened are the small markers a kind declares, each read no further than
+/// <see cref="MarkerFile"/>'s bound.
 /// </summary>
 public static class BuildDirectorySignature
 {
@@ -59,6 +60,21 @@ public static class BuildDirectorySignature
             {
                 return null;
             }
+        }
+
+        // After the names, because each of these opens a file and a missing name is the common way a
+        // candidate fails.
+        foreach (var marker in kind.RequiredMarkers)
+        {
+            if (!marker.IsIn(directory))
+            {
+                return null;
+            }
+        }
+
+        if (kind.ConfirmsContents is { } confirms && !confirms(directory))
+        {
+            return null;
         }
 
         if (kind.AnyOfSiblings.Count > 0

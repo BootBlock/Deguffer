@@ -49,7 +49,7 @@ public static class JellyfinServerLayout
 
     public const string Marker = ".jellyfin-transcode";
 
-    public const string CacheTag = "CACHEDIR.TAG";
+    public const string CacheTag = MarkerFile.CacheDirectoryTagName;
 
     /// <summary>§5.3. The server, and the tray program that starts it.</summary>
     public static readonly IReadOnlyList<string> ProcessNames = ["jellyfin", "Jellyfin.Windows.Tray"];
@@ -275,11 +275,14 @@ public static class JellyfinServerLayout
 
     /// <summary>
     /// The marker, or the cache tag above the standard folder. The tag is a general convention other
-    /// tools write too, so it counts only where the folder is the one Jellyfin's own name gives it.
+    /// tools write too, so it counts only where the folder is the one Jellyfin's own name gives it,
+    /// and only as a tag: its header read, as Jellyfin writes it
+    /// (<see href="https://github.com/jellyfin/jellyfin/blob/master/Emby.Server.Implementations/AppBase/BaseApplicationPaths.cs">BaseApplicationPaths.cs</see>),
+    /// rather than any file of that name.
     /// </summary>
     private static bool IsJellyfins(string folder, string data, bool isMoved) =>
         LongPath.FileExists(Path.Combine(folder, Marker))
-        || (!isMoved && LongPath.FileExists(Path.Combine(data, "cache", CacheTag)));
+        || (!isMoved && MarkerFile.AnyCacheDirectoryTag.IsIn(Path.Combine(data, "cache")));
 
     private static PlanNote Unrecognised(string folder, string why) => new(
         PlanNoteSeverity.Information,
