@@ -19,10 +19,10 @@ namespace Deguffer.Core.Exploring.Acting;
 /// named on the far side of its parent and not of itself.</para>
 ///
 /// <para><b>A share, a network drive and a drive that keeps its files in the cloud are never
-/// opened</b>, as a duplicate search does not open them: opening is itself a conversation with
-/// another machine or the cloud client, a link on a share is followed by the server that holds it,
-/// and such a drive holds no link that could lead back to a local disk. What is there is judged by
-/// its text, as it was before links were followed at all.</para>
+/// opened</b>, for the reasons <see cref="HostVolume.Unopened"/> gives, and what is there is judged
+/// by its path. A link on a local disk that leads to a share is another matter: the share may be this
+/// computer's own disk under a second name, <c>\localhost\C$</c>, which no rule names, so the
+/// removal is refused.</para>
 ///
 /// <para><b>Following a link only adds places.</b> A rule and an item keep every path they were
 /// reachable at before, and a refusal that holds at any of them holds, so a link followed can refuse
@@ -34,6 +34,9 @@ namespace Deguffer.Core.Exploring.Acting;
 /// </summary>
 internal sealed class FinalPlaces(IFileSystem fileSystem, IVolumeInventory volumes)
 {
+    // In the extended form §6.3 requires, which is the form a test of this seam asserts on.
+    private readonly Func<string, string?> _finalPath = path => fileSystem.FinalPath(LongPath.Extended(path));
+
     /// <summary>
     /// The folder a rule names at <paramref name="path"/>, at every path it is reachable at, the
     /// folder a link on the way to it leads to included.
@@ -47,11 +50,7 @@ internal sealed class FinalPlaces(IFileSystem fileSystem, IVolumeInventory volum
     {
         var folder = ReachedFolder.At(path, volumes);
 
-        return IsOpened(path)
-            && fileSystem.FinalPath(LongPath.Extended(path)) is { } final
-            && ReachedFolder.Displayed(final) is { } shown
-                ? folder.Joined(ReachedFolder.At(shown, volumes))
-                : folder;
+        return ReachedFolder.FollowedTo(path, volumes, _finalPath) is { } followed ? folder.Joined(followed) : folder;
     }
 
     /// <summary>
@@ -59,8 +58,8 @@ internal sealed class FinalPlaces(IFileSystem fileSystem, IVolumeInventory volum
     /// Deguffer cannot tell.
     ///
     /// <para><b>Fails closed.</b> A folder above the item that is there and that Windows will not
-    /// open, or that Windows names only by a device path, hides where the removal would act, so
-    /// it refuses. A folder above the item that is not there hides nothing: the item is not there
+    /// open, that Windows names only by a device path, or that leads to a share, hides where the
+    /// removal would act, so it refuses. A folder above the item that is not there hides nothing: the item is not there
     /// either, and the removal reports it as gone.</para>
     /// </summary>
     /// <param name="target">The item, in display form, as the policy has already resolved it. Never the top of a volume.</param>
@@ -70,7 +69,7 @@ internal sealed class FinalPlaces(IFileSystem fileSystem, IVolumeInventory volum
         var extended = LongPath.Extended(parent);
         var name = Path.GetFileName(target);
 
-        if (!IsOpened(parent))
+        if (HostVolume.Unopened(volumes, parent) is not null)
         {
             return new FarSide(null, null);
         }
@@ -84,17 +83,18 @@ internal sealed class FinalPlaces(IFileSystem fileSystem, IVolumeInventory volum
                 : new FarSide(null, null);
         }
 
-        return ReachedFolder.Displayed(final) is { } shown
-            ? new FarSide(Path.Join(shown, name), null)
-            : new FarSide(null, ExploreVerdict.Refuse(
+        return ReachedFolder.Displayed(final) switch
+        {
+            null => new FarSide(null, ExploreVerdict.Refuse(
                 $"'{parent}' leads to a drive Windows names by no letter or folder, so Deguffer cannot tell "
-                + $"what removing '{name}' would act on, and leaves it alone."));
+                + $"what removing '{name}' would act on, and leaves it alone.")),
+            var shown when LongPath.IsShare(shown) => new FarSide(null, ExploreVerdict.Refuse(
+                $"A link on the way to '{name}' leads to the network share '{shown}', which can be this "
+                + "computer's own disk under another name, so Deguffer cannot tell what removing it would "
+                + "act on, and leaves it alone.")),
+            var shown => new FarSide(Path.Join(shown, name), null),
+        };
     }
-
-    /// <summary>Whether <paramref name="path"/> is on a drive whose links are asked about. See the type's remarks.</summary>
-    private bool IsOpened(string path) =>
-        !LongPath.IsShare(path)
-        && HostVolume.For(volumes, path) is not ({ Kind: DriveType.Network } or { StoresContentRemotely: true });
 }
 
 /// <summary>

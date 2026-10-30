@@ -184,6 +184,24 @@ public sealed class ReachedFolder
     }
 
     /// <summary>
+    /// The folder <paramref name="path"/> leads to once every link on the way to it is followed, or
+    /// null where Windows would not open it, where it is a place <see cref="HostVolume.Unopened"/>
+    /// never opens, or where Windows gives its final path only as a device path
+    /// (<see cref="Displayed"/>). A caller keeps the paths the name reaches where this answers null.
+    /// </summary>
+    /// <param name="path">A full path, in either form <see cref="LongPath"/> produces.</param>
+    /// <param name="finalPath">
+    /// Asks Windows where a path really is, given the path in either form, as
+    /// <see cref="FileInformation.FinalPath"/> and <see cref="IFileSystem.FinalPath"/> do.
+    /// </param>
+    internal static ReachedFolder? FollowedTo(string path, IVolumeInventory volumes, Func<string, string?> finalPath) =>
+        HostVolume.Unopened(volumes, path) is null
+        && finalPath(path) is { } final
+        && Displayed(final) is { } shown
+            ? At(shown, volumes)
+            : null;
+
+    /// <summary>
     /// <paramref name="final"/> in display form, or null where Windows gave it only as a device path,
     /// such as a volume's <c>\\?\Volume{GUID}\</c> name, which names no drive or folder.
     ///

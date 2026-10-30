@@ -562,8 +562,11 @@ not the shell asked.
   so a junction in the profile leading into `C:\Windows` takes the refusal with it, and a refused
   folder or a tool's root moved by a junction is refused at the link's far side as it is at its own
   name. The item itself is not followed, because removing a link removes only the link. A folder
-  above the item that Windows will not open, or that leads to a volume with no name, is refused,
-  because Deguffer cannot tell where the removal would act.
+  above the item that Windows will not open, that leads to a volume with no name, or that leads to
+  a network share, which can be this computer's own disk under a second name, is refused, because
+  Deguffer cannot tell where the removal would act. Nothing on a share, a network drive or a drive
+  that keeps its files in the cloud is opened to follow a link, so what is there is judged by its
+  path.
 - **What Explore shows and what Explore will act on are different sets**, and the second is much
   smaller. Drawing a rectangle for a path says only that the bytes are there. It is not a
   classification, it is not an offer, and the UI must never let a user read it as one — which is why

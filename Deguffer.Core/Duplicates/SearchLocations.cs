@@ -208,23 +208,15 @@ public sealed class SearchLocations
 
     /// <summary>
     /// Why <paramref name="followed"/> is refused before anything is opened on it, or null where only
-    /// its final path can say.
-    ///
-    /// <para>A share, and a drive letter Windows maps to one, because opening anything there is
-    /// itself a conversation with another machine, and the location is refused whatever it would say.
-    /// A drive that keeps its files in the cloud, because its driver answers an open, and such a drive
-    /// holds no link that could lead back to a local disk. Every other drive waits for the final path:
-    /// a link on it can lead to a local disk, where the location is searched.</para>
+    /// its final path can say. <see cref="HostVolume.Unopened"/> holds the rule and says why.
     /// </summary>
     internal static string? WhyNotOpened(string followed, IVolumeInventory volumes) =>
-        LongPath.IsShare(followed)
-            ? NotLocal
-            : HostVolume.For(volumes, followed) switch
-            {
-                { Kind: DriveType.Network } => NotLocal,
-                { StoresContentRemotely: true } => InTheCloud,
-                _ => null,
-            };
+        HostVolume.Unopened(volumes, followed) switch
+        {
+            UnopenedPlace.Share => NotLocal,
+            UnopenedPlace.Cloud => InTheCloud,
+            _ => null,
+        };
 
     private static string? WhyNotLocal(LocalVolume volume) => volume switch
     {

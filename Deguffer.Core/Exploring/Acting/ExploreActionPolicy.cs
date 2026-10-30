@@ -239,29 +239,21 @@ public sealed class ExploreActionPolicy
     }
 
     /// <summary>
-    /// The refusal of the place removing <paramref name="target"/> really acts on, where a folder above
-    /// it is a link, and the item's <paramref name="folder"/> with that place joined to it, so what it
-    /// holds there is asked about too. <see cref="FinalPlaces"/> says why only what is above the item
-    /// is followed.
-    ///
-    /// <para>A refusal is said as a sentence about the link, because the rule that refuses names a
-    /// path the user did not pick.</para>
+    /// The refusal of the place removing <paramref name="target"/> acts on where a folder above it is a
+    /// link, said of the link because the rule names a path the user did not pick, and the item's
+    /// <paramref name="folder"/> with that place joined, so <see cref="HeldLocations"/> asks there too.
     /// </summary>
     private (ExploreVerdict? Refusal, ReachedFolder Folder) ThroughLinks(
         string target, ReachedFolder folder, ToolRootChildren children)
     {
         var (farSide, unfollowed) = _finalPlaces.Item(target);
 
-        if (unfollowed is not null || farSide is null)
-        {
-            return (unfollowed, folder);
-        }
-
         // Where no link leads elsewhere the far side is one of the paths the item is already
         // reachable at, a substituted letter and another mount of its volume included.
-        if (folder.Places.Contains(ReachedFolder.Comparable(farSide), StringComparer.OrdinalIgnoreCase))
+        if (unfollowed is not null || farSide is null
+            || folder.Places.Contains(ReachedFolder.Comparable(farSide), StringComparer.OrdinalIgnoreCase))
         {
-            return (null, folder);
+            return (unfollowed, folder);
         }
 
         var name = Path.GetFileName(target);
