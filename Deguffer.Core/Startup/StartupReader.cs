@@ -42,10 +42,8 @@ public sealed class StartupReader(
 
         ReadPackaged(entries, notes, ct);
 
-        entries.Sort(static (a, b) =>
-            StringComparer.CurrentCultureIgnoreCase.Compare(a.Title, b.Title) is var byTitle and not 0
-                ? byTitle
-                : a.Key.Source.CompareTo(b.Key.Source));
+        // The shipped order (§7.5), so a page showing it moves nothing as the reading arrives.
+        entries.Sort(StartupRowOrder.Comparer(StartupOrder.Name, StartupOrderDirection.Ascending));
 
         return new StartupReading(entries, notes);
     }

@@ -26,10 +26,10 @@ public sealed class HiddenSpaceTests
     {
         var tiles = Layout(Volume with { Hidden = Shadow(allocated: 1_000) });
 
-        var shadow = tiles.Single(tile => tile.IsShadowCopies);
+        var shadow = tiles.Single(tile => tile.Block == MapBlock.ShadowCopies);
 
         Assert.Equal(1_000, shadow.Bytes);
-        Assert.Equal(2_000, tiles.Single(tile => tile.IsUnaccounted).Bytes);
+        Assert.Equal(2_000, tiles.Single(tile => tile.Block == MapBlock.Unaccounted).Bytes);
         Assert.False(shadow.IsNode);
     }
 
@@ -38,10 +38,10 @@ public sealed class HiddenSpaceTests
     {
         var tiles = Layout(Volume with { Hidden = Reserved(500) });
 
-        var reserved = tiles.Single(tile => tile.IsReservedStorage);
+        var reserved = tiles.Single(tile => tile.Block == MapBlock.ReservedStorage);
 
         Assert.Equal(500, reserved.Bytes);
-        Assert.Equal(2_500, tiles.Single(tile => tile.IsUnaccounted).Bytes);
+        Assert.Equal(2_500, tiles.Single(tile => tile.Block == MapBlock.Unaccounted).Bytes);
         Assert.False(reserved.IsNode);
     }
 
@@ -70,8 +70,8 @@ public sealed class HiddenSpaceTests
     {
         var tiles = Layout(Volume with { Hidden = new HiddenSpace(ShadowStorage.Refused, default) });
 
-        Assert.DoesNotContain(tiles, tile => tile.IsShadowCopies || tile.IsReservedStorage);
-        Assert.Equal(3_000, tiles.Single(tile => tile.IsUnaccounted).Bytes);
+        Assert.DoesNotContain(tiles, tile => tile.Block == MapBlock.ShadowCopies || tile.Block == MapBlock.ReservedStorage);
+        Assert.Equal(3_000, tiles.Single(tile => tile.Block == MapBlock.Unaccounted).Bytes);
     }
 
     /// <summary>
@@ -84,8 +84,8 @@ public sealed class HiddenSpaceTests
     {
         var tiles = Layout(Volume with { Hidden = Shadow(allocated: 5_000) });
 
-        Assert.DoesNotContain(tiles, tile => tile.IsShadowCopies);
-        Assert.Equal(3_000, tiles.Single(tile => tile.IsUnaccounted).Bytes);
+        Assert.DoesNotContain(tiles, tile => tile.Block == MapBlock.ShadowCopies);
+        Assert.Equal(3_000, tiles.Single(tile => tile.Block == MapBlock.Unaccounted).Bytes);
         Assert.All(tiles, tile => Assert.True(tile.Bytes >= 0));
     }
 
@@ -110,8 +110,8 @@ public sealed class HiddenSpaceTests
     {
         var tiles = Layout(Volume with { Hidden = Shadow(allocated: 1_000), CountedSystemVolumeInformation = true });
 
-        Assert.DoesNotContain(tiles, tile => tile.IsShadowCopies);
-        Assert.Equal(3_000, tiles.Single(tile => tile.IsUnaccounted).Bytes);
+        Assert.DoesNotContain(tiles, tile => tile.Block == MapBlock.ShadowCopies);
+        Assert.Equal(3_000, tiles.Single(tile => tile.Block == MapBlock.Unaccounted).Bytes);
     }
 
     [Fact]

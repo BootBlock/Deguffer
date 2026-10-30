@@ -243,6 +243,13 @@ public enum ExploreScheme
 /// way <paramref name="View"/> is: it changes where a row stands, never what is scanned, offered or
 /// deleted.
 /// </param>
+/// <param name="StartupOrder">
+/// How the Startup page orders its entries. By name by default, as §7.5 ships it. Presentation only:
+/// it changes where an entry stands, never what is read or what a change writes.
+/// </param>
+/// <param name="StartupOrderDirection">
+/// Which way round <paramref name="StartupOrder"/> runs. Ascending by default.
+/// </param>
 /// <param name="ExploreNotesDismissed">
 /// Whether Explore's notes are collapsed to the button that brings them back. Off by default, and
 /// only the reader ever turns it on.
@@ -400,6 +407,8 @@ public sealed record AppPreferences(
     bool ShowNotInstalled = false,
     bool ShowAlreadyClear = false,
     StorageOrder StorageOrder = StorageOrder.Size,
+    Startup.StartupOrder StartupOrder = Startup.StartupOrder.Name,
+    Startup.StartupOrderDirection StartupOrderDirection = Startup.StartupOrderDirection.Ascending,
     bool BackdropEnabled = true,
     bool ConfirmBeforeCleaning = true,
     bool RequireTypedConfirmation = false,

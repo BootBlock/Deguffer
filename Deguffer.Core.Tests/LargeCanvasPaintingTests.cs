@@ -1,3 +1,4 @@
+using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Testing;
@@ -109,8 +110,8 @@ public sealed class LargeCanvasPaintingTests
         new TileRasteriser(
             new CushionQuads(
                 tiles, Width, Height,
-                tile => tile.IsAggregate
-                    ? TilePalette.Aggregate
+                tile => tile.Block == MapBlock.Aggregate
+                    ? MapBlock.Aggregate.Colour
                     : Hues.Colour(tile.Node, tile.Depth),
                 ShapeFinish.Cushioned),
             Ground)

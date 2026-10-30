@@ -111,41 +111,6 @@ public static class TilePalette
     }
 
     /// <summary>
-    /// The colour for a rectangle standing in for siblings too small to draw.
-    ///
-    /// <para>Deliberately outside the branch hues, and deliberately flat. It is not a thing on the
-    /// disk, so giving it a colour that reads as one would invite the user to act on it.</para>
-    /// </summary>
-    public static TileColour Aggregate => TileColour.FromRgb(0x707070);
-
-    /// <summary>
-    /// The colour for the block standing for a volume's free space: a light neutral, apart from
-    /// the aggregate's darker one and from every hue, because it is neither a thing on the disk nor
-    /// a run of them.
-    /// </summary>
-    public static TileColour FreeSpace => TileColour.FromRgb(0xC8C8C8);
-
-    /// <summary>
-    /// The colour for the block standing for use the scan did not account for: the neutral between
-    /// the aggregate's and the free space's, because it is in use like the one and not a thing on
-    /// the disk like the other.
-    /// </summary>
-    public static TileColour Unaccounted => TileColour.FromRgb(0x9C9C9C);
-
-    /// <summary>
-    /// The colour for the block standing for restore points and shadow copies: a neutral a step
-    /// darker than the unaccounted block it was taken out of, so it reads as part of the same use
-    /// and apart from it, and like it is no hue a thing on the disk is drawn in.
-    /// </summary>
-    public static TileColour ShadowCopies => TileColour.FromRgb(0x888888);
-
-    /// <summary>
-    /// The colour for the block standing for reserved storage: a neutral a step lighter than the
-    /// unaccounted block, for the reason <see cref="ShadowCopies"/> is a step darker.
-    /// </summary>
-    public static TileColour ReservedStorage => TileColour.FromRgb(0xB0B0B0);
-
-    /// <summary>
     /// The colour of a folder drawn round what it holds, where the style asks for grey frames
     /// (<see cref="Configuration.MapFolderFill.Grey"/>): a dark neutral with a cool cast, darker than
     /// every block's grey so a frame is never read as one of them, as WizTree draws its folders.

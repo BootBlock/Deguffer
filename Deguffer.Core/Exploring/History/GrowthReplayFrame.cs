@@ -51,16 +51,11 @@ public sealed class GrowthReplayFrame : ITrackedTree
     /// What a shape of this step is labelled: its name and its size at this step. A folder removed
     /// since says so, and so does a block of what the earlier scan did not record.
     /// </summary>
-    public string Label(int node)
-    {
-        var size = FreeSpace.Format(SizeOf(node));
-
-        return Replay.NameOf(node) is not { } name
-            ? $"{GrowthText.Unrecorded(Replay.Growth.Earlier.UnrecordedAtMost)}  {size}"
-            : node >= Replay.TodayCount
-                ? $"{name}, removed since  {size}"
-                : $"{name}  {size}";
-    }
+    public string Label(int node) => MapShapeText.Label(
+        Replay.NameOf(node) is not { } name ? GrowthText.Unrecorded(Replay.Growth.Earlier.UnrecordedAtMost)
+        : node >= Replay.TodayCount ? $"{name}, removed since"
+        : name,
+        SizeOf(node));
 
     /// <summary>
     /// Find each node in another step of the same replay, where it has the same number, or in the

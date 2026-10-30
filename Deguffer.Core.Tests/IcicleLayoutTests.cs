@@ -68,7 +68,7 @@ public sealed class IcicleLayoutTests
         var tree = TreeOf([1_000_000, .. Enumerable.Repeat(1L, 500)]);
 
         var tiles = Layout(tree, limits);
-        var aggregate = Assert.Single(tiles, t => t.IsAggregate);
+        var aggregate = Assert.Single(tiles, t => t.Block == MapBlock.Aggregate);
 
         Assert.Equal(500, aggregate.Bytes);
     }
@@ -113,7 +113,7 @@ public sealed class IcicleLayoutTests
         var tiles = Layout(ScatteredTree(), LayoutLimits.Default);
 
         var drawn = tiles
-            .Where(tile => tile.Depth == 1 && !tile.IsAggregate)
+            .Where(tile => tile.Depth == 1 && tile.Block != MapBlock.Aggregate)
             .Select(tile => tile.Bytes)
             .OrderByDescending(bytes => bytes)
             .ToList();
@@ -131,7 +131,7 @@ public sealed class IcicleLayoutTests
     {
         var tiles = Layout(ScatteredTree(), LayoutLimits.Default).Where(t => t.Depth == 1).ToList();
 
-        var aggregate = Assert.Single(tiles, tile => tile.IsAggregate);
+        var aggregate = Assert.Single(tiles, tile => tile.Block == MapBlock.Aggregate);
 
         Assert.Equal(2, aggregate.Bytes);
         Assert.Equal(1000, tiles.Sum(tile => tile.Bytes));

@@ -14,7 +14,8 @@ namespace Deguffer.Core.Exploring.Layout;
 /// too small to draw individually, <see cref="FreeSpace"/> where it stands for what the volume has
 /// left, <see cref="Unaccounted"/> where it stands for what the volume has in use that the scan
 /// did not count, or <see cref="ShadowCopies"/> or <see cref="ReservedStorage"/> where it stands for
-/// a part of that Windows states the size of.
+/// a part of that Windows states the size of. What a block is called and painted is its
+/// <see cref="Block"/>.
 /// </param>
 /// <param name="Depth">How far below the layout's root this sits. The root itself is zero.</param>
 /// <param name="Bytes">
@@ -97,15 +98,8 @@ public readonly record struct ExploreTile(
     /// </summary>
     public const int ReservedStorage = -5;
 
-    public bool IsAggregate => Node == Aggregated;
-
-    public bool IsFreeSpace => Node == FreeSpace;
-
-    public bool IsUnaccounted => Node == Unaccounted;
-
-    public bool IsShadowCopies => Node == ShadowCopies;
-
-    public bool IsReservedStorage => Node == ReservedStorage;
+    /// <summary>The block this rectangle stands for, or null where it is a node of the tree.</summary>
+    public MapBlock? Block => MapBlock.Of(Node);
 
     /// <summary>Whether this rectangle is a node of the tree, rather than one standing for something else.</summary>
     public bool IsNode => Node >= 0;

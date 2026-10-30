@@ -260,8 +260,7 @@ public sealed partial class MemoryViewModel : ObservableObject, IMapNavigator
     {
         (Hovered, HoveredFigures, HoveredNote) = (Tree, hit) switch
         {
-            (_, { IsAggregate: true } aggregate) => (
-                "Parts too small to draw separately", Core.Scanning.FreeSpace.Format(aggregate.Bytes), string.Empty),
+            (_, { Block: { } block, Bytes: var bytes }) => (block.Readout, Core.Scanning.FreeSpace.Format(bytes), string.Empty),
 
             ({ } tree, { IsNode: true, Node: var over }) when tree.Holds(over) => (
                 MemoryText.Name(tree, over),

@@ -77,7 +77,7 @@ public sealed class TreemapLayoutTests
 
         var seen = new HashSet<int>();
 
-        foreach (var tile in tiles.Where(t => !t.IsAggregate))
+        foreach (var tile in tiles.Where(t => t.Block != MapBlock.Aggregate))
         {
             if (tile.Node != tree.RootNode)
             {
@@ -130,7 +130,7 @@ public sealed class TreemapLayoutTests
         var tree = TreeOf([1_000_000, .. Enumerable.Repeat(1L, 500)]);
 
         var tiles = TreemapLayout.Compute(tree, tree.RootNode, Width, Height, limits);
-        var aggregates = tiles.Where(t => t.IsAggregate).ToList();
+        var aggregates = tiles.Where(t => t.Block == MapBlock.Aggregate).ToList();
 
         Assert.NotEmpty(aggregates);
         Assert.All(aggregates, a => Assert.True(a.Bytes > 0, "an aggregate stood for nothing"));

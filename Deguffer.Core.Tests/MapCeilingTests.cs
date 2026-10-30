@@ -54,13 +54,13 @@ public sealed class MapCeilingTests
     public void TheCeilingRisesWhileThereIsDetailInViewAndStopsWhereItEnds()
     {
         var tree = LongTail();
-        var (x, y) = CentreOf(Layout(tree, MapViewport.Whole).Single(tile => tile.IsAggregate), MapViewport.Whole);
+        var (x, y) = CentreOf(Layout(tree, MapViewport.Whole).Single(tile => tile.Block == MapBlock.Aggregate), MapViewport.Whole);
         var viewport = MapViewport.Anchored(MapCeiling.Least, x, y, 0.5, 0.5, MapCeiling.Least);
         var tiles = Layout(tree, viewport);
 
-        Assert.Contains(tiles, tile => tile.IsAggregate && OnCanvas(tile));
+        Assert.Contains(tiles, tile => tile.Block == MapBlock.Aggregate && OnCanvas(tile));
 
-        for (var drawings = 0; tiles.Any(tile => tile.IsAggregate && OnCanvas(tile)); drawings++)
+        for (var drawings = 0; tiles.Any(tile => tile.Block == MapBlock.Aggregate && OnCanvas(tile)); drawings++)
         {
             Assert.True(drawings < 12, $"still a block in view after {drawings} drawings, at {viewport.Zoom}");
 
@@ -107,7 +107,7 @@ public sealed class MapCeilingTests
         var blocks = tiles.Where(tile => IsUnopenedFolder(tree, tile, tiles) && OnCanvas(tile)).ToList();
 
         Assert.NotEmpty(blocks);
-        Assert.DoesNotContain(tiles, tile => tile.IsAggregate && OnCanvas(tile));
+        Assert.DoesNotContain(tiles, tile => tile.Block == MapBlock.Aggregate && OnCanvas(tile));
 
         var ceiling = Draw(tree, ExploreView.Treemap, viewport).Ceiling!.Value;
 
@@ -125,7 +125,7 @@ public sealed class MapCeilingTests
         var tree = FilesOf(400, 300, 200, 100);
         var deep = MapViewport.Anchored(100, 0.3, 0.3, 0.5, 0.5, 1000);
 
-        Assert.DoesNotContain(Layout(tree, deep), tile => tile.IsAggregate);
+        Assert.DoesNotContain(Layout(tree, deep), tile => tile.Block == MapBlock.Aggregate);
         Assert.Equal(100, Draw(tree, ExploreView.Treemap, deep).Ceiling!.Value, 9);
         Assert.Equal(MapCeiling.Least, Draw(tree, ExploreView.Treemap, MapViewport.Whole).Ceiling);
     }
@@ -135,13 +135,13 @@ public sealed class MapCeilingTests
     public void UndrawnDetailOffTheScreenLeavesTheCeilingAtTheZoom()
     {
         var tree = LongTail();
-        var aggregate = Layout(tree, MapViewport.Whole).Single(tile => tile.IsAggregate);
+        var aggregate = Layout(tree, MapViewport.Whole).Single(tile => tile.Block == MapBlock.Aggregate);
         var (x, y) = CentreOf(aggregate, MapViewport.Whole);
 
         // The far side of the picture from the tail, which the huge file fills.
         var away = MapViewport.Anchored(100, 1 - x, 1 - y, 0.5, 0.5, 1000);
 
-        Assert.DoesNotContain(Layout(tree, away), tile => tile.IsAggregate && OnCanvas(tile));
+        Assert.DoesNotContain(Layout(tree, away), tile => tile.Block == MapBlock.Aggregate && OnCanvas(tile));
         Assert.Equal(100, Draw(tree, ExploreView.Treemap, away).Ceiling!.Value, 9);
     }
 
@@ -154,11 +154,11 @@ public sealed class MapCeilingTests
     {
         var even = FilesOf([10_000_000_000, .. Enumerable.Repeat(10L, 100_000)]);
         var uneven = FilesOf([10_000_000_000, .. Enumerable.Repeat(10L, 100_000), 1]);
-        var (x, y) = CentreOf(Layout(even, MapViewport.Whole).Single(tile => tile.IsAggregate), MapViewport.Whole);
+        var (x, y) = CentreOf(Layout(even, MapViewport.Whole).Single(tile => tile.Block == MapBlock.Aggregate), MapViewport.Whole);
         var viewport = MapViewport.Anchored(MapCeiling.Least, x, y, 0.5, 0.5, MapCeiling.Least);
 
-        Assert.Contains(Layout(even, viewport), tile => tile.IsAggregate);
-        Assert.Contains(Layout(uneven, viewport), tile => tile.IsAggregate);
+        Assert.Contains(Layout(even, viewport), tile => tile.Block == MapBlock.Aggregate);
+        Assert.Contains(Layout(uneven, viewport), tile => tile.Block == MapBlock.Aggregate);
 
         var evenCeiling = Draw(even, ExploreView.Treemap, viewport).Ceiling!.Value;
         var unevenCeiling = Draw(uneven, ExploreView.Treemap, viewport).Ceiling!.Value;
