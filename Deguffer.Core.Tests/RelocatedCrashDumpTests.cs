@@ -136,6 +136,92 @@ public sealed class RelocatedCrashDumpTests : IDisposable
     }
 
     /// <summary>
+    /// <c>LiveKernelReportsPath</c> moves live kernel reports, in the object manager's form Microsoft
+    /// documents for it. Windows writes a full live dump directly into the folder and each minidump
+    /// into a folder named after its component, so both are offered, by name and needing an
+    /// administrator. A folder of any other name there is never looked into, and every folder, with
+    /// everything in it that is not such a dump, survives the run.
+    /// </summary>
+    [Fact]
+    public async Task AMovedLiveKernelReportsFolderOffersItsDumpsAndThoseOfEachNamedComponent()
+    {
+        var folder = Path.Combine(Elsewhere, "LiveDumps");
+        var full = Dump(Path.Combine(folder, "WATCHDOG-20261030-1200.dmp"));
+        var watchdog = Path.Combine(folder, "WATCHDOG");
+        var minidump = Dump(Path.Combine(watchdog, "WATCHDOG-20261030-1201.dmp"));
+        var usb = Dump(Path.Combine(folder, "usbhub3", "USBHUB3-20261030-1202.dmp"));
+        var impostor = Text(Path.Combine(watchdog, "readme.dmp"));
+        var deeper = Dump(Path.Combine(watchdog, "older", "WATCHDOG-20250101-0000.dmp"));
+        var theirs = Dump(Path.Combine(folder, "Saved", "for-the-bug-report.dmp"));
+        Set($@"{CrashControl}\LiveKernelReports", "LiveKernelReportsPath", @"\??\" + folder);
+
+        var provider = CreateProvider();
+
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(
+            new[] { full, minidump, usb }.Order(StringComparer.OrdinalIgnoreCase),
+            plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
+        Assert.All(plan.Steps, s => Assert.IsType<DeleteFileStep>(s));
+        Assert.All(plan.Steps.OfType<DeleteStep>(), s => Assert.True(s.RequiresElevation));
+        Assert.Contains(plan.Notes, n => n.Message.Contains("live kernel reports", StringComparison.Ordinal)
+            && n.Message.Contains("LiveKernelReportsPath", StringComparison.Ordinal));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(watchdog, StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(provider));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.False(File.Exists(full));
+        Assert.False(File.Exists(minidump));
+        Assert.False(File.Exists(usb));
+
+        foreach (var spared in new[] { impostor, deeper, theirs })
+        {
+            Assert.True(File.Exists(spared), $"{Path.GetFileName(spared)} was removed");
+        }
+
+        Assert.True(Directory.Exists(folder), "the moved folder itself was removed");
+        Assert.True(Directory.Exists(watchdog), "a component's folder was removed");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// The component folders belong to live kernel reports alone. A folder named after one inside the
+    /// place <c>MinidumpDir</c> names is somebody else's, as any folder there is.
+    /// </summary>
+    [Fact]
+    public async Task OnlyTheLiveKernelReportsSettingReachesIntoComponentFolders()
+    {
+        var folder = Path.Combine(Elsewhere, "Minidumps");
+        var kernel = Dump(Path.Combine(folder, "102226-01.dmp"));
+        var named = Dump(Path.Combine(folder, "WATCHDOG", "WATCHDOG-20261030-1201.dmp"));
+        Set(CrashControl, "MinidumpDir", folder);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Equal([kernel], plan.TargetedPaths);
+        Assert.True(File.Exists(named));
+    }
+
+    /// <summary>
+    /// A setting that names the default folder, in the form Windows reads it, is the default: the
+    /// declared row covers it, and nothing in it is offered a second time.
+    /// </summary>
+    [Fact]
+    public async Task ALiveKernelReportsSettingNamingTheDefaultIsTheDefault()
+    {
+        var live = Path.Combine(_system.WindowsDirectory, "LiveKernelReports");
+        Dump(Path.Combine(live, "WATCHDOG", "WATCHDOG-20261030-1201.dmp"));
+        Set($@"{CrashControl}\LiveKernelReports", "LiveKernelReportsPath", @"\??\" + live);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Equal([live], plan.TargetedPaths);
+    }
+
+    /// <summary>
     /// <c>LocalDumps</c> has a folder for every application and one for each application that names
     /// its own. Both are read, and both hold dumps the signed-in account may remove.
     /// </summary>
