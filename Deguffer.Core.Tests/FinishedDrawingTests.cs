@@ -57,7 +57,7 @@ public sealed class FinishedDrawingTests
     [Fact]
     public void ABevelIsLitAlongTheTopAndLeftAndShadedAlongTheBottomAndRight()
     {
-        var drawing = Drawn(ExploreView.Treemap, MapStyle.Default with { Shading = MapShading.Bevel });
+        var drawing = Treemap(MapStyle.Default with { Shading = MapShading.Bevel });
         var pixels = Paint(drawing);
         var leaves = Leaves(drawing);
 
@@ -84,8 +84,8 @@ public sealed class FinishedDrawingTests
     [Fact]
     public void ABlocksLineAndAFoldersAreDrawnApart()
     {
-        var blocks = Drawn(ExploreView.Treemap, MapStyle.Default with { Shading = MapShading.Flat, BlockBorders = MapBorder.Solid });
-        var folders = Drawn(ExploreView.Treemap, MapStyle.Default with { Shading = MapShading.Flat, FolderBorders = MapBorder.Solid });
+        var blocks = Treemap(MapStyle.Default with { Shading = MapShading.Flat, BlockBorders = MapBorder.Solid });
+        var folders = Treemap(MapStyle.Default with { Shading = MapShading.Flat, FolderBorders = MapBorder.Solid });
         var band = Banded(blocks);
         var bandRow = band.Quad.Top + 4;
 
@@ -110,8 +110,7 @@ public sealed class FinishedDrawingTests
     [Fact]
     public void ALineIsTheShapesColourMixedTowardsItsTone()
     {
-        var drawing = Drawn(
-            ExploreView.Treemap,
+        var drawing = Treemap(
             MapStyle.Default with { Shading = MapShading.Flat, BlockBorders = MapBorder.Medium, BorderTone = MapBorderTone.Light });
         var pixels = Paint(drawing);
 
@@ -127,8 +126,7 @@ public sealed class FinishedDrawingTests
     [InlineData(MapBorderWidth.Heavy, 3)]
     public void AWideLineIsDrawnInsideTheShape(MapBorderWidth width, int pixels)
     {
-        var drawing = Drawn(
-            ExploreView.Treemap,
+        var drawing = Treemap(
             MapStyle.Default with { Shading = MapShading.Flat, BlockBorders = MapBorder.Solid, BorderWidth = width });
         var painted = Paint(drawing);
         var leaves = Leaves(drawing);
@@ -153,11 +151,11 @@ public sealed class FinishedDrawingTests
     [Fact]
     public void TheReliefScalesTheRiseAndAFlatStyleRisesNowhere()
     {
-        var standard = Drawn(ExploreView.Treemap, MapStyle.Default).Quads()!.Quads.ToArray();
-        var strong = Drawn(ExploreView.Treemap, MapStyle.Default with { Relief = MapRelief.Strong }).Quads()!.Quads.ToArray();
-        var deep = Drawn(ExploreView.Treemap, MapStyle.Default with { Relief = MapRelief.Deep }).Quads()!.Quads.ToArray();
-        var flat = Drawn(ExploreView.Treemap, MapStyle.Default with { Shading = MapShading.Flat }).Quads()!.Quads.ToArray();
-        var bevelled = Drawn(ExploreView.Treemap, MapStyle.Default with { Shading = MapShading.Bevel });
+        var standard = Treemap(MapStyle.Default).Quads().Quads.ToArray();
+        var strong = Treemap(MapStyle.Default with { Relief = MapRelief.Strong }).Quads().Quads.ToArray();
+        var deep = Treemap(MapStyle.Default with { Relief = MapRelief.Deep }).Quads().Quads.ToArray();
+        var flat = Treemap(MapStyle.Default with { Shading = MapShading.Flat }).Quads().Quads.ToArray();
+        var bevelled = Treemap(MapStyle.Default with { Shading = MapShading.Bevel });
 
         Assert.Equal(standard.Length, strong.Length);
         Assert.Contains(standard, quad => quad.Ridge > 0);
@@ -169,9 +167,9 @@ public sealed class FinishedDrawingTests
         }
 
         Assert.All(flat, quad => Assert.Equal(0, quad.Ridge));
-        Assert.Equal(0, Banded(Drawn(ExploreView.Treemap, MapStyle.Default)).Quad.Ridge);
+        Assert.Equal(0, Banded(Treemap(MapStyle.Default)).Quad.Ridge);
         Assert.True(Banded(bevelled).Quad.Ridge > 0);
-        Assert.Equal(0, Banded(Drawn(ExploreView.Treemap, MapStyle.Default with { Shading = MapShading.Gradient })).Quad.Ridge);
+        Assert.Equal(0, Banded(Treemap(MapStyle.Default with { Shading = MapShading.Gradient })).Quad.Ridge);
     }
 
     /// <summary>
@@ -186,7 +184,7 @@ public sealed class FinishedDrawingTests
     [InlineData(MapRelief.Deep)]
     public void ASheenIsLighterAlongTheTopAndDarkerAlongTheBottom(MapRelief relief)
     {
-        var drawing = Drawn(ExploreView.Treemap, MapStyle.Default with { Shading = MapShading.Gradient, Relief = relief });
+        var drawing = Treemap(MapStyle.Default with { Shading = MapShading.Gradient, Relief = relief });
         var pixels = Paint(drawing);
         var slope = GradientShading.SlopeAt(drawing.Finish.Relief);
         var leaves = Leaves(drawing);
@@ -280,8 +278,8 @@ public sealed class FinishedDrawingTests
     [Fact]
     public void WithoutBandsNoFolderHasOneOrIsNamedInOne()
     {
-        var banded = Drawn(ExploreView.Treemap, MapStyle.Default);
-        var bare = Drawn(ExploreView.Treemap, MapStyle.Default with { FolderNames = false });
+        var banded = Treemap(MapStyle.Default);
+        var bare = Treemap(MapStyle.Default with { FolderNames = false });
 
         Assert.Contains(banded.Tiles, tile => tile.Header > 0);
         Assert.Contains(banded.Labels, label => Tree.IsDirectory(label.Node));
@@ -303,7 +301,7 @@ public sealed class FinishedDrawingTests
     {
         var named = Drawn(view, MapStyle.Default);
         var unnamed = Drawn(view, MapStyle.Default with { ShapeNames = false });
-        var bands = unnamed.Tiles.Where(tile => tile.Header > 0).Select(tile => tile.Node).ToHashSet();
+        var bands = unnamed is TiledSurface tiled ? tiled.Tiles.Where(tile => tile.Header > 0).Select(tile => tile.Node).ToHashSet() : [];
 
         Assert.Contains(named.Labels, label => !bands.Contains(label.Node));
         Assert.All(unnamed.Labels, label => Assert.Contains(label.Node, bands));
@@ -317,10 +315,10 @@ public sealed class FinishedDrawingTests
     [Fact]
     public void GreyFramesFillEveryFolderDrawnRoundWhatItHolds()
     {
-        var coloured = Drawn(ExploreView.Treemap, MapStyle.Default);
-        var grey = Drawn(ExploreView.Treemap, MapStyle.Default with { FolderFill = MapFolderFill.Grey });
-        var quads = coloured.Quads()!.Quads.ToArray();
-        var greyQuads = grey.Quads()!.Quads.ToArray();
+        var coloured = Treemap(MapStyle.Default);
+        var grey = Treemap(MapStyle.Default with { FolderFill = MapFolderFill.Grey });
+        var quads = coloured.Quads().Quads.ToArray();
+        var greyQuads = grey.Quads().Quads.ToArray();
 
         Assert.Contains(greyQuads, quad => quad.Framed);
 
@@ -342,10 +340,10 @@ public sealed class FinishedDrawingTests
     [Fact]
     public void TintedFramesMixEveryFolderHalfWayTowardsTheGrey()
     {
-        var coloured = Drawn(ExploreView.Treemap, MapStyle.Default);
-        var tinted = Drawn(ExploreView.Treemap, MapStyle.Default with { FolderFill = MapFolderFill.Tinted });
-        var quads = coloured.Quads()!.Quads.ToArray();
-        var tintedQuads = tinted.Quads()!.Quads.ToArray();
+        var coloured = Treemap(MapStyle.Default);
+        var tinted = Treemap(MapStyle.Default with { FolderFill = MapFolderFill.Tinted });
+        var quads = coloured.Quads().Quads.ToArray();
+        var tintedQuads = tinted.Quads().Quads.ToArray();
 
         Assert.True(tintedQuads.Where(quad => quad.Framed).Select(quad => quad.Colour).Distinct().Count() > 1, "every folder was tinted alike");
 
@@ -369,13 +367,12 @@ public sealed class FinishedDrawingTests
     {
         var window = new TileColour(0, 0, 0);
         var text = new TileColour(255, 255, 0);
-        var drawing = Drawn(
-            ExploreView.Treemap,
+        var drawing = Treemap(
             MapPreset.SpaceMonger.Style with { FolderFill = fill },
             ShapeColours.Contrasted(new ContrastColours(window, text)));
 
         Assert.Equal(ShapeFinish.Contrasted(new ContrastColours(window, text), 1), drawing.Finish);
-        Assert.All(drawing.Quads()!.Quads.ToArray(), quad => Assert.Equal(window, quad.Colour));
+        Assert.All(drawing.Quads().Quads.ToArray(), quad => Assert.Equal(window, quad.Colour));
     }
 
     /// <summary>
@@ -385,7 +382,7 @@ public sealed class FinishedDrawingTests
     [Fact]
     public void AShapeAChangeOfViewCarriesKeepsItsLine()
     {
-        var drawing = Drawn(ExploreView.Treemap, MapStyle.Default with { Shading = MapShading.Flat, BlockBorders = MapBorder.Solid });
+        var drawing = Treemap(MapStyle.Default with { Shading = MapShading.Flat, BlockBorders = MapBorder.Solid });
         var shapes = drawing.MorphShapes(drawing.NodesDrawn.ToHashSet()).ToDictionary(shape => shape.Node);
         var framed = drawing.Tiles.Where(tile => tile.IsNode && tile.Framed).Select(tile => tile.Node).ToHashSet();
 
@@ -398,7 +395,7 @@ public sealed class FinishedDrawingTests
     [Fact]
     public void ATileAZoomShowsIsFinishedAsItsDrawingIs()
     {
-        var drawing = (TiledSurface)Drawn(ExploreView.Treemap, MapPreset.SpaceMonger.Style);
+        var drawing = Treemap(MapPreset.SpaceMonger.Style);
         var tiling = new MapTiling(Width, Height);
         var tile = drawing.Tile(tiling, tiling.At(1, 0.4, 0.6)!.Value);
 
@@ -449,8 +446,8 @@ public sealed class FinishedDrawingTests
     public void EveryShapeIsPaintedTheColourOfItsLevel()
     {
         var folder = Tree.ChildrenOf(ExploreTreeBuilder.RootNode).ToArray().First(node => Tree.IsDirectory(node));
-        var drawing = Drawn(ExploreView.Treemap, MapStyle.Default, ShapeColours.ByDepth, folder);
-        var quads = drawing.Quads()!.Quads.ToArray();
+        var drawing = Treemap(MapStyle.Default, ShapeColours.ByDepth, folder);
+        var quads = drawing.Quads().Quads.ToArray();
         var tiles = drawing.Tiles.Where(tile => CushionQuad.Of(tile, drawing.Finish).Reaches(Width, Height)).ToList();
 
         Assert.Equal(tiles.Count, quads.Length);
@@ -485,11 +482,14 @@ public sealed class FinishedDrawingTests
         Tree, root, view, Width, Height, scale: 1, textScale: 1,
         colours ?? ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None, style: style);
 
+    private static TiledSurface Treemap(MapStyle style, ShapeColours? colours = null, int root = ExploreTreeBuilder.RootNode) =>
+        (TiledSurface)Drawn(ExploreView.Treemap, style, colours, root);
+
     /// <summary>
     /// The rectangles drawn as one block whole on the canvas and large enough to look inside, each with
     /// the colour it is painted.
     /// </summary>
-    private static List<(CushionQuad Quad, TileColour Colour)> Leaves(ExploreSurface drawing) =>
+    private static List<(CushionQuad Quad, TileColour Colour)> Leaves(TiledSurface drawing) =>
     [
         .. drawing.Tiles
             .Where(tile => tile.IsNode && !tile.Framed)
@@ -500,7 +500,7 @@ public sealed class FinishedDrawingTests
     ];
 
     /// <summary>A folder drawn with a band, whole on the canvas, and the colour it is painted.</summary>
-    private static (CushionQuad Quad, TileColour Colour) Banded(ExploreSurface drawing)
+    private static (CushionQuad Quad, TileColour Colour) Banded(TiledSurface drawing)
     {
         var tile = drawing.Tiles.First(tile => tile.Header > 0 && tile.Node != ExploreTreeBuilder.RootNode && tile.X >= 0 && tile.Y >= 0);
 
