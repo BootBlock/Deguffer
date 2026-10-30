@@ -479,9 +479,9 @@ One class each, on the shape npm and NuGet already use.
 | Bun | `%USERPROFILE%\.bun\install\cache`, `bun pm cache prune` | ✅ Shipped as `BunInstallCacheProvider`, through `prune` only. `prune` first shipped in Bun 1.4.4, and an earlier Bun is offered nothing, because its only eviction, `rm`, deletes the global store in `links` |
 | Composer | `composer clear-cache` | ✅ Shipped as `ComposerCacheProvider`. Measured at 30 MB |
 | vcpkg | `%LOCALAPPDATA%\vcpkg\archives`, plus `buildtrees`, `downloads`, `packages` under the vcpkg root | The cache root moves with `VCPKG_DEFAULT_BINARY_CACHE`, the same problem `PLAYWRIGHT_BROWSERS_PATH` already forced into `IUserEnvironment` |
-| Conan | `conan cache clean` | Build and download folders |
+| Conan | `conan cache clean` | ✅ Shipped as `ConanCacheProvider`, as `conan cache clean -s -b -t`: source, build and temporary folders. Not the download folders, whose metadata can exist nowhere else. See [provider-candidates.md](provider-candidates.md) §2 |
 | Chocolatey | `%TEMP%\chocolatey` by default | Moves if `cacheLocation` is set in `chocolatey.config`; read the config |
-| Scoop | `scoop cache rm *` | Not `scoop cleanup *`: it removes superseded app versions under `apps\<name>\<version>`, which is uninstalling (§2). See [provider-candidates.md](provider-candidates.md) §2 |
+| Scoop | `scoop cache rm *` | Not `scoop cleanup *`: it removes superseded app versions under `apps\<name>\<version>`, which is uninstalling (§2). ✅ Shipped as `ScoopCacheProvider`, offered only when every entry in the cache is a download Scoop made. See [provider-candidates.md](provider-candidates.md) §2 |
 
 ---
 

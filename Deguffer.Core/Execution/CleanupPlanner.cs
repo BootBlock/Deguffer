@@ -248,6 +248,7 @@ public sealed class CleanupPlanner
             new YarnClassicCacheProvider(environment, scanner: scanner),
             new BunInstallCacheProvider(environment, scanner: hardLinks),
             new ComposerCacheProvider(environment, scanner: scanner),
+            new ScoopCacheProvider(environment, scanner: scanner),
             new VsCodeCppToolsCacheProvider(environment, scanner: scanner),
             new DartAnalysisServerProvider(environment, declarations: declarations, scanner: scanner),
             new RoslynCacheProvider(environment, scanner: scanner),
@@ -267,6 +268,7 @@ public sealed class CleanupPlanner
             new SccacheProvider(environment, scanner: scanner),
             new MavenRepositoryProvider(environment, scanner: scanner),
             new VcpkgCacheProvider(environment, scanner: scanner),
+            new ConanCacheProvider(environment, scanner: scanner),
             new GpuShaderCacheProvider(environment, scanner: scanner),
             new ChromiumCacheProvider(environment, liveTrees: liveTrees, discovery: chromium, declarations: declarations, scanner: scanner),
             new ChromiumServiceWorkerStorageProvider(
@@ -299,6 +301,7 @@ public sealed class CleanupPlanner
             new PuppeteerBrowsersProvider(environment, liveTrees: liveTrees, scanner: scanner),
             new VsCodeExtensionBrowsersProvider(environment, liveTrees: liveTrees, scanner: scanner),
             new LmStudioRuntimeProvider(environment, scanner: scanner),
+            new VagrantSupersededBoxProvider(environment, scanner: scanner),
             testBrowsers,
             new SquirrelSupersededVersionProvider(environment, discovery: squirrel, liveTrees: liveTrees, scanner: scanner),
             new AzureFunctionsToolsProvider(environment, liveTrees: liveTrees, scanner: scanner),
