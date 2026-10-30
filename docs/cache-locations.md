@@ -5150,16 +5150,19 @@ prune if any box version has been added or removed since the preview, if a machi
 as created from a version it would remove, or if either cannot be read. Scanning again shows what
 the prune would remove now.
 
-Vagrant is never started for a home with no `boxes` folder, because every Vagrant command creates
-its home. Running Vagrant loads the Vagrantfile in its home and any Vagrantfile in the folder
-Deguffer runs tools in or above it, such as your profile. It also contacts HashiCorp unless
+A `VAGRANT_HOME` that puts the home at your profile, a drive's root or another folder Deguffer never
+treats as one tool's is left alone: Vagrant is not run, and nothing in it is offered. Vagrant is
+never started for a home with no `boxes` folder, because every Vagrant command creates its home.
+Running Vagrant loads the Vagrantfile in its home and any Vagrantfile in the folder Deguffer runs
+tools in or above it, such as your profile. It also contacts HashiCorp unless
 `VAGRANT_CHECKPOINT_DISABLE` is set. A cancelled prune is left to finish.
 
 ### What is protected
 
 The home, `boxes`, every box folder, the newest version of every box, every version the prune does
 not name, `Vagrantfile`, `data\machine-index`, `insecure_private_key(s)`, `plugins.json`, `gems` and
-`aliases`. Explore refuses everything in the home.
+`aliases`. Explore refuses everything in the home, and in a home it has left alone, only Vagrant's
+own entries.
 
 ### What it costs you
 
