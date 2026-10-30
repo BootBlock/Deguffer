@@ -211,6 +211,11 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
     /// unconditionally rather than from what discovery found, because a register that would not be
     /// read leaves no profiles and the files are on disk regardless — and a declaration naming a
     /// directory that is not there refuses nothing.</para>
+    ///
+    /// <para><b>A profile kept outside Firefox's folder is declared too</b>, whole, because nothing
+    /// above it is Firefox's and so nothing else refuses it: <c>D:\Firefox\work</c> holds the same
+    /// <c>logins.json</c> the declared profiles do. A profile at the top of a drive or share is
+    /// declared in <see cref="DiscoverToolRootsAsync"/> instead.</para>
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
         _toolRoots.Get(() =>
@@ -242,7 +247,68 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
                        NothingIsDisposable),
                }
                select root,
+            .. from profile in LocatedElsewhere()
+               where Path.GetDirectoryName(profile.Path) is not null
+               select ToolRoot.Of(
+                   profile.Path,
+                   $"This is your '{profile.Name}' Firefox profile, which Firefox keeps outside its own "
+                   + "folder. Your bookmarks, history, saved passwords and settings are in it, and "
+                   + "Deguffer removes nothing from it.",
+                   NothingIsDisposable),
         ]);
+
+    /// <summary>
+    /// A profile at the top of a drive or share, which <see cref="ToolRoots"/> leaves out: refusing
+    /// every child of a drive would take the whole drive away from Explore, and a volume root is
+    /// never itself removable there. The user data the plan protects by name is refused instead,
+    /// and everything else on the drive stays the user's. Declared here rather than in
+    /// <see cref="ToolRoots"/> because a declaration made here only ever adds a refusal. See
+    /// <see cref="ToolRoot.Sparing"/>.
+    /// </summary>
+    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<ToolRoot>>(
+        [
+            .. from profile in LocatedElsewhere(ct)
+               where Path.GetDirectoryName(profile.Path) is null
+               select ToolRoot.Sparing(
+                   profile.Path,
+                   $"Your '{profile.Name}' Firefox profile is kept at the top of this drive, so its "
+                   + "bookmarks, history, saved passwords and settings are here. Deguffer removes "
+                   + "none of them.",
+                   ProtectedRoamingFiles.Select(file => file.Name)),
+        ]);
+
+    /// <summary>
+    /// Each profile kept outside Firefox's folder that names a directory, with that directory.
+    /// </summary>
+    private IEnumerable<(string Name, string Path)> LocatedElsewhere(CancellationToken ct = default)
+    {
+        // Discovery is what fills the list, and it is memoised, so this costs nothing after the
+        // first read of the pass.
+        Profiles(ct);
+
+        foreach (var profile in _discovery.ProfilesElsewhere)
+        {
+            if (profile.Path is { } path)
+            {
+                yield return (profile.Name, path);
+            }
+        }
+    }
+
+    /// <summary>
+    /// §5.6 for the profiles kept outside Firefox's folder: each directory, and the user data inside
+    /// it by name, for the reason <see cref="ProtectedRoamingFiles"/> gives.
+    /// </summary>
+    private IEnumerable<(string Path, string Reason)> SurvivorsElsewhere() =>
+        from profile in LocatedElsewhere()
+        from survivor in ProtectedRoamingFiles
+            .Select(file => (Path: Path.Combine(profile.Path, file.Name), file.Reason))
+            .Prepend((
+                profile.Path,
+                $"Your '{profile.Name}' Firefox profile, kept outside Firefox's own folder. Deguffer "
+                + "removes nothing from it."))
+        select survivor;
 
     /// <summary>
     /// Each cache this row recognises, in the local half of every profile Firefox's register lists,
@@ -317,7 +383,10 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
             // Every profile there is sits outside Firefox's own folder. Saying "no profile" here
             // would be the same untruth as saying it about a register nobody could read.
             return _discovery.ProfilesElsewhere.Count > 0
-                ? UnexaminedPlan(StoredElsewhere(_discovery.ProfilesElsewhere))
+                ? UnexaminedPlan(StoredElsewhere(_discovery.ProfilesElsewhere)) with
+                {
+                    ProtectedPaths = Protect([.. SurvivorsElsewhere()]),
+                }
                 : EmptyPlan("Firefox has no profile in this user's account.");
         }
 
@@ -346,6 +415,7 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
                 StoredElsewhere(_discovery.ProfilesElsewhere)));
+            survivors.AddRange(SurvivorsElsewhere());
         }
 
         foreach (var profile in profiles)
@@ -510,10 +580,11 @@ public sealed class FirefoxCacheProvider : CleanupProviderBase
     /// two places, because such a profile can be one of several or the only one there is, and the
     /// second case returns before the plan is ever built.
     /// </summary>
-    private static string StoredElsewhere(IReadOnlyList<string> names) =>
-        $"The '{string.Join("' and '", names)}' {(names.Count == 1 ? "profile is" : "profiles are")} "
+    private static string StoredElsewhere(IReadOnlyList<MozillaProfileElsewhere> profiles) =>
+        $"The '{string.Join("' and '", profiles.Select(profile => profile.Name))}' "
+        + $"{(profiles.Count == 1 ? "profile is" : "profiles are")} "
         + "kept outside Firefox's own folder. Deguffer did not examine "
-        + $"{(names.Count == 1 ? "it" : "them")}: a profile stored that way keeps its cache among "
+        + $"{(profiles.Count == 1 ? "it" : "them")}: a profile stored that way keeps its cache among "
         + "your bookmarks and passwords rather than separately from them.";
 
     private static PlanNote LinkNote(string path) => new(

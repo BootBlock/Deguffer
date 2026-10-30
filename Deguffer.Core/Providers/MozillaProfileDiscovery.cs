@@ -21,6 +21,19 @@ namespace Deguffer.Core.Providers;
 /// </param>
 public sealed record MozillaProfile(string Name, string RoamingPath, string LocalPath);
 
+/// <summary>
+/// A profile <c>profiles.ini</c> keeps outside the application's own folder, which is reported and
+/// never examined.
+/// </summary>
+/// <param name="Name">The profile's own name, as <see cref="MozillaProfile.Name"/> is.</param>
+/// <param name="Path">
+/// The directory the application opens as the profile, with its bookmarks and saved passwords in
+/// it: the absolute path itself, or a relative one resolved against the roaming root as Mozilla
+/// resolves it. Null where the entry names no directory the application would open — an absolute
+/// entry that is not fully qualified, which Mozilla's own reader skips.
+/// </param>
+public sealed record MozillaProfileElsewhere(string Name, string? Path);
+
 /// <summary>What a read of a Mozilla application's <c>profiles.ini</c> learned.</summary>
 public enum MozillaRegisterReading
 {
@@ -108,8 +121,12 @@ public sealed partial class MozillaProfileDiscovery(IUserEnvironment environment
     /// among <c>places.sqlite</c> and <c>logins.json</c> rather than in a tree of their own, which is
     /// a different safety argument from the one this provider makes. So such a profile is reported
     /// and skipped, which is the direction §5.2 requires the case nobody established to fail in.</para>
+    ///
+    /// <para>Each is carried with the directory it resolves to rather than by name alone. Skipping
+    /// it in a plan protects nothing outside the Storage page, and the user's passwords are in that
+    /// directory whatever this provider declines to say about its cache.</para>
     /// </summary>
-    public IReadOnlyList<string> ProfilesElsewhere { get; private set; } = [];
+    public IReadOnlyList<MozillaProfileElsewhere> ProfilesElsewhere { get; private set; } = [];
 
     /// <summary>
     /// Every profile <c>profiles.ini</c> names, with both of its halves resolved.
@@ -143,7 +160,7 @@ public sealed partial class MozillaProfileDiscovery(IUserEnvironment environment
         Register = MozillaRegisterReading.Read;
 
         var found = new List<MozillaProfile>();
-        var elsewhere = new List<string>();
+        var elsewhere = new List<MozillaProfileElsewhere>();
 
         foreach (var entry in Sections(lines, ct))
         {
@@ -154,17 +171,17 @@ public sealed partial class MozillaProfileDiscovery(IUserEnvironment environment
 
             var name = entry.TryGetValue("Name", out var named) && named.Length > 0 ? named : declared;
 
+            // The file records the separator Mozilla writes rather than the one Windows uses.
+            var segments = declared.Replace('/', Path.DirectorySeparatorChar);
+
             // IsRelative is absent on a hand-edited file, and the safe reading of a missing value is
             // the one that resolves nothing: an absolute path treated as relative would be appended
             // to the application root and land on a directory nobody named.
             if (!entry.TryGetValue("IsRelative", out var relative) || relative != "1")
             {
-                elsewhere.Add(name);
+                elsewhere.Add(new MozillaProfileElsewhere(name, LongPath.Configured(segments)));
                 continue;
             }
-
-            // The file records the separator Mozilla writes rather than the one Windows uses.
-            var segments = declared.Replace('/', Path.DirectorySeparatorChar);
 
             if (Resolve(RoamingRoot, segments) is not { } roaming
                 || Resolve(LocalRoot, segments) is not { } local)
@@ -172,7 +189,9 @@ public sealed partial class MozillaProfileDiscovery(IUserEnvironment environment
                 // A relative path that climbs back out of the application's own directory. This is a
                 // text file on disk, so the value is a claim rather than a fact, and the only
                 // handling of a claim that would move the whole operation elsewhere is to refuse it.
-                elsewhere.Add(name);
+                // Mozilla opens it all the same, so where it lands is still a profile to protect.
+                elsewhere.Add(new MozillaProfileElsewhere(
+                    name, LongPath.Configured(Path.Combine(RoamingRoot, segments))));
                 continue;
             }
 
