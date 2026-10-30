@@ -236,9 +236,13 @@ public sealed partial class ExplorePage : Page
         Map.OverviewHiddenChanged += (_, _) =>
             App.Preferences.Update(current => current with { ExploreOverviewHidden = Map.OverviewHidden });
 
+        // The look before the colouring and the view below, so the legend they build is in the
+        // colours the map is drawn in. The view-model reads each picture's scheme from it.
+        ViewModel.Look = _appearance.Look;
+
         _appearance.Changed += (_, _) =>
         {
-            ViewModel.SelectedScheme = _appearance.Look.SchemeFor(ViewModel.SelectedView);
+            ViewModel.Look = _appearance.Look;
             ShowCurrentNode();
         };
 
@@ -291,10 +295,9 @@ public sealed partial class ExplorePage : Page
         ViewModel.SelectedView = view;
         ViewSelector.SelectedIndex = ExploreChoice.IndexOf(view);
 
-        // Each picture keeps its own colours, so a change of view is a change of scheme as well, and
-        // the appearance window's picker moves to speak for the new one.
+        // Each picture keeps its own colours, so the appearance window's picker moves to speak for
+        // the new one.
         _appearance.View = view;
-        ViewModel.SelectedScheme = _appearance.Look.SchemeFor(view);
 
         var listed = view is ExploreView.List or ExploreView.Files;
 
@@ -386,7 +389,7 @@ public sealed partial class ExplorePage : Page
                 ViewModel.SelectedView,
                 _ => ShapeColours.ForReplay(frame),
                 frame.Label,
-                _appearance.Look,
+                ViewModel.Look,
                 frame.Replay.VolumeAt(frame.Step, ViewModel.VolumeBeside));
 
             _cards.Relight();
@@ -399,7 +402,7 @@ public sealed partial class ExplorePage : Page
             ViewModel.SelectedView,
             ViewModel.SelectedColouring,
             ViewModel.SelectedScheme,
-            _appearance.Look,
+            ViewModel.Look,
             ViewModel.VolumeBeside,
             ViewModel.Growth.Comparison,
             ViewModel.Types.Dominant,

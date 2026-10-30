@@ -32,7 +32,10 @@ namespace Deguffer.App.ViewModels;
 /// Every seam this page had has been cut and lives beside it: the row and crumb values, the wording
 /// of a row, the legend's bands, the drawing, the scanning, and the rules in Core of where a step
 /// leads (<see cref="ExplorePosition"/>), what a redraw keeps (<see cref="ExploreRedraw"/>), and
-/// where each way of re-pointing the page leaves it (<see cref="ExploreTarget"/>). What is left is
+/// where each way of re-pointing the page leaves it (<see cref="ExploreTarget"/>), what it shows
+/// round its picture (<see cref="ExploreDisplay"/>), when it may act (<see cref="ExploreGate"/>),
+/// which notes it shows (<see cref="ExploreNotes"/>) and what its status line says
+/// (<see cref="ExploreStatusText"/>). What is left is
 /// one page's controller, and its parts are not independently useful — the scan, the scope, the
 /// navigation and the view selection all read and write the same current tree and current node, so
 /// a second type over them would share that state rather than own any of it.</para>
@@ -275,20 +278,19 @@ public sealed partial class ExploreViewModel : ObservableObject
 
     partial void OnIsBusyChanged(bool value) => StandDown();
 
-    /// <summary>
-    /// Let the selection act only while nothing else is under way, and while the map shows the drive
-    /// as it is now. A step of a replay is a picture of what the drive held, and the outlines of what
-    /// is picked are not drawn on it, so nothing is acted on from it (§7.1).
-    /// </summary>
-    private void StandDown() => Selection.CanAct = !IsBusy && !Replay.Shows;
+    /// <summary>When the page may act, from the work under way and the picture on the map. See <see cref="ExploreGate"/>.</summary>
+    private ExploreGate Gate => new(IsBusy, Replay.Shows);
+
+    /// <summary>Let the selection act only where <see cref="ExploreGate.SelectionMayAct"/> says it may (§7.1).</summary>
+    private void StandDown() => Selection.CanAct = Gate.SelectionMayAct;
 
     /// <summary>
-    /// Replay the comparison, the tree and the folder on screen, while the map is coloured by growth,
-    /// and nothing otherwise. See <see cref="ExploreReplay.Follow"/>.
+    /// Replay the comparison, the tree and the folder on screen, while the panel of what grew is
+    /// open, and nothing otherwise. See <see cref="ExploreReplay.Follow"/>.
     /// </summary>
     private void FollowReplay()
     {
-        Replay.Follow(ShowsGrowth ? Growth.Comparison : null, Tree, CurrentNode);
+        Replay.Follow(Display.ShowsGrowth ? Growth.Comparison : null, Tree, CurrentNode);
         StandDown();
     }
 
@@ -320,14 +322,8 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <summary>Whether the bar has to be indeterminate. See <see cref="Progress"/>.</summary>
     public bool HasNoProgressFraction => Progress is null;
 
-    /// <summary>
-    /// What the status line says before anything has been measured, and what it goes back to when
-    /// a refusal is taken off it. See <see cref="ExplainRefusal"/>.
-    /// </summary>
-    private const string ScanPrompt = "Choose a drive or a folder and scan it to see what is using the space.";
-
     [ObservableProperty]
-    public partial string Status { get; set; } = ScanPrompt;
+    public partial string Status { get; set; } = ExploreStatusText.Prompt;
 
     /// <summary>
     /// The §5.6 checks a removal could not pass, each by the path it is about and what it found,
@@ -370,53 +366,32 @@ public sealed partial class ExploreViewModel : ObservableObject
 
     public bool HasRouteNote => !string.IsNullOrEmpty(RouteNote);
 
-    /// <summary>
-    /// Whether the reader has collapsed the notes into their button.
-    ///
-    /// <para>Theirs to set and nobody else's. Nothing in a scan, a selection or a removal writes
-    /// it, so a note arriving afterwards does not put the panel back over the picture — it brings
-    /// the button back, which is where the sentence then is.</para>
-    /// </summary>
+    /// <summary>Whether the reader has collapsed the notes into their button. See <see cref="ExploreNotes.Dismissed"/>.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowsNotes))]
     [NotifyPropertyChangedFor(nameof(ShowsNotesButton))]
     public partial bool NotesDismissed { get; set; }
 
+    /// <summary>The four notes and the reader's choice to collapse them. See <see cref="ExploreNotes"/>.</summary>
+    private ExploreNotes Notes =>
+        new(Selection.HasNote, Selection.HasStaleNote, HasViewNote, HasRouteNote, NotesDismissed);
+
     /// <summary>
-    /// What the collapsed button shows, and what it is called.
-    ///
-    /// <para>Two states rather than one, because one of the four notes is a warning and the other
-    /// three are not. §7.1 lets Explore's totals be lower bounds "provided the picture states which
-    /// it is", and after a removal the stale note is the whole of that statement: the sizes leave out
-    /// what went, and nothing else on the disk is measured again. Collapsed behind a fixed <c>i</c> it would arrive with
-    /// nothing on screen changing, because the route note usually has the button on screen already.
-    /// So the glyph and the name change with it, and neither is colour alone.</para>
+    /// What the collapsed button shows, and what it is called: both change where one of the notes is
+    /// a warning (<see cref="ExploreNotes.Warns"/>), so neither is colour alone.
     /// </summary>
-    public string NotesButtonGlyph => Selection.HasStaleNote ? WarningGlyph : InfoGlyph;
+    public string NotesButtonGlyph => Notes.Warns ? WarningGlyph : InfoGlyph;
 
     /// <inheritdoc cref="NotesButtonGlyph"/>
-    public string NotesButtonLabel => Selection.HasStaleNote
+    public string NotesButtonLabel => Notes.Warns
         ? "Show the notes about this scan. One of them is a warning."
         : "Show the notes about this scan";
 
-    /// <summary>
-    /// Whether the notes are on the card. See <see cref="ShowsNotesButton"/> for the other half.
-    /// </summary>
-    public bool ShowsNotes => HasNotes && !NotesDismissed;
+    /// <summary>Whether the notes are on the card. See <see cref="ExploreNotes.ShowsPanel"/>.</summary>
+    public bool ShowsNotes => Notes.ShowsPanel;
 
-    /// <summary>
-    /// Whether the button that brings them back is on the card.
-    ///
-    /// <para>The two are exclusive, and both are false while there is nothing to read. That is what
-    /// makes the button itself the signal: it is in the notes' corner exactly when a sentence is
-    /// waiting behind it, so a collapsed panel with something to say never looks like a collapsed
-    /// panel with nothing.</para>
-    /// </summary>
-    public bool ShowsNotesButton => HasNotes && NotesDismissed;
-
-    /// <summary>Whether any of the four notes has something to say.</summary>
-    private bool HasNotes =>
-        Selection.HasNote || Selection.HasStaleNote || HasViewNote || HasRouteNote;
+    /// <summary>Whether the button that brings them back is on the card. See <see cref="ExploreNotes.ShowsButton"/>.</summary>
+    public bool ShowsNotesButton => Notes.ShowsButton;
 
     // Segoe Fluent Icons, by code point rather than pasted: a private-use glyph reads back as
     // nothing at all through a file tool, so the literal is the one form that can be checked.
@@ -464,6 +439,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <see cref="ViewNote"/> is what keeps that from being a silent substitution.</para>
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedScheme))]
     [NotifyPropertyChangedFor(nameof(ViewNote))]
     [NotifyPropertyChangedFor(nameof(HasViewNote))]
     [NotifyPropertyChangedFor(nameof(ShowsMapControls))]
@@ -473,10 +449,12 @@ public sealed partial class ExploreViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(ShowsNotesButton))]
     public partial ExploreView SelectedView { get; set; }
 
-    /// <summary>The Files layout searches only while it is on screen. See <see cref="ExploreFiles.IsActive"/>.</summary>
     partial void OnSelectedViewChanged(ExploreView value)
     {
-        Files.IsActive = value == ExploreView.Files;
+        Files.IsActive = Display.SearchesFiles;
+
+        // Each picture keeps its own colours, so a change of view can be a change of scheme.
+        ShowLegend();
 
         // Whether a zoom is part of where the reader is turns on the view. See Zooms.
         NotifyVisits();
@@ -500,43 +478,42 @@ public sealed partial class ExploreViewModel : ObservableObject
 
     partial void OnSelectedColouringChanged(ExploreColouring value)
     {
-        LiveList.Rewrite(Legend, ExploreLegendBand.For(value, SelectedScheme));
-        Types.IsActive = value == ExploreColouring.Type;
+        ShowLegend();
+        Types.IsActive = Display.MeasuresTypes;
         FollowReplay();
     }
 
     /// <summary>
-    /// Which set of colours the picture on screen is drawn in. See <see cref="ExploreScheme"/>.
+    /// How the maps are drawn, which holds the colours each picture is drawn in. The page hands it
+    /// over as the appearance window changes it.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedScheme))]
+    [NotifyPropertyChangedFor(nameof(ShowsLegend))]
+    public partial MapLook Look { get; set; } = MapLook.Default;
+
+    partial void OnLookChanged(MapLook value) => ShowLegend();
+
+    /// <summary>
+    /// Which set of colours the picture on screen is drawn in. See <see cref="ExploreDisplay.Scheme"/>.
     /// Here rather than only on the page because the legend below has to be drawn in it too: a
     /// legend in one set of colours beside a map in another names every band wrongly.
     /// </summary>
-    [ObservableProperty]
-    public partial ExploreScheme SelectedScheme { get; set; }
-
-    partial void OnSelectedSchemeChanged(ExploreScheme value) =>
-        LiveList.Rewrite(Legend, ExploreLegendBand.For(SelectedColouring, value));
+    public ExploreScheme SelectedScheme => Display.Scheme;
 
     /// <summary>
-    /// What each colour on the map means, or an empty list where the colours are branches.
-    ///
-    /// <para>A legend is not decoration for the other two. A hue per branch is self-explanatory,
-    /// because the branch it names is the rectangle it is inside — but an age band or a growth band
-    /// means nothing at all without the scale beside it, and a picture whose colours the reader
-    /// cannot decode is worse than one with no colours in it.</para>
+    /// What the page shows round its picture, from what it is showing. See <see cref="ExploreDisplay"/>.
     /// </summary>
+    private ExploreDisplay Display => new(Tree, SelectedView, SelectedColouring, Look, MapInContrast);
+
+    /// <summary>What each colour on the map means. See <see cref="MapLegend"/>.</summary>
     public ObservableCollection<ExploreLegendBand> Legend { get; } = [];
 
-    /// <summary>
-    /// Whether to show that legend: only when the colours are a scale, only when there is a picture
-    /// rather than a list, only once something has been scanned into it, and not while the map is drawn
-    /// in a high contrast theme's two colours, which none of the bands is. A scale beside an empty card
-    /// explains nothing and reads as part of the empty state.
-    /// </summary>
-    public bool ShowsLegend =>
-        SelectedColouring != ExploreColouring.Branch
-        && SelectedView is not (ExploreView.List or ExploreView.Files)
-        && HasTree
-        && !MapInContrast;
+    /// <summary>Bring <see cref="Legend"/> to the colouring and the scheme on screen, in place.</summary>
+    private void ShowLegend() => LiveList.Rewrite(Legend, ExploreLegendBand.For(SelectedColouring, SelectedScheme));
+
+    /// <summary>Whether to show that legend. See <see cref="ExploreDisplay.ShowsLegend"/>.</summary>
+    public bool ShowsLegend => Display.ShowsLegend;
 
     /// <summary>
     /// Whether the map is drawn in a high contrast theme's two colours, in which its colours say nothing
@@ -546,68 +523,25 @@ public sealed partial class ExploreViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(ShowsLegend))]
     public partial bool MapInContrast { get; set; }
 
-    /// <summary>Whether to show the Files layout's filters: while it is on screen and has something to filter.</summary>
-    public bool ShowsFileFilters => SelectedView == ExploreView.Files && HasTree;
+    /// <summary>Whether to show the Files layout's filters. See <see cref="ExploreDisplay.ShowsFileFilters"/>.</summary>
+    public bool ShowsFileFilters => Display.ShowsFileFilters;
 
-    /// <summary>
-    /// Whether to show the panel of what grew: whenever the colours are growth and something has been
-    /// scanned, in the list view as well as the pictures, because the panel is a list of its own and
-    /// a reader in the list view has asked the same question.
-    /// </summary>
-    public bool ShowsGrowth => SelectedColouring == ExploreColouring.Growth && HasTree;
+    /// <summary>Whether to show the panel of what grew. See <see cref="ExploreDisplay.ShowsGrowth"/>.</summary>
+    public bool ShowsGrowth => Display.ShowsGrowth;
 
-    /// <summary>
-    /// Whether to show the panel of what kind of file fills the folder on screen: whenever the colours
-    /// are types and something has been scanned, in the lists as well as the pictures, as
-    /// <see cref="ShowsGrowth"/> is.
-    /// </summary>
-    public bool ShowsTypes => SelectedColouring == ExploreColouring.Type && HasTree;
+    /// <summary>Whether to show the panel of what kind of file fills the folder on screen. See <see cref="ExploreDisplay.ShowsTypes"/>.</summary>
+    public bool ShowsTypes => Display.ShowsTypes;
 
-    /// <summary>
-    /// How what is on screen differs from what the View box names, or null when it does not.
-    ///
-    /// <para>Only ever raised by a partial tree, and every view is affected by one. Its children are
-    /// ordered by name rather than by size, so that a scan in progress stays still, and neither the
-    /// treemap nor the sunburst can be drawn from that at all — squarification is defined only over
-    /// a decreasing sequence, and a sunburst's residual wedge assumes the small children are the
-    /// tail — so the map substitutes the icicle on top. A scan reading the file table publishes no
-    /// partial tree, so it never says any of this.</para>
-    ///
-    /// <para>The list gets the sentence as much as the pictures do. It reorders itself alphabetically
-    /// and back again, which is a substitution too, and one nobody is told about is the kind a user
-    /// reads as a bug.</para>
-    ///
-    /// <para>The Files layout is ordered by size whatever the tree is, so what it has to say is that
-    /// the scan has not reached everything yet: a larger file may still be found.</para>
-    /// </summary>
-    public string? ViewNote => Tree is { ChildOrder: not ExploreChildOrder.BySize } tree
-        ? SelectedView switch
-        {
-            ExploreView.Files =>
-                "The largest files found so far. A larger one may still turn up before the scan "
-                + "finishes.",
-            ExploreView.Treemap when ExploreSurface.Drawn(tree, ExploreView.Treemap) == ExploreView.Icicle =>
-                "Drawing the icicle, in name order, while the scan runs. A treemap reorders every "
-                + "folder as it grows, so it follows when the scan finishes.",
-            ExploreView.Sunburst when ExploreSurface.Drawn(tree, ExploreView.Sunburst) == ExploreView.Icicle =>
-                "Drawing the icicle, in name order, while the scan runs. A sunburst turns every "
-                + "wedge after one that grows, so it follows when the scan finishes.",
-            _ =>
-                "In name order while the scan runs, so nothing moves as a folder grows. Largest "
-                + "first when the scan finishes.",
-        }
-        : null;
+    /// <summary>How what is on screen differs from what the View box names, or null. See <see cref="ExploreDisplay.Note"/>.</summary>
+    public string? ViewNote => Display.Note;
 
     public bool HasViewNote => ViewNote is not null;
 
     /// <summary>
-    /// Whether the picture on screen is a treemap, the one the mouse zooms and drags, so the line
-    /// naming how is worth showing. Not while a scan runs: the map draws the icicle then, whatever
-    /// the View box says (see <see cref="ViewNote"/>).
+    /// Whether the line naming how the mouse zooms and drags is worth showing: while the picture on
+    /// screen is one that zooms. See <see cref="ExploreDisplay.Zooms"/>.
     /// </summary>
-    public bool ShowsMapControls =>
-        SelectedView == ExploreView.Treemap && Tree is { } tree
-        && ExploreSurface.Drawn(tree, ExploreView.Treemap) == ExploreView.Treemap;
+    public bool ShowsMapControls => Display.Zooms;
 
     /// <summary>
     /// How large the volume was and how much of it was free when the scan on screen finished, where
@@ -736,7 +670,6 @@ public sealed partial class ExploreViewModel : ObservableObject
         // Read once, at the start. The scope can be changed while a scan runs, and a sentence
         // written afterwards would then describe the next scan rather than this one's result.
         var scoped = IsScopedToFolder;
-        var what = scoped ? "folder" : "drive";
 
         IsBusy = true;
         Progress = null;
@@ -791,18 +724,7 @@ public sealed partial class ExploreViewModel : ObservableObject
 
             await RecordAsync(scan, target, scoped);
 
-            // Which figure the map draws, said once where the total is, with the length beside it so
-            // a gap between the two is something the reader was told about rather than found.
-            Status = string.Join(" ", new[]
-            {
-                $"{FreeSpace.Format(scan.Tree.TotalBytes)} on disk accounted for, in files whose lengths "
-                    + $"add up to {FreeSpace.Format(scan.Tree.TotalLength)}.",
-                scan.Tree.HasUnknownSizes
-                    ? $"Some of this {what} could not be read, so the totals are lower bounds."
-                    : null,
-                ExploreRouteText.Sizing(scan.Strategy),
-                ExploreUnaccountedNote.Overcount(volume, scan.Tree.TotalBytes, scan.Strategy),
-            }.Where(sentence => sentence is not null));
+            Status = ExploreStatusText.Finished(scan, volume, scoped);
         }
         catch (OperationCanceledException)
         {
@@ -867,15 +789,14 @@ public sealed partial class ExploreViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Show what is inside the folder <paramref name="row"/> names, from the list of what grew. Ignored
-    /// for a folder that was removed before this scan, which has nothing to show, and for one removed
-    /// from this page since.
+    /// Show what is inside the folder <paramref name="row"/> names, from the list of what grew, where
+    /// <see cref="ExploreGrowth.Opens"/> says it can be opened.
     /// </summary>
     public void ShowFolder(ExploreGrowthRow row)
     {
         ArgumentNullException.ThrowIfNull(row);
 
-        if (Tree is { } tree && row.CanOpen && Growth.Comparison?.Describes(tree) == true && tree.Holds(row.Node))
+        if (Tree is { } tree && Growth.Opens(tree, row))
         {
             Visit(tree, ExplorePosition.Inside(row.Node));
         }
@@ -896,11 +817,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     {
         if (PickedFolder.OnDisk(folder) is not { } onDisk)
         {
-            // The target stays, so a refusal of it still stands and still has to be said: without
-            // it the Scan button stays greyed out with nothing on the page saying why.
-            var refused = Target.Refusal(_volumes) is { } standing
-                ? $"{PickedFolder.NotOnDisk} {standing}"
-                : PickedFolder.NotOnDisk;
+            var refused = ExploreStatusText.NotOnDisk(Target.Refusal(_volumes));
 
             Status = refused;
             _statedRefusal = refused;
@@ -1165,12 +1082,8 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <summary>Where the reader is now, zoom and all, as a step on <see cref="_visits"/>.</summary>
     private ExploreVisit Here => new(_position, Viewing());
 
-    /// <summary>
-    /// Whether the picture on screen can be zoomed, so a zoom is part of where the reader is. See
-    /// <see cref="ExploreSurface.Zooms"/>. Read from the view rather than from the map, because the
-    /// map hears of a change of view only once this page has said it.
-    /// </summary>
-    private bool Zooms => Tree is { } tree && ExploreSurface.Zooms(tree, SelectedView);
+    /// <summary>Whether a zoom is part of where the reader is. See <see cref="ExploreDisplay.Zooms"/>.</summary>
+    private bool Zooms => Display.Zooms;
 
     /// <summary>
     /// Show <paramref name="to"/>: a step somewhere new, where the reader was going behind them. The
@@ -1558,43 +1471,20 @@ public sealed partial class ExploreViewModel : ObservableObject
         ElevateAndRescanCommand.NotifyCanExecuteChanged();
     }
 
-    private bool CanScan() => !IsBusy && Target.IsScannable(_volumes);
+    private bool CanScan() => Gate.MayScan(Target, _volumes);
 
-    /// <summary>
-    /// What <see cref="ScanCommand"/> would scan, and nothing running on any page: elevating ends
-    /// this process, and a clean or a removal elsewhere would end with it.
-    /// </summary>
-    private bool CanElevateNow() => CanScan() && _running.MayEndProcess;
+    private bool CanElevateNow() => Gate.MayElevate(Target, _volumes, _running);
 
     /// <summary>
     /// State why the page will not scan what it is pointed at, and take the sentence back once it
-    /// is pointed somewhere it will.
-    ///
-    /// <para>§7.1 asks a refusal to say what it is, and a greyed-out Scan button says nothing at
-    /// all. The retraction is the other half of that: this line describes what pressing Scan would
-    /// do, so leaving "Deguffer does not scan this drive" up while the button is live and aimed at
-    /// an ordinary volume states the opposite of the truth. Choosing a folder on a local disk after
-    /// looking at a cloud one reaches it in two gestures.</para>
-    ///
-    /// <para>It takes back its own sentence and nobody else's. A scan's result and a selection's
-    /// report write this same line, and neither is made untrue by a change of target, so clearing
-    /// unconditionally would throw away whichever of them was there.</para>
+    /// is pointed somewhere it will. See <see cref="ExploreStatusText.Retargeted"/>.
     /// </summary>
     private void ExplainRefusal()
     {
-        if (Target.Refusal(_volumes) is { } refused)
-        {
-            Status = refused;
-            _statedRefusal = refused;
-            return;
-        }
+        var refused = Target.Refusal(_volumes);
 
-        if (_statedRefusal is not null && Status == _statedRefusal)
-        {
-            Status = ScanPrompt;
-        }
-
-        _statedRefusal = null;
+        Status = ExploreStatusText.Retargeted(Status, _statedRefusal, refused);
+        _statedRefusal = refused;
     }
 
     private bool CanRun() => !IsBusy;

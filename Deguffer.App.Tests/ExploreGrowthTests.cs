@@ -58,7 +58,8 @@ public sealed class ExploreGrowthTests : IDisposable
         var old = page.Growth.Rows[^1];
         Assert.Equal(@"C:\Old", old.Path);
         Assert.Equal("Removed, held 30.0 MB", old.Change);
-        Assert.False(old.CanOpen);
+        Assert.False(page.Growth.Opens(page.Tree, old));
+        Assert.True(page.Growth.Opens(page.Tree, logs));
 
         Assert.Equal(2, page.Growth.UsedSpace.Count);
         Assert.Equal(60, page.Growth.UsedSpace[^1].Share, precision: 6);
@@ -128,6 +129,38 @@ public sealed class ExploreGrowthTests : IDisposable
         page.Hover(new ExploreHit(logs.Node, second.SizeOf(logs.Node)));
 
         Assert.EndsWith(", +240 MB since the last scan", page.HoveredFigures);
+    });
+
+    /// <summary>
+    /// A row an earlier comparison listed opens nothing once a later comparison is on
+    /// screen, though its folder is still there: it states a change that comparison does not, and the
+    /// page answers only for the rows it shows (§7.1).
+    /// </summary>
+    [Fact]
+    public void ARowOfAnEarlierComparisonOpensNothing() => UiThread.Run(async () =>
+    {
+        _explore.Volumes.With(@"C:\", totalBytes: 1000 * Megabyte, freeBytes: 400 * Megabyte, volumeName: Volume);
+        var page = _explore.Page();
+        page.SelectedColouring = ExploreColouring.Growth;
+
+        await _explore.ScanAsync(page, ExploreScan.Fast(Drive(("Logs", 10))));
+        _explore.Time.Advance(TimeSpan.FromDays(1));
+        await _explore.ScanAsync(page, ExploreScan.Fast(Drive(("Logs", 250))));
+
+        var earlier = page.Growth.Rows.First(row => row.Path == @"C:\Logs");
+
+        _explore.Time.Advance(TimeSpan.FromDays(1));
+        await _explore.ScanAsync(page, ExploreScan.Fast(Drive(("Logs", 500))));
+
+        var root = page.CurrentNode;
+
+        Assert.True(page.Tree!.Holds(earlier.Node));
+        Assert.True(page.Growth.Opens(page.Tree, page.Growth.Rows.First(row => row.Path == @"C:\Logs")));
+        Assert.False(page.Growth.Opens(page.Tree, earlier));
+
+        page.ShowFolder(earlier);
+
+        Assert.Equal(root, page.CurrentNode);
     });
 
     /// <summary>
