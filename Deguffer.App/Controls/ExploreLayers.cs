@@ -330,7 +330,7 @@ internal sealed class ExploreLayers
 
         _tiles.Renew();
 
-        // Made before the replacement, it would take a write and show nothing (see MapGraphics.Replaced).
+        // Made before the replacement, it would take a write and show nothing (see CompositionDevice.Replaced).
         _current = null;
         _lit = null;
         _overview = null;

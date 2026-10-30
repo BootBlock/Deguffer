@@ -215,7 +215,7 @@ internal sealed class ExploreTiles
 
     /// <summary>
     /// Let go of everything, for a device that has replaced the one the surfaces were made on: they hold
-    /// nothing, and a write into one would show nothing (see <see cref="MapGraphics.Replaced"/>).
+    /// nothing, and a write into one would show nothing (see <see cref="CompositionDevice.Replaced"/>).
     /// </summary>
     public void Renew() => Release();
 

@@ -7,7 +7,7 @@ namespace Deguffer.App.Tests;
 /// <summary>
 /// A compositor on a thread with a dispatcher queue, as the window's is, for a test of what the shell
 /// draws through composition. One for the test run, made the first time it is asked for and never shut
-/// down, because the map's device is the application's one and holds the first compositor it is given.
+/// down, so the tests that draw through it share the one device the compositor has, as the maps do.
 ///
 /// <para>The Windows App SDK's classes are found through the app's manifest, which names the library
 /// each is in. The test host has none of its own, so the app's, embedded in Deguffer.App.exe beside the

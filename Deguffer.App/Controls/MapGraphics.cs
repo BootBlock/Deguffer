@@ -1,8 +1,8 @@
+using System.Runtime.CompilerServices;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.UI.Composition;
-using Microsoft.Graphics.DirectX;
 using Microsoft.UI.Composition;
 using Windows.Foundation;
 using Windows.Graphics;
@@ -10,13 +10,11 @@ using Windows.Graphics;
 namespace Deguffer.App.Controls;
 
 /// <summary>
-/// The GPU device every map draws through, and the one way a painted region of a canvas reaches the
-/// composition surface it is shown in. The window takes its stills through it too: see
-/// <see cref="Capture"/>.
+/// The one way a painted region of a canvas reaches the composition surface it is shown in, drawn
+/// through the compositor's device (see <see cref="CompositionDevice"/>).
 ///
-/// <para>One for the application, because the device is the costly thing and the window has the one
-/// compositor (G5). Each map's surfaces are made here, on the one device, so a device lost is replaced
-/// for all of them at once, and each map then makes its surfaces again: see <see cref="Replaced"/>.</para>
+/// <para>One for each compositor, as the device is (G5). What it keeps, the bitmap a region is staged
+/// in and what shades a canvas, is made on that device, and made again once a loss replaces it.</para>
 ///
 /// <para>A treemap's canvas is shaded here on the GPU when the compositor says effects are fast (see
 /// <see cref="Shades"/>), in one pass from its quads. Otherwise it is painted on the CPU, by
@@ -26,9 +24,7 @@ namespace Deguffer.App.Controls;
 /// </summary>
 internal sealed class MapGraphics
 {
-    private static MapGraphics? _shared;
-
-    private readonly CompositionGraphicsDevice _graphics;
+    private static readonly ConditionalWeakTable<Compositor, MapGraphics> Shared = [];
 
     /// <summary>Whether the compositor has the GPU time for effects, which a remote session can change.</summary>
     private readonly CompositionCapabilities _capabilities = new();
@@ -40,50 +36,30 @@ internal sealed class MapGraphics
     /// </summary>
     private readonly byte[] _staged = new byte[PaintOrder.RegionSize * PaintOrder.RegionSize * 4];
 
-    private CanvasDevice _device;
-
     /// <summary>The GPU bitmap a region is staged in on its way to a surface, made once per device.</summary>
     private CanvasBitmap? _staging;
 
-    /// <summary>What shades a canvas on the device, made the first time it is asked for: see <see cref="Renderer"/>.</summary>
-    private CushionRenderer? _renderer;
+    /// <summary>
+    /// What shades a canvas on the current device, or null where the device cannot run its shaders.
+    /// Made once per device, the first time it is asked for, so a device that cannot have one is asked
+    /// once. A loss as it is made replaces the device, and the new one is asked again.
+    /// </summary>
+    private Lazy<CushionRenderer?> _renderer;
 
-    /// <summary>Whether <see cref="_renderer"/> has been asked for on this device, so a device that cannot have one is asked once.</summary>
-    private bool _rendererAsked;
-
-    private MapGraphics(Compositor compositor)
+    private MapGraphics(CompositionDevice device)
     {
-        _device = new CanvasDevice();
-        _device.DeviceLost += OnDeviceLost;
+        Device = device;
+        Geometry = new MapGeometry(() => device.Current);
+        _renderer = RendererOnDevice();
 
-        _graphics = CanvasComposition.CreateCompositionGraphicsDevice(compositor, _device);
-
-        Geometry = new MapGeometry(() => _device);
-        _graphics.RenderingDeviceReplaced += (_, _) =>
-        {
-            Generation++;
-            Replaced?.Invoke(this, EventArgs.Empty);
-        };
+        device.Lost += OnDeviceLost;
     }
 
-    /// <summary>
-    /// Every surface's content is gone: the device was lost and replaced, by this or by the compositor.
-    /// Raised on the UI thread. Each map draws its picture again, and keeps none of what it had.
-    ///
-    /// <para>Nor does it keep its surfaces. One made before the replacement takes a write on the new
-    /// device without an error and shows nothing of it, so the map stayed empty under its labels
-    /// until each surface was made again.</para>
-    /// </summary>
-    public event EventHandler? Replaced;
+    /// <summary>The device every surface here is made on and drawn through.</summary>
+    public CompositionDevice Device { get; }
 
     /// <summary>The outlines and the shapes over the picture, built on this device.</summary>
     public MapGeometry Geometry { get; }
-
-    /// <summary>
-    /// How many times the device has been replaced, so a map that was off the screen when it happened
-    /// knows on its return that what it kept is gone.
-    /// </summary>
-    public int Generation { get; private set; }
 
     /// <summary>
     /// Whether a treemap's canvas is shaded on the GPU (see <see cref="Shade"/>) rather than painted on
@@ -95,10 +71,17 @@ internal sealed class MapGraphics
     /// at a time and off the UI thread. Win2D's device is asked rather than the compositor's word alone,
     /// because the two are separate devices. A device that cannot run the shaders is painted for too.</para>
     /// </summary>
-    public bool Shades => _capabilities.AreEffectsFast() && Renderer is { OnSoftware: false };
+    public bool Shades => _capabilities.AreEffectsFast() && _renderer.Value is { OnSoftware: false };
 
-    /// <summary>The device for <paramref name="compositor"/>, made the first time a map asks.</summary>
-    public static MapGraphics For(Compositor compositor) => _shared ??= new MapGraphics(compositor);
+    /// <summary>
+    /// The bitmap regions are staged in now, or null before the first write on this device. Read by a
+    /// test, which proves a loss lets go of it rather than leaving it to the finaliser.
+    /// </summary>
+    internal CanvasBitmap? Staging => _staging;
+
+    /// <summary>The graphics for <paramref name="compositor"/>, made the first time a map asks.</summary>
+    public static MapGraphics For(Compositor compositor) =>
+        Shared.GetValue(compositor, static compositor => new MapGraphics(CompositionDevice.For(compositor)));
 
     /// <summary>
     /// A surface for a canvas of this size, transparent until a region is written into it.
@@ -108,10 +91,10 @@ internal sealed class MapGraphics
     /// whole first and is one texture, which a large canvas runs into the limit of.</para>
     /// </summary>
     public CompositionVirtualDrawingSurface CreateSurface(int width, int height) =>
-        _graphics.CreateVirtualDrawingSurface(
+        Device.Graphics.CreateVirtualDrawingSurface(
             new SizeInt32(width, height),
-            DirectXPixelFormat.B8G8R8A8UIntNormalized,
-            DirectXAlphaMode.Premultiplied);
+            CompositionDevice.Format,
+            CompositionDevice.Alpha);
 
     /// <summary>
     /// A surface for one tile of a moving map (see <see cref="MapTiling"/>), <paramref name="width"/> by
@@ -123,37 +106,14 @@ internal sealed class MapGraphics
     /// surface has to cover all of it, and a tile in the last column or row of the picture is smaller:
     /// written into a whole square, it was refused as an invalid argument.</para>
     /// </summary>
-    public CompositionDrawingSurface TileSurface(CompositionDrawingSurface? spare, int width, int height)
-    {
-        var size = new SizeInt32(width, height);
-
-        if (spare is null)
-        {
-            return _graphics.CreateDrawingSurface2(
-                size,
-                DirectXPixelFormat.B8G8R8A8UIntNormalized,
-                DirectXAlphaMode.Premultiplied);
-        }
-
-        if (spare.SizeInt32 != size)
-        {
-            spare.Resize(size);
-        }
-
-        return spare;
-    }
+    public CompositionDrawingSurface TileSurface(CompositionDrawingSurface? spare, int width, int height) =>
+        Sized(spare, new SizeInt32(width, height));
 
     /// <summary>
     /// Let go of everything written into <paramref name="surface"/>, which shows nothing until it is
     /// written again. Trimming keeps what lies inside the rectangles it is given, so none are given.
     /// </summary>
     public static void Empty(CompositionVirtualDrawingSurface surface) => surface.Trim([]);
-
-    /// <summary>
-    /// Give back what the device keeps for itself between drawings, for a window nobody can see. What
-    /// the surfaces hold is theirs and stays.
-    /// </summary>
-    public void Trim() => _device.Trim();
 
     /// <summary>
     /// Write <paramref name="region"/> of <paramref name="pixels"/>, a canvas <paramref name="width"/>
@@ -163,38 +123,18 @@ internal sealed class MapGraphics
     {
         PixelBuffer.CopyRegion(pixels, width, region, _staged);
 
-        // A pass can meet the same loss at several regions, and skips each: everything is drawn again on
-        // the new device.
-        UnlessLost(device =>
+        Device.UnlessLost(device =>
         {
             var staging = _staging ??= CanvasBitmap.CreateFromBytes(
                 device,
                 _staged,
                 PaintOrder.RegionSize,
                 PaintOrder.RegionSize,
-
-                // Win2D's own bitmaps take the platform's format type, where the compositor's
-                // surfaces above take the Windows App SDK's: the same format, named twice.
-                Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized);
+                CompositionDevice.BitmapFormat);
 
             staging.SetPixelBytes(_staged, 0, 0, region.Width, region.Height);
 
-            // The session draws from the update rectangle's own corner, wherever the compositor keeps
-            // that part of the surface, and every pixel of it is overwritten, as a draw into a surface
-            // has to: what was there before is undefined.
-            using var session = CanvasComposition.CreateDrawingSession(
-                surface,
-                new Rect(region.X, region.Y, region.Width, region.Height),
-                96);
-
-            session.DrawImage(
-                staging,
-                0,
-                0,
-                new Rect(0, 0, region.Width, region.Height),
-                1,
-                CanvasImageInterpolation.NearestNeighbor,
-                CanvasComposite.Copy);
+            CopyInto(surface, staging, new Point(0, 0), region, flush: false);
         });
     }
 
@@ -218,36 +158,22 @@ internal sealed class MapGraphics
         TileColour ground,
         CanvasRegion region,
         PointerLight? light) =>
-        UnlessLost(_ =>
+        Device.UnlessLost(_ =>
         {
             // None where the device was lost as the renderer was made: it is replaced, and every
             // drawing is shaded again on the new one.
-            if (Renderer is not { } renderer)
+            if (_renderer.Value is not { } renderer)
             {
                 return;
             }
 
             var shaded = renderer.Shade(quads, ground, region, light);
-            var area = new Rect(region.X, region.Y, region.Width, region.Height);
 
-            // Every pixel of the update rectangle is overwritten, as a draw into a surface has to be.
-            using var session = CanvasComposition.CreateDrawingSession(surface, area, 96);
-
-            // The session draws from the update rectangle's own corner.
-            session.DrawImage(
-                shaded,
-                0,
-                0,
-                area,
-                1,
-                CanvasImageInterpolation.NearestNeighbor,
-                CanvasComposite.Copy);
-
-            // Now rather than when Direct2D chooses. The renderer writes its canvas straight through
-            // Direct3D, so Direct2D cannot see that the next shading overwrites what this copy reads,
-            // and ending the session leaves the copy queued. Measured: a new drawing landed with the
-            // light shaded into the drawing before it, a few milliseconds later, and nothing else.
-            session.Flush();
+            // Flushed now rather than when Direct2D chooses. The renderer writes its canvas straight
+            // through Direct3D, so Direct2D cannot see that the next shading overwrites what this copy
+            // reads, and ending the session leaves the copy queued. Measured: a new drawing landed with
+            // the light shaded into the drawing before it, a few milliseconds later, and nothing else.
+            CopyInto(surface, shaded, new Point(region.X, region.Y), region, flush: true);
         });
 
     /// <summary>
@@ -262,14 +188,9 @@ internal sealed class MapGraphics
     /// large surface is shown small.</para>
     /// </summary>
     public CompositionDrawingSurface? Shrink(CompositionDrawingSurface? into, byte[] pixels, int width, int height, SizeInt32 size) =>
-        UnlessLost(device =>
+        Device.UnlessLost(device =>
         {
-            using var bitmap = CanvasBitmap.CreateFromBytes(
-                device,
-                pixels,
-                width,
-                height,
-                Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized);
+            using var bitmap = CanvasBitmap.CreateFromBytes(device, pixels, width, height, CompositionDevice.BitmapFormat);
 
             return Shrink(into, bitmap, width, height, size);
         });
@@ -280,7 +201,40 @@ internal sealed class MapGraphics
     /// a painted one. Asked straight after the shading, before anything else is shaded.
     /// </summary>
     public CompositionDrawingSurface? ShrinkShaded(CompositionDrawingSurface? into, int width, int height, SizeInt32 size) =>
-        _renderer is { Shaded: { } shaded } ? UnlessLost(_ => Shrink(into, shaded, width, height, size)) : null;
+        _renderer is { IsValueCreated: true, Value.Shaded: { } shaded }
+            ? Device.UnlessLost(_ => Shrink(into, shaded, width, height, size))
+            : null;
+
+    /// <summary>
+    /// Copy <paramref name="image"/> from <paramref name="from"/> into <paramref name="region"/> of
+    /// <paramref name="surface"/>, every pixel of it, as a draw into a surface has to: what was there
+    /// before is undefined. The session draws from the update rectangle's own corner, wherever the
+    /// compositor keeps that part of the surface.
+    ///
+    /// <para><paramref name="flush"/> sends the copy to the GPU before the session ends, for an image
+    /// Direct3D writes where Direct2D cannot see it.</para>
+    /// </summary>
+    private static void CopyInto(CompositionDrawingSurface surface, CanvasBitmap image, Point from, CanvasRegion region, bool flush)
+    {
+        using var session = CanvasComposition.CreateDrawingSession(
+            surface,
+            new Rect(region.X, region.Y, region.Width, region.Height),
+            96);
+
+        session.DrawImage(
+            image,
+            0,
+            0,
+            new Rect(from.X, from.Y, region.Width, region.Height),
+            1,
+            CanvasImageInterpolation.NearestNeighbor,
+            CanvasComposite.Copy);
+
+        if (flush)
+        {
+            session.Flush();
+        }
+    }
 
     /// <summary>Draw the corner of <paramref name="canvas"/> a canvas covers into <paramref name="into"/>, small.</summary>
     private CompositionDrawingSurface Shrink(
@@ -291,15 +245,7 @@ internal sealed class MapGraphics
         SizeInt32 size)
     {
         // Resized rather than made again for each whole picture (G5).
-        var surface = into ?? _graphics.CreateDrawingSurface2(
-            size,
-            DirectXPixelFormat.B8G8R8A8UIntNormalized,
-            DirectXAlphaMode.Premultiplied);
-
-        if (surface.SizeInt32 != size)
-        {
-            surface.Resize(size);
-        }
+        var surface = Sized(into, size);
 
         using var session = CanvasComposition.CreateDrawingSession(surface);
 
@@ -317,109 +263,37 @@ internal sealed class MapGraphics
         return surface;
     }
 
-    /// <summary>
-    /// What <paramref name="draw"/> returns on the device, or null where the device was lost on the way,
-    /// which is then replaced.
-    ///
-    /// <para>The one failure to give up a drawing for: everything is drawn again on the new device. Any
-    /// other failure is a defect, an invalid argument above all, and is left to be raised. Several
-    /// drawings can meet the same loss, and the device it was met on is reported lost only once.</para>
-    /// </summary>
-    private T? UnlessLost<T>(Func<CanvasDevice, T?> draw)
-        where T : class
+    /// <summary><paramref name="spare"/> resized to <paramref name="size"/>, or a plain surface of that size where there is none.</summary>
+    private CompositionDrawingSurface Sized(CompositionDrawingSurface? spare, SizeInt32 size)
     {
-        var device = _device;
-
-        try
+        if (spare is null)
         {
-            return draw(device);
+            return Device.Graphics.CreateDrawingSurface2(size, CompositionDevice.Format, CompositionDevice.Alpha);
         }
-        catch (Exception exception) when (device.IsDeviceLost(exception.HResult))
-        {
-            if (device == _device)
-            {
-                device.RaiseDeviceLost();
-            }
 
-            return null;
+        if (spare.SizeInt32 != size)
+        {
+            spare.Resize(size);
         }
+
+        return spare;
     }
 
-    /// <summary>Do <paramref name="draw"/> on the device, unless the device is lost on the way: see <see cref="UnlessLost{T}"/>.</summary>
-    private void UnlessLost(Action<CanvasDevice> draw) =>
-        UnlessLost(device =>
-        {
-            draw(device);
-            return this;
-        });
+    /// <summary>The renderer for the device drawn through now, made when it is first asked for.</summary>
+    private Lazy<CushionRenderer?> RendererOnDevice() =>
+        new(() => Device.UnlessLost(CushionRenderer.For), LazyThreadSafetyMode.None);
 
-    /// <summary>
-    /// A still of <paramref name="visual"/> and everything drawn under it as it is now, at
-    /// <paramref name="size"/> pixels, or null where the device was lost on the way. On this device
-    /// rather than a second one, because the window is the one asking and it has the one compositor
-    /// (G5).
-    /// </summary>
-    public async Task<ICompositionSurface?> Capture(Visual visual, SizeInt32 size)
+    /// <summary>The device was lost: let go of everything made on it, to be made again on the next.</summary>
+    private void OnDeviceLost(object? sender, EventArgs args)
     {
-        var device = _device;
-
-        try
-        {
-            return await _graphics.CaptureAsync(
-                visual,
-                size,
-                DirectXPixelFormat.B8G8R8A8UIntNormalized,
-                DirectXAlphaMode.Premultiplied,
-                1);
-        }
-        catch (Exception exception) when (device.IsDeviceLost(exception.HResult))
-        {
-            // As a lost device is everywhere else here: replaced, and the still not taken. Any other
-            // failure is a defect, and is left to be raised.
-            if (device == _device)
-            {
-                device.RaiseDeviceLost();
-            }
-
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// What shades a canvas on the current device, or null where the device cannot run its shaders.
-    /// Made once per device, the first time it is asked for, and never on a device lost since.
-    /// </summary>
-    private CushionRenderer? Renderer
-    {
-        get
-        {
-            if (!_rendererAsked)
-            {
-                // Asked once per device. A loss as it is made replaces the device, and the new one is
-                // asked again.
-                _rendererAsked = true;
-                _renderer = UnlessLost(CushionRenderer.For);
-            }
-
-            return _renderer;
-        }
-    }
-
-    /// <summary>
-    /// The device was lost: replace it under the compositor's graphics device, which raises
-    /// <see cref="Replaced"/> once every surface is on the new one.
-    /// </summary>
-    private void OnDeviceLost(CanvasDevice sender, object args)
-    {
-        sender.DeviceLost -= OnDeviceLost;
-
+        _staging?.Dispose();
         _staging = null;
-        _renderer?.Dispose();
-        _renderer = null;
-        _rendererAsked = false;
-        _device = new CanvasDevice();
-        _device.DeviceLost += OnDeviceLost;
 
-        CanvasComposition.SetCanvasDevice(_graphics, _device);
+        if (_renderer.IsValueCreated)
+        {
+            _renderer.Value?.Dispose();
+        }
+
+        _renderer = RendererOnDevice();
     }
 }
