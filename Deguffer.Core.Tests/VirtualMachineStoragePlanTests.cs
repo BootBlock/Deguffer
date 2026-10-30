@@ -169,4 +169,29 @@ public sealed class VirtualMachineStoragePlanTests
         Assert.Equal([elsewhere], applied.TargetedPaths);
         Assert.Contains(applied.ProtectedPaths, p => p.Path == aliased && p.Withheld == Withholding.VirtualMachineStorage);
     }
+
+    /// <summary>
+    /// A disk recorded through a <c>subst</c> letter is the same disk as the folder that letter stands
+    /// for, so a step naming that folder by its own path is withheld.
+    /// </summary>
+    [Fact]
+    public void ADiskRecordedThroughASubstitutedLetterIsMetUnderTheFolderItStandsFor()
+    {
+        var volumes = new FakeVolumeInventory().Substituting(@"S:\", @"C:\Users\testuser\AppData\Local\Temp\distros");
+        const string recorded = @"S:\ubuntu\ext4.vhdx";
+        var registered = new RegisteredStorage(
+        [
+            new RegisteredEntry(
+                new VirtualMachineStorage(recorded, "the WSL distribution 'Ubuntu'"),
+                Registrar,
+                PathPresence.Present,
+                RegisteredStorage.Reach(recorded, volumes)),
+        ]);
+
+        var applied = VirtualMachineStoragePlan.Apply(
+            Planning(steps: new DeleteDirectoryStep(Imported, "Folder")), registered, volumes);
+
+        Assert.Empty(applied.Steps);
+        Assert.Contains(applied.ProtectedPaths, p => p.Path == recorded && p.Withheld == Withholding.VirtualMachineStorage);
+    }
 }

@@ -565,8 +565,8 @@ public sealed class VirtualDiskProviderTests : IDisposable
     }
 
     /// <summary>
-    /// Every clean proves each registered disk is standing, and a disk a step took anyway (a rule broader
-    /// than it said, or a disk registered after the preview) fails the run's verification by name.
+    /// Every clean proves each registered disk is standing, and a disk a step took anyway, through a rule
+    /// broader than its plan said, fails the run's verification by name.
     /// </summary>
     [Fact]
     public async Task ADiskARunDeletesAnywayFailsTheRunNamingIt()

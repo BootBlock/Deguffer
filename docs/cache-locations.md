@@ -6654,7 +6654,9 @@ For each disk the row states:
   Hyper-V module refuses an unelevated user outside the Hyper-V Administrators group (observed), so the
   route says it needs an elevated PowerShell or that membership. A sparse disk gives space back by
   itself once Linux discards it (`sudo fstrim -a`), so its route needs no compaction. No Microsoft
-  page states how `Optimize-VHD` treats a sparse file, and the route claims nothing about it. For
+  source settles how `Optimize-VHD` treats a sparse file (the Windows SDK's text for `0xC03A001A` says
+  virtual disk files "must not be sparse", and Microsoft Learn's entry for the same code does not), so
+  the route claims nothing about it. For
   Docker: `docker system prune` and `docker builder prune` first. Docker Desktop 4.34 and later give
   freed space back to the drive by themselves, which 4.59 turned off for the time being, and Docker
   Desktop's *Clean up data* resets the disk and removes every container and image. For a Podman
