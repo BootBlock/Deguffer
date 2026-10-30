@@ -27,28 +27,57 @@ namespace Deguffer.Core.Providers;
 /// worked out as Conan would work it out (<see cref="ConanHome"/>), and only once it exists is Conan
 /// asked, and its answer used.</para>
 ///
+/// <para><b>A home or store a setting names is vetted first.</b> <c>CONAN_HOME</c>, a
+/// <c>.conanrc</c> and <c>core.cache:storage_path</c> can name any folder, and examining one as
+/// Conan's declares everything in it Conan's (§5.6, §7.1). One <see cref="ConfiguredFolder"/>
+/// declines is left alone: no step, and only Conan's own files in it are refused in Explore.</para>
+///
 /// <para><b>Held back while Conan runs.</b> Conan's cache is not safe for concurrent use, and
 /// <c>-t</c> removes every unfinished build in the store, which is exactly what a build in progress
-/// looks like. A command step has no check the run asks again before it starts, so the plan offers
-/// no step at all while a <c>conan</c> process is running.</para>
+/// looks like. The plan offers no step while a <c>conan</c> process is running, and the step asks
+/// again immediately before it starts (<see cref="ConanNotRunning"/>), because a build can start while
+/// the preview is on screen.</para>
 /// </summary>
 public sealed class ConanCacheProvider : CleanupProviderBase
 {
     private const string Clean = "cache clean -s -b -t";
 
-    private readonly PassMemo<Task<ConanLocation?>> _location = new();
+    private readonly ISystemDirectories _system;
+    private readonly ConanRcWalk _conanRcWalk;
+    private readonly PassMemo<Task<ConanLocation>> _location = new();
 
     public ConanCacheProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        ISystemDirectories? system = null,
+        IVolumeInventory? volumes = null)
+        : this(ConanRcWalk.ToDriveRoot, environment, runner, inspector, scanner, system, volumes)
+    {
+    }
+
+    /// <param name="conanRcWalk">
+    /// How far above the folder Conan runs in a <c>.conanrc</c> is looked for: the drive's root, as
+    /// Conan looks, everywhere but a test, which ends it inside the folder it made.
+    /// </param>
+    internal ConanCacheProvider(
+        ConanRcWalk conanRcWalk,
+        IUserEnvironment? environment = null,
+        IProcessRunner? runner = null,
+        IProcessInspector? inspector = null,
+        IDirectoryScanner? scanner = null,
+        ISystemDirectories? system = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner)
+            scanner,
+            volumes: volumes)
     {
+        _conanRcWalk = conanRcWalk;
+        _system = system ?? SystemDirectories.Current;
     }
 
     public override string Id => "conan";
@@ -86,35 +115,40 @@ public sealed class ConanCacheProvider : CleanupProviderBase
     /// configuration sits beside the package store, and which folders in the store are disposable is
     /// Conan's database to say, not a name.
     /// </summary>
-    public override IReadOnlyList<ToolRoot> ToolRoots => [HomeRoot(DefaultHome)];
+    public override IReadOnlyList<ToolRoot> ToolRoots => [ConanDeclarations.Home(DefaultHome)];
 
-    /// <summary>The home and the store Conan reports, which a <c>.conanrc</c>, <c>CONAN_HOME</c> or <c>core.cache:storage_path</c> moves.</summary>
-    public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
-        Environment.FindExecutable("conan") is { } conan
-            && await LocateAsync(conan, ct).ConfigureAwait(false) is ConanLocation.Found found
-            ?
-            [
-                HomeRoot(found.Home),
-                new ToolRoot(
-                    found.Store,
-                    "This is Conan's package store, which holds every recipe and package binary Conan "
-                    + "has, and the database that lists them. Clearing its sources and build folders is "
-                    + "offered on the Storage page, where Conan's own command does it.",
-                    static _ => false),
-            ]
-            : [];
+    /// <summary>
+    /// The home and the store Conan reports, which a <c>.conanrc</c>, <c>CONAN_HOME</c> or
+    /// <c>core.cache:storage_path</c> moves, and a home or store set to a folder this declines, where
+    /// only Conan's own files are refused. See <see cref="ToolRoot.Sparing"/>.
+    /// </summary>
+    public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
+    {
+        if (Environment.FindExecutable("conan") is not { } conan)
+        {
+            return [];
+        }
+
+        return await LocateAsync(conan, ct).ConfigureAwait(false) switch
+        {
+            ConanLocation.Found found => [ConanDeclarations.Home(found.Home), ConanDeclarations.Store(found.Store)],
+            ConanLocation.HomeDeclined home => [ConanDeclarations.DeclinedHome(home.Home)],
+            ConanLocation.StoreDeclined store => [ConanDeclarations.Home(store.Home), ConanDeclarations.DeclinedStore(store.Store)],
+            _ => [],
+        };
+    }
 
     /// <summary>
     /// Every folder named <c>s</c> or <c>b</c> in the store, and its <c>t</c>, in the default store, in
     /// the store of the home worked out without Conan, and in the store Conan reports. Wider than the
     /// clean, which spares a complete local build's package, so a duplicate search errs towards
-    /// keeping a copy.
+    /// keeping a copy. Never a store this declines, where the clean is never run.
     /// </summary>
     public override async Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default)
     {
         List<string> stores = [Path.Combine(DefaultHome, ConanConfigOutput.DefaultStoreFolder)];
 
-        if (OwnHome() is ConanHomeAnswer.Found own)
+        if (OwnHome() is ConanHomeAnswer.Found own && WhyNotOwned(own.Home) is null)
         {
             stores.Add(Path.Combine(own.Home, ConanConfigOutput.DefaultStoreFolder));
         }
@@ -180,6 +214,12 @@ public sealed class ConanCacheProvider : CleanupProviderBase
         {
             ConanLocation.Found found => await PlanCleanAsync(conan, found, ct).ConfigureAwait(false),
             ConanLocation.Unknown unknown => UnexaminedPlan(unknown.Why),
+            ConanLocation.HomeDeclined home => EmptyPlan(
+                $"Conan is set to keep its home in {home.Home}, by {home.Source}, and Deguffer will not run "
+                + $"Conan's clean there: {home.Why} It is leaving it alone."),
+            ConanLocation.StoreDeclined store => EmptyPlan(
+                $"Conan is set to keep its package store in {store.Store}, and Deguffer will not run Conan's "
+                + $"clean there: {store.Why} It is leaving it alone."),
 
             // Remembered from earlier in this pass, when the home was not yet there to ask about.
             _ => UnexaminedPlan("Conan's home was not there when this scan first looked, so Conan was not asked about it. Scan again."),
@@ -193,7 +233,34 @@ public sealed class ConanCacheProvider : CleanupProviderBase
             return nothing;
         }
 
+        // Every Conan command opens the store's database, creating it, so a store Conan has used holds
+        // one, and a folder without it is not shown to be the store Conan's answer names.
+        var database = Path.Combine(found.Store, ConanStoreContents.Database);
+
+        switch (LongPath.ProbeFile(database))
+        {
+            case PathPresence.Refused:
+                return UnreadableRootPlan(database);
+
+            case PathPresence.Absent:
+                return UnexaminedPlan(
+                    $"Conan reports its package store as {found.Store}, but there is no {ConanStoreContents.Database} "
+                    + "there, the database Conan keeps in every store it uses, so nothing in it is offered.");
+        }
+
         var contents = ConanStoreContents.Read(found.Store, ct);
+
+        if (contents.Unrecognised.Count > 0)
+        {
+            var withheld = UnexaminedPlan(Unrecognised(found.Store, contents.Unrecognised));
+
+            return withheld with
+            {
+                ProtectedPaths = BuildProtectedPaths(found, contents),
+                Notes = [.. withheld.Notes, .. contents.Notes],
+                HasUnreadableRoot = contents.Unreadable,
+            };
+        }
 
         if (contents.Measured.Count == 0)
         {
@@ -236,6 +303,7 @@ public sealed class ConanCacheProvider : CleanupProviderBase
                     WhenCancelled = CancelledCommand.Finishes,
                     Estimated = measured.Total,
                     MeasuredPaths = contents.Measured,
+                    TargetCheck = new ConanNotRunning(Inspector, ConflictingProcessNames),
                 },
             ],
             ProtectedPaths = protectedPaths,
@@ -246,50 +314,41 @@ public sealed class ConanCacheProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// §5.6. The home's configuration from <c>conan/internal/cache/home_paths.py</c>, the store and its
-    /// database, and everything in the store the clean leaves: every recipe and package folder, and
-    /// in each of them every folder but the sources and the build.
+    /// §5.6. The home's configuration, the store and its database, and everything in the store the
+    /// clean leaves: every recipe and package folder, in each of them every folder but the sources
+    /// and the build, and anything the clean would take that Conan did not make.
     /// </summary>
-    private static IReadOnlyList<ProtectedPath> BuildProtectedPaths(ConanLocation.Found found, ConanStoreReading contents)
-    {
-        var home = found.Home;
+    private static IReadOnlyList<ProtectedPath> BuildProtectedPaths(ConanLocation.Found found, ConanStoreReading contents) =>
+        Protect([.. ConanDeclarations.Survivors(found.Home, found.Store), .. contents.Kept]);
 
-        return Protect(
-        [
-            (home, "Conan's home must survive: only sources and build folders in its store are cleared."),
-            (Path.Combine(home, "global.conf"), "Conan's configuration."),
-            (Path.Combine(home, "global_user.conf"), "Conan's configuration."),
-            (Path.Combine(home, "profiles"), "The profiles your builds use."),
-            (Path.Combine(home, "remotes.json"), "The remotes Conan downloads from."),
-            (Path.Combine(home, "settings.yml"), "Conan's settings model."),
-            (Path.Combine(home, "settings_user.yml"), "Your additions to Conan's settings model."),
-            (Path.Combine(home, "extensions"), "Your hooks, plugins, deployers and generators."),
-            (Path.Combine(home, "audit_providers.json"), "Conan's audit provider configuration."),
-            (Path.Combine(home, "config_version.json"), "Which configuration Conan installed."),
-            (Path.Combine(home, ".local_recipes_index"), "Local recipe repositories."),
-            (Path.Combine(home, "version.txt"), "The Conan version the home was last migrated to."),
-            (Path.Combine(home, "sources"), "Conan's backup of downloaded sources, which this clean is never asked to remove."),
-            (found.Store, "Conan's package store must survive: only sources and build folders inside it are cleared."),
-            (Path.Combine(found.Store, ConanStoreContents.Database), "Conan's database of every recipe and package in the store."),
-            .. contents.Kept,
-        ]);
+    private static string Unrecognised(string store, IReadOnlyList<string> entries)
+    {
+        var named = string.Join(", ", entries.Take(3).Select(entry => $"'{LongPath.Relative(store, entry)}'"));
+        var rest = entries.Count > 3 ? $" and {entries.Count - 3} more" : string.Empty;
+
+        return $"Conan's package store at {store} holds something Conan did not make, or that would not be "
+            + $"listed, where its clean removes by shape rather than by name: {named}{rest}. Deguffer will not "
+            + "run the clean while it is there. Move it out of the store and scan again.";
     }
 
-    private static ToolRoot HomeRoot(string home) => new(
-        home,
-        "This is Conan's home. Its configuration, your profiles and remotes, and the package store "
-        + "that holds everything Conan built or downloaded are all in here. Clearing its sources and "
-        + "build folders is offered on the Storage page, where Conan's own command does it.",
-        static _ => false);
+    private ConanHomeAnswer OwnHome() =>
+        ConanHome.Resolve(Environment, ProcessRunner.WorkingDirectoryFor(Environment), _conanRcWalk);
 
-    private ConanHomeAnswer OwnHome() => ConanHome.Resolve(Environment, ProcessRunner.WorkingDirectoryFor(Environment));
+    /// <summary>Why a home or store a setting names must not be examined as Conan's, or null where it may.</summary>
+    private string? WhyNotOwned(string folder) => ConfiguredFolder.WhyNotOwned(
+        folder, Environment, _system, Volumes, TempRoots.Resolve(Environment, _system, Volumes).AccountFolders);
 
     /// <summary>
-    /// Conan's home and store, asked of Conan once per pass, and null without asking where the home
-    /// is not there to ask about.
+    /// Conan's home and store, asked of Conan once per pass. A home this declines is never asked
+    /// about, and nor is one that is not there, because asking would make it.
     /// </summary>
-    private Task<ConanLocation?> LocateAsync(string conan, CancellationToken ct) =>
-        _location.Get(() => OwnHome() is ConanHomeAnswer.Found own && LongPath.ProbeDirectory(own.Home) is PathPresence.Present
-            ? ConanLocation.AskAsync(Runner, conan, ct)
-            : Task.FromResult<ConanLocation?>(null));
+    private Task<ConanLocation> LocateAsync(string conan, CancellationToken ct) =>
+        _location.Get(() => OwnHome() switch
+        {
+            ConanHomeAnswer.Found own when WhyNotOwned(own.Home) is { } declined =>
+                Task.FromResult<ConanLocation>(new ConanLocation.HomeDeclined(own.Home, own.Source, declined)),
+            ConanHomeAnswer.Found own when LongPath.ProbeDirectory(own.Home) is PathPresence.Present =>
+                ConanLocation.AskAsync(Runner, conan, WhyNotOwned, ct),
+            _ => Task.FromResult<ConanLocation>(new ConanLocation.NotAsked()),
+        });
 }
