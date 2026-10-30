@@ -401,7 +401,8 @@ public sealed class CleanupPlannerTests
     [Fact]
     public void TheTemporaryFolderRowLeavesEveryTenantsEntriesToIt()
     {
-        var planner = CleanupPlanner.CreateDefault();
+        using var shipped = new ShippedProviders();
+        var planner = shipped.Planner;
         var temporary = Assert.Single(planner.Providers.OfType<TempDirectoryProvider>());
         var tenants = planner.Providers.OfType<ITemporaryFolderTenant>().ToList();
 
@@ -421,7 +422,8 @@ public sealed class CleanupPlannerTests
     [Fact]
     public void EveryRowThatConsultsDeclarationsConsultsThePlannersOwn()
     {
-        var planner = CleanupPlanner.CreateDefault();
+        using var shipped = new ShippedProviders();
+        var planner = shipped.Planner;
         var declarations = planner.Declarations;
 
         Assert.NotNull(declarations);
@@ -457,7 +459,8 @@ public sealed class CleanupPlannerTests
     [Fact]
     public void TheDefaultSetIsTheVerifiedSourcesAndEveryTierAboveOneIsNamed()
     {
-        var planner = CleanupPlanner.CreateDefault();
+        using var shipped = new ShippedProviders();
+        var planner = shipped.Planner;
 
         Assert.Equal(
             [

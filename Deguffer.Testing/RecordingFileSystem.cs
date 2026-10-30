@@ -15,6 +15,7 @@ public sealed class RecordingFileSystem(IFileSystem inner) : IFileSystem
 {
     private readonly ConcurrentQueue<string> _paths = new();
     private readonly ConcurrentQueue<string> _probed = new();
+    private readonly ConcurrentQueue<string> _resolved = new();
 
     public IReadOnlyCollection<string> Paths => _paths;
 
@@ -24,6 +25,12 @@ public sealed class RecordingFileSystem(IFileSystem inner) : IFileSystem
     /// — see <c>DeletionProbe</c> — and a test has to be able to say where it happened.
     /// </summary>
     public IReadOnlyCollection<string> Probed => _probed;
+
+    /// <summary>
+    /// The paths asked where they really lead, which <see cref="Paths"/> holds too. Kept apart so a
+    /// test counting how often an entry is described is not counting the question of where it is.
+    /// </summary>
+    public IReadOnlyCollection<string> Resolved => _resolved;
 
     public bool DirectoryExists(string path)
     {
@@ -102,5 +109,12 @@ public sealed class RecordingFileSystem(IFileSystem inner) : IFileSystem
     {
         _paths.Enqueue(path);
         return inner.MayExist(path);
+    }
+
+    public string? FinalPath(string path)
+    {
+        _paths.Enqueue(path);
+        _resolved.Enqueue(path);
+        return inner.FinalPath(path);
     }
 }

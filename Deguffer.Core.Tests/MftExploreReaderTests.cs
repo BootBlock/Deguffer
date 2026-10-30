@@ -269,7 +269,7 @@ public class MftExploreReaderTests
             .Build();
         var reported = new List<long>();
 
-        var tree = MftExploreReader.Read(source, Root, [], new TableTuning(64 * 1024, 8, 4), reported.Add, default).Tree!;
+        var tree = MftExploreReader.Read(source, Root, [], new TableTuning(64 * 1024, 8, 4, 8), reported.Add, default).Tree!;
 
         Assert.Equal(7000, tree.TotalLength);
         Assert.Contains(reported, done => done >= 2 * Interval);

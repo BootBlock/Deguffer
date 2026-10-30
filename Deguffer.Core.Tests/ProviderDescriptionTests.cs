@@ -1,6 +1,7 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -10,9 +11,13 @@ namespace Deguffer.Core.Tests;
 /// The subject is <see cref="CleanupPlanner.CreateDefault"/>'s own list rather than a hand-kept one,
 /// so a provider added later is covered by these the moment it is registered.
 /// </summary>
-public class ProviderDescriptionTests
+public sealed class ProviderDescriptionTests : IDisposable
 {
-    private static IReadOnlyList<ICleanupProvider> Shipped => CleanupPlanner.CreateDefault().Providers;
+    private readonly ShippedProviders _shipped = new();
+
+    private IReadOnlyList<ICleanupProvider> Shipped => _shipped.Providers;
+
+    public void Dispose() => _shipped.Dispose();
 
     /// <summary>
     /// Every field is required by the compiler, so what is left to go wrong is a field filled in

@@ -10,7 +10,8 @@ namespace Deguffer.Core.Providers;
 internal sealed record CaptureOneCandidate(string Cache, string Owner, string Reason);
 
 /// <summary>What one planning pass has found so far, across every catalog and session.</summary>
-internal sealed class CaptureOneExamination
+/// <param name="volumes">Asked whether the drive or share holding a missing folder is there.</param>
+internal sealed class CaptureOneExamination(IVolumeInventory volumes)
 {
     public List<CaptureOneCandidate> Candidates { get; } = [];
 
@@ -54,11 +55,10 @@ internal sealed class CaptureOneExamination
         {
             // The drive or share is asked about in its turn, because the two absences mean different
             // things: a disconnected drive leaves the folder unexamined, and a deleted folder holds
-            // nothing to examine.
+            // nothing to examine. Windows names no mount point for a letter nothing is mounted at,
+            // or for a share that does not answer.
             case PathPresence.Absent:
-                (Path.GetPathRoot(folder) is { Length: > 0 } volume && LongPath.DirectoryExists(volume)
-                    ? Gone
-                    : Disconnected).Add(folder);
+                (volumes.MountPointOf(folder) is null ? Disconnected : Gone).Add(folder);
                 return false;
 
             case PathPresence.Refused:

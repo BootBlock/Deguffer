@@ -238,9 +238,12 @@ public sealed class ExploreSelectionTests : IDisposable
 
         selection.Select([folder]);
 
-        await Eventually.HoldsAsync(() => notes.Count > 0, "the folder answered");
+        // Until the folder's own answer, which is no note. The page may first say it is still asking,
+        // because how long the folder takes to answer depends on how busy the machine is.
+        await Eventually.HoldsAsync(() => notes.Count > 0 && notes[^1] is null, "the folder answered");
 
-        Assert.All(notes, Assert.Null);
+        Assert.DoesNotContain("Kept for a reason.", notes);
+        Assert.All(notes, note => Assert.True(note is null || note == ExploreRefusalNote.Asking(1), note));
         Assert.Null(selection.Note);
     });
 

@@ -96,6 +96,24 @@ public sealed class ReportTests
     }
 
     /// <summary>
+    /// A table route says how many reads of clusters it made and how long the attribute lists kept
+    /// outside the table took to read, which is the time their depth decides.
+    /// </summary>
+    [Fact]
+    public void ATableRouteReportsItsClusterReadsAndHowLongTheListsTook()
+    {
+        var text = Render(
+            Route.Index,
+            Run(1, clusterReads: 1_201, listSeconds: 0.25),
+            Run(1, clusterReads: 1_201, listSeconds: 0.01),
+            Run(1, clusterReads: 1_201, listSeconds: 0.03));
+
+        Assert.Equal("cluster reads      1,201           1,201 (1,201 to 1,201)", Line(text, "cluster reads"));
+        Assert.Equal("list reads took    250.0 ms        20.0 ms (10.0 ms to 30.0 ms)", Line(text, "list reads took"));
+        Assert.DoesNotContain("list reads took", Render(Route.Walk, Run(1)), StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Without the bitmap the table cannot say how many records are in use, so the report says so
     /// rather than calling every record read a free one. The walk reads no table and says neither.
     /// </summary>
@@ -166,12 +184,15 @@ public sealed class ReportTests
     public void TheExploreWalkCountsEntries() =>
         Assert.Contains("entries/s", Render(Route.ExploreWalk, Run(1)), StringComparison.Ordinal);
 
-    /// <summary>The same for a table route, whose values are the reads and the parse threads.</summary>
+    /// <summary>
+    /// The same for a table route, whose values are the reads, the parse threads and the reads of the
+    /// attribute lists kept outside the table.
+    /// </summary>
     [Fact]
     public void ATableRoutesValuesAreTheOnesItRanWith() =>
         Assert.Equal(
-            "2048 KiB reads, 8 in flight, parsed on 3 threads",
-            Deguffer.Benchmark.Tuning.Describe(Route.Index, WalkTuning.Default, new TableTuning(2048 * 1024, 8, 3), snapshots: true, LinkRead.Name));
+            "2048 KiB reads, 8 in flight, parsed on 3 threads, 24 list reads in flight",
+            Deguffer.Benchmark.Tuning.Describe(Route.Index, WalkTuning.Default, new TableTuning(2048 * 1024, 8, 3, 24), snapshots: true, LinkRead.Name));
 
     [Fact]
     public void ADebugBuildIsCalledOut()
@@ -213,10 +234,18 @@ public sealed class ReportTests
         int peak = 0,
         long kept = 0,
         double processorSeconds = 0,
-        long reads = 0) =>
+        long reads = 0,
+        long clusterReads = 0,
+        double listSeconds = 0) =>
         new(
-            TimeSpan.FromSeconds(seconds), new RunTally(items, bytes, complete, peak, Reads: reads), AllocatedBytes: 1 << 20, FullCollections: 0,
-            PeakWorkingSet: 64 << 20, TimeSpan.FromSeconds(processorSeconds), kept);
+            TimeSpan.FromSeconds(seconds),
+            new RunTally(
+                items, bytes, complete, peak, Reads: reads, ClusterReads: clusterReads, ListReadTime: TimeSpan.FromSeconds(listSeconds)),
+            AllocatedBytes: 1 << 20,
+            FullCollections: 0,
+            PeakWorkingSet: 64 << 20,
+            TimeSpan.FromSeconds(processorSeconds),
+            kept);
 
     private static string Line(string text, string label) =>
         text.Split('\n').Single(line => line.StartsWith(label + " ", StringComparison.Ordinal));

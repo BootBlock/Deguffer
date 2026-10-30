@@ -67,6 +67,12 @@ internal static class Report
         {
             Row(text, "MiB/s read", Rate(first.MegabytesPerSecond), Over(later, r => r.MegabytesPerSecond, Rate));
             Row(text, "reads", Count(first.Tally.Reads), Over(later, r => r.Tally.Reads, Count));
+            Row(text, "cluster reads", Count(first.Tally.ClusterReads), Over(later, r => r.Tally.ClusterReads, Count));
+            Row(
+                text,
+                "list reads took",
+                Duration(first.Tally.ListReadTime.TotalSeconds),
+                Over(later, r => r.Tally.ListReadTime.TotalSeconds, Duration));
 
             if (census is { } inUse)
             {

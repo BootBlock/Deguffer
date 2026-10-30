@@ -31,6 +31,13 @@ public class ExploreScannerTests
         return Task.CompletedTask;
     };
 
+    /// <summary>
+    /// A scanner whose walk reads nothing, for a scan of <see cref="DriveLetters.Faked"/> or of a
+    /// share. See <see cref="WalkRecorder"/>.
+    /// </summary>
+    private static ExploreScanner OnTheFakes(IMftSourceFactory sources, WalkRecorder? walks = null) =>
+        new(sources) { Walker = (walks ?? new WalkRecorder()).Walk };
+
     private static MftFixture Volume() => new MftFixture()
         .AddDirectory(Users, MftRecord.RootRecordNumber, "Users")
         .AddDirectory(Profile, Users, "testuser")
@@ -45,8 +52,8 @@ public class ExploreScannerTests
     [Fact]
     public async Task ReadsTheTableForAWholeVolumeWhereItCan()
     {
-        var letter = DriveLetters.Unused();
-        var scanner = new ExploreScanner(FakeMftSourceFactory.Serving(letter, Volume()));
+        const char letter = DriveLetters.Faked;
+        var scanner = OnTheFakes(FakeMftSourceFactory.Serving(letter, Volume()));
 
         var scan = await scanner.ScanAsync($@"{letter}:\");
 
@@ -65,8 +72,8 @@ public class ExploreScannerTests
     [Fact]
     public async Task AScanOfATableWithARecordItCouldNotReadSaysItIsIncomplete()
     {
-        var letter = DriveLetters.Unused();
-        var scanner = new ExploreScanner(FakeMftSourceFactory.Serving(letter, Volume().CorruptSectorStamp(21)));
+        const char letter = DriveLetters.Faked;
+        var scanner = OnTheFakes(FakeMftSourceFactory.Serving(letter, Volume().CorruptSectorStamp(21)));
 
         var scan = await scanner.ScanAsync($@"{letter}:\");
 
@@ -82,14 +89,16 @@ public class ExploreScannerTests
     [Fact]
     public async Task FallsBackToTheWalkAndOffersElevationWhenTheTableCannotBeOpened()
     {
-        var letter = DriveLetters.Unused();
-        var scanner = new ExploreScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated));
+        const char letter = DriveLetters.Faked;
+        var walks = new WalkRecorder();
+        var scanner = OnTheFakes(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated), walks);
 
         var scan = await scanner.ScanAsync($@"{letter}:\");
 
         Assert.Equal(ScanStrategy.ParallelEnumeration, scan.Strategy);
         Assert.Equal(FallbackReason.NotElevated, scan.Fallback);
         Assert.Contains("administrator", scan.RouteNote!, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal([$@"{letter}:\"], walks.Walked);
     }
 
     /// <summary>
@@ -100,8 +109,8 @@ public class ExploreScannerTests
     [Fact]
     public async Task ReadsTheTableForAFolderBelowTheVolumeRoot()
     {
-        var letter = DriveLetters.Unused();
-        var scanner = new ExploreScanner(FakeMftSourceFactory.Serving(letter, Volume()));
+        const char letter = DriveLetters.Faked;
+        var scanner = OnTheFakes(FakeMftSourceFactory.Serving(letter, Volume()));
 
         var scan = await scanner.ScanAsync($@"{letter}:\Users\testuser\.npm-cache");
 
@@ -128,8 +137,8 @@ public class ExploreScannerTests
     [Fact]
     public async Task NamesAFolderInTheFormAPersonReadsWhateverFormItWasGiven()
     {
-        var letter = DriveLetters.Unused();
-        var scanner = new ExploreScanner(FakeMftSourceFactory.Serving(letter, Volume()));
+        const char letter = DriveLetters.Faked;
+        var scanner = OnTheFakes(FakeMftSourceFactory.Serving(letter, Volume()));
 
         var scan = await scanner.ScanAsync($@"\\?\{letter}:\Users\testuser\.npm-cache");
 
@@ -175,16 +184,19 @@ public class ExploreScannerTests
     [Fact]
     public async Task WalksAFolderReachedThroughALinkWithoutOfferingARouteThatWasNeverLost()
     {
-        var letter = DriveLetters.Unused();
+        const char letter = DriveLetters.Faked;
         var sources = FakeMftSourceFactory.Serving(
             letter, Volume().AddDirectoryLink(30, Profile, "linked-cache"));
 
-        var scan = await new ExploreScanner(sources).ScanAsync($@"{letter}:\Users\testuser\linked-cache");
+        var walks = new WalkRecorder();
+
+        var scan = await OnTheFakes(sources, walks).ScanAsync($@"{letter}:\Users\testuser\linked-cache");
 
         Assert.Equal(1, sources.OpenCount);
         Assert.Equal(ScanStrategy.ParallelEnumeration, scan.Strategy);
         Assert.Equal(FallbackReason.None, scan.Fallback);
         Assert.Null(scan.RouteNote);
+        Assert.Equal([$@"{letter}:\Users\testuser\linked-cache"], walks.Walked);
     }
 
     /// <summary>
@@ -195,30 +207,40 @@ public class ExploreScannerTests
     [Fact]
     public async Task ReportsAFolderTheTableDoesNotDescribe()
     {
-        var letter = DriveLetters.Unused();
+        const char letter = DriveLetters.Faked;
         var sources = FakeMftSourceFactory.Serving(letter, Volume());
 
-        var scan = await new ExploreScanner(sources).ScanAsync($@"{letter}:\Users\testuser\.pnpm-store");
+        var walks = new WalkRecorder();
+
+        var scan = await OnTheFakes(sources, walks).ScanAsync($@"{letter}:\Users\testuser\.pnpm-store");
 
         Assert.Equal(ScanStrategy.ParallelEnumeration, scan.Strategy);
         Assert.Equal(FallbackReason.MasterFileTableIncomplete, scan.Fallback);
         Assert.Contains("file table", scan.RouteNote!, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal([$@"{letter}:\Users\testuser\.pnpm-store"], walks.Walked);
     }
 
     /// <summary>
     /// A UNC path has no volume this process can open, so there is no table to read and nothing the
-    /// user can do about it. It still has to be scanned rather than refused.
+    /// user can do about it. It still has to be scanned rather than refused, so the share is walked.
+    ///
+    /// <para>The walk is recorded rather than made. A real one would ask the network for the server
+    /// by name, and how long that takes depends on the machine running the suite.</para>
     /// </summary>
     [Fact]
     public async Task ReportsAPathThatIsOnNoLocalVolumeItCanAddress()
     {
+        const string share = @"\\deguffer.test\share\cache";
         var sources = FakeMftSourceFactory.Serving('C', Volume());
-        var scan = await new ExploreScanner(sources).ScanAsync(@"\\deguffer.test\share\cache");
+        var walks = new WalkRecorder();
+
+        var scan = await OnTheFakes(sources, walks).ScanAsync(share);
 
         Assert.Equal(ScanStrategy.ParallelEnumeration, scan.Strategy);
         Assert.Equal(FallbackReason.VolumeNotAddressable, scan.Fallback);
         Assert.Contains("local volume", scan.RouteNote!, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, sources.OpenCount);
+        Assert.Equal([share], walks.Walked);
     }
 
     /// <summary>
@@ -258,9 +280,9 @@ public class ExploreScannerTests
     [Fact]
     public async Task ReportsAMeasuredFractionWhileItReadsTheTable()
     {
-        var letter = DriveLetters.Unused();
+        const char letter = DriveLetters.Faked;
         var progress = new ProgressRecorder<ExploreProgress>();
-        var scanner = new ExploreScanner(FakeMftSourceFactory.Serving(letter, Volume().AddUnused(70_000)));
+        var scanner = OnTheFakes(FakeMftSourceFactory.Serving(letter, Volume().AddUnused(70_000)));
 
         await scanner.ScanAsync($@"{letter}:\", progress);
 
@@ -419,8 +441,8 @@ public class ExploreScannerTests
     [Fact]
     public async Task StopsTheTableReadWhenTheScanIsCancelled()
     {
-        var letter = DriveLetters.Unused();
-        var scanner = new ExploreScanner(FakeMftSourceFactory.Serving(letter, Volume().AddUnused(70_000)));
+        const char letter = DriveLetters.Faked;
+        var scanner = OnTheFakes(FakeMftSourceFactory.Serving(letter, Volume().AddUnused(70_000)));
 
         using var cancel = new CancellationTokenSource();
         var progress = new CallbackProgress<ExploreProgress>(_ => cancel.Cancel());

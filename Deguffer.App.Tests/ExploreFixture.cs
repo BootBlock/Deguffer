@@ -155,4 +155,8 @@ internal sealed class ExploreFixture : IDisposable
     public static ExploreChild Folder(string name) => new(name, IsDirectory: true, IsLink: false, Size: 0);
 
     public static ExploreChild File(string name, long size) => new(name, IsDirectory: false, IsLink: false, Size: size);
+
+    /// <summary>A file created and last written at <paramref name="when"/>.</summary>
+    public static ExploreChild Written(string name, long size, DateTime when) =>
+        new(name, IsDirectory: false, IsLink: false, size, ExploreTimestamp.FromUtc(when), ExploreTimestamp.FromUtc(when));
 }

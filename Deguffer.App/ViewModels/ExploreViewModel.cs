@@ -127,7 +127,11 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// </summary>
     private string? _statedRefusal;
 
-    /// <param name="time">What decides when the drive picker's last reading has gone stale.</param>
+    /// <param name="time">
+    /// The one clock the page reads: what the folder list and the line under the map date an age
+    /// against, what a kept scan is stamped with, and what decides when the drive picker's last
+    /// reading has gone stale.
+    /// </param>
     /// <param name="isElevated">Whether this process holds administrator rights.</param>
     /// <param name="relaunch">See <see cref="_relaunch"/>.</param>
     /// <param name="running">See <see cref="_running"/>.</param>
@@ -1207,7 +1211,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         var storage = ExploreRowText.Storage(tree, node);
         var figures = $"{FreeSpace.Format(tree.SizeOf(node))} on disk, "
             + (storage.Length > 0 ? $"{storage}, " : string.Empty)
-            + $"last written {ExploreRowText.Age(tree, node, DateTime.UtcNow)}";
+            + $"last written {ExploreRowText.Age(tree, node, _time.GetUtcNow().UtcDateTime)}";
 
         // The shape's own change, where the map is coloured by growth: compared, or settled by its
         // dates. A shape painted by the folder above it has none of its own, and the readout says
@@ -1379,7 +1383,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         // Once for the whole list rather than once per row. Every age in it is measured against the
         // same instant, which is both cheaper and the only way two rows a millisecond apart cannot
         // land in different days (G5).
-        var now = DateTime.UtcNow;
+        var now = _time.GetUtcNow().UtcDateTime;
 
         _arriving.Clear();
 
