@@ -167,6 +167,60 @@ public sealed class ReachedFolder
         Places.Any(place => other.Places.Contains(place, StringComparer.OrdinalIgnoreCase));
 
     /// <summary>
+    /// This folder at every path it is reachable at and every path <paramref name="other"/> is, for a
+    /// caller that has learned the two are one folder by asking Windows where a link leads. This
+    /// folder's places come first, so the path it was asked about stays the one it is named by.
+    /// </summary>
+    internal ReachedFolder Joined(ReachedFolder other)
+    {
+        List<string> places = [.. Places];
+
+        foreach (var place in other.Places)
+        {
+            Add(places, place);
+        }
+
+        return new ReachedFolder(places, IsVolumeTop);
+    }
+
+    /// <summary>
+    /// The folder <paramref name="path"/> leads to once every link on the way to it is followed, or
+    /// null where Windows would not open it, where it is a place <see cref="HostVolume.Unopened"/>
+    /// never opens, or where Windows gives its final path only as a device path
+    /// (<see cref="Displayed"/>). A caller keeps the paths the name reaches where this answers null.
+    /// </summary>
+    /// <param name="path">A full path, in either form <see cref="LongPath"/> produces.</param>
+    /// <param name="finalPath">
+    /// Asks Windows where a path really is, given the path in either form, as
+    /// <see cref="FileInformation.FinalPath"/> and <see cref="IFileSystem.FinalPath"/> do.
+    /// </param>
+    internal static ReachedFolder? FollowedTo(string path, IVolumeInventory volumes, Func<string, string?> finalPath) =>
+        HostVolume.Unopened(volumes, path) is null
+        && finalPath(path) is { } final
+        && Displayed(final) is { } shown
+            ? At(shown, volumes)
+            : null;
+
+    /// <summary>
+    /// <paramref name="final"/> in display form, or null where Windows gave it only as a device path,
+    /// such as a volume's <c>\\?\Volume{GUID}\</c> name, which names no drive or folder.
+    ///
+    /// <para><b>Measured on 2026-10-09</b> on an NTFS volume mounted in a folder with no drive
+    /// letter: Windows gives the final path of a folder on it, and of a junction leading into it,
+    /// through the folder the volume is mounted at, so a volume Windows names only by its GUID is
+    /// one mounted nowhere a user can name.</para>
+    /// </summary>
+    internal static string? Displayed(string final)
+    {
+        var display = LongPath.Display(final);
+
+        // A drive keeps its separator, which is how C:\ names a drive rather than a path relative to one.
+        return Path.IsPathFullyQualified(display) && !LongPath.IsDeviceSpelling(display)
+            ? Path.TrimEndingDirectorySeparator(display)
+            : null;
+    }
+
+    /// <summary>
     /// Without an 8.3 alias, the extended-length prefix or a trailing separator, so a path from a step
     /// and one from the environment compare as the same folder. A root keeps its separator.
     ///

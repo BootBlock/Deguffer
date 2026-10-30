@@ -46,4 +46,6 @@ public sealed class ReplacingFileSystem(IFileSystem inner, string replaced) : IF
     public FileAttributes? TryGetAttributes(string path) => inner.TryGetAttributes(path);
 
     public bool MayExist(string path) => inner.MayExist(path);
+
+    public string? FinalPath(string path) => inner.FinalPath(path);
 }

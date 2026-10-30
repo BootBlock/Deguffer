@@ -51,6 +51,7 @@ public sealed class ExploreActionPolicy
     private readonly HeldLocations _held;
     private readonly IVolumeInventory _volumes;
     private readonly IFileSystem _fileSystem;
+    private readonly FinalPlaces _finalPlaces;
 
     /// <param name="regions">
     /// The structural table. Its most-specific-wins rule is <see cref="RegionTable"/>'s, rather than
@@ -69,9 +70,10 @@ public sealed class ExploreActionPolicy
     /// pass a fake would quietly be asking about the developer's disks.
     /// </param>
     /// <param name="fileSystem">
-    /// Where <see cref="HeldLocations"/> asks whether a refused location is on disk, and where
-    /// <see cref="ToolRootChildren"/> asks what a tool root's child is. Injected so a test can see
-    /// the form of the path each is asked about (§6.3), and what a probe that fails does.
+    /// Where <see cref="HeldLocations"/> asks whether a refused location is on disk,
+    /// <see cref="ToolRootChildren"/> asks what a tool root's child is, and
+    /// <see cref="FinalPlaces"/> asks where a link leads. Injected so a test can see the form of the
+    /// path each is asked about (§6.3), and what a probe that fails does.
     /// </param>
     /// <param name="probedRoots">
     /// What the providers declared once they had asked the machine, through
@@ -90,11 +92,12 @@ public sealed class ExploreActionPolicy
         ArgumentNullException.ThrowIfNull(toolRoots);
         ArgumentNullException.ThrowIfNull(volumes);
 
-        _regions = new RegionTable(regions, volumes);
-        _toolRoots = DeclaredRoot.Follow(toolRoots, volumes);
-        _probedRoots = DeclaredRoot.Follow(probedRoots ?? [], volumes);
-
         _fileSystem = fileSystem ?? WindowsFileSystem.Default;
+        _finalPlaces = new FinalPlaces(_fileSystem, volumes);
+
+        _regions = new RegionTable(regions, volumes, _finalPlaces);
+        _toolRoots = DeclaredRoot.Follow(toolRoots, _finalPlaces);
+        _probedRoots = DeclaredRoot.Follow(probedRoots ?? [], _finalPlaces);
 
         // A permitting region protects nothing, and a root that will not resolve names nothing.
         _held = new HeldLocations(
@@ -227,9 +230,50 @@ public sealed class ExploreActionPolicy
             allowed ??= verdict;
         }
 
+        // Then where the removal really acts, asked of the disk and only of a path its text allows.
+        var (refused, reached) = ThroughLinks(target, folder, children);
+
         // Last, and only of a path everything above allows at every place, because it reads every
         // location the path holds. The tool roots read one entry each, and only of a path inside one.
-        return _held.Refusal(target, folder) ?? allowed!;
+        return refused ?? _held.Refusal(target, reached) ?? allowed!;
+    }
+
+    /// <summary>
+    /// The refusal of the place removing <paramref name="target"/> acts on where a folder above it is a
+    /// link, said of the link because the rule names a path the user did not pick, and the item's
+    /// <paramref name="folder"/> with that place joined, so <see cref="HeldLocations"/> asks there too.
+    /// </summary>
+    private (ExploreVerdict? Refusal, ReachedFolder Folder) ThroughLinks(
+        string target, ReachedFolder folder, ToolRootChildren children)
+    {
+        var (farSide, unfollowed) = _finalPlaces.Item(target);
+
+        // Where no link leads elsewhere the far side is one of the paths the item is already
+        // reachable at, a substituted letter and another mount of its volume included.
+        if (unfollowed is not null || farSide is null
+            || folder.Places.Contains(ReachedFolder.Comparable(farSide), StringComparer.OrdinalIgnoreCase))
+        {
+            return (unfollowed, folder);
+        }
+
+        var name = Path.GetFileName(target);
+
+        if (VolumeRoot.Places(_volumes, farSide) is not { } places)
+        {
+            return (ExploreVerdict.Refuse(
+                $"A folder on the way to '{name}' is a link, and '{name}' is the whole drive mounted at "
+                + $"'{farSide}'. Deguffer removes things from a drive, never the drive itself."), folder);
+        }
+
+        var far = ReachedFolder.Following(farSide, places);
+        var refusal = TopOfVolumeRefusals.Refusal(places)
+            ?? far.Places.Select(place => Above(place, children)).FirstOrDefault(verdict => !verdict.IsAllowed);
+
+        return refusal is null
+            ? (null, folder.Joined(far))
+            : (ExploreVerdict.Refuse(
+                $"A folder on the way to '{name}' is a link, so removing '{name}' removes '{farSide}'. "
+                + refusal.Reason), folder);
     }
 
     /// <summary>
@@ -250,6 +294,10 @@ public sealed class ExploreActionPolicy
     ///
     /// <para>A whole volume is answered null rather than refused: it is never removed, and what is on
     /// it is asked about thing by thing.</para>
+    ///
+    /// <para>It does not follow a link above the path, as <see cref="MayRemove"/> does: a search
+    /// passes over the final paths Windows gives, which every link on the way already leads to, and
+    /// opening each folder it asks about would add nothing but the cost.</para>
     /// </summary>
     public ExploreVerdict? RefusedAtAndBelow(string path)
     {

@@ -41,6 +41,13 @@ public sealed class ExploreScanner(
     internal Func<Action, Task> AssembleSnapshot { get; init; } = WalkSnapshots.InBackground;
 
     /// <summary>
+    /// How a folder the table does not answer for is walked. A test sets one that records the folder
+    /// and reads nothing, so a scan of a drive letter or a share only the fakes stand for never walks
+    /// whatever the machine running the suite has there, or looks a share's server up on the network.
+    /// </summary>
+    internal ExploreWalk Walker { get; init; } = WalkExploreReader.Read;
+
+    /// <summary>
     /// Scan everything at or below <paramref name="root"/>, which is a volume root or any folder
     /// under one.
     ///
@@ -374,7 +381,7 @@ public sealed class ExploreScanner(
         LeavesUnlisted? unlisted = null)
     {
         // The scan's own clock, so the walk's reports and its snapshots keep one time.
-        var tree = WalkExploreReader.Read(root, _tuning, _occupancy, progress, _time, ct, unlisted, assembleSnapshot);
+        var tree = Walker(root, _tuning, _occupancy, progress, _time, ct, unlisted, assembleSnapshot);
 
         return ExploreScan.Walked(tree, reason);
     }
