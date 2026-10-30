@@ -2,6 +2,7 @@ using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.VirtualDisks;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -30,16 +31,22 @@ public sealed class VirtualMachineStoragePlanTests
         Steps = steps,
     };
 
+    private static readonly FakeVolumeInventory Volumes = new();
+
     private static RegisteredStorage Registered(string path = Disk, PathPresence presence = PathPresence.Present) =>
-        new([new RegisteredEntry(new VirtualMachineStorage(path, "the WSL distribution 'Ubuntu'"), Registrar, presence, path)]);
+        new([new RegisteredEntry(
+            new VirtualMachineStorage(path, "the WSL distribution 'Ubuntu'"), Registrar, presence, RegisteredStorage.Reach(path, Volumes))]);
+
+    private static CleanupPlan Apply(CleanupPlan plan, RegisteredStorage registered) =>
+        VirtualMachineStoragePlan.Apply(plan, registered, Volumes);
 
     [Fact]
     public void APlanWhoseStepsReachNoStorageIsReturnedAsItIs()
     {
         var plan = Planning(steps: new DeleteDirectoryStep(@"C:\Users\testuser\AppData\Local\Temp\distros\notes", "Notes"));
 
-        Assert.Same(plan, VirtualMachineStoragePlan.Apply(plan, Registered()));
-        Assert.Same(plan, VirtualMachineStoragePlan.Apply(plan, RegisteredStorage.None));
+        Assert.Same(plan, Apply(plan, Registered()));
+        Assert.Same(plan, Apply(plan, RegisteredStorage.None));
     }
 
     /// <summary>
@@ -56,7 +63,7 @@ public sealed class VirtualMachineStoragePlanTests
         };
         var beside = new DeleteDirectoryStep(@"C:\Users\testuser\AppData\Local\Temp\build-1", "Temporary files");
 
-        var applied = VirtualMachineStoragePlan.Apply(Planning(steps: [holding, beside]), Registered());
+        var applied = Apply(Planning(steps: [holding, beside]), Registered());
 
         Assert.Equal([beside], applied.Steps);
         Assert.DoesNotContain(applied.TargetedPaths, path => LongPath.Contains(path, Disk));
@@ -79,7 +86,7 @@ public sealed class VirtualMachineStoragePlanTests
     [Fact]
     public void AFileStepNamingTheDiskIsWithheld()
     {
-        var applied = VirtualMachineStoragePlan.Apply(Planning(steps: new DeleteFileStep(Disk, "Old file")), Registered());
+        var applied = Apply(Planning(steps: new DeleteFileStep(Disk, "Old file")), Registered());
 
         Assert.Empty(applied.Steps);
         Assert.Equal(Disk, Assert.Single(applied.ProtectedPaths).Path);
@@ -99,7 +106,7 @@ public sealed class VirtualMachineStoragePlanTests
             MeasuredPaths = [@"C:\Users\testuser\AppData\Local\Temp"],
         };
 
-        var applied = VirtualMachineStoragePlan.Apply(Planning(steps: command), Registered());
+        var applied = Apply(Planning(steps: command), Registered());
 
         Assert.Empty(applied.Steps);
         Assert.Contains(applied.Notes, n => n.Message.Contains("tool.exe cache clean", StringComparison.Ordinal));
@@ -115,7 +122,7 @@ public sealed class VirtualMachineStoragePlanTests
     {
         var inside = new DeleteDirectoryStep(Imported + @"\cache", "Cache");
 
-        var applied = VirtualMachineStoragePlan.Apply(Planning(steps: inside), Registered(Imported));
+        var applied = Apply(Planning(steps: inside), Registered(Imported));
 
         Assert.Empty(applied.Steps);
         Assert.Equal(Imported, Assert.Single(applied.ProtectedPaths).Path);
@@ -130,27 +137,36 @@ public sealed class VirtualMachineStoragePlanTests
     {
         var plan = Planning(steps: new DeleteDirectoryStep(Imported, "Folder"));
 
-        var refused = VirtualMachineStoragePlan.Apply(plan, Registered(presence: PathPresence.Refused));
+        var refused = Apply(plan, Registered(presence: PathPresence.Refused));
         Assert.Empty(refused.Steps);
         Assert.Equal(PathPresence.Refused, Assert.Single(refused.ProtectedPaths, p => p.Path == Disk).PresenceBefore);
 
-        Assert.Same(plan, VirtualMachineStoragePlan.Apply(plan, Registered(presence: PathPresence.Absent)));
+        Assert.Same(plan, Apply(plan, Registered(presence: PathPresence.Absent)));
     }
 
     /// <summary>
-    /// The registering row's own plan protects every disk it registered, though it has no step, so a run
-    /// proves them whichever rows it cleans. Another row with nothing in reach gains nothing.
+    /// A disk recorded through an 8.3 alias Windows will not expand may be inside the folder a step names
+    /// by its long name, so it is not ruled out: everything below the part Windows can name is treated
+    /// as possibly the disk's. A step outside that part still runs.
     /// </summary>
     [Fact]
-    public void TheRegisteringRowsPlanProtectsEveryDiskItRegistered()
+    public void ADiskRecordedThroughAnAliasWindowsWillNotExpandIsNotRuledOut()
     {
-        var report = VirtualMachineStoragePlan.Apply(Planning(Registrar) with { ReportsOnly = true }, Registered());
+        using var temp = new TempDirectory();
+        var distros = temp.CreateDirectory("distros");
+        var named = temp.CreateDirectory("distros", "Ubuntu-imported");
+        var elsewhere = temp.CreateDirectory("build-1");
+        var aliased = Path.Combine(distros, "UBUNTU~1", "ext4.vhdx");
 
-        Assert.True(report.HasSomethingToProve);
-        Assert.Equal(Disk, Assert.Single(report.ProtectedPaths, p => p.Withheld == Withholding.VirtualMachineStorage).Path);
-        Assert.Equal(Disk, Assert.Single(report.ProofOnly().ProtectedPaths).Path);
+        using var refusal = DeniedDirectory.WithUnreadableAttributes(distros);
 
-        var other = Planning();
-        Assert.Same(other, VirtualMachineStoragePlan.Apply(other, Registered()));
+        Assert.Null(LongPath.Canonical(aliased));
+
+        var applied = Apply(
+            Planning(steps: [new DeleteDirectoryStep(named, "Folder"), new DeleteDirectoryStep(elsewhere, "Build")]),
+            Registered(aliased, PathPresence.Refused));
+
+        Assert.Equal([elsewhere], applied.TargetedPaths);
+        Assert.Contains(applied.ProtectedPaths, p => p.Path == aliased && p.Withheld == Withholding.VirtualMachineStorage);
     }
 }

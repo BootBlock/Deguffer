@@ -8,16 +8,16 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>Registering is the whole of what a report does to protect them.</b>
 /// <see cref="Execution.CleanupPlanner"/> asks every row that implements this before a planning pass,
-/// withholds any step of any row that would reach what it names, and has the registering row's own
-/// plan prove afterwards that each one is still there (§5.6). Explore refuses each one too
+/// withholds any step of any row that would reach what it names, and proves after every clean that each
+/// one is still there (§5.6). Explore refuses each one too
 /// (<see cref="Exploring.Acting.ExploreActionPolicy.ForAsync"/>). A new report adds its machines by
 /// implementing this, and nothing else changes.</para>
 /// </summary>
 public interface IRegistersVirtualMachineStorage
 {
     /// <summary>
-    /// Every disk and folder the tool's records name, whether or not it is there. Read once per pass
-    /// and shared with the row's own plan (G4).
+    /// Every disk and folder the tool's records name, whether or not it is there. Asked once before a
+    /// planning pass and once before a clean, so an implementation keeps its reading for the pass (G4).
     /// </summary>
     Task<IReadOnlyList<VirtualMachineStorage>> RegisteredStorageAsync(CancellationToken ct = default);
 }

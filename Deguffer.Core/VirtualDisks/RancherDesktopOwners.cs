@@ -7,8 +7,9 @@ namespace Deguffer.Core.VirtualDisks;
 /// <para>Grounded in rancher-sandbox/rancher-desktop. <c>pkg/rancher-desktop/backend/wsl.ts</c> names the
 /// distribution <c>DATA_INSTANCE_NAME</c> and lists <c>/var/lib</c> among the "directories that are in the
 /// data distribution (persisted across version upgrades)", and the FAQ calls it "a persistent volume used
-/// for storage, such as container images". Its "Reclaiming Disk Space" guide prunes with the
-/// <c>docker</c> command, which is the moby engine's, and offers a factory reset otherwise. The
+/// for storage, such as container images". Its only pruning recipe is the "Reclaiming Disk Space" part of
+/// the guide to migrating moby images between storage drivers, which prunes with the <c>docker</c>
+/// command and offers a factory reset otherwise, so the route names it as that guide's. The
 /// Troubleshooting page offers Reset Kubernetes and Factory Reset, and <c>rdctl reset --factory</c> is
 /// the same reset from a command line (<c>src/go/rdctl/cmd/reset.go</c>).</para>
 /// </summary>
@@ -26,9 +27,9 @@ public sealed record RancherDesktopData : DiskOwner
         + "Desktop writes and does not shrink by itself. " + VirtualDiskRoutes.InsideIsNotOnTheDrive;
 
     public override string Route(VirtualDisk disk, bool isSparse) =>
-        "To make it smaller, remove what is no longer needed first. With the moby engine, Rancher Desktop's own "
-        + "guide turns Kubernetes off, stops the running containers and then runs 'docker container prune' and "
-        + "'docker image prune --all'. Its Troubleshooting page offers Reset Kubernetes, which can remove the "
+        "To make it smaller, remove what is no longer needed first. With the moby engine, Rancher Desktop's guide "
+        + "to reclaiming the space a storage driver change leaves behind turns Kubernetes off, stops the running "
+        + "containers and then runs 'docker container prune' and 'docker image prune --all'. Its Troubleshooting page offers Reset Kubernetes, which can remove the "
         + "images too, and Factory Reset ('rdctl reset --factory'), which removes everything."
         + VirtualDiskRoutes.WslCompaction(disk, isSparse);
 

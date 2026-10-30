@@ -6660,9 +6660,10 @@ For each disk the row states:
   Desktop's *Clean up data* resets the disk and removes every container and image. For a Podman
   machine: `podman system prune`, which Podman's command on Windows runs through the machine
   ([podman-for-windows](https://github.com/containers/podman/blob/main/docs/tutorials/podman-for-windows.md)),
-  then WSL's compaction. For Rancher Desktop's data: with the moby engine, its own
-  [Reclaiming Disk Space](https://docs.rancherdesktop.io/how-to-guides/migrating-images) guide's
-  `docker container prune` and `docker image prune --all`, or its Reset Kubernetes and Factory Reset
+  then WSL's compaction. For Rancher Desktop's data: with the moby engine, the
+  `docker container prune` and `docker image prune --all` its guide to reclaiming the space a storage
+  driver change leaves behind runs
+  ([Reclaiming Disk Space](https://docs.rancherdesktop.io/how-to-guides/migrating-images)), or its Reset Kubernetes and Factory Reset
   (`rdctl reset --factory`), then WSL's compaction.
 
 Explore says the same thing when you hover a disk, and refuses to delete one or the folder it is in.
@@ -6673,9 +6674,8 @@ The row is how every clean learns where the disks are. Before a preview plans an
 asks each row that reads a virtualisation tool's records (`IRegistersVirtualMachineStorage`) for the
 disks and folders it registered. A step of *any* row that would reach one is withheld, with a
 warning naming the disk, and the disk is protected, so §5.6 proves after the run that it survived.
-This row's own plan protects every disk it registered, so every clean proves them all, whichever
-rows it cleans and whether or not this row is ticked. Explore's refusal is read from the same
-registration.
+Every clean then proves each registered disk still standing, whichever rows it cleans and whether
+or not this row was scanned. Explore's refusal is read from the same registration.
 
 ### Why nothing is run
 

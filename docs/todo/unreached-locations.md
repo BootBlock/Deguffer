@@ -1602,8 +1602,9 @@ disk's owner and route on hover, and refuses to delete one.
 **Closed: every run refuses the registered disks.** Before a preview plans anything, the planner
 asks each row that registers a virtual machine's storage (`IRegistersVirtualMachineStorage`) where
 its disks are. A step of any row that would reach one is withheld, and the disk is protected, so
-§5.6 proves after the run that it survived. The report's own plan protects every disk it registered,
-so every clean proves them all, and Explore's refusal is read from the same registration. Container
+§5.6 proves after the run that it survived. Every clean then proves each registered disk still
+standing, whether or not the report's row was scanned, and Explore's refusal is read from the same
+registration. Container
 tools on WSL are named by their own distributions: Docker Desktop, Podman and Rancher Desktop, each
 with its own route.
 

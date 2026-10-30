@@ -24,7 +24,7 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>Every disk registered, so no run deletes one.</b> The row is how the planner learns where
 /// the disks are (<see cref="IRegistersVirtualMachineStorage"/>): a step of any other row that would
-/// reach one is withheld, and this row's plan proves after every clean that each one is still there.</para>
+/// reach one is withheld, and every clean proves afterwards that each one is still there.</para>
 ///
 /// <para><b>Tier 3</b>, because a disk deleted is a distribution, or every image, container and volume,
 /// gone for good. The tier describes the disk. The row offers nothing to tick either way.</para>
@@ -126,8 +126,8 @@ public sealed class VirtualDiskProvider : CleanupProviderBase, IRegistersVirtual
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             ReportsOnly = true,
 
-            // No protected paths of its own: the planner adds one for every disk this row registers
-            // (VirtualMachineStoragePlan), so each is proved by every clean whether or not this row runs.
+            // No protected paths: every clean proves each disk this row registers, whether or not this row
+            // was scanned or chosen (VirtualMachineStoragePlan.ProofFor).
             Notes = VirtualDiskReport.Notes(measured, inside, inventory.Problems),
         };
     }

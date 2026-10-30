@@ -100,9 +100,10 @@ public enum Withholding
     UpdateInProgress,
 
     /// <summary>
-    /// A virtual machine's disk or folder that a virtualisation tool registered, which Deguffer never
-    /// removes. Protected on its existence, and proved standing by every clean. See
-    /// <see cref="VirtualMachineStoragePlan"/>.
+    /// A virtual machine's disk or folder that a virtualisation tool registered, inside what a step would
+    /// have reached, which Deguffer never removes. Protected on its existence. Every clean proves it
+    /// standing whether or not this plan runs, through its registering row (see
+    /// <see cref="VirtualMachineStoragePlan.ProofFor"/>).
     /// </summary>
     VirtualMachineStorage,
 }
@@ -346,8 +347,8 @@ public sealed record CleanupPlan
     public bool WaitsForAnUpdate => ProtectedPaths.Any(p => p.Withheld == Withholding.UpdateInProgress);
 
     /// <summary>
-    /// Whether this plan leaves a virtual machine's disk or folder where it is: one its own row
-    /// registered, or one a step here would have reached and was withheld for. The same shape as
+    /// Whether this plan leaves a virtual machine's disk or folder where it is, because a step here would
+    /// have reached it and was withheld. The same shape as
     /// <see cref="HoldsMailStores"/>, for the same reason.
     /// </summary>
     public bool HoldsVirtualMachineStorage =>
@@ -508,8 +509,7 @@ public sealed record CleanupPlan
 
     /// <summary>
     /// This plan reduced to what a run owes it when it does not run: nothing to do, and what it leaves
-    /// standing whatever anyone chooses to prove — its kept items, its Outlook data files and the virtual
-    /// machines' storage it holds.
+    /// standing whatever anyone chooses to prove — its kept items and its Outlook data files.
     ///
     /// <para>For a row the user did not tick, or whose confirmation was declined. Nothing in it runs,
     /// and those files still have to be shown standing once the run is over, because an over-broad rule
@@ -520,7 +520,6 @@ public sealed record CleanupPlan
     public CleanupPlan ProofOnly() => this with
     {
         Steps = [],
-        ProtectedPaths = [.. ProtectedPaths.Where(p => p.Withheld
-            is Withholding.OnKeepList or Withholding.MailStore or Withholding.VirtualMachineStorage)],
+        ProtectedPaths = [.. ProtectedPaths.Where(p => p.Withheld is Withholding.OnKeepList or Withholding.MailStore)],
     };
 }

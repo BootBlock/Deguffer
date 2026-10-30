@@ -383,6 +383,7 @@ public sealed class VirtualDiskProviderTests : IDisposable
         Assert.Contains("It is sparse", Text(plan), StringComparison.Ordinal);
         Assert.Contains("fstrim", Text(plan), StringComparison.Ordinal);
         Assert.DoesNotContain("--compact", Text(plan), StringComparison.Ordinal);
+        Assert.DoesNotContain("Optimize-VHD", Text(plan), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -531,10 +532,65 @@ public sealed class VirtualDiskProviderTests : IDisposable
     /// <summary>
     /// The run-wide refusal (<c>unreached-locations.md</c> §11): another row whose location holds a
     /// registered disk does not remove it, and the run's §5.6 negative names the disk as having survived.
-    /// The row's plan taken outside the planner shows the fixture would otherwise have taken the disk.
+    /// Only that row is scanned, as a chosen scan does, so neither the refusal nor the proof may depend on
+    /// the report's own row. The row's plan taken outside the planner shows the fixture would otherwise
+    /// have taken the disk.
     /// </summary>
     [Fact]
     public async Task ARowWhoseLocationHoldsARegisteredDiskLeavesItAndTheRunProvesIt()
+    {
+        var (gradle, disk) = DiskInsideGradlesCaches();
+
+        Assert.Contains((await gradle.PlanAsync()).TargetedPaths, path => LongPath.Contains(path, disk));
+
+        var report = Provider();
+        var planner = new CleanupPlanner([gradle, report], volumes: new FakeVolumeInventory());
+        var cache = Assert.Single(await planner.PlanAsync([gradle]));
+
+        Assert.DoesNotContain(cache.Plan!.TargetedPaths, path => LongPath.Contains(path, disk));
+        Assert.Contains(
+            cache.Plan.ProtectedPaths,
+            p => p.Path == disk && p.Withheld == Withholding.VirtualMachineStorage);
+
+        var results = await planner.ExecuteAsync([cache]);
+
+        Assert.True(File.Exists(disk), "a row whose location held a registered disk deleted it");
+        Assert.All(results, result => Assert.True(result.Verification!.Passed, result.Verification.Summary));
+        Assert.All(
+            results,
+            result => Assert.Contains(
+                result.Verification!.Checks,
+                check => check.Subject == disk && check.Outcome == VerificationOutcome.Survived));
+        Assert.Contains(results, result => result.ProviderId == report.Id);
+    }
+
+    /// <summary>
+    /// Every clean proves each registered disk is standing, and a disk a step took anyway (a rule broader
+    /// than it said, or a disk registered after the preview) fails the run's verification by name.
+    /// </summary>
+    [Fact]
+    public async Task ADiskARunDeletesAnywayFailsTheRunNamingIt()
+    {
+        var (gradle, disk) = DiskInsideGradlesCaches();
+        var planner = new CleanupPlanner([gradle, Provider()], volumes: new FakeVolumeInventory());
+
+        var overReaching = new CleanupPlan
+        {
+            ProviderId = gradle.Id,
+            ProviderName = gradle.Name,
+            Tier = gradle.Tier,
+            WhatHappensOnNextUse = gradle.WhatHappensOnNextUse,
+            Steps = [new DeleteDirectoryStep(Path.GetDirectoryName(disk)!, "Over-reaching")],
+        };
+
+        var results = await planner.ExecuteAsync([new Finding(gradle, IsPresent: true, overReaching)]);
+
+        Assert.False(File.Exists(disk));
+        var proof = Assert.Single(results, result => result.ProviderId == "virtual-disks");
+        Assert.Equal(disk, Assert.Single(proof.Verification!.Failures).Subject);
+    }
+
+    private (GradleCacheProvider Gradle, string Disk) DiskInsideGradlesCaches()
     {
         var caches = Path.Combine(_environment.UserProfile, ".gradle", "caches");
         var imported = Path.Combine(caches, "imported");
@@ -543,73 +599,7 @@ public sealed class VirtualDiskProviderTests : IDisposable
         File.WriteAllBytes(Path.Combine(caches, "modules.bin"), new byte[4096]);
         Register(Ubuntu, "Ubuntu", imported);
 
-        var gradle = new GradleCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
-
-        Assert.Contains((await gradle.PlanAsync()).TargetedPaths, path => LongPath.Contains(path, disk));
-
-        var report = Provider();
-        var planner = new CleanupPlanner([gradle, report]);
-        var findings = await planner.PlanAllAsync();
-        var cache = Assert.Single(findings, finding => finding.Provider == gradle);
-
-        Assert.DoesNotContain(cache.Plan!.TargetedPaths, path => LongPath.Contains(path, disk));
-        Assert.Contains(
-            cache.Plan.ProtectedPaths,
-            p => p.Path == disk && p.Withheld == Withholding.VirtualMachineStorage);
-
-        var results = await planner.ExecuteAsync([cache, .. StandingProof.For(findings, [cache])]);
-
-        Assert.True(File.Exists(disk), "a row whose location held a registered disk deleted it");
-        Assert.All(results, result => Assert.True(result.Verification!.Passed, result.Verification.Summary));
-        Assert.Contains(results, result => result.ProviderId == report.Id);
-        Assert.All(
-            results,
-            result => Assert.Contains(
-                result.Verification!.Checks,
-                check => check.Subject == disk && check.Outcome == VerificationOutcome.Survived));
-    }
-
-    /// <summary>
-    /// A re-plan of only the rows a clean changed still holds them to every registration, though the
-    /// report's own row is not planned again.
-    /// </summary>
-    [Fact]
-    public async Task ARePlanOfOtherRowsStillRefusesTheRegisteredDisk()
-    {
-        var caches = Path.Combine(_environment.UserProfile, ".gradle", "caches");
-        var imported = Path.Combine(caches, "imported");
-        Directory.CreateDirectory(imported);
-        var disk = Disk(imported);
-        Register(Ubuntu, "Ubuntu", imported);
-
-        var gradle = new GradleCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
-        var planner = new CleanupPlanner([gradle, Provider()]);
-
-        var replanned = Assert.Single(await planner.PlanAsync([gradle]));
-
-        Assert.DoesNotContain(replanned.Plan!.TargetedPaths, path => LongPath.Contains(path, disk));
-        Assert.Contains(replanned.Plan.ProtectedPaths, p => p.Path == disk);
-    }
-
-    /// <summary>
-    /// Every run proves each registered disk is standing, even one no chosen row's location holds, and a
-    /// disk gone afterwards fails the run's verification by name.
-    /// </summary>
-    [Fact]
-    public async Task ARunAfterWhichARegisteredDiskIsGoneFailsNamingIt()
-    {
-        var folder = Folder("wsl", "Ubuntu");
-        var disk = Disk(folder);
-        Register(Ubuntu, "Ubuntu", folder);
-
-        var planner = new CleanupPlanner([Provider()]);
-        var proving = Assert.Single(StandingProof.For(await planner.PlanAllAsync(), running: []));
-
-        File.Delete(disk);
-
-        var result = Assert.Single(await planner.ExecuteAsync([proving]));
-
-        Assert.Equal(disk, Assert.Single(result.Verification!.Failures).Subject);
+        return (new GradleCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning), disk);
     }
 
     [Fact]

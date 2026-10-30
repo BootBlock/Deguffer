@@ -5,23 +5,23 @@ using Deguffer.Core.VirtualDisks;
 namespace Deguffer.Core.Execution;
 
 /// <summary>
-/// One registered disk or folder, with what a planning pass found of it.
+/// One registered disk or folder, with what Windows said of it when it was read.
 /// </summary>
 /// <param name="Storage">The disk or folder, and whose it is.</param>
 /// <param name="RegisteredBy">The <see cref="ICleanupProvider.Id"/> of the row whose records name it.</param>
 /// <param name="Presence">
-/// What Windows said about it when the pass began. A refusal is not an absence: a disk behind an access
+/// What Windows said about it when it was read. A refusal is not an absence: a disk behind an access
 /// rule may be there, so it is protected as one that is.
 /// </param>
-/// <param name="Form">
-/// <see cref="Storage"/>'s path in the form comparisons use: canonical where it can be put in that form,
-/// so a record spelled with an 8.3 alias still reads as inside the folder a step names.
+/// <param name="Reached">
+/// Where it is, as <see cref="RegisteredStorage.Reach"/> gives it, for the comparison with what a step
+/// reaches.
 /// </param>
-public sealed record RegisteredEntry(VirtualMachineStorage Storage, string RegisteredBy, PathPresence Presence, string Form);
+public sealed record RegisteredEntry(VirtualMachineStorage Storage, string RegisteredBy, PathPresence Presence, ReachedFolder Reached);
 
 /// <summary>
-/// Every virtual machine's disk and folder the rows registered for one planning pass, read before any
-/// row plans, so every plan in the pass is held to the same set. See
+/// Every virtual machine's disk and folder the rows registered, read once before a planning pass so every
+/// plan in it is held to the same set, and again before a clean so the clean proves them. See
 /// <see cref="IRegistersVirtualMachineStorage"/>.
 ///
 /// <para>The reading, kept apart from <see cref="VirtualMachineStoragePlan"/>, which is the rule (G2).</para>
@@ -31,11 +31,14 @@ public sealed record RegisteredStorage(IReadOnlyList<RegisteredEntry> Entries)
     public static readonly RegisteredStorage None = new([]);
 
     /// <summary>
-    /// Asks every row in <paramref name="providers"/> that registers storage, and probes each path once.
+    /// Asks every row in <paramref name="providers"/> that registers storage, and probes and places each
+    /// path once.
     /// </summary>
-    public static async Task<RegisteredStorage> ReadAsync(IEnumerable<ICleanupProvider> providers, CancellationToken ct)
+    public static async Task<RegisteredStorage> ReadAsync(
+        IEnumerable<ICleanupProvider> providers, IVolumeInventory volumes, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(providers);
+        ArgumentNullException.ThrowIfNull(volumes);
 
         List<RegisteredEntry> entries = [];
 
@@ -54,7 +57,7 @@ public sealed record RegisteredStorage(IReadOnlyList<RegisteredEntry> Entries)
                     storage with { Path = path },
                     provider.Id,
                     LongPath.ProbeEntry(path),
-                    ComparedForm(path)));
+                    Reach(path, volumes)));
             }
         }
 
@@ -69,13 +72,31 @@ public sealed record RegisteredStorage(IReadOnlyList<RegisteredEntry> Entries)
     public IEnumerable<RegisteredEntry> Standing => Entries.Where(entry => entry.Presence != PathPresence.Absent);
 
     /// <summary>
-    /// <paramref name="path"/> in the form an entry's <see cref="RegisteredEntry.Form"/> is in, for a
-    /// comparison against it.
+    /// The folder <paramref name="path"/> names, at every path it is reachable at, for a comparison that
+    /// must not fail in the direction that deletes.
+    ///
+    /// <para><b>An alias Windows will not expand is not ruled out.</b> A record or a step may spell a
+    /// folder with an 8.3 alias, and <see cref="LongPath.Canonical"/> answers null where Windows would not
+    /// describe it: "cannot say", never a guess. Compared as spelled, a disk recorded through such an
+    /// alias would read as outside the folder a step names by its long name, and the step would run. So
+    /// the path is cut back to the longest part Windows can name, and everything below that part is
+    /// treated as possibly the disk's: a step there is withheld, and a step holding it is too.</para>
+    ///
+    /// <para><see cref="ReachedFolder"/> then follows that part to every path it is reachable at, so a
+    /// step naming the folder through a <c>subst</c> letter or another mount of its volume still meets
+    /// it.</para>
     /// </summary>
-    public static string ComparedForm(string path)
+    public static ReachedFolder Reach(string path, IVolumeInventory volumes)
     {
-        var display = LongPath.Display(path);
+        ArgumentNullException.ThrowIfNull(volumes);
 
-        return LongPath.Canonical(display) ?? display;
+        var known = LongPath.Display(path);
+
+        while (LongPath.Canonical(known) is null && Path.GetDirectoryName(known) is { Length: > 0 } above)
+        {
+            known = above;
+        }
+
+        return ReachedFolder.At(known, volumes);
     }
 }

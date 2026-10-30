@@ -1,3 +1,4 @@
+using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Execution;
@@ -14,11 +15,11 @@ namespace Deguffer.Core.Execution;
 /// over an Outlook data file (<see cref="MailStorePlan"/>). A step inside a registered folder is withheld
 /// for the same reason.</para>
 ///
-/// <para><b>The registering row proves every one of its own.</b> Its plan carries a protection for each
-/// disk and folder it registered, so a run checks them whichever rows it cleans, and
-/// <see cref="StandingProof"/> owes that check even when the row itself is not chosen. That is the
-/// negative <c>unreached-locations.md</c> §11 found missing: before this, a report had no step, no run
-/// included it, and Explore's refusal was the only guard.</para>
+/// <para><b>Every clean proves every one.</b> <see cref="ProofFor"/> gives each registering row a plan
+/// that protects all it registered, and <see cref="CleanupPlanner.ExecuteAsync"/> runs it last in every
+/// clean, whichever rows were scanned or chosen. That is the negative <c>unreached-locations.md</c> §11
+/// found missing: before this, a report had no step, no run included it, and Explore's refusal was the
+/// only guard.</para>
 ///
 /// <para>Applied by <see cref="CleanupPlanner"/> to every plan it builds, because the set belongs to the
 /// pass and no single row can see the others' records (G1).</para>
@@ -28,19 +29,22 @@ public static class VirtualMachineStoragePlan
     /// <summary>The reason a whole subject withheld gives, in the verification report.</summary>
     private const string WholeReason = "Holds a virtual machine's storage, so Deguffer leaves it exactly as it is.";
 
-    public static CleanupPlan Apply(CleanupPlan plan, RegisteredStorage registered)
+    /// <param name="plan">The plan a row built.</param>
+    /// <param name="registered">Every registration the pass read.</param>
+    /// <param name="volumes">Asked where else each step's path is reachable, as the registrations were.</param>
+    public static CleanupPlan Apply(CleanupPlan plan, RegisteredStorage registered, IVolumeInventory volumes)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(registered);
+        ArgumentNullException.ThrowIfNull(volumes);
 
         var standing = registered.Standing.ToList();
 
-        if (standing.Count == 0)
+        if (standing.Count == 0 || plan.Steps.Count == 0)
         {
             return plan;
         }
 
-        var own = standing.Where(entry => entry.RegisteredBy == plan.ProviderId).ToList();
         var reached = new List<RegisteredEntry>();
         var leftWhole = new List<ProtectedPath>();
         var notes = new List<PlanNote>(plan.Notes);
@@ -48,8 +52,10 @@ public static class VirtualMachineStoragePlan
 
         foreach (var step in plan.Steps)
         {
-            var reach = Reach(step).Select(path => (Path: path, Form: RegisteredStorage.ComparedForm(path))).ToList();
-            var inReach = standing.Where(entry => reach.Any(path => Overlaps(path.Form, entry.Form))).ToList();
+            var reach = Reach(step).Select(path => (Path: path, Folder: RegisteredStorage.Reach(path, volumes))).ToList();
+            var inReach = standing
+                .Where(entry => reach.Any(path => path.Folder.Holds(entry.Reached) || entry.Reached.Holds(path.Folder)))
+                .ToList();
 
             if (inReach.Count == 0)
             {
@@ -60,14 +66,13 @@ public static class VirtualMachineStoragePlan
             reached.AddRange(inReach);
             notes.Add(new PlanNote(PlanNoteSeverity.Warning, WhyWithheld(plan, step, inReach)));
 
-            if (step is DeleteStep whole)
+            if (step is DeleteStep)
             {
                 // Each path the step would have destroyed that holds the storage, protected on its
                 // contents, so a rule elsewhere in the run that emptied it is caught as well. A path
                 // inside a registered folder is not one: the folder's own protection covers it.
                 leftWhole.AddRange(reach
-                    .Where(path => inReach.Any(entry => LongPath.Contains(path.Form, entry.Form)
-                        && !path.Form.Equals(entry.Form, StringComparison.OrdinalIgnoreCase)))
+                    .Where(path => inReach.Any(entry => path.Folder.Holds(entry.Reached) && !path.Folder.IsSameAs(entry.Reached)))
                     .Select(path => new ProtectedPath(
                         LongPath.Display(path.Path),
                         WholeReason,
@@ -78,7 +83,7 @@ public static class VirtualMachineStoragePlan
             }
         }
 
-        if (own.Count == 0 && reached.Count == 0)
+        if (reached.Count == 0)
         {
             return plan;
         }
@@ -86,9 +91,33 @@ public static class VirtualMachineStoragePlan
         return plan with
         {
             Steps = kept,
-            ProtectedPaths = [.. plan.ProtectedPaths, .. ProtectionsFor(own.Concat(reached)), .. leftWhole],
+            ProtectedPaths = [.. plan.ProtectedPaths, .. ProtectionsFor(reached), .. leftWhole],
             Notes = notes,
         };
+    }
+
+    /// <summary>
+    /// A plan for <paramref name="registrar"/> that does nothing and proves every disk and folder it
+    /// registered is still standing once a clean is over, or null where none is standing. See
+    /// <see cref="CleanupPlanner.ExecuteAsync"/>.
+    /// </summary>
+    public static CleanupPlan? ProofFor(ICleanupProvider registrar, RegisteredStorage registered)
+    {
+        ArgumentNullException.ThrowIfNull(registrar);
+        ArgumentNullException.ThrowIfNull(registered);
+
+        var own = registered.Standing.Where(entry => entry.RegisteredBy == registrar.Id).ToList();
+
+        return own.Count == 0
+            ? null
+            : new CleanupPlan
+            {
+                ProviderId = registrar.Id,
+                ProviderName = registrar.Name,
+                Tier = registrar.Tier,
+                WhatHappensOnNextUse = registrar.WhatHappensOnNextUse,
+                ProtectedPaths = [.. ProtectionsFor(own)],
+            };
     }
 
     /// <summary>
@@ -105,15 +134,8 @@ public static class VirtualMachineStoragePlan
     };
 
     /// <summary>
-    /// Whether one path holds the other: a step whose subject holds the storage, or a step inside a
-    /// registered folder. Either way the step would change what the machine keeps there.
-    /// </summary>
-    private static bool Overlaps(string step, string storage) =>
-        LongPath.Contains(step, storage) || LongPath.Contains(storage, step);
-
-    /// <summary>
-    /// One protection per disk or folder, each on its existence alone, with the presence the pass
-    /// found. A disk is a file, so there is no content to ask about, and a machine's folder changes as
+    /// One protection per disk or folder, each on its existence alone, with the presence Windows gave
+    /// when it was read. A disk is a file, so there is no content to ask about, and a machine's folder changes as
     /// the machine runs, so asking whether it still holds what it held would cry wolf.
     /// </summary>
     private static IEnumerable<ProtectedPath> ProtectionsFor(IEnumerable<RegisteredEntry> entries) =>
