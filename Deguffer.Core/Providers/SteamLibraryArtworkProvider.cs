@@ -212,12 +212,15 @@ public sealed class SteamLibraryArtworkProvider : CleanupProviderBase
             return UnreadableRootPlan(container);
         }
 
-        var examination = Examine(entries, new SteamAppManifests(libraries), ct);
+        var manifests = new SteamAppManifests(libraries);
+        var examination = Examine(entries, manifests, ct);
 
         if (examination.Targets.Count == 0 && examination.Declined.Count == 0)
         {
             return EmptyPlan("Steam is keeping no library artwork on this machine.");
         }
+
+        examination.Notes.AddRange(manifests.UnreachedLibraryNotes());
 
         var (steps, measured) = await PlanDeletionsAsync(examination.Targets, keep, ct).ConfigureAwait(false);
 

@@ -9,7 +9,8 @@ namespace Deguffer.Core.Providers;
 /// <param name="Name">The name Steam shows for it, or null where no manifest said.</param>
 /// <param name="IsInstalled">
 /// Whether any library holds the game's manifest. Null where that cannot be said: a library the list
-/// did not name, or one Windows would not describe, may hold it.
+/// did not name, a library that could not be reached, or a manifest Windows would not describe, may
+/// hold it.
 /// </param>
 public sealed record SteamApp(string Id, string? Name, bool? IsInstalled)
 {
@@ -42,6 +43,12 @@ public sealed record SteamApp(string Id, string? Name, bool? IsInstalled)
 ///
 /// <para>Memoised per id for the life of one planning pass (G4), because a game's cache can sit in
 /// more than one library and each library is asked about the same game.</para>
+///
+/// <para><b>"Not installed" is a claim about every library.</b> A library on a drive that is not
+/// connected answers "no manifest here" for every game, because Windows reads a missing drive as an
+/// absent path. So a library that could not be reached is never searched and never counted as
+/// saying no: a game whose manifest is not found elsewhere is then of unknown standing, and
+/// <see cref="UnreachedLibraryNotes"/> names the library that made it so.</para>
 /// </summary>
 internal sealed class SteamAppManifests(SteamLibraries libraries)
 {
@@ -52,6 +59,9 @@ internal sealed class SteamAppManifests(SteamLibraries libraries)
     private static readonly char[] NotInAFolderName = Path.GetInvalidFileNameChars();
 
     private readonly Dictionary<string, SteamApp> _described = new(StringComparer.Ordinal);
+
+    /// <summary>Each library that left at least one game's standing unknown, in list order.</summary>
+    private readonly List<string> _unreached = [];
 
     /// <summary>The manifest's name, relative to a library, for the application <paramref name="id"/>.</summary>
     public static string RelativePath(string id) => Path.Combine("steamapps", $"appmanifest_{id}.acf");
@@ -64,10 +74,17 @@ internal sealed class SteamAppManifests(SteamLibraries libraries)
         }
 
         var unknowable = !libraries.IsComplete;
+        List<string>? unreached = null;
 
         foreach (var library in libraries.Folders)
         {
-            var manifest = Path.Combine(library, RelativePath(id));
+            if (library.Presence is not PathPresence.Present)
+            {
+                (unreached ??= []).Add(library.Folder);
+                continue;
+            }
+
+            var manifest = Path.Combine(library.Folder, RelativePath(id));
 
             switch (LongPath.ProbeFile(manifest))
             {
@@ -80,8 +97,32 @@ internal sealed class SteamAppManifests(SteamLibraries libraries)
             }
         }
 
-        return _described[id] = new SteamApp(id, Name: null, IsInstalled: unknowable ? null : false);
+        foreach (var library in unreached ?? [])
+        {
+            if (!_unreached.Contains(library, StringComparer.OrdinalIgnoreCase))
+            {
+                _unreached.Add(library);
+            }
+        }
+
+        return _described[id] = new SteamApp(
+            id, Name: null, IsInstalled: unknowable || unreached is not null ? null : false);
     }
+
+    /// <summary>
+    /// The sentence owed about each library that could not be reached while some game's manifest was
+    /// found in no other library, so a reader filtering on "Installed" learns why that game carries
+    /// no answer. Information rather than a warning: nothing is removed because of it.
+    /// </summary>
+    public IReadOnlyList<PlanNote> UnreachedLibraryNotes() =>
+    [
+        .. _unreached.Select(library => new PlanNote(
+            PlanNoteSeverity.Information,
+            $"Steam lists a game library at '{LongPath.Display(library)}', and Deguffer could not look in it. "
+            + "A drive that is not connected, a network share that is offline and a folder this account may "
+            + "not read all do that. Its games may still be installed, so a game Deguffer found in no other "
+            + "library is not called uninstalled.")),
+    ];
 
     /// <summary>
     /// The folder each library holding the application's manifest installed it in,
@@ -98,11 +139,11 @@ internal sealed class SteamAppManifests(SteamLibraries libraries)
         List<(string Library, string Folder)> folders = [];
         List<string> unread = [];
 
-        foreach (var library in libraries.Folders)
+        foreach (var (library, presence) in libraries.Folders)
         {
             var manifest = Path.Combine(library, RelativePath(id));
 
-            switch (LongPath.ProbeFile(manifest))
+            switch (presence is PathPresence.Present ? LongPath.ProbeFile(manifest) : presence)
             {
                 case PathPresence.Absent:
                     continue;

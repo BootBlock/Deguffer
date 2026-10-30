@@ -1,4 +1,5 @@
 using Deguffer.Core.Providers;
+using Deguffer.Core.Safety;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -31,7 +32,7 @@ public sealed class SteamLibraryFoldersTests : IDisposable
 
         var libraries = SteamLibraryFolders.Of(Install);
 
-        Assert.Equal(new[] { Install }, libraries.Folders);
+        Assert.Equal(new[] { Install }, libraries.Folders.Select(library => library.Folder));
         Assert.Equal(SteamLibraryListing.Absent, libraries.Listing);
         Assert.True(libraries.IsComplete);
     }
@@ -56,7 +57,7 @@ public sealed class SteamLibraryFoldersTests : IDisposable
 
         var libraries = SteamLibraryFolders.Of(Install);
 
-        Assert.Equal(new[] { Install, second }, libraries.Folders);
+        Assert.Equal(new[] { Install, second }, libraries.Folders.Select(library => library.Folder));
         Assert.Equal(SteamLibraryListing.Read, libraries.Listing);
     }
 
@@ -83,7 +84,7 @@ public sealed class SteamLibraryFoldersTests : IDisposable
 
         var libraries = SteamLibraryFolders.Of(Install);
 
-        Assert.Equal(new[] { Install, second }, libraries.Folders);
+        Assert.Equal(new[] { Install, second }, libraries.Folders.Select(library => library.Folder));
         Assert.Equal(SteamLibraryListing.Unplaced, libraries.Listing);
         Assert.False(libraries.IsComplete);
     }
@@ -99,9 +100,50 @@ public sealed class SteamLibraryFoldersTests : IDisposable
 
         var libraries = SteamLibraryFolders.Of(Install);
 
-        Assert.Equal(new[] { Install }, libraries.Folders);
+        Assert.Equal(new[] { Install }, libraries.Folders.Select(library => library.Folder));
         Assert.Equal(SteamLibraryListing.Unreadable, libraries.Listing);
         Assert.False(libraries.IsComplete);
+    }
+
+    /// <summary>
+    /// A library on a drive that is not connected, or one Windows would not describe, is still a
+    /// library Steam named. It stays in the list with that answer, probed once as the list is read, so
+    /// a game installed there is never read as gone. The install is the caller's finding, and is not
+    /// asked about again.
+    /// </summary>
+    [Fact]
+    public void EachLibraryIsListedWithWhetherItCouldBeReached()
+    {
+        var reachable = Path.Combine(_temp.Path, "Library");
+        var unplugged = Path.Combine(_temp.Path, "Unplugged", "SteamLibrary");
+        var refused = Path.Combine(_temp.Path, "Refused", "SteamLibrary");
+        Directory.CreateDirectory(reachable);
+        Directory.CreateDirectory(refused);
+
+        WriteList($$"""
+            "libraryfolders"
+            {
+                "0" { "path" "{{Escaped(Install)}}" }
+                "1" { "path" "{{Escaped(reachable)}}" }
+                "2" { "path" "{{Escaped(unplugged)}}" }
+                "3" { "path" "{{Escaped(refused)}}" }
+            }
+            """);
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(refused);
+
+        var libraries = SteamLibraryFolders.Of(Install);
+
+        Assert.Equal(
+            new[]
+            {
+                new SteamLibrary(Install, PathPresence.Present),
+                new SteamLibrary(reachable, PathPresence.Present),
+                new SteamLibrary(unplugged, PathPresence.Absent),
+                new SteamLibrary(refused, PathPresence.Refused),
+            },
+            libraries.Folders);
+        Assert.True(libraries.IsComplete);
     }
 
     [Theory]
@@ -114,7 +156,7 @@ public sealed class SteamLibraryFoldersTests : IDisposable
 
         var libraries = SteamLibraryFolders.Of(Install);
 
-        Assert.Equal(new[] { Install }, libraries.Folders);
+        Assert.Equal(new[] { Install }, libraries.Folders.Select(library => library.Folder));
         Assert.Equal(SteamLibraryListing.Malformed, libraries.Listing);
         Assert.False(libraries.IsComplete);
     }
