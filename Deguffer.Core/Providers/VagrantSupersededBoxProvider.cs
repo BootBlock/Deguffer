@@ -23,8 +23,9 @@ namespace Deguffer.Core.Providers;
 /// machine made as a linked clone keeps its disk as a differencing disk whose parent is the image in
 /// the box's own folder (<c>plugins/providers/hyperv/action/import.rb</c>), so removing that version
 /// leaves the machine unable to start. So the machine index is read here, and the whole row is
-/// withheld while any machine records a version prune would remove. The flag stays on the command
-/// for the older index entries it does recognise.</para>
+/// withheld while any machine records a version prune would remove. Prune ranks the versions afresh
+/// when it runs, so both are asked again immediately before it does (<see cref="VagrantPruneTarget"/>).
+/// The flag stays on the command for the older index entries it does recognise.</para>
 ///
 /// <para><b>Running Vagrant does more than read.</b> Deguffer cannot set an environment variable for a
 /// tool (<see cref="IProcessRunner"/> takes none), so every run, the dry run at each scan included,
@@ -200,6 +201,19 @@ public sealed class VagrantSupersededBoxProvider : CleanupProviderBase
             return nothing;
         }
 
+        // Read before the dry run rather than after it, so a box installed or removed while the dry
+        // run is ranking them shows at the clean as a change, never as part of a layout the dry run
+        // did not see. See VagrantPruneTarget.
+        if (VagrantBoxLayout.Installed(boxes) is not { } installed)
+        {
+            var unread = new PlanNote(
+                PlanNoteSeverity.Warning,
+                $"Deguffer could not read every box folder in {boxes}, so it could not check again when the "
+                + "clean runs that Vagrant's prune would remove only what it shows, and offers nothing.");
+
+            return UnexaminedPlan(unread.Message) with { Notes = [unread] };
+        }
+
         var outcome = await Runner.RunAsync(vagrant, DryRun, ToolRun.Query, ct).ConfigureAwait(false);
 
         if (!outcome.Succeeded)
@@ -271,6 +285,7 @@ public sealed class VagrantSupersededBoxProvider : CleanupProviderBase
                     WhenCancelled = CancelledCommand.Finishes,
                     Estimated = measured.Total,
                     MeasuredPaths = measuredPaths,
+                    TargetCheck = new VagrantPruneTarget(home, installed, [.. located.Select(found => found.Box)]),
                 },
             ],
             ProtectedPaths = BuildProtectedPaths(home, boxes, preview, located),

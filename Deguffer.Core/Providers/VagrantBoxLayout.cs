@@ -129,6 +129,94 @@ internal static class VagrantBoxLayout
             left.TrimEnd(Path.DirectorySeparatorChar), right.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Every folder in <paramref name="boxes"/> that <c>BoxCollection#all</c> could take as an
+    /// installed box, as its path inside <paramref name="boxes"/>: each
+    /// <c>&lt;name&gt;\&lt;version&gt;\&lt;provider&gt;</c> and
+    /// <c>&lt;name&gt;\&lt;version&gt;\&lt;architecture&gt;\&lt;provider&gt;</c> holding
+    /// <c>metadata.json</c>. Null where a folder on the way would not be listed or a
+    /// <c>metadata.json</c> would not be described, because a set read in part cannot show that
+    /// nothing changed.
+    ///
+    /// <para><b>Wider than what <c>all</c> lists, on purpose.</b> Prune ranks versions from
+    /// <c>all</c> each time it runs, so two equal readings mean it ranks them the same way. Taking
+    /// both layouts at every version, and the version folders <c>all</c> declines as malformed or
+    /// hidden, can only make a change seen where <c>all</c> would show none, never the reverse.</para>
+    ///
+    /// <para>Links are listed through, as Ruby's <c>Pathname#directory?</c> follows them, so a box
+    /// kept behind a junction is seen as Vagrant sees it. Nothing is acted on through one, and the
+    /// walk is four folders deep whatever a link points at.</para>
+    /// </summary>
+    public static IReadOnlySet<string>? Installed(string boxes)
+    {
+        var installed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (Listed(boxes) is not { } names)
+        {
+            return null;
+        }
+
+        foreach (var name in names)
+        {
+            if (Listed(Path.Combine(boxes, name)) is not { } versions)
+            {
+                return null;
+            }
+
+            foreach (var version in versions)
+            {
+                var versionFolder = Path.Combine(name, version);
+
+                if (Listed(Path.Combine(boxes, versionFolder)) is not { } children)
+                {
+                    return null;
+                }
+
+                foreach (var child in children)
+                {
+                    var childFolder = Path.Combine(versionFolder, child);
+
+                    if (!TakeIfBox(childFolder) || Listed(Path.Combine(boxes, childFolder)) is not { } providers)
+                    {
+                        return null;
+                    }
+
+                    if (!providers.All(provider => TakeIfBox(Path.Combine(childFolder, provider))))
+                    {
+                        return null;
+                    }
+                }
+            }
+        }
+
+        return installed;
+
+        // False only where Windows would not say whether the folder holds the record.
+        bool TakeIfBox(string folder)
+        {
+            switch (LongPath.ProbeFile(Path.Combine(boxes, folder, MetadataFile)))
+            {
+                case PathPresence.Present:
+                    installed.Add(folder);
+                    return true;
+
+                case PathPresence.Absent:
+                    return true;
+
+                default:
+                    return false;
+            }
+        }
+    }
+
+    /// <summary>The names of every folder and link in <paramref name="folder"/>, or null where Windows would not list it.</summary>
+    private static IReadOnlyList<string>? Listed(string folder)
+    {
+        var listing = ChildDirectories.Under(folder);
+
+        return listing.Unreadable ? null : [.. listing.Directories.Concat(listing.Links).Select(child => child.Name)];
+    }
+
     private static IEnumerable<string> Children(string folder)
     {
         var listing = ChildDirectories.Under(folder);
