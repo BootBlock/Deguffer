@@ -129,7 +129,7 @@ output and project caches, such as `node_modules`, `obj`, Rust's `target` and Py
 sources in more detail.
 
 After a scan, each row on the Storage page gives the location's size and safety tier, and says what
-you would lose by deleting it. Only Tier 1 rows start out selected:
+you would lose by deleting it. By default, only Tier 1 rows start out selected:
 
 ![The Storage page after a scan, listing rows such as the NuGet package cache and GPU shader caches with their sizes, tiers and what deleting each one costs](assets/screenshots/storage.png)
 

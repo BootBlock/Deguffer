@@ -26,6 +26,9 @@
         <Thickness x:Key="ExpanderContentPadding">0,4,0,4</Thickness>
         <x:Double x:Key="ExpanderMinHeight">32</x:Double>
 
+        <!-- The compact rows' figure column, one width down the whole list. See CompactFindingRow. -->
+        <controls:WidthGroup x:Key="FigureWidths" />
+
         <!-- The Scan drop-down's locations under their category headings. Handed its source from
              code-behind, as ItemListView's grouped list is. -->
         <CollectionViewSource x:Key="ScanChoiceGroups" IsSourceGrouped="True" />
@@ -42,16 +45,18 @@
             row with nothing to reclaim drops the figure instead — it reads "0 B" or "—", which the
             reason beside it already says in words.
 
-            The figure sits in a fixed-width column and everything to its right of the name is
-            right-aligned against it. WinUI 3 has no SharedSizeGroup and each row builds its own
-            Grid, so a figure column left to Auto comes out at a different width on every row and
-            the chips beside it step raggedly down the page. Pinning that one column is enough:
-            the chip's own column can stay Auto and still start at the same offset from the right
-            on every row, which is what puts the chips in a straight line.
+            The figure sits in a column of one width on every row, and everything to its right of
+            the name is right-aligned against it. Each row builds its own Grid, so a figure column
+            left to Auto alone comes out at a different width on every row and the chips beside it
+            step raggedly down the page. The figure's cell is in a WidthGroup instead, which gives
+            every row the width of the widest figure in the list: the chip's own column can stay
+            Auto and still start at the same offset from the right on every row, which is what puts
+            the chips in a straight line. A fixed width would cut off an estimate such as "about
+            1.0 GB", and any figure under Windows text scaling.
 
-            Only that one column is pinned, because a pinned column is a promise about text the
-            app does not control. Windows text scaling grows the chip, and a fixed column would
-            have it overflow leftwards over the status instead of pushing the name.
+            The chip's column is not grouped, because Windows text scaling grows the chip, and a
+            fixed column would have it overflow leftwards over the status instead of pushing the
+            name.
 
             The name never gives way. It is the row's identity, and a list of rows that no longer
             say which row they are is not a list. So the name column is Auto and the status column
@@ -60,7 +65,7 @@
             minimum width is set so that even that trim is shallow.
         -->
         <DataTemplate x:Key="CompactFindingRow" x:DataType="vm:FindingViewModel">
-            <Grid ColumnSpacing="10" ColumnDefinitions="Auto,Auto,Auto,*,Auto,72" Padding="16,8,0,8">
+            <Grid ColumnSpacing="10" ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" Padding="16,8,0,8">
 
                 <!-- §7's sentence, announced where the decision is made. A tooltip cannot serve a
                      screen reader or a keyboard, and this is the control both of them land on to
@@ -122,14 +127,20 @@
                                 AutomationProperties.Name="{x:Bind TierLabel}"
                                 AutomationProperties.HelpText="{x:Bind TierExplanation}" />
 
-                <TextBlock Grid.Column="5"
-                           Text="{x:Bind SizeLabel, Mode=OneWay}"
-                           Visibility="{x:Bind HasSizeToShow, Mode=OneWay}"
-                           ToolTipService.ToolTip="{x:Bind ChangeTip, Mode=OneWay}"
-                           Style="{StaticResource Figure}"
-                           FontSize="15"
-                           TextAlignment="Right"
-                           VerticalAlignment="Center" />
+                <!-- The group is on the cell rather than the figure, so a row whose figure is
+                     hidden still keeps the column's width and its chip stays in line. -->
+                <Border Grid.Column="5"
+                        MinWidth="72"
+                        controls:WidthGroup.Group="{StaticResource FigureWidths}">
+                    <TextBlock Text="{x:Bind SizeLabel, Mode=OneWay}"
+                               Visibility="{x:Bind HasSizeToShow, Mode=OneWay}"
+                               ToolTipService.ToolTip="{x:Bind ChangeTip, Mode=OneWay}"
+                               Style="{StaticResource Figure}"
+                               FontSize="15"
+                               HorizontalAlignment="Right"
+                               TextAlignment="Right"
+                               VerticalAlignment="Center" />
+                </Border>
             </Grid>
         </DataTemplate>
 

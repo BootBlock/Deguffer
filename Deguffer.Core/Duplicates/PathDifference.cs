@@ -1,3 +1,5 @@
+using System.Buffers;
+
 namespace Deguffer.Core.Duplicates;
 
 /// <summary>A path cut where it differs from the other paths of its group, for the page to show where.</summary>
@@ -20,6 +22,13 @@ public readonly record struct PathParts(string Same, string Differs, string Same
 /// is. Compared ordinally, case and all, because a case-sensitive folder can hold <c>Photos</c> and
 /// <c>photos</c>, and those differ.</para>
 ///
+/// <para><b>By the letter only where the difference is small.</b> The letters are what a reader needs
+/// where two names are near twins, and only there. <c>Documents\Shared album</c> and
+/// <c>Downloads\Phone backup</c> share <c>Do</c>, and a difference cut after it starts in the middle
+/// of a name and reads as a fault. So a difference keeps its letters only where it lies inside one
+/// name and that name shares more characters with its twin than it differs by. Any other difference
+/// is widened to the whole names it touches.</para>
+///
 /// <para>Found by sorting rather than by comparing every pair: the longest start a path shares with
 /// any other is the one it shares with a neighbour in ordinal order, and the longest end likewise in
 /// the order of the reversed paths, so a group of thousands of copies costs a sort, not millions of
@@ -27,6 +36,8 @@ public readonly record struct PathParts(string Same, string Differs, string Same
 /// </summary>
 public static class PathDifference
 {
+    private static readonly SearchValues<char> Separators = SearchValues.Create(@"\/");
+
     /// <summary>Each of <paramref name="paths"/>, in the same order, cut where it differs from the rest.</summary>
     public static IReadOnlyList<PathParts> Of(IReadOnlyList<string> paths)
     {
@@ -40,12 +51,46 @@ public static class PathDifference
         {
             var path = paths[i];
             var start = WholeCharacters(path, starts[i], fromStart: true);
-            var end = WholeCharacters(path, Math.Min(ends[i], path.Length - start), fromStart: false);
+            var end = path.Length - WholeCharacters(path, Math.Min(ends[i], path.Length - start), fromStart: false);
+            (start, end) = ByLetterOrByName(path, start, end);
 
-            parts[i] = new PathParts(path[..start], path[start..(path.Length - end)], path[(path.Length - end)..]);
+            parts[i] = new PathParts(path[..start], path[start..end], path[end..]);
         }
 
         return parts;
+    }
+
+    /// <summary>
+    /// The difference between <paramref name="start"/> and <paramref name="end"/> as it is, where it
+    /// is small enough to read by the letter, or widened to the whole names it touches.
+    /// </summary>
+    private static (int Start, int End) ByLetterOrByName(string path, int start, int end)
+    {
+        if (start == end)
+        {
+            return (start, end);
+        }
+
+        var nameStart = path.AsSpan(0, start).LastIndexOfAny(Separators) + 1;
+        var after = path.AsSpan(end).IndexOfAny(Separators);
+        var nameEnd = after < 0 ? path.Length : end + after;
+
+        // A difference ending in a separator, or starting with one, ends or starts at a name's edge
+        // already, so the names it touches start after it and end before it.
+        if (path[end - 1] is '\\' or '/')
+        {
+            nameEnd = end;
+        }
+
+        if (path[start] is '\\' or '/')
+        {
+            nameStart = start;
+        }
+
+        var differs = end - start;
+        var withinOneName = path.AsSpan(start, differs).IndexOfAny(Separators) < 0;
+
+        return withinOneName && differs < nameEnd - nameStart - differs ? (start, end) : (nameStart, nameEnd);
     }
 
     /// <summary>

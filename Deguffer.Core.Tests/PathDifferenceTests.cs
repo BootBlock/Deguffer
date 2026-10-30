@@ -89,12 +89,59 @@ public sealed class PathDifferenceTests
     [Fact]
     public void ACharacterWrittenAsTwoHalvesIsNeverCut()
     {
-        // U+1F600 and U+1F601 share their high half, so a cut by halves would fall inside them.
-        var parts = PathDifference.Of(["C:\\A\uD83D\uDE00\\a.jpg", "C:\\A\uD83D\uDE01\\a.jpg"]);
+        // U+1F600 and U+1F601 share their high half, so a cut by halves would fall inside them. The
+        // folder's name is long enough that the two are near twins, which are read by the letter.
+        var parts = PathDifference.Of(["C:\\Album\uD83D\uDE00\\a.jpg", "C:\\Album\uD83D\uDE01\\a.jpg"]);
 
         Assert.Equal("\uD83D\uDE00", parts[0].Differs);
         Assert.Equal("\uD83D\uDE01", parts[1].Differs);
-        Assert.Equal(@"C:\A", parts[0].Same);
+        Assert.Equal(@"C:\Album", parts[0].Same);
+    }
+
+    /// <summary>
+    /// Two names that share only a letter or two are not near twins, so the difference is the whole
+    /// name, rather than one starting after the letters they happen to share.
+    /// </summary>
+    [Fact]
+    public void NamesThatShareLittleDifferByTheWholeName()
+    {
+        var parts = PathDifference.Of([@"C:\Users\x\Documents\a.jpg", @"C:\Users\x\Downloads\a.jpg"]);
+
+        Assert.Equal(new PathParts(@"C:\Users\x\", "Documents", @"\a.jpg"), parts[0]);
+        Assert.Equal(new PathParts(@"C:\Users\x\", "Downloads", @"\a.jpg"), parts[1]);
+    }
+
+    /// <summary>A difference that runs across a separator is widened to every name it touches.</summary>
+    [Fact]
+    public void ADifferenceAcrossFoldersCoversTheirWholeNames()
+    {
+        var parts = PathDifference.Of([@"D:\Demo\Documents\Shared album\a.jpg", @"D:\Demo\Downloads\Phone backup\a.jpg"]);
+
+        Assert.Equal(new PathParts(@"D:\Demo\", @"Documents\Shared album", @"\a.jpg"), parts[0]);
+        Assert.Equal(new PathParts(@"D:\Demo\", @"Downloads\Phone backup", @"\a.jpg"), parts[1]);
+    }
+
+    /// <summary>
+    /// File names that share only their extension differ by the whole name, extension included,
+    /// rather than leaving <c>.jpg</c> unmarked as if it were what made them twins.
+    /// </summary>
+    [Fact]
+    public void FileNamesThatShareOnlyTheirExtensionDifferWhole()
+    {
+        var parts = PathDifference.Of([@"C:\Pictures\holiday.jpg", @"C:\Pictures\beach.jpg"]);
+
+        Assert.Equal(new PathParts(@"C:\Pictures\", "holiday.jpg", string.Empty), parts[0]);
+        Assert.Equal(new PathParts(@"C:\Pictures\", "beach.jpg", string.Empty), parts[1]);
+    }
+
+    /// <summary>The copy a browser or Explorer names by adding a number is a near twin, and is read by the letter.</summary>
+    [Fact]
+    public void ANumberedCopyDiffersByItsNumber()
+    {
+        var parts = PathDifference.Of([@"C:\Downloads\quote.pdf", @"C:\Downloads\quote (1).pdf"]);
+
+        Assert.Equal(string.Empty, parts[0].Differs);
+        Assert.Equal(" (1)", parts[1].Differs);
     }
 
     /// <summary>Every path comes back whole, in the order it was given.</summary>
