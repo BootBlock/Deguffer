@@ -37,7 +37,13 @@ public sealed class ConanCacheProviderTests : IDisposable
             .Responding(Conan, "config show core.cache:storage_path", storeAnswer);
 
     private ConanCacheProvider CreateProvider(FakeProcessRunner runner, FakeProcessInspector? inspector = null) =>
-        new(new ConanRcWalk(_temp.Path), _environment, runner, inspector ?? FakeProcessInspector.NothingRunning);
+        new(
+            new ConanRcWalk(_temp.Path),
+            _environment,
+            runner,
+            inspector ?? FakeProcessInspector.NothingRunning,
+            system: new FakeSystemDirectories(Path.Combine(_temp.Path, "system")),
+            volumes: new FakeVolumeInventory());
 
     private static string Write(int bytes, params string[] segments)
     {
