@@ -25,6 +25,9 @@ pub cache, the Android SDK and Docker are all settled subjects with their reason
 read that first. `%LOCALAPPDATA%\Temp` was among them and has since shipped — it is documented there
 as an offered provider rather than a rejected candidate.
 
+[provider-candidates.md](provider-candidates.md) is the second survey, from #407: virtualisation,
+further package managers, per-project and IDE caches, applications and Windows itself.
+
 Each entry below carries a proposed tier and says plainly whether it was **measured** or only
 **researched**. That distinction is the point of the format. A measured entry was present on the
 audited machine and sized there. A researched entry rests on vendor documentation, which is worth
@@ -473,12 +476,12 @@ One class each, on the shape npm and NuGet already use.
 | --- | --- | --- |
 | Maven | `%USERPROFILE%\.m2\repository`, no official purge | `.m2\settings.xml` in the root can hold encrypted server passwords. §5.2 verbatim |
 | Yarn | `yarn cache dir`, then `yarn cache clean` | Yarn 1 and Berry differ; probe rather than assume |
-| Bun | `%USERPROFILE%\.bun\install\cache` | No eviction command as of early 2026, so path-based by necessity |
+| Bun | `%USERPROFILE%\.bun\install\cache`, `bun pm cache prune` | Corrected by [provider-candidates.md](provider-candidates.md) §2: `bun pm cache rm` and `prune` now exist, and only `prune` keeps the global store in `links` |
 | Composer | `composer clear-cache` | Measured at 30 MB, so the location is real rather than hypothetical |
 | vcpkg | `%LOCALAPPDATA%\vcpkg\archives`, plus `buildtrees`, `downloads`, `packages` under the vcpkg root | The cache root moves with `VCPKG_DEFAULT_BINARY_CACHE`, the same problem `PLAYWRIGHT_BROWSERS_PATH` already forced into `IUserEnvironment` |
 | Conan | `conan cache clean` | Build and download folders |
 | Chocolatey | `%TEMP%\chocolatey` by default | Moves if `cacheLocation` is set in `chocolatey.config`; read the config |
-| Scoop | `scoop cache rm *`, `scoop cleanup *` | The second removes superseded app versions under `apps\<name>\<version>` |
+| Scoop | `scoop cache rm *` | Not `scoop cleanup *`: it removes superseded app versions under `apps\<name>\<version>`, which is uninstalling (§2). See [provider-candidates.md](provider-candidates.md) §2 |
 
 ---
 
