@@ -18,10 +18,13 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>Searched where the scope can ask, and from the scan's tree where it listed the root.</b>
 /// The policy is built again each time the page opens and each time a scan starts, and every path is
-/// refused until it is ready, so the search reads what the scan listed rather than walking the
-/// developer's source folders beside it (<see cref="SourceDirectoryDiscovery"/>). A root the scope
-/// does not reach is not searched, and is refused whole: the scope said nothing it covers is there,
-/// so this refuses nothing a caller meant to ask about, and it is what holds if one asks anyway.</para>
+/// refused until it is ready, so a root a scan listed whole is read from the scan's tree rather than
+/// walked beside it (<see cref="SourceDirectoryDiscovery"/>). Any other root the scope reaches is
+/// searched on the disk, as the plan searches it: every root when the page opens, before any scan,
+/// and a root the scan reached without listing it whole. A directory created after a scan is found
+/// by the next one. A root the scope does not reach is not searched, and is refused whole: the scope
+/// said nothing it covers is there, so this refuses nothing a caller meant to ask about, and it is
+/// what holds if one asks anyway.</para>
 ///
 /// <para><b>Process-table evidence alone would leave gaps.</b> Where the process table could not be
 /// read, the places are few or none, and the plan holds back every build directory in the approved

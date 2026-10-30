@@ -16,9 +16,9 @@ internal sealed record WalkedSourceTree(
     bool RootListed);
 
 /// <summary>
-/// The guaranteed route through an approved source root: list it ourselves, on
-/// <see cref="BoundedFileWalk"/>'s workers, applying <see cref="SourceTreeBoundary"/> as each
-/// directory is read.
+/// The routes through an approved source root that apply <see cref="SourceTreeBoundary"/>
+/// themselves: <see cref="Under"/>, the guaranteed one, which lists the root on
+/// <see cref="BoundedFileWalk"/>'s workers, and <see cref="In"/>, which reads an Explore scan's tree.
 ///
 /// <para>On the bounded walk rather than a loop of its own because the trees this runs over are the
 /// developer's whole source folder, which on one thread is every directory listed in turn while the
@@ -26,7 +26,7 @@ internal sealed record WalkedSourceTree(
 /// into, so this cannot lose it.</para>
 ///
 /// <para>The workers find candidates in whatever order they happen to run, so both lists are sorted
-/// before they are handed back. A plan built from them then reads the same on every run, and the same
+/// before they are handed back, by both routes. A plan built from them then reads the same on every run, and the same
 /// at one thread as at sixteen.</para>
 /// </summary>
 internal static class SourceTreeWalk

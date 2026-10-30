@@ -134,9 +134,8 @@ public sealed class SourceDirectoryDiscovery
     /// restated. And what counts as "inside another candidate" is a property of the set rather than
     /// of one name: a pass that knows about <c>node_modules</c> stops there and never offers the
     /// <c>build</c> directory of a package inside it, where a pass that does not walks straight in.
-    /// Both routes are given this set, so neither applies a rule the other does not — which is as
-    /// far as the two can be held together, and <see cref="SourceTreeBoundary"/> says where that
-    /// stops.</para>
+    /// Every route is given this set, so none applies a rule another does not — which is as far as
+    /// they can be held together, and <see cref="SourceTreeBoundary"/> says where that stops.</para>
     /// </summary>
     public void Include(IReadOnlyList<string> names)
     {

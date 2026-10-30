@@ -4795,10 +4795,12 @@ editor has open is held back like any other. A switch on the editor's command li
 out of the project, so a plan made while an Unreal editor, a commandlet or Unreal Build Tool runs
 also says so by name.
 
-Explore refuses every build directory a scan would hold back, for the same reason the scan gives,
+Explore refuses the build directories a scan would hold back, for the same reason the scan gives,
 including one held back because Deguffer could not tell whether anything is using it. It asks the
-scan's question of each build directory in your source folders, reading them from what Explore's
-own scan listed rather than searching your folders a second time.
+scan's question of each build directory in your source folders. Where Explore's own scan listed a
+folder, Explore reads the build directories from that listing rather than searching the folder a
+second time, so one created after the scan is found by the next scan. Before the first scan, and
+for a folder the scan did not list whole, it searches the folder itself.
 
 **It can miss.** Four things it does not see, all of them stated
 here because a safeguard whose limits are unwritten gets trusted past them:

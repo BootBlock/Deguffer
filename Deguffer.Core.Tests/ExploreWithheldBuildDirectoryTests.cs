@@ -100,6 +100,33 @@ public sealed class ExploreWithheldBuildDirectoryTests : IDisposable
     }
 
     /// <summary>
+    /// A solution that could not be read may name any project below it, so a program working beside
+    /// it makes the plan hold back every one of them. Walking up from where the program works never
+    /// reaches a project below the solution, and nothing names one.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesAnObjOnlyAnUnreadableSolutionCouldName()
+    {
+        var root = ApproveRootInProfile();
+        var solution = Path.Combine(root, "Solution");
+        var first = ProjectFixture.CreateProject(Path.Combine(solution, "ProjectA"), "ProjectA");
+        var second = ProjectFixture.CreateProject(Path.Combine(solution, "Nested", "ProjectB"), "ProjectB");
+        var outside = ProjectFixture.CreateProject(Path.Combine(root, "Other"), "Other");
+        File.WriteAllText(Path.Combine(solution, "Solution.sln"), "not a solution");
+
+        var provider = DotNetObj(new FakeLiveTreeInspector().WithProgram("devenv", workingDirectory: solution));
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([outside], plan.TargetedPaths);
+
+        var policy = await PolicyAsync(provider);
+
+        Assert.False(policy.MayRemove(first).IsAllowed);
+        Assert.False(policy.MayRemove(second).IsAllowed);
+        Assert.True(policy.MayRemove(outside).IsAllowed);
+    }
+
+    /// <summary>
     /// The table read in full, and the question about one project's lock file alone not asked, as for
     /// a Unity project past <c>MAX_PATH</c>. No program is near it, so nothing made it a candidate.
     /// </summary>
@@ -208,14 +235,23 @@ public sealed class ExploreWithheldBuildDirectoryTests : IDisposable
         Directory.CreateDirectory(Path.Combine(root, "Web", "node_modules", "pkg", "obj"));
         Directory.CreateDirectory(Path.Combine(root, ".git", "objects", "obj"));
         Directory.CreateDirectory(Path.Combine(root, "Empty"));
+        var locked = Directory.CreateDirectory(Path.Combine(root, "Locked")).FullName;
+        Directory.CreateDirectory(Path.Combine(locked, "Hidden", "obj"));
 
-        var fromTree = await Discovery(Scanned(root)).FindAsync(_roots.Load());
-        var fromDisk = await Discovery().FindAsync(_roots.Load());
+        SourceDiscovery fromTree, fromDisk;
+
+        using (new DeniedDirectory(locked))
+        {
+            fromTree = await Discovery(Scanned(root)).FindAsync(_roots.Load());
+            fromDisk = await Discovery().FindAsync(_roots.Load());
+        }
 
         Assert.Equal(
             [Path.Combine(root, "App", "obj"), Path.Combine(root, "App", "src", "Lib", "obj"), Path.Combine(root, "Web", "node_modules")],
             fromDisk.Candidates.Order(StringComparer.Ordinal));
         Assert.Equal(fromDisk.Candidates.Order(StringComparer.Ordinal), fromTree.Candidates.Order(StringComparer.Ordinal));
+        Assert.Equal([locked], fromDisk.UnreadableDirectories);
+        Assert.Equal(fromDisk.UnreadableDirectories, fromTree.UnreadableDirectories);
         Assert.All(fromTree.Candidates, candidate => Assert.False(candidate.StartsWith(@"\\?\", StringComparison.Ordinal)));
         Assert.Empty(fromTree.NotSearchedRoots);
     }
