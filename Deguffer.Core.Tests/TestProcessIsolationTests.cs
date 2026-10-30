@@ -23,12 +23,16 @@ public sealed partial class TestProcessIsolationTests
     [Fact]
     public void ThisMachinesScannerAndSizeCacheAreClosedToATestProcess()
     {
-        Assert.Throws<InvalidOperationException>(() => DirectoryScanner.For(UserEnvironment.Current));
-        Assert.Throws<InvalidOperationException>(() => DirectoryScanner.CreateDefault(UserEnvironment.Current));
-        Assert.Throws<InvalidOperationException>(() => ScanEstimateCache.For(UserEnvironment.Current));
-        Assert.Throws<InvalidOperationException>(() => new ScanEstimateCache(UserEnvironment.Current));
-        Assert.Throws<InvalidOperationException>(() => CleanupPlanner.CreateDefault());
-        Assert.Throws<InvalidOperationException>(() => new NpmCacheProvider());
+        Refused(() => DirectoryScanner.For(UserEnvironment.Current));
+        Refused(() => DirectoryScanner.CreateDefault(UserEnvironment.Current));
+        Refused(() => ScanEstimateCache.For(UserEnvironment.Current));
+        Refused(() => new ScanEstimateCache(UserEnvironment.Current));
+        Refused(() => CleanupPlanner.CreateDefault());
+        Refused(() => new NpmCacheProvider());
+
+        // By the fence's own words, so another refusal on the way cannot stand in for it.
+        static void Refused(Func<object> reach) =>
+            Assert.StartsWith("This process does not measure the machine it runs on.", Assert.Throws<InvalidOperationException>(reach).Message, StringComparison.Ordinal);
     }
 
     /// <summary>The fence shuts out this machine alone, so a test's own machine still measures.</summary>

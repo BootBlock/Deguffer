@@ -60,9 +60,7 @@ public sealed partial class TestAssemblySeamTests
     /// uses names the routes it forbids.
     /// </summary>
     private static IEnumerable<string> TestSources() =>
-        TestProjects.Directories()
-            .Append(Path.Combine(MarkdownGuide.RepositoryRoot, "Deguffer.Testing"))
-            .SelectMany(TestProjects.SourceFiles)
+        TestProjects.SourcesWithFixtures()
             .Where(file => !string.Equals(Path.GetFullPath(file), Path.GetFullPath(ThisFile()), StringComparison.OrdinalIgnoreCase));
 
     private static string ThisFile([CallerFilePath] string path = "") => path;

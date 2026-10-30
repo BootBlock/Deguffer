@@ -11,6 +11,13 @@ internal static class TestProjects
         Directory.EnumerateDirectories(MarkdownGuide.RepositoryRoot)
             .Where(project => Path.GetFileName(project).EndsWith(".Tests", StringComparison.Ordinal));
 
+    /// <summary>
+    /// The C# files of every test project and of <c>Deguffer.Testing</c>, the fixtures they share,
+    /// for a sweep of everything a test runs.
+    /// </summary>
+    public static IEnumerable<string> SourcesWithFixtures() =>
+        Directories().Append(Path.Combine(MarkdownGuide.RepositoryRoot, "Deguffer.Testing")).SelectMany(SourceFiles);
+
     /// <summary>The C# files of <paramref name="project"/>, leaving out what a build wrote.</summary>
     public static IEnumerable<string> SourceFiles(string project) =>
         Directory.EnumerateFiles(project, "*.cs", SearchOption.AllDirectories).Where(file => !IsBuildOutput(file));

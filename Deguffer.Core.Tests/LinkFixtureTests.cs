@@ -150,13 +150,7 @@ public sealed partial class LinkFixtureTests : IDisposable
     [Fact]
     public void NoTestCreatesALinkWithoutTheFixtures()
     {
-        string[] projects = ["Deguffer.Core.Tests", "Deguffer.App.Tests", "Deguffer.Testing"];
-
-        var creating = projects
-            .SelectMany(project => Directory.EnumerateFiles(
-                Path.Combine(MarkdownGuide.RepositoryRoot, project), "*.cs", SearchOption.AllDirectories))
-            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
-                && !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+        var creating = TestProjects.SourcesWithFixtures()
             .Where(file => LinkCreation().IsMatch(File.ReadAllText(file)))
             .Select(file => Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file))
             .Order(StringComparer.Ordinal);
