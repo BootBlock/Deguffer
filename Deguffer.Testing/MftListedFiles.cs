@@ -410,8 +410,8 @@ public static class MftListedFiles
     /// A file whose base record holds its own stream, which states
     /// <paramref name="allocated"/>, and a reparse point tagged <paramref name="reparseTag"/>, beside
     /// an <c>$ATTRIBUTE_LIST</c> that cannot be read. Both are settled by the base record, so the list
-    /// can only have hidden something more, and whether it could have depends on the tag: only
-    /// CompactOS keeps content in a further stream.
+    /// can only have hidden something more: CompactOS's further stream, for one tag, or another of
+    /// the file's names, for any.
     /// </summary>
     public static MftFixture AddReparsePointFileWithAMalformedAttributeList(
         this MftFixture fixture, uint number, uint parent, string name, long allocated, uint reparseTag)

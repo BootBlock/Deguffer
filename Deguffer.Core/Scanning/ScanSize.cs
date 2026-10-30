@@ -137,7 +137,9 @@ public readonly record struct ScanSize(
     /// reclaim cannot be selected. Elevating made seven real locations unselectable.</para>
     ///
     /// <para>Logical is what both routes produce, and they produce the same one: across 322 real
-    /// directories the table's logical total and the walk's agreed to the byte, every time. The
+    /// directories the table's logical total and the walk's agreed to the byte, every time. A
+    /// hard-linked file is counted once for each name a folder holds on both, which is what keeps
+    /// that agreement for a tree that holds links (see <see cref="Mft.MftLink"/>). The
     /// honest answer to "what did the volume actually give back" is the free-space delta the shell
     /// already measures across a run and shows beside the total, which no per-tree arithmetic can
     /// improve on.</para>

@@ -105,9 +105,10 @@ public static class ExploreUnaccountedNote
     /// What to say where the scan counted more than <paramref name="volume"/> has in use, so no
     /// unaccounted block is drawn, or null where it did not.
     ///
-    /// <para>The causes depend on the route. A walk counts a file with several names once for each
-    /// and a file Windows compressed itself at its length. The file table counts each file once at
-    /// what it occupies, so only a drive that changed during the scan is left to explain it.</para>
+    /// <para>The causes depend on the route. Both count a file with several names once for each,
+    /// as a listing shows it. A walk also counts a file Windows compressed itself at its length,
+    /// where the file table counts what it occupies and leaves a drive that changed during the scan
+    /// as the other cause.</para>
     /// </summary>
     public static string? Overcount(VolumeSpace volume, long scannedBytes, ScanStrategy strategy)
     {
@@ -118,9 +119,10 @@ public static class ExploreUnaccountedNote
         }
 
         var causes = strategy == ScanStrategy.MasterFileTable
-            ? "Files written while the scan ran can do this."
-            : "A walk counts a file with several names once for each, and a file Windows compressed "
-              + "itself (CompactOS) at its full length.";
+            ? "A file with several names is counted once for each, and files written while the scan "
+              + "ran can add to this."
+            : "A file with several names is counted once for each, and a walk counts a file Windows "
+              + "compressed itself (CompactOS) at its full length.";
 
         return $"The scan counted {FreeSpace.Format(over)} more than Windows says is in use, so none "
             + $"of the drive is shown as not accounted for. {causes}";

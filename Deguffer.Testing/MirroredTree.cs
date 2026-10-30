@@ -40,6 +40,17 @@ public sealed record TreeFile(string Name, int Bytes, bool Resident = false, int
 public sealed record TreeDirectory(string Name, params TreeEntry[] Children) : TreeEntry(Name);
 
 /// <summary>
+/// Another name for a file described earlier in the same tree: a hard link, made on disk as
+/// <c>mklink /H</c> makes one, and declared to the table as one more <c>$FILE_NAME</c> in that file's
+/// record. It has no dates of its own, because a link is the file.
+/// </summary>
+/// <param name="Target">
+/// The file this is another name of, as components below the tree's root. It must be described
+/// before this entry, so the file exists when the link is made.
+/// </param>
+public sealed record TreeLink(string Name, params string[] Target) : TreeEntry(Name);
+
+/// <summary>
 /// One tree, described once and built twice: as real directories and files under a scratch root,
 /// and as the MFT records that would describe those same paths.
 ///
@@ -58,18 +69,26 @@ public static class MirroredTree
     /// </summary>
     public static (string Path, MftFixture Fixture) Realise(TempDirectory temp, TreeDirectory root)
     {
-        var builder = new Builder();
         var scratch = Path.GetFullPath(temp.Path);
+        var path = Path.Combine(scratch, root.Name);
+        var builder = new Builder(path);
 
         builder.Add(builder.DescribeAncestorsOf(scratch), root, scratch);
+        builder.DescribeFiles();
 
-        return (Path.Combine(scratch, root.Name), builder.Fixture);
+        return (path, builder.Fixture);
     }
 
-    private sealed class Builder
+    /// <param name="root">The tree's own folder, which a link's target is named below.</param>
+    private sealed class Builder(string root)
     {
         // NTFS reserves the first sixteen records for its own metadata, so entries start past them.
         private uint _next = MftRecord.ReservedRecordCount;
+
+        // Each file's record is written once the whole tree is described, because a link met later
+        // adds a name to it. Keyed by the file's path.
+        private readonly Dictionary<string, (uint Number, TreeFile File, List<(uint Parent, string Name)> Names)> _files =
+            new(StringComparer.OrdinalIgnoreCase);
 
         public MftFixture Fixture { get; } = new();
 
@@ -91,24 +110,26 @@ public static class MirroredTree
         public void Add(uint parent, TreeEntry entry, string parentPath)
         {
             var path = Path.Combine(parentPath, entry.Name);
+
+            // A link is another name in a file's record, and takes no record of its own. Made as it
+            // is met, inside the folder it is listed in, so the folder's own dates are stamped after
+            // it as they are after every other child.
+            if (entry is TreeLink link)
+            {
+                var existing = Path.Combine([root, .. link.Target]);
+
+                HardLink.To(existing, path);
+                _files[existing].Names.Add((parent, link.Name));
+                return;
+            }
+
             var number = _next++;
 
             switch (entry)
             {
                 case TreeFile file:
                     File.WriteAllBytes(path, new byte[file.Bytes]);
-
-                    if (file.Resident)
-                    {
-                        Fixture.AddResidentFile(
-                            number, parent, file.Name, file.Bytes, file.Created, file.Modified);
-                    }
-                    else
-                    {
-                        Fixture.AddFile(
-                            number, parent, file.Name, file.Allocated ?? file.Bytes, logical: file.Bytes,
-                            file.Created, file.Modified);
-                    }
+                    _files[path] = (number, file, [(parent, file.Name)]);
 
                     Stamp(file, File.SetCreationTimeUtc, File.SetLastWriteTimeUtc, path);
                     break;
@@ -132,6 +153,37 @@ public static class MirroredTree
 
                 default:
                     throw new ArgumentOutOfRangeException(nameof(entry), entry, "Unknown tree entry.");
+            }
+        }
+
+        /// <summary>
+        /// Declare every file in the tree to the table, with each of its names.
+        /// </summary>
+        public void DescribeFiles()
+        {
+            foreach (var (path, (number, file, names)) in _files)
+            {
+                if (names.Count > 1)
+                {
+                    if (file.Resident)
+                    {
+                        throw new NotSupportedException($"{path} is described as resident, which no hard-linked file here is.");
+                    }
+
+                    Fixture.AddHardLinkedFile(
+                        number, names, file.Allocated ?? file.Bytes, logical: file.Bytes, file.Created, file.Modified);
+                }
+                else if (file.Resident)
+                {
+                    Fixture.AddResidentFile(
+                        number, names[0].Parent, file.Name, file.Bytes, file.Created, file.Modified);
+                }
+                else
+                {
+                    Fixture.AddFile(
+                        number, names[0].Parent, file.Name, file.Allocated ?? file.Bytes, logical: file.Bytes,
+                        file.Created, file.Modified);
+                }
             }
         }
 

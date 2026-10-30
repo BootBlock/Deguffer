@@ -215,18 +215,6 @@ internal static class MftRecordParser
         return ReadReparseTag(attribute) is { } tag && (tag & NameSurrogateBit) != 0;
     }
 
-    /// <summary>
-    /// Whether a <c>$REPARSE_POINT</c> is CompactOS's, which is the only kind whose file keeps its
-    /// content in <see cref="WofStreamName"/>. A file whose reparse point is anything else has no such
-    /// stream to wait for.
-    /// </summary>
-    internal static bool IsWofReparsePoint(ReadOnlySpan<byte> attribute)
-    {
-        const uint WofTag = 0x8000_0017;
-
-        return ReadReparseTag(attribute) == WofTag;
-    }
-
     /// <summary>The tag a <c>$REPARSE_POINT</c> declares, or null where it is too short to declare one.</summary>
     private static uint? ReadReparseTag(ReadOnlySpan<byte> attribute)
     {
@@ -320,9 +308,10 @@ internal static class MftRecordParser
     /// <summary>
     /// Where a <c>$FILE_NAME</c> places the file, and where its name sits, without decoding it.
     ///
-    /// <para>A record carries several names, an 8.3 alias beside almost every long one, and only the
-    /// best of them is ever wanted, so the losers are ranked here and never turned into strings. The
-    /// winner is read as it sits, by <see cref="NameAt"/>.</para>
+    /// <para>A record carries several names, an 8.3 alias beside almost every long one, and the file
+    /// is placed by the best of them, so the names are ranked here without decoding any. The winner
+    /// is read as it sits, by <see cref="NameAt"/>. Only a name that is another link
+    /// (<see cref="MftLink"/>) is turned into a string, and almost no record has one.</para>
     /// </summary>
     /// <param name="result">
     /// <c>NameOffset</c> is in bytes from the start of <paramref name="attribute"/>, and

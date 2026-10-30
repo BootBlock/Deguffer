@@ -56,6 +56,108 @@ public class RouteAgreementTests
     }
 
     /// <summary>
+    /// #171: a file with names in two folders, as uv links a cache into a virtual environment, and
+    /// a second name beside the first. Both routes count it once for each name a folder holds, so
+    /// each folder, and the tree above both, measures alike whichever route runs. Before, the table
+    /// placed the file under one name, and every one of these figures depended on elevation.
+    /// </summary>
+    [Fact]
+    public async Task TheTwoRoutesCountAHardLinkedFileOnceForEachName()
+    {
+        using var temp = new TempDirectory();
+
+        var (path, fixture) = MirroredTree.Realise(temp, new TreeDirectory(
+            "uv",
+            new TreeDirectory(
+                "cache",
+                new TreeFile("numpy.pyd", 4096),
+                new TreeLink("numpy-copy.pyd", "cache", "numpy.pyd")),
+            new TreeDirectory(
+                "venv",
+                new TreeFile("pyvenv.cfg", 100),
+                new TreeLink("numpy.pyd", "cache", "numpy.pyd"))));
+
+        foreach (var (measured, logical, entries) in new[]
+        {
+            (path, (3 * 4096) + 100, 7),
+            (Path.Combine(path, "cache"), 2 * 4096, 3),
+            (Path.Combine(path, "venv"), 4096 + 100, 3),
+        })
+        {
+            var walked = await Walking().MeasureAsync(measured);
+            var indexed = await Indexing(path, fixture).MeasureAsync(measured);
+
+            Assert.Equal(ScanStrategy.ParallelEnumeration, walked.Strategy);
+            Assert.Equal(ScanStrategy.MasterFileTable, indexed.Strategy);
+
+            Assert.Equal(logical, walked.Size.Logical);
+            Assert.Equal(walked.Size.Logical, indexed.Size.Logical);
+            Assert.Equal(entries, walked.Size.Entries);
+            Assert.Equal(walked.Size.Entries, indexed.Size.Entries);
+        }
+    }
+
+    /// <summary>
+    /// The same tree drawn by both of Explore's routes: the file is drawn under each of its names,
+    /// at its size and length, on either route.
+    /// </summary>
+    [Fact]
+    public void TheTwoRoutesDrawAHardLinkedFileUnderEachName()
+    {
+        using var temp = new TempDirectory();
+
+        var (path, fixture) = MirroredTree.Realise(temp, new TreeDirectory(
+            "uv",
+            new TreeDirectory(
+                "cache",
+                new TreeFile("numpy.pyd", 4096),
+                new TreeLink("numpy-copy.pyd", "cache", "numpy.pyd")),
+            new TreeDirectory(
+                "venv",
+                new TreeFile("pyvenv.cfg", 100),
+                new TreeLink("numpy.pyd", "cache", "numpy.pyd"))));
+
+        using var source = fixture.Build();
+
+        var walked = WalkExploreReader.Read(path, ScanTuner.Shipped, OccupancyProbe.Default, progress: null, TimeProvider.System, default);
+        var indexed = MftExploreReader.Read(source, path[..3], [], TableTuning.Default, onProgress: null, default).Tree!;
+
+        var walkedSizes = SizesByPath(walked, walked.RootNode);
+        var indexedSizes = SizesByPath(indexed, ExploreTreePaths.NodeAt(indexed, path));
+
+        Assert.Equal(7, walkedSizes.Count);
+        Assert.Equal(walkedSizes, indexedSizes);
+
+        Assert.Equal(4096, walkedSizes[@".\venv\numpy.pyd"].Length);
+        Assert.Equal(4096, walkedSizes[@".\cache\numpy-copy.pyd"].Length);
+        Assert.Equal((3 * 4096) + 100, walkedSizes["."].Length);
+    }
+
+    /// <summary>
+    /// Every node at or below <paramref name="from"/>, by its path relative to it, with its space on
+    /// disk and its length. Relative and descended for the reasons <see cref="DatesByPath"/> gives.
+    /// </summary>
+    private static Dictionary<string, (long Size, long Length)> SizesByPath(ExploreTree tree, int from)
+    {
+        var sizes = new Dictionary<string, (long Size, long Length)>(StringComparer.OrdinalIgnoreCase);
+        var pending = new Stack<(int Node, string Path)>();
+
+        pending.Push((from, "."));
+
+        while (pending.TryPop(out var current))
+        {
+            sizes.Add(current.Path, (tree.SizeOf(current.Node), tree.LengthOf(current.Node)));
+
+            foreach (var child in tree.ChildrenOf(current.Node))
+            {
+                pending.Push((child, Path.Combine(current.Path, tree.NameOf(child))));
+            }
+        }
+
+        return sizes;
+    }
+
+    /// <summary>
     /// A measurement told to leave entries out, on both routes. The table places a folder by its name
     /// and leaves it out, keeps the root out of the count, and agrees with the walk on both numbers.
     /// </summary>

@@ -15,7 +15,7 @@ namespace Deguffer.Core.Scanning.Mft;
 /// </summary>
 public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
 {
-    /// <summary>No record left out, for a measurement of the whole tree.</summary>
+    /// <summary>No node left out, for a measurement of the whole tree.</summary>
     internal static readonly IReadOnlySet<uint> NothingLeftOut = new HashSet<uint>();
 
     /// <summary>
@@ -62,7 +62,7 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
     /// <see cref="ScanBounds.KeepRoot"/>.
     /// </param>
     /// <param name="leftOut">
-    /// Records below the path that are neither counted nor entered, and keep every folder above them
+    /// Nodes below the path that are neither counted nor entered, and keep every folder above them
     /// standing, as <see cref="TryPlace"/> found them. See <see cref="ScanBounds.LeftOut"/>.
     /// </param>
     public ScanSize? TryMeasure(
@@ -91,9 +91,9 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
             return null;
         }
 
-        if (!keep.Protects(tree.Newest[record]))
+        if (!keep.Protects(tree.NewestOf(record)))
         {
-            return new ScanSize(tree.Allocated[record], tree.Logical[record], Entries: 1);
+            return new ScanSize(tree.AllocatedOf(record), tree.LogicalOf(record), Entries: 1);
         }
 
         withheldRecent = true;
@@ -105,7 +105,7 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
         TryMeasure(relativePath, MinimumAge.Off, out _);
 
     /// <summary>
-    /// The record of each entry of <paramref name="leftOut"/>, given as components below
+    /// The node of each entry of <paramref name="leftOut"/>, given as components below
     /// <paramref name="root"/>, for <see cref="TryMeasure(IReadOnlyList{string}, MinimumAge, bool, IReadOnlySet{uint}, out bool, out IReadOnlyList{IReadOnlyList{string}})"/>
     /// to leave out, or null where one cannot be placed. See <see cref="MftLeftOutPlacement"/>.
     /// </summary>
@@ -132,8 +132,8 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
     /// only for a directory that is found, from the names the pass already holds, so nothing outside
     /// the root is read and no path is rebuilt from a parent chain.</para>
     ///
-    /// <para>Only directories are considered, which needs no filtering: <see cref="MftVolumeTree.Names"/>
-    /// is populated for directories alone.</para>
+    /// <para>Only directories are considered, which needs no filtering: <see cref="MftVolumeTree.DirectoryName"/>
+    /// names directories alone.</para>
     /// </summary>
     public IReadOnlyList<IReadOnlyList<string>>? TryFindDirectories(
         IReadOnlyList<string> root,
@@ -142,7 +142,8 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
         new MftDirectoryFinder(tree, links, TryResolve).TryFind(root, search, ct);
 
     /// <summary>
-    /// Rebuild one record's path by walking <see cref="MftVolumeTree.Parent"/> up to the root.
+    /// Rebuild one node's path by walking <see cref="MftVolumeTree.ParentOf"/> up to the root. A
+    /// link's path is its own: its name, under the directory holding that name.
     ///
     /// Returns null for a record whose chain does not reach the root — an orphan, or a parent
     /// pointing outside the table — and for one whose chain passes through a link. The first is a
@@ -151,14 +152,14 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
     /// be rebuilt must be dropped rather than guessed at, because a wrong path here is a wrong
     /// deletion target.
     /// </summary>
-    private IReadOnlyList<string>? TryBuildPath(uint record)
+    private IReadOnlyList<string>? TryBuildPath(uint node)
     {
         // Deep enough for any real tree, and bounded so a cyclic parent chain terminates instead of
         // hanging the scan. NTFS itself cannot express a path with this many components.
         const int MaximumDepth = 512;
 
         var components = new List<string>();
-        var current = record;
+        var current = node;
 
         for (var depth = 0; depth < MaximumDepth; depth++)
         {
@@ -168,7 +169,7 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
                 return components;
             }
 
-            if (current >= tree.Count)
+            if (current >= tree.NodeCount)
             {
                 return null;
             }
@@ -182,14 +183,14 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
             // reparse point, because it is a file no path passes through, and the removal leaves it
             // whatever mark it carries.
             if ((tree.IsReparsePoint(current) && !(depth == 0 && tree.IsMailStore(current)))
-                || (tree.Names[current] ?? tree.MailStoreNames.GetValueOrDefault(current)) is not { } component)
+                || (tree.DirectoryName(current) ?? tree.MailStoreName(current)) is not { } component)
             {
                 return null;
             }
 
             components.Add(component);
 
-            var parent = tree.Parent[current];
+            var parent = tree.ParentOf(current);
 
             // Only the root is its own parent; anything else claiming to be would loop forever.
             if (parent == current)
@@ -261,7 +262,7 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
             // one file — C:\Windows\MEMORY.DMP — and this is why that measurement takes the walk:
             // naming every file on a volume would cost a string per record, which is a poor trade
             // for a single stat. See ScanStrategy.DirectRead, which is how the walk reports it.
-            if (tree.Names[child] is not { } candidate)
+            if (tree.DirectoryName(child) is not { } candidate)
             {
                 continue;
             }
@@ -300,6 +301,10 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
     /// folders standing exactly as a kept file does, and its path is rebuilt so the plan can protect
     /// it. A store whose path cannot be rebuilt takes the whole subtree to the walk rather than being
     /// left out unnamed, because a store nobody can name is one nothing can prove survived.</para>
+    ///
+    /// <para><b>A file is counted once for each of its names in the subtree</b>, because each is a
+    /// node (see <see cref="MftLink"/>). That is what the walk lists and what the removal takes, and
+    /// a name outside the subtree is outside the total.</para>
     /// </summary>
     private ScanSize? SumSubtree(
         uint root,
@@ -391,8 +396,8 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
 
             if (CountOrKeep(node, item.Holder))
             {
-                allocated += tree.Allocated[node];
-                logical += tree.Logical[node];
+                allocated += tree.AllocatedOf(node);
+                logical += tree.LogicalOf(node);
             }
         }
 
@@ -404,7 +409,7 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
         // Whether the removal takes this entry. One it leaves keeps every folder above it standing.
         bool CountOrKeep(uint node, int holder)
         {
-            if (!keep.Protects(tree.Newest[node]))
+            if (!keep.Protects(tree.NewestOf(node)))
             {
                 entries++;
                 return true;
