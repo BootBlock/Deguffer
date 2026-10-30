@@ -191,6 +191,8 @@ public class CrashLogTests
 
         public string? GetEnvironmentVariable(string name) => null;
 
+        public string? GetToolEnvironmentVariable(string name) => null;
+
         public string? ReadCurrentUserRegistryValue(string keyPath, string valueName) => null;
 
         public int? ReadCurrentUserRegistryNumber(string keyPath, string valueName) => null;

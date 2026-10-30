@@ -973,6 +973,212 @@ time a project asks for it, with no command from you and nothing to re-configure
 
 ---
 
+## Yarn 1 package cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\Yarn\Cache`, unless moved; `yarn cache dir` names the `v6` folder inside it |
+| **Method** | `yarn cache clean` (the tool's own command), only where the `yarn` on your PATH is Yarn 1 |
+| **Typical size** | Not measured: no Yarn was installed on the machine this was written against |
+
+### What it is
+
+Yarn 1, also called Yarn Classic, is a package manager for Node.js. It keeps an unpacked copy of every
+package it downloads in one cache that all your projects share. The cache is a versioned folder,
+`v6` for Yarn 1.22, inside a cache root.
+
+Two folders sit beside the cache root and are not cache. **`Data`** holds the packages you installed
+with `yarn global add` and the ones you linked with `yarn link`. **`Berry`** holds the global cache of
+Yarn 2 and later, which Plug'n'Play projects run from directly.
+
+### What Deguffer does
+
+It first asks the `yarn` on your PATH for its version. A `yarnPath` setting in a `.yarnrc.yml` in your
+profile, or a Corepack shim, can make `yarn` run Yarn 4, and Yarn 4's `yarn cache clean` deletes the
+cache Plug'n'Play projects run from. So unless the answer is a Yarn 1 version, Deguffer offers
+nothing and says which Yarn it found.
+
+For Yarn 1 it asks `yarn cache dir` where the cache is, because `yarn config set cache-folder` and
+`YARN_CACHE_FOLDER` can move it. Yarn 1's `cache clean` deletes the **whole cache root**, the folder
+that holds `v6`, and then makes an empty `v6` again
+([cache.js](https://github.com/yarnpkg/yarn/blob/v1.22.22/src/cli/commands/cache.js)). So the root
+is checked before anything runs:
+
+- It must be a folder Deguffer accepts as a tool's own: not a drive root, your profile, a temporary
+  folder or a folder Windows is built from.
+- It must not hold Yarn's `Data` folder or Berry's cache, even where they do not exist yet.
+- It must hold nothing but Yarn's versioned cache folders. Anything else there, or a link, means
+  Deguffer leaves the cache alone and says what it found.
+
+Deguffer then runs `yarn cache clean --cache-folder "<root>" --non-interactive`. Naming the root makes
+Yarn 1 delete the folder Deguffer measured, whatever its settings say by then. Yarn 4 refuses both
+options before it runs anything, so a setting that changed which Yarn runs between the preview and
+the clean stops the command rather than clearing its cache.
+
+A clean that you cancel while this command runs is left to finish. It is one delete of the cache
+root, and Yarn 1 reads a package as cached by a file inside its folder, so a folder cut off part-way
+could be read as whole.
+
+### What is protected
+
+Yarn's **`Data`** and **`Berry`** folders, and **`.yarnrc`** and **`.yarnrc.yml`** in your profile,
+which can hold registry authentication tokens. Deguffer asserts that all four survived the run, and
+Explore refuses all of them.
+
+### What it costs you
+
+The next `yarn install` downloads its packages from the registry again. Every `node_modules` folder
+that is already installed is untouched, and so are your global packages and every Yarn 2 and later
+cache.
+
+### Why Tier 1
+
+Every package in the cache is a copy of something the registry still serves, and Yarn fetches it
+again when an install needs it.
+
+---
+
+## Bun install cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%USERPROFILE%\.bun\install\cache`, unless moved |
+| **Method** | `bun pm cache prune --max-age 0` (the tool's own command), Bun 1.4.4 or later only |
+| **Typical size** | Not measured: no Bun was installed on the machine this was written against |
+
+### What it is
+
+Bun is a JavaScript runtime and package manager. It extracts every package it installs into one
+cache, and links the files from there into each project. On Windows those links are hard links, so
+a project's `node_modules` and the cache share the same files on disk.
+
+The cache also holds **`links`**, Bun's global store. With `install.globalStore` on, a project's
+`node_modules` are links into it, and removing it breaks each such project until you run
+`bun install` in it again ([global store](https://bun.com/docs/pm/global-store)). It also holds git
+clones, package listings and Bun's transpiler cache.
+
+### What Deguffer does
+
+Bun has two ways to clear its cache, and only one of them is a cache clean. `bun pm cache rm` deletes
+everything, `links` included. `bun pm cache prune` removes the extracted package folders and keeps
+`links`, git clones, listings and anything it does not recognise. Deguffer only ever runs `prune`.
+
+`prune` first shipped in **Bun 1.4.4** ([release notes](https://bun.com/blog/bun-v1.4.4)). Deguffer
+asks `bun --version` first, and offers nothing for an earlier Bun, saying that `bun upgrade` adds the
+command. An earlier Bun has no clean that keeps `links`, which it has had since 1.3.14.
+
+For Bun 1.4.4 or later it asks `bun pm cache` where the cache is, because `BUN_INSTALL_CACHE_DIR`,
+`BUN_INSTALL` and `install.cache.dir` in `.bunfig.toml` can move it. It then runs
+`bun pm cache prune --max-age 0 --cache-dir "<cache>"`. `--max-age 0` makes every package old enough,
+where the default keeps those used in the last 30 days, and `--cache-dir` sends the prune to the cache
+Deguffer measured. A cache Deguffer would not accept as a tool's own folder, such as your profile or a
+drive root, is left alone, and so is a cache that is a link.
+
+Bun's prune decides by a folder's name, so a cache a setting points at could hold a folder of yours
+that only looks like a package, such as `client@acme`. Deguffer leaves the whole cache alone where a
+package-shaped folder has no `package.json`, or where one of Bun's index folders holds anything but
+links.
+
+Deguffer measures only the package folders `prune` removes, found by the same rule Bun's prune walk
+uses, and counts only the files no project still links. That is what the prune frees.
+
+A clean that you cancel while this command runs is left to finish.
+
+### What is protected
+
+**`links`** inside the cache, everything else prune keeps there (git clones, package listings, the
+transpiler cache and anything it does not recognise), the cache folder itself, Bun's home `%USERPROFILE%\.bun` (moved by
+`BUN_INSTALL`) and **`install\global`**, the packages you installed with `bun add --global`. Deguffer
+asserts that each survived the run, and Explore refuses everything in Bun's home except the package
+folders at the top of the cache.
+
+### What it costs you
+
+The next `bun install` that needs a removed package downloads it again. Installed projects keep their
+own links to the files, so no `node_modules` breaks, and the global store is untouched.
+
+### Why Tier 1
+
+Every package removed is one the registry still serves, and Bun fetches it again when an install
+needs it.
+
+---
+
+## Composer package cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\Composer`, unless moved |
+| **Method** | `composer clear-cache` (the tool's own command) |
+| **Typical size** | 30.1 MB on the machine this was written against, with Composer 2.4.4 |
+
+### What it is
+
+Composer is the package manager for PHP. Its cache folder holds **`files`**, the package archives it
+downloaded, **`repo`**, the package listings it read from repositories, and **`vcs`**, git mirrors of
+packages it installed from source. Composer trims `files` itself past 300 MiB or six months
+([config](https://getcomposer.org/doc/06-config.md#cache-files-ttl)), so this cache rarely grows
+large.
+
+Composer's **home**, `%APPDATA%\Composer`, is not cache. It holds `config.json`, `auth.json` with the
+credentials Composer signs in to package repositories with, and the packages you installed with
+`composer global require`. With only `COMPOSER_HOME` set, the cache moves into `cache` inside the home,
+next to `auth.json`.
+
+### What Deguffer does
+
+`composer clear-cache` empties every folder that four settings name: `cache-dir`, `cache-files-dir`,
+`cache-repo-dir` and `cache-vcs-dir`. It deletes every entry it finds there, and it has no check of
+its own against a setting that names some other folder
+([ClearCacheCommand.php](https://github.com/composer/composer/blob/2.11.1/src/Composer/Command/ClearCacheCommand.php),
+[Cache.php](https://github.com/composer/composer/blob/2.4.4/src/Composer/Cache.php)). So Deguffer asks
+Composer for each of the four, and for its home, its data folder and `cache-read-only`, with
+`composer config --global --absolute`. It runs the clear only where:
+
+- the cache folder is one Deguffer accepts as a tool's own, and does not hold Composer's home;
+- the other three settings are the cache folder's own `files`, `repo` and `vcs`, or are turned off;
+- the cache folder holds nothing but those three folders and the `.htaccess` Composer writes, and
+  none of them is a link.
+
+Anything else means Deguffer leaves the cache alone and says why. A cache that is turned off or set
+read-only is not offered, because the clear would remove nothing. Nor is the cache offered while the
+`COMPOSER` environment variable names a project file: Composer 2.11's `clear-cache` takes that
+project's cache settings, which the global settings Deguffer asks for never show.
+
+Every Composer command runs with `--working-dir` naming Deguffer's own empty folder. Composer 2.11
+reads a project's `composer.json` from the working folder before its global settings, and with
+`use-parent-dir` set it moves to the nearest parent folder that has one, unless `--working-dir` is
+given. Asking Composer for a setting also creates its home and cache folders, and an empty
+`config.json` and `auth.json`, where they are missing. Every Composer that has run once has already
+made them.
+
+A clean that you cancel while this command runs is left to finish, because `vcs` holds git mirrors,
+and nothing found shows that Composer notices a mirror cut off part-way.
+
+### What is protected
+
+The cache folder itself, which `clear-cache` keeps, and Composer's home with **`auth.json`** and
+**`config.json`** in it, and its data folder where that is somewhere else. Deguffer asserts that each
+survived the run, and Explore refuses the home and everything in it.
+
+### What it costs you
+
+The next `composer install` or `composer update` downloads its packages again. Every project's
+`vendor` folder, your global packages and your Composer credentials are untouched.
+
+### Why Tier 1
+
+Everything removed is a download Composer fetches again when an install needs it, and Composer
+already deletes the oldest of it on its own.
+
+---
+
 ## Maven local repository
 
 **Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an

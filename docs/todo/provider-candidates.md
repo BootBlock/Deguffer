@@ -230,12 +230,12 @@ report.
 | Electron download cache | **Build** | 1 | 150.9 MB |
 | electron-builder cache | Build later | 1 | 63.9 MB |
 | TypeScript typings cache | **Build** | 1 | 57.7 MB |
-| Bun install cache | **Build**, through `prune` only | 1 | Absent |
-| Yarn 1 cache | **Build** | 1 | Absent |
+| Bun install cache | ✅ **Built**, through `prune` only, Bun 1.4.4+ | 1 | Absent |
+| Yarn 1 cache | ✅ **Built** | 1 | Absent |
 | Deno cache | **Build**, by path, never `deno clean` | 1 | Absent |
 | Conan 2 | **Build**, `conan cache clean` only | 1 | Absent |
 | Scoop download cache | **Build** | 1 | Absent |
-| Composer | **Build**, low value | 1 | 30.1 MB |
+| Composer | ✅ **Built**, low value | 1 | 30.1 MB |
 | Cypress binaries | Build later | 2 | Absent |
 | Yarn Berry global cache | Build later | 2 | Absent |
 | PDM, Bazelisk, Coursier, opam, Julia, node-gyp, Chocolatey, Terraform plugin cache, RubyGems, Cabal, Stack, Hex | Build later | 1–2 | Absent |
@@ -294,6 +294,16 @@ The trap is `<cache>\links`, the global store. With `install.globalStore` on, a 
 `prune --max-age 0`), never `rm`, and `links` is never a path target. The Bun version that added
 `prune` is not stated anywhere found; probe with `--dry-run`.
 
+✅ **Done**: `BunInstallCacheProvider` runs `bun pm cache prune --max-age 0 --cache-dir <cache>`.
+Corrected from source: `prune` first shipped in **Bun 1.4.4** (commit `9510e7415207`,
+[release notes](https://bun.com/blog/bun-v1.4.4)), and `links` arrived in 1.3.14, so 1.3.14 to 1.4.3
+have the store and no safe eviction. A `--dry-run` probe cannot detect it: an older Bun skips unknown
+flags and reads `prune` as a request for the path, and before 1.4.4 `rm --dry-run` really deleted. The
+provider asks `bun --version` instead and offers nothing below 1.4.4. No path fallback was built: an
+older Bun will not report its cache from a folder with no `package.json`, and how 1.3.14 to 1.4.3 link
+the store was not established. The plan measures only the package folders prune's own walk removes,
+link-aware.
+
 ### Yarn 1 cache — Build, Tier 1, researched
 
 `%LOCALAPPDATA%\Yarn\Cache\v6` (`getCacheDir()` and `CACHE_VERSION = 6` in
@@ -303,6 +313,16 @@ The trap is `<cache>\links`, the global store. With `install.globalStore` on, a 
 ([cache](https://classic.yarnpkg.com/en/docs/cli/cache)). `.npmrc` and `.yarnrc` are read from the
 working directory's parents, so the fixed working directory (§5.1) matters. `Yarn\Data` beside it
 holds installed global packages: Tier 4.
+
+✅ **Done**: `YarnClassicCacheProvider`. Corrected from source: `yarn cache clean` deletes the whole
+cache **root**, the parent of the `v6` that `cache dir` prints, with anything else in it
+([cache.js](https://github.com/yarnpkg/yarn/blob/v1.22.22/src/cli/commands/cache.js#L119-L124)). And
+the fixed working directory is not enough to keep Berry out: Yarn 1 hands itself off to a `yarnPath`
+read from `.yarnrc.yml` in the profile as well as in the working directory's parents, and a Corepack
+shim can run Yarn 4. The provider asks `yarn -v`, offers nothing unless it is `1.x.y`, accepts only a
+root that holds nothing but `vN` folders and not `Data` or `Berry`, and runs
+`yarn cache clean --cache-folder <root> --non-interactive`, which Yarn 4 rejects before running anything
+(Yarn 2 and 3 unverified).
 
 ### Deno cache — Build by path, Tier 1, researched
 
@@ -353,6 +373,15 @@ It loads a `composer.json` from the working directory first, so the fixed folder
 Composer already caps its own cache at 300 MiB and six months
 ([config](https://getcomposer.org/doc/06-config.md)). With only `COMPOSER_HOME` set the cache sits in
 `$COMPOSER_HOME/cache` beside `auth.json`, which the command handles and a path fallback must not.
+
+✅ **Done**: `ComposerCacheProvider`. Added from source: `clear-cache` empties every folder the four
+settings `cache-dir`, `cache-files-dir`, `cache-repo-dir` and `cache-vcs-dir` name, with no guard of its
+own, so the provider asks each and runs the clear only where the three are the cache folder's own
+`files`, `repo` and `vcs`, the cache holds nothing else but `.htaccess`, and it does not hold the home.
+Composer 2.11 also reads a project from the working directory and, with `use-parent-dir`, from its
+parents, which `--working-dir` stops. Asking a setting writes `config.json`, `auth.json` and
+`.htaccess` where they are missing. The cache is capped at 300 MiB for `files` alone; `repo` and `vcs`
+are expired only by `clear-cache --gc`.
 
 ### Build later
 
