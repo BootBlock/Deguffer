@@ -9,7 +9,10 @@ internal abstract record ConanLocation
     /// Conan's home and its package store, as Conan reported them and as Deguffer worked them out, in
     /// full form.
     /// </summary>
-    /// <param name="Configuration">The home's configuration files the store was read from.</param>
+    /// <param name="Configuration">
+    /// The home's configuration files as they were once Conan had answered, which is what Conan reads
+    /// at the clean.
+    /// </param>
     public sealed record Found(string Home, string Store, ConanConfFiles Configuration) : ConanLocation;
 
     /// <summary>Conan's answer could not be used, for the reason given.</summary>
@@ -42,6 +45,13 @@ internal abstract record ConanLocation
     /// <para><b>Why the answers must agree.</b> The home and the store were judged from Deguffer's own
     /// reading, and the question itself made the store. An answer that names another folder means
     /// that reading is not Conan's, so the folder Conan used was never judged.</para>
+    ///
+    /// <para><b>Why the configuration is read again afterwards.</b> Conan's first command writes a
+    /// default <c>global.conf</c> where the home has none (<c>load_global_conf</c> in
+    /// <c>conan/internal/model/conf.py</c>), so the files as they were before Conan started are not the
+    /// files the clean will find. Held to that earlier reading, the clean would refuse every time. It
+    /// is held to the files as they are once Conan has answered, provided they still name the store
+    /// that was judged before Conan started.</para>
     /// </summary>
     /// <param name="own">The home as Deguffer worked it out, and what named it.</param>
     /// <param name="configured">The store the home's configuration names, and the files it was read from.</param>
@@ -101,11 +111,18 @@ internal abstract record ConanLocation
             return new StoreDeclined(home, store, storeDeclined);
         }
 
-        return SameFolder(store, configured.Store)
-            ? new Found(home, store, configured.Files)
-            : new Unknown(
+        if (!SameFolder(store, configured.Store))
+        {
+            return new Unknown(
                 $"Conan reports its package store as {store}, but its configuration in {home} names "
                 + $"{configured.Store}, so the folder Conan uses is not the one Deguffer checked, and nothing is offered.");
+        }
+
+        return ConanGlobalConf.Read(own.Home) is ConanConfReading.Plain answered && SameFolder(answered.Store, configured.Store)
+            ? new Found(home, store, answered.Files)
+            : new Unknown(
+                $"Conan's configuration in {home} no longer names {configured.Store}, the package store Deguffer "
+                + "checked before Conan started, or could not be read again, so nothing is offered.");
     }
 
     /// <summary>Whether two full paths name one folder, as Windows compares names.</summary>

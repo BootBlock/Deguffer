@@ -18,7 +18,7 @@ namespace Deguffer.Core.Providers;
 /// besides.</para>
 ///
 /// <para>So the step runs only while no Conan is running, the home works out as it did, the
-/// configuration files are byte for byte what the plan read, and <c>t</c> and <c>b</c> are judged
+/// configuration files are byte for byte what the plan read once Conan had answered it, and <c>t</c> and <c>b</c> are judged
 /// exactly as they were. Every reading is the plan's own, so this asks no subprocess.</para>
 /// </summary>
 /// <param name="inspector">Asked afresh at the clean, to within <see cref="IUseCheck.ReadingLimit"/>.</param>

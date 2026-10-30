@@ -521,6 +521,61 @@ public sealed class ConanCacheProviderTests : IDisposable
         Assert.Contains(IUseCheck.ReadingLimit, inspector.AgeLimits);
     }
 
+    /// <summary>
+    /// A home without a <c>global.conf</c> is given one by Conan's first command, written as
+    /// <c>load_global_conf</c> writes it. The clean is held to the files as they are once Conan has
+    /// answered, so it still runs, and nothing Conan wrote on that first question stops it.
+    /// </summary>
+    [Fact]
+    public async Task RunsTheCleanWhereConansFirstQuestionWroteItsConfiguration()
+    {
+        CreateHome(DefaultHome);
+        File.Delete(Path.Combine(DefaultHome, "global.conf"));
+        CreateStore(Store);
+        var runner = WritingConfigurationWhenAsked(
+            "# Core configuration (type 'conan config list' to list possible values)\n"
+            + "# e.g, for CI systems, to raise if user input would block\n"
+            + "# core:non_interactive = True\n");
+        var provider = CreateProvider(runner);
+
+        var plan = await provider.PlanAsync();
+        Assert.Single(plan.Steps);
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(Assert.Single(result.Steps).Succeeded);
+        Assert.Contains(runner.Invocations, call => call.Arguments == "cache clean -s -b -t");
+    }
+
+    /// <summary>
+    /// The store was judged from the configuration as it was before Conan started. A configuration
+    /// that names another store by the time Conan has answered was never judged, so nothing is offered.
+    /// </summary>
+    [Fact]
+    public async Task OffersNothingWhereTheConfigurationNamesAnotherStoreOnceConanHasAnswered()
+    {
+        CreateHome(DefaultHome);
+        File.Delete(Path.Combine(DefaultHome, "global.conf"));
+        CreateStore(Store);
+        var elsewhere = Path.Combine(_temp.Path, "storage");
+
+        var plan = await CreateProvider(WritingConfigurationWhenAsked($"core.cache:storage_path = {elsewhere}\n")).PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, note => note.Message.Contains($"no longer names {Store}", StringComparison.Ordinal));
+    }
+
+    /// <summary>Conan answering for the default home, and writing <paramref name="text"/> as its <c>global.conf</c> when first asked.</summary>
+    private FakeProcessRunner WritingConfigurationWhenAsked(string text) => Answering().Replying(Conan, arguments =>
+    {
+        if (arguments == "config home")
+        {
+            WriteConf(DefaultHome, text);
+        }
+
+        return null;
+    });
+
     public enum ChangeAfterPreview
     {
         HomeMoved,
