@@ -328,7 +328,7 @@ internal sealed class ExploreLayers
             layer.Renew();
         }
 
-        _tiles.Renew();
+        _tiles.Release();
 
         // Made before the replacement, it would take a write and show nothing (see CompositionDevice.Replaced).
         _current = null;

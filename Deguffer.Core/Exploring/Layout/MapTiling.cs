@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Deguffer.Core.Exploring.Rendering;
 
 namespace Deguffer.Core.Exploring.Layout;
@@ -128,44 +129,35 @@ public sealed class MapTiling
     }
 
     /// <summary>
-    /// Every tile of <paramref name="level"/> with any of <paramref name="shown"/> in it, the one holding
-    /// picture point (<paramref name="focusX"/>, <paramref name="focusY"/>) first and the rest by how far
-    /// their middles are from it: the order a reader looking there wants them drawn in.
+    /// Add to <paramref name="into"/> every tile of <paramref name="level"/> with any of
+    /// <paramref name="shown"/> in it, the one holding picture point (<paramref name="focusX"/>,
+    /// <paramref name="focusY"/>) first and the rest by how far their middles are from it: the order a
+    /// reader looking there wants them drawn in.
+    ///
+    /// <para>Into a list the caller keeps, because a moving map asks once or twice for every report
+    /// the camera makes, sixty or more times a second (G5).</para>
     /// </summary>
-    public IReadOnlyList<MapTileKey> Covering(MapViewport shown, int level, double focusX, double focusY)
+    public void Covering(MapViewport shown, int level, double focusX, double focusY, List<MapTileKey> into)
     {
+        ArgumentNullException.ThrowIfNull(into);
+
         var across = AcrossAt(level);
         var down = DownAt(level);
         var span = 1 / shown.Zoom;
 
         var (firstColumn, lastColumn) = Range(shown.Left, span, across);
         var (firstRow, lastRow) = Range(shown.Top, span, down);
-
-        var keys = new List<MapTileKey>();
-        var distances = new List<double>();
-
-        // By middles alone, a short tile at the picture's edge can be nearer the focus than the tile
-        // that holds it, so that one is put first outright, as a redraw's focus region is.
-        var focus = At(level, focusX, focusY);
+        var start = into.Count;
 
         for (var row = firstRow; row <= lastRow; row++)
         {
             for (var column = firstColumn; column <= lastColumn; column++)
             {
-                var key = new MapTileKey(level, column, row);
-                var (x, y) = FrameOf(key).Centre;
-
-                keys.Add(key);
-                distances.Add(key == focus ? -1 : Squared((x - focusX) * across) + Squared((y - focusY) * down));
+                into.Add(new MapTileKey(level, column, row));
             }
         }
 
-        var ordered = keys.ToArray();
-        Array.Sort(distances.ToArray(), ordered);
-
-        return ordered;
-
-        static double Squared(double value) => value * value;
+        CollectionsMarshal.AsSpan(into)[start..].Sort(new NearestFirst(this, At(level, focusX, focusY), focusX, focusY));
     }
 
     /// <summary>
@@ -199,4 +191,30 @@ public sealed class MapTiling
     /// <summary>How many pixels of a picture <paramref name="pixels"/> across the tile at <paramref name="index"/> along it has.</summary>
     private static int Extent(double pixels, long index) =>
         (int)Math.Clamp(Math.Ceiling(pixels - (index * (double)Size)), 1, Size);
+
+    /// <summary>
+    /// Tiles in the order <see cref="Covering"/> gives them: <paramref name="Focus"/> first, the tile
+    /// holding the focus, and the rest by how far their middles are from it, in the level's pixels.
+    /// By middles alone, a short tile at the picture's edge can be nearer the focus than the tile that
+    /// holds it, so that one is put first outright, as a redraw's focus region is.
+    /// </summary>
+    private readonly record struct NearestFirst(MapTiling Tiling, MapTileKey? Focus, double FocusX, double FocusY)
+        : IComparer<MapTileKey>
+    {
+        public int Compare(MapTileKey x, MapTileKey y) => Distance(x).CompareTo(Distance(y));
+
+        private double Distance(MapTileKey key)
+        {
+            if (key == Focus)
+            {
+                return -1;
+            }
+
+            var (x, y) = Tiling.FrameOf(key).Centre;
+
+            return Squared((x - FocusX) * Tiling.AcrossAt(key.Level)) + Squared((y - FocusY) * Tiling.DownAt(key.Level));
+        }
+
+        private static double Squared(double value) => value * value;
+    }
 }

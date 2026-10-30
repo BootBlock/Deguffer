@@ -45,9 +45,17 @@ internal sealed class ExploreTiles
 
     private readonly Stack<TileSprite> _spare = new();
 
-    private MapTiling? _tiling;
+    /// <summary>The tiles on screen and where the camera is going, asked for again at each camera report (G5).</summary>
+    private readonly List<MapTileKey> _covering = [];
 
-    private MapTileCache<TileSprite>? _cache;
+    /// <summary>Those of <see cref="_covering"/> not kept, which are drawn.</summary>
+    private readonly List<MapTileKey> _wanted = [];
+
+    /// <summary>
+    /// The tiles of the picture shown and those kept of it, made together for each size of picture, and
+    /// none before the first.
+    /// </summary>
+    private (MapTiling Tiling, MapTileCache<TileSprite> Cache)? _kept;
 
     /// <summary>The deepest level shown: that of the zoom on screen.</summary>
     private int _deepest = -1;
@@ -81,10 +89,10 @@ internal sealed class ExploreTiles
     public ContainerVisual Under { get; }
 
     /// <summary>Whether the tiles are on screen: the levels over the drawing and those under it, together.</summary>
-    public bool IsShown
+    private bool IsShown
     {
         get => Over.IsVisible;
-        private set
+        set
         {
             Over.IsVisible = value;
             Under.IsVisible = value;
@@ -105,30 +113,42 @@ internal sealed class ExploreTiles
     /// </summary>
     public void Want(TiledSurface picture, MapViewport shown, MapViewport target, double focusX, double focusY, TileColour ground)
     {
-        if (_tiling is not { } tiling || tiling.Width != picture.Width || tiling.Height != picture.Height)
+        if (_kept is not var (tiling, cache) || tiling.Width != picture.Width || tiling.Height != picture.Height)
         {
             Forget();
-            tiling = _tiling = new MapTiling(picture.Width, picture.Height);
-            _cache = new MapTileCache<TileSprite>(tiling.Budget, Recycle);
+            tiling = new MapTiling(picture.Width, picture.Height);
+            cache = new MapTileCache<TileSprite>(tiling.Budget, Recycle);
+            _kept = (tiling, cache);
         }
 
         var level = MapTiling.LevelOf(shown.Zoom);
-        var wanted = new List<MapTileKey>();
 
-        Missing(tiling.Covering(shown, level, focusX, focusY), wanted);
+        _covering.Clear();
+        tiling.Covering(shown, level, focusX, focusY, _covering);
 
         if (MapTiling.LevelOf(target.Zoom) is var going && (going != level || target != shown))
         {
             var (x, y) = target.PictureAt(0.5, 0.5);
 
-            Missing(tiling.Covering(target, going, x, y), wanted);
+            tiling.Covering(target, going, x, y, _covering);
+        }
+
+        // Each not kept is drawn, and each kept is counted as used.
+        _wanted.Clear();
+
+        foreach (var key in _covering)
+        {
+            if (!cache.TryGet(key, out _))
+            {
+                _wanted.Add(key);
+            }
         }
 
         ShowDownTo(level);
 
         IsShown = true;
 
-        _draws.Want(picture, tiling, ground, _graphics.Shades, wanted);
+        _draws.Want(picture, tiling, ground, _graphics.Shades, _wanted);
     }
 
     /// <summary>The camera has come to rest: draw nothing more, but keep what is under way, and go on showing.</summary>
@@ -161,7 +181,7 @@ internal sealed class ExploreTiles
     /// </summary>
     public MapTile? TileOver(double x, double y)
     {
-        if (!IsShown || _tiling is not { } tiling || _cache is not { } cache)
+        if (!IsShown || _kept is not var (tiling, cache))
         {
             return null;
         }
@@ -183,7 +203,7 @@ internal sealed class ExploreTiles
         _size = (width, height);
         _origin = origin;
 
-        foreach (var sprite in _cache?.Values ?? [])
+        foreach (var sprite in _kept?.Cache.Values ?? [])
         {
             Fit(sprite);
         }
@@ -196,13 +216,17 @@ internal sealed class ExploreTiles
     public void Forget()
     {
         _draws.Stop();
-        _cache?.Clear();
+        _kept?.Cache.Clear();
         IsShown = false;
 
         RaiseIfAnswerLost();
     }
 
-    /// <summary>Let go of every tile and every surface kept, for a map nobody can see.</summary>
+    /// <summary>
+    /// Let go of every tile and every surface kept, for a map nobody can see, or for a device that has
+    /// replaced the one the surfaces were made on: they hold nothing, and a write into one would show
+    /// nothing (see <see cref="CompositionDevice.Replaced"/>).
+    /// </summary>
     public void Release()
     {
         Forget();
@@ -210,24 +234,6 @@ internal sealed class ExploreTiles
         while (_spare.TryPop(out var sprite))
         {
             sprite.Dispose();
-        }
-    }
-
-    /// <summary>
-    /// Let go of everything, for a device that has replaced the one the surfaces were made on: they hold
-    /// nothing, and a write into one would show nothing (see <see cref="CompositionDevice.Replaced"/>).
-    /// </summary>
-    public void Renew() => Release();
-
-    /// <summary>Add to <paramref name="wanted"/> each of <paramref name="keys"/> not kept, and count each kept as used.</summary>
-    private void Missing(IReadOnlyList<MapTileKey> keys, List<MapTileKey> wanted)
-    {
-        foreach (var key in keys)
-        {
-            if (!_cache!.TryGet(key, out _))
-            {
-                wanted.Add(key);
-            }
         }
     }
 
@@ -255,9 +261,15 @@ internal sealed class ExploreTiles
     private void Shaded(MapTile tile, CushionQuads quads, TileColour ground) =>
         Show(tile, surface => _graphics.Shade(surface, quads, ground));
 
-    /// <summary>Put <paramref name="tile"/> on screen, written into its surface by <paramref name="write"/>, and keep it.</summary>
+    /// <summary>
+    /// Put <paramref name="tile"/> on screen, written into its surface by <paramref name="write"/>, and
+    /// keep it. Only ever handed over for the picture the tiles are kept for: a change of picture stops
+    /// the draws first (see <see cref="Forget"/>).
+    /// </summary>
     private void Show(MapTile tile, Action<CompositionDrawingSurface> write)
     {
+        var cache = _kept!.Value.Cache;
+
         _spare.TryPop(out var spare);
 
         var surface = _graphics.TileSurface(spare?.Surface, tile.Width, tile.Height);
@@ -273,7 +285,7 @@ internal sealed class ExploreTiles
         Level(tile.Key.Level).Children.InsertAtTop(sprite.Visual);
 
         // Kept before it comes in, so a tile it lets go of is gone before this one can answer.
-        _cache!.Add(tile.Key, sprite, tile.Bytes);
+        cache.Add(tile.Key, sprite, tile.Bytes);
         RaiseIfAnswerLost();
 
         FadeIn(sprite, tile);
@@ -395,36 +407,6 @@ internal sealed class ExploreTiles
         else
         {
             sprite.Dispose();
-        }
-    }
-
-    /// <summary>What shows one tile: a visual painted by a surface of a tile's size, and the tile it holds now.</summary>
-    private sealed class TileSprite : IDisposable
-    {
-        private readonly CompositionSurfaceBrush _brush;
-
-        public TileSprite(Compositor compositor, CompositionDrawingSurface surface)
-        {
-            Surface = surface;
-            _brush = compositor.CreateUnstretchedBrush(surface);
-            Visual = compositor.CreateSpriteVisual();
-            Visual.Brush = _brush;
-        }
-
-        public CompositionDrawingSurface Surface { get; }
-
-        public SpriteVisual Visual { get; }
-
-        public MapTile? Tile { get; set; }
-
-        /// <summary>Whether <see cref="Tile"/> has come in in full, and so answers the pointer.</summary>
-        public bool Answers { get; set; }
-
-        public void Dispose()
-        {
-            Visual.Dispose();
-            _brush.Dispose();
-            Surface.Dispose();
         }
     }
 }

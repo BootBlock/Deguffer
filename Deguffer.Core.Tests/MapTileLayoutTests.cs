@@ -76,7 +76,7 @@ public sealed class MapTileLayoutTests
         var drawing = Drawing(viewport);
         var level = MapTiling.LevelOf(zoom);
         var screen = viewport.PictureOf(MapFrame.Whole);
-        var tiles = Tiling.Covering(viewport, level, 0.5, 0.5).Select(key => drawing.Tile(Tiling, key)).ToList();
+        var tiles = Tiling.Covered(viewport, level, 0.5, 0.5).Select(key => drawing.Tile(Tiling, key)).ToList();
 
         var drawn = drawing.Tiles
             .Where(shape => shape.IsNode)
@@ -104,7 +104,7 @@ public sealed class MapTileLayoutTests
     {
         var viewport = MapViewport.Anchored(6.5, 0.2, 0.8, 0.5, 0.5, MapCeiling.Most);
         var level = MapTiling.LevelOf(viewport.Zoom);
-        var frames = Tiling.Covering(viewport, level, 0.2, 0.8).Select(Tiling.FrameOf).ToList();
+        var frames = Tiling.Covered(viewport, level, 0.2, 0.8).Select(Tiling.FrameOf).ToList();
         var screen = viewport.PictureOf(MapFrame.Whole);
 
         foreach (var (x, y) in Grid(screen).Append((screen.X, screen.Y)))
@@ -120,9 +120,29 @@ public sealed class MapTileLayoutTests
         var viewport = MapViewport.Anchored(4, 0.5, 0.5, 0.5, 0.5, MapCeiling.Most);
         var level = MapTiling.LevelOf(viewport.Zoom);
 
-        var keys = Tiling.Covering(viewport, level, 0.41, 0.57);
+        var keys = Tiling.Covered(viewport, level, 0.41, 0.57);
 
         Assert.Equal(Tiling.At(level, 0.41, 0.57), keys[0]);
+    }
+
+    /// <summary>
+    /// A second screen's tiles go after the first's, each screen in its own order, so the screen shown
+    /// is drawn before the one a move is going to, and the list is reused rather than made again.
+    /// </summary>
+    [Fact]
+    public void TilesAreAddedAfterThoseTheListHolds()
+    {
+        var shown = MapViewport.Anchored(4, 0.5, 0.5, 0.5, 0.5, MapCeiling.Most);
+        var going = MapViewport.Anchored(4, 0.2, 0.8, 0.5, 0.5, MapCeiling.Most);
+        var level = MapTiling.LevelOf(shown.Zoom);
+        var first = Tiling.Covered(shown, level, 0.41, 0.57);
+        var second = Tiling.Covered(going, level, 0.2, 0.8);
+
+        var keys = new List<MapTileKey>();
+        Tiling.Covering(shown, level, 0.41, 0.57, keys);
+        Tiling.Covering(going, level, 0.2, 0.8, keys);
+
+        Assert.Equal(first.Concat(second), keys);
     }
 
     /// <summary>
@@ -139,7 +159,7 @@ public sealed class MapTileLayoutTests
         var focusX = 760 / tiling.AcrossAt(0);
         var focusY = 128 / tiling.DownAt(0);
 
-        var keys = tiling.Covering(MapViewport.Whole, 0, focusX, focusY);
+        var keys = tiling.Covered(MapViewport.Whole, 0, focusX, focusY);
 
         Assert.Equal(new MapTileKey(0, 2, 0), keys[0]);
     }
@@ -163,7 +183,7 @@ public sealed class MapTileLayoutTests
             foreach (var (x, y) in new[] { (0.0, 0.0), (0.3, 0.7), (0.5, 0.5), (0.999, 0.001), (0.123, 0.456) })
             {
                 var shown = MapViewport.Anchored(zoom, x, y, 0.5, 0.5, MapCeiling.Most);
-                var keys = tiling.Covering(shown, MapTiling.LevelOf(shown.Zoom), x, y);
+                var keys = tiling.Covered(shown, MapTiling.LevelOf(shown.Zoom), x, y);
 
                 most = Math.Max(most, keys.Count);
             }
