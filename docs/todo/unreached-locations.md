@@ -1351,6 +1351,10 @@ the operation is stop-service, delete, start-service, under elevation. That is a
 step from anything `CleanupPlan` models today. **Decide whether Deguffer takes on service control at
 all before this is scheduled.**
 
+[provider-candidates.md](provider-candidates.md) §5 found a documented rebuild,
+`ISearchCatalogManager::Reset`, that needs no service control. If it shrinks the file, the question
+above no longer blocks this entry. Whether it does is not yet measured.
+
 ---
 
 ## 7. Things every cleaner does on `C:` and nowhere else
@@ -1615,7 +1619,10 @@ Two carve-outs are defensible, because both are caches rather than installations
 
 - JetBrains' `caches`, `index` and `log` subdirectories under each per-version folder. The IDE
   itself deletes these after 180 days, so an eviction policy already exists to match.
-- Visual Studio's `ComponentModelCache`, a MEF index rebuilt on next launch.
+- Visual Studio's `ComponentModelCache`, a MEF index rebuilt on next launch. Rejected by
+  [provider-candidates.md](provider-candidates.md) §3: 8.5 MB measured, and rebuilding it is a
+  repair rather than a way to free space. The same section narrows the JetBrains carve-out to the
+  whole system directory of a superseded version, which is what the IDE itself deletes.
 
 Both are §5.2 recognised children under a root that must never be targeted whole, because `settings`
 and `plugins` live in the same place.

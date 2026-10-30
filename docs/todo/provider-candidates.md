@@ -18,12 +18,16 @@ own source, cited inline. Where a primary source could not be read, the entry sa
 is to be built on it until the source is read. Some vendor help sites refuse automated fetches;
 claims taken from them are marked *(page not read directly)*.
 
-Verdicts are one of four:
+Each candidate gets one of four verdicts:
 
 - **Build** — evidence and route are established. Ready to design.
 - **Build later** — worth having, with a named gap to close first.
 - **Report only** — the right row offers nothing to tick, as `VirtualDiskProvider` does.
 - **Reject** — with the reason, so the question is not asked again.
+
+The summary tables also mark what needs no new provider: *Already covered*, an owner record in an
+existing report, an Explore entry, a setting Deguffer names and never changes, and an addition to
+the negative list.
 
 ---
 
@@ -56,7 +60,7 @@ route in order. The one offered row in this area is old Vagrant box versions, th
 | Vagrant superseded box versions | **Build** | 2 | Absent |
 | Rancher Desktop snapshots | Report only | 3 | Absent |
 | Podman and Rancher Desktop distributions | Owner records in the WSL report | 3 | Absent |
-| Rancher Desktop `cache`, Podman machine image cache | Build later | — | Absent |
+| Rancher Desktop `cache` | Build later | — | Absent |
 | Packer, minikube, kind, Multipass, Windows Sandbox, Hyper-V Quick Create downloads | Reject | — | — |
 | Any VM file by path: logs, `.lck`, `.vmem`, `.vmss`, `.vmsn`, delta disks, `.avhdx`, `.vmrs`, `.vmgs` | Reject | 4 | — |
 
@@ -204,7 +208,7 @@ report.
 | Candidate | Verdict | Tier | Measured |
 | --- | --- | --- | --- |
 | Electron download cache | **Build** | 1 | 150.9 MB |
-| electron-builder cache | **Build** | 1 | 63.9 MB |
+| electron-builder cache | Build later | 1 | 63.9 MB |
 | TypeScript typings cache | **Build** | 1 | 57.7 MB |
 | Bun install cache | **Build**, through `prune` only | 1 | Absent |
 | Yarn 1 cache | **Build** | 1 | Absent |
@@ -227,7 +231,7 @@ unpacked into a project's `node_modules`, so installed projects keep working; th
 download at the next fresh install. No clean command exists, so path-based. Recognised children are
 the 64-hex folders; any other name is Tier 4.
 
-### electron-builder cache — Build, Tier 1, measured at 63.9 MB
+### electron-builder cache — Build later, Tier 1, measured at 63.9 MB
 
 `%LOCALAPPDATA%\electron-builder\Cache`, moved by `ELECTRON_BUILDER_CACHE`
 ([offline builds](https://www.electron.build/docs/tutorials/offline-air-gapped-builds)). Measured
@@ -346,7 +350,7 @@ Composer already caps its own cache at 300 MiB and six months
 
 | Candidate | Verdict | Tier | Measured |
 | --- | --- | --- | --- |
-| Godot `.godot\imported` and `.godot\shader_cache` | **Build**, named children only | 2 and 1 | **14.0 GB across 36 projects** |
+| Godot `.godot\imported` and `.godot\shader_cache` | Build later, named children only | 2 and 1 | **14.0 GB across 36 projects** |
 | JetBrains-platform system directories of superseded versions | **Build** | 1 | 633 MB, one superseded Android Studio |
 | Flutter/Dart `.dart_tool` | **Build** | 2 | 288 MB across 2 projects |
 | Python tool caches that write `CACHEDIR.TAG` | **Build**, as a declared table | 1–2 | One `.pytest_cache` |
@@ -358,7 +362,7 @@ Composer already caps its own cache at 300 MiB and six months
 | CMake build trees | Build later | 2 | Absent |
 | `__pycache__`, Visual Studio `ComponentModelCache`, ReSharper caches, Gradle `build`, Maven `target`, Bazel `bazel-*`, `.idea` | Reject | — | — |
 
-### Godot `.godot` — Build, named children only, measured at 14.0 GB
+### Godot `.godot` — Build later, named children only, measured at 14.0 GB
 
 The largest per-project item on the measured machine, and not on any earlier list. Across 36
 `.godot` folders, each beside a `project.godot`:
@@ -490,7 +494,7 @@ Cargo did, and `CargoTargetProvider` correctly declined both.
 
 | Candidate | Verdict | Tier | Measured |
 | --- | --- | --- | --- |
-| Lightroom Classic `Previews.lrdata` | **Build**, with a lost-original guard | 2 | Absent |
+| Lightroom Classic `Previews.lrdata` | Build later, with a lost-original guard | 2 | Absent |
 | Packaged (MSIX) Electron apps | **Build**, as a general rule | 1 | — |
 | Classic Teams leftover `%APPDATA%\Microsoft\Teams` | Build later | 1 | Absent |
 | iOS firmware `.ipsw` downloads | Build later | 2 | Absent |
@@ -506,7 +510,7 @@ Several vendor pages in this area could not be read directly. Every claim marked
 directly)* comes from a search engine's extract of the named page, and must be read in full before
 anything is built on it.
 
-### Lightroom Classic previews — Build, Tier 2, with a lost-original guard
+### Lightroom Classic previews — Build later, Tier 2, with a lost-original guard
 
 `<Catalog> Previews.lrdata` sits beside each catalog, which can be anywhere, so discovery reads the
 recent-catalog list in Lightroom's preferences
@@ -618,7 +622,7 @@ measured machine registers 32.
 | --- | --- |
 | Previous Installations, Temporary Setup Files, Windows ESD installation files | Covered by `PreviousWindowsInstallationProvider` |
 | **Upgrade Discarded Files** (`SetupDirectories=$WINDOWS.~Q;$INPLACE.~TR;$Windows.~LS`) | **Not covered.** The same `setupcln.dll` as the three above, so a fourth row in `Cleanups`. Build |
-| Windows Reset Log Files, Windows Upgrade Log Files | Covered by `WindowsServicingLogProvider`, which removes `Panther` by path deliberately and says why |
+| Windows Reset Log Files, Windows Upgrade Log Files | Covered by `WindowsServicingLogProvider`, which removes `Panther` by path. Whether `Panther` should go through its handler instead is an open question that provider and the first survey's §6 already record |
 | Device Driver Packages, User file versions, Delivery Optimization Files, Update Cleanup, D3D Shader Cache, Recycle Bin, dump and error-report handlers | Covered by their providers |
 | Temporary Files | Covered for `%TEMP%` and `C:\Windows\Temp`. See the `SystemTemp` question below |
 | Windows Defender, Diagnostic Data Viewer database files, Feedback Hub Archive log files | Build later, below |
@@ -634,15 +638,15 @@ is "run at the completion of the disk cleanup", which reads as the cleanup manag
 handlers depend on their pre- and post-cleanup commands. Whether the data-driven cleaner runs them
 when Deguffer hosts it directly is neither documented nor verified, and it has to be settled first.
 
-### Build later, in existing providers
+### In existing providers
 
-- **`CrashDumpProvider`**: Windows lets `LiveKernelReports` move through
+- **`CrashDumpProvider`, Build**: Windows lets `LiveKernelReports` move through
   `CrashControl\LiveKernelReports\LiveKernelReportsPath`
   ([live dump reference](https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/kernel-live-dump-code-reference)),
   and `CrashDumpSettings` reads `DumpFile`, `MinidumpDir` and `DumpFolder` but not this value. The
   *Temporary Files* handler also names `%LOCALAPPDATA%\Microsoft\Windows\TaskManager\LiveKernelDumps`,
   dumps Task Manager writes on request, which nothing covers.
-- **`WindowsServicingLogProvider`**: `Logs\DISM` (7.3 MB) and `System32\LogFiles\setupcln` (20.6 MB)
+- **`WindowsServicingLogProvider`, Build later**: `Logs\DISM` (7.3 MB) and `System32\LogFiles\setupcln` (20.6 MB)
   are not covered. Same reasoning and tier as `CBS`.
 
 ### Build later, new
@@ -687,9 +691,10 @@ Protection's limit applies.
 
 ### `C:\Windows\SystemTemp` — a question, not a candidate
 
-`TempRoots` excludes it because "nothing documents it as safe to empty". Windows' own *Temporary
+`TempRoots` excludes it for two reasons: Windows 11 writes servicing work there, which §9 keeps
+Deguffer out of, and "it is also not a folder anything documents as safe to empty". Windows' own *Temporary
 Files* handler names it, with a seven-day `LastAccess` rule. A registration is not documentation, and
-§9 keeps Deguffer out of servicing internals, so the exclusion stands, but the comment should record
+the first reason is untouched, so the exclusion stands, but the comment should record
 that Windows' own cleanup does reach it, and an elevated measurement should say what is there.
 
 ---
@@ -699,15 +704,21 @@ that Windows' own cleanup does reach it, and an elevated measurement should say 
 1. **Bun has eviction commands.** The first survey's long-tail table says "no eviction command as of
    early 2026". `bun pm cache rm` and `bun pm cache prune` exist ([pm](https://bun.com/docs/pm/cli/pm)).
 2. **`scoop cleanup *` is an uninstall.** The same table lists it beside `scoop cache rm *`.
-3. **`Optimize-VHD`'s refusal of sparse files is unsourced here.** The first survey's §11 and
-   `VirtualDiskRoutes` say `Optimize-VHD` refuses a sparse, compressed or encrypted file. Microsoft's
+3. **`Optimize-VHD`'s refusal of sparse files is unsourced here.** The first survey's §11 says
+   `Optimize-VHD` refuses a sparse, compressed or encrypted file, and `VirtualDiskRoutes` tells the
+   user it refuses a sparse file. Microsoft's
    [cmdlet page](https://learn.microsoft.com/en-us/powershell/module/hyper-v/optimize-vhd) does not
    say so. Find the primary source, or reword the claim.
 4. **`Optimize-VHD` needs Hyper-V rights.** Measured: the Hyper-V module refuses an unelevated user
    outside Hyper-V Administrators, so the WSL and Docker route that names it should say so.
+5. **`ComponentModelCache` is not a carve-out.** The first survey's §12 proposes it; §3 above
+   rejects it as a repair rather than space.
+6. **The Search index may not need service control.** The first survey's §6 makes service control
+   the blocker; §5 above names a documented rebuild that needs none, if it shrinks the file.
 
-Items 1 and 2 are corrected in place in [unreached-locations.md](unreached-locations.md). Items 3 and
-4 change shipped text, and belong with the work that next touches the virtual disk report.
+Items 1, 2, 5 and 6 are corrected in place in [unreached-locations.md](unreached-locations.md).
+Items 3 and 4 change shipped text, and belong with the work that next touches the virtual disk
+report.
 
 ## Additions to the negative list
 
@@ -731,8 +742,8 @@ Items 1 and 2 are corrected in place in [unreached-locations.md](unreached-locat
 - **A vendor's automatic rule is the best tier evidence.** JetBrains' 180-day rule, Gradle's 7-day
   rule, ReSharper's 30 days and Composer's cap each say what the vendor already deletes without
   asking. Where the vendor already deletes it, an offer is either redundant or Tier 1.
-- **Hypervisors refuse to be listed unelevated.** Hyper-V answers nothing; the other two keep their
-  records in the profile. A report row has to say why it is empty.
+- **Hyper-V refuses to be listed unelevated.** VMware and VirtualBox keep their records in the
+  profile, so they answer. A Hyper-V row has to say why it is empty.
 
 ## Suggested order
 
