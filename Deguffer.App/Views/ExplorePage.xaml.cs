@@ -109,7 +109,7 @@ public sealed partial class ExplorePage : Page
             (current, colouring) => current with { ExploreColours = colouring },
             ColourAs);
 
-        ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
+        ViewModel.Elevation.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
         FollowRows();
 
         InitializeComponent();
@@ -137,7 +137,7 @@ public sealed partial class ExplorePage : Page
         WireMap();
 
         // Read once, here, and never again: see DrawnSetting.Stored.
-        ViewModel.NotesDismissed = _notesDismissed.Stored;
+        ViewModel.Notes.Dismissed = _notesDismissed.Stored;
 
         FollowAppearance();
 
@@ -211,11 +211,11 @@ public sealed partial class ExplorePage : Page
 
         Map.Removal = ViewModel.ShapeRemoval;
         Map.ContrastChanged += (_, _) => ViewModel.MapInContrast = Map.Contrasted;
-        Map.ZoomingIn += (_, from) => ViewModel.Zoomed(from);
-        Map.ViewportChanged += (_, _) => ViewModel.ViewportChanged();
+        Map.ZoomingIn += (_, from) => ViewModel.Visiting.Zoomed(from);
+        Map.ViewportChanged += (_, _) => ViewModel.Visiting.ViewportChanged();
 
-        // A step away remembers the zoom it left, so Back comes back to it. See ExploreViewModel.Viewing.
-        ViewModel.Viewing = () => Map.Viewport;
+        // A step away remembers the zoom it left, so Back comes back to it. See ExploreVisiting.Viewing.
+        ViewModel.Visiting.Viewing = () => Map.Viewport;
     }
 
     /// <summary>Draw in the look, the colouring and the view the appearance holds, and follow the look as it changes.</summary>
@@ -309,7 +309,7 @@ public sealed partial class ExplorePage : Page
     private void ShowRowsOf(ExploreView view)
     {
         var files = view == ExploreView.Files;
-        object rows = files ? ViewModel.Files.Rows : ViewModel.Rows;
+        object rows = files ? ViewModel.Files.Rows : ViewModel.Listing.Rows;
 
         if (ReferenceEquals(RowsList.ItemsSource, rows))
         {
@@ -378,7 +378,7 @@ public sealed partial class ExplorePage : Page
             ViewModel.VolumeBeside,
             ViewModel.Growth.Comparison,
             ViewModel.Types.Dominant,
-            ViewModel.Revisiting);
+            ViewModel.Visiting.Revisiting);
 
         _cards.Relight();
     }
@@ -482,7 +482,7 @@ public sealed partial class ExplorePage : Page
 
     private void ShowNotesDismissed(bool dismissed)
     {
-        ViewModel.NotesDismissed = dismissed;
+        ViewModel.Notes.Dismissed = dismissed;
 
         // The button that was just pressed is the one that has gone, so focus would be left on a
         // collapsed element and the reader would have to cross the whole page to reach the other.
@@ -504,12 +504,12 @@ public sealed partial class ExplorePage : Page
     /// <summary>
     /// Read the volumes again as the picker opens, where the last reading has gone stale, so its
     /// space figures describe the disk now rather than when the page was first shown. See
-    /// <see cref="ExploreViewModel.RefreshDrivesAsync"/>.
+    /// <see cref="ExploreTargeting.RefreshDrivesAsync"/>.
     ///
     /// <para>Not cancelled when the page is left. NavigationCacheMode keeps the page, so rows written
     /// after it is left are the rows its next visit shows.</para>
     /// </summary>
-    private async void OnDriveListOpened(object sender, object e) => await ViewModel.RefreshDrivesAsync(CancellationToken.None);
+    private async void OnDriveListOpened(object sender, object e) => await ViewModel.Targeting.RefreshDrivesAsync(CancellationToken.None);
 
     /// <summary>
     /// Read the volumes as the page is shown, on the same terms as the picker opening, the first
@@ -526,7 +526,7 @@ public sealed partial class ExplorePage : Page
         var resuming = _resuming;
         _resuming = null;
 
-        if (!await ViewModel.ShownAsync(resuming, CancellationToken.None))
+        if (!await ViewModel.Targeting.ShownAsync(resuming, CancellationToken.None))
         {
             return;
         }
@@ -591,7 +591,7 @@ public sealed partial class ExplorePage : Page
 
         if (await FolderDialog.ChooseAsync(window) is { } folder)
         {
-            ViewModel.ScopeTo(folder);
+            ViewModel.Targeting.ScopeTo(folder);
         }
     }
 

@@ -105,7 +105,7 @@ internal sealed class ExploreInput
             return;
         }
 
-        args.Handled = _viewModel.GoBackCommand.TryExecute();
+        args.Handled = _viewModel.Visiting.GoBackCommand.TryExecute();
     }
 
     /// <summary>
@@ -118,8 +118,8 @@ internal sealed class ExploreInput
     {
         var command = e.GetCurrentPoint(_page).Properties.PointerUpdateKind switch
         {
-            PointerUpdateKind.XButton1Released => _viewModel.GoBackCommand,
-            PointerUpdateKind.XButton2Released => _viewModel.GoForwardCommand,
+            PointerUpdateKind.XButton1Released => _viewModel.Visiting.GoBackCommand,
+            PointerUpdateKind.XButton2Released => _viewModel.Visiting.GoForwardCommand,
             _ => null,
         };
 

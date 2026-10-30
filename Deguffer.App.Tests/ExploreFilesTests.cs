@@ -280,7 +280,7 @@ public sealed class ExploreFilesTests : IDisposable
 
         var page = _explore.Page();
 
-        page.ScopeTo(root);
+        page.Targeting.ScopeTo(root);
         await _explore.ScanAsync(page, ExploreScan.Fast(tree));
 
         return (page, tree);

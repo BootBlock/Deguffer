@@ -102,7 +102,7 @@ public sealed class MapNavigatorTests : IDisposable
         var page = _explore.Page();
         var (tree, folder) = _explore.OnDisk();
 
-        page.ScopeTo(tree.PathOf(tree.RootNode));
+        page.Targeting.ScopeTo(tree.PathOf(tree.RootNode));
         await _explore.ScanAsync(page, ExploreScan.Fast(tree));
 
         return (page, tree, folder);
