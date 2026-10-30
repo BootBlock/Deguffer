@@ -1,4 +1,3 @@
-using System.Windows.Input;
 using Deguffer.App.Controls;
 using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
@@ -11,13 +10,10 @@ using Deguffer.Core.Exploring.Knowledge;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Viewing;
-using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Navigation;
-using Windows.Foundation;
 
 namespace Deguffer.App.Views;
 
@@ -59,6 +55,15 @@ public sealed partial class ExplorePage : Page
     /// <summary>The cards beside the map, joined to it. See <see cref="ExploreCards"/>.</summary>
     private readonly ExploreCards _cards;
 
+    /// <summary>Whether the reader put the notes away. See <see cref="ShowNotesDismissed"/>.</summary>
+    private readonly DrawnSetting<bool> _notesDismissed;
+
+    /// <summary>The picture the page draws, chosen in the View box.</summary>
+    private readonly DrawnSetting<ExploreView> _view;
+
+    /// <summary>What the map's colours say, chosen in the Colour box.</summary>
+    private readonly DrawnSetting<ExploreColouring> _colouring;
+
     public ExplorePage()
     {
         // Assigned before InitializeComponent so no x:Bind can evaluate against a null view-model,
@@ -89,28 +94,23 @@ public sealed partial class ExplorePage : Page
 
         _guard = new ListSelectionGuard(() => ViewModel.IsShowingRows, restore => DispatcherQueue.TryEnqueueGuarded(restore));
 
+        _notesDismissed = new DrawnSetting<bool>(
+            App.Preferences,
+            current => current.ExploreNotesDismissed,
+            (current, dismissed) => current with { ExploreNotesDismissed = dismissed },
+            ShowNotesDismissed);
+
+        _view = new DrawnSetting<ExploreView>(
+            App.Preferences, current => current.Explore, (current, view) => current with { Explore = view }, ShowAs);
+
+        _colouring = new DrawnSetting<ExploreColouring>(
+            App.Preferences,
+            current => current.ExploreColours,
+            (current, colouring) => current with { ExploreColours = colouring },
+            ColourAs);
+
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
-
-        // The Files layout's rows arrive on their own, after a search rather than with a redraw, so
-        // the highlight is put back on them the way a redraw puts it back on the folder's rows.
-        ViewModel.Files.Changed += (_, _) =>
-        {
-            ShowSelectedRows();
-            _guard.Settle();
-        };
-        ViewModel.ViewChanged += (_, _) =>
-        {
-            ShowCurrentNode();
-
-            // The rows changed rather than the selection, so this is the other direction of the same
-            // agreement: the highlight goes back onto whichever of the new rows the selection still
-            // names. ShowCurrentNode has already put the map's outlines on the new drawing.
-            ShowSelectedRows();
-
-            // Whatever the list reports from here until the user touches it again is the list's own
-            // doing, however long it takes to arrive. See ListGestures.
-            _guard.Settle();
-        };
+        FollowRows();
 
         InitializeComponent();
 
@@ -125,24 +125,66 @@ public sealed partial class ExplorePage : Page
 
         _rowsMargin = RowsList.Margin;
 
-        // Subscribed past the handled flag, because a ListViewItem marks the right-tap handled on
-        // its way past and an ordinary handler on the list never runs. Measured: an attached
-        // ContextFlyout never appears either, and ContextRequested does not arrive at all. The map
-        // needs none of this — nothing between it and the pointer handles anything.
-        RowsList.AddHandler(
-            RightTappedEvent, new RightTappedEventHandler(OnRowsRightTapped), handledEventsToo: true);
-
         // The two ways a person moves this list's selection, marked as they arrive rather than
         // inferred afterwards. The guard settles as the list's containers are built again on a return
         // to the page, and ShowAs settles it as the list comes back from behind the map.
         _guard.Hear(RowsList);
 
-        // One signal, followed by both screens that show a selection. The list is not on screen
-        // while the map is and keeps whatever was highlighted in it until something says otherwise,
-        // and the map draws an outline round what was picked — so a change reaching only one of them
-        // is a Delete pointed at something the other one is still showing. Here rather than at each
-        // call site, because the callers are five and growing: a map click, a row click, a
-        // navigation, a snapshot carried over mid-scan, and the end of a removal.
+        // Kept alive by the events it follows on the page, the list and the map.
+        _ = new ExploreInput(this, ViewModel, Map, RowsList, RowsMenu);
+
+        FollowSelection();
+        WireMap();
+
+        // Read once, here, and never again: see DrawnSetting.Stored.
+        ViewModel.NotesDismissed = _notesDismissed.Stored;
+
+        FollowAppearance();
+
+        // A scan of a full drive takes long enough that throwing it away on a trip to Settings and
+        // back would be its own defect.
+        NavigationCacheMode = NavigationCacheMode.Required;
+
+        // An elevated replacement opens straight here, and is pointed where the instance it replaced
+        // was pointed once its drives have been read, as it is first shown (OnNavigatedTo).
+        _resuming = ElevatedRelaunch.Requested as ExploreRequest;
+    }
+
+    /// <summary>Put the highlight back on the rows each time the view-model gives the list new ones.</summary>
+    private void FollowRows()
+    {
+        // The Files layout's rows arrive on their own, after a search rather than with a redraw, so
+        // the highlight is put back on them the way a redraw puts it back on the folder's rows.
+        ViewModel.Files.Changed += (_, _) =>
+        {
+            ShowSelectedRows();
+            _guard.Settle();
+        };
+
+        ViewModel.ViewChanged += (_, _) =>
+        {
+            ShowCurrentNode();
+
+            // The rows changed rather than the selection, so this is the other direction of the same
+            // agreement: the highlight goes back onto whichever of the new rows the selection still
+            // names. ShowCurrentNode has already put the map's outlines on the new drawing.
+            ShowSelectedRows();
+
+            // Whatever the list reports from here until the user touches it again is the list's own
+            // doing, however long it takes to arrive. See ListGestures.
+            _guard.Settle();
+        };
+    }
+
+    /// <summary>
+    /// One signal, followed by both screens that show a selection. The list is not on screen while
+    /// the map is and keeps whatever was highlighted in it until something says otherwise, and the
+    /// map draws an outline round what was picked, so a change reaching only one of them is a Delete
+    /// pointed at something the other one is still showing. Here rather than at each call site,
+    /// because the callers are five and growing: a map click, a row click, a navigation, a snapshot
+    /// carried over mid-scan, and the end of a removal.
+    /// </summary>
+    private void FollowSelection() =>
         ViewModel.Selection.PropertyChanged += (_, changed) =>
         {
             if (changed.PropertyName == nameof(ExploreSelection.Nodes))
@@ -155,37 +197,30 @@ public sealed partial class ExplorePage : Page
             }
         };
 
-        Map.Hovered += (_, hit) => ViewModel.Hover(hit);
-        Map.Activated += (_, node) => ViewModel.Descend(node);
-        Map.Ascending += (_, _) => Invoke(ViewModel.AscendCommand);
-        Map.Facts = ViewModel.ShapeFacts;
+    /// <summary>The map's wiring every page shares (<see cref="MapWiring"/>), and what only Explore's map does.</summary>
+    private void WireMap()
+    {
+        MapWiring.Attach(
+            Map,
+            ViewModel,
+            new DrawnSetting<bool>(
+                App.Preferences,
+                current => current.ExploreOverviewHidden,
+                (current, hidden) => current with { ExploreOverviewHidden = hidden },
+                hidden => Map.OverviewHidden = hidden));
+
         Map.Removal = ViewModel.ShapeRemoval;
         Map.ContrastChanged += (_, _) => ViewModel.MapInContrast = Map.Contrasted;
         Map.ZoomingIn += (_, from) => ViewModel.Zoomed(from);
         Map.ViewportChanged += (_, _) => ViewModel.ViewportChanged();
-        Map.Picked += (_, node) => ViewModel.Selection.Select(node is { } picked ? [picked] : []);
-        Map.MenuRequested += OnMapMenuRequested;
 
         // A step away remembers the zoom it left, so Back comes back to it. See ExploreViewModel.Viewing.
         ViewModel.Viewing = () => Map.Viewport;
+    }
 
-        // The mouse's Back and Forward buttons from anywhere on the page, as a browser takes them.
-        // Heard past the handled flag, because a row or a button under the pointer marks the press
-        // handled on its way past. Backspace is the page's accelerator, in the XAML.
-        AddHandler(PointerReleasedEvent, new PointerEventHandler(OnPageReleased), handledEventsToo: true);
-
-        // Read once, here, and never again — the same rule the Storage page's density selector
-        // follows, and for the same reason: re-reading on every navigation undoes a choice whose
-        // write to disk failed, silently and in the same session.
-        var preferences = App.Preferences.Current;
-
-        ViewModel.NotesDismissed = preferences.ExploreNotesDismissed;
-
-        // Kept as the reader leaves it, on the overview itself.
-        Map.OverviewHidden = preferences.ExploreOverviewHidden;
-        Map.OverviewHiddenChanged += (_, _) =>
-            App.Preferences.Update(current => current with { ExploreOverviewHidden = Map.OverviewHidden });
-
+    /// <summary>Draw in the look, the colouring and the view the appearance holds, and follow the look as it changes.</summary>
+    private void FollowAppearance()
+    {
         // The look before the colouring and the view below, so the legend they build is in the
         // colours the map is drawn in. The view-model reads each picture's scheme from it.
         ViewModel.Look = _appearance.Look;
@@ -206,14 +241,6 @@ public sealed partial class ExplorePage : Page
         // built, written or not.
         ColourAs(_appearance.Colouring);
         ShowAs(_appearance.View);
-
-        // A scan of a full drive takes long enough that throwing it away on a trip to Settings and
-        // back would be its own defect.
-        NavigationCacheMode = NavigationCacheMode.Required;
-
-        // An elevated replacement opens straight here, and is pointed where the instance it replaced
-        // was pointed once its drives have been read, as it is first shown (OnNavigatedTo).
-        _resuming = ElevatedRelaunch.Requested as ExploreRequest;
     }
 
     /// <summary>
@@ -447,24 +474,15 @@ public sealed partial class ExplorePage : Page
             _rowsMargin.Right,
             _rowsMargin.Bottom + (e.NewSize.Height > 0 ? e.NewSize.Height + Notes.Margin.Bottom : 0));
 
-    /// <summary>
-    /// Put the notes away, leaving the button that brings them back.
-    ///
-    /// <para>Applied first and persisted second, on the reasoning the two selectors below give:
-    /// that order is inverted from <see cref="Shell.PreferenceService"/>'s usual one for a setting
-    /// that governs what is drawn rather than what is deleted, and a reader closing something that
-    /// is over their picture should not find it still there because a file could not be
-    /// written.</para>
-    /// </summary>
-    private void OnDismissNotes(object sender, RoutedEventArgs e) => KeepNotes(dismissed: true);
+    /// <summary>Put the notes away, leaving the button that brings them back. See <see cref="DrawnSetting{T}"/>.</summary>
+    private void OnDismissNotes(object sender, RoutedEventArgs e) => _notesDismissed.Choose(true);
 
     /// <summary>Ask for them back. The other half of <see cref="OnDismissNotes"/>.</summary>
-    private void OnShowNotes(object sender, RoutedEventArgs e) => KeepNotes(dismissed: false);
+    private void OnShowNotes(object sender, RoutedEventArgs e) => _notesDismissed.Choose(false);
 
-    private void KeepNotes(bool dismissed)
+    private void ShowNotesDismissed(bool dismissed)
     {
         ViewModel.NotesDismissed = dismissed;
-        App.Preferences.Update(current => current with { ExploreNotesDismissed = dismissed });
 
         // The button that was just pressed is the one that has gone, so focus would be left on a
         // collapsed element and the reader would have to cross the whole page to reach the other.
@@ -473,13 +491,6 @@ public sealed partial class ExplorePage : Page
         _ = (dismissed ? ShowNotes : DismissNotes).Focus(FocusState.Programmatic);
     }
 
-    /// <summary>
-    /// The view is applied first and persisted second, so it takes effect whether or not the
-    /// preferences file can be written — <see cref="Shell.PreferenceService"/>'s usual order is
-    /// inverted here on the same reasoning the Storage page gives: that order exists so a rejected
-    /// write cannot take effect for a setting governing what gets deleted, and this one governs
-    /// which picture is drawn.
-    /// </summary>
     private void OnViewSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (ViewSelector.SelectedIndex is not (>= 0 and var index) || index >= ExploreChoice.Views.Count)
@@ -487,10 +498,7 @@ public sealed partial class ExplorePage : Page
             return;
         }
 
-        var view = ExploreChoice.Views[index];
-
-        ShowAs(view);
-        App.Preferences.Update(current => current with { Explore = view });
+        _view.Choose(ExploreChoice.Views[index]);
     }
 
     /// <summary>
@@ -535,14 +543,8 @@ public sealed partial class ExplorePage : Page
         }
     }
 
-    /// <summary>Applied first and persisted second, for the reason above.</summary>
-    private void OnColourSelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        var colouring = (ExploreColouring)ColourSelector.SelectedIndex;
-
-        ColourAs(colouring);
-        App.Preferences.Update(current => current with { ExploreColours = colouring });
-    }
+    private void OnColourSelectionChanged(object sender, SelectionChangedEventArgs e) =>
+        _colouring.Choose((ExploreColouring)ColourSelector.SelectedIndex);
 
     /// <summary>Open the folder a row of the list of what grew names. See <see cref="ExploreViewModel.ShowFolder"/>.</summary>
     private void OnGrowthRowClicked(object sender, ItemClickEventArgs e)
@@ -613,164 +615,11 @@ public sealed partial class ExplorePage : Page
         }
     }
 
-    /// <summary>
-    /// Two clicks go in. A folder is descended into and a file is opened, which is what a double
-    /// click means everywhere else the user has done this.
-    ///
-    /// <para>Taken from the row the gesture landed on, not from the selection. The handler sits on
-    /// the list, whose background is hit-testable, so a double-click on the empty space below the
-    /// last row arrives here too — and reading the selection instead would open whatever was
-    /// highlighted, from a gesture that landed on nothing.</para>
-    /// </summary>
-    private void OnRowsDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
-    {
-        if (ListSelectionGuard.Row(e.OriginalSource) is not { Content: IExploreListed row })
-        {
-            return;
-        }
-
-        if (row.IsDirectory)
-        {
-            ViewModel.Descend(row.Node);
-        }
-        else if (ViewModel.Selection.OpenCommand.CanExecute(null))
-        {
-            ViewModel.Selection.OpenCommand.Execute(null);
-        }
-    }
-
-    /// <summary>
-    /// Open the menu on the row the pointer landed on, moving the selection there first when that
-    /// row is not already in it.
-    ///
-    /// <para>Moving the selection is the safety-relevant half. Without it the menu would act on
-    /// whatever was highlighted before, so a right-click on one row could delete another — which is
-    /// exactly the mistake <see cref="Deguffer.Core.Exploring.Acting.ExploreRemover"/> re-checks the
-    /// policy to survive, and it should not be made here in the first place.</para>
-    ///
-    /// <para>Subscribed in the constructor rather than declared in XAML, and shown by hand rather
-    /// than attached with <c>ContextFlyout</c>. Both were measured: an attached flyout never
-    /// appears, <c>ContextRequested</c> does not arrive at all, and a plain <c>RightTapped</c>
-    /// handler does not run because a <c>ListViewItem</c> marks the gesture handled first. The
-    /// keyboard reaches all five of these actions through the accelerators instead.</para>
-    /// </summary>
-    private void OnRowsRightTapped(object sender, RightTappedRoutedEventArgs e)
-    {
-        if (ListSelectionGuard.Row(e.OriginalSource) is not { Content: IExploreListed row } container)
-        {
-            // The gesture landed on the list's own background. Clearing is what the map does on the
-            // same miss, and the alternative is a menu positioned at the pointer whose Delete is
-            // live against a row somewhere else on screen.
-            RowsList.SelectedItem = null;
-        }
-        else if (!RowsList.SelectedItems.Contains(row))
-        {
-            RowsList.SelectedItem = row;
-            container.Focus(FocusState.Programmatic);
-        }
-
-        e.Handled = Show(RowsList, e.GetPosition(RowsList));
-    }
-
-    /// <summary>
-    /// Open the same menu where the pointer is on the map. The map has already reported what is
-    /// under it, so this is about the shape the user right-clicked rather than about whatever was
-    /// picked before.
-    /// </summary>
-    private void OnMapMenuRequested(object? sender, Point point) => Show(Map, point);
-
-    private bool Show(FrameworkElement at, Point? point)
-    {
-        // The list owns the flyout, and the map borrows it. One menu rather than two, because two
-        // is how the treemap comes to offer an action the list has stopped offering.
-        if (RowsList.ContextFlyout is not MenuFlyout menu)
-        {
-            return false;
-        }
-
-        // A keyboard-raised request has no position, and placing the menu at the pointer's last
-        // location would put it wherever the mouse happens to be sitting.
-        menu.ShowAt(at, point is { } p ? new FlyoutShowOptions { Position = p } : new FlyoutShowOptions());
-
-        return true;
-    }
-
-    private void OnDeleteInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args) =>
-        args.Handled = Invoke(ViewModel.Selection.DeleteCommand);
-
-    private void OnDeletePermanentlyInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args) =>
-        args.Handled = Invoke(ViewModel.Selection.DeletePermanentlyCommand);
-
-    private void OnOpenInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args) =>
-        args.Handled = Invoke(ViewModel.Selection.OpenCommand);
-
-    private void OnPropertiesInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args) =>
-        args.Handled = Invoke(ViewModel.Selection.PropertiesCommand);
-
-    private void OnRevealInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args) =>
-        args.Handled = Invoke(ViewModel.Selection.RevealCommand);
-
-    /// <summary>
-    /// The mouse's Back or Forward button. Taken as it comes up rather than as it goes down, as
-    /// Windows takes it: the list is not then in the middle of a press, which it would read as the
-    /// reader picking a row out of the rows the step is about to replace. See
-    /// <see cref="ListGestures"/>.
-    /// </summary>
-    private void OnPageReleased(object sender, PointerRoutedEventArgs e)
-    {
-        var command = e.GetCurrentPoint(this).Properties.PointerUpdateKind switch
-        {
-            PointerUpdateKind.XButton1Released => ViewModel.GoBackCommand,
-            PointerUpdateKind.XButton2Released => ViewModel.GoForwardCommand,
-            _ => null,
-        };
-
-        if (command is not null && Invoke(command))
-        {
-            e.Handled = true;
-        }
-    }
-
-    /// <summary>
-    /// Backspace goes back, unless a box being typed in has the focus: there it deletes a character,
-    /// and leaving the accelerator unhandled passes the key on to the box.
-    /// </summary>
-    private void OnBackspaceInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
-    {
-        if (FocusManager.GetFocusedElement(XamlRoot) is TextBox or PasswordBox or RichEditBox or AutoSuggestBox)
-        {
-            return;
-        }
-
-        args.Handled = Invoke(ViewModel.GoBackCommand);
-    }
-
-    /// <summary>
-    /// Run the command if it will run, and say whether it did.
-    ///
-    /// <para>Reporting that back is what stops the key going on to the control underneath: swallowing
-    /// Enter while nothing is selected would leave the list unable to activate a row, and swallowing
-    /// Delete would make the key look broken rather than inapplicable.</para>
-    /// </summary>
-    private static bool Invoke(ICommand command)
-    {
-        if (!command.CanExecute(null))
-        {
-            return false;
-        }
-
-        command.Execute(null);
-        return true;
-    }
-
     /// <summary>Start the scan an elevated replacement was launched to run. See the constructor.</summary>
     private void StartRequestedScan(object sender, RoutedEventArgs e)
     {
         Loaded -= StartRequestedScan;
 
-        if (ViewModel.ScanCommand.CanExecute(null))
-        {
-            ViewModel.ScanCommand.Execute(null);
-        }
+        ViewModel.ScanCommand.TryExecute();
     }
 }

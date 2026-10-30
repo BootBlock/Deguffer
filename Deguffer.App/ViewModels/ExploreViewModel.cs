@@ -40,7 +40,7 @@ namespace Deguffer.App.ViewModels;
 /// navigation and the view selection all read and write the same current tree and current node, so
 /// a second type over them would share that state rather than own any of it.</para>
 /// </summary>
-public sealed partial class ExploreViewModel : ObservableObject
+public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator
 {
     private readonly IExploreScanner _scanner;
     private readonly IVolumeInventory _volumes;
@@ -1028,6 +1028,12 @@ public sealed partial class ExploreViewModel : ObservableObject
 
         Visit(tree, opened);
     }
+
+    /// <summary>Up a folder from the map, as the command goes up from a key or the button.</summary>
+    void IMapNavigator.Ascend() => AscendCommand.TryExecute();
+
+    /// <summary>A shape picked on the map is the whole selection, and a place with no shape is none.</summary>
+    void IMapNavigator.Pick(int? node) => Selection.Select(node is { } picked ? [picked] : []);
 
     [RelayCommand(CanExecute = nameof(CanAscend))]
     private void Ascend()

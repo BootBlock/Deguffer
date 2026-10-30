@@ -489,14 +489,11 @@ public sealed partial class CleanPage : Page
         // The scan the replaced window last ran: the locations it measured alone, or every location.
         if (ElevatedRelaunch.Requested is PreviewRequest { Chosen: { } chosen })
         {
-            if (ViewModel.PreviewChosenCommand.CanExecute(chosen))
-            {
-                ViewModel.PreviewChosenCommand.Execute(chosen);
-            }
+            ViewModel.PreviewChosenCommand.TryExecute(chosen);
         }
-        else if (ViewModel.PreviewCommand.CanExecute(null))
+        else
         {
-            ViewModel.PreviewCommand.Execute(null);
+            ViewModel.PreviewCommand.TryExecute();
         }
     }
 }

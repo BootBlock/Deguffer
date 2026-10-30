@@ -21,7 +21,7 @@ namespace Deguffer.App.ViewModels;
 /// <para>The page is pointed at one node of one tree, as Explore's is, and everything on screen is
 /// rebuilt from that pair: the headline, the rows, the trail and the picture.</para>
 /// </summary>
-public sealed partial class MemoryViewModel : ObservableObject
+public sealed partial class MemoryViewModel : ObservableObject, IMapNavigator
 {
     private readonly MemoryFeed _feed;
 
@@ -224,6 +224,9 @@ public sealed partial class MemoryViewModel : ObservableObject
         ReferenceEquals(tree, Tree) && Tree is { } reading && reading.Holds(node)
             ? new MapShapeFacts(MemoryText.Name(reading, node), MemoryText.Kind(reading, node), MemoryPlace.Inside(reading, node) is not null)
             : null;
+
+    /// <summary>A shape picked on the map is the one program or part picked, and a place with no shape is none.</summary>
+    void IMapNavigator.Pick(int? node) => Selection.Select(node);
 
     public void Ascend()
     {
