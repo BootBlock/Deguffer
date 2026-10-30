@@ -36,10 +36,10 @@ public sealed class ExploreClockTests : IDisposable
         var tree = builder.Build(ExploreChildOrder.BySize);
         var page = _explore.Page();
 
-        page.ScopeTo(root);
+        page.Targeting.ScopeTo(root);
         await _explore.ScanAsync(page, ExploreScan.Fast(tree));
 
-        var row = Assert.Single(page.Rows);
+        var row = Assert.Single(page.Listing.Rows);
         Assert.Equal("3 days ago", row.AgeLabel);
 
         page.Hover(new ExploreHit(row.Node, 10));

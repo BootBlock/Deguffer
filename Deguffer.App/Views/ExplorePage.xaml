@@ -10,15 +10,6 @@
     Background="Transparent"
     KeyboardAcceleratorPlacementMode="Hidden">
 
-    <!--
-        Backspace goes back, as Alt+Left does, unless a box being typed in has it. An accelerator
-        rather than a KeyDown handler, because a click on a map that cannot zoom focuses nothing and
-        a key then reaches no element to bubble from; an accelerator is heard whatever holds the focus.
-    -->
-    <Page.KeyboardAccelerators>
-        <KeyboardAccelerator Key="Back" Invoked="OnBackspaceInvoked" />
-    </Page.KeyboardAccelerators>
-
     <Page.Resources>
         <!--
             A row of the List layout: one child of the folder on screen. The list is shared with the
@@ -189,8 +180,8 @@
                       MinWidth="88"
                       Header="Drive"
                       IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
-                      ItemsSource="{x:Bind ViewModel.Drives}"
-                      SelectedItem="{x:Bind ViewModel.SelectedDrive, Mode=TwoWay}"
+                      ItemsSource="{x:Bind ViewModel.Targeting.Drives}"
+                      SelectedItem="{x:Bind ViewModel.Targeting.SelectedDrive, Mode=TwoWay}"
                       ItemTemplateSelector="{StaticResource DriveEntry}"
                       DropDownOpened="OnDriveListOpened"
                       AutomationProperties.Name="Drive to scan" />
@@ -224,7 +215,7 @@
                   ColumnSpacing="6"
                   VerticalAlignment="Bottom"
                   ColumnDefinitions="Auto,*,Auto"
-                  Visibility="{x:Bind ViewModel.IsScopedToFolder, Mode=OneWay}">
+                  Visibility="{x:Bind ViewModel.Targeting.IsScopedToFolder, Mode=OneWay}">
                 <FontIcon Grid.Column="0"
                           Glyph="&#xE8B7;"
                           FontSize="14"
@@ -232,16 +223,16 @@
                           AutomationProperties.AccessibilityView="Raw" />
 
                 <TextBlock Grid.Column="1"
-                           Text="{x:Bind ViewModel.ScopeFolder, Mode=OneWay}"
+                           Text="{x:Bind ViewModel.Targeting.ScopeFolder, Mode=OneWay}"
                            VerticalAlignment="Center"
                            TextTrimming="CharacterEllipsis"
-                           ToolTipService.ToolTip="{x:Bind ViewModel.ScopeFolder, Mode=OneWay}" />
+                           ToolTipService.ToolTip="{x:Bind ViewModel.Targeting.ScopeFolder, Mode=OneWay}" />
 
                 <!-- This clears the folder; it does not start anything. The accessible name says
                      so, because it is the only thing a screen reader announces. -->
                 <Button Grid.Column="2"
                         Content="Whole drive"
-                        Command="{x:Bind ViewModel.ScanWholeDriveCommand}"
+                        Command="{x:Bind ViewModel.Targeting.ScanWholeDriveCommand}"
                         ToolTipService.ToolTip="Clear the folder, so the next scan covers the whole drive"
                         AutomationProperties.Name="Clear the folder" />
             </Grid>
@@ -251,9 +242,9 @@
                  not help. -->
             <Button Grid.Column="5"
                     VerticalAlignment="Bottom"
-                    Content="{x:Bind ViewModel.ElevateLabel, Mode=OneWay}"
-                    Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
-                    Command="{x:Bind ViewModel.ElevateAndRescanCommand}" />
+                    Content="{x:Bind ViewModel.Elevation.ElevateLabel, Mode=OneWay}"
+                    Visibility="{x:Bind ViewModel.Elevation.CanElevate, Mode=OneWay}"
+                    Command="{x:Bind ViewModel.Elevation.ElevateAndRescanCommand}" />
 
             <!-- Mapped to ExploreView by ExploreChoice.Views, so the order here is the order of that
                  list. The three pictures come before the lists because that is the order they are
@@ -318,15 +309,15 @@
 
             Back and Forward retrace where you have been, as a browser's do, which is not the same
             as up: a folder opened from the list of what grew is several levels from the one before
-            it. The mouse's own Back and Forward buttons reach them from anywhere on the page (see
-            ExplorePage's constructor), and Backspace through the page's accelerator above; Alt+Left
-            and Alt+Right are here, as in a browser.
+            it. The mouse's own Back and Forward buttons reach them from anywhere on the page, and
+            Backspace through the page's accelerator (both in ExploreInput); Alt+Left and Alt+Right
+            are here, as in a browser.
         -->
         <Grid Grid.Row="2" ColumnSpacing="8" ColumnDefinitions="Auto,*,Auto"
               Visibility="{x:Bind ViewModel.HasTree, Mode=OneWay}">
             <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
                 <Button Padding="8,4"
-                        Command="{x:Bind ViewModel.GoBackCommand}"
+                        Command="{x:Bind ViewModel.Visiting.GoBackCommand}"
                         KeyboardAcceleratorPlacementMode="Hidden"
                         ToolTipService.ToolTip="Back (Alt+Left, Backspace, or the mouse's Back button)"
                         AutomationProperties.Name="Back">
@@ -337,7 +328,7 @@
                 </Button>
 
                 <Button Padding="8,4"
-                        Command="{x:Bind ViewModel.GoForwardCommand}"
+                        Command="{x:Bind ViewModel.Visiting.GoForwardCommand}"
                         KeyboardAcceleratorPlacementMode="Hidden"
                         ToolTipService.ToolTip="Forward (Alt+Right, or the mouse's Forward button)"
                         AutomationProperties.Name="Forward">
@@ -355,7 +346,7 @@
                 </Button>
             </StackPanel>
 
-            <ItemsControl Grid.Column="1" ItemsSource="{x:Bind ViewModel.Trail}" VerticalAlignment="Center">
+            <ItemsControl Grid.Column="1" ItemsSource="{x:Bind ViewModel.Listing.Trail}" VerticalAlignment="Center">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <StackPanel Orientation="Horizontal" />
@@ -494,14 +485,6 @@
                             </ToolTip.ContentTemplate>
                         </ToolTip>
                     </ToolTipService.ToolTip>
-
-                    <controls:ExploreMap.KeyboardAccelerators>
-                        <KeyboardAccelerator Key="Delete" Invoked="OnDeleteInvoked" />
-                        <KeyboardAccelerator Key="Delete" Modifiers="Shift" Invoked="OnDeletePermanentlyInvoked" />
-                        <KeyboardAccelerator Key="Enter" Invoked="OnOpenInvoked" />
-                        <KeyboardAccelerator Key="Enter" Modifiers="Menu" Invoked="OnPropertiesInvoked" />
-                        <KeyboardAccelerator Key="Enter" Modifiers="Control" Invoked="OnRevealInvoked" />
-                    </controls:ExploreMap.KeyboardAccelerators>
                 </controls:ExploreMap>
 
                 <!--
@@ -514,16 +497,15 @@
                           Visibility="Collapsed"
                           SelectionMode="Extended"
                           KeyboardAcceleratorPlacementMode="Hidden"
-                          SelectionChanged="OnRowSelectionChanged"
-                          DoubleTapped="OnRowsDoubleTapped">
+                          SelectionChanged="OnRowSelectionChanged">
                     <ListView.ContextFlyout>
                         <!--
                         One menu, opened by hand from the list and from the map. Two things forced
                         that, both measured rather than reasoned about: an attached ContextFlyout on
                         this ListView never appears, and neither ContextRequested nor RightTapped
                         reaches an ordinary handler on it, because a ListViewItem marks the gesture
-                        handled on its way past. The page subscribes past that in code, which is why
-                        no right-click handler is declared here.
+                        handled on its way past. ExploreInput subscribes past that in code, which is
+                        why no right-click handler is declared here.
 
                         It is still declared here, and not as a page resource, because that is what
                         gives it a lifetime: a StaticResource flyout is built on first use, and the
@@ -537,12 +519,12 @@
                         out by hand: three that change nothing, and a removal that goes to the
                         Recycle Bin unless the user asks for the other one by name.
 
-                        The accelerators are declared on the two surfaces rather than here, because a
-                        flyout item's accelerator only fires while the flyout is open — which is
-                        exactly when the keyboard is not what the user is reaching for. These carry
+                        ExploreInput puts the accelerators on the two surfaces rather than here,
+                        because a flyout item's accelerator only fires while the flyout is open — which
+                        is exactly when the keyboard is not what the user is reaching for. These carry
                         the text so the menu still teaches them.
                     -->
-                    <MenuFlyout>
+                    <MenuFlyout x:Name="RowsMenu">
                         <MenuFlyoutItem Text="Open"
                                         Command="{x:Bind ViewModel.Selection.OpenCommand}"
                                         KeyboardAcceleratorTextOverride="Enter">
@@ -595,14 +577,6 @@
                         </MenuFlyoutItem>
                     </MenuFlyout>
                     </ListView.ContextFlyout>
-
-                    <ListView.KeyboardAccelerators>
-                        <KeyboardAccelerator Key="Delete" Invoked="OnDeleteInvoked" />
-                        <KeyboardAccelerator Key="Delete" Modifiers="Shift" Invoked="OnDeletePermanentlyInvoked" />
-                        <KeyboardAccelerator Key="Enter" Invoked="OnOpenInvoked" />
-                        <KeyboardAccelerator Key="Enter" Modifiers="Menu" Invoked="OnPropertiesInvoked" />
-                        <KeyboardAccelerator Key="Enter" Modifiers="Control" Invoked="OnRevealInvoked" />
-                    </ListView.KeyboardAccelerators>
                 </ListView>
 
                 <!-- The empty state. A large blank card reads as a screen that has failed rather
@@ -677,7 +651,7 @@
                         picture rather than part of it, at some cost to the contrast the opaque ground
                         below was there to give (§6.5).
                     -->
-                    <Grid Opacity="0.75" Visibility="{x:Bind ViewModel.ShowsNotes, Mode=OneWay}">
+                    <Grid Opacity="0.75" Visibility="{x:Bind ViewModel.Notes.ShowsPanel, Mode=OneWay}">
                         <Grid.Resources>
                             <!--
                                 The banner is one surface, so nothing inside it paints a second one.
@@ -779,11 +753,11 @@
 
                                 <!-- §5.5: the fallback must be observable, not inferred from how long the scan
                                      took. -->
-                                <InfoBar IsOpen="{x:Bind ViewModel.HasRouteNote, Mode=OneWay}"
-                                         Visibility="{x:Bind ViewModel.HasRouteNote, Mode=OneWay}"
+                                <InfoBar IsOpen="{x:Bind ViewModel.Notes.HasRouteNote, Mode=OneWay}"
+                                         Visibility="{x:Bind ViewModel.Notes.HasRouteNote, Mode=OneWay}"
                                          IsClosable="False"
                                          Severity="Informational"
-                                         Message="{x:Bind ViewModel.RouteNote, Mode=OneWay}" />
+                                         Message="{x:Bind ViewModel.Notes.RouteNote, Mode=OneWay}" />
                             </StackPanel>
                         </Border>
 
@@ -836,16 +810,16 @@
                             CornerRadius="16"
                             Opacity="0.5"
                             Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
-                            Visibility="{x:Bind ViewModel.ShowsNotesButton, Mode=OneWay}">
+                            Visibility="{x:Bind ViewModel.Notes.ShowsButton, Mode=OneWay}">
                         <Button x:Name="ShowNotes"
                                 Width="32"
                                 Height="32"
                                 Padding="0"
                                 CornerRadius="16"
                                 Click="OnShowNotes"
-                                ToolTipService.ToolTip="{x:Bind ViewModel.NotesButtonLabel, Mode=OneWay}"
-                                AutomationProperties.Name="{x:Bind ViewModel.NotesButtonLabel, Mode=OneWay}">
-                            <FontIcon Glyph="{x:Bind ViewModel.NotesButtonGlyph, Mode=OneWay}" FontSize="14" />
+                                ToolTipService.ToolTip="{x:Bind ViewModel.Notes.ButtonLabel, Mode=OneWay}"
+                                AutomationProperties.Name="{x:Bind ViewModel.Notes.ButtonLabel, Mode=OneWay}">
+                            <FontIcon Glyph="{x:Bind ViewModel.Notes.ButtonGlyph, Mode=OneWay}" FontSize="14" />
                         </Button>
                     </Border>
                 </Grid>

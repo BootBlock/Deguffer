@@ -41,12 +41,12 @@ public sealed class ExploreViewModelTests : IDisposable
 
         var page = _explore.Page();
 
-        Assert.Equal(@"C:\", page.SelectedDrive?.RootPath);
-        Assert.Null(page.ScopeFolder);
+        Assert.Equal(@"C:\", page.Targeting.SelectedDrive?.RootPath);
+        Assert.Null(page.Targeting.ScopeFolder);
         Assert.Equal(ScanPrompt, page.Status.Sentence);
         Assert.True(page.ScanCommand.CanExecute(null));
-        Assert.True(page.CanElevate);
-        Assert.Equal(ElevationOffer.Label(hasScanned: false), page.ElevateLabel);
+        Assert.True(page.Elevation.CanElevate);
+        Assert.Equal(ElevationOffer.Label(hasScanned: false), page.Elevation.ElevateLabel);
         Assert.Empty(page.Legend);
         Assert.Empty(_explore.Relaunches);
     }
@@ -56,7 +56,7 @@ public sealed class ExploreViewModelTests : IDisposable
     {
         _explore.Volumes.With(@"C:\");
 
-        Assert.False(_explore.Page(isElevated: true).CanElevate);
+        Assert.False(_explore.Page(isElevated: true).Elevation.CanElevate);
     }
 
     /// <summary>
@@ -70,16 +70,16 @@ public sealed class ExploreViewModelTests : IDisposable
         _explore.Volumes.With(@"C:\");
         var page = _explore.Page();
         var raised = 0;
-        page.ElevateAndRescanCommand.CanExecuteChanged += (_, _) => raised++;
+        page.Elevation.ElevateAndRescanCommand.CanExecuteChanged += (_, _) => raised++;
 
         var clean = _explore.Running.Begin(RunningAction.StorageClean);
 
-        Assert.False(page.ElevateAndRescanCommand.CanExecute(null));
+        Assert.False(page.Elevation.ElevateAndRescanCommand.CanExecute(null));
         Assert.True(page.ScanCommand.CanExecute(null));
 
         clean.Dispose();
 
-        Assert.True(page.ElevateAndRescanCommand.CanExecute(null));
+        Assert.True(page.Elevation.ElevateAndRescanCommand.CanExecute(null));
         Assert.Equal(2, raised);
     }
 
@@ -94,7 +94,7 @@ public sealed class ExploreViewModelTests : IDisposable
 
         var page = _explore.Page();
 
-        Assert.Equal(@"G:\", page.SelectedDrive?.RootPath);
+        Assert.Equal(@"G:\", page.Targeting.SelectedDrive?.RootPath);
         Assert.Equal(DriveChoice.RemoteStorageRefusal, page.Status.Sentence);
         Assert.False(page.ScanCommand.CanExecute(null));
     }
@@ -117,15 +117,15 @@ public sealed class ExploreViewModelTests : IDisposable
 
         await _explore.ScanAsync(page, ExploreScan.Fast(tree));
 
-        page.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        page.Notes.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
         page.Selection.Select([Child(tree, "kept")]);
 
         await Eventually.HoldsAsync(() => page.Selection.Note == "Kept for a reason.", "the refusal stated");
-        Assert.True(page.ShowsNotes);
+        Assert.True(page.Notes.ShowsPanel);
 
-        // The notes are the selection's as much as the page's, and the card follows the page.
-        Assert.Contains(nameof(ExploreViewModel.ShowsNotes), raised);
-        Assert.Contains(nameof(ExploreViewModel.ShowsNotesButton), raised);
+        // The notes are the selection's as much as the page's, and the card follows the selection.
+        Assert.Contains(nameof(ExploreNoteCard.ShowsPanel), raised);
+        Assert.Contains(nameof(ExploreNoteCard.ShowsButton), raised);
     });
 
     /// <summary>
@@ -138,17 +138,17 @@ public sealed class ExploreViewModelTests : IDisposable
         _explore.Volumes.With(@"C:\").With(@"D:\");
         var page = _explore.Page();
 
-        page.ScopeTo(@"C:\Users\testuser");
+        page.Targeting.ScopeTo(@"C:\Users\testuser");
         await _explore.ScanAsync(page, ExploreScan.Fast(new ExploreTreeBuilder(@"C:\Users\testuser").Build(ExploreChildOrder.BySize)));
 
-        Assert.False(page.CanElevate);
-        Assert.Equal(ElevationOffer.Label(hasScanned: true), page.ElevateLabel);
+        Assert.False(page.Elevation.CanElevate);
+        Assert.Equal(ElevationOffer.Label(hasScanned: true), page.Elevation.ElevateLabel);
 
-        page.SelectedDrive = page.Drives.Single(drive => drive.RootPath == @"D:\");
+        page.Targeting.SelectedDrive = page.Targeting.Drives.Single(drive => drive.RootPath == @"D:\");
 
-        Assert.Null(page.ScopeFolder);
-        Assert.True(page.CanElevate);
-        Assert.Equal(ElevationOffer.Label(hasScanned: false), page.ElevateLabel);
+        Assert.Null(page.Targeting.ScopeFolder);
+        Assert.True(page.Elevation.CanElevate);
+        Assert.Equal(ElevationOffer.Label(hasScanned: false), page.Elevation.ElevateLabel);
     });
 
     [Fact]
@@ -157,11 +157,11 @@ public sealed class ExploreViewModelTests : IDisposable
         _explore.Volumes.With(@"C:\").With(@"D:\");
         var page = _explore.Page();
 
-        page.ScopeTo(@"D:\Photos");
+        page.Targeting.ScopeTo(@"D:\Photos");
 
-        Assert.Equal(@"D:\", page.SelectedDrive?.RootPath);
-        Assert.Equal(@"D:\Photos", page.ScopeFolder);
-        Assert.True(page.IsScopedToFolder);
+        Assert.Equal(@"D:\", page.Targeting.SelectedDrive?.RootPath);
+        Assert.Equal(@"D:\Photos", page.Targeting.ScopeFolder);
+        Assert.True(page.Targeting.IsScopedToFolder);
     }
 
     /// <summary>
@@ -174,17 +174,17 @@ public sealed class ExploreViewModelTests : IDisposable
     {
         _explore.Volumes.With(@"C:\").With(@"D:\");
         var page = _explore.Page();
-        page.ScopeTo(@"D:\Photos");
+        page.Targeting.ScopeTo(@"D:\Photos");
 
-        page.ScopeTo(string.Empty);
+        page.Targeting.ScopeTo(string.Empty);
 
-        Assert.Equal(@"D:\", page.SelectedDrive?.RootPath);
-        Assert.Equal(@"D:\Photos", page.ScopeFolder);
+        Assert.Equal(@"D:\", page.Targeting.SelectedDrive?.RootPath);
+        Assert.Equal(@"D:\Photos", page.Targeting.ScopeFolder);
         Assert.Equal(PickedFolder.NotOnDisk, page.Status.Sentence);
 
-        page.ScopeTo(@"C:\Users\testuser");
+        page.Targeting.ScopeTo(@"C:\Users\testuser");
 
-        Assert.Equal(@"C:\Users\testuser", page.ScopeFolder);
+        Assert.Equal(@"C:\Users\testuser", page.Targeting.ScopeFolder);
         Assert.Equal(ScanPrompt, page.Status.Sentence);
     }
 
@@ -197,14 +197,14 @@ public sealed class ExploreViewModelTests : IDisposable
     {
         _explore.Volumes.With(@"C:\").With(@"C:\Cloud\", features: VolumeFeatures.RemoteStorage);
         var page = _explore.Page();
-        page.ScopeTo(@"C:\Cloud\Photos");
+        page.Targeting.ScopeTo(@"C:\Cloud\Photos");
 
-        page.ScopeTo(string.Empty);
+        page.Targeting.ScopeTo(string.Empty);
 
         Assert.Equal($"{PickedFolder.NotOnDisk} {DriveChoice.RemoteStorageRefusal}", page.Status.Sentence);
         Assert.False(page.ScanCommand.CanExecute(null));
 
-        page.ScopeTo(@"C:\Users\testuser");
+        page.Targeting.ScopeTo(@"C:\Users\testuser");
 
         Assert.Equal(ScanPrompt, page.Status.Sentence);
     }
@@ -219,19 +219,19 @@ public sealed class ExploreViewModelTests : IDisposable
         _explore.Volumes.With(@"C:\").With(@"C:\Cloud\", features: VolumeFeatures.RemoteStorage);
         var page = _explore.Page();
 
-        page.ScopeTo(@"C:\Cloud\Photos");
+        page.Targeting.ScopeTo(@"C:\Cloud\Photos");
 
         Assert.Equal(DriveChoice.RemoteStorageRefusal, page.Status.Sentence);
         Assert.False(page.ScanCommand.CanExecute(null));
 
-        page.ScopeTo(@"C:\Users\testuser");
+        page.Targeting.ScopeTo(@"C:\Users\testuser");
 
         Assert.Equal(ScanPrompt, page.Status.Sentence);
         Assert.True(page.ScanCommand.CanExecute(null));
 
-        page.ScopeTo(@"C:\Cloud\Photos");
+        page.Targeting.ScopeTo(@"C:\Cloud\Photos");
         page.Status.Say(StatusLine.Said("Something another part of the page said."));
-        page.ScopeTo(@"C:\Users\testuser");
+        page.Targeting.ScopeTo(@"C:\Users\testuser");
 
         Assert.Equal("Something another part of the page said.", page.Status.Sentence);
     }
@@ -247,12 +247,12 @@ public sealed class ExploreViewModelTests : IDisposable
         _explore.Volumes.With(@"C:\").With(@"D:\");
         var page = _explore.Page();
 
-        Assert.False(page.PointAt(@"E:\", null));
-        Assert.Equal(@"C:\", page.SelectedDrive?.RootPath);
+        Assert.False(page.Targeting.PointAt(@"E:\", null));
+        Assert.Equal(@"C:\", page.Targeting.SelectedDrive?.RootPath);
 
-        Assert.True(page.PointAt(@"D:\", @"D:\Photos"));
-        Assert.Equal(@"D:\", page.SelectedDrive?.RootPath);
-        Assert.Equal(@"D:\Photos", page.ScopeFolder);
+        Assert.True(page.Targeting.PointAt(@"D:\", @"D:\Photos"));
+        Assert.Equal(@"D:\", page.Targeting.SelectedDrive?.RootPath);
+        Assert.Equal(@"D:\Photos", page.Targeting.ScopeFolder);
     }
 
     /// <summary>
@@ -266,8 +266,8 @@ public sealed class ExploreViewModelTests : IDisposable
         _explore.Volumes.With(@"C:\").With(@"D:\");
         var page = _explore.Built(isElevated: true);
 
-        Assert.True(await page.ShownAsync(new ExploreRequest(@"D:\", null), CancellationToken.None));
-        Assert.Equal(@"D:\", page.SelectedDrive?.RootPath);
+        Assert.True(await page.Targeting.ShownAsync(new ExploreRequest(@"D:\", null), CancellationToken.None));
+        Assert.Equal(@"D:\", page.Targeting.SelectedDrive?.RootPath);
         Assert.True(page.ScanCommand.CanExecute(null));
     }
 
@@ -281,13 +281,13 @@ public sealed class ExploreViewModelTests : IDisposable
         _explore.Volumes.With(@"C:\").With(@"E:\");
         var page = _explore.Page();
 
-        page.ScopeTo(@"E:\Photos");
+        page.Targeting.ScopeTo(@"E:\Photos");
         _explore.Volumes.Without(@"E:\");
         _explore.Time.Advance(DriveList.FreshFor);
-        await page.RefreshDrivesAsync(CancellationToken.None);
+        await page.Targeting.RefreshDrivesAsync(CancellationToken.None);
 
-        Assert.Equal(@"C:\", page.SelectedDrive?.RootPath);
-        Assert.Null(page.ScopeFolder);
+        Assert.Equal(@"C:\", page.Targeting.SelectedDrive?.RootPath);
+        Assert.Null(page.Targeting.ScopeFolder);
     }
 
     /// <summary>
@@ -301,21 +301,21 @@ public sealed class ExploreViewModelTests : IDisposable
         _explore.Volumes.With(@"C:\").With(@"D:\");
         var page = _explore.Page();
 
-        page.ScopeTo(@"C:\Users\testuser");
+        page.Targeting.ScopeTo(@"C:\Users\testuser");
 
         var release = _explore.Volumes.HoldRefreshes();
         _explore.Time.Advance(DriveList.FreshFor);
-        var reading = page.RefreshDrivesAsync(CancellationToken.None);
+        var reading = page.Targeting.RefreshDrivesAsync(CancellationToken.None);
 
-        page.SelectedDrive = page.Drives.Single(drive => drive.RootPath == @"D:\");
+        page.Targeting.SelectedDrive = page.Targeting.Drives.Single(drive => drive.RootPath == @"D:\");
 
         Assert.False(reading.IsCompleted, "The reading was meant to be under way when the drive was picked.");
 
         release();
         await reading;
 
-        Assert.Equal(@"D:\", page.SelectedDrive?.RootPath);
-        Assert.Null(page.ScopeFolder);
+        Assert.Equal(@"D:\", page.Targeting.SelectedDrive?.RootPath);
+        Assert.Null(page.Targeting.ScopeFolder);
     });
 
     /// <summary>
@@ -329,20 +329,20 @@ public sealed class ExploreViewModelTests : IDisposable
         _explore.Volumes.With(@"C:\");
         var page = _explore.Page();
 
-        page.ScopeTo(@"C:\Users\testuser");
+        page.Targeting.ScopeTo(@"C:\Users\testuser");
         await _explore.ScanAsync(page, ExploreScan.Fast(new ExploreTreeBuilder(@"C:\Users\testuser").Build(ExploreChildOrder.BySize)));
 
         // What a ComboBox does when the collection under its selected item changes.
-        page.Drives.CollectionChanged += (_, _) => page.SelectedDrive = null;
+        page.Targeting.Drives.CollectionChanged += (_, _) => page.Targeting.SelectedDrive = null;
 
         _explore.Volumes.With(@"E:\");
         _explore.Time.Advance(DriveList.FreshFor);
-        await page.RefreshDrivesAsync(CancellationToken.None);
+        await page.Targeting.RefreshDrivesAsync(CancellationToken.None);
 
-        Assert.Equal(@"C:\", page.SelectedDrive?.RootPath);
-        Assert.Equal(@"C:\Users\testuser", page.ScopeFolder);
-        Assert.False(page.CanElevate);
-        Assert.Equal(ElevationOffer.Label(hasScanned: true), page.ElevateLabel);
+        Assert.Equal(@"C:\", page.Targeting.SelectedDrive?.RootPath);
+        Assert.Equal(@"C:\Users\testuser", page.Targeting.ScopeFolder);
+        Assert.False(page.Elevation.CanElevate);
+        Assert.Equal(ElevationOffer.Label(hasScanned: true), page.Elevation.ElevateLabel);
     });
 
     /// <summary>
@@ -355,20 +355,20 @@ public sealed class ExploreViewModelTests : IDisposable
     {
         var page = _explore.Page();
 
-        Assert.True(page.PointAt(null, @"C:\Users\testuser"));
-        Assert.Null(page.SelectedDrive);
+        Assert.True(page.Targeting.PointAt(null, @"C:\Users\testuser"));
+        Assert.Null(page.Targeting.SelectedDrive);
 
         await _explore.ScanAsync(page, ExploreScan.Fast(new ExploreTreeBuilder(@"C:\Users\testuser").Build(ExploreChildOrder.BySize)));
 
-        Assert.False(page.CanElevate);
+        Assert.False(page.Elevation.CanElevate);
 
         _explore.Volumes.With(@"C:\");
         _explore.Time.Advance(DriveList.FreshFor);
-        await page.RefreshDrivesAsync(CancellationToken.None);
+        await page.Targeting.RefreshDrivesAsync(CancellationToken.None);
 
-        Assert.Equal(@"C:\", page.SelectedDrive?.RootPath);
-        Assert.Equal(@"C:\Users\testuser", page.ScopeFolder);
-        Assert.False(page.CanElevate);
+        Assert.Equal(@"C:\", page.Targeting.SelectedDrive?.RootPath);
+        Assert.Equal(@"C:\Users\testuser", page.Targeting.ScopeFolder);
+        Assert.False(page.Elevation.CanElevate);
     });
 
     /// <summary>
@@ -389,7 +389,7 @@ public sealed class ExploreViewModelTests : IDisposable
         var scan = ExploreScan.Walked(builder.Build(ExploreChildOrder.BySize), FallbackReason.NotElevated);
         var running = page.ScanCommand.ExecuteAsync(null);
 
-        page.ScopeTo(@"C:\Users\testuser");
+        page.Targeting.ScopeTo(@"C:\Users\testuser");
         _explore.Scanner.Current.Finish(scan);
         await running;
 
@@ -397,8 +397,8 @@ public sealed class ExploreViewModelTests : IDisposable
         Assert.Equal(ExploreStatusText.Finished(scan, page.Volume, scoped: false), page.Status.Sentence);
         Assert.Contains("Some of this drive", page.Status.Sentence);
         Assert.Contains(ExploreUnaccountedNote.Overcount(page.Volume, 7_000, ScanStrategy.ParallelEnumeration)!, page.Status.Sentence);
-        Assert.True(page.HasRouteNote);
-        Assert.True(page.CanElevate);
+        Assert.True(page.Notes.HasRouteNote);
+        Assert.True(page.Elevation.CanElevate);
     });
 
     /// <summary>
@@ -421,8 +421,8 @@ public sealed class ExploreViewModelTests : IDisposable
         await _explore.ScanAsync(page, ExploreScan.Fast(first.Build(ExploreChildOrder.BySize)));
 
         page.Selection.Select([users + 1]);
-        var windows = page.Rows.Single(row => row.Name == "Windows.bin");
-        var changes = Watch(page.Rows);
+        var windows = page.Listing.Rows.Single(row => row.Name == "Windows.bin");
+        var changes = Watch(page.Listing.Rows);
 
         var second = new ExploreTreeBuilder(@"C:\");
         var moved = second.AddChildren(ExploreTreeBuilder.RootNode, [
@@ -436,7 +436,7 @@ public sealed class ExploreViewModelTests : IDisposable
         Assert.NotEqual(users + 1, moved);
 
         Assert.Equal([moved], page.Selection.Nodes);
-        Assert.Same(windows, page.Rows.Single(row => row.Name == "Windows.bin"));
+        Assert.Same(windows, page.Listing.Rows.Single(row => row.Name == "Windows.bin"));
         Assert.Equal(moved, windows.Node);
         Assert.Equal([NotifyCollectionChangedAction.Add], changes);
     });
@@ -465,11 +465,11 @@ public sealed class ExploreViewModelTests : IDisposable
         await Task.Yield();
 
         Assert.False(page.Selection.CanAct);
-        Assert.Equal(["Users", "Windows"], page.Rows.Select(row => row.Name));
+        Assert.Equal(["Users", "Windows"], page.Listing.Rows.Select(row => row.Name));
 
         page.Selection.Select([users + 1]);
-        var windows = page.Rows.Single(row => row.Node == users + 1);
-        var changes = Watch(page.Rows);
+        var windows = page.Listing.Rows.Single(row => row.Node == users + 1);
+        var changes = Watch(page.Listing.Rows);
 
         builder.AddChildren(ExploreTreeBuilder.RootNode, [ExploreFixture.Folder("Program Files")]);
         scan.Report(new ExploreProgress(3, null, 0, builder.Build(ExploreChildOrder.ByName)));
@@ -477,7 +477,7 @@ public sealed class ExploreViewModelTests : IDisposable
 
         Assert.Equal([users + 1], page.Selection.Nodes);
         Assert.Equal([NotifyCollectionChangedAction.Add], changes);
-        Assert.Same(windows, page.Rows.Single(row => row.Node == users + 1));
+        Assert.Same(windows, page.Listing.Rows.Single(row => row.Node == users + 1));
 
         scan.Finish(ExploreScan.Fast(builder.Build(ExploreChildOrder.BySize)));
         await running;
@@ -510,8 +510,8 @@ public sealed class ExploreViewModelTests : IDisposable
         await running;
 
         Assert.Null(page.Tree);
-        Assert.Empty(page.Rows);
-        Assert.Empty(page.Trail);
+        Assert.Empty(page.Listing.Rows);
+        Assert.Empty(page.Listing.Trail);
         Assert.Equal("Scan cancelled. Nothing was measured.", page.Status.Sentence);
         Assert.False(page.IsBusy);
     });
@@ -549,7 +549,7 @@ public sealed class ExploreViewModelTests : IDisposable
     {
         _explore.Volumes.With(@"C:\").With(@"D:\");
         var page = _explore.Page();
-        page.SelectedDrive = page.Drives.Single(drive => drive.RootPath == @"D:\");
+        page.Targeting.SelectedDrive = page.Targeting.Drives.Single(drive => drive.RootPath == @"D:\");
 
         var running = page.ScanCommand.ExecuteAsync(null);
         page.ScanCancelCommand.Execute(null);
@@ -585,7 +585,7 @@ public sealed class ExploreViewModelTests : IDisposable
 
         Assert.Equal(users, page.CurrentNode);
         Assert.Empty(page.Selection.Nodes);
-        Assert.Equal(["testuser"], page.Rows.Select(row => row.Name));
+        Assert.Equal(["testuser"], page.Listing.Rows.Select(row => row.Name));
     });
 
     /// <summary>
@@ -601,11 +601,11 @@ public sealed class ExploreViewModelTests : IDisposable
         var (tree, folder) = _explore.OnDisk();
         var busy = new List<bool>();
 
-        page.ScopeTo(tree.PathOf(tree.RootNode));
+        page.Targeting.ScopeTo(tree.PathOf(tree.RootNode));
         await _explore.ScanAsync(page, ExploreScan.Fast(tree));
 
-        page.NotesDismissed = true;
-        var changes = Watch(page.Rows);
+        page.Notes.Dismissed = true;
+        var changes = Watch(page.Listing.Rows);
         page.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(ExploreViewModel.IsBusy))
@@ -618,13 +618,13 @@ public sealed class ExploreViewModelTests : IDisposable
         await page.Selection.DeleteCommand.ExecuteAsync(null);
 
         Assert.Equal([NotifyCollectionChangedAction.Remove], changes);
-        Assert.DoesNotContain(page.Rows, row => row.Node == folder);
+        Assert.DoesNotContain(page.Listing.Rows, row => row.Node == folder);
         Assert.False(page.Tree!.Holds(folder));
         Assert.Same(tree, page.Tree.Scanned);
         Assert.StartsWith("Moved 'old'", page.Status.Sentence);
         Assert.Equal([true, false], busy);
-        Assert.True(page.ShowsNotesButton);
-        Assert.Contains("One of them is a warning", page.NotesButtonLabel);
+        Assert.True(page.Notes.ShowsButton);
+        Assert.Contains("One of them is a warning", page.Notes.ButtonLabel);
 
         page.Descend(folder);
 
@@ -638,7 +638,7 @@ public sealed class ExploreViewModelTests : IDisposable
         var (rescan, again) = _explore.OnDisk();
         await _explore.ScanAsync(page, ExploreScan.Fast(rescan));
 
-        Assert.Contains(page.Rows, row => row.Node == again);
+        Assert.Contains(page.Listing.Rows, row => row.Node == again);
         Assert.Null(page.Selection.StaleNote);
     });
 
@@ -655,11 +655,11 @@ public sealed class ExploreViewModelTests : IDisposable
         var (tree, folder) = _explore.OnDisk();
         var file = tree.ChildrenOf(folder)[0];
 
-        page.ScopeTo(tree.PathOf(tree.RootNode));
+        page.Targeting.ScopeTo(tree.PathOf(tree.RootNode));
         await _explore.ScanAsync(page, ExploreScan.Fast(tree));
 
-        var old = Assert.Single(page.Rows, row => row.Node == folder);
-        var keep = Assert.Single(page.Rows, row => row.Node != folder);
+        var old = Assert.Single(page.Listing.Rows, row => row.Node == folder);
+        var keep = Assert.Single(page.Listing.Rows, row => row.Node != folder);
 
         Assert.Equal(FreeSpace.Format(10), old.SizeLabel);
 
@@ -669,7 +669,7 @@ public sealed class ExploreViewModelTests : IDisposable
         Assert.False(File.Exists(tree.PathOf(file)));
         Assert.Equal(5, page.Tree!.TotalBytes);
         Assert.Equal(tree.RootNode, page.CurrentNode);
-        Assert.Equal([keep, old], page.Rows);
+        Assert.Equal([keep, old], page.Listing.Rows);
         Assert.Equal(FreeSpace.Format(0), old.SizeLabel);
         Assert.Equal(0, old.Share);
         Assert.Equal(100, keep.Share);
@@ -693,7 +693,7 @@ public sealed class ExploreViewModelTests : IDisposable
 
         _explore.Volumes.With(Path.GetPathRoot(_explore.Temp.Path)!).With(root, totalBytes: 1_000, freeBytes: 100);
 
-        page.ScopeTo(tree.PathOf(tree.RootNode));
+        page.Targeting.ScopeTo(tree.PathOf(tree.RootNode));
         await _explore.ScanAsync(page, ExploreScan.Fast(tree));
 
         var scanned = page.Volume;
@@ -736,7 +736,7 @@ public sealed class ExploreViewModelTests : IDisposable
         var (tree, folder) = _explore.OnDisk();
         var root = tree.PathOf(tree.RootNode);
 
-        page.ScopeTo(root);
+        page.Targeting.ScopeTo(root);
         await _explore.ScanAsync(page, ExploreScan.Fast(tree));
 
         Assert.False(page.Status.HasChecks);
@@ -796,7 +796,7 @@ public sealed class ExploreViewModelTests : IDisposable
         int Named(string name) => tree.ChildrenOf(tree.RootNode).ToArray().Single(node => Path.GetFileName(tree.PathOf(node)) == name);
         var page = _explore.Page();
 
-        page.ScopeTo(root);
+        page.Targeting.ScopeTo(root);
         await _explore.ScanAsync(page, ExploreScan.Fast(tree));
 
         page.Selection.Select([Named("first")]);
@@ -824,23 +824,23 @@ public sealed class ExploreViewModelTests : IDisposable
         var page = _explore.Page();
         var raised = new List<string?>();
 
-        page.NotesDismissed = true;
+        page.Notes.Dismissed = true;
 
-        Assert.False(page.ShowsNotesButton);
+        Assert.False(page.Notes.ShowsButton);
 
         await _explore.ScanAsync(page, ExploreScan.Walked(Drive(ExploreFixture.Folder("Users")), FallbackReason.NotElevated));
 
-        Assert.True(page.ShowsNotesButton);
-        Assert.False(page.ShowsNotes);
-        Assert.DoesNotContain("warning", page.NotesButtonLabel);
+        Assert.True(page.Notes.ShowsButton);
+        Assert.False(page.Notes.ShowsPanel);
+        Assert.DoesNotContain("warning", page.Notes.ButtonLabel);
 
-        page.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
-        page.NotesDismissed = false;
+        page.Notes.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        page.Notes.Dismissed = false;
 
-        Assert.True(page.ShowsNotes);
-        Assert.False(page.ShowsNotesButton);
-        Assert.Contains(nameof(ExploreViewModel.ShowsNotes), raised);
-        Assert.Contains(nameof(ExploreViewModel.ShowsNotesButton), raised);
+        Assert.True(page.Notes.ShowsPanel);
+        Assert.False(page.Notes.ShowsButton);
+        Assert.Contains(nameof(ExploreNoteCard.ShowsPanel), raised);
+        Assert.Contains(nameof(ExploreNoteCard.ShowsButton), raised);
     });
 
     /// <summary>
@@ -1007,7 +1007,7 @@ public sealed class ExploreViewModelTests : IDisposable
         await _explore.ScanAsync(
             page, ExploreScan.Walked(Drive(ExploreFixture.File("file", 3_000)), FallbackReason.NotNtfsVolume));
 
-        Assert.Equal(refused, page.CanElevate);
+        Assert.Equal(refused, page.Elevation.CanElevate);
     });
 
     /// <summary>
@@ -1069,16 +1069,16 @@ public sealed class ExploreViewModelTests : IDisposable
         var page = _explore.Page();
         var replaced = 0;
 
-        page.ReplacedByElevatedInstance += (_, _) => replaced++;
-        page.ScopeTo(@"D:\Photos");
-        page.ElevateAndRescanCommand.Execute(null);
+        page.Elevation.ReplacedByElevatedInstance += (_, _) => replaced++;
+        page.Targeting.ScopeTo(@"D:\Photos");
+        page.Elevation.ElevateAndRescanCommand.Execute(null);
 
         Assert.Equal([new ExploreRequest(@"D:\", @"D:\Photos")], _explore.Relaunches);
         Assert.StartsWith("Deguffer is still running without administrator rights", page.Status.Sentence);
         Assert.Equal(0, replaced);
 
         _explore.RelaunchStarts = true;
-        page.ElevateAndRescanCommand.Execute(null);
+        page.Elevation.ElevateAndRescanCommand.Execute(null);
 
         Assert.Equal(1, replaced);
     }
