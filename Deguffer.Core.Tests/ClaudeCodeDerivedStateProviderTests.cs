@@ -654,11 +654,8 @@ public sealed class ClaudeCodeDerivedStateProviderTests : IDisposable
     [InlineData(false)]
     public async Task ALeftoverThatIsALinkIsNamedAndNeverOffered(bool spilledOutput)
     {
-        var outside = Path.Combine(_temp.Path, "outside-session");
-        var bystander = _claude.CreateFile(Path.Combine(outside, "tool-results", "output.txt"), 512);
-        TempDirectory.Age(bystander, Old);
-        AgeFolder(Path.GetDirectoryName(bystander)!, Old);
-        AgeFolder(outside, Old);
+        var outside = new ClaudeCodeFixture(Path.Combine(_temp.Path, "outside")).SpilledOutput(SessionA, age: Old);
+        var bystander = Path.Combine(outside, "tool-results", "output.txt");
 
         var endedLock = _claude.EditorLock(51234, processId: 4101);
 

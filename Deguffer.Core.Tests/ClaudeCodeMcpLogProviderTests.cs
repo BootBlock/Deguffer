@@ -35,9 +35,13 @@ public sealed class ClaudeCodeMcpLogProviderTests : IDisposable
     /// A server's log folder holding one run's log. Aged as a whole, the file first and the folder last,
     /// because a log folder is dated by the newest write one level down and a new file would date it now.
     /// </summary>
-    private string ServerLog(string server, string project = ProjectName, TimeSpan? age = null)
+    private string ServerLog(string server, string project = ProjectName, TimeSpan? age = null) =>
+        ServerLogIn(Project(project), server, age);
+
+    /// <summary>A server's log folder, as <see cref="ServerLog"/> makes one, in any folder.</summary>
+    private static string ServerLogIn(string parent, string server, TimeSpan? age)
     {
-        var folder = Path.Combine(Project(project), ClaudeCodeMcpLogProvider.LogFolderPrefix + server);
+        var folder = Path.Combine(parent, ClaudeCodeMcpLogProvider.LogFolderPrefix + server);
         Directory.CreateDirectory(folder);
 
         var log = Path.Combine(folder, "2026-01-01T10-00-00-000Z.jsonl");
@@ -241,12 +245,7 @@ public sealed class ClaudeCodeMcpLogProviderTests : IDisposable
         var log = ServerLog("filesystem", age: ClaudeCodeFixture.Old);
 
         var outside = Path.Combine(_temp.Path, "elsewhere");
-        var farLog = Path.Combine(outside, ClaudeCodeMcpLogProvider.LogFolderPrefix + "browser");
-        var bystander = Path.Combine(farLog, "2026-01-01T10-00-00-000Z.jsonl");
-        Directory.CreateDirectory(farLog);
-        File.WriteAllBytes(bystander, new byte[1024]);
-        TempDirectory.Age(bystander, ClaudeCodeFixture.Old);
-        ClaudeCodeFixture.AgeFolder(farLog, ClaudeCodeFixture.Old);
+        var bystander = Path.Combine(ServerLogIn(outside, "browser", ClaudeCodeFixture.Old), "2026-01-01T10-00-00-000Z.jsonl");
 
         var link = Project("C--Users-testuser-src-moved");
         SymbolicLink.ToDirectory(link, outside);
