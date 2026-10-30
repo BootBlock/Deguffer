@@ -73,7 +73,10 @@ internal static partial class ConanStoreContents
 
         if (scan.Unreadable)
         {
-            return new ConanStoreReading([], [], [], [UnreadableRoot.Note(store)], Unreadable: true);
+            return new ConanStoreReading([], [], [], [UnreadableRoot.Note(store)], Unreadable: true)
+            {
+                HeldTo = new HashSet<ConanStoreEntry> { new(LongPath.Display(store), ConanStoreEntryKind.Unreadable) },
+            };
         }
 
         foreach (var child in scan.Directories.Concat(scan.Links))
@@ -92,7 +95,7 @@ internal static partial class ConanStoreContents
             // nobody here read.
             else if (isLink && ReferenceFolder().IsMatch(child.Name))
             {
-                reading.NotConans(path);
+                reading.NotConans(path, ConanStoreEntryKind.NotConans);
             }
             else if (isLink)
             {
@@ -110,31 +113,6 @@ internal static partial class ConanStoreContents
         }
 
         return reading.Finish();
-    }
-
-    /// <summary>
-    /// <c>t</c> and <c>b</c> in <paramref name="store"/> as they are now, judged exactly as
-    /// <see cref="Read"/> judges them, for the clean to hold to <see cref="ConanStoreReading.TempAndBuilds"/>:
-    /// they are where <c>-t</c> removes by shape rather than by what the database lists.
-    /// </summary>
-    public static IReadOnlySet<ConanStoreEntry> ReadTempAndBuilds(string store, CancellationToken ct)
-    {
-        var scan = ChildDirectories.Under(store);
-
-        if (scan.Unreadable)
-        {
-            return new HashSet<ConanStoreEntry> { new(LongPath.Display(store), ConanStoreEntryKind.Unreadable) };
-        }
-
-        var reading = new ConanStoreTally();
-
-        foreach (var child in scan.Directories.Concat(scan.Links).Where(IsTempOrBuilds))
-        {
-            ct.ThrowIfCancellationRequested();
-            ReadTempOrBuilds(child, reading, ct);
-        }
-
-        return reading.Finish().TempAndBuilds;
     }
 
     private static bool IsTempOrBuilds(FileSystemInfo child) =>

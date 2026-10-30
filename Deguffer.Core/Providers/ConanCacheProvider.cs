@@ -40,7 +40,7 @@ namespace Deguffer.Core.Providers;
 /// for concurrent use, and <c>-t</c> removes every unfinished build in the store, which is exactly
 /// what a build in progress looks like. The plan offers no step while a <c>conan</c> process is
 /// running. Immediately before it starts, the step asks again, and also checks that the home, the
-/// configuration and the store's <c>t</c> and <c>b</c> are as the plan read them
+/// configuration, the store's <c>t</c> and <c>b</c> and its linked folders are as the plan read them
 /// (<see cref="ConanCleanTarget"/>), because any of them can change while the preview is on
 /// screen.</para>
 /// </summary>
@@ -296,7 +296,7 @@ public sealed class ConanCacheProvider : CleanupProviderBase
                     WhenCancelled = CancelledCommand.Finishes,
                     Estimated = measured.Total,
                     MeasuredPaths = contents.Measured,
-                    TargetCheck = new ConanCleanTarget(Inspector, ConflictingProcessNames, ResolveHome, found, contents.TempAndBuilds),
+                    TargetCheck = new ConanCleanTarget(Inspector, ConflictingProcessNames, ResolveHome, found, contents.HeldTo),
                 },
             ],
             ProtectedPaths = protectedPaths,

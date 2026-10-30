@@ -19,16 +19,18 @@ internal sealed record ConanStoreReading(
     bool Unreadable)
 {
     /// <summary>
-    /// Every entry of <c>t</c> and every folder of <c>b</c>, and how each was judged, which the clean
-    /// holds the store to when it runs (<see cref="ConanStoreContents.ReadTempAndBuilds"/>).
+    /// Every entry of <c>t</c>, every folder of <c>b</c>, and every recipe or package folder that is a
+    /// link, and how each was judged: where <c>-t</c> removes by shape, and where <c>-s</c> and
+    /// <c>-b</c> would reach through a link, rather than by what the database lists. The clean holds
+    /// the store to it when it runs, read again by <see cref="ConanStoreContents.Read"/>.
     /// </summary>
-    public IReadOnlySet<ConanStoreEntry> TempAndBuilds { get; init; } = new HashSet<ConanStoreEntry>();
+    public IReadOnlySet<ConanStoreEntry> HeldTo { get; init; } = new HashSet<ConanStoreEntry>();
 }
 
-/// <summary>An entry of <c>t</c> or <c>b</c> in Conan's store, and how it was judged.</summary>
+/// <summary>An entry of Conan's store that the clean is held to, and how it was judged.</summary>
 internal readonly record struct ConanStoreEntry(string Path, ConanStoreEntryKind Kind);
 
-/// <summary>How an entry of <c>t</c> or <c>b</c> was judged, which decides what <c>-t</c> does with it.</summary>
+/// <summary>How an entry the clean is held to was judged, which decides what the clean does with it.</summary>
 internal enum ConanStoreEntryKind
 {
     /// <summary>An export Conan started in <c>t</c>, removed with it.</summary>
@@ -62,7 +64,7 @@ internal sealed class ConanStoreTally
     private readonly List<(string Path, string Reason)> _kept = [];
     private readonly List<string> _unrecognised = [];
     private readonly List<PlanNote> _notes = [];
-    private readonly HashSet<ConanStoreEntry> _tempAndBuilds = [];
+    private readonly HashSet<ConanStoreEntry> _heldTo = [];
     private bool _unreadable;
 
     public void Removed(string path, bool isLink)
@@ -79,22 +81,19 @@ internal sealed class ConanStoreTally
 
     public void Kept(string path, string reason) => _kept.Add((path, reason));
 
-    /// <summary>Something the clean would remove that is not shown to be Conan's: protected, and it holds the clean back.</summary>
-    public void NotConans(string path)
+    /// <summary>
+    /// Something the clean would remove, or reach through, that is not shown to be Conan's: protected,
+    /// it holds the clean back, and it is part of what the clean holds the store to.
+    /// </summary>
+    public void NotConans(string path, ConanStoreEntryKind kind)
     {
         _unrecognised.Add(path);
         _kept.Add((path, NotConansReason));
-    }
-
-    /// <summary>The same, in <c>t</c> or <c>b</c>, where it is part of what the clean holds the store to.</summary>
-    public void NotConans(string path, ConanStoreEntryKind kind)
-    {
-        NotConans(path);
         Saw(path, kind);
     }
 
-    /// <summary>An entry of <c>t</c>, or a folder of <c>b</c>, and how it was judged.</summary>
-    public void Saw(string path, ConanStoreEntryKind kind) => _tempAndBuilds.Add(new ConanStoreEntry(path, kind));
+    /// <summary>An entry the clean holds the store to, and how it was judged.</summary>
+    public void Saw(string path, ConanStoreEntryKind kind) => _heldTo.Add(new ConanStoreEntry(path, kind));
 
     public void Unreadable(string path)
     {
@@ -104,6 +103,6 @@ internal sealed class ConanStoreTally
 
     public ConanStoreReading Finish() => new(_measured, _kept, _unrecognised, _notes, _unreadable)
     {
-        TempAndBuilds = _tempAndBuilds,
+        HeldTo = _heldTo,
     };
 }

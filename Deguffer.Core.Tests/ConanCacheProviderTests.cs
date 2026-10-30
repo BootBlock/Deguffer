@@ -585,13 +585,15 @@ public sealed class ConanCacheProviderTests : IDisposable
         FolderDroppedIntoBuilds,
         BuildStarted,
         BuildsUnlisted,
+        RecipeFolderLinked,
     }
 
     /// <summary>
     /// Conan works out its home and reads its configuration afresh when the clean starts it, and
-    /// <c>-t</c> removes by shape from whatever <c>t</c> and <c>b</c> hold then. So a home moved, a
-    /// configuration installed, or anything new in <c>t</c> or <c>b</c> after the preview, or a
-    /// <c>b</c> that will no longer be listed, stops the clean, and nothing is removed.
+    /// <c>-t</c> removes by shape from whatever <c>t</c> and <c>b</c> hold then, and <c>-s</c> goes
+    /// through a recipe folder that is a link. So a home moved, a configuration installed, anything new
+    /// in <c>t</c> or <c>b</c> after the preview, a <c>b</c> that will no longer be listed, or a
+    /// recipe folder swapped for a junction, stops the clean, and nothing is removed.
     /// </summary>
     [Theory]
     [InlineData(ChangeAfterPreview.HomeMoved, "Conan's home no longer works out as")]
@@ -601,6 +603,7 @@ public sealed class ConanCacheProviderTests : IDisposable
     [InlineData(ChangeAfterPreview.FolderDroppedIntoBuilds, "temporary and build folders")]
     [InlineData(ChangeAfterPreview.BuildStarted, "temporary and build folders")]
     [InlineData(ChangeAfterPreview.BuildsUnlisted, "temporary and build folders")]
+    [InlineData(ChangeAfterPreview.RecipeFolderLinked, "reach through a link")]
     public async Task DoesNotRunTheCleanWhereWhatItWouldReachChangedAfterThePreview(ChangeAfterPreview change, string why)
     {
         CreateHome(DefaultHome);
@@ -645,6 +648,14 @@ public sealed class ConanCacheProviderTests : IDisposable
 
             case ChangeAfterPreview.BuildsUnlisted:
                 denied = new DeniedDirectory(Path.Combine(Store, "b"));
+                break;
+
+            case ChangeAfterPreview.RecipeFolderLinked:
+                var recipe = Path.Combine(Store, Recipe);
+                var target = Path.Combine(_temp.Path, "elsewhere", "project");
+                survivor = Write(10, target, "s", "main.c");
+                Directory.Delete(recipe, recursive: true);
+                DirectoryLink.Create(DirectoryLinkKind.Junction, recipe, target);
                 break;
         }
 
