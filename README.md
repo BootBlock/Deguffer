@@ -29,6 +29,11 @@ Windows SmartScreen may warn you the first time you run Deguffer, and each relea
 `SHA256SUMS.txt` file you can check the download against. You can also
 [build it from source](#building).
 
+Here is the Explore page showing a drive as a treemap, with each folder's share of the space and the
+largest files inside it:
+
+![The Explore page drawing a 49 GB drive as a treemap, split into Archive, Media, Downloads and Projects folders](assets/screenshots/explore.png)
+
 ## What it does
 
 Besides Settings and About, Deguffer has six pages:
@@ -122,6 +127,11 @@ output and project caches, such as `node_modules`, `obj`, Rust's `target` and Py
 `.pytest_cache` folders, are only looked for inside the source folders you add in Settings.
 [What Deguffer cleans, and what it costs you](docs/cache-locations.md) describes most of these
 sources in more detail.
+
+After a scan, each row on the Storage page gives the location's size and safety tier, and says what
+you would lose by deleting it. Only Tier 1 rows start out selected:
+
+![The Storage page after a scan, listing rows such as the NuGet package cache and GPU shader caches with their sizes, tiers and what deleting each one costs](assets/screenshots/storage.png)
 
 <details>
 <summary><b>Tier 1: regenerable caches</b></summary>
@@ -288,6 +298,11 @@ copies: the name, the size, the last-modified time, the content, or any combinat
 Content is compared by a checksum of your choice, XXH128 by default. Checksums are remembered, so a
 second search only reads the files that have changed. You can set a location as a reference, so that
 its files are matched but never marked for removal.
+
+In this search, the "Keep the newest copy" rule has marked the older copies of each photo, and the
+part of each path that differs from the others in its group is highlighted:
+
+![The Duplicates page with a content search finished, showing a group of three identical photos with two copies marked for removal](assets/screenshots/duplicates.png)
 
 Nothing is marked when a search finishes. You mark copies yourself or with a named rule, and every
 group always keeps at least one copy that can be relied on. That means a copy on an internal drive,
