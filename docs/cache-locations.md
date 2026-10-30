@@ -5798,6 +5798,56 @@ not Tier 3, because none of it is a record of something you did.
 
 ---
 
+## Files discarded by a Windows upgrade
+
+**Tier 3 — user data.** Offered, **never pre-selected**, and confirmed by a dialog that says the
+loss is permanent.
+
+| | |
+| --- | --- |
+| **Location** | `C:\$WINDOWS.~Q`, `C:\$INPLACE.~TR` and `C:\$Windows.~LS` |
+| **Method** | Windows' own Disk Cleanup handler, *Upgrade Discarded Files*, one row for all three |
+| **Typical size** | Not yet measured: none of the three was on the machine the survey measured |
+
+### What it is
+
+When Windows upgrades, it keeps a copy of any file it did not move to the new version and did not
+recognise as part of Windows. That is Windows' own description, given by the cleanup it registers for
+these folders, and it goes on: "If you are sure that no user's personal files are missing after the
+upgrade, you can delete these files." Microsoft documents nothing else about them. The three names
+are the ones that cleanup's registration lists, in the `SetupDirectories` value under
+`HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches\Upgrade Discarded Files`.
+
+### What Deguffer does
+
+It asks Windows to run that cleanup, the one Disk Cleanup's *Clean up system files* lists as *Files
+discarded by Windows upgrade*, and never deletes the folders itself. It is offered on exactly the
+terms of the [previous Windows installation](#previous-windows-installation), through the same Windows
+component: only once the upgrade can no longer be undone, never while an update is unfinished, and
+only where Windows' own cleanup says it has something to clear. The uninstall window is also the time
+to notice that something of yours did not come across. Running it needs administrator rights.
+
+### What is protected
+
+The top of the drive is never listed, and what Windows keeps there is named in the plan and checked
+after the run, as for the previous installation. `Windows.old` is a different row, and this one never
+names it.
+
+### What it costs you
+
+**Every file the upgrade set aside is gone for good**, including any of your own among them. Before
+removing these, check that nothing of yours has been missing since the upgrade, and look in these
+folders if something has.
+
+### Why Tier 3
+
+By Windows' own description, what is kept here is whatever the upgrade could not place, which is the
+part of an upgrade most likely to be somebody's own files, and the copy here may be the only one.
+Nothing re-creates it. The previous installation is Tier 2 because what it costs is a capability,
+going back. This costs whatever the files were, and that is Tier 3's definition.
+
+---
+
 ## Leftover Windows update folders
 
 **Tier 2 — regenerable with cost.** Offered, **not pre-selected**.
