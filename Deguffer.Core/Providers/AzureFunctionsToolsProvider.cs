@@ -31,7 +31,8 @@ namespace Deguffer.Core.Providers;
 /// the developer still has a Functions v2 project, and withholding 166 MB on the assumption that
 /// they might is Deguffer making their decision. What it can do is say which is which, so each row
 /// carries the age of the release and, where the tooling's own records reach it, whether they still
-/// name it — see <see cref="AzureFunctionsToolTags"/>.</para>
+/// name it — see <see cref="AzureFunctionsToolTags"/>. The one release held back is one a running
+/// program is using, which is a fact about the machine rather than a guess about the developer.</para>
 ///
 /// <para>§5.2 bites the way it does for Playwright: the disposable children are versioned, so an
 /// exact-name <see cref="DisposableChildSet"/> cannot express them, and the answer is a stricter
@@ -70,14 +71,19 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
     [GeneratedRegex(@"\A[0-9]+\.[0-9]+\.[0-9]+\z", RegexOptions.CultureInvariant)]
     private static partial Regex ReleaseVersion();
 
+    /// <summary>Why a release a running program is using is listed as a survivor, in the §5.6 report.</summary>
+    private const string InUseReason = "A running program is using this release, so it is left alone.";
+
     private readonly string _root;
     private readonly string _releases;
+    private readonly ILiveTreeInspector _liveTrees;
 
     public AzureFunctionsToolsProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        ILiveTreeInspector? liveTrees = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
@@ -86,6 +92,7 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
     {
         _root = Path.Combine(Environment.LocalAppData, RootName);
         _releases = Path.Combine(_root, ReleasesName);
+        _liveTrees = liveTrees ?? LiveTreeInspector.Default;
     }
 
     public override string Id => "azure-functions-tools";
@@ -119,7 +126,8 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
 
     /// <summary>
     /// §5.3. <c>func</c> is the Core Tools host, and it runs out of one of these directories while a
-    /// Functions project is being debugged.
+    /// Functions project is being debugged. A warning, never the guard: the release it runs from is
+    /// held back by where it runs from (see <see cref="BuildPlanAsync"/>).
     /// </summary>
     protected override IReadOnlyList<string> ConflictingProcessNames => ["func"];
 
@@ -156,6 +164,12 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
     public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<CleanedPlace>>([CleanedPlace.Whole(_releases)]);
 
+    public override void InvalidateCaches()
+    {
+        _liveTrees.Invalidate();
+        base.InvalidateCaches();
+    }
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(LongPath.DirectoryMayExist(_root));
 
@@ -191,10 +205,10 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
         }
 
         var notes = new List<PlanNote>();
-        var targets = new List<DeletionTarget>();
+        var releases = new Dictionary<string, (string Version, string Extended)>(StringComparer.OrdinalIgnoreCase);
         var declined = new List<(string Path, string Reason)>();
 
-        var live = AzureFunctionsToolTags.Read(_root, ct);
+        var tags = AzureFunctionsToolTags.Read(_root, ct);
         var scan = ChildDirectories.Under(_releases);
 
         // The folder was found on disk by name above, and a listing right is separate from a
@@ -240,21 +254,51 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
 
             // Enumeration runs in extended form; a plan always holds display paths, and I/O
             // re-extends at the point of use.
-            targets.Add(new DeletionTarget(
-                LongPath.Display(child.FullName),
-                Describe(child.Name, live),
+            releases.Add(LongPath.Display(child.FullName), (child.Name, child.FullName));
+        }
+
+        // func runs out of the release a project is debugged against, and the tooling's own records
+        // can still name that release, so it is no more spare than its age suggests. Removing it under
+        // the host fails part of the way through on the files the host holds open, which breaks the
+        // session and leaves a release the tooling neither runs nor fetches again. So a release is held
+        // back by what runs from it, and each release is its own project, because a host running from
+        // one is using none of the releases beside it.
+        var live = LiveTreeVeto.Apply(
+            _liveTrees,
+            [.. releases.Keys.Select(release => new RecognisedBuildDirectory(release, release))],
+            lockFiles: [],
+            ct);
+
+        if (LiveTreeVeto.NoteFor(live.Vetoed, vetoed => $"release {releases[vetoed.Directory].Version}") is { } held)
+        {
+            notes.Add(held);
+        }
+
+        if (LiveTreeVeto.UncheckedNote(live.Unchecked.Count) is { } incomplete)
+        {
+            notes.Add(incomplete);
+        }
+
+        var targets = live.Cleared.Select(cleared =>
+        {
+            var (version, extended) = releases[cleared.Path];
+
+            return new DeletionTarget(
+                cleared.Path,
+                Describe(version, tags),
 
                 // §7's age. A release directory is written once, when it is downloaded, and using it
                 // does not rewrite it — so the answer here is when this release arrived, which is
                 // what separates one the tooling fetched last week from one nobody has needed since
                 // 2019.
-                DirectoryAge.Of(child.FullName, ct),
+                DirectoryAge.Of(extended, ct),
 
                 // The version is the release, whichever profile holds it, so a release kept for an
                 // old Functions project stays kept.
-                Identity: new ItemIdentity(child.Name, $"Azure Functions Core Tools {child.Name}"),
-                Facets: [new ItemFacet("Version", child.Name)]));
-        }
+                Identity: new ItemIdentity(version, $"Azure Functions Core Tools {version}"),
+                Facets: [new ItemFacet("Version", version)],
+                UseCheck: cleared.StillUnused);
+        }).ToList();
 
         var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
 
@@ -275,11 +319,11 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(declined),
+            ProtectedPaths = BuildProtectedPaths(declined, live),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = scan.Unreadable,
-            WasNotExamined = targets.Count == 0 && declined.Count > 0,
+            WasNotExamined = targets.Count == 0 && (declined.Count > 0 || live.Held.Count > 0),
         };
     }
 
@@ -320,12 +364,13 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
     /// thing one folder along: it records which release each Functions runtime line uses, and this
     /// provider reads it for exactly that.
     ///
-    /// Every child of <c>Releases</c> that was declined is protected by name as well, because the
-    /// spared and the targeted are siblings in one folder — which is precisely when an over-broad
-    /// rule takes one with the other.
+    /// Every child of <c>Releases</c> that was declined or held back is protected by name as well,
+    /// because the spared and the targeted are siblings in one folder — which is precisely when an
+    /// over-broad rule takes one with the other.
     /// </summary>
     private IReadOnlyList<ProtectedPath> BuildProtectedPaths(
-        IReadOnlyList<(string Path, string Reason)> declined) => Protect(
+        IReadOnlyList<(string Path, string Reason)> declined,
+        LiveTreeVetoResult live) => Protect(
     [
         (_root, "The tooling's own folder must survive — only downloaded releases inside it are removed."),
         (_releases, "The folder holding the releases must survive; only whole releases inside it go."),
@@ -334,6 +379,8 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
         .. FeedFiles().Select(feed =>
             (feed, "The cached feed, which is how the tooling knows what it already has.")),
         .. declined,
+        .. live.Vetoed.Select(v => (v.Directory, InUseReason)),
+        .. live.Unchecked.Select(path => (path, LiveTreeVeto.UncheckedReason)),
     ]);
 
     /// <summary>

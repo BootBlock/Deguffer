@@ -20,7 +20,7 @@ public sealed class StandingProofTests : IDisposable
     public void Dispose() => _temp.Dispose();
 
     private PlaywrightBrowsersProvider Provider() =>
-        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+        new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, liveTrees: FakeLiveTreeInspector.NothingLive);
 
     /// <summary>A Playwright cache holding two builds, each with a payload.</summary>
     private string CreateBuilds()
