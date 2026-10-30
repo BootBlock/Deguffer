@@ -1234,15 +1234,15 @@
                  and leave the part saying it worked. So this one is allowed to change height, and
                  it does so when a scan starts or ends or a removal reports — never while the map
                  is being read. -->
-            <TextBlock Text="{x:Bind ViewModel.Status, Mode=OneWay}"
+            <TextBlock Text="{x:Bind ViewModel.Status.Sentence, Mode=OneWay}"
                        TextWrapping="Wrap"
                        AutomationProperties.LiveSetting="Polite" />
 
             <!-- Each check the sentence above counts as not passed, by the folder or file it is
                  about and what it found. The sentence asks the user to look at the folders, and
                  after a removal that touched many of them only this says which. -->
-            <views:VerificationCheckList Checks="{x:Bind ViewModel.StatusChecks}"
-                                         Visibility="{x:Bind ViewModel.HasStatusChecks, Mode=OneWay}"
+            <views:VerificationCheckList Checks="{x:Bind ViewModel.Status.Checks}"
+                                         Visibility="{x:Bind ViewModel.Status.HasChecks, Mode=OneWay}"
                                          AutomationProperties.Name="The checks on what should have survived that did not pass" />
         </StackPanel>
     </Grid>

@@ -71,7 +71,7 @@ public sealed partial class ExploreSelection : ObservableObject
     /// A sentence for the status line: what happened, with the §5.6 checks a removal could not pass,
     /// or what another program refused.
     /// </summary>
-    public event EventHandler<OutcomeStatement>? Reported;
+    public event EventHandler<StatusLine>? Reported;
 
     /// <summary>
     /// Raised when something was removed, with what is left of the tree it was removed from, so the
@@ -319,7 +319,7 @@ public sealed partial class ExploreSelection : ObservableObject
             {
                 // Declined. Saying so beats leaving the previous sentence standing, which somebody
                 // who has just dismissed a dialog reads as the outcome of it.
-                Reported?.Invoke(this, OutcomeStatement.Said("Nothing was removed."));
+                Reported?.Invoke(this, StatusLine.Said("Nothing was removed."));
                 return;
             }
 
@@ -353,7 +353,7 @@ public sealed partial class ExploreSelection : ObservableObject
             // The command is an AsyncRelayCommand without FlowExceptionsToTaskScheduler, so anything
             // escaping here is rethrown on the UI thread and takes the process down mid-deletion.
             // The Storage page's clean flow guards itself the same way and for the same reason.
-            Reported?.Invoke(this, OutcomeStatement.Said($"The removal stopped: {ex.Message}"));
+            Reported?.Invoke(this, StatusLine.Said($"The removal stopped: {ex.Message}"));
             work.Fail();
         }
         finally
@@ -421,7 +421,7 @@ public sealed partial class ExploreSelection : ObservableObject
     {
         if (failure is not null)
         {
-            Reported?.Invoke(this, OutcomeStatement.Said(failure));
+            Reported?.Invoke(this, StatusLine.Said(failure));
         }
     }
 

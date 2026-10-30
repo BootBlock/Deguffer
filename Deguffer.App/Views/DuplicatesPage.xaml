@@ -284,13 +284,13 @@
             <StackPanel Grid.Row="2" Grid.ColumnSpan="5" Spacing="4">
                 <TextBlock Text="{x:Bind ViewModel.Marking.WhyClosed, Mode=OneWay}" TextWrapping="Wrap"
                            Foreground="{ThemeResource SystemFillColorCautionBrush}" />
-                <TextBlock Text="{x:Bind ViewModel.Marking.Outcome, Mode=OneWay}" TextWrapping="Wrap" IsTextSelectionEnabled="True"
+                <TextBlock Text="{x:Bind ViewModel.Marking.Outcome.Sentence, Mode=OneWay}" TextWrapping="Wrap" IsTextSelectionEnabled="True"
                            AutomationProperties.LiveSetting="Polite" />
 
                 <!-- Each check the sentence above counts as not passed, by the copy or folder it is
                      about and what it found, because a count alone does not say which to look at. -->
-                <views:VerificationCheckList Checks="{x:Bind ViewModel.Marking.OutcomeChecks}"
-                                             Visibility="{x:Bind ViewModel.Marking.HasOutcomeChecks, Mode=OneWay}"
+                <views:VerificationCheckList Checks="{x:Bind ViewModel.Marking.Outcome.Checks}"
+                                             Visibility="{x:Bind ViewModel.Marking.Outcome.HasChecks, Mode=OneWay}"
                                              AutomationProperties.Name="The checks on what should have survived that did not pass" />
             </StackPanel>
         </Grid>

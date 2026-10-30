@@ -43,7 +43,7 @@ public sealed class ExploreViewModelTests : IDisposable
 
         Assert.Equal(@"C:\", page.SelectedDrive?.RootPath);
         Assert.Null(page.ScopeFolder);
-        Assert.Equal(ScanPrompt, page.Status);
+        Assert.Equal(ScanPrompt, page.Status.Sentence);
         Assert.True(page.ScanCommand.CanExecute(null));
         Assert.True(page.CanElevate);
         Assert.Equal(ElevationOffer.Label(hasScanned: false), page.ElevateLabel);
@@ -95,7 +95,7 @@ public sealed class ExploreViewModelTests : IDisposable
         var page = _explore.Page();
 
         Assert.Equal(@"G:\", page.SelectedDrive?.RootPath);
-        Assert.Equal(DriveChoice.RemoteStorageRefusal, page.Status);
+        Assert.Equal(DriveChoice.RemoteStorageRefusal, page.Status.Sentence);
         Assert.False(page.ScanCommand.CanExecute(null));
     }
 
@@ -180,12 +180,12 @@ public sealed class ExploreViewModelTests : IDisposable
 
         Assert.Equal(@"D:\", page.SelectedDrive?.RootPath);
         Assert.Equal(@"D:\Photos", page.ScopeFolder);
-        Assert.Equal(PickedFolder.NotOnDisk, page.Status);
+        Assert.Equal(PickedFolder.NotOnDisk, page.Status.Sentence);
 
         page.ScopeTo(@"C:\Users\testuser");
 
         Assert.Equal(@"C:\Users\testuser", page.ScopeFolder);
-        Assert.Equal(ScanPrompt, page.Status);
+        Assert.Equal(ScanPrompt, page.Status.Sentence);
     }
 
     /// <summary>
@@ -201,12 +201,12 @@ public sealed class ExploreViewModelTests : IDisposable
 
         page.ScopeTo(string.Empty);
 
-        Assert.Equal($"{PickedFolder.NotOnDisk} {DriveChoice.RemoteStorageRefusal}", page.Status);
+        Assert.Equal($"{PickedFolder.NotOnDisk} {DriveChoice.RemoteStorageRefusal}", page.Status.Sentence);
         Assert.False(page.ScanCommand.CanExecute(null));
 
         page.ScopeTo(@"C:\Users\testuser");
 
-        Assert.Equal(ScanPrompt, page.Status);
+        Assert.Equal(ScanPrompt, page.Status.Sentence);
     }
 
     /// <summary>
@@ -221,19 +221,19 @@ public sealed class ExploreViewModelTests : IDisposable
 
         page.ScopeTo(@"C:\Cloud\Photos");
 
-        Assert.Equal(DriveChoice.RemoteStorageRefusal, page.Status);
+        Assert.Equal(DriveChoice.RemoteStorageRefusal, page.Status.Sentence);
         Assert.False(page.ScanCommand.CanExecute(null));
 
         page.ScopeTo(@"C:\Users\testuser");
 
-        Assert.Equal(ScanPrompt, page.Status);
+        Assert.Equal(ScanPrompt, page.Status.Sentence);
         Assert.True(page.ScanCommand.CanExecute(null));
 
         page.ScopeTo(@"C:\Cloud\Photos");
-        page.Status = "Something another part of the page said.";
+        page.Status.Say(StatusLine.Said("Something another part of the page said."));
         page.ScopeTo(@"C:\Users\testuser");
 
-        Assert.Equal("Something another part of the page said.", page.Status);
+        Assert.Equal("Something another part of the page said.", page.Status.Sentence);
     }
 
     /// <summary>
@@ -394,9 +394,9 @@ public sealed class ExploreViewModelTests : IDisposable
         await running;
 
         Assert.Equal(@"C:\", _explore.Scanner.Current.Root);
-        Assert.Equal(ExploreStatusText.Finished(scan, page.Volume, scoped: false), page.Status);
-        Assert.Contains("Some of this drive", page.Status);
-        Assert.Contains(ExploreUnaccountedNote.Overcount(page.Volume, 7_000, ScanStrategy.ParallelEnumeration)!, page.Status);
+        Assert.Equal(ExploreStatusText.Finished(scan, page.Volume, scoped: false), page.Status.Sentence);
+        Assert.Contains("Some of this drive", page.Status.Sentence);
+        Assert.Contains(ExploreUnaccountedNote.Overcount(page.Volume, 7_000, ScanStrategy.ParallelEnumeration)!, page.Status.Sentence);
         Assert.True(page.HasRouteNote);
         Assert.True(page.CanElevate);
     });
@@ -512,7 +512,7 @@ public sealed class ExploreViewModelTests : IDisposable
         Assert.Null(page.Tree);
         Assert.Empty(page.Rows);
         Assert.Empty(page.Trail);
-        Assert.Equal("Scan cancelled. Nothing was measured.", page.Status);
+        Assert.Equal("Scan cancelled. Nothing was measured.", page.Status.Sentence);
         Assert.False(page.IsBusy);
     });
 
@@ -621,7 +621,7 @@ public sealed class ExploreViewModelTests : IDisposable
         Assert.DoesNotContain(page.Rows, row => row.Node == folder);
         Assert.False(page.Tree!.Holds(folder));
         Assert.Same(tree, page.Tree.Scanned);
-        Assert.StartsWith("Moved 'old'", page.Status);
+        Assert.StartsWith("Moved 'old'", page.Status.Sentence);
         Assert.Equal([true, false], busy);
         Assert.True(page.ShowsNotesButton);
         Assert.Contains("One of them is a warning", page.NotesButtonLabel);
@@ -739,15 +739,15 @@ public sealed class ExploreViewModelTests : IDisposable
         page.ScopeTo(root);
         await _explore.ScanAsync(page, ExploreScan.Fast(tree));
 
-        Assert.False(page.HasStatusChecks);
+        Assert.False(page.Status.HasChecks);
 
         page.Selection.Select([folder]);
         await page.Selection.DeleteCommand.ExecuteAsync(null);
 
-        Assert.Contains("did not pass", page.Status, StringComparison.Ordinal);
-        Assert.True(page.HasStatusChecks);
+        Assert.Contains("did not pass", page.Status.Sentence, StringComparison.Ordinal);
+        Assert.True(page.Status.HasChecks);
 
-        var check = Assert.Single(page.StatusChecks);
+        var check = Assert.Single(page.Status.Checks);
         Assert.Equal(root, check.Subject);
         Assert.Equal(VerificationOutcome.Failed, check.Outcome);
         Assert.Contains("'keep.bin'", check.Detail, StringComparison.Ordinal);
@@ -755,9 +755,9 @@ public sealed class ExploreViewModelTests : IDisposable
         var (rescan, _) = _explore.OnDisk();
         await _explore.ScanAsync(page, ExploreScan.Fast(rescan));
 
-        Assert.DoesNotContain("did not pass", page.Status, StringComparison.Ordinal);
-        Assert.Empty(page.StatusChecks);
-        Assert.False(page.HasStatusChecks);
+        Assert.DoesNotContain("did not pass", page.Status.Sentence, StringComparison.Ordinal);
+        Assert.Empty(page.Status.Checks);
+        Assert.False(page.Status.HasChecks);
     });
 
     /// <summary>
@@ -802,15 +802,15 @@ public sealed class ExploreViewModelTests : IDisposable
         page.Selection.Select([Named("first")]);
         await page.Selection.DeleteCommand.ExecuteAsync(null);
 
-        Assert.True(page.HasStatusChecks);
+        Assert.True(page.Status.HasChecks);
 
         takeNeighbour = false;
         page.Selection.Select([Named("second")]);
         await page.Selection.DeleteCommand.ExecuteAsync(null);
 
-        Assert.StartsWith("Moved 'second'", page.Status, StringComparison.Ordinal);
-        Assert.Empty(page.StatusChecks);
-        Assert.False(page.HasStatusChecks);
+        Assert.StartsWith("Moved 'second'", page.Status.Sentence, StringComparison.Ordinal);
+        Assert.Empty(page.Status.Checks);
+        Assert.False(page.Status.HasChecks);
     });
 
     /// <summary>
@@ -1074,7 +1074,7 @@ public sealed class ExploreViewModelTests : IDisposable
         page.ElevateAndRescanCommand.Execute(null);
 
         Assert.Equal([new ExploreRequest(@"D:\", @"D:\Photos")], _explore.Relaunches);
-        Assert.StartsWith("Deguffer is still running without administrator rights", page.Status);
+        Assert.StartsWith("Deguffer is still running without administrator rights", page.Status.Sentence);
         Assert.Equal(0, replaced);
 
         _explore.RelaunchStarts = true;

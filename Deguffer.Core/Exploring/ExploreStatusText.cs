@@ -1,4 +1,5 @@
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Exploring;
@@ -64,10 +65,18 @@ public static class ExploreStatusText
     /// <para>It takes back its own sentence and nobody else's. A scan's result and a selection's
     /// report write this same line, and neither is made untrue by a change of target, so clearing
     /// unconditionally would throw away whichever of them was there.</para>
+    ///
+    /// <para>Which sentence is the page's refusal is said by where it came from
+    /// (<see cref="StatusOrigin.Refusal"/>), never by comparing its words with what was stated.</para>
     /// </summary>
-    /// <param name="shown">What the line says now.</param>
-    /// <param name="stated">The refusal the page last put on the line, or null where it put none since.</param>
+    /// <param name="shown">What the line holds now.</param>
     /// <param name="refusal">Why the page will not scan where it now points, or null where it will.</param>
-    public static string Retargeted(string shown, string? stated, string? refusal) =>
-        refusal ?? (stated is not null && shown == stated ? Prompt : shown);
+    public static StatusLine Retargeted(StatusLine shown, string? refusal)
+    {
+        ArgumentNullException.ThrowIfNull(shown);
+
+        return refusal is not null ? StatusLine.Refused(refusal)
+            : shown.Origin == StatusOrigin.Refusal ? StatusLine.Said(Prompt)
+            : shown;
+    }
 }

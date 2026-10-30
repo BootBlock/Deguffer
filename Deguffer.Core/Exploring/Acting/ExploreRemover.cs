@@ -78,7 +78,7 @@ public sealed record ExploreRemovalReport(
     public long BytesRemoved => Removed.Sum(i => i.Bytes);
 
     /// <summary><see cref="Summary"/>, with every §5.6 check it counts as not passed, for the page to list beside it.</summary>
-    public OutcomeStatement Statement => OutcomeStatement.After(Summary, Verification);
+    public StatusLine Statement => StatusLine.After(Summary, Verification);
 
     /// <summary>
     /// What happened, in one sentence for the status line, with the §5.6 result attached whenever it

@@ -120,13 +120,6 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// </summary>
     private bool _retargeting;
 
-    /// <summary>
-    /// The refusal <see cref="ExplainRefusal"/> last put on the status line, so it can take that
-    /// sentence back and leave anything written over it alone. A folder <see cref="ScopeTo"/> refused
-    /// is stated here too, because the next change of target answers it just as well.
-    /// </summary>
-    private string? _statedRefusal;
-
     /// <param name="time">What decides when the drive picker's last reading has gone stale.</param>
     /// <param name="isElevated">Whether this process holds administrator rights.</param>
     /// <param name="relaunch">See <see cref="_relaunch"/>.</param>
@@ -186,7 +179,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         // other down through the one busy flag. One direction each, rather than a flag both write:
         // the selection says when it is working, and this says when the page is free to act.
         Selection.Working += (_, working) => IsBusy = working;
-        Selection.Reported += (_, report) => Say(report);
+        Selection.Reported += (_, report) => Status.Say(report);
         Selection.Removed += (_, removed) => ShowLeft(removed);
 
         // Two of the four notes are the selection's, so what the card shows in their corner turns
@@ -322,40 +315,12 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// <summary>Whether the bar has to be indeterminate. See <see cref="Progress"/>.</summary>
     public bool HasNoProgressFraction => Progress is null;
 
-    [ObservableProperty]
-    public partial string Status { get; set; } = ExploreStatusText.Prompt;
-
     /// <summary>
-    /// The §5.6 checks a removal could not pass, each by the path it is about and what it found,
-    /// listed beside <see cref="Status"/> while it still holds that removal's sentence. The sentence
-    /// counts them and asks the user to look at the folders, and after a removal that touched many
-    /// folders a count does not say which.
+    /// The line under the map: what the page last said, and the §5.6 checks a removal could not pass
+    /// beside it. A refusal the page states is taken back by <see cref="ExplainRefusal"/> once the page
+    /// is pointed somewhere it will scan, and nothing else on the line is.
     /// </summary>
-    public ObservableCollection<VerificationCheck> StatusChecks { get; } = [];
-
-    /// <summary>Whether there is anything in that list, so the page shows it only when there is.</summary>
-    public bool HasStatusChecks => StatusChecks.Count > 0;
-
-    /// <summary>The last statement the selection put on the status line.</summary>
-    private OutcomeStatement _stated = OutcomeStatement.Said(string.Empty);
-
-    /// <summary>Put a statement on the status line and its checks beside it.</summary>
-    private void Say(OutcomeStatement statement)
-    {
-        // Before the sentence, so the change below lists this statement's checks beside it.
-        _stated = statement;
-        Status = statement.Sentence;
-        ListBeside(Status);
-    }
-
-    partial void OnStatusChanged(string value) => ListBeside(value);
-
-    /// <summary>Update the list in place to what <see cref="OutcomeStatement.ChecksBeside"/> says belongs beside <paramref name="shown"/>.</summary>
-    private void ListBeside(string shown)
-    {
-        LiveList.Rewrite(StatusChecks, _stated.ChecksBeside(shown));
-        OnPropertyChanged(nameof(HasStatusChecks));
-    }
+    public StatusLineViewModel Status { get; } = new(StatusLine.Said(ExploreStatusText.Prompt));
 
     /// <summary>The sentence §5.5 requires beside a walked scan, or null when the table answered.</summary>
     [ObservableProperty]
@@ -690,7 +655,7 @@ public sealed partial class ExploreViewModel : ObservableObject
         // about to be replaced, and a cancelled or failed scan never reaches the offer below.
         OfferElevation(null);
 
-        Status = $"Scanning {target}…";
+        Status.Say(StatusLine.Said($"Scanning {target}…"));
 
         // Next to the try, so nothing can throw between the two and leave the taskbar busy.
         var work = _work.Begin();
@@ -724,7 +689,7 @@ public sealed partial class ExploreViewModel : ObservableObject
 
             await RecordAsync(scan, target, scoped);
 
-            Status = ExploreStatusText.Finished(scan, volume, scoped);
+            Status.Say(StatusLine.Said(ExploreStatusText.Finished(scan, volume, scoped)));
         }
         catch (OperationCanceledException)
         {
@@ -743,14 +708,14 @@ public sealed partial class ExploreViewModel : ObservableObject
             Trail.Clear();
             ViewChanged?.Invoke(this, EventArgs.Empty);
 
-            Status = "Scan cancelled. Nothing was measured.";
+            Status.Say(StatusLine.Said("Scan cancelled. Nothing was measured."));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // A volume that went away mid-scan, or one the account cannot open at all. Neither is
             // worth taking the window down for, and the page is read-only — there is nothing
             // half-done to report.
-            Status = $"Could not scan {target}: {ex.Message}";
+            Status.Say(StatusLine.Said($"Could not scan {target}: {ex.Message}"));
             work.Fail();
         }
         finally
@@ -817,10 +782,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     {
         if (PickedFolder.OnDisk(folder) is not { } onDisk)
         {
-            var refused = ExploreStatusText.NotOnDisk(Target.Refusal(_volumes));
-
-            Status = refused;
-            _statedRefusal = refused;
+            Status.Say(StatusLine.Refused(ExploreStatusText.NotOnDisk(Target.Refusal(_volumes))));
 
             return;
         }
@@ -951,8 +913,9 @@ public sealed partial class ExploreViewModel : ObservableObject
     {
         if (!_relaunch(new ExploreRequest(Target.Drive, Target.Folder)))
         {
-            Status = "Deguffer is still running without administrator rights, so it scans by walking "
-                + "directories. Everything else works exactly the same.";
+            Status.Say(StatusLine.Said(
+                "Deguffer is still running without administrator rights, so it scans by walking "
+                + "directories. Everything else works exactly the same."));
             return;
         }
 
@@ -1257,9 +1220,9 @@ public sealed partial class ExploreViewModel : ObservableObject
     {
         Progress = progress.Fraction;
 
-        Status = progress.Total is null
+        Status.Say(StatusLine.Said(progress.Total is null
             ? $"Scanning… {progress.Done:N0} items, {FreeSpace.Format(progress.BytesSeen)} so far"
-            : $"Reading the file table… {progress.Fraction:P0}";
+            : $"Reading the file table… {progress.Fraction:P0}"));
 
         // A partial tree, on the cadence the scanner chose. Drawing it is what stops a long scan
         // looking like a hung window — and it is only ever a snapshot, so the finished tree replaces
@@ -1481,10 +1444,7 @@ public sealed partial class ExploreViewModel : ObservableObject
     /// </summary>
     private void ExplainRefusal()
     {
-        var refused = Target.Refusal(_volumes);
-
-        Status = ExploreStatusText.Retargeted(Status, _statedRefusal, refused);
-        _statedRefusal = refused;
+        Status.Say(ExploreStatusText.Retargeted(Status.Line, Target.Refusal(_volumes)));
     }
 
     private bool CanRun() => !IsBusy;
