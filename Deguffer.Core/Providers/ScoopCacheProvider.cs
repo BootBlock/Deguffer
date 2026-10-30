@@ -34,19 +34,24 @@ public sealed class ScoopCacheProvider : CleanupProviderBase
     /// <summary>How many unrecognised entries the note names before it summarises the rest.</summary>
     private const int EntriesNamed = 3;
 
+    private readonly ISystemDirectories _system;
     private readonly PassMemo<ScoopResolution> _resolution = new();
 
     public ScoopCacheProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        ISystemDirectories? system = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner)
+            scanner,
+            volumes: volumes)
     {
+        _system = system ?? SystemDirectories.Current;
     }
 
     public override string Id => "scoop-cache";
@@ -78,19 +83,13 @@ public sealed class ScoopCacheProvider : CleanupProviderBase
     /// <summary>Scoop's root where nothing has moved it.</summary>
     private string DefaultRoot => Path.Combine(Environment.UserProfile, "scoop");
 
-    /// <summary>
-    /// §5.2 as §7.1 needs it read from outside, at the default locations. The root recognises
-    /// nothing: <c>apps</c> holds every installed app and <c>persist</c> their data. The cache
-    /// recognises the downloads by name. The settings file can hold a GitHub token and a proxy
-    /// password.
-    /// </summary>
+    /// <summary>§5.2 as §7.1 needs it read from outside, at the default locations.</summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
-        Declare(DefaultRoot, Path.Combine(DefaultRoot, "cache"), [Path.Combine(Environment.UserProfile, ".config", "scoop", "config.json")]);
+        ScoopToolRoots.Of(DefaultRoot, Path.Combine(DefaultRoot, "cache"), [Path.Combine(Environment.UserProfile, ".config", "scoop", "config.json")]);
 
     /// <summary>The same declaration at the folders the running Scoop uses.</summary>
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<ToolRoot>>(
-            Resolve() is ScoopResolution.Followed { Layout: var layout } ? Declare(layout.Root, layout.Cache, layout.ConfigFiles) : []);
+        Task.FromResult(ScoopToolRoots.Of(Resolve()));
 
     /// <summary>
     /// The cache the command is sent to, and the default one, because <c>SCOOP_CACHE</c> or a
@@ -126,6 +125,12 @@ public sealed class ScoopCacheProvider : CleanupProviderBase
     {
         ScoopResolution.Followed followed => await PlanCacheAsync(followed.Layout, ct).ConfigureAwait(false),
         ScoopResolution.Unfollowed unfollowed => UnexaminedPlan(unfollowed.Why),
+        ScoopResolution.RootDeclined declined => UnexaminedPlan(
+            $"Scoop is set to keep its apps and its cache in {declined.Layout.Root}, which Deguffer will not "
+            + $"examine as Scoop's own folder: {declined.Why} It is leaving Scoop's cache alone."),
+        ScoopResolution.CacheDeclined declined => UnexaminedPlan(
+            $"Scoop is set to keep its downloads in {declined.Layout.Cache}, which Deguffer will not examine "
+            + $"as Scoop's own folder: {declined.Why} Scoop's own command removes everything there, so it is not run."),
         _ => EmptyPlan("Scoop is not installed on this machine."),
     };
 
@@ -215,10 +220,7 @@ public sealed class ScoopCacheProvider : CleanupProviderBase
     private IReadOnlyList<ProtectedPath> BuildProtectedPaths(ScoopLayout layout, IReadOnlyList<string> unrecognised) => Protect(
     [
         (layout.Cache, "Scoop's cache folder must survive. Only the downloads inside it are removed."),
-        (Path.Combine(layout.Root, "apps"), "The apps Scoop installed, and every version of each."),
-        (Path.Combine(layout.Root, "persist"), "Settings and data Scoop keeps for installed apps across updates."),
-        (Path.Combine(layout.Root, "buckets"), "The bucket manifests Scoop installs from."),
-        (Path.Combine(layout.Root, "shims"), "The commands Scoop puts on your PATH, Scoop's own included."),
+        .. ScoopToolRoots.RootFolders.Select(folder => (Path.Combine(layout.Root, folder.Name), folder.Holds)),
         .. layout.ConfigFiles.Select(file => (file, "Scoop's settings, which can hold a GitHub token and a proxy password.")),
         .. unrecognised.Select(entry => (entry, "Not a download Scoop made, so it is left alone.")),
     ]);
@@ -234,30 +236,35 @@ public sealed class ScoopCacheProvider : CleanupProviderBase
             + "will not run it while they are there. Move them out of the folder and scan again.";
     }
 
-    private static IReadOnlyList<ToolRoot> Declare(string root, string cache, IReadOnlyList<string> configFiles) =>
-    [
-        new ToolRoot(
-            root,
-            "This is Scoop's own folder, holding the apps it installed, their data and its buckets. "
-            + "Deguffer removes nothing here except Scoop's downloads, through Scoop's own command.",
-            static _ => false),
-
-        new ToolRoot(
-            cache,
-            "This is Scoop's download cache. Deguffer clears it with Scoop's own command, and removes "
-            + "only the downloads Scoop made from here.",
-            static child => child.Kind == ChildKind.File && ScoopCacheEntries.IsDownloadName(child.Name)),
-
-        .. configFiles.Select(file => new ToolRoot(
-            file,
-            "This is Scoop's settings file, and it can hold a GitHub token and a proxy password. "
-            + "Deguffer never removes it.",
-            static _ => false)),
-    ];
-
     /// <summary>The layout of the Scoop on <c>PATH</c>, or null where there is none.</summary>
     private ScoopResolution? Resolve() =>
         Environment.FindExecutable("scoop") is { } found
-            ? _resolution.Get(() => ScoopLocations.Resolve(Environment, ScoopCommand.Beside(found)))
+            ? _resolution.Get(() => Judged(ScoopLocations.Resolve(Environment, ScoopCommand.Beside(found))))
             : null;
+
+    /// <summary>
+    /// The layout, declined where its root or cache is somewhere no tool's folder may be, such as the
+    /// profile, a drive root or Documents. Either can come from a variable or a setting anything on the
+    /// machine may have written, and examining the folder as Scoop's would name everything else in it
+    /// as Scoop's (see <see cref="ConfiguredFolder"/>). Asked of the defaults as well, which are as
+    /// Scoop's install put them and pass.
+    /// </summary>
+    private ScoopResolution Judged(ScoopResolution resolution)
+    {
+        if (resolution is not ScoopResolution.Followed { Layout: var layout })
+        {
+            return resolution;
+        }
+
+        var temporary = TempRoots.Resolve(Environment, _system, Volumes).AccountFolders;
+
+        if (ConfiguredFolder.WhyNotOwned(layout.Root, Environment, _system, Volumes, temporary) is { } root)
+        {
+            return new ScoopResolution.RootDeclined(layout, root);
+        }
+
+        return ConfiguredFolder.WhyNotOwned(layout.Cache, Environment, _system, Volumes, temporary) is { } cache
+            ? new ScoopResolution.CacheDeclined(layout, cache)
+            : resolution;
+    }
 }
