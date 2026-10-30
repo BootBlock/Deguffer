@@ -975,6 +975,66 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// A profile <c>profiles.ini</c> keeps outside Firefox's folder holds the same passwords as one
+    /// inside it, and nothing above it is Firefox's to refuse. It is declared whole, so the profile
+    /// and everything in it is refused, while the folder it sits in stays the user's.
+    /// </summary>
+    [Theory]
+    [InlineData("", false)]                // the profile itself
+    [InlineData("logins.json", false)]     // saved passwords
+    [InlineData("key4.db", false)]
+    [InlineData("places.sqlite", false)]   // bookmarks and history
+    [InlineData("cache2", false)]          // a cache, kept among all of the above
+    [InlineData(@"..\notes", true)]        // a folder beside the profile, which is not Firefox's
+    public void AFirefoxProfileKeptElsewhereIsRefusedWhole(string relative, bool allowed)
+    {
+        var profile = _temp.CreateDirectory("Documents", "FirefoxProfile");
+        _temp.CreateDirectory("Documents", "notes");
+        RegisterFirefoxProfile(profile, isRelative: false);
+
+        var provider = new FirefoxCacheProvider(_environment);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory());
+
+        Assert.Equal(
+            allowed,
+            policy.MayRemove(
+                relative.Length == 0 ? profile : Path.GetFullPath(Path.Combine(profile, relative))).IsAllowed);
+    }
+
+    /// <summary>
+    /// A relative entry that climbs out of Firefox's folder is never examined, but Firefox opens it
+    /// all the same, so where it lands is refused as a profile is.
+    /// </summary>
+    [Fact]
+    public void AFirefoxProfileWhoseRelativePathClimbsOutIsRefusedWhereItLands()
+    {
+        var profile = _temp.CreateDirectory("escaped-profile");
+        RegisterFirefoxProfile("../../../../../escaped-profile");
+
+        var provider = new FirefoxCacheProvider(_environment);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory());
+
+        Assert.Empty(provider.Profiles());
+        Assert.False(policy.MayRemove(profile).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(profile, "logins.json")).IsAllowed);
+    }
+
+    /// <summary>
+    /// A profile at the top of a drive is not declared: a refusal of every child of the drive would
+    /// take the whole drive away from Explore, and Explore never removes a volume root itself.
+    /// </summary>
+    [Fact]
+    public void AFirefoxProfileAtTheTopOfADriveIsNotDeclared()
+    {
+        var drive = Path.GetPathRoot(_temp.Path)!;
+        RegisterFirefoxProfile(drive, isRelative: false);
+
+        var roots = new FirefoxCacheProvider(_environment).ToolRoots;
+
+        Assert.DoesNotContain(roots, root => root.Path.Equals(drive, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// A Code - OSS editor's user-data folder, level by level. It repeats the Chromium shape one
     /// directory further down: <c>WebStorage</c> holds one directory per webview, and each of those
     /// holds what that view saved beside the one cache Deguffer removes.
@@ -1606,14 +1666,15 @@ public sealed class ExploreActionPolicyTests : IDisposable
     /// so the provider declares no <em>profile</em> root until <c>profiles.ini</c> names one.
     /// Firefox's two folders above them are declared from constants and need no fixture.
     /// </summary>
-    private void RegisterFirefoxProfile() => File.WriteAllText(
-        _temp.CreateFile(0, "profile", "AppData", "Roaming", "Mozilla", "Firefox", "profiles.ini"),
-        """
-        [Profile0]
-        Name=default-release
-        IsRelative=1
-        Path=Profiles/default-release
-        """);
+    private void RegisterFirefoxProfile(string declared = "Profiles/default-release", bool isRelative = true) =>
+        File.WriteAllText(
+            _temp.CreateFile(0, "profile", "AppData", "Roaming", "Mozilla", "Firefox", "profiles.ini"),
+            $"""
+            [Profile0]
+            Name=default-release
+            IsRelative={(isRelative ? 1 : 0)}
+            Path={declared}
+            """);
 
     /// <summary>
     /// Firefox, Affinity and the Azure Functions tooling are deliberately absent. The sweep above probes a
