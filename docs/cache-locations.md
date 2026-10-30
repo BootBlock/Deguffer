@@ -7083,7 +7083,19 @@ drive stops trusting the number.
 
 It finds each disk from the tools' own records, never by searching for `.vhdx` files: a copied disk
 or a Hyper-V machine's disk looks the same, and only the record says whose it is and which route
-applies. A WSL 1 distribution has no disk and is left out. A disk a record names that is not there
+applies. A WSL 1 distribution has no disk and is left out.
+
+Container tools that run on WSL register distributions of their own, and each is named as that
+tool's, with that tool's route:
+
+| Distribution | Owner | Source |
+| --- | --- | --- |
+| `docker-desktop-data`, `docker-desktop` | Docker Desktop's data, and its own Linux | Docker Desktop's documentation |
+| `podman-machine-default`, or `podman-<name>` | A Podman machine. Podman adds the `podman-` prefix only to a name that does not already begin with `podman` | containers/podman [`pkg/machine/wsl/machine.go`](https://github.com/containers/podman/blob/main/pkg/machine/wsl/machine.go), [`pkg/machine/env/dir.go`](https://github.com/containers/podman/blob/main/pkg/machine/env/dir.go) (`WithPodmanPrefix`), [`pkg/machine/define/config.go`](https://github.com/containers/podman/blob/main/pkg/machine/define/config.go) (`DefaultMachineName`) |
+| `podman-net-usermode` | The distribution Podman makes for user-mode networking | [`pkg/machine/wsl/declares.go`](https://github.com/containers/podman/blob/main/pkg/machine/wsl/declares.go), [`usermodenet.go`](https://github.com/containers/podman/blob/main/pkg/machine/wsl/usermodenet.go) |
+| `rancher-desktop-data`, `rancher-desktop` | Rancher Desktop's data (images, volumes and Kubernetes state under `/var/lib`), and its own Linux, which it imports again when missing and replaces on upgrade | rancher-sandbox/rancher-desktop [`pkg/rancher-desktop/backend/wsl.ts`](https://github.com/rancher-sandbox/rancher-desktop/blob/main/pkg/rancher-desktop/backend/wsl.ts) |
+
+Any other distribution is the user's own. A disk a record names that is not there
 is reported as missing, not as an empty disk, and one Windows will not describe is reported as
 unreadable.
 
@@ -7097,13 +7109,36 @@ For each disk the row states:
   row says why there is no inside figure. Unused volumes are named as holding data.
 - **The route, in order.** For a WSL distribution: delete what is no longer needed inside it, then
   compact the disk with `wsl --manage <distribution> --compact` (WSL 3.0.1 and later), or on an
-  older WSL run `wsl --shutdown` and then `Optimize-VHD` from the Hyper-V module. A sparse disk gives
-  space back by itself once Linux discards it (`sudo fstrim -a`), and `Optimize-VHD` refuses a sparse
-  file. For Docker: `docker system prune` and `docker builder prune` first. Docker Desktop 4.34 and
-  later give freed space back to the drive by themselves, which 4.59 turned off for the time being,
-  and Docker Desktop's *Clean up data* resets the disk and removes every container and image.
+  older WSL run `wsl --shutdown` and then `Optimize-VHD` from the Hyper-V module. `Optimize-VHD` needs
+  the disk detached or attached read-only
+  ([cmdlet page](https://learn.microsoft.com/en-us/powershell/module/hyper-v/optimize-vhd)), and the
+  Hyper-V module refuses an unelevated user outside the Hyper-V Administrators group (observed), so the
+  route says it needs an elevated PowerShell or that membership. A sparse disk gives space back by
+  itself once Linux discards it (`sudo fstrim -a`), so its route needs no compaction. No Microsoft
+  source settles how `Optimize-VHD` treats a sparse file (the Windows SDK's text for `0xC03A001A` says
+  virtual disk files "must not be sparse", and Microsoft Learn's entry for the same code does not), so
+  the route claims nothing about it. For
+  Docker: `docker system prune` and `docker builder prune` first. Docker Desktop 4.34 and later give
+  freed space back to the drive by themselves, which 4.59 turned off for the time being, and Docker
+  Desktop's *Clean up data* resets the disk and removes every container and image. For a Podman
+  machine: `podman system prune`, which Podman's command on Windows runs through the machine
+  ([podman-for-windows](https://github.com/containers/podman/blob/main/docs/tutorials/podman-for-windows.md)),
+  then WSL's compaction. For Rancher Desktop's data: with the moby engine, the
+  `docker container prune` and `docker image prune --all` its guide to reclaiming the space a storage
+  driver change leaves behind runs
+  ([Reclaiming Disk Space](https://docs.rancherdesktop.io/how-to-guides/migrating-images)), or its Reset Kubernetes and Factory Reset
+  (`rdctl reset --factory`), then WSL's compaction.
 
 Explore says the same thing when you hover a disk, and refuses to delete one or the folder it is in.
+
+### No clean removes a registered disk
+
+The row is how every clean learns where the disks are. Before a preview plans anything, the planner
+asks each row that reads a virtualisation tool's records (`IRegistersVirtualMachineStorage`) for the
+disks and folders it registered. A step of *any* row that would reach one is withheld, with a
+warning naming the disk, and the disk is protected, so §5.6 proves after the run that it survived.
+Every clean then proves each registered disk still standing, whichever rows it cleans and whether
+or not this row was scanned. Explore's refusal is read from the same registration.
 
 ### Why nothing is run
 

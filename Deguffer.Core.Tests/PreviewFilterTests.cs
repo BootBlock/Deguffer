@@ -52,6 +52,7 @@ public sealed class PreviewFilterTests
     [InlineData(FindingStatus.OnKeepList)]
     [InlineData(FindingStatus.MailStoresHeldBack)]
     [InlineData(FindingStatus.UpdateInProgress)]
+    [InlineData(FindingStatus.VirtualMachineKept)]
     [InlineData(FindingStatus.ReportOnly)]
     [InlineData(FindingStatus.ReadyToClean)]
     [InlineData(FindingStatus.NeedsElevation)]
