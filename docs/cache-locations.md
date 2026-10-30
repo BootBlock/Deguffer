@@ -902,6 +902,11 @@ where the default keeps those used in the last 30 days, and `--cache-dir` sends 
 Deguffer measured. A cache Deguffer would not accept as a tool's own folder, such as your profile or a
 drive root, is left alone, and so is a cache that is a link.
 
+Bun's prune decides by a folder's name, so a cache a setting points at could hold a folder of yours
+that only looks like a package, such as `client@acme`. Deguffer leaves the whole cache alone where a
+package-shaped folder has no `package.json`, or where one of Bun's index folders holds anything but
+links.
+
 Deguffer measures only the package folders `prune` removes, found by the same rule Bun's prune walk
 uses, and counts only the files no project still links. That is what the prune frees.
 
@@ -909,7 +914,8 @@ A clean that you cancel while this command runs is left to finish.
 
 ### What is protected
 
-**`links`** inside the cache, the cache folder itself, Bun's home `%USERPROFILE%\.bun` (moved by
+**`links`** inside the cache, everything else prune keeps there (git clones, package listings, the
+transpiler cache and anything it does not recognise), the cache folder itself, Bun's home `%USERPROFILE%\.bun` (moved by
 `BUN_INSTALL`) and **`install\global`**, the packages you installed with `bun add --global`. Deguffer
 asserts that each survived the run, and Explore refuses everything in Bun's home except the package
 folders at the top of the cache.
@@ -965,7 +971,9 @@ Composer for each of the four, and for its home, its data folder and `cache-read
   none of them is a link.
 
 Anything else means Deguffer leaves the cache alone and says why. A cache that is turned off or set
-read-only is not offered, because the clear would remove nothing.
+read-only is not offered, because the clear would remove nothing. Nor is the cache offered while the
+`COMPOSER` environment variable names a project file: Composer 2.11's `clear-cache` takes that
+project's cache settings, which the global settings Deguffer asks for never show.
 
 Every Composer command runs with `--working-dir` naming Deguffer's own empty folder. Composer 2.11
 reads a project's `composer.json` from the working folder before its global settings, and with
