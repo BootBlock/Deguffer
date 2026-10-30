@@ -53,12 +53,12 @@ public sealed class ContrastDrawingTests
     [Fact]
     public void EveryShapeAndBlockIsFilledWithTheWindowColour()
     {
-        var quads = Drawn(ExploreView.Treemap).Quads()!.Quads.ToArray();
+        var quads = Treemap().Quads().Quads.ToArray();
 
         Assert.Contains(quads, quad => quad.Colour == Window && quad.Left > 0);
         Assert.All(quads, quad => Assert.Equal(Window, quad.Colour));
 
-        var tiles = Drawn(ExploreView.Treemap).Tiles;
+        var tiles = Treemap().Tiles;
         Assert.Contains(tiles, tile => tile.IsAggregate);
         Assert.Contains(tiles, tile => tile.IsFreeSpace);
     }
@@ -70,9 +70,9 @@ public sealed class ContrastDrawingTests
     [Fact]
     public void EachShapeIsEdgedInTheTextColourAndFlatInside()
     {
-        var drawing = Drawn(ExploreView.Treemap);
+        var drawing = Treemap();
         var pixels = Paint(drawing);
-        var leaves = drawing.Quads()!.Quads.ToArray()
+        var leaves = drawing.Quads().Quads.ToArray()
             .Where(quad => quad.Left >= 0 && quad.Top >= 0 && quad.Right <= Width && quad.Bottom <= Height)
             .Where(quad => quad.Right - quad.Left >= 8 && quad.Bottom - quad.Top >= 8)
             .Where(quad => ColourAt(pixels, (quad.Left + quad.Right) / 2, (quad.Top + quad.Bottom) / 2) == Window)
@@ -239,11 +239,11 @@ public sealed class ContrastDrawingTests
     [InlineData(1.5, 1.0, 2)]
     public void TheEdgesAreAsHeavyAsTheDisplaysScale(double scale, double textScale, int width)
     {
-        var drawing = ExploreSurface.Create(
+        var drawing = (TiledSurface)ExploreSurface.Create(
             Tree(), ExploreTreeBuilder.RootNode, ExploreView.Treemap, Width, Height, scale, textScale,
             Contrasted, ExploreSpacing.Comfortable, VolumeSpace.None);
 
-        var finish = drawing.Quads()!.Finish;
+        var finish = drawing.Quads().Finish;
 
         Assert.Equal(MapShading.Flat, finish.Shading);
         Assert.Equal(new ShapeBorders(Text, width, ShapeFinish.Whole, ShapeFinish.Whole), finish.Borders);
@@ -253,11 +253,11 @@ public sealed class ContrastDrawingTests
     [Fact]
     public void AColouredMapHasNoEdges()
     {
-        var drawing = ExploreSurface.Create(
+        var drawing = (TiledSurface)ExploreSurface.Create(
             Tree(), ExploreTreeBuilder.RootNode, ExploreView.Treemap, Width, Height, 1, 1,
             ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None);
 
-        Assert.Equal(ShapeFinish.Cushioned, drawing.Quads()!.Finish);
+        Assert.Equal(ShapeFinish.Cushioned, drawing.Quads().Finish);
         Assert.All(drawing.MorphShapes(drawing.NodesDrawn.ToHashSet()), shape => Assert.Null(shape.Edges));
     }
 
@@ -265,11 +265,11 @@ public sealed class ContrastDrawingTests
     [Fact]
     public void ATileAZoomShowsIsDrawnAsItsDrawingIs()
     {
-        var drawing = (TiledSurface)Drawn(ExploreView.Treemap);
+        var drawing = Treemap();
         var tiling = new MapTiling(Width, Height);
         var tile = drawing.Tile(tiling, tiling.At(1, 0.4, 0.6)!.Value);
 
-        Assert.Equal(drawing.Quads()!.Finish, tile.Quads().Finish);
+        Assert.Equal(drawing.Quads().Finish, tile.Quads().Finish);
         Assert.All(tile.Quads().Quads.ToArray(), quad => Assert.Equal(Window, quad.Colour));
     }
 
@@ -296,6 +296,8 @@ public sealed class ContrastDrawingTests
     private static ExploreSurface Drawn(ExploreView view) => ExploreSurface.Create(
         Tree(), ExploreTreeBuilder.RootNode, view, Width, Height, scale: 1, textScale: 1,
         Contrasted, ExploreSpacing.Comfortable, new VolumeSpace(TotalBytes: 12_000_000, FreeBytes: 4_000_000));
+
+    private static TiledSurface Treemap() => (TiledSurface)Drawn(ExploreView.Treemap);
 
     private static byte[] Paint(ExploreSurface drawing)
     {

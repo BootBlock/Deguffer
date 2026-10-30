@@ -90,7 +90,7 @@ public sealed class ExploreHoverNoteTests : IDisposable
 
         var tree = builder.Build(ExploreChildOrder.BySize);
 
-        return (tree, ExploreSurface.Create(
+        return (tree, Surfaces.Create(
             tree,
             tree.RootNode,
             ExploreView.Treemap,

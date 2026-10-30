@@ -37,14 +37,24 @@ public enum SteamLibraryListing
     Unplaced,
 }
 
+/// <summary>One Steam library, and whether Windows could say it is there.</summary>
+/// <param name="Folder">The library's own folder.</param>
+/// <param name="Presence">
+/// Probed once, when the list was read, so every question asked of the library in one pass gets the
+/// same answer. Anything but <see cref="PathPresence.Present"/> is a library on a drive that is not
+/// connected, a share that is offline, a folder removed outside Steam or one Windows would not
+/// describe: whatever Steam installed there is out of sight, not gone.
+/// </param>
+public sealed record SteamLibrary(string Folder, PathPresence Presence);
+
 /// <summary>Every Steam library this machine's Steam knows of, and how that was established.</summary>
 /// <param name="Folders">
-/// Each library's own folder, the install directory first, with no repeats. Always holds at least the
-/// install directory, which is a library whether or not the list names it.
+/// Each library, the install directory first, with no repeats. Always holds at least the install
+/// directory, which is a library whether or not the list names it.
 /// </param>
 /// <param name="Listing">What became of the list the other libraries were read from.</param>
 /// <param name="ListPath">Where that list is, for a sentence about it.</param>
-public sealed record SteamLibraries(IReadOnlyList<string> Folders, SteamLibraryListing Listing, string ListPath)
+public sealed record SteamLibraries(IReadOnlyList<SteamLibrary> Folders, SteamLibraryListing Listing, string ListPath)
 {
     /// <summary>
     /// Whether <see cref="Folders"/> is every library Steam knows of. False where the list could not
@@ -86,35 +96,39 @@ public static class SteamLibraryFolders
     /// </summary>
     private const int MaximumBytes = 2 * 1024 * 1024;
 
-    /// <summary>Every library of the Steam installed at <paramref name="install"/>.</summary>
+    /// <summary>
+    /// Every library of the Steam installed at <paramref name="install"/>, which the caller has
+    /// already found to be there with the Steam program in it, so it is not probed again.
+    /// </summary>
     public static SteamLibraries Of(string install)
     {
         var list = Path.Combine(install, "steamapps", ListFileName);
+        var installLibrary = new SteamLibrary(install, PathPresence.Present);
 
         switch (LongPath.ProbeFile(list))
         {
             case PathPresence.Absent:
-                return new SteamLibraries([install], SteamLibraryListing.Absent, list);
+                return new SteamLibraries([installLibrary], SteamLibraryListing.Absent, list);
 
             case PathPresence.Refused:
-                return new SteamLibraries([install], SteamLibraryListing.Unreadable, list);
+                return new SteamLibraries([installLibrary], SteamLibraryListing.Unreadable, list);
         }
 
         // Too large, locked, or gone since the probe. Read as unreadable rather than absent, because
         // something was there and nothing established what it said.
         if (BoundedFile.Read(list, MaximumBytes) is not { } content)
         {
-            return new SteamLibraries([install], SteamLibraryListing.Unreadable, list);
+            return new SteamLibraries([installLibrary], SteamLibraryListing.Unreadable, list);
         }
 
         if (SteamKeyValues.Parse(Encoding.UTF8.GetString(content.Span)) is not { } entries
             || entries.FirstOrDefault(e => string.Equals(e.Key, "libraryfolders", StringComparison.OrdinalIgnoreCase))
                 is not { Value: null } root)
         {
-            return new SteamLibraries([install], SteamLibraryListing.Malformed, list);
+            return new SteamLibraries([installLibrary], SteamLibraryListing.Malformed, list);
         }
 
-        var folders = new List<string> { install };
+        var folders = new List<SteamLibrary> { installLibrary };
         var unplaced = false;
 
         foreach (var entry in root.Children.Where(e => IsLibraryIndex(e.Key)))
@@ -127,9 +141,9 @@ public static class SteamLibraryFolders
             {
                 unplaced = true;
             }
-            else if (!folders.Contains(folder, StringComparer.OrdinalIgnoreCase))
+            else if (!folders.Any(known => string.Equals(known.Folder, folder, StringComparison.OrdinalIgnoreCase)))
             {
-                folders.Add(folder);
+                folders.Add(new SteamLibrary(folder, LongPath.ProbeDirectory(folder)));
             }
         }
 

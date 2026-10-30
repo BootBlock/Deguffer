@@ -1980,8 +1980,10 @@ are offered too, as part of their game. Anything else, such as `backup`, `440.ol
 not a picture, stays in Tier 4, and the plan names it.
 
 **Each game is its own item.** Deguffer names a game from Steam's manifest for it where the game is
-installed, and shows the app id where it is not. Keeping a game keeps all of its artwork, in either
-layout.
+installed, and shows the app id where it is not. It says whether the game is installed in any of
+Steam's libraries, and says nothing about it where a library Steam lists could not be looked in, such
+as one on a drive that is not connected: the plan names that library. Keeping a game keeps all of its
+artwork, in either layout.
 
 **Steam's index of the artwork, `assetcache.vdf`, is never removed.** Removing a game's folder does
 not need it to change: with the folders for three games removed and the index left listing them,
@@ -2073,7 +2075,8 @@ so you can choose them one by one and keep one you want to hold on to. It reads 
 Steam's manifest for it, `appmanifest_<app id>.acf`, and says whether the game is still installed in
 any library. A cache for a game you have uninstalled costs nothing to remove. Where a manifest is
 missing, the item shows the app id instead. Where Deguffer could not look in every library, it says
-nothing about whether a game is installed rather than guess.
+nothing about whether a game is installed rather than guess. A library on a drive that is not
+connected counts: the plan names it.
 
 **A library the list names but Deguffer cannot place**, an entry with no full path, is named on the
 plan as a warning, and a shader cache in it is neither cleared nor ruled out.

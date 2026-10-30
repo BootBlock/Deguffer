@@ -138,7 +138,7 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
         Task.FromResult<IReadOnlyList<CleanedPlace>>(
         [
             .. (_discovery.Libraries?.Folders ?? [])
-                .Select(library => CleanedPlace.Whole(Path.Combine(library, ShaderCacheDirectory))),
+                .Select(library => CleanedPlace.Whole(Path.Combine(library.Folder, ShaderCacheDirectory))),
         ]);
 
     public override void InvalidateCaches()
@@ -187,6 +187,8 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
             ct.ThrowIfCancellationRequested();
             Collect(library, examination, ct);
         }
+
+        examination.Notes.AddRange(examination.Manifests.UnreachedLibraryNotes(refusalsNamed: true));
 
         if (examination.Targets.Count == 0
             && examination.Declined.Count == 0
@@ -275,12 +277,14 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
     };
 
     /// <summary>
-    /// Whether <paramref name="library"/> may hold a game's shader cache with something in it. See
+    /// Whether <paramref name="steamLibrary"/> may hold a game's shader cache with something in it. See
     /// <see cref="IsPresentAsync"/> for why an obstacle answers yes.
     /// </summary>
-    private static bool MayHoldACache(string library)
+    private static bool MayHoldACache(SteamLibrary steamLibrary)
     {
-        switch (LongPath.ProbeDirectory(library))
+        var library = steamLibrary.Folder;
+
+        switch (steamLibrary.Presence)
         {
             case PathPresence.Absent:
                 return false;
@@ -321,9 +325,11 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
     /// §5.2 for one library: reach its container through folders that are not links, classify every
     /// child, target the games, and name everything else.
     /// </summary>
-    private static void Collect(string library, Examination examination, CancellationToken ct)
+    private static void Collect(SteamLibrary steamLibrary, Examination examination, CancellationToken ct)
     {
-        switch (LongPath.ProbeDirectory(library))
+        var library = steamLibrary.Folder;
+
+        switch (steamLibrary.Presence)
         {
             // A library on a drive that is not connected, or one removed since Steam listed it. There
             // is nothing on this machine to reclaim from it.
@@ -433,7 +439,7 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
 
         var roots = new List<ToolRoot>(libraries.Folders.Count * 2);
 
-        foreach (var library in libraries.Folders)
+        foreach (var (library, _) in libraries.Folders)
         {
             roots.Add(new ToolRoot(
                 Path.Combine(library, "steamapps"),

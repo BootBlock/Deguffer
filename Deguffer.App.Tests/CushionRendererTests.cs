@@ -52,7 +52,7 @@ public sealed class CushionRendererTests : IDisposable
     public void AZoomedPictureIsShadedAsItIsPainted()
     {
         var picture = Picture(MapViewport.Seen(zoom: 2.5, left: 0.31, top: 0.42));
-        var quads = picture.Quads()!.Quads.ToArray();
+        var quads = picture.Quads().Quads.ToArray();
 
         Assert.Contains(quads, quad => quad.Left < 0 || quad.Top < 0 || quad.Right > Width || quad.Bottom > Height);
 
@@ -66,7 +66,7 @@ public sealed class CushionRendererTests : IDisposable
     [Fact]
     public void ASmallerCanvasAfterALargerIsShadedAtItsOwnSize()
     {
-        var larger = Picture(MapViewport.Whole, Width * 2, Height * 2).Quads()!;
+        var larger = Picture(MapViewport.Whole, Width * 2, Height * 2).Quads();
 
         _renderer.Shade(larger, new TileColour(250, 0, 250), Whole(larger), light: null);
 
@@ -88,7 +88,7 @@ public sealed class CushionRendererTests : IDisposable
     [Fact]
     public void ThePointerLightBrightensWithinItsReachAndChangesNothingPastIt()
     {
-        var quads = Picture(MapViewport.Whole).Quads()!;
+        var quads = Picture(MapViewport.Whole).Quads();
         var light = new PointerLight(400, 300, 120);
         var unlit = Shaded(quads);
         var lit = _renderer.Shade(quads, Ground, Whole(quads), light).GetPixelBytes(0, 0, quads.Width, quads.Height);
@@ -126,7 +126,7 @@ public sealed class CushionRendererTests : IDisposable
     [Fact]
     public void ARegionShadedOnItsOwnIsThePictureOfTheWhole()
     {
-        var quads = Picture(MapViewport.Whole).Quads()!;
+        var quads = Picture(MapViewport.Whole).Quads();
         var light = new PointerLight(400, 300, 120);
         var region = new CanvasRegion(260, 170, 290, 250);
         var whole = _renderer.Shade(quads, Ground, Whole(quads), light).GetPixelBytes(region.X, region.Y, region.Width, region.Height);
@@ -148,7 +148,7 @@ public sealed class CushionRendererTests : IDisposable
         var window = new TileColour(0, 0, 0);
         var text = new TileColour(255, 255, 0);
         var picture = Picture(MapViewport.Seen(zoom, left, top), colours: ShapeColours.Contrasted(new ContrastColours(window, text)));
-        var quads = picture.Quads()!;
+        var quads = picture.Quads();
         var painted = new byte[PixelBuffer.LengthFor(picture.Width, picture.Height)];
 
         picture.Painter(window).Paint(painted, new CanvasRegion(0, 0, picture.Width, picture.Height));
@@ -179,7 +179,7 @@ public sealed class CushionRendererTests : IDisposable
     public void EveryFinishIsShadedAsItIsPainted(string name, MapStyle style)
     {
         var picture = Picture(MapViewport.Seen(zoom: 1.6, left: 0.2, top: 0.3), style: style);
-        var finish = picture.Quads()!.Finish;
+        var finish = picture.Quads().Finish;
 
         Assert.True(
             finish.Borders.Width > 0 || finish.Bevel.Width > 0 || style.Relief != MapStyle.Default.Relief || style.Shading == MapShading.Gradient,
@@ -225,7 +225,7 @@ public sealed class CushionRendererTests : IDisposable
     public void ThePointerLightBrightensAFlatPictureWithinItsReachButNotItsLines(MapShading shading)
     {
         var picture = Picture(MapViewport.Whole, style: new MapStyle(shading, BlockBorders: MapBorder.Medium, BorderWidth: MapBorderWidth.Thick));
-        var quads = picture.Quads()!;
+        var quads = picture.Quads();
         var light = new PointerLight(400, 300, 160);
         var unlit = Shaded(quads);
         var lit = _renderer.Shade(quads, Ground, Whole(quads), light).GetPixelBytes(0, 0, quads.Width, quads.Height);
@@ -287,9 +287,9 @@ public sealed class CushionRendererTests : IDisposable
         }
     }
 
-    private void AssertShadedAsPainted(ExploreSurface picture)
+    private void AssertShadedAsPainted(TiledSurface picture)
     {
-        var quads = picture.Quads()!;
+        var quads = picture.Quads();
         var painted = new byte[PixelBuffer.LengthFor(picture.Width, picture.Height)];
 
         picture.Painter(Ground).Paint(painted, new CanvasRegion(0, 0, picture.Width, picture.Height));
@@ -322,9 +322,9 @@ public sealed class CushionRendererTests : IDisposable
             $"{differing} of {painted.Length / 4} pixels differ by a level");
     }
 
-    private void AssertShadedExactlyAsPainted(ExploreSurface picture)
+    private void AssertShadedExactlyAsPainted(TiledSurface picture)
     {
-        var quads = picture.Quads()!;
+        var quads = picture.Quads();
         var painted = new byte[PixelBuffer.LengthFor(picture.Width, picture.Height)];
 
         picture.Painter(Ground).Paint(painted, new CanvasRegion(0, 0, picture.Width, picture.Height));
@@ -348,8 +348,8 @@ public sealed class CushionRendererTests : IDisposable
 
     private static string Colour(byte[] pixels, int i) => $"#{pixels[i + 2]:X2}{pixels[i + 1]:X2}{pixels[i]:X2}";
 
-    private static ExploreSurface Picture(MapViewport viewport, int width = Width, int height = Height, ShapeColours? colours = null, MapStyle? style = null) =>
-        ExploreSurface.Create(
+    private static TiledSurface Picture(MapViewport viewport, int width = Width, int height = Height, ShapeColours? colours = null, MapStyle? style = null) =>
+        (TiledSurface)ExploreSurface.Create(
             Tree,
             Tree.RootNode,
             ExploreView.Treemap,

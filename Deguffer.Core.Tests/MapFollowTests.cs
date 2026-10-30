@@ -147,29 +147,29 @@ public sealed class MapFollowTests
         MapViewport.Fitting(Drawing(tree, MapViewport.Whole).FrameOf(node)!.Value, Ceiling);
 
     /// <summary>The deepest node drawn under the middle of the screen.</summary>
-    private static int? Middle(ExploreSurface drawing) =>
+    private static int? Middle(TiledSurface drawing) =>
         drawing.Tiles.LastOrDefault(tile => tile.IsNode && Under(tile, drawing)) is { IsNode: true } tile ? tile.Node : null;
 
     /// <summary>The top-level folder drawn under the middle of the screen.</summary>
-    private static int? Folder(ExploreSurface drawing, ExploreTree tree) =>
+    private static int? Folder(TiledSurface drawing, ExploreTree tree) =>
         drawing.Tiles.FirstOrDefault(tile => tile.IsNode && tile.Node != tree.RootNode && Under(tile, drawing)) is { IsNode: true } tile
             ? tile.Node
             : null;
 
-    private static bool Under(ExploreTile tile, ExploreSurface drawing) =>
+    private static bool Under(ExploreTile tile, TiledSurface drawing) =>
         drawing.Width / 2f >= tile.X && drawing.Width / 2f < tile.X + tile.Width
         && drawing.Height / 2f >= tile.Y && drawing.Height / 2f < tile.Y + tile.Height;
 
     /// <summary>Where the middle of the screen is inside <paramref name="node"/>'s shape, as a share of it.</summary>
-    private static (double X, double Y) Share(ExploreSurface drawing, int node)
+    private static (double X, double Y) Share(TiledSurface drawing, int node)
     {
         var frame = drawing.FrameOf(node)!.Value;
 
         return ((0.5 - frame.X) / frame.Width, (0.5 - frame.Y) / frame.Height);
     }
 
-    private static ExploreSurface Drawing(ISizedTree tree, MapViewport viewport) =>
-        ExploreSurface.Create(
+    private static TiledSurface Drawing(ISizedTree tree, MapViewport viewport) =>
+        (TiledSurface)ExploreSurface.Create(
             tree, tree.RootNode, ExploreView.Treemap, Width, Height, scale: 1, textScale: 1,
             ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None, viewport);
 

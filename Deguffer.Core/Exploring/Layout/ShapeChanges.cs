@@ -41,13 +41,19 @@ public static class ShapeChanges
     /// <summary>
     /// The shapes that moved between <paramref name="earlier"/> and <paramref name="later"/>, two
     /// drawings of the same place at the same zoom. Empty where their trees are not of the same thing,
-    /// so there is nothing to match.
+    /// so there is nothing to match, or where either is not a drawing of rectangles, whose shapes are
+    /// not moved.
     /// </summary>
     public static IReadOnlyList<ShapeChange> Between(ExploreSurface earlier, ExploreSurface later)
     {
         ArgumentNullException.ThrowIfNull(earlier);
         ArgumentNullException.ThrowIfNull(later);
 
+        return earlier is TiledSurface tiledEarlier && later is TiledSurface tiledLater ? Between(tiledEarlier, tiledLater) : [];
+    }
+
+    private static IReadOnlyList<ShapeChange> Between(TiledSurface earlier, TiledSurface later)
+    {
         if (earlier.Tree is not ITrackedTree before
             || later.Tree is not ITrackedTree after
             || before.CounterpartsIn(later.Tree) is not { } onward
@@ -128,7 +134,7 @@ public static class ShapeChanges
     /// replaced by what is drawn inside it, largest first, while there is room in
     /// <see cref="MostShapes"/>. See <see cref="ShapeChanges"/>.
     /// </summary>
-    private static List<int> Cut(ExploreSurface drawing, Dictionary<int, int> indexed)
+    private static List<int> Cut(TiledSurface drawing, Dictionary<int, int> indexed)
     {
         var tiles = drawing.Tiles;
         var inside = new Dictionary<int, List<int>>();
@@ -194,7 +200,7 @@ public static class ShapeChanges
     /// shape lies inside it, and null where it is drawn at the top or beside its folder, as in an
     /// icicle. A shape that stands for no node is drawn at the top.
     /// </summary>
-    private static int? Holder(ExploreSurface drawing, Dictionary<int, int> indexed, int index)
+    private static int? Holder(TiledSurface drawing, Dictionary<int, int> indexed, int index)
     {
         var tile = drawing.Tiles[index];
 

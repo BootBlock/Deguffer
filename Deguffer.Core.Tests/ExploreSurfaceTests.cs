@@ -68,7 +68,7 @@ public sealed class ExploreSurfaceTests
         var tree = FlatTree(10);
 
         Assert.IsType<TiledSurface>(
-            ExploreSurface.Create(
+            Surfaces.Create(
                 tree, tree.RootNode, view, Width, Height, scale: 1, textScale: 1, Branch, ExploreScheme.Standard, Now, ExploreSpacing.Comfortable, VolumeSpace.None));
     }
 
@@ -78,7 +78,7 @@ public sealed class ExploreSurfaceTests
         var tree = FlatTree(10);
 
         Assert.IsType<SunburstSurface>(
-            ExploreSurface.Create(
+            Surfaces.Create(
                 tree, tree.RootNode, ExploreView.Sunburst, Width, Height, scale: 1, textScale: 1, Branch, ExploreScheme.Standard, Now, ExploreSpacing.Comfortable, VolumeSpace.None));
     }
 
@@ -95,7 +95,7 @@ public sealed class ExploreSurfaceTests
     {
         var tree = NamedTree(10);
 
-        var surface = ExploreSurface.Create(
+        var surface = Surfaces.Create(
             tree, tree.RootNode, view, Width, Height, scale: 1, textScale: 1, Branch, ExploreScheme.Standard, Now, ExploreSpacing.Comfortable, VolumeSpace.None);
 
         Assert.IsType<TiledSurface>(surface);
@@ -332,7 +332,7 @@ public sealed class ExploreSurfaceTests
     [InlineData(ExploreView.Icicle)]
     public void TheRectangleAtAPointIsTheShapeThePointIsOver(ExploreView view)
     {
-        var surface = Drawn(NestedTree(), view);
+        var surface = Assert.IsType<TiledSurface>(Drawn(NestedTree(), view));
         var shapes = 0;
 
         for (var x = 1f; x < Width; x += 13)
@@ -362,10 +362,10 @@ public sealed class ExploreSurfaceTests
         var surface = Drawn(NestedTree(), ExploreView.Sunburst);
 
         Assert.NotNull(surface.At(Width / 2f, Height / 2f));
-        Assert.Null(surface.TileAt(Width / 2f, Height / 2f));
+        Assert.IsNotType<TiledSurface>(surface);
     }
 
-    private static ExploreSurface Drawn(ExploreTree tree, ExploreView view) => ExploreSurface.Create(
+    private static ExploreSurface Drawn(ExploreTree tree, ExploreView view) => Surfaces.Create(
         tree, tree.RootNode, view, Width, Height, scale: 1, textScale: 1,
         Branch, ExploreScheme.Standard, Now, ExploreSpacing.Comfortable, VolumeSpace.None);
 

@@ -69,6 +69,23 @@ public sealed class SteamLibraryArtworkProviderTests : IDisposable
 
     private string Index() => WriteFile(Path.Combine(Container, "assetcache.vdf"));
 
+    /// <summary>A library on a drive that is not connected: listed by Steam, and not there.</summary>
+    private string UnpluggedLibrary => Path.Combine(_temp.Path, "unplugged-drive", "SteamLibrary");
+
+    /// <summary>
+    /// Steam's list of libraries, naming the install and <paramref name="others"/>, with every
+    /// backslash doubled as Steam's writer doubles them.
+    /// </summary>
+    private void WriteLibraryList(params string[] others)
+    {
+        var blocks = new[] { InstallRoot }.Concat(others).Select((library, index) =>
+            $$"""    "{{index}}" { "path" "{{library.Replace(@"\", @"\\")}}" }""");
+
+        var list = Path.Combine(InstallRoot, "steamapps", SteamLibraryFolders.ListFileName);
+        Directory.CreateDirectory(Path.GetDirectoryName(list)!);
+        File.WriteAllText(list, $"\"libraryfolders\"\n{{\n{string.Join("\n", blocks)}\n}}\n");
+    }
+
     private string Manifest(string appId, string name)
     {
         var path = Path.Combine(InstallRoot, "steamapps", $"appmanifest_{appId}.acf");
@@ -150,6 +167,77 @@ public sealed class SteamLibraryArtworkProviderTests : IDisposable
         Assert.Contains(new ItemFacet("Installed", "Yes"), steps[installed].Facets);
         Assert.Equal(new ItemIdentity("570", "Steam app 570"), steps[owned].Identity);
         Assert.Contains(new ItemFacet("Installed", "No"), steps[owned].Facets);
+    }
+
+    /// <summary>
+    /// A library on a drive that is not connected answers "no manifest here" for every game, so a game
+    /// found in no library that could be looked in is of unknown standing rather than uninstalled, and
+    /// the plan names the library. A reader filtering on "Installed: No" would otherwise clear artwork
+    /// for games they still have. A game found elsewhere is still installed.
+    /// </summary>
+    [Fact]
+    public async Task AGameThatMayBeInALibraryOnADisconnectedDriveIsNotCalledUninstalled()
+    {
+        RegisterInstall();
+        Index();
+        WriteLibraryList(UnpluggedLibrary);
+        var installed = ArtworkFor("440");
+        var unknown = ArtworkFor("570");
+        Manifest("440", "Team Fortress 2");
+
+        var plan = await CreateProvider().PlanAsync();
+        var steps = plan.Steps.OfType<DeleteDirectoryStep>().ToDictionary(s => s.Path, StringComparer.OrdinalIgnoreCase);
+
+        Assert.Contains(new ItemFacet("Installed", "Yes"), steps[installed].Facets);
+        Assert.DoesNotContain(steps[unknown].Facets, f => f.Label == "Installed");
+        Assert.Contains(new ItemFacet("App ID", "570"), steps[unknown].Facets);
+
+        var note = Assert.Single(plan.Notes, n => n.Message.Contains(UnpluggedLibrary, StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(PlanNoteSeverity.Information, note.Severity);
+        Assert.DoesNotContain(@"\\?\", note.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A library Windows would not describe is the same unknown. A manifest inside it can still answer
+    /// "not there" when probed, because traverse checking is bypassed, so the library's own answer has
+    /// to decide.
+    /// </summary>
+    [Fact]
+    public async Task AGameThatMayBeInALibraryWindowsWouldNotDescribeIsNotCalledUninstalled()
+    {
+        RegisterInstall();
+        var refused = Path.Combine(_temp.Path, "refused-drive", "SteamLibrary");
+        Directory.CreateDirectory(Path.Combine(refused, "steamapps"));
+        WriteLibraryList(refused);
+        var unknown = ArtworkFor("570");
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(refused);
+
+        var plan = await CreateProvider().PlanAsync();
+        var step = Assert.Single(plan.Steps.OfType<DeleteDirectoryStep>());
+
+        Assert.Equal(unknown, step.Path, ignoreCase: true);
+        Assert.DoesNotContain(step.Facets, f => f.Label == "Installed");
+        Assert.Contains(plan.Notes, n => n.Message.Contains(refused, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// A library that could not be reached is mentioned only where it decided something: every game
+    /// here was found in a library listed after it, so the plan has nothing to say about it.
+    /// </summary>
+    [Fact]
+    public async Task ALibraryThatCouldNotBeReachedIsNotMentionedWhereEveryGameWasFound()
+    {
+        RegisterInstall();
+        var later = Path.Combine(_temp.Path, "third-drive", "SteamLibrary");
+        WriteLibraryList(UnpluggedLibrary, later);
+        ArtworkFor("440");
+        WriteFile(Path.Combine(later, SteamAppManifests.RelativePath("440")));
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Contains(new ItemFacet("Installed", "Yes"), Assert.Single(plan.Steps.OfType<DeleteDirectoryStep>()).Facets);
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains(UnpluggedLibrary, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
