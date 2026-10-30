@@ -80,7 +80,7 @@ public sealed class VagrantSupersededBoxProvider : CleanupProviderBase
     /// </summary>
     private static readonly string[] NamesInTheHome =
     [
-        "boxes", "data", "gems", "rgloader", "tmp", "setup_version",
+        VagrantBoxLayout.BoxesFolder, "data", "gems", "rgloader", "tmp", "setup_version",
         .. HomeEntries.Select(entry => entry.Name.Split(Path.DirectorySeparatorChar)[0]).Distinct(StringComparer.OrdinalIgnoreCase),
     ];
 
@@ -172,7 +172,7 @@ public sealed class VagrantSupersededBoxProvider : CleanupProviderBase
             .. new[] { Resolve().Folder, DefaultHome }
                 .OfType<string>()
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Select(home => CleanedPlace.Whole(BoxesIn(home))),
+                .Select(home => CleanedPlace.Whole(VagrantBoxLayout.BoxesIn(home))),
         ]);
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
@@ -194,7 +194,7 @@ public sealed class VagrantSupersededBoxProvider : CleanupProviderBase
                 + $"folder: {setting.Declined} Vagrant is not run, and none of its boxes is offered.");
         }
 
-        var boxes = BoxesIn(home);
+        var boxes = VagrantBoxLayout.BoxesIn(home);
 
         if (NothingToPlanFor(boxes, $"Vagrant has no boxes for this account: {boxes} does not exist.") is { } nothing)
         {
@@ -329,8 +329,6 @@ public sealed class VagrantSupersededBoxProvider : CleanupProviderBase
                 .Select(folder => (folder, "Beside a version prune removes, and not part of it.")),
         ]);
     }
-
-    private static string BoxesIn(string home) => Path.Combine(home, "boxes");
 
     private static bool IsThere(PathPresence presence) => presence is PathPresence.Present;
 

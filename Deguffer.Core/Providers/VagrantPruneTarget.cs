@@ -29,7 +29,7 @@ internal sealed class VagrantPruneTarget(
 {
     public string? WhyNot(RunCommandStep step, CancellationToken ct)
     {
-        var boxes = Path.Combine(home, "boxes");
+        var boxes = VagrantBoxLayout.BoxesIn(home);
 
         if (VagrantBoxLayout.Installed(boxes) is not { } now)
         {

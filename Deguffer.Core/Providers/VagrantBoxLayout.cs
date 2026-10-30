@@ -16,6 +16,12 @@ internal static class VagrantBoxLayout
     /// <summary>The file whose presence makes a provider folder a box, for Vagrant and here.</summary>
     private const string MetadataFile = "metadata.json";
 
+    /// <summary>The folder in a home that <c>BoxCollection</c> keeps every installed box in.</summary>
+    public const string BoxesFolder = "boxes";
+
+    /// <summary>The boxes folder of the home at <paramref name="home"/>, where prune looks.</summary>
+    public static string BoxesIn(string home) => Path.Combine(home, BoxesFolder);
+
     /// <summary>
     /// The folder <c>BoxCollection#dir_name</c> gives a box's logical name, or null where the name
     /// would not be one folder inside <paramref name="boxes"/>.
