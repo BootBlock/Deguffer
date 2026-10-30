@@ -7,7 +7,7 @@ namespace Deguffer.App.Controls;
 /// rows that each build their own <c>Grid</c>. WinUI 3 has no <c>SharedSizeGroup</c>.
 ///
 /// <para>A fixed column width cannot do it, because the column holds text the app does not control:
-/// an estimate reads "about 1.0 GB" and a ceiling "up to 1023.9 MB", and Windows text scaling widens
+/// an estimate reads "about 1.0 GB" and a ceiling "up to 99.9 GB", and Windows text scaling widens
 /// every figure. A column too narrow for its text cuts the figure off, which is the one thing on the
 /// row that must be read whole.</para>
 ///
@@ -49,7 +49,17 @@ public sealed partial class WidthGroup
     }
 
     // A recycled row's container unloads and loads again, so a member is held only while it is shown.
-    private void OnUnloaded(object sender, RoutedEventArgs args) => _members.Remove((FrameworkElement)sender);
+    // An element moved to a new parent can be loaded there before it is unloaded from the old one,
+    // so one that is still loaded stays a member.
+    private void OnUnloaded(object sender, RoutedEventArgs args)
+    {
+        var member = (FrameworkElement)sender;
+
+        if (!member.IsLoaded)
+        {
+            _members.Remove(member);
+        }
+    }
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs args)
     {
