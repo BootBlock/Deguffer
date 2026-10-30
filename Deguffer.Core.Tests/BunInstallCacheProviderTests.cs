@@ -180,11 +180,11 @@ public sealed class BunInstallCacheProviderTests : IDisposable
         Assert.Empty(plan.Steps);
     }
 
-    [Fact]
     /// <summary>
     /// A cache that is the account's temporary folder holds what other rows remove. It holds only
     /// packages here, so nothing but the folder check can decline it.
     /// </summary>
+    [Fact]
     public async Task LeavesACacheThatIsATemporaryFolderAlone()
     {
         var temp = Path.Combine(_environment.LocalAppData, "Temp");
@@ -211,8 +211,10 @@ public sealed class BunInstallCacheProviderTests : IDisposable
 
         Assert.Contains(plan.ProtectedPaths, p =>
             p.Path.Equals(Path.Combine(Cache, "links"), StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
+        // Each kept entry by a protected path inside the cache, so neither the cache nor the home that
+        // holds it can stand in for the entry.
         Assert.All(kept, entry => Assert.Contains(plan.ProtectedPaths, p =>
-            !p.Path.Equals(Cache, StringComparison.OrdinalIgnoreCase)
+            p.Path.StartsWith(Cache + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
             && (p.Path.Equals(entry, StringComparison.OrdinalIgnoreCase)
                 || entry.StartsWith(p.Path + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))));
 
@@ -296,6 +298,8 @@ public sealed class BunInstallCacheProviderTests : IDisposable
     [Fact]
     public void ExploreRefusesTheLinksStoreAndBunsHome()
     {
+        PopulateCache();
+        Write(16, "client@acme", "notes.txt");
         var policy = new ExploreActionPolicy([], CreateProvider(new FakeProcessRunner()).ToolRoots, new FakeVolumeInventory());
 
         Assert.False(policy.MayRemove(Home).IsAllowed);
@@ -304,6 +308,7 @@ public sealed class BunInstallCacheProviderTests : IDisposable
         Assert.False(policy.MayRemove(Path.Combine(Cache, "links")).IsAllowed);
         Assert.False(policy.MayRemove(Path.Combine(Cache, "0123456789abcdef.git")).IsAllowed);
         Assert.True(policy.MayRemove(Path.Combine(Cache, "left-pad@1.3.0@@@1")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(Cache, "client@acme")).IsAllowed);
     }
 
     [Fact]

@@ -211,11 +211,11 @@ public sealed class ComposerCacheProviderTests : IDisposable
         Assert.Contains(plan.Notes, n => n.Message.Contains("credentials", StringComparison.Ordinal));
     }
 
-    [Fact]
     /// <summary>
     /// A cache that is the account's temporary folder holds what other rows remove. It holds only
     /// Composer's own folders here, so nothing but the folder check can decline it.
     /// </summary>
+    [Fact]
     public async Task LeavesACacheThatIsATemporaryFolderAlone()
     {
         var temp = Path.Combine(_environment.LocalAppData, "Temp");
@@ -243,7 +243,10 @@ public sealed class ComposerCacheProviderTests : IDisposable
     public async Task LeavesTheCacheAloneWhereComposerNamesAProject()
     {
         PopulateCache();
-        _environment.WithEnvironmentVariable("COMPOSER", @"C:\Users\testuser\Projects\app\composer.json");
+
+        // Only in the block Deguffer started with: the machine has since dropped it, and the clear
+        // would still inherit it.
+        _environment.WithToolEnvironmentVariable("COMPOSER", @"C:\Users\testuser\Projects\app\composer.json");
 
         var plan = await CreateProvider(ComposerAnswering()).PlanAsync();
 

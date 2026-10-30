@@ -79,6 +79,25 @@ public sealed class ProcessRunnerTests : IDisposable
         Assert.Equal(argument, outcome.StandardOutput.Trim());
     }
 
+    /// <summary>
+    /// cmd.exe expands %NAME% inside a quoted argument, so a path vetted as written would reach a shim
+    /// as another. The shim is not started at all.
+    /// </summary>
+    [Fact]
+    public async Task ABatchShimIsNotStartedWithAPercentSignInItsArguments()
+    {
+        var marker = Path.Combine(_temp.Path, "ran");
+        var shim = Path.Combine(_temp.CreateDirectory("bin"), "tool.cmd");
+        File.WriteAllText(shim, $"@echo ran> \"{marker}\"" + Environment.NewLine);
+        var argument = Path.Combine(_temp.Path, "%USERNAME%", "cache");
+
+        var outcome = await new ProcessRunner(Path.Combine(_temp.Path, "tools"))
+            .RunAsync(shim, $"--cache-folder \"{argument}\"", ToolRun.Query, CancellationToken.None);
+
+        Assert.Equal(-1, outcome.ExitCode);
+        Assert.False(File.Exists(marker), "The shim ran with an argument cmd.exe would have rewritten.");
+    }
+
     [Fact]
     public async Task AFolderThatCannotBeMadeFailsTheStepWithoutRunningTheTool()
     {

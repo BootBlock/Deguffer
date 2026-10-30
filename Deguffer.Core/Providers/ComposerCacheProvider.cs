@@ -168,7 +168,7 @@ public sealed class ComposerCacheProvider : CleanupProviderBase
         // Composer 2.11's clear-cache loads the project this names and takes its cache settings, which the
         // global settings asked here never include (ConfigCommand merges no project under --global), so
         // the clear could empty a folder nobody vetted.
-        if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("COMPOSER")))
+        if (!string.IsNullOrWhiteSpace(Environment.GetToolEnvironmentVariable("COMPOSER")))
         {
             return EmptyPlan(
                 "The COMPOSER environment variable names a project file, and Composer's clear-cache takes that "

@@ -123,6 +123,18 @@ public sealed class ProcessRunner : IProcessRunner
             return new CommandOutcome(-1, string.Empty, ex.Message);
         }
 
+        // cmd.exe expands %NAME% in its command line, quoted or not, and has no escape for it there. A
+        // path vetted as written would reach the tool as a different one: Yarn 1's cache clean
+        // deletes the whole folder it is handed.
+        if (IsBatchFile(fileName) && arguments.Contains('%', StringComparison.Ordinal))
+        {
+            return new CommandOutcome(
+                -1,
+                string.Empty,
+                $"Not run, because '{fileName}' runs through cmd.exe, which would read the % in its arguments as a "
+                + "variable and could hand the tool a different path.");
+        }
+
         var (application, commandLine) = CommandLineFor(fileName, arguments);
 
         ToolJob? job = null;
@@ -188,17 +200,22 @@ public sealed class ProcessRunner : IProcessRunner
     /// The program Windows starts and the command line it is given, quoted as
     /// <see cref="System.Diagnostics.Process"/> quoted it, which every caller's arguments were written for.
     /// </summary>
+    private static bool IsBatchFile(string fileName) =>
+        Path.GetExtension(fileName).Equals(".cmd", StringComparison.OrdinalIgnoreCase)
+        || Path.GetExtension(fileName).Equals(".bat", StringComparison.OrdinalIgnoreCase);
+
     private static (string Application, string CommandLine) CommandLineFor(string fileName, string arguments)
     {
         // npm and friends ship as .cmd shims on Windows, and CreateProcess cannot launch a batch
         // file directly — it has to go through the interpreter. In any case: a PATH search takes the
         // extension's case from PATHEXT, which lists .BAT and .CMD in capitals, and a shim launched
         // without this quoting mangles any quoted argument.
-        if (Path.GetExtension(fileName).Equals(".cmd", StringComparison.OrdinalIgnoreCase)
-            || Path.GetExtension(fileName).Equals(".bat", StringComparison.OrdinalIgnoreCase))
+        if (IsBatchFile(fileName))
         {
+            // /v:off, because delayed expansion can be switched on for every cmd.exe in the registry,
+            // and would then read !NAME! in an argument the way % is read.
             var cmd = NativeSystemTool.In(SystemDirectories.Current, "cmd.exe");
-            return (cmd, $"\"{cmd}\" /d /c \"\"{fileName}\" {arguments}\"");
+            return (cmd, $"\"{cmd}\" /d /v:off /c \"\"{fileName}\" {arguments}\"");
         }
 
         return (fileName, arguments.Length == 0 ? $"\"{fileName}\"" : $"\"{fileName}\" {arguments}");

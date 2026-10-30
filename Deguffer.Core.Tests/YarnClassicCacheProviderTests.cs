@@ -163,11 +163,11 @@ public sealed class YarnClassicCacheProviderTests : IDisposable
         Assert.Empty(plan.Steps);
     }
 
-    [Fact]
     /// <summary>
     /// A root that is the account's temporary folder holds what other rows remove. It holds only
     /// versioned cache folders here, so nothing but the folder check can decline it.
     /// </summary>
+    [Fact]
     public async Task LeavesARootThatIsATemporaryFolderAlone()
     {
         var temp = Path.Combine(_environment.LocalAppData, "Temp");

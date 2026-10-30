@@ -64,8 +64,16 @@ internal static class BunCacheEntries
             : BunCacheEntryKind.Index;
     }
 
-    /// <summary>Whether a folder directly in the cache is one prune removes, for Explore's declaration.</summary>
-    public static bool IsPackage(string name) => Classify(name, isDirectory: true, inScope: false) is BunCacheEntryKind.Package;
+    /// <summary>
+    /// Whether a folder directly in <paramref name="cache"/> is one of Bun's packages, which prune
+    /// removes: the name prune removes, and the manifest every package Bun extracts carries. A folder
+    /// that only shares the name shape is something else. A refused probe is no evidence of a manifest.
+    /// </summary>
+    public static bool IsPackage(string cache, string name) =>
+        Classify(name, isDirectory: true, inScope: false) is BunCacheEntryKind.Package && HasManifest(Path.Combine(cache, name));
+
+    private static bool HasManifest(string package) =>
+        LongPath.ProbeFile(Path.Combine(package, "package.json")) is PathPresence.Present;
 
     /// <summary>
     /// What prune would remove from <paramref name="cache"/> and what it would keep, or null where a
@@ -93,10 +101,8 @@ internal static class BunCacheEntries
 
             switch (Classify(entry.Name, isDirectory, inScope))
             {
-                // Every package Bun extracts carries its manifest, so a folder with no readable one is
-                // something else that only shares the name shape, and prune would delete it all the
-                // same. A refused probe is no evidence of a manifest.
-                case BunCacheEntryKind.Package when LongPath.ProbeFile(Path.Combine(path, "package.json")) is not PathPresence.Present:
+                // Prune would delete a folder that only shares the name shape all the same.
+                case BunCacheEntryKind.Package when !HasManifest(path):
                     contents.Strangers.Add(path);
                     break;
                 case BunCacheEntryKind.Package:

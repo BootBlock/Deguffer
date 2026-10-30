@@ -26,7 +26,7 @@ under the MIT licence. Download the zip for your processor from the
 
 ## What it does
 
-- **Storage** checks 89 sources of waste, from package-manager and browser caches to `Windows.old`
+- **Storage** checks 92 sources of waste, from package-manager and browser caches to `Windows.old`
   and old restore points, and sorts each one into a [safety tier](#safety-tiers). You tick what
   goes, and after the clean Deguffer checks that everything it promised to leave alone is still
   there.

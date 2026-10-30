@@ -103,13 +103,13 @@ public sealed class BunInstallCacheProvider : CleanupProviderBase
     public override IReadOnlyList<ToolRoot> ToolRoots =>
     [
         .. ToolRoot.WayDown(HomeDirectory, [DefaultCache], HomeReason),
-        ToolRoot.Folders(DefaultCache, CacheReason, BunCacheEntries.IsPackage),
+        CacheRoot(DefaultCache),
     ];
 
     /// <summary>The cache Bun reports, where its prune would be run there.</summary>
     public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
         await AcceptedCacheAsync(ct).ConfigureAwait(false) is { } cache
-            ? [ToolRoot.Folders(cache, CacheReason, BunCacheEntries.IsPackage)]
+            ? [CacheRoot(cache)]
             : [];
 
     /// <summary>The default cache and the one Bun reports, because a setting can move it back after a duplicate search.</summary>
@@ -261,6 +261,10 @@ public sealed class BunInstallCacheProvider : CleanupProviderBase
             cache, Environment, _system, Volumes, TempRoots.Resolve(Environment, _system, Volumes).AccountFolders) is { } notOwned
             ? $"Bun is set to keep its cache in '{cache}', and Deguffer will not run its prune there: {notOwned} It is leaving it alone."
             : null;
+
+    /// <summary>The cache, recognising the package folders prune removes and nothing it keeps.</summary>
+    private static ToolRoot CacheRoot(string cache) =>
+        ToolRoot.Folders(cache, CacheReason, name => BunCacheEntries.IsPackage(cache, name));
 
     private async Task<string?> AcceptedCacheAsync(CancellationToken ct) =>
         Environment.FindExecutable("bun") is { } bun
