@@ -797,6 +797,54 @@ time a project asks for it, with no command from you and nothing to re-configure
 
 ---
 
+## Scoop download cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%USERPROFILE%\scoop\cache`, unless moved |
+| **Method** | `scoop cache rm *` (the tool's own command) |
+| **Typical size** | Not measured: no Scoop was installed on the survey machine |
+
+### What it is
+
+Scoop is a command-line installer for Windows. It keeps every installer archive it downloads,
+named `<app>#<version>#<url>`, so reinstalling a version needs no download.
+
+### What Deguffer does
+
+Scoop prints no cache location, so Deguffer works it out as Scoop does: `SCOOP_CACHE`, then
+`cache_path` in Scoop's settings, then `cache` in Scoop's root. The root is `SCOOP`, then
+`root_path`, then the folder the running Scoop is installed in. The settings are a `config.json`
+beside that install if one exists, otherwise `scoop\config.json` under `XDG_CONFIG_HOME` or
+`%USERPROFILE%\.config`. Where any of these could be read as a different folder (a relative path,
+or brackets PowerShell takes as a wildcard), nothing is offered. Scoop is started through the
+`scoop.cmd` shim it installs, by full path.
+
+`scoop cache rm *` removes every entry in the folder without reading its name. So Deguffer offers it
+only when every entry is a download Scoop made, its partial download or aria2 file, or aria2's
+leftover list beside it. Anything else means no offer, and a note names what is there. A cancelled
+run is ended: each download is removed on its own.
+
+### What is protected
+
+The cache folder itself, `apps`, `persist`, `buckets` and `shims` in Scoop's root, both settings
+files (they can hold a GitHub token and a proxy password), and anything in the cache Scoop did not
+make. Explore refuses the root and the settings files. `scoop cleanup`, which removes old versions
+of installed apps, is never run.
+
+### What it costs you
+
+The next install or update that needs a removed download fetches it again. Installed apps are
+untouched.
+
+### Why Tier 1
+
+Every archive is a copy of what the app's manifest URL still serves.
+
+---
+
 ## Maven local repository
 
 **Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
@@ -950,6 +998,52 @@ rebuild of a large C++ library is the same cost with the clock running the other
 Two of the four — `buildtrees` and `packages` — are genuinely scratch and would be Tier 1 on their
 own. A plan carries one tier, and the more cautious of the two governs it. You are not denied them:
 each directory is its own row, so you can take the scratch and leave the binary cache.
+
+---
+
+## Conan package cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | The package store in Conan's home, `%USERPROFILE%\.conan2\p` unless moved |
+| **Method** | `conan cache clean -s -b -t` (the tool's own command) |
+| **Typical size** | Not measured: no Conan was installed on the survey machine |
+
+### What it is
+
+Conan is a package manager for C and C++. Beside every recipe and package binary, its store keeps
+the source code it fetched (`s`) and the folders it built packages in (`b`), so a package can be
+built again without fetching anything. A build that never finished stays behind too.
+
+### What Deguffer does
+
+It works out Conan's home the way Conan does: a `.conanrc` in Deguffer's tool folder or any folder
+above it, then `CONAN_HOME`, then `.conan2` in your profile. If that home does not exist, Conan is
+never started, because every Conan command creates its home. Otherwise it asks `conan config home`
+and `conan config show core.cache:storage_path` where the home and store are, and the row names the
+home Conan reported. It runs `conan cache clean -s -b -t`. The download and metadata folders (`-d`)
+and the backup sources (`-bs`) are never asked for, and `conan remove` is never run. While a `conan`
+process is running, nothing is offered. A clean you cancel while this command runs is left to
+finish, because Conan would build from a half-removed source or build folder.
+
+### What is protected
+
+Conan's home and its configuration (`global.conf`, `profiles`, `remotes.json`, `extensions`,
+`settings.yml` and the rest), `sources`, the store, `cache.sqlite3`, and in every recipe and package
+folder everything except `s` and `b`, including each package built on this machine. Explore refuses
+the home and the store.
+
+### What it costs you
+
+A package built from source again fetches its sources and builds from a fresh folder. Every recipe,
+package binary and download is untouched.
+
+### Why Tier 1
+
+Sources and build folders are rebuilt from the recipe on demand. A package's metadata, the one thing
+in the store that can exist nowhere else, is never touched.
 
 ---
 
@@ -4521,6 +4615,53 @@ settings are untouched.
 
 Nothing recreates a removed runtime on its own. Getting it back is a deliberate download, of a
 version that may not stay published, so it is offered and never ticked on your behalf.
+
+---
+
+## Vagrant superseded box versions
+
+**Tier 2 — regenerable, with cost.** Not pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `boxes` in `%USERPROFILE%\.vagrant.d`, unless `VAGRANT_HOME` moves it |
+| **Method** | `vagrant box prune --force --keep-active-boxes`, offered from what `vagrant box prune --dry-run` names |
+| **Typical size** | Each box version is a whole virtual disk image, often several GB |
+
+### What it is
+
+Vagrant keeps every version of a box it downloaded, so updating a box leaves the old versions
+beside the new one.
+
+### What Deguffer does
+
+It asks Vagrant's own prune, as a dry run, which versions it would remove: every version older than
+the newest for the same box and provider. It measures those versions' folders and runs the prune.
+
+The row is not offered while Vagrant's machine index records a machine created from one of those
+versions, because Vagrant's own in-use check does not reliably recognise one, and a Hyper-V linked
+clone's disk depends on the image in the box's folder. It is also not offered while a version is
+installed for two architectures, because the prune stops with an error part-way through.
+
+Vagrant is never started for a home with no `boxes` folder, because every Vagrant command creates
+its home. Running Vagrant loads the Vagrantfile in its home and any Vagrantfile in the folder
+Deguffer runs tools in or above it, such as your profile. It also contacts HashiCorp unless
+`VAGRANT_CHECKPOINT_DISABLE` is set. A cancelled prune is left to finish.
+
+### What is protected
+
+The home, `boxes`, every box folder, the newest version of every box, every version the prune does
+not name, `Vagrantfile`, `data\machine-index`, `insecure_private_key(s)`, `plugins.json`, `gems` and
+`aliases`. Explore refuses everything in the home.
+
+### What it costs you
+
+A Vagrantfile asking for a removed version downloads it again the next time a machine is created
+from it. Machines already created are untouched.
+
+### Why Tier 2, not Tier 1
+
+Getting a version back is a download of a whole disk image.
 
 ---
 
