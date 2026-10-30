@@ -79,7 +79,8 @@ public sealed class ProviderListingTests
     [Fact]
     public void ListsEveryShippedProviderOnce()
     {
-        var shipped = CleanupPlanner.CreateDefault().Providers;
+        using var planned = new ShippedProviders();
+        var shipped = planned.Providers;
 
         var listed = ProviderListing.Group(shipped, search: null).SelectMany(group => group.Providers).ToList();
 

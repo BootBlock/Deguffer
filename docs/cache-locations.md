@@ -4777,9 +4777,7 @@ evidence rather than a guess, with one cautious exception in the fourth:
   using none of the projects below it, so the folder alone is not the test: a `.sln` or `.slnx` in it
   has to name the project. The exception: a solution Deguffer cannot read, or a folder it cannot
   list, counts for every project below it, because it could name any of them. This applies to .NET's
-  `obj`, the one build directory here whose editor opens its projects from above. Explore finds a
-  project by the solution that names it, so it does not refuse one that only such an unreadable
-  solution could name.
+  `obj`, the one build directory here whose editor opens its projects from above.
 
 Each of the last three is asked at every path the project is reachable at, so a program working in
 `S:\Game` through a `subst` letter or a second mount of the volume is using the project as surely
@@ -4795,8 +4793,14 @@ project's, so the three signals after the first do not see it. It does hold its 
 `Saved\Logs` open for the whole session, and Deguffer asks about every log there, so a project the
 editor has open is held back like any other. A switch on the editor's command line can move the log
 out of the project, so a plan made while an Unreal editor, a commandlet or Unreal Build Tool runs
-also says so by name. Explore does not find a project by its log, as it does not find a Unity
-project by its lockfile.
+also says so by name.
+
+Explore refuses the build directories a scan would hold back, for the same reason the scan gives,
+including one held back because Deguffer could not tell whether anything is using it. It asks the
+scan's question of each build directory in your source folders. Where Explore's own scan listed a
+folder, Explore reads the build directories from that listing rather than searching the folder a
+second time, so one created after the scan is found by the next scan. Before the first scan, and
+for a folder the scan did not list whole, it searches the folder itself.
 
 **It can miss.** Four things it does not see, all of them stated
 here because a safeguard whose limits are unwritten gets trusted past them:

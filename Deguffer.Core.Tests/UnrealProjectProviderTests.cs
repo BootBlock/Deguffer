@@ -171,9 +171,7 @@ public sealed class UnrealProjectProviderTests : IDisposable
     /// §5.3's veto, with Windows' own answer. The editor holds its log in the project's
     /// <c>Saved\Logs</c> open for the whole session, sharing it for reading only, and works in the
     /// engine's folder. So a held log is the evidence that the project is open, and the project's
-    /// build output is not offered at all, whatever the log is called. Explore's own declaration
-    /// does not find a directory whose only evidence is a held lock file, as for Unity's, which
-    /// <see cref="InUseBuildDirectories"/> records.
+    /// build output is not offered at all, whatever the log is called.
     /// </summary>
     [Theory]
     [InlineData("Shooter.log")]

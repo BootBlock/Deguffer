@@ -1,4 +1,5 @@
 using Deguffer.Core.Execution;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -60,7 +61,8 @@ public class StepGrainTests
             "vscode-extension-browsers",
         ];
 
-        var declared = CleanupPlanner.CreateDefault().Providers
+        using var shipped = new ShippedProviders();
+        var declared = shipped.Providers
             .Where(provider => provider.Grain == StepGrain.Items)
             .Select(provider => provider.Id)
             .Order(StringComparer.Ordinal);

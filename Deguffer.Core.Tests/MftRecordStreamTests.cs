@@ -72,7 +72,7 @@ public sealed class MftRecordStreamTests
             .Build();
         using var source = new RecordedReads(table);
 
-        var handed = ReadAll(source, new TableTuning(TableTuning.MinimumReadBytes, readsInFlight: 4, parseThreads: 4), out var wholeTable);
+        var handed = ReadAll(source, new TableTuning(TableTuning.MinimumReadBytes, readsInFlight: 4, parseThreads: 4, listReadsInFlight: 4), out var wholeTable);
 
         Assert.True(wholeTable);
         Assert.Empty(source.Reads);
@@ -98,7 +98,7 @@ public sealed class MftRecordStreamTests
             .Build();
         using var source = new RecordedReads(table, unreadableFrom: 500, unreadableTo: 600);
 
-        var handed = ReadAll(source, new TableTuning(TableTuning.MaximumReadBytes, 4, 2), out var wholeTable);
+        var handed = ReadAll(source, new TableTuning(TableTuning.MaximumReadBytes, 4, 2, 4), out var wholeTable);
 
         Assert.False(wholeTable);
         Assert.Equal([(1_000L, 3), (3_000L, 1)], source.Reads);
@@ -126,7 +126,7 @@ public sealed class MftRecordStreamTests
             .Build();
         using var source = new RecordedReads(table, unreadableFrom: 500, unreadableTo: 600);
 
-        var handed = ReadAll(source, new TableTuning(TableTuning.MaximumReadBytes, 4, 2), out _);
+        var handed = ReadAll(source, new TableTuning(TableTuning.MaximumReadBytes, 4, 2, 4), out _);
 
         Assert.Equal(64, MftReadGap.Records(source.BytesPerRecord));
         (long First, int Records)[] expected = reads == 1 ? [(1_000L, unwanted + 2)] : [(1_000L, 1), (second, 1)];
@@ -173,13 +173,41 @@ public sealed class MftRecordStreamTests
             .Build();
         using var source = new HeldClusterReads(table, waitFor: 3);
 
-        var handed = ReadAll(source, new TableTuning(TableTuning.MaximumReadBytes, readsInFlight: 4, parseThreads: 1), out var wholeTable);
+        var handed = ReadAll(source, new TableTuning(TableTuning.MaximumReadBytes, readsInFlight: 4, parseThreads: 1, listReadsInFlight: 4), out var wholeTable);
 
         Assert.True(wholeTable);
         Assert.Equal([700L, 800L, 900L], source.Clusters);
         Assert.Equal(3, source.MostInFlight);
         Assert.Equal(1000, handed[20].Record.Size?.Logical);
         Assert.Equal(2000, handed[21].Record.Size?.Logical);
+        Assert.Equal(3000, handed[22].Record.Size?.Logical);
+    }
+
+    /// <summary>
+    /// The lists are read at their own depth, not at the table's. A read of the table is megabytes in
+    /// one place, where one at a time can keep a SATA drive busy, but a list is a cluster or two
+    /// anywhere on the volume, and one at a time leaves every drive waiting on each in turn. Here the
+    /// table is read one at a time and the lists two at a time, and each list read waits until two are
+    /// in flight.
+    /// </summary>
+    [Fact]
+    public void ReadsListsKeptOutsideTheTableAtTheirOwnDepthRatherThanTheTables()
+    {
+        using var table = new MftFixture()
+            .AddFileWithANonResidentAttributeList(20, MftRecord.RootRecordNumber, "a.tgz", allocated: 4096, logical: 1000, extension: 30, listCluster: 900)
+            .AddFileWithANonResidentAttributeList(21, MftRecord.RootRecordNumber, "b.tgz", allocated: 4096, logical: 2000, extension: 31, listCluster: 700)
+            .AddFileWithANonResidentAttributeList(22, MftRecord.RootRecordNumber, "c.tgz", allocated: 4096, logical: 3000, extension: 32, listCluster: 800)
+            .Build();
+        using var source = new HeldClusterReads(table, waitFor: 2);
+
+        var handed = ReadAll(
+            source,
+            new TableTuning(TableTuning.MaximumReadBytes, readsInFlight: 1, parseThreads: 1, listReadsInFlight: 2),
+            out var wholeTable);
+
+        Assert.True(wholeTable);
+        Assert.Equal([700L, 800L, 900L], source.Clusters);
+        Assert.Equal(2, source.MostInFlight);
         Assert.Equal(3000, handed[22].Record.Size?.Logical);
     }
 
@@ -225,7 +253,7 @@ public sealed class MftRecordStreamTests
 
         Assert.True(source.RecordCount < 24, "two lists must want more than the table holds, and one must not");
 
-        ReadAll(source, new TableTuning(TableTuning.MaximumReadBytes, readsInFlight: 4, parseThreads: 1), out var wholeTable);
+        ReadAll(source, new TableTuning(TableTuning.MaximumReadBytes, readsInFlight: 4, parseThreads: 1, listReadsInFlight: 4), out var wholeTable);
 
         Assert.False(wholeTable);
         Assert.Contains(source.Reads, r => r.First is >= 2_000 and < 2_012);
@@ -267,7 +295,7 @@ public sealed class MftRecordStreamTests
             }
         });
 
-        Assert.Throws<IOException>(() => ReadAll(source, new TableTuning(TableTuning.MaximumReadBytes, readsInFlight: 4, parseThreads: 1), out _));
+        Assert.Throws<IOException>(() => ReadAll(source, new TableTuning(TableTuning.MaximumReadBytes, readsInFlight: 4, parseThreads: 1, listReadsInFlight: 4), out _));
 
         Assert.True(cancelled, "the read still in flight was cancelled");
         Assert.Equal(0, source.InFlight);

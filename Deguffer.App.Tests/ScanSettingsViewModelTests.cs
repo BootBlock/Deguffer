@@ -64,8 +64,9 @@ public sealed class ScanSettingsViewModelTests : IDisposable
         section.ListingBufferKiB = 64;
         section.TableReadKiB = 512;
         section.TableReadsInFlight = 6;
+        section.TableListReadsInFlight = 12;
 
-        Assert.Equal(new MediaScanPreferences(2, 64, 512, 6), preferences.Current.Scanning.Rotational);
+        Assert.Equal(new MediaScanPreferences(2, 64, 512, 6, 12), preferences.Current.Scanning.Rotational);
         Assert.Equal(MediaScanPreferences.Auto, preferences.Current.Scanning.Nvme);
         Assert.False(section.SaveFailed);
     }
@@ -113,6 +114,9 @@ public sealed class ScanSettingsViewModelTests : IDisposable
         Assert.Equal(
             $"Auto ({VolumeTuning.Resolve(ScanPreferences.Default, StorageMedia.SolidState).Table.ReadsInFlight:N0})",
             section.AutoTableReadsInFlight);
+        Assert.Equal(
+            $"Auto ({VolumeTuning.Resolve(ScanPreferences.Default, StorageMedia.SolidState).Table.ListReadsInFlight:N0})",
+            section.AutoTableListReadsInFlight);
     }
 
     /// <summary>

@@ -30,6 +30,15 @@ internal static class VisualTree
         }
     }
 
+    /// <summary><paramref name="element"/>, then each element above it in turn. Lazy, as <see cref="Descendants"/> is.</summary>
+    public static IEnumerable<DependencyObject> FromSelf(DependencyObject element)
+    {
+        for (var at = element; at is not null; at = VisualTreeHelper.GetParent(at))
+        {
+            yield return at;
+        }
+    }
+
     /// <summary>The nearest element of type <typeparamref name="T"/> above <paramref name="element"/>, or null.</summary>
     public static T? Ancestor<T>(DependencyObject element)
         where T : DependencyObject

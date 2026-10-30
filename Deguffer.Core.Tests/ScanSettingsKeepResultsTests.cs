@@ -34,7 +34,8 @@ public sealed class ScanSettingsKeepResultsTests : IDisposable
             WalkTuning.MinimumThreads,
             WalkTuning.MinimumListingBuffer / 1024,
             TableTuning.MinimumReadBytes / 1024,
-            TableTuning.MinimumReadsInFlight)) with
+            TableTuning.MinimumReadsInFlight,
+            TableTuning.MinimumListReadsInFlight)) with
     {
         TableParseThreads = TableTuning.MinimumParseThreads,
     };
@@ -45,7 +46,8 @@ public sealed class ScanSettingsKeepResultsTests : IDisposable
             WalkTuning.MaximumThreads,
             WalkTuning.MaximumListingBuffer / 1024,
             TableTuning.MaximumReadBytes / 1024,
-            TableTuning.MaximumReadsInFlight)) with
+            TableTuning.MaximumReadsInFlight,
+            TableTuning.MaximumListReadsInFlight)) with
     {
         TableParseThreads = TableTuning.MaximumParseThreads,
     };
@@ -142,13 +144,13 @@ public sealed class ScanSettingsKeepResultsTests : IDisposable
             bytesPerCluster,
             bytesPerRecord,
             gapAfterCluster,
-            new TableTuning(TableTuning.MinimumReadBytes, TableTuning.MinimumReadsInFlight, TableTuning.MinimumParseThreads));
+            new TableTuning(TableTuning.MinimumReadBytes, TableTuning.MinimumReadsInFlight, TableTuning.MinimumParseThreads, TableTuning.MinimumListReadsInFlight));
         var largest = ReadVolume(
             bytesPerSector,
             bytesPerCluster,
             bytesPerRecord,
             gapAfterCluster,
-            new TableTuning(TableTuning.MaximumReadBytes, TableTuning.MaximumReadsInFlight, TableTuning.MaximumParseThreads));
+            new TableTuning(TableTuning.MaximumReadBytes, TableTuning.MaximumReadsInFlight, TableTuning.MaximumParseThreads, TableTuning.MaximumListReadsInFlight));
 
         Assert.Equal(TableTotal, smallest);
         Assert.Equal(smallest, largest);

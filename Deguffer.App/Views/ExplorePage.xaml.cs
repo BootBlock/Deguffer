@@ -10,12 +10,12 @@ using Deguffer.Core.Exploring.Hidden;
 using Deguffer.Core.Exploring.Knowledge;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Viewing;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 using Windows.Foundation;
 
@@ -36,39 +36,12 @@ namespace Deguffer.App.Views;
 /// </summary>
 public sealed partial class ExplorePage : Page
 {
-    /// <summary>Whether <see cref="ShowSelectedRows"/> is writing the list's selection.</summary>
-    private bool _showingSelectedRows;
-
     /// <summary>
-    /// Whether <see cref="ShowRowsOf"/> is handing the list the other layout's rows. The list reports
-    /// every row it drops on the way, and none of that is the user's doing. See
-    /// <see cref="IsUserSelecting"/>.
+    /// Tells the reader's selection in the list from one the list made as the page rewrote it. The
+    /// rows are rewritten on every snapshot a running scan publishes, and §7.1 says Explore never
+    /// pre-selects. See <see cref="ListGestures"/>.
     /// </summary>
-    private bool _swappingRows;
-
-    /// <summary>
-    /// Whether the user has touched the list since it last settled on rows or containers it was
-    /// given. See <see cref="IsUserSelecting"/>.
-    /// </summary>
-    private bool _touchedSinceSettled;
-
-    /// <summary>
-    /// Whether a pointer is down <em>on a row</em> right now, which is a gesture in progress rather
-    /// than a list that has settled.
-    ///
-    /// <para>A <c>ListView</c> commits a pointer selection on the <em>release</em>, and this page
-    /// rewrites its rows on every snapshot a running scan publishes, so a press held across one
-    /// would otherwise have its gesture cleared before the control reported it — and the click would
-    /// be refused, the highlight snapping back to whatever was picked before.</para>
-    ///
-    /// <para>A row is the whole of it. The list's background and its scroll chrome are hit-testable
-    /// and commit no selection at all, so a press there has nothing to protect, and suspending the
-    /// guard for the length of a scrollbar drag would admit exactly the write §7.1 forbids. It is
-    /// also the press the list cannot promise an end for: a <c>ListViewItem</c> captures the
-    /// pointer and so guarantees a release or a capture loss, and a press on the background
-    /// released somewhere else raises neither.</para>
-    /// </summary>
-    private bool _pointerDown;
+    private readonly ListSelectionGuard _guard;
 
     /// <summary>
     /// Where the list sits before <see cref="OnNotesResized"/> moves its bottom edge. Read once,
@@ -114,6 +87,8 @@ public sealed partial class ExplorePage : Page
             App.ScanHistory,
             SystemMotion.Current);
 
+        _guard = new ListSelectionGuard(() => ViewModel.IsShowingRows, restore => DispatcherQueue.TryEnqueueGuarded(restore));
+
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
 
         // The Files layout's rows arrive on their own, after a search rather than with a redraw, so
@@ -121,7 +96,7 @@ public sealed partial class ExplorePage : Page
         ViewModel.Files.Changed += (_, _) =>
         {
             ShowSelectedRows();
-            Settled();
+            _guard.Settle();
         };
         ViewModel.ViewChanged += (_, _) =>
         {
@@ -133,8 +108,8 @@ public sealed partial class ExplorePage : Page
             ShowSelectedRows();
 
             // Whatever the list reports from here until the user touches it again is the list's own
-            // doing, however long it takes to arrive. See IsUserSelecting.
-            Settled();
+            // doing, however long it takes to arrive. See ListGestures.
+            _guard.Settle();
         };
 
         InitializeComponent();
@@ -158,34 +133,9 @@ public sealed partial class ExplorePage : Page
             RightTappedEvent, new RightTappedEventHandler(OnRowsRightTapped), handledEventsToo: true);
 
         // The two ways a person moves this list's selection, marked as they arrive rather than
-        // inferred afterwards. Both run before the control has changed anything: a pointer press is
-        // subscribed past the handled flag, as the right-tap above is and for the same reason, and
-        // the keyboard is taken on the preview because a ListView handles the arrow keys itself and
-        // an ordinary KeyDown handler would run after the selection had already moved. See
-        // IsUserSelecting.
-        RowsList.AddHandler(
-            PointerPressedEvent, new PointerEventHandler(OnRowsPressed), handledEventsToo: true);
-
-        // Every way a press ends, because the gesture is over whichever way it went and only one of
-        // the three fires when the pointer is taken away from the list mid-click: a capture loss
-        // when something else claims it, and a cancellation when the touch is abandoned. A press
-        // whose end goes unheard leaves _pointerDown standing and the guard suspended.
-        RowsList.AddHandler(
-            PointerReleasedEvent, new PointerEventHandler(OnRowsReleased), handledEventsToo: true);
-
-        RowsList.AddHandler(
-            PointerCaptureLostEvent, new PointerEventHandler(OnRowsReleased), handledEventsToo: true);
-
-        RowsList.AddHandler(
-            PointerCanceledEvent, new PointerEventHandler(OnRowsReleased), handledEventsToo: true);
-
-        RowsList.PreviewKeyDown += OnRowsTouched;
-
-        // The other moment the list settles on its own, and the one a rewrite does not cover: its
-        // containers are built again when it comes back into the tree, on a return to a page held
-        // by NavigationCacheMode. ShowAs covers the same thing for the map's half of the toggle.
-        // See IsUserSelecting.
-        RowsList.Loaded += (_, _) => Settled();
+        // inferred afterwards. The guard settles as the list's containers are built again on a return
+        // to the page, and ShowAs settles it as the list comes back from behind the map.
+        _guard.Hear(RowsList);
 
         // One signal, followed by both screens that show a selection. The list is not on screen
         // while the map is and keeps whatever was highlighted in it until something says otherwise,
@@ -312,9 +262,9 @@ public sealed partial class ExplorePage : Page
         if (listed)
         {
             // Back from behind the map, so the list realises its containers again and may settle on
-            // one. Nothing here writes the highlight, so no other reset covers it (see
-            // IsUserSelecting).
-            Settled();
+            // one. Nothing here need write the highlight, so no other settle covers it (see
+            // ListGestures).
+            _guard.Settle();
         }
 
         ShowCurrentNode();
@@ -339,19 +289,14 @@ public sealed partial class ExplorePage : Page
             return;
         }
 
-        _swappingRows = true;
-
-        try
+        // The list reports every row it drops on the way, and none of that is the user's doing.
+        _guard.Write(() =>
         {
             RowsList.ItemsSource = null;
             RowsList.SelectionMode = files ? ListViewSelectionMode.Single : ListViewSelectionMode.Extended;
             RowsList.ItemTemplate = (DataTemplate)Resources[files ? "FileRow" : "FolderRow"];
             RowsList.ItemsSource = rows;
-        }
-        finally
-        {
-            _swappingRows = false;
-        }
+        });
 
         ShowSelectedRows();
     }
@@ -454,9 +399,7 @@ public sealed partial class ExplorePage : Page
         // Writing these back raises SelectionChanged, once for the clear and once per row. That is
         // this method's own doing rather than the user's, and letting it round-trip would report a
         // half-applied selection back to the view model as a gesture.
-        _showingSelectedRows = true;
-
-        try
+        _guard.Write(() =>
         {
             if (RowsList.SelectionMode == ListViewSelectionMode.Single)
             {
@@ -478,14 +421,7 @@ public sealed partial class ExplorePage : Page
                     RowsList.SelectedItems.Add(row);
                 }
             }
-        }
-        finally
-        {
-            _showingSelectedRows = false;
-
-            // A write of the page's own is not the user touching the list. See IsUserSelecting.
-            Settled();
-        }
+        });
     }
 
     /// <summary>
@@ -671,110 +607,11 @@ public sealed partial class ExplorePage : Page
     /// </summary>
     private void OnRowSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (IsUserSelecting)
+        if (_guard.Admits(restore: ShowSelectedRows))
         {
             ViewModel.Selection.Select([.. RowsList.SelectedItems.OfType<IExploreListed>().Select(r => r.Node)]);
-
-            return;
-        }
-
-        // Refused, and the list is still showing it. Nothing to take off while one of the page's own
-        // writes is in flight, because that write ends by calling ShowSelectedRows itself. A report
-        // arriving outside one is the control having highlighted a row on its own, and leaving that
-        // standing is the same pre-selection §7.1 forbids, one screen further along: the menu and
-        // the accelerators act on the view model, so the list would name a folder Delete is not
-        // pointed at. Put back through the queue rather than here, so the list is not written to
-        // from inside its own report.
-        if (!_showingSelectedRows && !_swappingRows && !ViewModel.IsShowingRows)
-        {
-            DispatcherQueue.TryEnqueueGuarded(() =>
-            {
-                // Asked again on arrival. A ListView commits a pointer selection on the release, so
-                // a press can land between the two and take the list back; this repair is then
-                // about a state that has already gone, and running it would drop that gesture.
-                if (!_touchedSinceSettled)
-                {
-                    ShowSelectedRows();
-                }
-            });
         }
     }
-
-    /// <summary>Note that the user has touched the list. See <see cref="IsUserSelecting"/>.</summary>
-    private void OnRowsTouched(object sender, RoutedEventArgs e) => _touchedSinceSettled = true;
-
-    /// <summary>
-    /// A press. Assigned rather than only set true, so that a press landing anywhere else on the
-    /// list answers the question afresh and nothing an earlier press left can outlive it. See
-    /// <see cref="_pointerDown"/>.
-    /// </summary>
-    private void OnRowsPressed(object sender, PointerRoutedEventArgs e)
-    {
-        _pointerDown = Container(e.OriginalSource) is not null;
-
-        OnRowsTouched(sender, e);
-    }
-
-    /// <summary>
-    /// The press is over. The gesture is deliberately <em>not</em> cleared here: the
-    /// <c>ListView</c> commits a pointer selection on the release, so the report this page is
-    /// waiting for arrives immediately after this.
-    /// </summary>
-    private void OnRowsReleased(object sender, PointerRoutedEventArgs e) => _pointerDown = false;
-
-    /// <summary>
-    /// The list has settled on rows or containers it was given, so whatever it reports next is its
-    /// own doing — unless a press is still in progress, which is a gesture the user has not finished
-    /// making. See <see cref="_pointerDown"/>.
-    /// </summary>
-    private void Settled()
-    {
-        if (!_pointerDown)
-        {
-            _touchedSinceSettled = false;
-        }
-    }
-
-    /// <summary>
-    /// Whether a selection change arriving from the list is the user's doing.
-    ///
-    /// <para>Two windows are not, and both are this page's own writing. While the view model is
-    /// rewriting the rows, the ListView drops every item it can no longer place and reports each
-    /// drop; while <see cref="ShowSelectedRows"/> is writing the highlight, so does every
-    /// intermediate state of that write. Taken for a gesture, either replaces the selection the
-    /// user made with whatever the rewrite had reached — and on a rescan those are node numbers
-    /// belonging to the tree before it, which the arriving one cannot place at all.</para>
-    ///
-    /// <para><b>Neither window closes when the page stops writing.</b> A <c>ListView</c> settles on
-    /// rows and containers it has just been given during a later layout pass, and it can select a
-    /// row of its own accord there — reported after <c>Show</c> has returned and after both flags
-    /// above have gone false. The page then took that for a gesture, and §7.1's "Explore never
-    /// pre-selects" stopped being true: the status line named a folder nobody had picked, and the
-    /// menu and the accelerators act on exactly that selection. Reported against a navigation into
-    /// a folder holding one entry, where the control puts a focused index back and the only row
-    /// there is is the one it lands on. <b>The control's own write could not be provoked on
-    /// demand</b>, under driven input, on this code or on the code the report was filed against, so
-    /// what was measured is the page's response to such a write rather than the control making
-    /// one.</para>
-    ///
-    /// <para>So the third term is not one of those windows. It asks whether the user has touched
-    /// the list since it last settled on rows or containers it was given, which is a question with
-    /// an answer however late the report is. Both gestures that move a selection are marked as they
-    /// arrive and before the control acts on them, so a genuine click or arrow key counts on the
-    /// first press after a navigation rather than the second.</para>
-    ///
-    /// <para>It does hold a window of its own, between a press and its release, and a scan
-    /// publishing a snapshot into one would clear the gesture before the control committed the
-    /// click. <see cref="Settled"/> is what keeps that from happening — see
-    /// <see cref="_pointerDown"/>.</para>
-    ///
-    /// <para>A row selected straight through UI Automation carries neither, and is refused with the
-    /// rest. From in here it cannot be told apart from the control's own write, and §7.1's
-    /// direction is to drop a pick nobody can attribute rather than to act on one. The keyboard and
-    /// the pointer both reach every row, so nothing is unreachable by that.</para>
-    /// </summary>
-    private bool IsUserSelecting =>
-        !_showingSelectedRows && !_swappingRows && !ViewModel.IsShowingRows && _touchedSinceSettled;
 
     /// <summary>
     /// Two clicks go in. A folder is descended into and a file is opened, which is what a double
@@ -787,7 +624,7 @@ public sealed partial class ExplorePage : Page
     /// </summary>
     private void OnRowsDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
-        if (Container(e.OriginalSource) is not { Content: IExploreListed row })
+        if (ListSelectionGuard.Row(e.OriginalSource) is not { Content: IExploreListed row })
         {
             return;
         }
@@ -819,7 +656,7 @@ public sealed partial class ExplorePage : Page
     /// </summary>
     private void OnRowsRightTapped(object sender, RightTappedRoutedEventArgs e)
     {
-        if (Container(e.OriginalSource) is not { Content: IExploreListed row } container)
+        if (ListSelectionGuard.Row(e.OriginalSource) is not { Content: IExploreListed row } container)
         {
             // The gesture landed on the list's own background. Clearing is what the map does on the
             // same miss, and the alternative is a menu positioned at the pointer whose Delete is
@@ -858,26 +695,6 @@ public sealed partial class ExplorePage : Page
         return true;
     }
 
-    /// <summary>
-    /// The list container the event started in, or null when the click missed every row.
-    ///
-    /// Walked up the visual tree because the source is whichever <c>TextBlock</c> or icon was under
-    /// the pointer, and the row is several levels above it.
-    /// </summary>
-    private static ListViewItem? Container(object? source)
-    {
-        for (var element = source as DependencyObject; element is not null;
-             element = VisualTreeHelper.GetParent(element))
-        {
-            if (element is ListViewItem container)
-            {
-                return container;
-            }
-        }
-
-        return null;
-    }
-
     private void OnDeleteInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args) =>
         args.Handled = Invoke(ViewModel.Selection.DeleteCommand);
 
@@ -897,7 +714,7 @@ public sealed partial class ExplorePage : Page
     /// The mouse's Back or Forward button. Taken as it comes up rather than as it goes down, as
     /// Windows takes it: the list is not then in the middle of a press, which it would read as the
     /// reader picking a row out of the rows the step is about to replace. See
-    /// <see cref="IsUserSelecting"/>.
+    /// <see cref="ListGestures"/>.
     /// </summary>
     private void OnPageReleased(object sender, PointerRoutedEventArgs e)
     {

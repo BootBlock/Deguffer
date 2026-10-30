@@ -11,6 +11,14 @@ namespace Deguffer.Benchmark;
 /// faster for the wrong reason, so the report counts these rather than hiding them in the median.
 /// </param>
 /// <param name="Reads">How many reads of records were asked for. Zero for the walk, which reads none.</param>
+/// <param name="ClusterReads">
+/// How many reads of clusters were asked for: the table's bitmap and the attribute lists kept outside
+/// it. Zero for the walk, which reads none.
+/// </param>
+/// <param name="ListReadTime">
+/// How long the reads of the attribute lists kept outside the table took, from the first starting to
+/// the last ending. Zero for the walk, and for a table with no such list.
+/// </param>
 /// <param name="PeakListings">
 /// The most folders the walk was listing at once. Zero for a table route, which lists no folders.
 /// </param>
@@ -19,4 +27,11 @@ namespace Deguffer.Benchmark;
 /// it (<see cref="RunSample.KeptBytes"/>), or null for a route that keeps nothing.
 /// </param>
 internal readonly record struct RunTally(
-    long Items, long BytesRead, bool Complete, int PeakListings = 0, KeptResult? Kept = null, long Reads = 0);
+    long Items,
+    long BytesRead,
+    bool Complete,
+    int PeakListings = 0,
+    KeptResult? Kept = null,
+    long Reads = 0,
+    long ClusterReads = 0,
+    TimeSpan ListReadTime = default);
