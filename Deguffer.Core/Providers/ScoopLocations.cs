@@ -35,12 +35,12 @@ internal static class ScoopLocations
     {
         if (ScoopCommand.InstallRoot(command, out var why) is not { } installRoot)
         {
-            return ScoopResolution.Unfollowed(why);
+            return new ScoopResolution.Unfollowed(why);
         }
 
         if (ConfigHome(environment, out why) is not { } configHome)
         {
-            return ScoopResolution.Unfollowed(why);
+            return new ScoopResolution.Unfollowed(why);
         }
 
         var userConfig = Path.Combine(configHome, "scoop", "config.json");
@@ -48,32 +48,31 @@ internal static class ScoopLocations
 
         if (ChosenConfig(portableConfig, userConfig, out why) is not { } config)
         {
-            return ScoopResolution.Unfollowed(why);
+            return new ScoopResolution.Unfollowed(why);
         }
 
         if (ScoopPath.HasWildcard(config))
         {
-            return ScoopResolution.Unfollowed(Unfollowed($"Scoop's settings file is at '{config}'"));
+            return new ScoopResolution.Unfollowed(Unfollowed($"Scoop's settings file is at '{config}'"));
         }
 
         if (ScoopSettings.Read(config, out why) is not { } settings)
         {
-            return ScoopResolution.Unfollowed(why);
+            return new ScoopResolution.Unfollowed(why);
         }
 
-        if (First("Scoop's root", out why, Variable(environment, "SCOOP"), settings.RootPath, ScoopValue.From(installRoot))
-            is not { } root)
+        if (First("Scoop's root", installRoot, out why, Variable(environment, "SCOOP"), settings.RootPath) is not { } root)
         {
-            return ScoopResolution.Unfollowed(why);
+            return new ScoopResolution.Unfollowed(why);
         }
 
-        if (First("Scoop's cache", out why, Variable(environment, "SCOOP_CACHE"), settings.CachePath, ScoopValue.From(Path.Combine(root, "cache")))
+        if (First("Scoop's cache", Path.Combine(root, "cache"), out why, Variable(environment, "SCOOP_CACHE"), settings.CachePath)
             is not { } cache)
         {
-            return ScoopResolution.Unfollowed(why);
+            return new ScoopResolution.Unfollowed(why);
         }
 
-        return ScoopResolution.Of(new ScoopLayout(command, root, cache, [portableConfig, userConfig]));
+        return new ScoopResolution.Followed(new ScoopLayout(command, root, cache, [portableConfig, userConfig]));
     }
 
     private static string? ConfigHome(IUserEnvironment environment, out string why)
@@ -119,24 +118,36 @@ internal static class ScoopLocations
         }
     }
 
-    /// <summary>The value Scoop takes from <paramref name="candidates"/>, as a folder both read alike.</summary>
-    private static string? First(string what, out string why, params ScoopValue[] candidates)
+    /// <summary>
+    /// The first of <paramref name="configured"/> that is set, else <paramref name="fallback"/>, as a
+    /// folder both read alike.
+    /// </summary>
+    private static string? First(string what, string fallback, out string why, params ScoopValue[] configured)
     {
         why = string.Empty;
 
-        var chosen = candidates.First(candidate => candidate.IsSet);
+        var text = fallback;
 
-        if (chosen.WhyUnfollowed is { } declined)
+        foreach (var value in configured)
         {
-            why = declined;
-            return null;
+            if (value is ScoopValue.Unfollowed unfollowed)
+            {
+                why = unfollowed.Why;
+                return null;
+            }
+
+            if (value is ScoopValue.Given given)
+            {
+                text = given.Text;
+                break;
+            }
         }
 
-        var folder = ScoopPath.Followed(chosen.Text!);
+        var folder = ScoopPath.Followed(text);
 
         if (folder is null)
         {
-            why = Unfollowed($"{what} is set to '{chosen.Text}'");
+            why = Unfollowed($"{what} is set to '{text}'");
         }
 
         return folder;

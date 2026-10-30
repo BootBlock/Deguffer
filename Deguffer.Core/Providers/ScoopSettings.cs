@@ -5,15 +5,26 @@ namespace Deguffer.Core.Providers;
 
 /// <summary>
 /// One entry in a list Scoop takes the first set value of, such as <c>$env:SCOOP_CACHE,
-/// (get_config CACHE_PATH), "$scoopdir\cache"</c>. Unset where Scoop's <c>Where-Object { $_ }</c>
-/// would pass over it (absent, null or empty), and <see cref="WhyUnfollowed"/> where it is set to
-/// something Deguffer cannot read as Scoop does.
+/// (get_config CACHE_PATH), "$scoopdir\cache"</c>.
 /// </summary>
-internal readonly record struct ScoopValue(string? Text, string? WhyUnfollowed)
+internal abstract record ScoopValue
 {
-    public bool IsSet => Text is not null || WhyUnfollowed is not null;
+    private ScoopValue()
+    {
+    }
 
-    public static ScoopValue From(string? text) => new(string.IsNullOrEmpty(text) ? null : text, null);
+    /// <summary>Absent, null or empty, which Scoop's <c>Where-Object { $_ }</c> passes over.</summary>
+    public static ScoopValue Unset { get; } = new UnsetValue();
+
+    public static ScoopValue From(string? text) => string.IsNullOrEmpty(text) ? Unset : new Given(text);
+
+    /// <summary>The text Scoop takes as the folder.</summary>
+    public sealed record Given(string Text) : ScoopValue;
+
+    /// <summary>Set to something Deguffer cannot read as Scoop does, for the reason given.</summary>
+    public sealed record Unfollowed(string Why) : ScoopValue;
+
+    private sealed record UnsetValue : ScoopValue;
 }
 
 /// <summary>
@@ -31,7 +42,7 @@ internal sealed record ScoopSettings(ScoopValue RootPath, ScoopValue CachePath)
     private const int MaximumBytes = 256 * 1024;
 
     /// <summary>The settings of a machine with no settings file, where Scoop reads every value as unset.</summary>
-    public static ScoopSettings None { get; } = new(default, default);
+    public static ScoopSettings None { get; } = new(ScoopValue.Unset, ScoopValue.Unset);
 
     /// <summary>
     /// The settings in <paramref name="file"/>, <see cref="None"/> where there is no such file, or
@@ -97,13 +108,13 @@ internal sealed record ScoopSettings(ScoopValue RootPath, ScoopValue CachePath)
             return property.Value.ValueKind switch
             {
                 JsonValueKind.String => ScoopValue.From(property.Value.GetString()),
-                JsonValueKind.Null => default,
-                _ => new ScoopValue(null, $"Scoop's {name} setting is not a folder, so Deguffer cannot tell "
+                JsonValueKind.Null => ScoopValue.Unset,
+                _ => new ScoopValue.Unfollowed($"Scoop's {name} setting is not a folder, so Deguffer cannot tell "
                     + "where Scoop keeps its cache, and leaves it alone."),
             };
         }
 
-        return default;
+        return ScoopValue.Unset;
     }
 
     private static bool HasRepeatedKey(JsonElement element) => element.ValueKind switch

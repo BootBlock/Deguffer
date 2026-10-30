@@ -16,13 +16,15 @@ namespace Deguffer.Core.Providers;
 /// </param>
 internal sealed record ScoopLayout(string Command, string Root, string Cache, IReadOnlyList<string> ConfigFiles);
 
-/// <summary>
-/// A <see cref="ScoopLayout"/>, or the sentence saying why Deguffer could not work it out exactly as
-/// Scoop does. Exactly one of the two is set.
-/// </summary>
-internal sealed record ScoopResolution(ScoopLayout? Layout, string? WhyUnfollowed)
+/// <summary>Where one Scoop keeps its folders, or why Deguffer could not work it out exactly as Scoop does.</summary>
+internal abstract record ScoopResolution
 {
-    public static ScoopResolution Of(ScoopLayout layout) => new(layout, null);
+    private ScoopResolution()
+    {
+    }
 
-    public static ScoopResolution Unfollowed(string why) => new(null, why);
+    public sealed record Followed(ScoopLayout Layout) : ScoopResolution;
+
+    /// <summary>Scoop's own reading could not be mirrored, for the reason given.</summary>
+    public sealed record Unfollowed(string Why) : ScoopResolution;
 }

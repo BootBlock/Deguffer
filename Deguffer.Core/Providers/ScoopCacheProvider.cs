@@ -90,7 +90,7 @@ public sealed class ScoopCacheProvider : CleanupProviderBase
     /// <summary>The same declaration at the folders the running Scoop uses.</summary>
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<ToolRoot>>(
-            Resolve() is { Layout: { } layout } ? Declare(layout.Root, layout.Cache, layout.ConfigFiles) : []);
+            Resolve() is ScoopResolution.Followed { Layout: var layout } ? Declare(layout.Root, layout.Cache, layout.ConfigFiles) : []);
 
     /// <summary>
     /// The cache the command is sent to, and the default one, because <c>SCOOP_CACHE</c> or a
@@ -100,9 +100,9 @@ public sealed class ScoopCacheProvider : CleanupProviderBase
     {
         List<string> places = [Path.Combine(DefaultRoot, "cache")];
 
-        if (Resolve() is { Layout: { } layout })
+        if (Resolve() is ScoopResolution.Followed followed)
         {
-            places.Add(layout.Cache);
+            places.Add(followed.Layout.Cache);
         }
 
         return Task.FromResult<IReadOnlyList<CleanedPlace>>(
@@ -122,18 +122,15 @@ public sealed class ScoopCacheProvider : CleanupProviderBase
         base.InvalidateCaches();
     }
 
-    protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
+    protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct) => Resolve() switch
     {
-        if (Resolve() is not { } resolution)
-        {
-            return EmptyPlan("Scoop is not installed on this machine.");
-        }
+        ScoopResolution.Followed followed => await PlanCacheAsync(followed.Layout, ct).ConfigureAwait(false),
+        ScoopResolution.Unfollowed unfollowed => UnexaminedPlan(unfollowed.Why),
+        _ => EmptyPlan("Scoop is not installed on this machine."),
+    };
 
-        if (resolution.Layout is not { } layout)
-        {
-            return UnexaminedPlan(resolution.WhyUnfollowed!);
-        }
-
+    private async Task<CleanupPlan> PlanCacheAsync(ScoopLayout layout, CancellationToken ct)
+    {
         var cache = layout.Cache;
 
         if (NothingToPlanFor(cache, $"Scoop has not downloaded anything into its cache yet ({cache} does not exist).") is { } nothing)
