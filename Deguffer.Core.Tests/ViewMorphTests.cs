@@ -53,7 +53,7 @@ public sealed class ViewMorphTests
     public void ABarsTopBecomesTheInnerArcOfItsWedge()
     {
         var tree = Many(folders: 3, files: 2);
-        var icicle = Drawing(tree, ExploreView.Icicle);
+        var icicle = (TiledSurface)Drawing(tree, ExploreView.Icicle);
         var morphs = ViewMorph.Between(icicle, Drawing(tree, ExploreView.Sunburst));
         var folder = Assert.Single(morphs, morph => tree.NameOf(morph.Node) == "folder00");
         var bar = Assert.Single(icicle.Tiles, tile => tile.Node == folder.Node);

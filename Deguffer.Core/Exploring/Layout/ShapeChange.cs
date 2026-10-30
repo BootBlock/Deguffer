@@ -2,7 +2,7 @@ namespace Deguffer.Core.Exploring.Layout;
 
 /// <summary>
 /// One shape's move between two layouts of the same place, in fractions of the drawing (as
-/// <see cref="Rendering.ExploreSurface.FrameOf"/> measures): from where it was to where it is.
+/// <see cref="Rendering.TiledSurface.FrameOf"/> measures): from where it was to where it is.
 /// </summary>
 /// <param name="Node">
 /// The shape's node in the later layout's tree, or, for one that

@@ -16,6 +16,9 @@ internal static class Drawings
 
     public static readonly TileColour Ground = new(32, 32, 32);
 
+    /// <summary>What a map showing no tile over its drawing answers for every point of the picture.</summary>
+    public static readonly Func<double, double, MapTile?> NoTile = (_, _) => null;
+
     /// <summary>A tree of <paramref name="files"/> files under <paramref name="root"/>, numbered 1 upwards.</summary>
     public static ExploreTree Tree(int files = 2, string root = @"C:\") =>
         Tree([.. Enumerable.Range(0, files).Select(i => $"file{i}")], root);
@@ -76,23 +79,15 @@ internal sealed class GatedSurface(TiledSurface drawing, Func<CanvasRegion, bool
     public override CanvasPainter Painter(TileColour background) =>
         new GatedPainter(drawing.Painter(background), painted, _open, background);
 
-    public override CushionQuads? Quads() => drawing.Quads();
-
     public override ExploreHit? At(float x, float y) => drawing.At(x, y);
-
-    public override ExploreTile? TileAt(float x, float y) => drawing.TileAt(x, y);
-
-    public override IReadOnlyList<ExploreTile> Tiles => drawing.Tiles;
-
-    public override MapFrame? FrameOf(int node) => drawing.FrameOf(node);
-
-    public override MapFrame? Locate(int node) => drawing.Locate(node);
 
     protected override IReadOnlyList<MapShape> FindShapes(int? folder) => drawing.Shapes(folder);
 
     public override IReadOnlyList<ExploreOutline> OutlineOf(MapShape shape) => drawing.OutlineOf(shape);
 
     public override int? ShownAs(int node) => drawing.ShownAs(node);
+
+    public override MapFrame? ScreenOf(int node, MapViewport shown, MapViewport opened) => drawing.ScreenOf(node, shown, opened);
 
     public override IReadOnlyList<ExploreOutline> Outlines(IReadOnlySet<int> nodes) => drawing.Outlines(nodes);
 

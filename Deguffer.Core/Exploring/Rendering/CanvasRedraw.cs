@@ -142,7 +142,7 @@ public sealed class CanvasRedraw
             {
                 // Asked only of a drawing of rectangles: the caller chooses the route before the
                 // layout, from the view it asked for.
-                var quads = surface.Quads()
+                var quads = (surface as TiledSurface)?.Quads()
                     ?? throw new InvalidOperationException("A drawing that is not of rectangles cannot be shaded by the GPU.");
 
                 _owner.Post(_ => Shade(surface, quads), null);

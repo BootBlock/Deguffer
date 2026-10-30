@@ -336,7 +336,7 @@ Every change of folder on a treemap of one tree is one flight of the map's camer
 - **The tracker cannot fly a folder.** Its scale is one factor on both axes, and a folder's own picture fills the screen on both, so the outer picture has to stretch by more on one axis than the other. The flight carries the two sets of drawings, as the opening did, and hands the inner one to the tracker's camera exactly at the end.
 - **The flight zooms about the point both ends agree on, by equal ratios,** on each axis apart, as `MapViewport.Between` does for a glide. A straight line between the frames slid the outer picture sideways, and a flight several levels deep lurched at one end.
 - **A step out waits for the picture it goes out to.** The shape to pull back into is only known once that picture is laid out, and the picture left covers the screen until then.
-- **A folder too deep to be drawn is flown to from the deepest folder above it that is**, which is where the screen shows it (`ExploreSurface.FrameOf`).
+- **A folder too deep to be drawn is flown to from the deepest folder above it that is**, which is where the screen shows it (`TiledSurface.FrameOf`).
 - **The direction comes from the tree**, so Back, Forward, Up, a breadcrumb and a double-click fly alike. The double-click no longer hands the map a shape.
 - **With animation effects off the folder fades in place,** as `MotionToken.Entrance` already says, rather than cutting.
 - **Driven** on a fixture of nested folders: in one level and two at once, back out to the root in one pull-back, a flight turned round 70 ms in, and the same with animation effects off. A click after each picked the shape under the pointer.

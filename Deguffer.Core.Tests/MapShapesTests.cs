@@ -27,7 +27,7 @@ public sealed class MapShapesTests
     public void TheTopOfATreemapIsWhatTheRootHoldsWhereItIsDrawn()
     {
         var tree = Tree();
-        var drawing = Drawn(tree, ExploreView.Treemap);
+        var drawing = Tiled(tree, ExploreView.Treemap);
         var shapes = drawing.Shapes(null);
 
         Assert.Equal(ExploreTile.Aggregated, shapes[^1].Node);
@@ -48,7 +48,7 @@ public sealed class MapShapesTests
     {
         var tree = Tree();
         var folder = Named(tree, "folder");
-        var drawing = Drawn(tree, ExploreView.Treemap);
+        var drawing = Tiled(tree, ExploreView.Treemap);
         var shapes = drawing.Shapes(folder);
 
         Assert.Equal([.. tree.ChildrenOf(folder)], shapes.Select(shape => shape.Node));
@@ -63,7 +63,7 @@ public sealed class MapShapesTests
     public void BesideAVolumeTheTopIsTheRootAndTheBlocksBesideIt()
     {
         var tree = Tree();
-        var drawing = ExploreSurface.Create(
+        var drawing = (TiledSurface)ExploreSurface.Create(
             tree, tree.RootNode, ExploreView.Treemap, Width, Height, 1, 1,
             ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable,
             new VolumeSpace(TotalBytes: 40_000_000, FreeBytes: 20_000_000));
@@ -79,13 +79,13 @@ public sealed class MapShapesTests
 
     /// <summary>
     /// Zoomed in, the shapes the screen has left behind are still there to move to, where
-    /// <see cref="ExploreSurface.Locate"/> places them, off the canvas.
+    /// <see cref="TiledSurface.Locate"/> places them, off the canvas.
     /// </summary>
     [Fact]
     public void AZoomedTreemapGivesTheShapesOffTheCanvasToo()
     {
         var tree = Tree();
-        var drawing = ExploreSurface.Create(
+        var drawing = (TiledSurface)ExploreSurface.Create(
             tree, tree.RootNode, ExploreView.Treemap, Width, Height, 1, 1,
             ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None,
             MapViewport.Seen(zoom: 6, left: 0.05, top: 0.05));
@@ -111,7 +111,7 @@ public sealed class MapShapesTests
     public void AFolderDrawnAsOneBlockOrNotDrawnHasNone()
     {
         var tree = Tree();
-        var drawing = Drawn(tree, ExploreView.Treemap);
+        var drawing = Tiled(tree, ExploreView.Treemap);
         var nook = Named(tree, "nook");
         var inner = ExploreSurface.Create(
             tree, Named(tree, "folder"), ExploreView.Treemap, Width, Height, 1, 1,
@@ -136,7 +136,7 @@ public sealed class MapShapesTests
     {
         var tree = Tree();
         var folder = Named(tree, "folder");
-        var drawing = Drawn(tree, ExploreView.Icicle);
+        var drawing = Tiled(tree, ExploreView.Icicle);
         var top = drawing.Shapes(null);
         var held = drawing.Shapes(folder);
 
@@ -389,7 +389,7 @@ public sealed class MapShapesTests
     /// A shape's box is the tile the drawing draws for it, and the middle of it is over that tile or over
     /// something the drawing draws inside it.
     /// </summary>
-    private static void AssertDrawnAt(ExploreSurface drawing, MapShape shape)
+    private static void AssertDrawnAt(TiledSurface drawing, MapShape shape)
     {
         var tile = drawing.Tiles.First(tile => tile.Node == shape.Node && (shape.IsNode || Math.Abs((tile.X / Width) - shape.Frame.X) < Near));
 
@@ -411,6 +411,8 @@ public sealed class MapShapesTests
     private static ExploreSurface Drawn(ExploreTree tree, ExploreView view) => ExploreSurface.Create(
         tree, tree.RootNode, view, Width, Height, 1, 1,
         ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None);
+
+    private static TiledSurface Tiled(ExploreTree tree, ExploreView view) => (TiledSurface)Drawn(tree, view);
 
     private static int Named(ExploreTree tree, string name) =>
         Enumerable.Range(0, tree.NodeCount).First(node => tree.NameOf(node) == name);
