@@ -230,6 +230,41 @@ public sealed class ClaudeCodeMcpLogProviderTests : IDisposable
         Assert.True(File.Exists(bystander), "a file was deleted through a linked log folder");
     }
 
+    /// <summary>
+    /// A project's folder moved behind a link holds log folders that are not links themselves, so only
+    /// the check one level up stops them. Listed through, they became targets under the link, and the
+    /// removal deleted the far side while every survivor it asserted sat on the near side.
+    /// </summary>
+    [Fact]
+    public async Task ALinkedProjectFolderIsNamedAndNeverListedThrough()
+    {
+        var log = ServerLog("filesystem", age: ClaudeCodeFixture.Old);
+
+        var outside = Path.Combine(_temp.Path, "elsewhere");
+        var farLog = Path.Combine(outside, ClaudeCodeMcpLogProvider.LogFolderPrefix + "browser");
+        var bystander = Path.Combine(farLog, "2026-01-01T10-00-00-000Z.jsonl");
+        Directory.CreateDirectory(farLog);
+        File.WriteAllBytes(bystander, new byte[1024]);
+        TempDirectory.Age(bystander, ClaudeCodeFixture.Old);
+        ClaudeCodeFixture.AgeFolder(farLog, ClaudeCodeFixture.Old);
+
+        var link = Project("C--Users-testuser-src-moved");
+        SymbolicLink.ToDirectory(link, outside);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([log], plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == link && p.Reason == CacheLevelWalk.LinkReason);
+        Assert.Contains(plan.Notes, n => n.Message.Contains(link, StringComparison.OrdinalIgnoreCase));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.False(Directory.Exists(log));
+        Assert.True(File.Exists(bystander), "a server's log was deleted through a linked project folder");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
     [Fact]
     public async Task AProjectFolderThatWillNotBeListedIsSaidSoRatherThanReportedAsEmpty()
     {

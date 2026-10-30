@@ -613,6 +613,78 @@ public sealed class ClaudeCodeDerivedStateProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A project folder that is a link is never listed, so it may hold the only transcript of a session
+    /// whose output and environment sit elsewhere. Neither is an orphan Deguffer can show, so neither is
+    /// offered, and the link is named.
+    /// </summary>
+    [Fact]
+    public async Task AProjectFolderThatIsALinkStopsEverySessionBeingCalledAnOrphan()
+    {
+        var sidecar = _claude.SpilledOutput(SessionA, ProjectFolder, age: Old);
+        var environmentFolder = _claude.HookEnvironment(SessionA, age: Old);
+        var endedLock = _claude.EditorLock(51234, processId: 4101);
+
+        var outside = new ClaudeCodeFixture(Path.Combine(_temp.Path, "outside"));
+        var transcript = outside.Transcript(SessionA);
+
+        var link = _claude.Project(OtherProjectFolder);
+        SymbolicLink.ToDirectory(link, outside.Project());
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([endedLock], plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == link && p.Reason == CacheLevelWalk.LinkReason);
+        Assert.Contains(plan.Notes, n => n.Message.Contains(link, StringComparison.OrdinalIgnoreCase));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(sidecar), "the output of a session whose transcript is behind a link was removed");
+        Assert.True(Directory.Exists(environmentFolder), "the environment of a session whose transcript is behind a link was removed");
+        Assert.True(File.Exists(transcript));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// A session's spilled output, or its environment folder, that is itself a link is named and left
+    /// alone. Offered, the removal took the link and reported the far side's content as freed.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ALeftoverThatIsALinkIsNamedAndNeverOffered(bool spilledOutput)
+    {
+        var outside = Path.Combine(_temp.Path, "outside-session");
+        var bystander = _claude.CreateFile(Path.Combine(outside, "tool-results", "output.txt"), 512);
+        TempDirectory.Age(bystander, Old);
+        AgeFolder(Path.GetDirectoryName(bystander)!, Old);
+        AgeFolder(outside, Old);
+
+        var endedLock = _claude.EditorLock(51234, processId: 4101);
+
+        // A real leftover of the same kind beside the link, so the folder the link sits in is there to read.
+        var link = spilledOutput
+            ? Path.Combine(Path.GetDirectoryName(_claude.SpilledOutput(SessionB, age: Old))!, SessionA)
+            : Path.Combine(Path.GetDirectoryName(_claude.HookEnvironment(SessionB, age: Old))!, SessionA);
+
+        SymbolicLink.ToDirectory(link, outside);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.DoesNotContain(link, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(endedLock, plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == link && p.Reason == CacheLevelWalk.LinkReason);
+        Assert.Contains(plan.Notes, n => n.Message.Contains(link, StringComparison.OrdinalIgnoreCase));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(link), "a leftover that is a link was removed");
+        Assert.True(File.Exists(bystander), "a file was deleted through a linked leftover");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
     /// G4: the folder is read once for the life of a planning pass, and again after an invalidation, so
     /// an editor that closed while Deguffer was open is seen on the next preview.
     /// </summary>
