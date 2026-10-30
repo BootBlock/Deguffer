@@ -18,6 +18,12 @@ public sealed partial class StartupPage : Page
     /// <summary>Windows' own Startup page in Settings, which Microsoft documents as a launch target.</summary>
     private static readonly Uri SettingsStartup = new("ms-settings:startupapps");
 
+    /// <summary>What the entries are ordered by, chosen in the Sort by box.</summary>
+    private readonly DrawnSetting<StartupOrder> _order;
+
+    /// <summary>Which way round that order runs, chosen with the button beside it.</summary>
+    private readonly DrawnSetting<StartupOrderDirection> _direction;
+
     private bool _hasRead;
 
     public StartupPage()
@@ -54,6 +60,15 @@ public sealed partial class StartupPage : Page
 
         InitializeComponent();
 
+        // Shown through the view-model, which reads back the value it settled on, so a stored value
+        // no order is named for is written back as the order it is shown as.
+        _order = new DrawnSetting<StartupOrder>(
+            App.Preferences, current => current.StartupOrder, (current, _) => current with { StartupOrder = ViewModel.Order }, OrderEntries);
+        _direction = new DrawnSetting<StartupOrderDirection>(
+            App.Preferences, current => current.StartupOrderDirection, (current, _) => current with { StartupOrderDirection = ViewModel.Direction }, value => ViewModel.Direction = value);
+        OrderEntries(_order.Stored);
+        ViewModel.Direction = _direction.Stored;
+
         ListAnimation.Play(EntryList, SystemMotion.Current);
 
         NavigationCacheMode = NavigationCacheMode.Required;
@@ -88,6 +103,19 @@ public sealed partial class StartupPage : Page
 
     private void OnSelectionChanged(object sender, SelectionChangedEventArgs e) =>
         ViewModel.SelectedRow = EntryList.SelectedItem as StartupRow;
+
+    /// <summary>Order the entries by <paramref name="order"/>, and leave the box agreeing with the order the view-model settled on.</summary>
+    private void OrderEntries(StartupOrder order)
+    {
+        ViewModel.Order = order;
+        OrderSelector.SelectedIndex = (int)ViewModel.Order;
+    }
+
+    private void OnOrderSelectionChanged(object sender, SelectionChangedEventArgs e) =>
+        _order.Choose((StartupOrder)OrderSelector.SelectedIndex);
+
+    private void OnDirectionClicked(object sender, RoutedEventArgs e) =>
+        _direction.Choose(ViewModel.IsDescending ? StartupOrderDirection.Ascending : StartupOrderDirection.Descending);
 
     private void OnReportClosed(InfoBar sender, object args) => ViewModel.DismissReportCommand.Execute(null);
 }

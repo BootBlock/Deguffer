@@ -86,7 +86,7 @@
         </Style>
     </Page.Resources>
 
-    <Grid Padding="20,12,20,16" RowSpacing="10" RowDefinitions="Auto,Auto,Auto,*,Auto">
+    <Grid Padding="20,12,20,16" RowSpacing="10" RowDefinitions="Auto,Auto,Auto,Auto,*">
 
         <Grid Grid.Row="0" ColumnSpacing="12" ColumnDefinitions="*,Auto,Auto,Auto,Auto">
             <StackPanel Spacing="4">
@@ -126,20 +126,56 @@
                                          AutomationProperties.Name="What this change wrote, and what it checked afterwards" />
         </StackPanel>
 
-        <ListView x:Name="EntryList" Grid.Row="3"
+        <!-- The order and the one change, directly above the list they act on. The change is the
+             page's one action, so it is the accent button, and it names the change it will make. The
+             note beside it says what that change will do for the picked entry, or why it will not,
+             and with nothing picked, where the change comes from. The labels are raw for assistive
+             technology, as the Storage page's Sort by label is. -->
+        <Grid Grid.Row="3" ColumnSpacing="12" ColumnDefinitions="Auto,*,Auto">
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <TextBlock Text="Sort by" Style="{StaticResource FieldLabel}" VerticalAlignment="Center"
+                           AutomationProperties.AccessibilityView="Raw" />
+                <ComboBox x:Name="OrderSelector" MinWidth="132"
+                          SelectionChanged="OnOrderSelectionChanged"
+                          AutomationProperties.Name="Sort by">
+                    <ComboBoxItem Content="Name" />
+                    <ComboBoxItem Content="Enabled or disabled" />
+                    <ComboBoxItem Content="Where it comes from" />
+                    <ComboBoxItem Content="Publisher" />
+                </ComboBox>
+                <ToggleButton x:Name="DirectionToggle" VerticalAlignment="Stretch"
+                              IsChecked="{x:Bind ViewModel.IsDescending, Mode=OneWay}"
+                              Click="OnDirectionClicked"
+                              ToolTipService.ToolTip="Reverse the order"
+                              AutomationProperties.Name="Reverse the order">
+                    <FontIcon Glyph="&#xE8CB;" FontSize="14" />
+                </ToggleButton>
+            </StackPanel>
+
+            <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.Note, Mode=OneWay}" TextWrapping="Wrap"
+                       HorizontalAlignment="Right" HorizontalTextAlignment="Right" VerticalAlignment="Center"
+                       Style="{StaticResource SecondaryText}"
+                       AutomationProperties.LiveSetting="Polite" />
+
+            <Button Grid.Column="2" MinWidth="120" VerticalAlignment="Center"
+                    Style="{StaticResource AccentButtonStyle}"
+                    Command="{x:Bind ViewModel.ChangeCommand}"
+                    AutomationProperties.Name="{x:Bind ViewModel.ChangeLabel, Mode=OneWay}"
+                    AutomationProperties.HelpText="{x:Bind ViewModel.Note, Mode=OneWay}">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon Glyph="{x:Bind ViewModel.ChangeGlyph, Mode=OneWay}" FontSize="14"
+                              AutomationProperties.AccessibilityView="Raw" />
+                    <TextBlock Text="{x:Bind ViewModel.ChangeLabel, Mode=OneWay}" />
+                </StackPanel>
+            </Button>
+        </Grid>
+
+        <ListView x:Name="EntryList" Grid.Row="4"
                   AutomationProperties.Name="What starts at sign-in"
                   SelectionMode="Single"
                   SelectionChanged="OnSelectionChanged"
                   ItemsSource="{x:Bind ViewModel.Rows}"
                   ItemTemplate="{StaticResource EntryTemplate}"
                   ItemContainerStyle="{StaticResource EntryContainer}" />
-
-        <Grid Grid.Row="4" ColumnSpacing="12" ColumnDefinitions="*,Auto">
-            <TextBlock Text="{x:Bind ViewModel.Note, Mode=OneWay}" TextWrapping="Wrap"
-                       VerticalAlignment="Center" AutomationProperties.LiveSetting="Polite" />
-            <Button Grid.Column="1" Content="{x:Bind ViewModel.ChangeLabel, Mode=OneWay}"
-                    Command="{x:Bind ViewModel.ChangeCommand}"
-                    AutomationProperties.Name="{x:Bind ViewModel.ChangeLabel, Mode=OneWay}" />
-        </Grid>
     </Grid>
 </Page>

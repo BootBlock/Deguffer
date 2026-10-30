@@ -17,6 +17,12 @@ namespace Deguffer.App.ViewModels;
 /// </summary>
 public sealed partial class StartupViewModel : ObservableObject
 {
+    private const string NothingPicked = "Select an entry to disable or enable it.";
+
+    // Segoe Fluent Icons: Accept, and Blocked.
+    private const string EnableGlyph = "\uE8FB";
+    private const string DisableGlyph = "\uE733";
+
     private readonly Func<CancellationToken, StartupView> _read;
     private readonly Func<StartupEntry, StartupChangeReport> _switch;
     private readonly bool _isElevated;
@@ -25,6 +31,9 @@ public sealed partial class StartupViewModel : ObservableObject
     private readonly RunningActions _running;
     private readonly BusyWork _work;
     private StartupView _view = StartupView.Empty;
+    private StartupOrder _order;
+    private StartupOrderDirection _direction;
+    private IComparer<StartupEntry> _comparer = StartupRowOrder.Comparer(StartupOrder.Name, StartupOrderDirection.Ascending);
     private CancellationTokenSource? _reads;
 
     /// <summary>An entry a link asked for, picked once a reading holds it.</summary>
@@ -74,13 +83,53 @@ public sealed partial class StartupViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(ChangeCommand))]
     public partial StartupRow? SelectedRow { get; set; }
 
-    /// <summary>What the change button will do for the picked entry, or why it will not: a sentence, never a disabled button.</summary>
+    /// <summary>
+    /// What the change button will do for the picked entry, or why it will not: a sentence, never a
+    /// disabled button. With nothing picked, where the button's change comes from.
+    /// </summary>
     [ObservableProperty]
-    public partial string Note { get; private set; } = string.Empty;
+    public partial string Note { get; private set; } = NothingPicked;
 
     /// <summary>The change button's word: the change the picked entry would get.</summary>
     [ObservableProperty]
     public partial string ChangeLabel { get; private set; } = "Disable";
+
+    /// <summary>The change button's icon, which names the same change as <see cref="ChangeLabel"/>.</summary>
+    [ObservableProperty]
+    public partial string ChangeGlyph { get; private set; } = DisableGlyph;
+
+    /// <summary>
+    /// How the rows are ordered. Set by the view from the preference and from the page's order picker,
+    /// so this type still knows nothing about settings, and read back by it, because a value no order
+    /// is named for is stored as the shipped one (<see cref="StartupRowOrder.Known(StartupOrder)"/>).
+    /// </summary>
+    public StartupOrder Order
+    {
+        get => _order;
+        set
+        {
+            if (SetProperty(ref _order, StartupRowOrder.Known(value)))
+            {
+                Reorder();
+            }
+        }
+    }
+
+    /// <summary>Which way round <see cref="Order"/> runs, set and read back as it is.</summary>
+    public StartupOrderDirection Direction
+    {
+        get => _direction;
+        set
+        {
+            if (SetProperty(ref _direction, StartupRowOrder.Known(value)))
+            {
+                OnPropertyChanged(nameof(IsDescending));
+                Reorder();
+            }
+        }
+    }
+
+    public bool IsDescending => _direction is StartupOrderDirection.Descending;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ChangeCommand))]
@@ -120,6 +169,16 @@ public sealed partial class StartupViewModel : ObservableObject
         {
             _ = RefreshAsync();
         }
+    }
+
+    /// <summary>
+    /// Move each row that is out of place in the fewest moves, never removing or re-creating one, so
+    /// the picked row stays picked and the reader keeps their place (G4).
+    /// </summary>
+    private void Reorder()
+    {
+        _comparer = StartupRowOrder.Comparer(_order, _direction);
+        LiveList.Show(Rows, [.. Rows.OrderBy(row => row.Entry, _comparer)], row => row);
     }
 
     partial void OnSelectedRowChanged(StartupRow? value)
@@ -253,7 +312,7 @@ public sealed partial class StartupViewModel : ObservableObject
     {
         LiveList.Show(
             Rows,
-            _view.Reading.Entries,
+            [.. _view.Reading.Entries.Order(_comparer)],
             row => row.Key,
             entry => entry.Key,
             entry => new StartupRow(entry, MarksFor(entry)),
@@ -272,18 +331,21 @@ public sealed partial class StartupViewModel : ObservableObject
     {
         if (SelectedRow is not { } row)
         {
-            Note = string.Empty;
+            Note = NothingPicked;
             return;
         }
 
         var verdict = StartupChangePolicy.MayChange(row.Entry, _isElevated);
         Note = verdict.Reason;
-        ChangeLabel = verdict.Change switch
+        var enables = verdict.Change switch
         {
-            StartupChange.Enable => "Enable",
-            StartupChange.Disable => "Disable",
-            _ => row.Entry.State is StartupState.Disabled ? "Enable" : "Disable",
+            StartupChange.Enable => true,
+            StartupChange.Disable => false,
+            _ => row.Entry.State is StartupState.Disabled,
         };
+
+        ChangeLabel = enables ? "Enable" : "Disable";
+        ChangeGlyph = enables ? EnableGlyph : DisableGlyph;
     }
 
     private void PickWanted()

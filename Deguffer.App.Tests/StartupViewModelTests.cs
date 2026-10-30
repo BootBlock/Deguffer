@@ -18,6 +18,9 @@ public sealed class StartupViewModelTests : IDisposable
 {
     private const string Tool = @"C:\Program Files\Tool\tool.exe";
 
+    /// <summary>The state Task Manager writes to disable an entry (§7.5).</summary>
+    private const uint DisabledState = 3;
+
     private readonly TempDirectory _temp = new();
     private readonly FakeStartupRegistry _registry = new();
     private readonly FakeProgramFiles _programs = new FakeProgramFiles().With(Tool, description: "Tool Tray", company: "Contoso");
@@ -56,9 +59,10 @@ public sealed class StartupViewModelTests : IDisposable
         Assert.False(row.IsNotRunning);
         Assert.StartsWith("1 entry: 1 starts at sign-in", page.Headline, StringComparison.Ordinal);
 
-        // §7.5: nothing is picked for the user.
+        // §7.5: nothing is picked for the user, and the note says where the change comes from.
         Assert.Null(page.SelectedRow);
-        Assert.Empty(page.Note);
+        Assert.Equal("Select an entry to disable or enable it.", page.Note);
+        Assert.False(page.ChangeCommand.CanExecute(null));
     });
 
     /// <summary>A live list is updated in place, never rebuilt: the picked row stays picked across the reading a change ends with.</summary>
@@ -105,6 +109,62 @@ public sealed class StartupViewModelTests : IDisposable
         Assert.Equal(0, _switches);
         Assert.Empty(_registry.Writes);
         Assert.Equal(InfoBarSeverity.Informational, page.ReportSeverity);
+    });
+
+    /// <summary>
+    /// The chosen order places the rows of every reading, and a new order moves the rows already
+    /// listed in place, so the picked row stays picked. A live list is updated in place, never rebuilt.
+    /// </summary>
+    [Fact]
+    public void TheChosenOrderPlacesTheRowsAndMovesThemInPlace() => UiThread.Run(async () =>
+    {
+        // Programs nothing describes, so each row's title is its entry's name.
+        _registry
+            .WithRun(StartupSource.UserRun, "Alpha", @"C:\Program Files\Alpha\alpha.exe")
+            .WithRun(StartupSource.UserRun, "Bravo", @"C:\Program Files\Bravo\bravo.exe")
+            .WithRun(StartupSource.UserRun, "Charlie", @"C:\Program Files\Charlie\charlie.exe")
+            .WithApproval(StartupSource.UserRun, "Alpha", DisabledState)
+            .WithApproval(StartupSource.UserRun, "Charlie", DisabledState);
+        var page = Page();
+        page.Order = StartupOrder.State;
+        page.Direction = StartupOrderDirection.Descending;
+
+        await page.RefreshAsync();
+
+        Assert.Equal(["Alpha", "Charlie", "Bravo"], page.Rows.Select(r => r.Key.Name));
+
+        var bravo = page.Rows[2];
+        page.SelectedRow = bravo;
+        page.Order = StartupOrder.Name;
+
+        Assert.Equal(["Charlie", "Bravo", "Alpha"], page.Rows.Select(r => r.Key.Name));
+        Assert.Same(bravo, page.Rows[1]);
+        Assert.Same(bravo, page.SelectedRow);
+
+        page.Direction = StartupOrderDirection.Ascending;
+
+        Assert.Equal(["Alpha", "Bravo", "Charlie"], page.Rows.Select(r => r.Key.Name));
+        Assert.Same(bravo, page.SelectedRow);
+    });
+
+    /// <summary>The change button's word and icon name the same change.</summary>
+    [Fact]
+    public void TheChangeButtonsIconFollowsItsWord() => UiThread.Run(async () =>
+    {
+        _registry
+            .WithRun(StartupSource.UserRun, "Alpha", @"C:\Program Files\Alpha\alpha.exe")
+            .WithRun(StartupSource.UserRun, "Bravo", @"C:\Program Files\Bravo\bravo.exe")
+            .WithApproval(StartupSource.UserRun, "Bravo", DisabledState);
+        var page = Page();
+        await page.RefreshAsync();
+
+        page.SelectedRow = page.Rows[0];
+        var disable = page.ChangeGlyph;
+        Assert.Equal("Disable", page.ChangeLabel);
+
+        page.SelectedRow = page.Rows[1];
+        Assert.Equal("Enable", page.ChangeLabel);
+        Assert.NotEqual(disable, page.ChangeGlyph);
     });
 
     [Fact]
