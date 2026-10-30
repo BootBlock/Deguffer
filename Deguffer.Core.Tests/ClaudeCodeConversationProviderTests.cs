@@ -356,21 +356,50 @@ public sealed class ClaudeCodeConversationProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The floor travels on the plan, not only into the preview. A conversation appended to between the
+    /// The floor travels on the plan, not only into the preview. A conversation written between the
     /// preview and the clean, by a version of Claude Code the list does not show, is spared by the removal.
+    ///
+    /// <para>Its last-write time is put back, so the check at the clean sees nothing written since the
+    /// scan, and only the floor reads the creation time that moved. A conversation whose last write moved
+    /// is held back by that check as well, which <see cref="AConversationWrittenAfterThePreviewHoldsBackItsWholeSession"/>
+    /// asserts.</para>
     /// </summary>
     [Fact]
-    public async Task AConversationWrittenAfterThePreviewIsSparedByTheClean()
+    public async Task AConversationWrittenAfterThePreviewIsSparedByTheFloor()
+    {
+        var (conversation, _) = OldSession(SessionA);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Contains(conversation, plan.TargetedPaths);
+        Assert.Equal(DateTime.UtcNow - ClaudeCodeSessionRegistry.RecentWindow, plan.Keep.KeepFromUtc!.Value, TimeSpan.FromMinutes(1));
+
+        var scanned = File.GetLastWriteTimeUtc(conversation);
+        File.AppendAllText(conversation, "{\"type\":\"assistant\"}\n");
+        File.SetLastWriteTimeUtc(conversation, scanned);
+        File.SetCreationTimeUtc(conversation, DateTime.UtcNow);
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(conversation), "a conversation written after the preview was removed");
+    }
+
+    /// <summary>
+    /// The check at the clean asks whether the conversation was written since the scan, and holds back the
+    /// whole session where it was. The floor cannot spare the folder, which nobody wrote to.
+    /// </summary>
+    [Fact]
+    public async Task AConversationWrittenAfterThePreviewHoldsBackItsWholeSession()
     {
         var (conversation, folder) = OldSession(SessionA);
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
 
-        Assert.Contains(conversation, plan.TargetedPaths);
+        Assert.Contains(folder, plan.TargetedPaths);
 
         File.AppendAllText(conversation, "{\"type\":\"assistant\"}\n");
-        File.SetCreationTimeUtc(conversation, DateTime.UtcNow);
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -748,6 +777,38 @@ public sealed class ClaudeCodeConversationProviderTests : IDisposable
         AssertKept(plan, folder);
         Assert.Contains(plan.Notes, note => note.Severity == PlanNoteSeverity.Warning
             && note.Message.Contains("could not list every Claude Code project folder", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A project folder that is a link is never listed, so it may hold a conversation of the same name as
+    /// one Deguffer did list. That makes the view incomplete, as a folder that cannot be listed does, and
+    /// nothing is offered. The link is named.
+    /// </summary>
+    [Fact]
+    public async Task AProjectFolderThatIsALinkRefusesEveryConversation()
+    {
+        var (conversation, folder) = OldSession(SessionA);
+
+        var outside = new ClaudeCodeFixture(Path.Combine(_temp.Path, "outside"));
+        var duplicate = outside.Conversation(SessionA, age: Old);
+
+        var link = _claude.Project(OtherProjectFolder);
+        SymbolicLink.ToDirectory(link, outside.Project());
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        AssertKept(plan, conversation);
+        AssertKept(plan, folder);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == link && p.Reason == CacheLevelWalk.LinkReason);
+        Assert.Contains(plan.Notes, n => n.Message.Contains(link, StringComparison.OrdinalIgnoreCase));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(conversation));
+        Assert.True(File.Exists(duplicate));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
     /// <summary>A conversation that is a link is named and refused, and so is the session's folder.</summary>

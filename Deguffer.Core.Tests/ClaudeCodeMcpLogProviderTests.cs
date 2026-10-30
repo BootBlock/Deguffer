@@ -35,9 +35,13 @@ public sealed class ClaudeCodeMcpLogProviderTests : IDisposable
     /// A server's log folder holding one run's log. Aged as a whole, the file first and the folder last,
     /// because a log folder is dated by the newest write one level down and a new file would date it now.
     /// </summary>
-    private string ServerLog(string server, string project = ProjectName, TimeSpan? age = null)
+    private string ServerLog(string server, string project = ProjectName, TimeSpan? age = null) =>
+        ServerLogIn(Project(project), server, age);
+
+    /// <summary>A server's log folder, as <see cref="ServerLog"/> makes one, in any folder.</summary>
+    private static string ServerLogIn(string parent, string server, TimeSpan? age)
     {
-        var folder = Path.Combine(Project(project), ClaudeCodeMcpLogProvider.LogFolderPrefix + server);
+        var folder = Path.Combine(parent, ClaudeCodeMcpLogProvider.LogFolderPrefix + server);
         Directory.CreateDirectory(folder);
 
         var log = Path.Combine(folder, "2026-01-01T10-00-00-000Z.jsonl");
@@ -228,6 +232,36 @@ public sealed class ClaudeCodeMcpLogProviderTests : IDisposable
         await provider.ExecuteAsync(plan);
 
         Assert.True(File.Exists(bystander), "a file was deleted through a linked log folder");
+    }
+
+    /// <summary>
+    /// A project's folder moved behind a link holds log folders that are not links themselves, so only
+    /// the check one level up stops them. Listed through, they became targets under the link, and the
+    /// removal deleted the far side while every survivor it asserted sat on the near side.
+    /// </summary>
+    [Fact]
+    public async Task ALinkedProjectFolderIsNamedAndNeverListedThrough()
+    {
+        var log = ServerLog("filesystem", age: ClaudeCodeFixture.Old);
+
+        var outside = Path.Combine(_temp.Path, "elsewhere");
+        var bystander = Path.Combine(ServerLogIn(outside, "browser", ClaudeCodeFixture.Old), "2026-01-01T10-00-00-000Z.jsonl");
+
+        var link = Project("C--Users-testuser-src-moved");
+        SymbolicLink.ToDirectory(link, outside);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([log], plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == link && p.Reason == CacheLevelWalk.LinkReason);
+        Assert.Contains(plan.Notes, n => n.Message.Contains(link, StringComparison.OrdinalIgnoreCase));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.False(Directory.Exists(log));
+        Assert.True(File.Exists(bystander), "a server's log was deleted through a linked project folder");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
     [Fact]
