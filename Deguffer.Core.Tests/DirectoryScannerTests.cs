@@ -179,10 +179,11 @@ public class DirectoryScannerTests
         var cache = temp.CreateDirectory("cache");
         File.WriteAllBytes(Path.Combine(cache, "fragmented.tgz"), new byte[3000]);
 
-        var (volume, folder) = Along(cache);
+        Assert.True(VolumePath.TryParse(cache, out var path));
+        var (volume, folder, next) = MftFolders.Through(path.Components);
         volume.AddFileWithDataInAnExtensionRecord(
-            21, folder, "fragmented.tgz", allocated: 4096, logical: 4096, extension: 22, ListMismatch.ItsOwnSequence);
-        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving(cache[0], volume), tuning: RouteTuners.Table);
+            next, folder, "fragmented.tgz", allocated: 4096, logical: 4096, extension: next + 1, ListMismatch.ItsOwnSequence);
+        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving(path.DriveLetter, volume), tuning: RouteTuners.Table);
 
         var result = await scanner.MeasureAsync(cache);
 
@@ -191,26 +192,6 @@ public class DirectoryScannerTests
 
         // The file the test wrote, not the 4096 the table records: the walk read the scratch tree.
         Assert.Equal(3000, result.Size.Logical);
-    }
-
-    /// <summary>
-    /// A table holding a directory for each folder of <paramref name="path"/> below its root, and the
-    /// record of the last of them, so the table resolves a folder the test also builds on the disk.
-    /// Numbered from 100, above every record the tests here add themselves.
-    /// </summary>
-    private static (MftFixture Volume, uint Folder) Along(string path)
-    {
-        var volume = new MftFixture();
-        var parent = Deguffer.Core.Scanning.Mft.MftRecord.RootRecordNumber;
-        var number = 100u;
-
-        foreach (var name in path[Path.GetPathRoot(path)!.Length..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
-        {
-            volume.AddDirectory(number, parent, name);
-            parent = number++;
-        }
-
-        return (volume, parent);
     }
 
     /// <summary>
