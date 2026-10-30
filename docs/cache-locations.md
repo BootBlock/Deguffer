@@ -1201,12 +1201,17 @@ Scoop prints no cache location, so Deguffer works it out as Scoop does: `SCOOP_C
 `root_path`, then the folder the running Scoop is installed in. The settings are a `config.json`
 beside that install if one exists, otherwise `scoop\config.json` under `XDG_CONFIG_HOME` or
 `%USERPROFILE%\.config`. Where any of these could be read as a different folder (a relative path,
-or brackets PowerShell takes as a wildcard), nothing is offered. Scoop is started through the
-`scoop.cmd` shim it installs, by full path.
+or a character PowerShell takes as a wildcard or its escape: `[`, `]`, `*`, `?` or a backtick),
+nothing is offered. Nor is anything offered where the root or the cache is somewhere no tool's
+folder may be, such as the profile, Documents or a drive root; a root there is declared to Explore
+for only the folders Scoop keeps in it. Scoop is started through the `scoop.cmd` shim it installs,
+by full path.
 
 `scoop cache rm *` removes every entry in the folder without reading its name. So Deguffer offers it
 only when every entry is a download Scoop made, its partial download or aria2 file, or aria2's
-leftover list beside it. Anything else means no offer, and a note names what is there. A cancelled
+leftover list beside it. Anything else means no offer, and a note names what is there. Scoop lists
+the folder only when it runs, so the clean works the cache out and lists it again immediately before
+the command, and does not run it if the cache has moved or holds anything else by then. A cancelled
 run is ended: each download is removed on its own.
 
 ### What is protected

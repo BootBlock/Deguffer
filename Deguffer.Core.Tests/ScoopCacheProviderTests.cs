@@ -171,16 +171,83 @@ public sealed class ScoopCacheProviderTests : IDisposable
         Assert.Empty(_scoop.Runner.Invocations);
     }
 
+    /// <summary>
+    /// A file link carrying a download's name is still not a download Scoop made: Scoop writes files,
+    /// never links. This is the case the reparse-point test on a file decides.
+    /// </summary>
     [Fact]
-    public async Task ALinkInsideTheCacheWithholdsTheCommand()
+    public async Task AFileLinkWithADownloadsNameWithholdsTheCommandAndIsProtected()
+    {
+        _scoop.Install();
+        _scoop.File(_scoop.DefaultCache, ScoopFixture.Download);
+        var target = _scoop.File(_scoop.Elsewhere("linked"), "target.7z");
+        var link = Path.Combine(_scoop.DefaultCache, "git#2.47.1#0123abc.7z");
+        SymbolicLink.ToFile(link, target);
+
+        await AssertWithheldFor(link);
+    }
+
+    /// <summary>A folder link is not a download whatever its name, because a download is a file.</summary>
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task AFolderLinkInsideTheCacheWithholdsTheCommandAndIsProtected(DirectoryLinkKind kind)
     {
         _scoop.Install();
         _scoop.File(_scoop.DefaultCache, ScoopFixture.Download);
         var target = _scoop.Elsewhere("linked");
         Directory.CreateDirectory(target);
-        Junction.ToDirectory(Path.Combine(_scoop.DefaultCache, "git#2.47.1#0123abc.7z"), target);
+        var link = Path.Combine(_scoop.DefaultCache, "git#2.47.1#0123abc.7z");
+        DirectoryLink.Create(kind, link, target);
 
-        Assert.Empty((await _scoop.Provider().PlanAsync()).Steps);
+        await AssertWithheldFor(link);
+    }
+
+    /// <summary>
+    /// The command lists the cache when it runs, not when the preview did, so a file saved there in
+    /// between stops it, is named, and survives. The fake Scoop removes every file it finds, as the
+    /// real one does.
+    /// </summary>
+    [Fact]
+    public async Task AFileSavedIntoTheCacheAfterThePreviewStopsTheCommand()
+    {
+        var shim = _scoop.Install();
+        var download = _scoop.File(_scoop.DefaultCache, ScoopFixture.Download);
+        _scoop.Runner.Replying(shim, _ => RemoveEveryFileIn(_scoop.DefaultCache));
+        var provider = _scoop.Provider();
+
+        var plan = await provider.PlanAsync();
+        var saved = _scoop.File(_scoop.DefaultCache, "report.docx");
+        var outcome = Assert.Single((await provider.ExecuteAsync(plan)).Steps);
+
+        Assert.False(outcome.Succeeded);
+        Assert.StartsWith("Not run:", outcome.Message, StringComparison.Ordinal);
+        Assert.Contains("'report.docx'", outcome.Message, StringComparison.Ordinal);
+        Assert.Empty(_scoop.Runner.Invocations);
+        Assert.True(File.Exists(saved));
+        Assert.True(File.Exists(download));
+    }
+
+    /// <summary>
+    /// Scoop reads its settings when it starts, so a cache moved after the preview would have the
+    /// command empty a folder nobody examined. It is not run.
+    /// </summary>
+    [Fact]
+    public async Task ACacheMovedAfterThePreviewStopsTheCommand()
+    {
+        var shim = _scoop.Install();
+        _scoop.File(_scoop.DefaultCache, ScoopFixture.Download);
+        var moved = _scoop.Elsewhere("moved-cache");
+        var unexamined = _scoop.File(moved, "report.docx");
+        _scoop.Runner.Replying(shim, _ => RemoveEveryFileIn(moved));
+        var provider = _scoop.Provider();
+
+        var plan = await provider.PlanAsync();
+        _scoop.WriteText(_scoop.UserConfig, $$"""{ "cache_path": {{System.Text.Json.JsonSerializer.Serialize(moved)}} }""");
+        var outcome = Assert.Single((await provider.ExecuteAsync(plan)).Steps);
+
+        Assert.StartsWith("Not run:", outcome.Message, StringComparison.Ordinal);
+        Assert.Empty(_scoop.Runner.Invocations);
+        Assert.True(File.Exists(unexamined));
     }
 
     /// <summary>
@@ -295,6 +362,17 @@ public sealed class ScoopCacheProviderTests : IDisposable
         _scoop.File(cache, ScoopFixture.Download);
 
         Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(_scoop.Provider()));
+    }
+
+    private async Task AssertWithheldFor(string link)
+    {
+        var plan = await _scoop.Provider().PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, note => note.Message.Contains($"'{Path.GetFileName(link)}'", StringComparison.Ordinal));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(link, StringComparison.OrdinalIgnoreCase));
+        Assert.Empty(_scoop.Runner.Invocations);
     }
 
     private static CommandOutcome RemoveEveryFileIn(string folder)

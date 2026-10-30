@@ -1,4 +1,5 @@
 using Deguffer.Core.Execution;
+using Deguffer.Core.Providers;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -116,8 +117,9 @@ public sealed class ScoopCacheLocationTests : IDisposable
     }
 
     /// <summary>
-    /// Scoop resolves a relative value against PowerShell's current folder, and pads, device forms and
-    /// wildcard brackets are each read differently by <c>-Path</c> than by Win32. Each would have the
+    /// Scoop resolves a relative value against PowerShell's current folder, and pads, device forms,
+    /// wildcards and the backtick that escapes them are each read differently by <c>-Path</c> than by
+    /// Win32. Each would have the
     /// plan examine one folder and the command empty another, so none of them offers anything, and
     /// Scoop is never started. The default cache is populated, so a value read as unset would plan.
     /// </summary>
@@ -127,6 +129,10 @@ public sealed class ScoopCacheLocationTests : IDisposable
     [InlineData("SCOOP_CACHE", @"C:scoop\cache")]
     [InlineData("SCOOP_CACHE", " {0}")]
     [InlineData("SCOOP_CACHE", @"{0}\a[1]")]
+    [InlineData("SCOOP_CACHE", @"{0}\d``e")]
+    [InlineData("SCOOP_CACHE", @"{0}\c*")]
+    [InlineData("SCOOP_CACHE", @"{0}\c?")]
+    [InlineData("SCOOP", @"{0}\x`y")]
     [InlineData("SCOOP_CACHE", @"\\?\{0}")]
     [InlineData("SCOOP", "scoop")]
     [InlineData("XDG_CONFIG_HOME", ".config")]
@@ -171,6 +177,74 @@ public sealed class ScoopCacheLocationTests : IDisposable
         _scoop.WriteText(_scoop.UserConfig, json);
 
         Assert.Equal([_scoop.DefaultCache], ScoopFixture.Step(await _scoop.Provider().PlanAsync()).MeasuredPaths);
+    }
+
+    /// <summary>
+    /// A root or cache somewhere no tool's folder may be is not examined as Scoop's, wherever the value
+    /// came from. The download sits where Scoop would look, so a value taken at its word would plan.
+    /// </summary>
+    [Theory]
+    [InlineData("variable", "SCOOP", "profile")]
+    [InlineData("variable", "SCOOP_CACHE", "documents")]
+    [InlineData("setting", "root_path", "profile")]
+    [InlineData("setting", "cache_path", "documents")]
+    public async Task AFolderNoToolMayOwnOffersNothing(string source, string name, string folder)
+    {
+        _scoop.Install();
+        var named = folder == "profile" ? _scoop.Environment.UserProfile : Path.Combine(_scoop.Environment.UserProfile, "Documents");
+        _scoop.File(name is "SCOOP" or "root_path" ? Path.Combine(named, "cache") : named, ScoopFixture.Download);
+
+        if (source == "variable")
+        {
+            _scoop.Environment.WithEnvironmentVariable(name, named);
+        }
+        else
+        {
+            _scoop.WriteText(_scoop.UserConfig, $$"""{ "{{name}}": {{Json(named)}} }""");
+        }
+
+        var plan = await AssertOffersNothing();
+        Assert.Contains(plan.Notes, note => note.Message.Contains(named, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// A root that is the profile claims only the folders Scoop keeps there, never the whole profile,
+    /// and the settings stay refused.
+    /// </summary>
+    [Fact]
+    public async Task ADeclinedRootIsDeclaredSparingly()
+    {
+        _scoop.Install();
+        var profile = _scoop.Environment.UserProfile;
+        _scoop.Environment.WithEnvironmentVariable("SCOOP", profile);
+
+        var roots = await _scoop.Provider().DiscoverToolRootsAsync();
+        var atProfile = Assert.Single(roots, root => root.Path.Equals(profile, StringComparison.OrdinalIgnoreCase));
+
+        Assert.Equal(ToolRootClaim.NamedEntries, atProfile.Claim);
+        Assert.False(atProfile.Recognises(new ToolRootChild("apps", ChildKind.Folder)));
+        Assert.False(atProfile.Recognises(new ToolRootChild("persist", ChildKind.Folder)));
+        Assert.True(atProfile.Recognises(new ToolRootChild("Documents", ChildKind.Folder)));
+        Assert.Contains(roots, root => root.Path.Equals(_scoop.UserConfig, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// A cache that is Documents is not declared at all, because a root there would recognise the
+    /// downloads and so lift other refusals there, while Scoop's root is still refused whole.
+    /// </summary>
+    [Fact]
+    public async Task ADeclinedCacheIsNotDeclared()
+    {
+        _scoop.Install();
+        var documents = Path.Combine(_scoop.Environment.UserProfile, "Documents");
+        _scoop.Environment.WithEnvironmentVariable("SCOOP_CACHE", documents);
+
+        var roots = await _scoop.Provider().DiscoverToolRootsAsync();
+
+        Assert.DoesNotContain(roots, root => root.Path.Equals(documents, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(roots, root => root.Path.Equals(_scoop.DefaultRoot, StringComparison.OrdinalIgnoreCase)
+            && root.Claim == ToolRootClaim.WholeFolder
+            && !root.Recognises(new ToolRootChild("apps", ChildKind.Folder)));
     }
 
     [Fact]

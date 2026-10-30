@@ -77,7 +77,12 @@ internal sealed class ScoopFixture : IDisposable
         System.IO.File.WriteAllText(path, text);
     }
 
-    public ScoopCacheProvider Provider() => new(Environment, Runner, FakeProcessInspector.NothingRunning);
+    public ScoopCacheProvider Provider() => new(
+        Environment,
+        Runner,
+        FakeProcessInspector.NothingRunning,
+        system: new FakeSystemDirectories(Path.Combine(_temp.Path, "system")),
+        volumes: new FakeVolumeInventory());
 
     /// <summary>The plan's one step, asserted to be the command and nothing else.</summary>
     public static RunCommandStep Step(CleanupPlan plan) => Assert.IsType<RunCommandStep>(Assert.Single(plan.Steps));
