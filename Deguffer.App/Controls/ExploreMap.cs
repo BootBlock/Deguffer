@@ -21,7 +21,6 @@ using Windows.Foundation;
 using Windows.UI.Core;
 using VirtualKey = Windows.System.VirtualKey;
 using VirtualKeyModifiers = Windows.System.VirtualKeyModifiers;
-using Windows.UI.ViewManagement;
 
 namespace Deguffer.App.Controls;
 
@@ -233,8 +232,8 @@ public sealed class ExploreMap : UserControl
 
     private ISizedTree? _markedTree;
 
-    /// <summary>Whether the compositor can draw effects without slowing the picture down, and when that changes.</summary>
-    private readonly CompositionCapabilities _capabilities = new();
+    /// <summary>What the map follows while it is loaded, undone when it is unloaded.</summary>
+    private Subscriptions? _watching;
 
     /// <summary>
     /// The one node under the pointer, in the shape <see cref="ExploreSurface.Outlines"/> wants.
@@ -268,13 +267,6 @@ public sealed class ExploreMap : UserControl
     /// for where it is drawn.
     /// </summary>
     private VolumeSpace _volume = VolumeSpace.None;
-
-    /// <summary>
-    /// The reader's Windows text size, which the labels grow with and the layout has to leave room
-    /// for, and the accent colour the hover outline is drawn in. One instance for every map, because
-    /// it is a window onto the system's settings (G5).
-    /// </summary>
-    private static readonly UISettings SystemSettings = new();
 
     /// <summary>
     /// Where the pointer was last seen, in this control's coordinates, or null while it is elsewhere.
@@ -427,7 +419,7 @@ public sealed class ExploreMap : UserControl
         _overview.HiddenChanged += (_, _) => OverviewHiddenChanged?.Invoke(this, EventArgs.Empty);
 
         // The camera is held where it was, measured from its new origin, until this returns, so
-        // everything on it is placed from that origin at once (see ExploreZoom.Rebase).
+        // everything on it is placed from that origin at once (see ExploreOrigin.Move).
         _zoom.OriginMoved += (_, _) => Fit();
 
         // A pinch, a touch or the wheel with Ctrl held moves the picture on the compositor before the
@@ -484,19 +476,21 @@ public sealed class ExploreMap : UserControl
         // (microsoft-ui-xaml #9610), and the root is not attached until this is loaded.
         Loaded += (_, _) =>
         {
+            _watching?.Dispose();
+            _watching = new Subscriptions()
+                .Add(() => SystemLook.Current.Changed += OnLookChanged, () => SystemLook.Current.Changed -= OnLookChanged)
+                .Add(() => SystemMotion.Current.Changed += OnMotionChanged, () => SystemMotion.Current.Changed -= OnMotionChanged)
+                .Add(() => _graphics.Device.Replaced += OnDeviceReplaced, () => _graphics.Device.Replaced -= OnDeviceReplaced);
+
+            // The root the map was loaded into is the one it leaves, though it may be gone from the
+            // control by the time Unloaded is raised.
             if (XamlRoot is { } root)
             {
-                root.Changed += OnRootChanged;
+                _watching.Add(() => root.Changed += OnRootChanged, () => root.Changed -= OnRootChanged);
             }
 
-            SystemSettings.TextScaleFactorChanged += OnTextScaleChanged;
-            SystemSettings.ColorValuesChanged += OnSystemColoursChanged;
-            _capabilities.Changed += OnCapabilitiesChanged;
-            SystemMotion.Current.Changed += OnMotionChanged;
             TintHighlight();
             _zoom.FollowMotion();
-
-            _graphics.Device.Replaced += OnDeviceReplaced;
 
             // The device was replaced while the map was away, so nothing it kept is on its surfaces
             // any more, and every redraw the rest of this would ask for is owed in full.
@@ -567,24 +561,27 @@ public sealed class ExploreMap : UserControl
             // it at all, and nothing on the page would put them there.
             _labels.Reveal();
 
-            if (XamlRoot is { } root)
+            // A map moved to a new parent can be loaded there before it is unloaded from the old one,
+            // and one still loaded keeps following what it was following.
+            if (!IsLoaded)
             {
-                root.Changed -= OnRootChanged;
+                _watching?.Dispose();
+                _watching = null;
             }
-
-            SystemSettings.TextScaleFactorChanged -= OnTextScaleChanged;
-            SystemSettings.ColorValuesChanged -= OnSystemColoursChanged;
-            _capabilities.Changed -= OnCapabilitiesChanged;
-            SystemMotion.Current.Changed -= OnMotionChanged;
-            _graphics.Device.Replaced -= OnDeviceReplaced;
         };
 
         // The ground is baked into the canvas, so unlike every themed control around it the map
         // cannot restyle itself. Nothing else here fires on a theme switch — the page is kept alive
         // by NavigationCacheMode, so a trip to Settings and back does not rebuild it either — and
         // the map would keep the old ground until the window was resized. WindowBackdrop subscribes
-        // this same event for the same reason.
-        ActualThemeChanged += (_, _) => Redraw();
+        // this same event for the same reason. High contrast turned on or off raises it too, and it can
+        // arrive before Windows' own colour event, so the system's look is read again before the redraw
+        // takes its colours from it.
+        ActualThemeChanged += (_, _) =>
+        {
+            SystemLook.Current.Refresh();
+            Redraw();
+        };
 
         // One tab stop, inside which the arrow keys move between the shapes, as they move between the
         // items of a list. A screen reader is given the shapes as a tree of their own (see
@@ -892,7 +889,12 @@ public sealed class ExploreMap : UserControl
         if (another)
         {
             _picturesHanded++;
-            EndDrag();
+
+            // The camera's drag ends with the map's, where it was held, and the new picture is drawn there.
+            if (EndDrag())
+            {
+                _zoom.Stop();
+            }
 
             if (_left is { Drawing: { } drawing } left
                 && ReferenceEquals(tree, left.Tree) && node == left.Node && view == left.View && volume == left.Volume
@@ -1283,7 +1285,7 @@ public sealed class ExploreMap : UserControl
         // ContrastColours.
         var wasContrasted = Contrasted;
 
-        _contrast = Contrast();
+        _contrast = SystemLook.Current.State.Contrast?.ToMap();
         _shapeColours = _contrast is { } contrast ? ShapeColours.Contrasted(contrast) : _colours(DateTime.UtcNow);
 
         if (Contrasted != wasContrasted)
@@ -1410,7 +1412,7 @@ public sealed class ExploreMap : UserControl
         var node = DrawnNode;
         var view = _view;
         var scale = _scale;
-        var textScale = SystemSettings.TextScaleFactor;
+        var textScale = SystemLook.Current.State.TextScale;
         var colours = _shapeColours!;
         var look = _look;
         var volume = DrawnVolume;
@@ -1607,42 +1609,17 @@ public sealed class ExploreMap : UserControl
         (int)Math.Round(extent * (XamlRoot?.RasterizationScale ?? 1));
 
     /// <summary>
-    /// The canvas ground, taken from the theme rather than fixed.
+    /// The canvas ground (see <see cref="MapGround"/>), for the theme this control is in and the high
+    /// contrast theme the picture on screen is drawn in.
     ///
-    /// <para>§6.5 requires the UI to read correctly on a flat background in either theme, and this
-    /// is where the reference implementation took the shortcut this cannot: WinDirStat's newer views
-    /// hard-code a near-black ground and are dark whatever the system is set to.</para>
-    /// </summary>
-    /// <para>Read from <see cref="FrameworkElement.ActualTheme"/> rather than by pulling the brush
-    /// out of the application's resource dictionary. This app applies the user's choice at element
+    /// <para>The theme is read from <see cref="FrameworkElement.ActualTheme"/> rather than by pulling the
+    /// brush out of the application's resource dictionary. This app applies the user's choice at element
     /// level — <c>MainWindow</c> sets <c>RequestedTheme</c> on the content root and nothing ever
     /// sets it on the application — so the application dictionary answers for the *system* theme.
     /// Asking it for a colour gives a light ground behind a dark page whenever the two disagree,
     /// which is the §6.5 failure this method exists to avoid.</para>
-    ///
-    /// <para>In a high contrast theme, the theme's own window colour, which the shapes are filled with too.</para>
-    private TileColour Ground() => _contrast is { } contrast
-        ? contrast.Window
-        : ActualTheme == ElementTheme.Dark
-            ? new TileColour(32, 32, 32)
-            : new TileColour(243, 243, 243);
-
-    /// <summary>
-    /// The colours of the high contrast theme Windows is in, or null where it is in none. Read from the
-    /// system rather than the application's resources, as <see cref="TintHighlight"/> reads them.
     /// </summary>
-    private static ContrastColours? Contrast()
-    {
-        if (!HighContrast.IsEnabled())
-        {
-            return null;
-        }
-
-        var window = SystemSettings.UIElementColor(UIElementType.Window);
-        var text = SystemSettings.UIElementColor(UIElementType.WindowText);
-
-        return new ContrastColours(window.ToTile(), text.ToTile());
-    }
+    private TileColour Ground() => MapGround.For(ActualTheme == ElementTheme.Dark, _contrast);
 
     /// <summary>
     /// What to write on a labelled shape. The blocks standing for the rest of the volume are the
@@ -2193,7 +2170,7 @@ public sealed class ExploreMap : UserControl
             && _look.Light.Shown
             && ReferenceEquals(found.Drawing, _drawing)
             && _graphics.Shades
-            && !HighContrast.IsEnabled())
+            && !Contrasted)
         {
             _pictures.Light(found.Drawing, PointerLight.At(found.X, found.Y, _scale, _look.Light.Amount));
         }
@@ -2250,30 +2227,24 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>
-    /// Draw again for a new text size, because the bands and the label thresholds are sized for the
-    /// old one. Raised off the UI thread, so it is sent back to it.
+    /// Follow a change of the system's look. A change of accent colour or of whether effects are fast
+    /// restyles the outlines. High contrast turned on or off or to another theme draws the picture
+    /// again in the colours it now has, and so does a new text size, because the bands and the label
+    /// thresholds are sized for the old one.
     /// </summary>
-    private void OnTextScaleChanged(UISettings sender, object args) => DispatcherQueue.TryEnqueueGuarded(Redraw);
-
-    /// <summary>
-    /// Follow a change of accent colour, or high contrast turned on or off or to another theme, which
-    /// draws the picture again in the colours it now has. Raised off the UI thread, like the text size
-    /// above.
-    /// </summary>
-    private void OnSystemColoursChanged(UISettings sender, object args) =>
-        DispatcherQueue.TryEnqueueGuarded(() =>
+    private void OnLookChanged(object? sender, SystemLookChange change)
+    {
+        if ((change & (SystemLookChange.Colours | SystemLookChange.Effects)) != 0)
         {
             TintHighlight();
+        }
 
-            if (Contrast() != _contrast)
-            {
-                Redraw();
-            }
-        });
-
-    /// <summary>Follow the compositor's word on whether effects are fast, which a remote session changes.</summary>
-    private void OnCapabilitiesChanged(CompositionCapabilities sender, object args) =>
-        DispatcherQueue.TryEnqueueGuarded(TintHighlight);
+        if ((change & SystemLookChange.TextScale) != 0
+            || ((change & SystemLookChange.Colours) != 0 && SystemLook.Current.State.Contrast?.ToMap() != _contrast))
+        {
+            Redraw();
+        }
+    }
 
     /// <summary>
     /// Follow the reader turning animation effects on or off, which says whether the picture coasts
@@ -2288,26 +2259,21 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void TintHighlight()
     {
+        // One reading for both, so the overview and the outlines cannot disagree about the theme.
+        var look = SystemLook.Current.State;
+
         // The overview's mark in white over a dark halo, which reads over any colour in the picture,
         // or in high contrast the theme's own colour for what is selected, over its window colour.
-        if (HighContrast.IsEnabled())
+        if (look.Contrast is { } contrast)
         {
-            _overview.Restyle(SystemSettings.UIElementColor(UIElementType.Highlight), SystemSettings.UIElementColor(UIElementType.Window));
+            _overview.Restyle(contrast.Highlight, contrast.Window);
         }
         else
         {
             _overview.Restyle(Microsoft.UI.Colors.White, Windows.UI.Color.FromArgb(170, 0, 0, 0));
         }
 
-        _highlight.Restyle(
-            SystemSettings.GetColorValue(UIColorType.AccentLight2),
-            HighContrast.IsEnabled()
-                ? new SystemHighlight(
-                    SystemSettings.UIElementColor(UIElementType.Window),
-                    SystemSettings.UIElementColor(UIElementType.Highlight),
-                    SystemSettings.UIElementColor(UIElementType.Hotlight))
-                : null,
-            _capabilities.AreEffectsFast());
+        _highlight.Restyle(look.Accent, look.Contrast?.ToHighlight(), look.EffectsFast);
     }
 
     private void OnPointerExited(object sender, PointerRoutedEventArgs e)
@@ -2699,7 +2665,7 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        var text = SystemSettings.TextScaleFactor;
+        var text = SystemLook.Current.State.TextScale;
         var target = _zoom.Target.Showing(
             drawn.PictureOf(shape.Frame),
             LayoutLimits.Default.MinimumLabelWidth * text / ActualWidth,

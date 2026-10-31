@@ -70,6 +70,21 @@ public sealed class MapFlingTests
         Assert.Equal((0, 0), fling.Release(at));
     }
 
+    /// <summary>
+    /// A picture stretched past an edge springs back, whatever the hand was doing. One inside the
+    /// picture coasts on at the hand's speed, unless the hand had stopped or the reader has turned
+    /// animation effects off.
+    /// </summary>
+    [Theory]
+    [InlineData(true, true, 300, 0, MapLetGo.SpringBack)]
+    [InlineData(true, false, 0, 0, MapLetGo.SpringBack)]
+    [InlineData(false, true, 300, 0, MapLetGo.Fling)]
+    [InlineData(false, true, 0, -40, MapLetGo.Fling)]
+    [InlineData(false, true, 0, 0, MapLetGo.Rest)]
+    [InlineData(false, false, 300, 0, MapLetGo.Rest)]
+    public void LettingGoSpringsBackCoastsOrRests(bool stretched, bool elastic, double x, double y, MapLetGo expected) =>
+        Assert.Equal(expected, MapFling.LetGo(stretched, elastic, (x, y)));
+
     /// <summary>A hand moving by (<paramref name="dx"/>, <paramref name="dy"/>) at each report from <paramref name="startX"/>. Says when it last reported.</summary>
     private static TimeSpan Drag(MapFling fling, TimeSpan from, int steps, double dx, double dy, double startX = 0)
     {

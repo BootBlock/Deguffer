@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Deguffer.App.Shell;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Microsoft.Graphics.Canvas;
@@ -25,9 +26,6 @@ namespace Deguffer.App.Controls;
 internal sealed class MapGraphics
 {
     private static readonly ConditionalWeakTable<Compositor, MapGraphics> Shared = [];
-
-    /// <summary>Whether the compositor has the GPU time for effects, which a remote session can change.</summary>
-    private readonly CompositionCapabilities _capabilities = new();
 
     /// <summary>
     /// One region's pixels, packed, before they go up. A region is never larger than
@@ -63,7 +61,8 @@ internal sealed class MapGraphics
 
     /// <summary>
     /// Whether a treemap's canvas is shaded on the GPU (see <see cref="Shade(CompositionDrawingSurface, CushionQuads, TileColour)"/>) rather than painted on
-    /// the CPU. Asked at each redraw, so a change of the compositor's word is followed at the next.
+    /// the CPU. Asked at each redraw, so a change of the compositor's word is followed at the next. The
+    /// word is kept by <see cref="SystemLook"/>, because a moving map asks this at every camera report.
     ///
     /// <para>Only where the compositor says effects are fast, which a remote session is not, and only on
     /// a hardware device. A software device's GPU time is the CPU's: WARP shades a 4K canvas in about
@@ -71,7 +70,7 @@ internal sealed class MapGraphics
     /// at a time and off the UI thread. Win2D's device is asked rather than the compositor's word alone,
     /// because the two are separate devices. A device that cannot run the shaders is painted for too.</para>
     /// </summary>
-    public bool Shades => _capabilities.AreEffectsFast() && _renderer.Value is { OnSoftware: false };
+    public bool Shades => SystemLook.Current.State.EffectsFast && _renderer.Value is { OnSoftware: false };
 
     /// <summary>
     /// The bitmap regions are staged in now, or null before the first write on this device. Read by a

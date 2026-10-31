@@ -60,4 +60,23 @@ public sealed class MapFling
 
         return ((last.X - first.X) / span, (last.Y - first.Y) / span);
     }
+
+    /// <summary>
+    /// What the picture does once the hand lets go moving at <paramref name="speed"/>
+    /// (<see cref="Release"/>), where the drag left it <paramref name="stretched"/> past an edge or not,
+    /// and the picture may coast only where <paramref name="elastic"/>.
+    ///
+    /// <para>A picture stretched past an edge springs back rather than coasting on. A reader who has
+    /// turned animation effects off gets no inertia, so for them it stays where it was put, as it does
+    /// for a hand that stopped before it let go.</para>
+    /// </summary>
+    public static MapLetGo LetGo(bool stretched, bool elastic, (double X, double Y) speed)
+    {
+        if (stretched)
+        {
+            return MapLetGo.SpringBack;
+        }
+
+        return !elastic || (speed.X == 0 && speed.Y == 0) ? MapLetGo.Rest : MapLetGo.Fling;
+    }
 }
