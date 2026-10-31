@@ -166,7 +166,7 @@ public sealed class MapFollowTests
             after, after.RootNode, ExploreView.Icicle, Width, Height, scale: 1, textScale: 1,
             ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None);
 
-        Assert.Null(unplaced.Viewport);
+        Assert.Null(unplaced.Zoom);
         Assert.Null(MapFollow.From(earlier, unplaced, viewport, viewport, movable: true));
     }
 

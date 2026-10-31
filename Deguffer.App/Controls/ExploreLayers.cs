@@ -164,7 +164,7 @@ internal sealed class ExploreLayers
     /// into tiles; null otherwise. A drawing of a picture that has changed would cut tiles of the old one.
     /// </summary>
     private TiledSurface? Tiled =>
-        _current is { Drawing: TiledSurface { Viewport: not null } drawing } current && current.Picture == _picture
+        _current is { Drawing: TiledSurface { Zoom: not null } drawing } current && current.Picture == _picture
             ? drawing
             : null;
 
@@ -276,7 +276,7 @@ internal sealed class ExploreLayers
     /// <param name="fade">How it comes in, where it replaces it. See <see cref="Replacement"/>.</param>
     public ExploreLayer StartLanding(ExploreSurface drawing, bool onTop, Motion fade)
     {
-        var viewport = drawing.Viewport ?? MapViewport.Whole;
+        var viewport = drawing.ShownAt;
         var layer = Take(drawing.Width, drawing.Height, viewport);
 
         layer.Begin(drawing.Width, drawing.Height, viewport, onTop, _picture, unseen: !fade.IsInstant);

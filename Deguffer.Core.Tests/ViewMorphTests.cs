@@ -189,7 +189,7 @@ public sealed class ViewMorphTests
             ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None,
             MapViewport.Seen(4, 0.25, 0.25));
 
-        Assert.False(zoomed.Viewport!.Value.IsWhole);
+        Assert.False(zoomed.ShownAt.IsWhole);
         Assert.NotEmpty(ViewMorph.Between(Drawing(tree, ExploreView.Treemap), Drawing(tree, ExploreView.Icicle)));
         Assert.Empty(ViewMorph.Between(zoomed, Drawing(tree, ExploreView.Icicle)));
     }

@@ -53,7 +53,7 @@ public sealed class ExploreSurfaceTests
 
         if (zooms)
         {
-            Assert.Equal(zoomed, surface.Viewport);
+            Assert.Equal(zoomed, surface.Zoom?.Viewport);
         }
     }
 

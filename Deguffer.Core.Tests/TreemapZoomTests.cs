@@ -331,10 +331,10 @@ public sealed class TreemapZoomTests
         var finished = FilesOf(500, 300, 200);
         var running = NamedFilesOf(500, 300, 200);
 
-        Assert.Equal(zoom, Draw(finished, ExploreView.Treemap, zoom).Viewport);
-        Assert.Null(Draw(running, ExploreView.Treemap, zoom).Viewport);
-        Assert.Null(Draw(finished, ExploreView.Icicle, zoom).Viewport);
-        Assert.Null(Draw(finished, ExploreView.Sunburst, zoom).Viewport);
+        Assert.Equal(zoom, Draw(finished, ExploreView.Treemap, zoom).Zoom?.Viewport);
+        Assert.Null(Draw(running, ExploreView.Treemap, zoom).Zoom);
+        Assert.Null(Draw(finished, ExploreView.Icicle, zoom).Zoom);
+        Assert.Null(Draw(finished, ExploreView.Sunburst, zoom).Zoom);
     }
 
     /// <summary>What the pointer finds on a zoomed drawing is the shape laid out under it.</summary>

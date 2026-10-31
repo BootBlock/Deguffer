@@ -122,7 +122,7 @@ public static class MapHitTest
     private static Spot? Over(
         MapViewport shown, double x, double y, ExploreSurface drawing, Func<double, double, MapTile?> tileOver)
     {
-        if (drawing.Viewport is not { } drawn)
+        if (drawing.Zoom?.Viewport is not { } drawn)
         {
             return null;
         }
@@ -153,11 +153,10 @@ public static class MapHitTest
     /// </summary>
     private static Spot? Place(MapViewport shown, double x, double y, ExploreSurface drawing)
     {
-        var viewport = drawing.Viewport ?? MapViewport.Whole;
         var (inX, inY) = drawing.PlacementOn(shown).InDrawing(x, y);
 
         return inX is >= 0 and < 1 && inY is >= 0 and < 1
-            ? new Spot(drawing, viewport, (float)(inX * drawing.Width), (float)(inY * drawing.Height), Tile: null)
+            ? new Spot(drawing, drawing.ShownAt, (float)(inX * drawing.Width), (float)(inY * drawing.Height), Tile: null)
             : null;
     }
 

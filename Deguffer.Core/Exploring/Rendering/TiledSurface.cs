@@ -29,7 +29,7 @@ public sealed class TiledSurface : ExploreSurface
 
     /// <param name="viewport">
     /// The part of the picture <paramref name="tiles"/> were laid out for, or null where their layout
-    /// draws only the whole of it. See <see cref="ExploreSurface.Viewport"/>.
+    /// draws only the whole of it. See <see cref="ExploreSurface.Zoom"/>.
     /// </param>
     /// <param name="beside">
     /// The volume the layout was given to draw beside the root, or <see cref="VolumeSpace.None"/>.
@@ -46,10 +46,8 @@ public sealed class TiledSurface : ExploreSurface
         IReadOnlyList<ExploreTile> tiles,
         MapViewport? viewport = null,
         VolumeSpace beside = default)
-        : base(tree, root, width, height, limits, colours, style, viewport)
+        : base(tree, root, width, height, limits, colours, style, ZoomOf(viewport, tiles, limits))
     {
-        ArgumentNullException.ThrowIfNull(tiles);
-
         _tiles = tiles;
         _hits = new TileHitTest(tiles, width, height);
         _beside = beside;
@@ -58,14 +56,11 @@ public sealed class TiledSurface : ExploreSurface
         Labels = new TileLabels(
             tiles, tree, root, width, height, limits, style.ShapeNames, MaximumLabels,
             tile => TextColourFor(tile.Node, tile.Depth, tile.Framed)).Build();
-        Ceiling = viewport is { } drawn ? MapCeiling.Of(drawn.Zoom, Deeper()) : null;
     }
 
     public override IReadOnlyList<ExploreLabel> Labels { get; }
 
     public override bool HasVolumeBeside { get; }
-
-    public override double? Ceiling { get; }
 
     /// <summary>Every rectangle drawn, a folder before what is drawn of it, in pixels of the drawing.</summary>
     public IReadOnlyList<ExploreTile> Tiles => _tiles;
@@ -97,7 +92,7 @@ public sealed class TiledSurface : ExploreSurface
     {
         ArgumentNullException.ThrowIfNull(tiling);
 
-        if (Viewport is not { } drawnAt)
+        if (Zoom?.Viewport is not { } drawnAt)
         {
             throw new InvalidOperationException("Only a treemap that can be zoomed is cut into tiles.");
         }
@@ -129,7 +124,7 @@ public sealed class TiledSurface : ExploreSurface
     public override int? ShownAs(int node) => Deepest(node)?.Node;
 
     public override MapFrame? ScreenOf(int node, MapViewport shown, MapViewport opened) =>
-        Viewport is { } drawn && FrameOf(node) is { } frame
+        Zoom?.Viewport is { } drawn && FrameOf(node) is { } frame
             ? shown.PlacementOf(drawn).OnScreen(frame).Inside(opened.PictureOf(MapFrame.Whole))
             : null;
 
@@ -143,12 +138,12 @@ public sealed class TiledSurface : ExploreSurface
     /// canvas. Any other drawing of rectangles holds all of its picture already.</para>
     /// </summary>
     public MapFrame? Locate(int node) =>
-        Viewport is { } viewport
+        Zoom?.Viewport is { } viewport
             ? TreemapLayout.Locate(Tree, Root, Width, Height, Limits, _beside, viewport, node)
             : Deepest(node) is { } shape && shape.Node == node ? shape.FrameIn(Width, Height) : null;
 
     protected override IReadOnlyList<MapShape> FindShapes(int? folder) =>
-        Viewport is { } viewport
+        Zoom?.Viewport is { } viewport
             ? TreemapLayout.Within(Tree, Root, Width, Height, Limits, _beside, viewport, folder is null && HasVolumeBeside ? null : folder ?? Root)
             : Held(folder ?? Root);
 
@@ -340,27 +335,38 @@ public sealed class TiledSurface : ExploreSurface
         inner.X >= outer.X - Rounding && inner.X + inner.Width <= outer.X + outer.Width + Rounding;
 
     /// <summary>
+    /// Where <paramref name="tiles"/> laid out at <paramref name="viewport"/> were drawn, and how far
+    /// the map can zoom over them, or null where their layout draws only the whole picture.
+    /// </summary>
+    private static DrawnZoom? ZoomOf(MapViewport? viewport, IReadOnlyList<ExploreTile> tiles, LayoutLimits limits)
+    {
+        ArgumentNullException.ThrowIfNull(tiles);
+
+        return viewport is { } drawn ? new DrawnZoom(drawn, MapCeiling.Of(drawn.Zoom, Deeper(tiles, limits))) : null;
+    }
+
+    /// <summary>
     /// How many times more the picture has to be magnified for everything in view to be drawn one by
     /// one, and for the smallest shape drawn to have room for its name: 1 where both already hold.
     /// Every tile is in view, in part at least: a zoomed layout lays out nothing wholly off the canvas.
     /// </summary>
-    private double Deeper()
+    private static double Deeper(IReadOnlyList<ExploreTile> tiles, LayoutLimits limits)
     {
         var deeper = 1.0;
 
-        for (var i = 0; i < _tiles.Count; i++)
+        for (var i = 0; i < tiles.Count; i++)
         {
-            var tile = _tiles[i];
+            var tile = tiles[i];
 
             if (tile.Finest > 0)
             {
-                deeper = Math.Max(deeper, MapCeiling.Revealing(tile.Finest, Limits.MinimumTileSize));
+                deeper = Math.Max(deeper, MapCeiling.Revealing(tile.Finest, limits.MinimumTileSize));
             }
             else if (tile.IsNode)
             {
                 deeper = Math.Max(
                     deeper,
-                    MapCeiling.Naming(tile.Width, tile.Height, Limits.MinimumLabelWidth, Limits.MinimumLabelHeight));
+                    MapCeiling.Naming(tile.Width, tile.Height, limits.MinimumLabelWidth, limits.MinimumLabelHeight));
             }
         }
 

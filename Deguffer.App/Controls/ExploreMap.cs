@@ -47,7 +47,7 @@ namespace Deguffer.App.Controls;
 ///
 /// <para>Over 500 lines because it is where the pointer, the drawings and the page meet, and each
 /// input has to be resolved against whichever picture is on screen at that moment (§7.1). Everything
-/// that can stand apart does: the drawings kept (<see cref="ExploreLayers"/>), the camera and what
+/// that can stand apart does: the redraws (<see cref="ExploreCanvas"/>), the drawings kept (<see cref="ExploreLayers"/>), the camera and what
 /// moves it (<see cref="ExploreZoom"/>), the clock of a change of folder (<see cref="ExploreDescent"/>),
 /// the shapes moving from one drawing to the next (<see cref="ExploreMoves"/>), the names, what is marked out on the picture (<see cref="ExploreMarking"/>) and the lines that mark
 /// it, what the pointer is over and when that is said (<see cref="ExplorePointer"/>), and in Core the arithmetic, the rule telling a click from a drag
@@ -56,41 +56,10 @@ namespace Deguffer.App.Controls;
 public sealed class ExploreMap : UserControl
 {
     /// <summary>
-    /// How long a run of size changes has to stop for before the map is drawn again.
-    ///
-    /// <para>Dragging a window edge raises <see cref="FrameworkElement.SizeChanged"/> tens of times
-    /// a second, and each one is a whole layout of the tree, a fresh canvas, and a pass over every
-    /// pixel of it — at 3840 by 2160 that is eight million pixels shaded several times over. Drawing
-    /// each of those in turn is not merely repeated work: it is work for a size that was superseded
-    /// before the paint finished, so the window falls further behind the pointer the longer the drag
-    /// goes on.</para>
-    ///
-    /// <para>So the size changes are coalesced and only the size the user settles on is drawn. In
-    /// between, each drawing kept stretches over the new bounds, which is the right picture at the
-    /// wrong scale and is on screen with no work at all.</para>
+    /// Lays out and paints each drawing of the picture, and says which is landing. See
+    /// <see cref="ExploreCanvas"/>.
     /// </summary>
-    private static readonly TimeSpan ResizeSettleTime = TimeSpan.FromMilliseconds(120);
-
-    private readonly PaintBuffers _buffers = new();
-
-    /// <summary>
-    /// Lays each drawing out and paints it off the UI thread, and puts it on screen a region at a
-    /// time. See <see cref="CanvasRedraws"/>.
-    /// </summary>
-    private readonly CanvasRedraws _redraws;
-
-    /// <summary>
-    /// The redraw of the picture the map is to work from next, while it lands. Its regions answer for
-    /// the points they cover until it arrives, and <see cref="_drawing"/> for every other point,
-    /// because each is what the screen shows there (§7.1).
-    /// </summary>
-    private CanvasRedraw? _arriving;
-
-    /// <summary>
-    /// Whether a redraw was stopped by the map leaving the screen before it arrived, so the map owes
-    /// one when it comes back.
-    /// </summary>
-    private bool _redrawOwed;
+    private readonly ExploreCanvas _canvas;
 
     /// <summary>Whether a tap, a right-tap or a double-tap may act, from the presses that made it.</summary>
     private readonly MapPress _press = new();
@@ -116,8 +85,6 @@ public sealed class ExploreMap : UserControl
     /// <see cref="CompositionDevice.Generation"/>.
     /// </summary>
     private int _generation;
-
-    private readonly DispatcherQueueTimer _settled;
 
     private readonly ExploreZoom _zoom;
 
@@ -193,7 +160,7 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>
     /// The part of the picture <see cref="_drawing"/> shows, which is the whole of it unless the
-    /// drawing said otherwise. See <see cref="ExploreSurface.Viewport"/>.
+    /// drawing said otherwise. See <see cref="ExploreSurface.ShownAt"/>.
     /// </summary>
     private MapViewport _drawn;
 
@@ -211,7 +178,6 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private ContrastColours? _contrast;
 
-    private double _scale = 1;
 
     /// <summary>
     /// The finest tile shown over the drawing worked from at a point of the picture, asked of whichever
@@ -252,7 +218,6 @@ public sealed class ExploreMap : UserControl
         _keyboard.Landed += OnKeyboardLanded;
         _moves = new ExploreMoves(compositor, _graphics.Geometry, _camera, SystemMotion.Current);
         _labels = new ExploreLabels(_camera, pictures.Root, SystemMotion.Current);
-        _redraws = new CanvasRedraws(owner);
         _pointer = new ExplorePointer(Locate, Shine, ShowHovered, Report);
         _overview = new ExploreOverview(_camera, _zoom, SystemMotion.Current, () => _pointer.Position);
 
@@ -265,6 +230,7 @@ public sealed class ExploreMap : UserControl
         _root = compositor.CreateContainerVisual();
         _flight = new ExploreFlight(_root, pictures, departing, this);
         _tileOver = (x, y) => _flight.Pictures.TileOver(x, y);
+        _canvas = new ExploreCanvas(this, _graphics, _zoom, _flight, owner, () => _pointer.Position, Present, () => Painting, Redraw);
         _root.Children.InsertAtTop(_moves.Root);
         _root.Children.InsertAtTop(_highlight.Root);
 
@@ -302,11 +268,7 @@ public sealed class ExploreMap : UserControl
 
         // A press on the overview moves the camera as any other input does, from a settled screen
         // with the whole picture under the zoomed one.
-        _overview.Moving += (_, _) =>
-        {
-            SettleStep();
-            Underlay();
-        };
+        _overview.Moving += (_, _) => PrepareMove();
         _overview.Entered += (_, _) => _pointer.Follow();
         _overview.HiddenChanged += (_, _) => OverviewHiddenChanged?.Invoke(this, EventArgs.Empty);
 
@@ -317,11 +279,7 @@ public sealed class ExploreMap : UserControl
         // A pinch, a touch or the wheel with Ctrl held moves the picture on the compositor before the
         // map hears of it, so a change of folder still flying is settled and the whole picture painted under the zoomed one
         // as soon as it does, as they are for a move the map starts itself.
-        _zoom.Started += (_, _) =>
-        {
-            SettleStep();
-            Underlay();
-        };
+        _zoom.Started += (_, _) => PrepareMove();
 
         _flight.Descent.Midway += OnDescentMidway;
         _flight.Descent.Arrived += OnDescentArrived;
@@ -333,11 +291,6 @@ public sealed class ExploreMap : UserControl
         departing.Faded += OnFaded;
         pictures.TileAnswersChanged += OnTileAnswersChanged;
         departing.TileAnswersChanged += OnTileAnswersChanged;
-
-        _settled = DispatcherQueue.CreateTimer();
-        _settled.Interval = ResizeSettleTime;
-        _settled.IsRepeating = false;
-        _settled.TickGuarded(Redraw);
 
         SizeChanged += OnSizeChanged;
         PointerPressed += OnPointerPressed;
@@ -403,13 +356,13 @@ public sealed class ExploreMap : UserControl
             //
             // A redraw stopped as the page was left is owed in full, because the picture it was
             // drawing has not been on screen.
-            if (_redrawOwed)
+            if (_canvas.IsOwed)
             {
                 Redraw();
             }
             else if (_drawing is { } drawing)
             {
-                if (drawing.Width != DevicePixels(ActualWidth) || drawing.Height != DevicePixels(ActualHeight))
+                if (!_canvas.Fits(drawing))
                 {
                     Redraw();
                 }
@@ -425,25 +378,21 @@ public sealed class ExploreMap : UserControl
             // A pending redraw for a size this control is no longer showing at. Left running it
             // would rasterise a whole volume for a page that has been navigated away from. A change of
             // folder still flying, or a drag still held, is finished where it was going for the same reason.
-            _settled.Stop();
+            _canvas.CancelResize();
             _zoom.Stop();
             SettleStep();
             EndDrag();
 
             // A redraw still landing is stopped for the same reason, and owed when the page is back.
-            // One painting the whole picture under a zoomed drawing is not owed: it is asked for
-            // again when the picture next moves.
-            _redrawOwed |= _arriving is { IsSettled: false };
-            _redraws.Cancel();
+            _canvas.Leave();
 
             // The page is kept alive while it is away (NavigationCacheMode), so what it holds stays
-            // held: at 4K, 33 MB for each drawing kept and for the paint buffer. Only the drawing on
-            // screen is needed to come back to, and the rest is asked for again when the picture next
-            // moves.
+            // held: at 4K, 33 MB for each drawing kept, as for the paint buffer the canvas let go. Only
+            // the drawing on screen is needed to come back to, and the rest is asked for again when the
+            // picture next moves.
             _flight.Pictures.Light(null, null);
             _flight.Pictures.Trim();
             _flight.Departing.ReleaseTiles();
-            _buffers.Release();
             _graphics.Device.Trim();
 
             // The labels go back with it. Dropping the redraw drops the thing that would have put
@@ -565,7 +514,7 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void Unlock()
     {
-        _zoom.Movable = Zoomable && _drawing is { Viewport: not null };
+        _zoom.Movable = Zoomable && _drawing is { Zoom: not null };
         ShowOverview();
     }
 
@@ -766,7 +715,7 @@ public sealed class ExploreMap : UserControl
             // flight between two pictures, and this one starts from the picture it arrived at.
             LandStep();
 
-            var step = change.Step(_drawing is { Viewport: not null });
+            var step = change.Step(_drawing is { Zoom: not null });
 
             // A flight through a folder starts as a step out to it, drawn whole as any folder opened is.
             if (!change.SamePlace)
@@ -777,13 +726,14 @@ public sealed class ExploreMap : UserControl
             // The picture on screen stays, to fly from, and the new one is drawn into the other set
             // of layers: over it for a step in, which the new picture grows out of, and under it for a
             // step out, which it shrinks back into.
-            if (step.Way != FolderStep.Across)
+            // Only a drawing placed by the zoom has a step other than across (PictureChange.Step).
+            if (step.Way != FolderStep.Across && _drawing is { } leaving)
             {
                 into = step.Way == FolderStep.Into
-                    ? _drawing!.ScreenOf(node, was, change.Opened) ?? MapFrame.Whole
+                    ? leaving.ScreenOf(node, was, change.Opened) ?? MapFrame.Whole
                     : null;
 
-                _flight.State = FolderFlight.Begin(step, new FolderLeft(Shown, was, _drawing, _shapeColours), change.Opened);
+                _flight.State = FolderFlight.Begin(step, new FolderLeft(Shown, was, leaving, _shapeColours), change.Opened);
 
                 Swap(was);
 
@@ -841,7 +791,7 @@ public sealed class ExploreMap : UserControl
         }
 
         // Nothing to fly to after all: a folder with nothing in it to draw.
-        if (_flight.State.IsUnderWay && _drawing is null && _redraws.Pending is null)
+        if (_flight.State.IsUnderWay && _drawing is null && _canvas.Pending is null)
         {
             LandStep();
         }
@@ -899,7 +849,7 @@ public sealed class ExploreMap : UserControl
     {
         ArgumentNullException.ThrowIfNull(nodes);
 
-        _marking.MarkRemoving(tree, nodes, _drawing, _scale);
+        _marking.MarkRemoving(tree, nodes, _drawing, _canvas.Scale);
     }
 
     /// <summary>
@@ -914,7 +864,7 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>
     /// Wait for the drag to stop before redrawing, on the terms
-    /// <see cref="ResizeSettleTime"/> gives.
+    /// <see cref="ExploreCanvas.AwaitResize"/> gives.
     ///
     /// <para>The first size the control is ever given is drawn at once. There is no drawing to
     /// stretch in the meantime, so deferring that one would leave the panel empty for the length of
@@ -942,11 +892,15 @@ public sealed class ExploreMap : UserControl
         // not, so they go on marking out the same shapes throughout the drag.
         Place();
 
-        // Stopped and started rather than started, so each size change puts the whole wait back and
-        // a drag that is still moving never reaches the end of one.
-        _settled.Stop();
-        _settled.Start();
+        _canvas.AwaitResize();
     }
+
+    /// <summary>
+    /// Where <paramref name="drawing"/>'s canvas lies in the picture, drawn at <see cref="_drawn"/> and
+    /// shown on a map of the control's size from the camera's origin now.
+    /// </summary>
+    private MapTransform Placed(ExploreSurface drawing) =>
+        _drawn.Canvas(drawing.Width, drawing.Height, ActualWidth, ActualHeight, _zoom.Origin);
 
     /// <summary>
     /// Cut the picture at the map's edges while anything runs past them. The camera itself follows the
@@ -980,13 +934,9 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        _highlight.PlaceOver(
-            _drawn.Canvas(drawing.Width, drawing.Height, ActualWidth, ActualHeight, _zoom.Origin),
-            ActualWidth,
-            ActualHeight,
-            _zoom.Origin);
+        _highlight.PlaceOver(Placed(drawing), ActualWidth, ActualHeight, _zoom.Origin);
 
-        _labels.Place(_drawn.Labels(drawing.Width, drawing.Height, ActualWidth, ActualHeight, _scale, _zoom.Origin));
+        _labels.Place(_drawn.Labels(drawing.Width, drawing.Height, ActualWidth, ActualHeight, _canvas.Scale, _zoom.Origin));
     }
 
     /// <summary>
@@ -1019,7 +969,7 @@ public sealed class ExploreMap : UserControl
         var motion = SystemMotion.Current.For(MotionToken.Shift);
 
         Redraw(motion);
-        _moves.Owe(MapMove.Shift, motion, _redraws.Pending is not null);
+        _moves.Owe(MapMove.Shift, motion, _canvas.Pending is not null);
     }
 
     /// <summary>
@@ -1032,7 +982,7 @@ public sealed class ExploreMap : UserControl
         var motion = SystemMotion.Current.For(MotionToken.Morph);
 
         Redraw(motion);
-        _moves.Owe(MapMove.Morph, motion, _redraws.Pending is not null);
+        _moves.Owe(MapMove.Morph, motion, _canvas.Pending is not null);
     }
 
     private void Redraw() => Redraw(Motion.Instant);
@@ -1043,8 +993,7 @@ public sealed class ExploreMap : UserControl
         // Whatever brought us here is more current than a size change still waiting to be drawn, or a
         // redraw stopped when the page was left; and a redraw for any other reason replaces a move
         // from the drawing on screen that was owed.
-        _settled.Stop();
-        _redrawOwed = false;
+        _canvas.Supersede();
         _moves.Forgo();
 
         // Nothing can see it, and the page asks again as it brings the map back. ExplorePage
@@ -1052,33 +1001,23 @@ public sealed class ExploreMap : UserControl
         // switch to List rasterises a whole volume into a control nobody is looking at.
         //
         // What was drawn is dropped rather than kept, because the page brings the map back with a
-        // Show() that draws it again anyway, and the zoomed drawings are 33 MB each at 4K. The
-        // paint buffer stays, and so do the layers with their surfaces emptied, so switching back
-        // allocates neither (G5).
-        if (Visibility != Visibility.Visible)
+        // Show() that draws it again anyway, and the zoomed drawings are 33 MB each at 4K.
+        if (_canvas.IsCollapsed)
         {
-            _redraws.Cancel();
-            _flight.Pictures.Clear();
-            _drawing = null;
-            _pointer.Forget();
+            _canvas.Drop();
+            Forget();
             return;
         }
 
-        _scale = XamlRoot?.RasterizationScale ?? 1;
+        _canvas.Rescale();
 
-        var width = DevicePixels(ActualWidth);
-        var height = DevicePixels(ActualHeight);
-
-        if (_tree is null || width <= 0 || height <= 0 || _tree.SizeOf(DrawnNode) <= 0)
+        if (_tree is not { } tree || !_canvas.HasPixels || tree.SizeOf(DrawnNode) <= 0)
         {
             // Every drawing goes, and the buffer they were painted through: a map with nothing to
             // show holds no memory for it.
-            _redraws.Cancel();
-            _flight.Pictures.Clear();
-            _buffers.Release();
-            _drawing = null;
+            _canvas.Empty();
+            Forget();
             _shapeColours = null;
-            _pointer.Forget();
             _labels.Clear();
             _highlight.Clear();
             Unlock();
@@ -1106,7 +1045,10 @@ public sealed class ExploreMap : UserControl
         var wasContrasted = Contrasted;
 
         _contrast = SystemLook.Current.State.Contrast?.ToMap();
-        _shapeColours = _contrast is { } contrast ? ShapeColours.Contrasted(contrast) : _colours(DateTime.UtcNow);
+
+        var colours = _contrast is { } contrast ? ShapeColours.Contrasted(contrast) : _colours(DateTime.UtcNow);
+
+        _shapeColours = colours;
 
         if (Contrasted != wasContrasted)
         {
@@ -1119,7 +1061,18 @@ public sealed class ExploreMap : UserControl
         // for the rest of the move like any other drawing.
         _flight.Pictures.Forget();
 
-        Request(_zoom.Shown, fade);
+        Request(new ExplorePainting(tree, Drawn, colours, _look, Ground()), _zoom.Shown, fade);
+    }
+
+    /// <summary>
+    /// Work from no drawing, with nothing under the pointer, for a picture on screen that no drawing
+    /// describes any more: a map collapsed, left with nothing to draw, or on a device replaced. One
+    /// place, so a field added for what the pointer resolves against is forgotten with the rest (§7.1).
+    /// </summary>
+    private void Forget()
+    {
+        _drawing = null;
+        _pointer.Forget();
     }
 
     /// <summary>
@@ -1134,7 +1087,7 @@ public sealed class ExploreMap : UserControl
         _flight.Pictures.RestTiles();
 
         // Left for Loaded, which shows the arrival when the map is back, as it does a redraw.
-        if (!IsLoaded || Visibility != Visibility.Visible || _drawing is not { } drawing)
+        if (!_canvas.IsShowing || _drawing is not { } drawing)
         {
             return;
         }
@@ -1142,9 +1095,7 @@ public sealed class ExploreMap : UserControl
         // A resize still settling has made every drawing kept the wrong size, and its names would
         // go back over a stretched picture at the old size's positions. The whole picture is drawn
         // again at the new one instead, which is what the settling was waiting to do.
-        if (_settled.IsRunning
-            || drawing.Width != DevicePixels(ActualWidth)
-            || drawing.Height != DevicePixels(ActualHeight))
+        if (_canvas.IsSettling || !_canvas.Fits(drawing))
         {
             Redraw();
             return;
@@ -1153,7 +1104,7 @@ public sealed class ExploreMap : UserControl
         // Nothing new to draw, and the names are still where this drawing put them. Unless a redraw
         // is landing, which was asked for somewhere the zoom has since left, or of a picture that
         // has changed since this drawing was made.
-        if (_zoom.Shown == _drawn && _arriving is not { IsSettled: false })
+        if (_zoom.Shown == _drawn && _canvas.Arriving is not { IsSettled: false })
         {
             _flight.Pictures.HideTiles();
             _labels.Reveal();
@@ -1162,19 +1113,18 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        Request(_zoom.Shown, Motion.Instant);
+        Request(Painting, _zoom.Shown, Motion.Instant);
     }
 
     /// <summary>
-    /// Show <paramref name="viewport"/> of the picture: the drawing kept of it, at once, where there
-    /// is one, and otherwise a redraw of it, which lands over the picture on screen.
+    /// Show <paramref name="viewport"/> of <paramref name="painting"/>: the drawing kept of it, at
+    /// once, where there is one, and otherwise a redraw of it, which lands over the picture on screen.
     /// </summary>
     /// <param name="fade">How a new drawing comes in over the one on screen. See <see cref="ExploreLayers.Replacement"/>.</param>
-    private void Request(MapViewport viewport, Motion fade)
+    private void Request(ExplorePainting painting, MapViewport viewport, Motion fade)
     {
-        if (_flight.Pictures.Show(viewport) is { } kept)
+        if (_canvas.Kept(viewport) is { } kept)
         {
-            _redraws.Cancel();
             Present(kept);
             return;
         }
@@ -1185,26 +1135,18 @@ public sealed class ExploreMap : UserControl
         // arrives, the old one answers, and it has to be shown where it is resolved.
         Place();
 
-        var width = DevicePixels(ActualWidth);
-        var height = DevicePixels(ActualHeight);
-
-        _arriving = Redraw(
-            Layout(viewport, width, height),
-            width,
-            height,
-            Focus(viewport, width, height),
-            _flight.Pictures.Replacement(Present, fade));
+        _canvas.Draw(painting, viewport, fade);
     }
 
     /// <summary>
-    /// Start a redraw of a drawing <paramref name="width"/> by <paramref name="height"/>, laid out by
-    /// <paramref name="layout"/>: shaded on the GPU in one pass where the device can, and the drawing is of
-    /// rectangles, and otherwise painted on the CPU a region at a time from <paramref name="focus"/> out.
+    /// What the drawing the map works from was drawn from, as a drawing of more of the same picture is:
+    /// the tree, the folder drawn, and the colours and the look the last redraw took. Asked only while
+    /// there is a drawing, which a redraw makes only of a tree, in colours.
     /// </summary>
-    private CanvasRedraw Redraw(Func<ExploreSurface> layout, int width, int height, ExplorePoint? focus, ICanvasRedrawTarget target) =>
-        _graphics.Shades && ExploreSurface.Drawn(_tree!, _view) != ExploreView.Sunburst
-            ? _redraws.Shade(layout, Ground(), target)
-            : _redraws.Start(layout, _buffers.PixelsFor(width, height), Ground(), focus, target);
+    private ExplorePainting Painting =>
+        _tree is { } tree && _shapeColours is { } colours
+            ? new ExplorePainting(tree, Drawn, colours, _look, Ground())
+            : throw new InvalidOperationException("A drawing on screen was drawn from a tree, in colours.");
 
     /// <summary>
     /// The picture drawn: the one asked for, or the folder a change of folder is passing through on its
@@ -1228,46 +1170,6 @@ public sealed class ExploreMap : UserControl
         _marking.ReadIn(_tree);
     }
 
-    /// <summary>
-    /// How to lay out a drawing of the picture on screen at <paramref name="viewport"/>, on a canvas
-    /// of <paramref name="width"/> by <paramref name="height"/>.
-    ///
-    /// <para>Every value is taken now, on the UI thread, because the layout runs on a worker. Read
-    /// there, the control's size, the text size and the tree would be read from the wrong thread, and
-    /// could be read after the page had handed over another picture.</para>
-    /// </summary>
-    private Func<ExploreSurface> Layout(MapViewport viewport, int width, int height)
-    {
-        var tree = _tree!;
-        var (_, node, view, volume) = Drawn;
-        var scale = _scale;
-        var textScale = SystemLook.Current.State.TextScale;
-        var colours = _shapeColours!;
-        var look = _look;
-
-        return () => ExploreSurface.Create(
-            tree, node, view, width, height, scale, textScale, colours, look.Spacing, volume, viewport, look.Style);
-    }
-
-    /// <summary>
-    /// Where the pointer is on a canvas of <paramref name="width"/> by <paramref name="height"/>
-    /// drawn at <paramref name="viewport"/>, so the region under it is painted first. Null where it is
-    /// not over that canvas.
-    /// </summary>
-    private ExplorePoint? Focus(MapViewport viewport, int width, int height)
-    {
-        if (_pointer.Position is not { } pointer || ActualWidth <= 0 || ActualHeight <= 0)
-        {
-            return null;
-        }
-
-        var (x, y) = _zoom.Shown.PlacementOf(viewport).InDrawing(pointer.X / ActualWidth, pointer.Y / ActualHeight);
-
-        return x is >= 0 and < 1 && y is >= 0 and < 1
-            ? new ExplorePoint((float)(x * width), (float)(y * height))
-            : null;
-    }
-
     /// <summary>Work from <paramref name="drawing"/>, which is on top of the rest now.</summary>
     private void Present(ExploreSurface drawing)
     {
@@ -1278,10 +1180,10 @@ public sealed class ExploreMap : UserControl
         // A drawing that cannot be zoomed shows the whole picture whatever was asked, and the zoom
         // has to agree with it: the screen is placed, and every click resolved, by what was drawn
         // rather than by what was asked for (§7.1).
-        if (drawing.Viewport is { } viewport)
+        if (drawing.Zoom is { } zoom)
         {
-            _drawn = viewport;
-            _zoom.Limit(drawing.Ceiling ?? throw new InvalidOperationException("A drawing that can be zoomed says how far."));
+            _drawn = zoom.Viewport;
+            _zoom.Limit(zoom.Ceiling);
         }
         else
         {
@@ -1299,7 +1201,7 @@ public sealed class ExploreMap : UserControl
         Unlock();
 
         // Over a change of folder still flying, too: the names ride the picture they name as it moves.
-        _labels.Show(drawing, _scale, LabelText);
+        _labels.Show(drawing, _canvas.Scale, LabelText);
 
         // A screen reader's shapes are this drawing's now.
         (FrameworkElementAutomationPeer.FromElement(this) as MapAutomationPeer)?.Redrawn(_keyboard.Folder);
@@ -1341,9 +1243,7 @@ public sealed class ExploreMap : UserControl
             FinishStep();
         }
 
-        var placed = _drawn.Canvas(drawing.Width, drawing.Height, ActualWidth, ActualHeight, _zoom.Origin);
-
-        if (_moves.Arrive(earlier, drawing, _flight.Pictures, placed) == MapMove.Shift)
+        if (_moves.Arrive(earlier, drawing, _flight.Pictures, Placed(drawing)) == MapMove.Shift)
         {
             Follow(earlier, drawing);
         }
@@ -1351,49 +1251,24 @@ public sealed class ExploreMap : UserControl
         // The whole picture under a zoomed drawing only shows once the picture moves, so it waits
         // until the drawing the reader asked for is on screen. Asked again as a move starts, for a
         // move that comes first.
-        if (drawing.Viewport is { IsWhole: false })
+        if (!drawing.ShownAt.IsWhole)
         {
             DispatcherQueue.TryEnqueueGuarded(DispatcherQueuePriority.Low, Underlay);
         }
     }
 
     /// <summary>
-    /// Paint the whole picture under a zoomed drawing, where it is not there already, so a move has
-    /// something to show wherever it goes. See <see cref="ExploreLayers"/>.
-    ///
-    /// <para>Never in place of a redraw still landing, which is the picture the reader asked for: the
-    /// two would share the one redraw at a time, and this one would stop that one. It is asked for
-    /// again once that one has arrived.</para>
+    /// Paint the whole picture under the drawing worked from, where it is zoomed and the whole is not
+    /// there already, so a move has something to show wherever it goes. See
+    /// <see cref="ExploreCanvas.Underlay"/>.
     /// </summary>
     private void Underlay()
     {
-        // Not while a resize is settling: painted at the new size, it would be thrown away with every
-        // other drawing when the settling redraws the picture.
-        if (!IsLoaded
-            || Visibility != Visibility.Visible
-            || _drawing is not { } drawing
-            || _settled.IsRunning
-            || _redraws.Pending is not null
-            || !_flight.Pictures.LacksWhole)
+        if (_drawing is { } drawing)
         {
-            return;
+            _canvas.Underlay(drawing);
         }
-
-        Redraw(
-            Layout(MapViewport.Whole, drawing.Width, drawing.Height),
-            drawing.Width,
-            drawing.Height,
-            focus: null,
-            _flight.Pictures.Underlay());
     }
-
-    /// <summary>
-    /// How many canvas pixels a control extent of <paramref name="extent"/> device-independent
-    /// pixels asks for. One expression, so that a caller asking whether the drawing still matches
-    /// the control gets the same answer <see cref="Redraw()"/> would lay out to.
-    /// </summary>
-    private int DevicePixels(double extent) =>
-        (int)Math.Round(extent * (XamlRoot?.RasterizationScale ?? 1));
 
     /// <summary>
     /// The canvas ground (see <see cref="MapGround"/>), for the theme this control is in and the high
@@ -1417,7 +1292,7 @@ public sealed class ExploreMap : UserControl
         : _labelText(label.Node);
 
     /// <summary>Mark everything the map marks out again, on the drawing it works from now. See <see cref="ExploreMarking.Remark"/>.</summary>
-    private void Remark() => _marking.Remark(_drawing, _scale);
+    private void Remark() => _marking.Remark(_drawing, _canvas.Scale);
 
     /// <summary>
     /// Outline what the pointer is over, and the shape the keyboard is on, in the drawing the map works
@@ -1463,11 +1338,11 @@ public sealed class ExploreMap : UserControl
     /// over the drawing, which draw the folders it has opened.</para>
     /// </summary>
     private MapLocation? Locate(Point point) =>
-        ActualWidth <= 0 || ActualHeight <= 0 || Stepping || _overview.Covers(point)
+        !_canvas.HasSize || Stepping || _overview.Covers(point)
             ? null
             : MapHitTest.Locate(
                 _zoom.Shown, point.X / ActualWidth, point.Y / ActualHeight, _drawing,
-                _moves.IsOwed ? null : _arriving,
+                _moves.IsOwed ? null : _canvas.Arriving,
                 _readingOf,
                 _tileOver);
 
@@ -1487,7 +1362,7 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void OnPointerWheelChanged(object sender, PointerRoutedEventArgs e)
     {
-        if (!_zoom.Movable || ActualWidth <= 0 || ActualHeight <= 0)
+        if (!_zoom.Movable || !_canvas.HasSize)
         {
             return;
         }
@@ -1495,8 +1370,7 @@ public sealed class ExploreMap : UserControl
         var point = e.GetCurrentPoint(this);
         var delta = point.Properties.MouseWheelDelta;
 
-        SettleStep();
-        Underlay();
+        PrepareMove();
 
         _pointer.MoveTo(point.Position);
         _overview.Avoid(point.Position);
@@ -1533,8 +1407,7 @@ public sealed class ExploreMap : UserControl
                 break;
 
             case MapKeyAction.Camera camera when _zoom.Movable:
-                SettleStep();
-                Underlay();
+                PrepareMove();
 
                 _zoom.Press(camera.Key);
 
@@ -1591,25 +1464,16 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>
-    /// Show the tiles of the picture the screen shows as the camera moves, and draw those it is missing,
-    /// from the one under the pointer outwards (see <see cref="ExploreTiles"/>): what comes into view is
-    /// as sharp as the zoom it is seen at, rather than the drawing worked from magnified until the move
-    /// stops. Not while a change of folder flies or new shapes travel, which move a picture on its way
-    /// to being another one.
+    /// Show the tiles of the picture the screen shows as the camera moves, and draw those it is missing
+    /// (see <see cref="ExploreCanvas.Sharpen"/>). Not while a change of folder flies or new shapes
+    /// travel, which move a picture on its way to being another one.
     /// </summary>
     private void Sharpen()
     {
-        if (Stepping || !IsLoaded || ActualWidth <= 0 || ActualHeight <= 0)
+        if (!Stepping)
         {
-            return;
+            _canvas.Sharpen(Ground());
         }
-
-        var shown = _zoom.Shown;
-        var (x, y) = _pointer.Position is { } pointer
-            ? shown.PictureAt(pointer.X / ActualWidth, pointer.Y / ActualHeight)
-            : shown.PictureAt(0.5, 0.5);
-
-        _flight.Pictures.WantTiles(shown, _zoom.Target, x, y, Ground());
     }
 
     /// <summary>
@@ -1680,8 +1544,7 @@ public sealed class ExploreMap : UserControl
 
         _pointer.MoveTo(position);
 
-        if (ActualWidth > 0
-            && ActualHeight > 0
+        if (_canvas.HasSize
             && _drag.Move(position.X, position.Y, Drags(point)) is (var x, var y))
         {
             if (!began)
@@ -1765,7 +1628,7 @@ public sealed class ExploreMap : UserControl
             && _graphics.Shades
             && !Contrasted)
         {
-            _flight.Pictures.Light(found.Drawing, PointerLight.At(found.X, found.Y, _scale, _look.Light.Amount));
+            _flight.Pictures.Light(found.Drawing, PointerLight.At(found.X, found.Y, _canvas.Scale, _look.Light.Amount));
         }
         else
         {
@@ -1789,7 +1652,7 @@ public sealed class ExploreMap : UserControl
             _graphics.Device.Trim();
         }
 
-        if (Math.Abs(sender.RasterizationScale - _scale) > 0.001)
+        if (Math.Abs(sender.RasterizationScale - _canvas.Scale) > 0.001)
         {
             Redraw();
         }
@@ -1805,12 +1668,11 @@ public sealed class ExploreMap : UserControl
         _generation = _graphics.Device.Generation;
 
         LandStep();
-        _redraws.Cancel();
+        _canvas.Cancel();
         _flight.Departing.Renew();
         _flight.Pictures.Renew();
 
-        _drawing = null;
-        _pointer.Forget();
+        Forget();
         _labels.Hide();
         _highlight.Renew();
         Report(null);
@@ -1893,7 +1755,7 @@ public sealed class ExploreMap : UserControl
     /// <summary>Pick what is at <paramref name="point"/>, as <see cref="MapPick.Click"/> says a click there does.</summary>
     private void Pick(Point point)
     {
-        var pictured = _drawing is not null || _arriving is { Landed.Count: > 0 };
+        var pictured = _drawing is not null || _canvas.Arriving is { Landed.Count: > 0 };
 
         if (MapPick.Click(Answers, pictured, Locate(point)?.Hit) is { } pick)
         {
@@ -1919,7 +1781,7 @@ public sealed class ExploreMap : UserControl
         }
 
         // Only a treemap nests: an icicle draws what a shape holds below it rather than in it.
-        Open(spot.Drawing, hit, spot.Drawing.Viewport is null ? null : spot.ShapeOnScreen(_zoom.Shown));
+        Open(spot.Drawing, hit, spot.Drawing.Zoom is null ? null : spot.ShapeOnScreen(_zoom.Shown));
     }
 
     /// <summary>
@@ -1999,7 +1861,7 @@ public sealed class ExploreMap : UserControl
         Open(
             drawing,
             new ExploreHit(shape.Node, shape.Bytes),
-            drawing.Viewport is null ? null : drawing.PlacementOn(_zoom.Shown).OnScreen(shape.Frame));
+            drawing.Zoom is null ? null : drawing.PlacementOn(_zoom.Shown).OnScreen(shape.Frame));
     }
 
     /// <summary>
@@ -2041,7 +1903,7 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     internal void Bring(ExploreSurface drawing, MapShape shape)
     {
-        if (!_zoom.Movable || drawing.Viewport is not { } drawn || ActualWidth <= 0 || ActualHeight <= 0)
+        if (!_zoom.Movable || drawing.Zoom?.Viewport is not { } drawn || !_canvas.HasSize)
         {
             return;
         }
@@ -2142,7 +2004,7 @@ public sealed class ExploreMap : UserControl
         var left = _flight.State.Left!;
         var leaving = _zoom.Shown;
 
-        _redraws.Cancel();
+        _canvas.Cancel();
 
         // The folder being left is the one drawn: on the way out of a step through a folder, the
         // folder passed through, which the drawing kept is of.
@@ -2167,6 +2029,17 @@ public sealed class ExploreMap : UserControl
         {
             FinishStep();
         }
+    }
+
+    /// <summary>
+    /// Get ready for the camera to move: settle any change of folder still flying, so the move starts
+    /// from the picture on screen, and paint the whole picture under a zoomed one, so the move has
+    /// something to show wherever it goes. Every input that moves the camera asks this first.
+    /// </summary>
+    private void PrepareMove()
+    {
+        SettleStep();
+        Underlay();
     }
 
     /// <summary>
@@ -2295,7 +2168,7 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void OnDescentArrived(object? sender, EventArgs e)
     {
-        _flight.State = _flight.State.Arrived(landing: _drawing is null && _redraws.Pending is not null);
+        _flight.State = _flight.State.Arrived(landing: _drawing is null && _canvas.Pending is not null);
 
         if (!_flight.State.Owed)
         {
