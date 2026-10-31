@@ -126,26 +126,8 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private bool _stepOwed;
 
-    /// <summary>
-    /// Whether the last press was one a tap may act on: the left button, a touch or a pen. The
-    /// framework makes a tap and a double-tap of the mouse's Back and Forward buttons too, which pick
-    /// and open nothing anywhere else in Windows. Where the page goes back or forward with them,
-    /// picking or opening the shape under the pointer as well would act on a picture the step is
-    /// about to replace.
-    /// </summary>
-    private bool _tapPress = true;
-
-    /// <summary>
-    /// Whether the last press landed a change of view on its way. It takes no click: the shapes were
-    /// where neither view puts them, so whatever the press was aimed at is not what is under it now (§7.1).
-    /// </summary>
-    private bool _pressLandedMorph;
-
-    /// <summary>
-    /// Whether the press before the last one landed a change of view: a double-click is two presses,
-    /// and the second finds the move already landed by the first.
-    /// </summary>
-    private bool _earlierPressLandedMorph;
+    /// <summary>Whether a tap, a right-tap or a double-tap may act, from the presses that made it.</summary>
+    private readonly MapPress _press = new();
 
     private readonly ExploreLabels _labels;
 
@@ -1851,35 +1833,26 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>
-    /// Move between the shapes with the arrow keys, on the focused map, and move the picture with the
-    /// rest: plus and minus zoom about the middle, the arrows with Shift pan, and Home shows the whole
-    /// picture. A key with Alt or Ctrl held is left alone, because Alt+Left and Alt+Right step back and
-    /// forward. On the overview's buttons, which are inside the map, the arrows pan as they always have.
+    /// Move between the shapes, or move the picture, as <see cref="MapKeys.Resolve"/> says the key
+    /// does. The picture moves only where it can.
     /// </summary>
     private void OnKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (Held(VirtualKey.Menu) || Held(VirtualKey.Control))
+        switch (Resolve(e))
         {
-            return;
+            case MapKeyAction.Focus focus:
+                e.Handled = MoveFocus(focus.Direction);
+                break;
+
+            case MapKeyAction.Camera camera when _zoom.Movable:
+                SettleStep();
+                Underlay();
+
+                _zoom.Press(camera.Key);
+
+                e.Handled = true;
+                break;
         }
-
-        if (ReferenceEquals(e.OriginalSource, this) && !Held(VirtualKey.Shift) && DirectionOf(e.Key) is { } direction)
-        {
-            e.Handled = MoveFocus(direction);
-            return;
-        }
-
-        if (!_zoom.Movable || KeyOf(e.Key) is not { } key)
-        {
-            return;
-        }
-
-        SettleStep();
-        Underlay();
-
-        _zoom.Press(key);
-
-        e.Handled = true;
     }
 
     /// <summary>
@@ -1888,53 +1861,26 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void OnPreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        if (!ReferenceEquals(e.OriginalSource, this) || Held(VirtualKey.Menu) || Held(VirtualKey.Control) || Held(VirtualKey.Shift))
+        switch (Resolve(e))
         {
-            return;
-        }
+            case MapKeyAction.Open when _keyboard && Readable is { } drawing && FocusedShape() is { } focused && ShapeOf(focused) is { } shape:
+                OpenShape(drawing, focused.Folder, shape);
+                e.Handled = true;
+                break;
 
-        if (e.Key == VirtualKey.Enter && _keyboard && Readable is { } drawing && FocusedShape() is { } focused && ShapeOf(focused) is { } shape)
-        {
-            OpenShape(drawing, focused.Folder, shape);
-            e.Handled = true;
-        }
-        else if (e.Key == VirtualKey.Back && Ascending is { } ascending)
-        {
-            ascending(this, EventArgs.Empty);
-            e.Handled = true;
+            case MapKeyAction.Ascend when Ascending is { } ascending:
+                ascending(this, EventArgs.Empty);
+                e.Handled = true;
+                break;
         }
     }
 
+    /// <summary>What the key in <paramref name="e"/> does, with the modifiers held now and whether it reached the map itself.</summary>
+    private MapKeyAction? Resolve(KeyRoutedEventArgs e) =>
+        MapKeys.Resolve(e.Key, Held(VirtualKey.Shift), Held(VirtualKey.Menu), Held(VirtualKey.Control), ReferenceEquals(e.OriginalSource, this));
+
     private static bool Held(VirtualKey modifier) =>
         InputKeyboardSource.GetKeyStateForCurrentThread(modifier).HasFlag(CoreVirtualKeyStates.Down);
-
-    /// <summary>Which way <paramref name="key"/> moves between the shapes, or null where it is not an arrow.</summary>
-    private static MapDirection? DirectionOf(VirtualKey key) => key switch
-    {
-        VirtualKey.Left => MapDirection.Left,
-        VirtualKey.Right => MapDirection.Right,
-        VirtualKey.Up => MapDirection.Up,
-        VirtualKey.Down => MapDirection.Down,
-        _ => null,
-    };
-
-    /// <summary>What <paramref name="key"/> does to the camera, or null where it does nothing.</summary>
-    private static MapKey? KeyOf(VirtualKey key) => key switch
-    {
-        VirtualKey.Add or PlusKey => MapKey.ZoomIn,
-        VirtualKey.Subtract or MinusKey => MapKey.ZoomOut,
-        VirtualKey.Left => MapKey.Left,
-        VirtualKey.Right => MapKey.Right,
-        VirtualKey.Up => MapKey.Up,
-        VirtualKey.Down => MapKey.Down,
-        VirtualKey.Home => MapKey.Whole,
-        _ => null,
-    };
-
-    /// <summary>The main keyboard's plus and minus (VK_OEM_PLUS, VK_OEM_MINUS), which VirtualKey has no names for.</summary>
-    private const VirtualKey PlusKey = (VirtualKey)0xBB;
-
-    private const VirtualKey MinusKey = (VirtualKey)0xBD;
 
     /// <summary>
     /// One report of the camera on its way: cut the picture at the edges if it now runs past them, and
@@ -1990,7 +1936,7 @@ public sealed class ExploreMap : UserControl
     {
         var point = e.GetCurrentPoint(this);
 
-        _tapPress = point.PointerDeviceType != PointerDeviceType.Mouse || point.Properties.IsLeftButtonPressed;
+        _press.Press(point.PointerDeviceType == PointerDeviceType.Mouse, point.Properties.IsLeftButtonPressed, _morph.IsMoving);
 
         // The pointer has the map now: the shape the keyboard was on is not marked until a key moves again.
         if (_keyboard)
@@ -1998,8 +1944,6 @@ public sealed class ExploreMap : UserControl
             _keyboard = false;
             ShowHovered();
         }
-        _earlierPressLandedMorph = _pressLandedMorph;
-        _pressLandedMorph = _morph.IsMoving;
 
         SettleStep();
 
@@ -2289,7 +2233,7 @@ public sealed class ExploreMap : UserControl
 
     private void OnTapped(object sender, TappedRoutedEventArgs e)
     {
-        if (_tapPress && !_pressLandedMorph && !_drag.Dragged)
+        if (_press.TapPicks(_drag.Dragged))
         {
             Pick(e.GetPosition(this));
         }
@@ -2298,7 +2242,7 @@ public sealed class ExploreMap : UserControl
     private void OnRightTapped(object sender, RightTappedRoutedEventArgs e)
     {
         // A picture that answers nothing has nothing to offer a menu for (§7.1).
-        if (!MapReading.Answers(_tree) || _pressLandedMorph)
+        if (!MapReading.Answers(_tree) || !_press.RightTapActs)
         {
             return;
         }
@@ -2353,7 +2297,7 @@ public sealed class ExploreMap : UserControl
     {
         var point = e.GetPosition(this);
 
-        if (!_tapPress || _pressLandedMorph || _earlierPressLandedMorph || _drag.Dragged || Locate(point) is not { } spot || spot.Hit is not { } hit)
+        if (!_press.DoubleTapOpens(_drag.Dragged) || Locate(point) is not { } spot || spot.Hit is not { } hit)
         {
             return;
         }
