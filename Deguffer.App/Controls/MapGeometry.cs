@@ -41,11 +41,17 @@ internal sealed class MapGeometry
     /// <para>One geometry for all of them rather than one per outline, because the list view selects
     /// any number of rows at once and a shape apiece would be hundreds of them (G4).</para>
     /// </summary>
-    public CompositionPath Trace(IReadOnlyList<ExploreOutline> outlines)
+    public CompositionPath Trace(IReadOnlyList<ExploreOutline> outlines) => PathOf(Shape(outlines));
+
+    /// <summary>
+    /// The geometry <see cref="Trace"/> makes a path of, for drawing it into a surface as well:
+    /// see <see cref="ExploreLift"/>. Null where there is nothing to outline.
+    /// </summary>
+    public CanvasGeometry? Shape(IReadOnlyList<ExploreOutline> outlines)
     {
         if (outlines.Count == 0)
         {
-            return Nothing;
+            return null;
         }
 
         // Not disposed: making the geometry takes the builder over.
@@ -56,8 +62,11 @@ internal sealed class MapGeometry
             AddFigure(path, outline.Points);
         }
 
-        return new CompositionPath(CanvasGeometry.CreatePath(path));
+        return CanvasGeometry.CreatePath(path);
     }
+
+    /// <summary>A path of <paramref name="shape"/>, from <see cref="Shape"/>, or <see cref="Nothing"/> for null.</summary>
+    public CompositionPath PathOf(CanvasGeometry? shape) => shape is null ? Nothing : new CompositionPath(shape);
 
     /// <summary>
     /// A geometry over everything but <paramref name="outlines"/> to <paramref name="far"/> pixels
