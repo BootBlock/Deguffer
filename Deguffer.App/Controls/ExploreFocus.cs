@@ -7,7 +7,7 @@ namespace Deguffer.App.Controls;
 /// Which shape on the map the keyboard is on: the folder whose shapes it moves between, the shape, and
 /// where the shape stood in the picture, so it can be found again in the next drawing of it.
 ///
-/// <para>Separate from <see cref="ExploreMap"/>, which decides when the keyboard moves and what follows
+/// <para>Separate from <see cref="ExploreKeyboard"/>, which moves the keyboard and says what follows
 /// from it. This only remembers where it is and finds it again: by the node, which every drawing of the
 /// same tree names alike, or where the drawing no longer draws that shape on its own (a block of the
 /// rest, once a zoom has drawn what it stood for one by one), by the shape nearest where it stood
@@ -62,11 +62,15 @@ internal sealed class ExploreFocus
     }
 
     /// <summary>
-    /// The shapes of the folder the keyboard is on in <paramref name="drawing"/>, and which of them it is
-    /// on: the same node, or the shape nearest where it stood, or the first where it was on none. The
-    /// top of the picture where the folder is no longer drawn. Null where the drawing has no shapes at all.
+    /// Put the keyboard down in <paramref name="drawing"/>, and give the shapes of its folder there and
+    /// which of them it is on: the same node, or the shape nearest where it stood, or the first where it
+    /// was on none. At the top of the picture where the folder is no longer drawn. Null where the drawing
+    /// has no shapes at all.
+    ///
+    /// <para>A command rather than a query: where the drawing no longer draws the shape, the keyboard is
+    /// on the one found from now on, so every reader of <see cref="Node"/> agrees with what is marked.</para>
     /// </summary>
-    public (IReadOnlyList<MapShape> Shapes, int Index)? Find(ExploreSurface drawing)
+    public (IReadOnlyList<MapShape> Shapes, int Index)? Land(ExploreSurface drawing)
     {
         var shapes = drawing.Shapes(Folder);
 
@@ -81,32 +85,17 @@ internal sealed class ExploreFocus
             return null;
         }
 
-        var index = IndexOf(shapes, Node) ?? (Node is null ? 0 : Nearest(drawing, shapes));
+        var index = Node is { } node ? MapShapes.IndexOf(shapes, node) ?? Nearest(drawing, shapes) : 0;
 
         Set(drawing, Folder, shapes[index]);
 
         return (shapes, index);
     }
 
-    private static int? IndexOf(IReadOnlyList<MapShape> shapes, int? node)
-    {
-        for (var i = 0; i < shapes.Count; i++)
-        {
-            if (shapes[i].Node == node)
-            {
-                return i;
-            }
-        }
-
-        return null;
-    }
-
     private int Nearest(ExploreSurface drawing, IReadOnlyList<MapShape> shapes)
     {
-        var drawn = drawing.Viewport ?? MapViewport.Whole;
-        var x = (_at.X - drawn.Left) * drawn.Zoom;
-        var y = (_at.Y - drawn.Top) * drawn.Zoom;
+        var (x, y) = (drawing.Viewport ?? MapViewport.Whole).ScreenAt(_at.X, _at.Y);
 
-        return MapNeighbours.Nearest(shapes, x, y, drawing.Width, drawing.Height) ?? 0;
+        return MapNeighbours.Nearest(shapes, x, y, drawing.Width, drawing.Height);
     }
 }

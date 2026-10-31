@@ -209,6 +209,13 @@ public readonly record struct MapViewport
     public (double X, double Y) PictureAt(double screenX, double screenY) =>
         (Left + (screenX / Zoom), Top + (screenY / Zoom));
 
+    /// <summary>
+    /// Where point (<paramref name="pictureX"/>, <paramref name="pictureY"/>) of the whole picture is on
+    /// the screen: the reverse of <see cref="PictureAt"/>. Outside 0 to 1 where the screen does not show it.
+    /// </summary>
+    public (double X, double Y) ScreenAt(double pictureX, double pictureY) =>
+        ((pictureX - Left) * Zoom, (pictureY - Top) * Zoom);
+
     /// <summary>Where <paramref name="onScreen"/>, a part of the screen, falls in the whole picture.</summary>
     public MapFrame PictureOf(MapFrame onScreen)
     {
@@ -297,10 +304,17 @@ public readonly record struct MapPlacement(double Scale, double X, double Y)
     /// </summary>
     public (double X, double Y) InDrawing(double x, double y) => ((x - X) / Scale, (y - Y) / Scale);
 
+    /// <summary>
+    /// Where point (<paramref name="x"/>, <paramref name="y"/>) of the drawing, in fractions of it, is on
+    /// the screen: the reverse of <see cref="InDrawing"/>.
+    /// </summary>
+    public (double X, double Y) OnScreen(double x, double y) => (X + (x * Scale), Y + (y * Scale));
+
     /// <summary>Where <paramref name="inDrawing"/>, a part of the drawing, is on the screen.</summary>
-    public MapFrame OnScreen(MapFrame inDrawing) => new(
-        X + (inDrawing.X * Scale),
-        Y + (inDrawing.Y * Scale),
-        inDrawing.Width * Scale,
-        inDrawing.Height * Scale);
+    public MapFrame OnScreen(MapFrame inDrawing)
+    {
+        var (x, y) = OnScreen(inDrawing.X, inDrawing.Y);
+
+        return new MapFrame(x, y, inDrawing.Width * Scale, inDrawing.Height * Scale);
+    }
 }

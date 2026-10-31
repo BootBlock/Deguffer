@@ -77,15 +77,17 @@ public static class MapNeighbours
 
     /// <summary>
     /// The index of the shape whose point is nearest (<paramref name="x"/>, <paramref name="y"/>), in
-    /// fractions of a canvas <paramref name="width"/> by <paramref name="height"/> pixels, or null where
-    /// there are none: where the keyboard goes on from when the shape it was on is no longer drawn, as
-    /// a block of the rest is not once a zoom has drawn what it stood for one by one.
+    /// fractions of a canvas <paramref name="width"/> by <paramref name="height"/> pixels: where the
+    /// keyboard goes on from when the shape it was on is no longer drawn, as a block of the rest is not
+    /// once a zoom has drawn what it stood for one by one. There must be shapes, because the keyboard is
+    /// only ever among the shapes of a folder that has some.
     /// </summary>
-    public static int? Nearest(IReadOnlyList<MapShape> shapes, double x, double y, double width, double height)
+    public static int Nearest(IReadOnlyList<MapShape> shapes, double x, double y, double width, double height)
     {
         ArgumentNullException.ThrowIfNull(shapes);
+        ArgumentOutOfRangeException.ThrowIfZero(shapes.Count);
 
-        int? nearest = null;
+        var nearest = 0;
         var best = double.MaxValue;
 
         for (var i = 0; i < shapes.Count; i++)

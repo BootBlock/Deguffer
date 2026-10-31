@@ -277,21 +277,14 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private readonly Func<ISizedTree, MapReading?> _readingOf;
 
-    /// <summary>Which shape the keyboard is on. See <see cref="ExploreFocus"/>.</summary>
-    private readonly ExploreFocus _focus = new();
+    /// <summary>The keyboard on the shapes, and which shape it is on. See <see cref="ExploreKeyboard"/>.</summary>
+    private readonly ExploreKeyboard _keyboard;
 
     /// <summary>
     /// The folders a screen reader expanded on this picture, which list their shapes as the keyboard's
     /// path does (<see cref="MapFolders.Lists"/>). Carried with the keyboard to a new tree of the same place.
     /// </summary>
     private readonly HashSet<int> _expanded = [];
-
-    /// <summary>
-    /// Whether the map has the focus from the keyboard, or from a screen reader, rather than from a click:
-    /// what marks the shape the keyboard is on and makes Enter open it. A click focuses the map too, so
-    /// the keys go to it, and marks nothing until a key moves between the shapes.
-    /// </summary>
-    private bool _keyboard;
 
     public ExploreMap()
     {
@@ -309,6 +302,8 @@ public sealed class ExploreMap : UserControl
         _highlight = new ExploreHighlight(compositor, _graphics.Geometry, _camera);
         _marking = new ExploreMarking(_highlight);
         _readingOf = _marking.ReadingOf;
+        _keyboard = new ExploreKeyboard(_marking.Picked, FolderOf);
+        _keyboard.Landed += OnKeyboardLanded;
         _moves = new ExploreMoves(compositor, _graphics.Geometry, _camera, SystemMotion.Current);
         _labels = new ExploreLabels(_camera, _pictures.Root, SystemMotion.Current);
         _redraws = new CanvasRedraws(owner);
@@ -1531,8 +1526,7 @@ public sealed class ExploreMap : UserControl
     /// The shape the keyboard is on, while the keyboard has the map, in a drawing of the tree the page
     /// handed over last, which is the one the keyboard's nodes are numbers in; and null otherwise.
     /// </summary>
-    private MapShape? KeyboardShape =>
-        _keyboard && Readable is { } drawing && _focus.Find(drawing) is { } found ? found.Shapes[found.Index] : null;
+    private MapShape? KeyboardShape => _keyboard.ShapeIn(Readable);
 
     /// <summary>
     /// What is under <paramref name="point"/>, in the control's own coordinates.
@@ -1634,7 +1628,9 @@ public sealed class ExploreMap : UserControl
         switch (Resolve(e))
         {
             case MapKeyAction.Focus focus:
-                e.Handled = MoveFocus(focus.Direction);
+                SettleStep();
+
+                e.Handled = _keyboard.Arrow(Readable, focus.Direction);
                 break;
 
             case MapKeyAction.Camera camera when _zoom.Movable:
@@ -1656,7 +1652,7 @@ public sealed class ExploreMap : UserControl
     {
         switch (Resolve(e))
         {
-            case MapKeyAction.Open when _keyboard && Readable is { } drawing && FocusedShape() is { } focused && ShapeOf(focused) is { } shape:
+            case MapKeyAction.Open when Readable is { } drawing && FocusedShape() is { } focused && ExploreKeyboard.Drawn(drawing, focused) is { } shape:
                 OpenShape(drawing, focused.Folder, shape);
                 e.Handled = true;
                 break;
@@ -1732,9 +1728,8 @@ public sealed class ExploreMap : UserControl
         _press.Press(point.PointerDeviceType == PointerDeviceType.Mouse, point.Properties.IsLeftButtonPressed, _moves.IsMorphing);
 
         // The pointer has the map now: the shape the keyboard was on is not marked until a key moves again.
-        if (_keyboard)
+        if (_keyboard.Leave())
         {
-            _keyboard = false;
             ShowHovered();
         }
 
@@ -2166,15 +2161,15 @@ public sealed class ExploreMap : UserControl
     /// <summary>The shapes a screen reader is given under <paramref name="folder"/>'s own shape, none while it is collapsed. See <see cref="MapFolders.Listed"/>.</summary>
     internal IReadOnlyList<MapShape> ListedIn(int folder) =>
         Readable is { } drawing && FactsOf(drawing, DrawnNode) is not null
-            ? MapFolders.Listed(drawing, DrawnNode, folder, _focus.Folder, _expanded)
+            ? MapFolders.Listed(drawing, DrawnNode, folder, _keyboard.Folder, _expanded)
             : [];
 
     /// <summary>Whether a screen reader is given <paramref name="folder"/>'s shapes. See <see cref="MapFolders.Lists"/>.</summary>
     internal bool Lists(int folder) =>
-        Readable is { } drawing && MapFolders.Lists(drawing.Tree, DrawnNode, drawing.HasVolumeBeside, folder, _focus.Folder, _expanded);
+        Readable is { } drawing && MapFolders.Lists(drawing.Tree, DrawnNode, drawing.HasVolumeBeside, folder, _keyboard.Folder, _expanded);
 
     /// <summary>The folder whose shapes the keyboard moves between, or null for the top of the picture.</summary>
-    internal int? KeyboardFolder => _focus.Folder;
+    internal int? KeyboardFolder => _keyboard.Folder;
 
     /// <summary>A screen reader expanded <paramref name="folder"/>. False where it was already.</summary>
     internal bool Expand(int folder) => _expanded.Add(folder);
@@ -2220,8 +2215,7 @@ public sealed class ExploreMap : UserControl
         Readable is { } drawing ? PlacementOn(_zoom.Shown, drawing).OnScreen(shape.Frame) : null;
 
     /// <summary>The shape the keyboard is on, while it has the map, and null otherwise.</summary>
-    internal (int? Folder, int Node)? FocusedShape() =>
-        _keyboard && FocusState != FocusState.Unfocused && _focus.Node is { } node ? (_focus.Folder, node) : null;
+    internal (int? Folder, int Node)? FocusedShape() => FocusState != FocusState.Unfocused ? _keyboard.On : null;
 
     internal bool HasFocusOn(int? folder, int node) => FocusedShape() == (folder, node);
 
@@ -2242,15 +2236,14 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        _keyboard = true;
-        _focus.Set(drawing, folder, shape);
+        _keyboard.TakeAt(drawing, folder, shape);
 
         if (FocusState == FocusState.Unfocused)
         {
             Focus(FocusState.Programmatic);
         }
 
-        Focused(drawing, folder, shape, pick: false);
+        _keyboard.Land(drawing, folder, shape, pick: false);
     }
 
     /// <summary>
@@ -2266,8 +2259,7 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        _keyboard = true;
-        Focused(drawing, folder, shape, pick: true);
+        _keyboard.Land(drawing, folder, shape, pick: true);
     }
 
     /// <summary>Pick nothing, as a click on empty space does.</summary>
@@ -2301,7 +2293,7 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        _focus.Set(drawing, folder, shape);
+        _keyboard.Remember(drawing, folder, shape);
 
         Open(
             drawing,
@@ -2309,66 +2301,18 @@ public sealed class ExploreMap : UserControl
             drawing.Viewport is null ? null : PlacementOn(_zoom.Shown, drawing).OnScreen(shape.Frame));
     }
 
-    /// <summary>The shape the keyboard is on, as the drawing on screen lists it, or null where it does not.</summary>
-    private MapShape? ShapeOf((int? Folder, int Node) focused)
-    {
-        foreach (var shape in Readable?.Shapes(focused.Folder) ?? [])
-        {
-            if (shape.Node == focused.Node)
-            {
-                return shape;
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>The one node picked, which the keyboard starts on where it is at the top of the picture.</summary>
-    private int? PickedAlone => _marking.Picked.Count == 1 ? _marking.Picked.First() : null;
-
     /// <summary>Where <paramref name="drawing"/> lies on a screen showing <paramref name="shown"/>.</summary>
     private static MapPlacement PlacementOn(MapViewport shown, ExploreSurface drawing) =>
         shown.PlacementOf(drawing.Viewport ?? MapViewport.Whole);
 
     /// <summary>
-    /// Move the keyboard to the shape next to the one it is on in <paramref name="direction"/>, and pick
-    /// it, as a list's arrow keys pick the row they reach; and stay where there is none that way. Starts
-    /// from the shape picked where the keyboard was not moving. False where there is no drawing with
-    /// shapes to move between, so the key goes on to the page.
+    /// The keyboard landed on a shape: it is marked, the line under the map names it, the camera brings
+    /// it into view, and a screen reader hears it. Picked as well where the landing says, a block picking
+    /// nothing as a click on one does.
     /// </summary>
-    private bool MoveFocus(MapDirection direction)
+    private void OnKeyboardLanded(object? sender, ExploreKeyboardLanding landing)
     {
-        SettleStep();
-
-        // From what a click picked, where the keyboard was not already moving.
-        if (!_keyboard && PickedAlone is { } picked)
-        {
-            _focus.Expect(FolderOf(picked), picked);
-        }
-
-        if (Readable is not { } drawing || _focus.Find(drawing) is not { } found)
-        {
-            return false;
-        }
-
-        // The first key onto a map nothing is picked on marks the shape it starts on, rather than leave it.
-        var moves = _keyboard || PickedAlone is not null;
-        var next = moves ? MapNeighbours.Toward(found.Shapes, found.Index, direction, drawing.Width, drawing.Height) : null;
-
-        _keyboard = true;
-        Focused(drawing, _focus.Folder, found.Shapes[next ?? found.Index], pick: next is not null);
-
-        return true;
-    }
-
-    /// <summary>
-    /// The keyboard is on <paramref name="shape"/> of <paramref name="folder"/>: it is marked, the line
-    /// under the map names it, the camera brings it into view, and a screen reader hears it. Picked as
-    /// well where <paramref name="pick"/> says, a block picking nothing as a click on one does.
-    /// </summary>
-    private void Focused(ExploreSurface drawing, int? folder, MapShape shape, bool pick)
-    {
-        _focus.Set(drawing, folder, shape);
+        var (drawing, folder, shape, pick) = landing;
 
         if (pick && Answers)
         {
@@ -2429,24 +2373,14 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        _keyboard = true;
-
-        if (_focus.Node is null && PickedAlone is { } picked)
-        {
-            _focus.Expect(FolderOf(picked), picked);
-        }
-
-        if (Readable is { } drawing && _focus.Find(drawing) is { } found)
-        {
-            Focused(drawing, _focus.Folder, found.Shapes[found.Index], pick: false);
-        }
+        _keyboard.TakeFocus(Readable);
     }
 
     private void OnLostFocus(object sender, RoutedEventArgs e)
     {
         if (ReferenceEquals(e.OriginalSource, this))
         {
-            _keyboard = false;
+            _keyboard.Leave();
             ShowHovered();
         }
     }
@@ -2465,65 +2399,30 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        var picked = PickedAlone;
-
-        if (!_keyboard)
-        {
-            if (picked is not { } clicked)
-            {
-                return;
-            }
-
-            _focus.Expect(FolderOf(clicked), clicked);
-        }
-
-        if (_focus.Find(drawing) is not { } found || (!_keyboard && found.Shapes[found.Index].Node != picked))
+        if (_keyboard.Menu(drawing) is not { } shape)
         {
             return;
         }
 
-        var shape = found.Shapes[found.Index];
+        var (x, y) = PlacementOn(_zoom.Target, drawing).OnScreen(shape.X, shape.Y);
 
-        _keyboard = true;
-        Focused(drawing, _focus.Folder, shape, pick: true);
-
-        var placed = PlacementOn(_zoom.Target, drawing);
-
-        MenuRequested?.Invoke(this, new Point(
-            Math.Clamp(placed.X + (shape.X * placed.Scale), 0, 1) * ActualWidth,
-            Math.Clamp(placed.Y + (shape.Y * placed.Scale), 0, 1) * ActualHeight));
+        MenuRequested?.Invoke(this, new Point(Math.Clamp(x, 0, 1) * ActualWidth, Math.Clamp(y, 0, 1) * ActualHeight));
 
         e.Handled = true;
     }
 
     /// <summary>
-    /// Where the keyboard is in the picture handed over: on the same shapes in a new tree of the same
-    /// place, read through their counterparts; on the folder it came out of, in a folder above it; on the
-    /// root, where the root is drawn again beside its volume; and on the first shape of anything else.
+    /// The folders a screen reader expanded go with the keyboard to a new tree of the same place, read
+    /// through their counterparts, and are forgotten in another place, whose folders a reader has not
+    /// expanded yet. Where the keyboard goes is <see cref="ExploreKeyboard.Carry"/>'s to say.
     /// </summary>
     private void CarryFocus(ISizedTree? tree, int node, bool beside, bool samePlace)
     {
-        if (samePlace && _tree is ITrackedTree shown && tree is not null && shown.CounterpartsIn(tree) is { } counterpart)
-        {
-            _focus.Carry(counterpart);
+        var counterpart = _keyboard.Carry(_tree, _node, tree, node, beside, samePlace);
+        int[] expanded = counterpart is null ? [] : [.. _expanded.Select(counterpart).OfType<int>()];
 
-            int[] expanded = [.. _expanded.Select(counterpart).OfType<int>()];
-
-            _expanded.Clear();
-            _expanded.UnionWith(expanded);
-            return;
-        }
-
-        // Another place is another picture, whose folders a reader has not expanded yet.
         _expanded.Clear();
-
-        if (tree is not null && ReferenceEquals(tree, _tree) && MapFolders.CameUpFrom(tree, _node, node, beside) is { } left)
-        {
-            _focus.Expect(null, left);
-            return;
-        }
-
-        _focus.Clear();
+        _expanded.UnionWith(expanded);
     }
 
     /// <summary>
