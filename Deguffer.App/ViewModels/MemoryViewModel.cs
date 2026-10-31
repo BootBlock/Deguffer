@@ -21,7 +21,7 @@ namespace Deguffer.App.ViewModels;
 /// <para>The page is pointed at one node of one tree, as Explore's is, and everything on screen is
 /// rebuilt from that pair: the headline, the rows, the trail and the picture.</para>
 /// </summary>
-public sealed partial class MemoryViewModel : ObservableObject, IMapNavigator
+public sealed partial class MemoryViewModel : ObservableObject, IMapNavigator, IMapShapes<MemoryTree>
 {
     private readonly MemoryFeed _feed;
 
@@ -77,16 +77,9 @@ public sealed partial class MemoryViewModel : ObservableObject, IMapNavigator
     [ObservableProperty]
     public partial ExploreView SelectedView { get; set; }
 
-    /// <summary>What the pointer is over, and what that is.</summary>
+    /// <summary>The line under the map: what the pointer or the keyboard is on, and what that is.</summary>
     [ObservableProperty]
-    public partial string Hovered { get; set; } = string.Empty;
-
-    [ObservableProperty]
-    public partial string HoveredFigures { get; set; } = string.Empty;
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasHoveredNote))]
-    public partial string HoveredNote { get; set; } = string.Empty;
+    public partial MapReadout Readout { get; private set; } = MapReadout.None;
 
     /// <summary>What the current node holds, largest first.</summary>
     public ObservableCollection<MemoryRow> Rows { get; } = [];
@@ -102,8 +95,6 @@ public sealed partial class MemoryViewModel : ObservableObject, IMapNavigator
     public bool HasNoTree => Tree is null;
 
     public bool HasFailure => Failure.Length > 0;
-
-    public bool HasHoveredNote => HoveredNote.Length > 0;
 
     public bool CanAscend => Tree is { } tree && CurrentNode != tree.RootNode;
 
@@ -216,14 +207,17 @@ public sealed partial class MemoryViewModel : ObservableObject, IMapNavigator
     }
 
     /// <summary>
-    /// What a screen reader is told of <paramref name="node"/> of <paramref name="tree"/> on the map: its
-    /// name, what part of memory it is, and whether opening it shows what it holds. Nothing of removing:
-    /// what this page does to a program is close it, which its own button says (§7.2.1).
+    /// What a screen reader is told of <paramref name="node"/> of <paramref name="tree"/> on the map, where
+    /// that is the reading on screen. See <see cref="MemoryText.Facts"/>.
     /// </summary>
-    public MapShapeFacts? ShapeFacts(ISizedTree tree, int node) =>
-        ReferenceEquals(tree, Tree) && Tree is { } reading && reading.Holds(node)
-            ? new MapShapeFacts(MemoryText.Name(reading, node), MemoryText.Kind(reading, node), MemoryPlace.Inside(reading, node) is not null)
-            : null;
+    public MapShapeFacts? ShapeFacts(ISizedTree tree, int node) => MapShapeFacts.For(tree, Tree, node, this);
+
+    MapShapeFacts IMapShapes<MemoryTree>.FactsOf(MemoryTree tree, int node) => MemoryText.Facts(tree, node);
+
+    MapReadout IMapShapes<MemoryTree>.ReadoutOf(MemoryTree tree, int node) => MemoryText.Readout(tree, node);
+
+    /// <summary>Nothing: a block of a memory picture stands for parts too small to draw, and its name says so.</summary>
+    string IMapShapes<MemoryTree>.NoteOn(MemoryTree tree, MapBlock block) => string.Empty;
 
     /// <summary>A shape picked on the map is the one program or part picked, and a place with no shape is none.</summary>
     void IMapNavigator.Pick(int? node) => Selection.Select(node);
@@ -253,23 +247,10 @@ public sealed partial class MemoryViewModel : ObservableObject, IMapNavigator
     }
 
     /// <summary>
-    /// Say what the pointer is over. Called on every move that lands on a different shape, so it
-    /// formats and assigns and does nothing else.
+    /// Say what the pointer or the keyboard is on. Called on every move that lands on a different
+    /// shape, so it formats and assigns and does nothing else.
     /// </summary>
-    public void Hover(ExploreHit? hit)
-    {
-        (Hovered, HoveredFigures, HoveredNote) = (Tree, hit) switch
-        {
-            (_, { Block: { } block, Bytes: var bytes }) => (block.Readout, Core.Scanning.FreeSpace.Format(bytes), string.Empty),
-
-            ({ } tree, { IsNode: true, Node: var over }) when tree.Holds(over) => (
-                MemoryText.Name(tree, over),
-                MemoryText.Figures(tree, over),
-                MemoryPartGuide.Describe(tree, over)),
-
-            _ => (string.Empty, string.Empty, string.Empty),
-        };
-    }
+    public void Hover(ExploreHit? hit) => Readout = MapReadout.For(Tree, hit, this);
 
     /// <summary>What to write on a shape of the tree on screen.</summary>
     public string LabelFor(int node) =>

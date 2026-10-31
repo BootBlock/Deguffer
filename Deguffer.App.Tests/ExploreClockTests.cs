@@ -43,6 +43,6 @@ public sealed class ExploreClockTests : IDisposable
         Assert.Equal("3 days ago", row.AgeLabel);
 
         page.Hover(new ExploreHit(row.Node, 10));
-        Assert.EndsWith("last written 3 days ago", page.HoveredFigures);
+        Assert.EndsWith("last written 3 days ago", page.Readout.Figures);
     });
 }

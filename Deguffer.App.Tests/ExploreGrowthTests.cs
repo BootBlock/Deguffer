@@ -128,7 +128,7 @@ public sealed class ExploreGrowthTests : IDisposable
 
         page.Hover(new ExploreHit(logs.Node, second.SizeOf(logs.Node)));
 
-        Assert.EndsWith(", +240 MB since the last scan", page.HoveredFigures);
+        Assert.EndsWith(", +240 MB since the last scan", page.Readout.Figures);
     });
 
     /// <summary>

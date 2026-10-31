@@ -476,8 +476,8 @@
                     -->
                     <ToolTipService.ToolTip>
                         <ToolTip MaxWidth="420"
-                                 Content="{x:Bind ViewModel.HoveredNote, Mode=OneWay}"
-                                 Visibility="{x:Bind ViewModel.HasHoveredNote, Mode=OneWay}">
+                                 Content="{x:Bind ViewModel.Readout.Note, Mode=OneWay}"
+                                 Visibility="{x:Bind ViewModel.Readout.HasNote, Mode=OneWay}">
                             <ToolTip.ContentTemplate>
                                 <DataTemplate x:DataType="x:String">
                                     <TextBlock Text="{x:Bind}" TextWrapping="Wrap" />
@@ -1129,14 +1129,14 @@
                 <TextBlock Grid.ColumnSpan="2" Style="{StaticResource LineStrut}" />
 
                 <TextBlock Grid.Column="0"
-                           Text="{x:Bind ViewModel.Hovered, Mode=OneWay}"
+                           Text="{x:Bind ViewModel.Readout.Name, Mode=OneWay}"
                            Style="{StaticResource SecondaryText}"
                            TextWrapping="NoWrap"
                            TextTrimming="CharacterEllipsis"
-                           ToolTipService.ToolTip="{x:Bind ViewModel.Hovered, Mode=OneWay}" />
+                           ToolTipService.ToolTip="{x:Bind ViewModel.Readout.Name, Mode=OneWay}" />
 
                 <TextBlock Grid.Column="1"
-                           Text="{x:Bind ViewModel.HoveredFigures, Mode=OneWay}"
+                           Text="{x:Bind ViewModel.Readout.Figures, Mode=OneWay}"
                            Style="{StaticResource SecondaryText}"
                            TextWrapping="NoWrap" />
             </Grid>

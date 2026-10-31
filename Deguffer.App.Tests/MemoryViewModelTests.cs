@@ -351,7 +351,7 @@ public sealed class MemoryViewModelTests : IDisposable
 
         Assert.Equal(string.Empty, page.LabelFor(page.Tree.NodeCount));
         Assert.Equal(string.Empty, page.LabelFor(-1));
-        Assert.Equal(string.Empty, page.Hovered);
+        Assert.Equal(string.Empty, page.Readout.Name);
         Assert.NotEqual(string.Empty, page.LabelFor(page.Tree.RootNode));
 
         await leave.CancelAsync();
@@ -371,8 +371,8 @@ public sealed class MemoryViewModelTests : IDisposable
 
         page.Hover(new ExploreHit(MapBlock.Aggregate.Node, 4_096));
 
-        Assert.Equal(MapBlock.Aggregate.Readout, page.Hovered);
-        Assert.Equal(Core.Scanning.FreeSpace.Format(4_096), page.HoveredFigures);
+        Assert.Equal(MapBlock.Aggregate.Readout, page.Readout.Name);
+        Assert.Equal(Core.Scanning.FreeSpace.Format(4_096), page.Readout.Figures);
 
         await leave.CancelAsync();
         await watching;
