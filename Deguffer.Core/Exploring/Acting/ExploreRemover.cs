@@ -26,7 +26,11 @@ public enum ExploreRemovalMode
 /// bound — §7.1 allows Explore's numbers to be short, provided the picture says so — which is why
 /// the report words a total as what was removed rather than as what was reclaimed.
 /// </param>
-public sealed record ExploreItem(string Path, bool IsDirectory, long Bytes);
+/// <param name="LowerBound">
+/// Whether <paramref name="Bytes"/> is a lower bound, because the scan could not read all of it, so
+/// the confirmation and the report mark the size they state (<see cref="ExploreRemovalPrompt"/>).
+/// </param>
+public sealed record ExploreItem(string Path, bool IsDirectory, long Bytes, bool LowerBound);
 
 /// <param name="Message">
 /// What happened, written for the user. On a refusal it is the policy's own sentence, because §7.1
@@ -49,6 +53,13 @@ public sealed record ExploreItemOutcome(string Path, bool Removed, long Bytes, s
     /// (<see cref="RecycleOutcome.DeletedOutright"/>). It is removed, and not in the bin to restore.
     /// </summary>
     public bool DeletedOutright { get; init; }
+
+    /// <summary>
+    /// Whether <see cref="ExploreItemOutcome.Bytes"/> is the scan's lower bound for the item rather
+    /// than a measurement, so the report marks it as the confirmation did (§7.1). Never true of
+    /// what a permanent removal reclaimed, which it measured.
+    /// </summary>
+    public bool LowerBound { get; init; }
 }
 
 /// <summary>What one Explore removal did, and the §5.6 evidence that it did no more.</summary>
@@ -164,8 +175,8 @@ public sealed record ExploreRemovalReport(
 
     private static string What(IReadOnlyList<ExploreItemOutcome> items) =>
         items is [{ } only]
-            ? $"'{Path.GetFileName(only.Path)}' ({FreeSpace.Format(only.Bytes)})"
-            : $"{items.Count} items ({FreeSpace.Format(items.Sum(item => item.Bytes))})";
+            ? $"'{Path.GetFileName(only.Path)}' ({ExploreNodeText.Size(only.Bytes, only.LowerBound)})"
+            : $"{items.Count} items ({ExploreNodeText.Size(items.Sum(item => item.Bytes), items.Any(item => item.LowerBound))})";
 }
 
 /// <summary>
@@ -371,6 +382,7 @@ public static class ExploreRemover
                 recycled.Message ?? "Moved to the Recycle Bin.")
             {
                 DeletedOutright = recycled.DeletedOutright,
+                LowerBound = recycled.Removed && item.LowerBound,
             };
         }
 

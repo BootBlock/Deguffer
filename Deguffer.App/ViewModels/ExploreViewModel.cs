@@ -533,7 +533,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     }
 
     /// <summary>
-    /// Show what a finished scan found, with the volume it was taken of, and say what it measured.
+    /// Show what a finished scan found, with the volume it was taken of, and clear the status line.
     /// </summary>
     /// <param name="scoped">Whether the scan was started on a folder rather than a drive.</param>
     private async Task FinishAsync(ExploreScan scan, string target, bool scoped, CancellationToken ct)
@@ -555,7 +555,9 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
 
         await RecordAsync(scan, target, scoped);
 
-        Status.Say(StatusLine.Said(ExploreStatusText.Finished(scan, volume, scoped)));
+        // The progress sentence goes, and nothing replaces it: the map, its readout and its rows
+        // state the figures, and each one that is a lower bound is marked "≥".
+        Status.Say(StatusLine.Empty);
     }
 
     /// <summary>
@@ -637,7 +639,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         ShownTree.Of(tree, Tree, node) is { } scanned ? Selection.VerdictOf(scanned.PathOf(node)) : null;
 
     MapShapeFacts IMapShapes<ExploreTree>.FactsOf(ExploreTree tree, int node) =>
-        new(tree.NameOf(node), ExploreNodeText.Kind(tree, node), _position.Opening(tree, node, Volume) is not null);
+        new(tree.NameOf(node), ExploreNodeText.Kind(tree, node), _position.Opening(tree, node, Volume) is not null, tree.HasUnknownSizeBelow(node));
 
     MapReadout IMapShapes<ExploreTree>.ReadoutOf(ExploreTree tree, int node) => ExploreReadout.Over(tree, node, ReadoutState);
 

@@ -148,6 +148,27 @@ public sealed class ExploreTypesTests : IDisposable
         Assert.Empty(page.Selection.Nodes);
     });
 
+    /// <summary>
+    /// The total the breakdown states is the folder's, so where the scan could not read all of it
+    /// the total is marked as the lower bound it is (§7.1).
+    /// </summary>
+    [Fact]
+    public void ATotalThatIsALowerBoundIsMarkedAsOne() => UiThread.Run(async () =>
+    {
+        var root = _explore.Temp.CreateDirectory("scan");
+        var builder = Builder(root);
+        builder.MarkSizeUnknown(ExploreTreeBuilder.RootNode);
+        var page = _explore.Page();
+
+        page.Targeting.ScopeTo(root);
+        await _explore.ScanAsync(page, ExploreScan.Fast(builder.Build(ExploreChildOrder.BySize)));
+        page.SelectedColouring = ExploreColouring.Type;
+
+        await Eventually.HoldsAsync(() => page.Types.Summary.Length > 0, "the breakdown shown");
+
+        Assert.Equal($"≥ {FreeSpace.Format(12_010)} in 4 files.", page.Types.Summary);
+    });
+
     private async Task<(ExploreViewModel Page, ExploreTree Tree)> ScannedAsync()
     {
         var root = _explore.Temp.CreateDirectory("scan");

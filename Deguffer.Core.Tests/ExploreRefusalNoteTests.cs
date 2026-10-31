@@ -52,5 +52,5 @@ public sealed class ExploreRefusalNoteTests
             note);
     }
 
-    private static ExploreItem Item(string path) => new(path, IsDirectory: false, Bytes: 1);
+    private static ExploreItem Item(string path) => new(path, IsDirectory: false, Bytes: 1, LowerBound: false);
 }

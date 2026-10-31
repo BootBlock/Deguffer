@@ -21,10 +21,17 @@ public sealed partial class StatusLineViewModel : ObservableObject
     /// <summary>What the line holds now, which a page reads to decide what replaces it.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Sentence))]
+    [NotifyPropertyChangedFor(nameof(HasSentence))]
     public partial StatusLine Line { get; private set; } = StatusLine.Empty;
 
     /// <summary>What the line says.</summary>
     public string Sentence => Line.Sentence;
+
+    /// <summary>
+    /// Whether the line says anything, so a page can take it out of its layout when it does not:
+    /// an empty text block still keeps a line's height under the content.
+    /// </summary>
+    public bool HasSentence => Line.Sentence.Length > 0;
 
     /// <summary>
     /// The checks the sentence counts as not passed, each by the path it is about and what it found.

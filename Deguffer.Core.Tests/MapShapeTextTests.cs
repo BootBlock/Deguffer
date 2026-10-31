@@ -14,17 +14,17 @@ public sealed class MapShapeTextTests
     public void TheNameSaysTheSizeAndTheShareOfWhatHoldsIt() =>
         Assert.Equal(
             $"Documents, {FreeSpace.Format(450)}, 45% of Users",
-            MapShapeText.Name("Documents", 450, 1000, "Users"));
+            MapShapeText.Name("Documents", 450, 1000, "Users", lowerBound: false));
 
     [Fact]
     public void AShapeBesideTheVolumeIsAShareOfTheDrive() =>
         Assert.Equal(
             $"Free space, {FreeSpace.Format(250)}, 25% of the drive",
-            MapShapeText.Name("Free space", 250, 1000, ofName: null));
+            MapShapeText.Name("Free space", 250, 1000, ofName: null, lowerBound: false));
 
     [Fact]
     public void WhatHoldsNothingHasNoShareToGive() =>
-        Assert.Equal($"Empty, {FreeSpace.Format(0)}", MapShapeText.Name("Empty", 0, 0, "Users"));
+        Assert.Equal($"Empty, {FreeSpace.Format(0)}", MapShapeText.Name("Empty", 0, 0, "Users", lowerBound: false));
 
     /// <summary>A shape that is there is never "0%", and one that is the whole of its folder is "all".</summary>
     [Theory]
@@ -42,23 +42,45 @@ public sealed class MapShapeTextTests
     public void AFolderThatOpensAndCanBeRemovedSaysBoth() =>
         Assert.Equal(
             "Folder. Enter opens it. Delete sends it to the Recycle Bin, after asking.",
-            MapShapeText.Help(new MapShapeFacts("Documents", "Folder", Opens: true), ExploreVerdict.Unclassified));
+            MapShapeText.Help(new MapShapeFacts("Documents", "Folder", Opens: true, LowerBound: false), ExploreVerdict.Unclassified));
 
     /// <summary>A refusal is said with its reason, before Delete is pressed (§7.1).</summary>
     [Fact]
     public void AShapeThatCannotBeRemovedSaysWhy() =>
         Assert.Equal(
             "File. It cannot be removed. Windows needs it.",
-            MapShapeText.Help(new MapShapeFacts("pagefile.sys", "File", Opens: false), ExploreVerdict.Refuse("Windows needs it.")));
+            MapShapeText.Help(new MapShapeFacts("pagefile.sys", "File", Opens: false, LowerBound: false), ExploreVerdict.Refuse("Windows needs it.")));
 
     [Fact]
     public void APageThatRemovesNothingSaysNothingOfRemoving() =>
         Assert.Equal(
             "Program. Enter opens it.",
-            MapShapeText.Help(new MapShapeFacts("explorer.exe", "Program", Opens: true), removal: null));
+            MapShapeText.Help(new MapShapeFacts("explorer.exe", "Program", Opens: true, LowerBound: false), removal: null));
 
     /// <summary>A shape's label is its name, then its size, two spaces apart, on every page and for every block.</summary>
     [Fact]
     public void ALabelIsTheNameThenTheSize() =>
         Assert.Equal($"Documents  {FreeSpace.Format(450)}", MapShapeText.Label("Documents", 450));
+
+    /// <summary>
+    /// §7.1: a shape the scan could not read all of says its size is a lower bound, in its name and
+    /// on its label, as its row does. One it read whole does not.
+    /// </summary>
+    [Fact]
+    public void AShapeWhoseSizeIsALowerBoundSaysSo()
+    {
+        var builder = new ExploreTreeBuilder(@"C:\");
+        builder.AddChildren(ExploreTreeBuilder.RootNode,
+        [
+            new ExploreChild("refused", IsDirectory: true, IsLink: false, Size: 450, SizeUnknown: true),
+            new ExploreChild("plain.bin", IsDirectory: false, IsLink: false, Size: 450),
+        ]);
+        var tree = builder.Build(ExploreChildOrder.ByName);
+        var refused = tree.ChildrenOf(tree.RootNode).ToArray().Single(node => tree.NameOf(node) == "refused");
+        var plain = tree.ChildrenOf(tree.RootNode).ToArray().Single(node => tree.NameOf(node) == "plain.bin");
+
+        Assert.Equal($"refused, {FreeSpace.Format(450)}, 45% of Users{ExploreNodeText.Unread}", MapShapeText.Name("refused", 450, 1000, "Users", lowerBound: true));
+        Assert.Equal($"refused  ≥ {FreeSpace.Format(450)}", MapShapeText.Label(tree, refused));
+        Assert.Equal($"plain.bin  {FreeSpace.Format(450)}", MapShapeText.Label(tree, plain));
+    }
 }
