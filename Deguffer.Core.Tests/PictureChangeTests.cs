@@ -141,6 +141,29 @@ public sealed class PictureChangeTests
     }
 
     /// <summary>
+    /// The same place laid out again gives the counterparts it was found through, so the map carries
+    /// the keyboard and a screen reader's folders into the new tree without reading them again; and
+    /// anything else gives none, though a new tree of another folder has counterparts of its own.
+    /// </summary>
+    [Fact]
+    public void OnlyTheSamePlaceGivesTheCounterpartsItWasFoundThrough()
+    {
+        var earlier = Nested();
+        var later = Nested(extra: 5_000);
+        var shown = Treemap(earlier, earlier.RootNode);
+        var asked = Treemap(later, later.RootNode);
+
+        var counterparts = PictureChange.Between(shown, asked, null, zoomable: true).Counterparts;
+
+        Assert.NotNull(counterparts);
+        Assert.Equal(Find(later, "mid00"), counterparts(Find(earlier, "mid00")));
+        Assert.Null(PictureChange.Between(shown, asked with { Node = Find(later, "top0") }, null, zoomable: true).Counterparts);
+        Assert.Null(PictureChange.Between(shown, asked with { View = ExploreView.Sunburst }, null, zoomable: true).Counterparts);
+        Assert.Null(PictureChange.Between(shown, asked, Zoomed, zoomable: true).Counterparts);
+        Assert.Null(PictureChange.Between(shown, shown, null, zoomable: true).Counterparts);
+    }
+
+    /// <summary>
     /// A finished scan drawn as the treemap picked, after its snapshots were drawn as icicles, is a
     /// change of view rather than the same place laid out again, though the view asked for is the same.
     /// </summary>

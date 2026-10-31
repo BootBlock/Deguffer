@@ -37,6 +37,15 @@ public sealed record PictureChange
     public bool SamePlace { get; private init; }
 
     /// <summary>
+    /// Where each node of <see cref="Shown"/>'s tree is in <see cref="Asked"/>'s, for the same place
+    /// laid out again (<see cref="SamePlace"/>), and null for anything else. Read once, here, and
+    /// handed on to what else carries a place from one tree to the next, because each reading of
+    /// them (<see cref="ITrackedTree.CounterpartsIn"/>) starts with nothing found: it places every
+    /// node through its folders again, and indexes by name again any folder whose numbers moved.
+    /// </summary>
+    public Func<int, int?>? Counterparts { get; private init; }
+
+    /// <summary>
     /// Whether <see cref="Asked"/> is the same place in another of the views that draw a picture, so
     /// its largest shapes travel from where the one view draws them to where the other does, from the
     /// whole of one picture to the whole of the other (<see cref="ViewMorph"/>).
@@ -77,24 +86,29 @@ public sealed record PictureChange
         var another = asked != shown;
         var zooms = zoomable && asked.Tree is not null && ExploreSurface.Zooms(asked.Tree, asked.View);
 
+        // The same place in a new tree, drawn the same way: a scan's next snapshot, or what a
+        // removal left. A change of view, such as a finished scan drawn as a treemap after its
+        // snapshots' icicles, is not. The volume beside it may have new figures, as a removal
+        // frees space, but it is drawn beside both or beside neither.
+        var counterparts = another
+            && viewport is null
+            && asked.View == shown.View
+            && asked.Beside == shown.Beside
+            && asked.Tree is not null
+            && shown.Tree is ITrackedTree tracked
+            && ExploreSurface.Drawn(asked.Tree, asked.View) == ExploreSurface.Drawn(tracked, shown.View)
+                ? tracked.CounterpartsIn(asked.Tree)
+                : null;
+        var samePlace = counterparts is not null && counterparts(shown.Node) == asked.Node;
+
         return new PictureChange
         {
             Shown = shown,
             Asked = asked,
             Another = another,
 
-            // The same place in a new tree, drawn the same way: a scan's next snapshot, or what a
-            // removal left. A change of view, such as a finished scan drawn as a treemap after its
-            // snapshots' icicles, is not. The volume beside it may have new figures, as a removal
-            // frees space, but it is drawn beside both or beside neither.
-            SamePlace = another
-                && viewport is null
-                && asked.View == shown.View
-                && asked.Beside == shown.Beside
-                && asked.Tree is not null
-                && shown.Tree is ITrackedTree tracked
-                && ExploreSurface.Drawn(asked.Tree, asked.View) == ExploreSurface.Drawn(tracked, shown.View)
-                && tracked.CounterpartsIn(asked.Tree)?.Invoke(shown.Node) == asked.Node,
+            SamePlace = samePlace,
+            Counterparts = samePlace ? counterparts : null,
 
             Morph = another
                 && viewport is null

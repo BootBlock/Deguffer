@@ -24,7 +24,7 @@ using VirtualKeyModifiers = Windows.System.VirtualKeyModifiers;
 namespace Deguffer.App.Controls;
 
 /// <summary>
-/// Draws a scanned tree, and says what the pointer is over.
+/// Draws a scanned tree, and says what the pointer is over: the host the map's parts meet in.
 ///
 /// <para>The geometry is painted into a picture rather than kept as shapes. A full volume lays out to
 /// tens of thousands of them, and the framework's own performance guidance is that a vector element
@@ -32,26 +32,40 @@ namespace Deguffer.App.Controls;
 /// implementation does, WinDirStat rendering into a cached surface and blitting it rather than
 /// keeping a shape per file. The picture is in the composition layer: each drawing a surface written
 /// a region at a time, placed in the whole picture once, and the whole picture placed on the screen
-/// by one camera (<see cref="MapCamera"/>), so a move writes the camera and nothing else. A zoomed
-/// picture keeps a few drawings, one per part of it drawn: see <see cref="ExploreLayers"/>.</para>
+/// by one camera (<see cref="MapCamera"/>), so a move writes the camera and nothing else.</para>
 ///
 /// <para>Two things are not in the picture, and each has a part of its own that the camera moves
-/// with it: <see cref="ExploreLabels"/> for the names, so they scale with the user's text size, and
-/// <see cref="ExploreHighlight"/> for the lines round what is picked and what the pointer is over,
-/// the dimming round a selection, the shape under the pointer lifted and the hatch over what is
-/// being removed, so a click moves a line rather than rasterising a volume again.</para>
+/// with it: the names, so they scale with the user's text size, and the lines round what is picked
+/// and what the pointer is over, the dimming round a selection, the shape under the pointer lifted
+/// and the hatch over what is being removed, so a click moves a line rather than rasterising a
+/// volume again.</para>
 ///
 /// <para>Nothing here knows what a drive is, how one is scanned, or how any of the views are laid
 /// out. It is handed a tree, a node and a view, it asks Core for the matching
 /// <see cref="ExploreSurface"/>, and it reports back what was pointed at (G1).</para>
 ///
-/// <para>Over 500 lines because it is where the pointer, the drawings and the page meet, and each
-/// input has to be resolved against whichever picture is on screen at that moment (§7.1). Everything
-/// that can stand apart does: the redraws (<see cref="ExploreCanvas"/>), the drawings kept (<see cref="ExploreLayers"/>), the camera and what
-/// moves it (<see cref="ExploreZoom"/>), the clock of a change of folder (<see cref="ExploreDescent"/>),
-/// the shapes moving from one drawing to the next (<see cref="ExploreMoves"/>), the names, what is marked out on the picture (<see cref="ExploreMarking"/>) and the lines that mark
-/// it, what the pointer is over and when that is said (<see cref="ExplorePointer"/>), and in Core the arithmetic, the rule telling a click from a drag
-/// (<see cref="MapDrag"/>), and what a click picks (<see cref="MapPick"/>) and a double-click opens (<see cref="MapOpen"/>). Most of the length is the reasoning behind each ordering.</para>
+/// <para>Each thing the map does is a part of its own: the redraws (<see cref="ExploreCanvas"/>), the
+/// drawings kept (<see cref="ExploreLayers"/>), the camera and what moves it (<see cref="ExploreZoom"/>),
+/// a change of folder (<see cref="ExploreFlight"/>), the shapes moving from one drawing to the next
+/// (<see cref="ExploreMoves"/>), the names (<see cref="ExploreLabels"/>), what is marked out on the
+/// picture (<see cref="ExploreMarking"/>, drawn by <see cref="ExploreHighlight"/>), the pointer
+/// (<see cref="ExplorePointer"/>), the keyboard (<see cref="ExploreKeyboard"/>) and what a screen reader
+/// reads (<see cref="MapReader"/>). Every rule they act on is in Core: what a new picture changes
+/// (<see cref="PictureChange"/>), what a key does (<see cref="MapKeys"/>), a click from a drag
+/// (<see cref="MapDrag"/>), what a click picks (<see cref="MapPick"/>) and a double-click opens
+/// (<see cref="MapOpen"/>).</para>
+///
+/// <para>What is left here is where they meet: the constructor that builds and wires them, the API
+/// the pages call, <see cref="Present"/>, which makes a new drawing the one every part works from, the
+/// redraw and the steps of a change of folder, the lifecycle, the drag, the wheel and the routed
+/// handlers. These stay together because each one joins several parts against the one picture on
+/// screen, in an order that matters: a click, a key, a hover and a removal resolve against what the
+/// screen shows (§7.1), so which part hears first of a new drawing, a flight landed or a zoom stopped
+/// is decided in one place. Most of the length is the reasoning behind each ordering.</para>
+///
+/// <para>The budget for this file is 2,300 lines, which a test in Deguffer.Core.Tests
+/// (<c>ExploreMapBudgetTests</c>) holds it to. Something new that would take it past that is a part
+/// of its own, or moves one out first. Raising the budget is the maintainer's decision.</para>
 /// </summary>
 public sealed class ExploreMap : UserControl
 {
@@ -127,9 +141,14 @@ public sealed class ExploreMap : UserControl
     /// <summary>What the map follows while it is loaded, undone when it is unloaded.</summary>
     private Subscriptions? _watching;
 
-    private ISizedTree? _tree;
-    private int _node;
-    private ExploreView _view = ExploreView.Treemap;
+    /// <summary>
+    /// The picture the map was last handed, which a change of folder may still be on its way to: the
+    /// tree, the node of it, the view, and the volume drawn beside the node or
+    /// <see cref="VolumeSpace.None"/>, as the page decides. See
+    /// <see cref="ExploreSurface.Create(ISizedTree, int, ExploreView, int, int, double, double, ShapeColours, ExploreSpacing, VolumeSpace, MapViewport, MapStyle)"/>
+    /// for where the volume is drawn.
+    /// </summary>
+    private MapPicture _shown = new(null, 0, ExploreView.Treemap, VolumeSpace.None);
 
     /// <summary>
     /// What the colours are to say, asked for at each repaint rather than held. See
@@ -145,13 +164,6 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>How much room a treemap leaves round what each folder holds, and how every shape is finished.</summary>
     private MapLook _look = MapLook.Default;
-
-    /// <summary>
-    /// The volume to draw beside the node, or <see cref="VolumeSpace.None"/>; the page decides. See
-    /// <see cref="ExploreSurface.Create(ISizedTree, int, ExploreView, int, int, double, double, ShapeColours, ExploreSpacing, VolumeSpace, MapViewport, MapStyle)"/>
-    /// for where it is drawn.
-    /// </summary>
-    private VolumeSpace _volume = VolumeSpace.None;
 
     /// <summary>Where the pointer is, what it is over, and the readout and outline that follow it. See <see cref="ExplorePointer"/>.</summary>
     private readonly ExplorePointer _pointer;
@@ -177,7 +189,6 @@ public sealed class ExploreMap : UserControl
     /// agrees with them, and read again to tell whether a change of the system's colours changed them.
     /// </summary>
     private ContrastColours? _contrast;
-
 
     /// <summary>
     /// The finest tile shown over the drawing worked from at a point of the picture, asked of whichever
@@ -215,7 +226,6 @@ public sealed class ExploreMap : UserControl
         _marking = new ExploreMarking(_highlight);
         _readingOf = _marking.ReadingOf;
         _keyboard = new ExploreKeyboard(_marking.Picked, node => Reader?.FolderOf(node));
-        _keyboard.Landed += OnKeyboardLanded;
         _moves = new ExploreMoves(compositor, _graphics.Geometry, _camera, SystemMotion.Current);
         _labels = new ExploreLabels(_camera, pictures.Root, SystemMotion.Current);
         _pointer = new ExplorePointer(Locate, Shine, ShowHovered, Report);
@@ -234,21 +244,49 @@ public sealed class ExploreMap : UserControl
         _root.Children.InsertAtTop(_moves.Root);
         _root.Children.InsertAtTop(_highlight.Root);
 
-        // The composition tree is hosted under an element of its own, so the labels, which are XAML,
-        // can go over it: a hosted visual is drawn over its host's children.
+        _layers = Stack();
+        Content = _layers;
+
+        FollowCamera();
+        FollowPictures(pictures, departing);
+        FollowInput();
+        FollowControl();
+
+        // One tab stop, inside which the arrow keys move between the shapes, as they move between the
+        // items of a list. A screen reader is given the shapes as a tree of their own (see
+        // MapAutomationPeer), with the one the keyboard is on as the focus.
+        IsTabStop = true;
+        AutomationProperties.SetName(this, "Map of what was scanned");
+
+        // Naming where the same content is readable as well, because a list is still the quicker way
+        // to read a great many names.
+        DescribeControls();
+    }
+
+    /// <summary>
+    /// The map's layers, bottom to top: the composition tree, then the names, then the overview.
+    ///
+    /// <para>The composition tree is hosted under an element of its own, so the names, which are XAML,
+    /// can go over it: a hosted visual is drawn over its host's children. The ground is transparent
+    /// rather than absent, so the whole control takes the pointer. The picture itself takes none of it,
+    /// so what is under the pointer is always this control's own answer rather than whichever drawing
+    /// happens to be topmost there.</para>
+    /// </summary>
+    private Grid Stack()
+    {
         var picture = new Border();
         ElementCompositionPreview.SetElementChildVisual(picture, _root);
 
-        // The ground is transparent rather than absent, so the whole control takes the pointer. The
-        // picture itself takes none of it, so what is under the pointer is always this control's own
-        // answer rather than whichever drawing happens to be topmost there.
-        _layers = new Grid
+        return new Grid
         {
             Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
             Children = { picture, _labels, _overview },
         };
-        Content = _layers;
+    }
 
+    /// <summary>Answer the camera on its way, at rest and retargeted, and the overview that moves it.</summary>
+    private void FollowCamera()
+    {
         _zoom.Moved += OnZoomMoved;
         _zoom.Arrived += (_, _) =>
         {
@@ -261,38 +299,47 @@ public sealed class ExploreMap : UserControl
             ViewportChanged?.Invoke(this, EventArgs.Empty);
         };
 
-        // The overview is of the picture the map works from: the set of drawings a change of folder
-        // leaves keeps its own, for a change turned round.
-        pictures.OverviewChanged += OnOverviewChanged;
-        departing.OverviewChanged += OnOverviewChanged;
+        // The camera is held where it was, measured from its new origin, until this returns, so
+        // everything on it is placed from that origin at once (see ExploreOrigin.Move).
+        _zoom.OriginMoved += (_, _) => Fit();
+
+        // A pinch, a touch or the wheel with Ctrl held moves the picture on the compositor before the
+        // map hears of it, so a change of folder still flying is settled and the whole picture painted
+        // under the zoomed one as soon as it does, as they are for a move the map starts itself.
+        _zoom.Started += (_, _) => PrepareMove();
 
         // A press on the overview moves the camera as any other input does, from a settled screen
         // with the whole picture under the zoomed one.
         _overview.Moving += (_, _) => PrepareMove();
         _overview.Entered += (_, _) => _pointer.Follow();
         _overview.HiddenChanged += (_, _) => OverviewHiddenChanged?.Invoke(this, EventArgs.Empty);
+    }
 
-        // The camera is held where it was, measured from its new origin, until this returns, so
-        // everything on it is placed from that origin at once (see ExploreOrigin.Move).
-        _zoom.OriginMoved += (_, _) => Fit();
-
-        // A pinch, a touch or the wheel with Ctrl held moves the picture on the compositor before the
-        // map hears of it, so a change of folder still flying is settled and the whole picture painted under the zoomed one
-        // as soon as it does, as they are for a move the map starts itself.
-        _zoom.Started += (_, _) => PrepareMove();
-
-        _flight.Descent.Midway += OnDescentMidway;
-        _flight.Descent.Arrived += OnDescentArrived;
-        _moves.Started += OnMoveStarted;
-        _moves.Landed += OnMoveLanded;
-
-        // Both sets, as the two change places with each change of folder that flies (see Swap).
+    /// <summary>
+    /// Answer the two sets of drawings, <paramref name="pictures"/> and <paramref name="departing"/>,
+    /// a change of folder's flight between them, and shapes moving from one drawing to the next.
+    /// </summary>
+    private void FollowPictures(ExploreLayers pictures, ExploreLayers departing)
+    {
+        // Both sets, as the two change places with each change of folder that flies (see Swap). The
+        // overview is of the picture the map works from: the set a change of folder leaves keeps its
+        // own, for a change turned round.
+        pictures.OverviewChanged += OnOverviewChanged;
+        departing.OverviewChanged += OnOverviewChanged;
         pictures.Faded += OnFaded;
         departing.Faded += OnFaded;
         pictures.TileAnswersChanged += OnTileAnswersChanged;
         departing.TileAnswersChanged += OnTileAnswersChanged;
 
-        SizeChanged += OnSizeChanged;
+        _flight.Descent.Midway += OnDescentMidway;
+        _flight.Descent.Arrived += OnDescentArrived;
+        _moves.Started += OnMoveStarted;
+        _moves.Landed += OnMoveLanded;
+    }
+
+    /// <summary>Answer the pointer, touch, the keys and the focus, each against what the screen shows (§7.1).</summary>
+    private void FollowInput()
+    {
         PointerPressed += OnPointerPressed;
         PointerMoved += OnPointerMoved;
         PointerReleased += OnPointerReleased;
@@ -306,132 +353,161 @@ public sealed class ExploreMap : UserControl
         GotFocus += OnGotFocus;
         LostFocus += OnLostFocus;
         ContextRequested += OnContextRequested;
+        _keyboard.Landed += OnKeyboardLanded;
 
         // Picking is separate from opening, on the file-manager idiom: one click says which one, two
         // says go in. A right-click picks as well, so the menu that follows is about the shape under
         // the pointer rather than about whatever was picked last.
         Tapped += OnTapped;
         RightTapped += OnRightTapped;
+    }
 
-        // Dragged to a differently scaled display, the control's size in device-independent units
-        // does not change, so nothing above fires and the canvas stays at the old resolution.
-        // The scale is read from the XamlRoot rather than from this element: the identically
-        // documented property on UIElement does not update on a scale change
-        // (microsoft-ui-xaml #9610), and the root is not attached until this is loaded.
-        Loaded += (_, _) =>
+    /// <summary>Answer the control's own life on the page: its size, its theme, and being loaded and unloaded.</summary>
+    private void FollowControl()
+    {
+        SizeChanged += OnSizeChanged;
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
+        ActualThemeChanged += OnThemeChanged;
+    }
+
+    /// <summary>
+    /// Follow what the map follows while it is loaded (<see cref="Watch"/>), take the system's look and
+    /// motion as they are now, and draw what was owed while the map was away (<see cref="CatchUp"/>).
+    /// </summary>
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        _watching?.Dispose();
+        _watching = Watch();
+
+        TintHighlight();
+        _zoom.FollowMotion();
+        CatchUp();
+    }
+
+    /// <summary>
+    /// What the map follows while it is loaded: the system's look and motion, the graphics device, and
+    /// the root it was loaded into.
+    ///
+    /// <para>Dragged to a differently scaled display, the control's size in device-independent units
+    /// does not change, so <see cref="FrameworkElement.SizeChanged"/> does not fire and the canvas would
+    /// stay at the old resolution. The scale is read from the <see cref="XamlRoot"/> rather than from
+    /// this element: the identically documented property on <see cref="UIElement"/> does not update on
+    /// a scale change (microsoft-ui-xaml #9610), and the root is not attached until this is loaded.
+    /// The root the map was loaded into is the one it leaves, though it may be gone from the control by
+    /// the time <see cref="FrameworkElement.Unloaded"/> is raised.</para>
+    /// </summary>
+    private Subscriptions Watch()
+    {
+        var watching = new Subscriptions()
+            .Add(() => SystemLook.Current.Changed += OnLookChanged, () => SystemLook.Current.Changed -= OnLookChanged)
+            .Add(() => SystemMotion.Current.Changed += OnMotionChanged, () => SystemMotion.Current.Changed -= OnMotionChanged)
+            .Add(() => _graphics.Device.Replaced += OnDeviceReplaced, () => _graphics.Device.Replaced -= OnDeviceReplaced);
+
+        if (XamlRoot is { } root)
         {
-            _watching?.Dispose();
-            _watching = new Subscriptions()
-                .Add(() => SystemLook.Current.Changed += OnLookChanged, () => SystemLook.Current.Changed -= OnLookChanged)
-                .Add(() => SystemMotion.Current.Changed += OnMotionChanged, () => SystemMotion.Current.Changed -= OnMotionChanged)
-                .Add(() => _graphics.Device.Replaced += OnDeviceReplaced, () => _graphics.Device.Replaced -= OnDeviceReplaced);
+            watching.Add(() => root.Changed += OnRootChanged, () => root.Changed -= OnRootChanged);
+        }
 
-            // The root the map was loaded into is the one it leaves, though it may be gone from the
-            // control by the time Unloaded is raised.
-            if (XamlRoot is { } root)
-            {
-                _watching.Add(() => root.Changed += OnRootChanged, () => root.Changed -= OnRootChanged);
-            }
+        return watching;
+    }
 
-            TintHighlight();
-            _zoom.FollowMotion();
+    /// <summary>
+    /// Draw what the map was owed while it was away, which nothing else will ask for once it is back.
+    ///
+    /// <para>A resize that arrived while this was on screen, and was still waiting to be drawn when the
+    /// page was navigated away from, was dropped rather than rasterised for a page nobody is looking at.
+    /// Coming back at that same size raises no <see cref="FrameworkElement.SizeChanged"/>, so without
+    /// this the map stays stretched over the old canvas for as long as the page is open.</para>
+    ///
+    /// <para>The same goes for a zoom that was still moving when the page was left. It was finished
+    /// where it was going rather than eased for nobody, so the drawing is of where it was, and the
+    /// drawings kept of the rest of the picture are still good for the one it went to. A redraw stopped
+    /// as the page was left is owed in full, because the picture it was drawing has not been on screen,
+    /// and so is everything where the device was replaced while the map was away: nothing it kept is on
+    /// its surfaces any more.</para>
+    /// </summary>
+    private void CatchUp()
+    {
+        if (_generation != _graphics.Device.Generation)
+        {
+            OnDeviceReplaced(_graphics, EventArgs.Empty);
+            return;
+        }
 
-            // The device was replaced while the map was away, so nothing it kept is on its surfaces
-            // any more, and every redraw the rest of this would ask for is owed in full.
-            if (_generation != _graphics.Device.Generation)
-            {
-                OnDeviceReplaced(_graphics, EventArgs.Empty);
-                return;
-            }
-
-            // A resize that arrived while this was on screen, and was still waiting to be drawn
-            // when the page was navigated away from, is dropped below rather than rasterised for a
-            // page nobody is looking at. Coming back at that same size raises no SizeChanged, so
-            // this is the only place that owes the redraw — and without it the map stays stretched
-            // over the old canvas for as long as the page is open.
-            //
-            // The same goes for a zoom that was still moving when the page was left. It was finished
-            // where it was going rather than eased for nobody, so the drawing is of where it was, and
-            // the drawings kept of the rest of the picture are still good for the one it went to.
-            //
-            // A redraw stopped as the page was left is owed in full, because the picture it was
-            // drawing has not been on screen.
-            if (_canvas.IsOwed)
+        if (_canvas.IsOwed)
+        {
+            Redraw();
+        }
+        else if (_drawing is { } drawing)
+        {
+            if (!_canvas.Fits(drawing))
             {
                 Redraw();
             }
-            else if (_drawing is { } drawing)
+            else if (_drawn != _zoom.Shown)
             {
-                if (!_canvas.Fits(drawing))
-                {
-                    Redraw();
-                }
-                else if (_drawn != _zoom.Shown)
-                {
-                    OnZoomArrived();
-                }
+                OnZoomArrived();
             }
-        };
+        }
+    }
 
-        Unloaded += (_, _) =>
+    /// <summary>
+    /// Stop everything on its way, and let go of what a page kept alive while it is away
+    /// (NavigationCacheMode) need not hold: the map comes back to the drawing on screen, and
+    /// <see cref="CatchUp"/> draws whatever was stopped.
+    /// </summary>
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        // A pending redraw for a size this control is no longer showing at. Left running it
+        // would rasterise a whole volume for a page that has been navigated away from. A change of
+        // folder still flying, or a drag still held, is finished where it was going for the same reason.
+        _canvas.CancelResize();
+        _zoom.Stop();
+        SettleStep();
+        EndDrag();
+
+        // A redraw still landing is stopped for the same reason, and owed when the page is back.
+        _canvas.Leave();
+
+        // At 4K, 33 MB for each drawing kept, as for the paint buffer the canvas let go. Only the
+        // drawing on screen is needed to come back to, and the rest is asked for again when the
+        // picture next moves.
+        _flight.Pictures.Light(null, null);
+        _flight.Pictures.Trim();
+        _flight.Departing.ReleaseTiles();
+        _graphics.Device.Trim();
+
+        // The labels go back with it. Dropping the redraw drops the thing that would have put
+        // them back, and Loaded only redraws where the size has actually moved — so without
+        // this a map returned to at the size it was last drawn at comes back with no names on
+        // it at all, and nothing on the page would put them there.
+        _labels.Reveal();
+
+        // A map moved to a new parent can be loaded there before it is unloaded from the old one,
+        // and one still loaded keeps following what it was following.
+        if (!IsLoaded)
         {
-            // A pending redraw for a size this control is no longer showing at. Left running it
-            // would rasterise a whole volume for a page that has been navigated away from. A change of
-            // folder still flying, or a drag still held, is finished where it was going for the same reason.
-            _canvas.CancelResize();
-            _zoom.Stop();
-            SettleStep();
-            EndDrag();
+            _watching?.Dispose();
+            _watching = null;
+        }
+    }
 
-            // A redraw still landing is stopped for the same reason, and owed when the page is back.
-            _canvas.Leave();
-
-            // The page is kept alive while it is away (NavigationCacheMode), so what it holds stays
-            // held: at 4K, 33 MB for each drawing kept, as for the paint buffer the canvas let go. Only
-            // the drawing on screen is needed to come back to, and the rest is asked for again when the
-            // picture next moves.
-            _flight.Pictures.Light(null, null);
-            _flight.Pictures.Trim();
-            _flight.Departing.ReleaseTiles();
-            _graphics.Device.Trim();
-
-            // The labels go back with it. Dropping the redraw drops the thing that would have put
-            // them back, and Loaded only redraws where the size has actually moved — so without
-            // this a map returned to at the size it was last drawn at comes back with no names on
-            // it at all, and nothing on the page would put them there.
-            _labels.Reveal();
-
-            // A map moved to a new parent can be loaded there before it is unloaded from the old one,
-            // and one still loaded keeps following what it was following.
-            if (!IsLoaded)
-            {
-                _watching?.Dispose();
-                _watching = null;
-            }
-        };
-
-        // The ground is baked into the canvas, so unlike every themed control around it the map
-        // cannot restyle itself. Nothing else here fires on a theme switch — the page is kept alive
-        // by NavigationCacheMode, so a trip to Settings and back does not rebuild it either — and
-        // the map would keep the old ground until the window was resized. WindowBackdrop subscribes
-        // this same event for the same reason. High contrast turned on or off raises it too, and it can
-        // arrive before Windows' own colour event, so the system's look is read again before the redraw
-        // takes its colours from it.
-        ActualThemeChanged += (_, _) =>
-        {
-            SystemLook.Current.Refresh();
-            Redraw();
-        };
-
-        // One tab stop, inside which the arrow keys move between the shapes, as they move between the
-        // items of a list. A screen reader is given the shapes as a tree of their own (see
-        // MapAutomationPeer), with the one the keyboard is on as the focus.
-        IsTabStop = true;
-        AutomationProperties.SetName(this, "Map of what was scanned");
-
-        // Naming where the same content is readable as well, because a list is still the quicker way
-        // to read a great many names.
-        DescribeControls();
+    /// <summary>
+    /// Draw the picture again on a new ground for the new theme.
+    ///
+    /// <para>The ground is baked into the canvas, so unlike every themed control around it the map
+    /// cannot restyle itself. Nothing else here fires on a theme switch — the page is kept alive by
+    /// NavigationCacheMode, so a trip to Settings and back does not rebuild it either — and the map
+    /// would keep the old ground until the window was resized. WindowBackdrop subscribes this same
+    /// event for the same reason. High contrast turned on or off raises it too, and it can arrive
+    /// before Windows' own colour event, so the system's look is read again before the redraw takes
+    /// its colours from it.</para>
+    /// </summary>
+    private void OnThemeChanged(FrameworkElement sender, object args)
+    {
+        SystemLook.Current.Refresh();
+        Redraw();
     }
 
     /// <summary>
@@ -691,7 +767,7 @@ public sealed class ExploreMap : UserControl
         ArgumentNullException.ThrowIfNull(look);
 
         var was = _zoom.Shown;
-        var change = PictureChange.Between(Shown, new MapPicture(tree, node, view, volume), viewport, Zoomable);
+        var change = PictureChange.Between(_shown, new MapPicture(tree, node, view, volume), viewport, Zoomable);
 
         MapFrame? into = null;
 
@@ -733,7 +809,7 @@ public sealed class ExploreMap : UserControl
                     ? leaving.ScreenOf(node, was, change.Opened) ?? MapFrame.Whole
                     : null;
 
-                _flight.State = FolderFlight.Begin(step, new FolderLeft(Shown, was, leaving, _shapeColours), change.Opened);
+                _flight.State = FolderFlight.Begin(step, new FolderLeft(_shown, was, leaving, _shapeColours), change.Opened);
 
                 Swap(was);
 
@@ -754,7 +830,7 @@ public sealed class ExploreMap : UserControl
 
         if (change.Another)
         {
-            CarryFocus(tree, node, volume != VolumeSpace.None, change.SamePlace);
+            CarryFocus(change);
         }
 
         Hold(change.Asked);
@@ -1011,7 +1087,7 @@ public sealed class ExploreMap : UserControl
 
         _canvas.Rescale();
 
-        if (_tree is not { } tree || !_canvas.HasPixels || tree.SizeOf(DrawnNode) <= 0)
+        if (_shown.Tree is not { } tree || !_canvas.HasPixels || tree.SizeOf(DrawnNode) <= 0)
         {
             // Every drawing goes, and the buffer they were painted through: a map with nothing to
             // show holds no memory for it.
@@ -1144,7 +1220,7 @@ public sealed class ExploreMap : UserControl
     /// there is a drawing, which a redraw makes only of a tree, in colours.
     /// </summary>
     private ExplorePainting Painting =>
-        _tree is { } tree && _shapeColours is { } colours
+        _shown.Tree is { } tree && _shapeColours is { } colours
             ? new ExplorePainting(tree, Drawn, colours, _look, Ground())
             : throw new InvalidOperationException("A drawing on screen was drawn from a tree, in colours.");
 
@@ -1152,13 +1228,10 @@ public sealed class ExploreMap : UserControl
     /// The picture drawn: the one asked for, or the folder a change of folder is passing through on its
     /// way there. See <see cref="FolderFlight.Drawn"/>.
     /// </summary>
-    private MapPicture Drawn => _flight.State.Drawn(Shown);
+    private MapPicture Drawn => _flight.State.Drawn(_shown);
 
     /// <summary>The folder drawn. See <see cref="Drawn"/>.</summary>
     private int DrawnNode => Drawn.Node;
-
-    /// <summary>The picture the map was last handed, which a change of folder may still be on its way to.</summary>
-    private MapPicture Shown => new(_tree, _node, _view, _volume);
 
     /// <summary>
     /// Work from <paramref name="picture"/>. The marks and the hit test read every drawing in its tree
@@ -1166,8 +1239,8 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void Hold(MapPicture picture)
     {
-        (_tree, _node, _view, _volume) = picture;
-        _marking.ReadIn(_tree);
+        _shown = picture;
+        _marking.ReadIn(picture.Tree);
     }
 
     /// <summary>Work from <paramref name="drawing"/>, which is on top of the rest now.</summary>
@@ -1203,7 +1276,6 @@ public sealed class ExploreMap : UserControl
         // Over a change of folder still flying, too: the names ride the picture they name as it moves.
         _labels.Show(drawing, _canvas.Scale, LabelText);
 
-        // A screen reader's shapes are this drawing's now.
         (FrameworkElementAutomationPeer.FromElement(this) as MapAutomationPeer)?.Redrawn(_keyboard.Folder);
 
         // A new drawing is new geometry, so whatever was marked out is marked out somewhere else
@@ -1225,7 +1297,7 @@ public sealed class ExploreMap : UserControl
 
             if (waiting.Passing is { } through)
             {
-                _flight.Descent.Pass(shape, drawing.ScreenOf(_node, _zoom.Shown, through.Opened));
+                _flight.Descent.Pass(shape, drawing.ScreenOf(_shown.Node, _zoom.Shown, through.Opened));
             }
             else if (_flight.State.IsUnderWay)
             {
@@ -1791,7 +1863,7 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void Open(ExploreSurface drawing, ExploreHit hit, MapFrame? shape)
     {
-        if (MapOpen.AsksPage(hit, _node, drawing.HasVolumeBeside))
+        if (MapOpen.AsksPage(hit, _shown.Node, drawing.HasVolumeBeside))
         {
             // Counted rather than compared by node: the root opened out of its volume is the same
             // node drawn as another picture.
@@ -1834,10 +1906,10 @@ public sealed class ExploreMap : UserControl
     /// of the tree the page handed over last, which the page's facts, the selection and the keyboard's
     /// shape are numbered in. Null while there is none, or one of an older tree is still on screen.
     /// </summary>
-    private ExploreSurface? Readable => _drawing is { } drawing && ReferenceEquals(drawing.Tree, _tree) ? drawing : null;
+    private ExploreSurface? Readable => _drawing is { } drawing && ReferenceEquals(drawing.Tree, _shown.Tree) ? drawing : null;
 
     /// <summary>Whether what is picked on this picture is acted on: not on a step of a replay (<see cref="MapReading.Answers"/>).</summary>
-    private bool Answers => MapReading.Answers(_tree);
+    private bool Answers => MapReading.Answers(_shown.Tree);
 
     /// <summary>Pick nothing, as a click on empty space does.</summary>
     internal void Unpick() => Picked?.Invoke(this, null);
@@ -1972,14 +2044,15 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>
-    /// The keyboard goes to a new tree, as <see cref="ExploreKeyboard.Carry"/> says, and the folders a
-    /// screen reader expanded go with it (<see cref="MapAutomationPeer.Carry"/>).
+    /// The keyboard goes to the picture <paramref name="change"/> hands over, as
+    /// <see cref="ExploreKeyboard.Carry"/> says, and the folders a screen reader expanded go with it
+    /// (<see cref="MapAutomationPeer.Carry"/>), both through the counterparts the change read once.
     /// </summary>
-    private void CarryFocus(ISizedTree? tree, int node, bool beside, bool samePlace)
+    private void CarryFocus(PictureChange change)
     {
-        var counterpart = _keyboard.Carry(_tree, _node, tree, node, beside, samePlace);
+        _keyboard.Carry(change);
 
-        (FrameworkElementAutomationPeer.FromElement(this) as MapAutomationPeer)?.Carry(counterpart);
+        (FrameworkElementAutomationPeer.FromElement(this) as MapAutomationPeer)?.Carry(change.Counterparts);
     }
 
     /// <summary>
@@ -2147,9 +2220,10 @@ public sealed class ExploreMap : UserControl
         var through = _flight.State.Passing!;
         var passing = _zoom.Shown;
 
-        _flight.State = _flight.State.Midway(Shown, passing, _drawing, _shapeColours);
+        _flight.State = _flight.State.Midway(_shown, passing, _drawing, _shapeColours);
 
-        // The set the folder left was in takes the folder asked for.
+        // Emptied of the folder left, because the two sets change places below and the folder asked
+        // for is drawn into this one.
         _flight.Departing.Clear();
         _zoom.Reset(through.Opened);
         Swap(passing);
