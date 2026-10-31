@@ -3,6 +3,7 @@ using Deguffer.App.Shell;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Microsoft.Graphics.Canvas;
+using Microsoft.Graphics.Canvas.Geometry;
 using Microsoft.Graphics.Canvas.UI.Composition;
 using Microsoft.UI.Composition;
 using Windows.Foundation;
@@ -203,6 +204,26 @@ internal sealed class MapGraphics
         _renderer is { IsValueCreated: true, Value.Shaded: { } shaded }
             ? Device.UnlessLost(_ => Shrink(into, shaded, width, height, size))
             : null;
+
+    /// <summary>
+    /// <paramref name="shape"/>, in a canvas's own pixels, filled opaque on a clear ground into
+    /// <paramref name="area"/> of that canvas, drawn from the area's corner: the mask a lifted shape is
+    /// cut out by (see <see cref="ExploreLift"/>). <paramref name="into"/> is resized rather than made
+    /// again where there is one (G5), and the surface drawn into is returned, or null where the device
+    /// was lost on the way.
+    /// </summary>
+    public CompositionDrawingSurface? Fill(CompositionDrawingSurface? into, CanvasGeometry shape, CanvasRegion area) =>
+        Device.UnlessLost(_ =>
+        {
+            var surface = Sized(into, new SizeInt32(area.Width, area.Height));
+
+            using var session = CanvasComposition.CreateDrawingSession(surface);
+
+            session.Clear(Microsoft.UI.Colors.Transparent);
+            session.FillGeometry(shape, -area.X, -area.Y, Microsoft.UI.Colors.White);
+
+            return surface;
+        });
 
     /// <summary>
     /// Copy <paramref name="image"/> from <paramref name="from"/> into <paramref name="region"/> of

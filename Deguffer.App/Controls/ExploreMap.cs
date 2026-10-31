@@ -356,7 +356,7 @@ public sealed class ExploreMap : UserControl
         _departing = new ExploreLayers(compositor, _graphics, _camera, SystemMotion.Current, owner);
         _tileOver = (x, y) => _pictures.TileOver(x, y);
         _readingOf = ReadingOf;
-        _highlight = new ExploreHighlight(compositor, _graphics.Geometry, _camera);
+        _highlight = new ExploreHighlight(compositor, _graphics, _camera);
         _shift = new ExploreShift(compositor, _camera);
         _morph = new ExploreMorph(compositor, _graphics.Geometry, _camera);
         _labels = new ExploreLabels(_camera, _pictures.Root, SystemMotion.Current);
