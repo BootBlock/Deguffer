@@ -49,7 +49,7 @@ namespace Deguffer.App.Controls;
 /// input has to be resolved against whichever picture is on screen at that moment (§7.1). Everything
 /// that can stand apart does: the drawings kept (<see cref="ExploreLayers"/>), the camera and what
 /// moves it (<see cref="ExploreZoom"/>), the clock of a change of folder (<see cref="ExploreDescent"/>),
-/// the names, what is marked out on the picture (<see cref="ExploreMarking"/>) and the lines that mark
+/// the shapes moving from one drawing to the next (<see cref="ExploreMoves"/>), the names, what is marked out on the picture (<see cref="ExploreMarking"/>) and the lines that mark
 /// it, and in Core the arithmetic and the rule telling a click from a drag (<see cref="MapDrag"/>). Most of the length is the reasoning behind each ordering.</para>
 /// </summary>
 public sealed class ExploreMap : UserControl
@@ -156,23 +156,11 @@ public sealed class ExploreMap : UserControl
 
     private readonly ExploreDescent _descent = new(SystemMotion.Current, RenderingClock.Current);
 
-    /// <summary>The large shapes moving from one layout of the same place to the next. See <see cref="ExploreShift"/>.</summary>
-    private readonly ExploreShift _shift;
-
     /// <summary>
-    /// Whether the redraw on its way is the same place laid out again, which moves from the drawing
-    /// on screen when it arrives rather than replacing it: a scan's next snapshot, or a new spacing.
+    /// The large shapes moving from the drawing on screen to the next as it arrives, and the move the
+    /// redraw on its way owes. See <see cref="ExploreMoves"/>.
     /// </summary>
-    private bool _shiftOwed;
-
-    /// <summary>The large shapes travelling from one view to another. See <see cref="ExploreMorph"/>.</summary>
-    private readonly ExploreMorph _morph;
-
-    /// <summary>
-    /// Whether the redraw on its way is the same place in another view, which the largest shapes travel
-    /// into from the drawing on screen when it arrives.
-    /// </summary>
-    private bool _morphOwed;
+    private readonly ExploreMoves _moves;
 
     /// <summary>The pointer's look while it drags the picture. One for the life of the map (G5).</summary>
     private readonly InputCursor _dragCursor = InputSystemCursor.Create(InputSystemCursorShape.SizeAll);
@@ -321,8 +309,7 @@ public sealed class ExploreMap : UserControl
         _highlight = new ExploreHighlight(compositor, _graphics.Geometry, _camera);
         _marking = new ExploreMarking(_highlight);
         _readingOf = _marking.ReadingOf;
-        _shift = new ExploreShift(compositor, _camera);
-        _morph = new ExploreMorph(compositor, _graphics.Geometry, _camera);
+        _moves = new ExploreMoves(compositor, _graphics.Geometry, _camera, SystemMotion.Current);
         _labels = new ExploreLabels(_camera, _pictures.Root, SystemMotion.Current);
         _redraws = new CanvasRedraws(owner);
         _overview = new ExploreOverview(_camera, _zoom, SystemMotion.Current, () => _pointer);
@@ -336,8 +323,7 @@ public sealed class ExploreMap : UserControl
         _root = compositor.CreateContainerVisual();
         _root.Children.InsertAtTop(_departing.Root);
         _root.Children.InsertAtTop(_pictures.Root);
-        _root.Children.InsertAtTop(_shift.Root);
-        _root.Children.InsertAtTop(_morph.Root);
+        _root.Children.InsertAtTop(_moves.Root);
         _root.Children.InsertAtTop(_highlight.Root);
 
         // The composition tree is hosted under an element of its own, so the labels, which are XAML,
@@ -398,8 +384,8 @@ public sealed class ExploreMap : UserControl
         _descent.Moved += OnDescentMoved;
         _descent.Midway += OnDescentMidway;
         _descent.Arrived += OnDescentArrived;
-        _shift.Arrived += OnMoveArrived;
-        _morph.Arrived += OnMoveArrived;
+        _moves.Started += OnMoveStarted;
+        _moves.Landed += OnMoveLanded;
 
         // Both sets, as the two change places with each change of folder that flies (see Swap).
         _pictures.Faded += OnFaded;
@@ -1091,11 +1077,10 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void Shift()
     {
-        Redraw(SystemMotion.Current.For(MotionToken.Shift));
+        var motion = SystemMotion.Current.For(MotionToken.Shift);
 
-        // Owed only to a drawing on its way. A map that cannot be seen, or has nothing to draw, draws
-        // nothing, and a drawing kept from before has already been shown.
-        _shiftOwed = _redraws.Pending is not null;
+        Redraw(motion);
+        _moves.Owe(MapMove.Shift, motion, _redraws.Pending is not null);
     }
 
     /// <summary>
@@ -1108,11 +1093,7 @@ public sealed class ExploreMap : UserControl
         var motion = SystemMotion.Current.For(MotionToken.Morph);
 
         Redraw(motion);
-
-        // Owed only to a drawing on its way, as a shift is, and only where the shapes travel. A swap at
-        // once lands the new view in sight a region at a time, and what has landed answers the pointer
-        // as it would for any other picture (§7.1).
-        _morphOwed = motion.Travels && _redraws.Pending is not null;
+        _moves.Owe(MapMove.Morph, motion, _redraws.Pending is not null);
     }
 
     private void Redraw() => Redraw(Motion.Instant);
@@ -1125,8 +1106,7 @@ public sealed class ExploreMap : UserControl
         // from the drawing on screen that was owed.
         _settled.Stop();
         _redrawOwed = false;
-        _shiftOwed = false;
-        _morphOwed = false;
+        _moves.Forgo();
 
         // Nothing can see it, and the page asks again as it brings the map back. ExplorePage
         // collapses this for the List view and calls Show() in the same breath, so without this a
@@ -1429,17 +1409,11 @@ public sealed class ExploreMap : UserControl
             FinishStep();
         }
 
-        if (_shiftOwed)
-        {
-            _shiftOwed = false;
-            MoveFrom(earlier, drawing);
-            Follow(earlier, drawing);
-        }
+        var placed = _drawn.Canvas(drawing.Width, drawing.Height, ActualWidth, ActualHeight, _zoom.Origin);
 
-        if (_morphOwed)
+        if (_moves.Arrive(earlier, drawing, _pictures, placed) == MapMove.Shift)
         {
-            _morphOwed = false;
-            MorphFrom(earlier, drawing);
+            Follow(earlier, drawing);
         }
 
         // The whole picture under a zoomed drawing only shows once the picture moves, so it waits
@@ -1600,7 +1574,7 @@ public sealed class ExploreMap : UserControl
             ? null
             : MapHitTest.Locate(
                 _zoom.Shown, point.X / ActualWidth, point.Y / ActualHeight, _drawing,
-                _shiftOwed || _morphOwed ? null : _arriving,
+                _moves.IsOwed ? null : _arriving,
                 _readingOf,
                 _tileOver);
 
@@ -1608,7 +1582,7 @@ public sealed class ExploreMap : UserControl
     /// Whether the screen is between two pictures: a change of folder flying or waiting for the
     /// picture it is to fly out to, shapes moving to a new layout, or a new drawing fading in.
     /// </summary>
-    private bool Stepping => _descent.IsMoving || _awaitingOuter || _shift.IsMoving || _morph.IsMoving || _pictures.IsFading;
+    private bool Stepping => _descent.IsMoving || _awaitingOuter || _moves.IsMoving || _pictures.IsFading;
 
     /// <summary>
     /// Zoom at the pointer, or with Shift held, or on a wheel that tilts, pan across, where the page
@@ -1755,7 +1729,7 @@ public sealed class ExploreMap : UserControl
     {
         var point = e.GetCurrentPoint(this);
 
-        _press.Press(point.PointerDeviceType == PointerDeviceType.Mouse, point.Properties.IsLeftButtonPressed, _morph.IsMoving);
+        _press.Press(point.PointerDeviceType == PointerDeviceType.Mouse, point.Properties.IsLeftButtonPressed, _moves.IsMorphing);
 
         // The pointer has the map now: the shape the keyboard was on is not marked until a key moves again.
         if (_keyboard)
@@ -2630,8 +2604,7 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void SettleStep()
     {
-        _shift.Finish();
-        _morph.Finish();
+        _moves.Finish();
         _pictures.LandFades();
 
         if (_descent.IsMoving)
@@ -2679,72 +2652,6 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>
-    /// Move from <paramref name="earlier"/>, the drawing that was on screen, to <paramref name="later"/>,
-    /// the same place laid out again, which has just arrived (<see cref="ShapeChanges"/>). Only between
-    /// two drawings of one canvas at one zoom, whose shapes are where the same rectangles of the screen
-    /// say. The pointer is over nothing while the shapes travel, as it is during a change of folder:
-    /// a shape is not where it is drawn until it lands (§7.1).
-    /// </summary>
-    private void MoveFrom(ExploreSurface? earlier, ExploreSurface later)
-    {
-        var motion = SystemMotion.Current.For(MotionToken.Shift);
-
-        if (!motion.Travels
-            || earlier is null
-            || earlier.Width != later.Width
-            || earlier.Height != later.Height
-            || earlier.Viewport != later.Viewport
-            || _pictures.SurfaceOf(earlier) is not { } before
-            || _pictures.SurfaceOf(later) is not { } after)
-        {
-            return;
-        }
-
-        var travels = ShapeChanges.Between(earlier, later)
-            .Select(change => ShapeTravel.Of(change, later.Width, later.Height))
-            .OfType<ShapeTravel>()
-            .ToList();
-
-        if (travels.Count == 0)
-        {
-            return;
-        }
-
-        _shift.Start(travels, before, after, _drawn.Canvas(later.Width, later.Height, ActualWidth, ActualHeight, _zoom.Origin), motion);
-        _labels.Hide();
-        _highlight.Hide();
-        ReportWhatThePointerIsOver();
-    }
-
-    /// <summary>
-    /// Carry the largest shapes from <paramref name="earlier"/>, the drawing that was on screen, into
-    /// <paramref name="later"/>, the same place in another view, which has just arrived
-    /// (<see cref="ViewMorph"/>). The pointer is over nothing while they travel, and a press lands
-    /// them and picks nothing: no shape is where either view puts it (§7.1).
-    /// </summary>
-    private void MorphFrom(ExploreSurface? earlier, ExploreSurface later)
-    {
-        var motion = SystemMotion.Current.For(MotionToken.Morph);
-
-        if (!motion.Travels || earlier is null)
-        {
-            return;
-        }
-
-        var morphs = ViewMorph.Between(earlier, later);
-
-        if (morphs.Count == 0)
-        {
-            return;
-        }
-
-        _morph.Start(morphs, later.Width, later.Height, _drawn.Canvas(later.Width, later.Height, ActualWidth, ActualHeight, _zoom.Origin), motion);
-        _labels.Hide();
-        _highlight.Hide();
-        ReportWhatThePointerIsOver();
-    }
-
-    /// <summary>
     /// Keep the reader on what they zoomed into, now that <paramref name="later"/> has laid the same
     /// place out again where <paramref name="earlier"/> was on screen (<see cref="MapFollow"/>): the
     /// camera moves with the shape at the middle of the screen over the same time as the shapes travel,
@@ -2753,11 +2660,7 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void Follow(ExploreSurface? earlier, ExploreSurface later)
     {
-        if (!_zoom.Movable
-            || earlier is null
-            || later.Viewport is not { } drawn
-            || _zoom.Shown != drawn
-            || _zoom.Target != drawn)
+        if (MapFollow.From(earlier, later, _zoom.Shown, _zoom.Target, _zoom.Movable) is not { } onward)
         {
             return;
         }
@@ -2765,7 +2668,7 @@ public sealed class ExploreMap : UserControl
         var motion = SystemMotion.Current.For(MotionToken.Shift);
 
         // With animation effects off nothing travels, and the camera goes straight to where the shape is.
-        _zoom.MoveTo(MapFollow.Onward(earlier, later), motion.Travels ? motion : Motion.Instant);
+        _zoom.MoveTo(onward, motion.Travels ? motion : Motion.Instant);
     }
 
     /// <summary>A new drawing has finished fading in: the pointer is over what it shows.</summary>
@@ -2778,10 +2681,21 @@ public sealed class ExploreMap : UserControl
     private void OnTileAnswersChanged(object? sender, EventArgs e) => ReportWhatThePointerIsOver();
 
     /// <summary>
+    /// Shapes have started to travel, to a new layout or into a new view: the names and the outlines,
+    /// which do not move with them, go, and the pointer is over nothing until they land (§7.1).
+    /// </summary>
+    private void OnMoveStarted(object? sender, EventArgs e)
+    {
+        _labels.Hide();
+        _highlight.Hide();
+        ReportWhatThePointerIsOver();
+    }
+
+    /// <summary>
     /// The shapes have landed, from a new layout or into a new view: the names, the outlines and the
     /// readout are the new drawing's again.
     /// </summary>
-    private void OnMoveArrived(object? sender, EventArgs e)
+    private void OnMoveLanded(object? sender, EventArgs e)
     {
         _labels.Reveal();
         _highlight.Reveal();
