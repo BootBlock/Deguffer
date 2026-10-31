@@ -372,12 +372,12 @@ public sealed class ExploreViewModelTests : IDisposable
     });
 
     /// <summary>
-    /// A finished scan is said of what it covered as it started, a drive here, though a folder was
-    /// chosen while it ran, and of the volume read as it finished. The route's note and the elevation
-    /// offer are the scan's too.
+    /// A finished scan covers what it started on, a drive here, though a folder was chosen while it
+    /// ran. It takes its progress sentence off the status line and puts nothing there, so the line
+    /// takes no room under the map. The route's note and the elevation offer are the scan's.
     /// </summary>
     [Fact]
-    public void AFinishedScanIsSaidOfWhatItCoveredAndTheVolumeItFound() => UiThread.Run(async () =>
+    public void AFinishedScanClearsTheStatusLineAndKeepsItsRouteNote() => UiThread.Run(async () =>
     {
         _explore.Volumes.With(@"C:\", totalBytes: 12_000, freeBytes: 6_000);
         var page = _explore.Page();
@@ -394,9 +394,8 @@ public sealed class ExploreViewModelTests : IDisposable
         await running;
 
         Assert.Equal(@"C:\", _explore.Scanner.Current.Root);
-        Assert.Equal(ExploreStatusText.Finished(scan, page.Volume, scoped: false), page.Status.Sentence);
-        Assert.Contains("Some of this drive", page.Status.Sentence);
-        Assert.Contains(ExploreUnaccountedNote.Overcount(page.Volume, 7_000, ScanStrategy.ParallelEnumeration)!, page.Status.Sentence);
+        Assert.Equal(StatusLine.Empty, page.Status.Line);
+        Assert.False(page.Status.HasSentence);
         Assert.True(page.Notes.HasRouteNote);
         Assert.True(page.Elevation.CanElevate);
     });

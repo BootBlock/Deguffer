@@ -21,10 +21,9 @@ public static class ExploreNodeText
     /// A node's size, marked where it is a lower bound.
     ///
     /// <para>A directory the walk was refused totals only what it could see, and the plain figure
-    /// reads as a measurement. The page says so once in its status line, which is true and is not
-    /// enough: it is the row for <c>System Volume Information</c> showing "0 B" that a reader acts
-    /// on. A row says the same in words for a screen reader, because a symbol read aloud is not a
-    /// sentence.</para>
+    /// reads as a measurement. This mark is where the page says so (§7.1), on the row a reader acts
+    /// on, such as the one for <c>System Volume Information</c> showing "0 B". A row says the same
+    /// in words for a screen reader, because a symbol read aloud is not a sentence.</para>
     /// </summary>
     public static string Size(ExploreTree tree, int node) =>
         tree.HasUnknownSizeBelow(node)

@@ -555,7 +555,9 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
 
         await RecordAsync(scan, target, scoped);
 
-        Status.Say(StatusLine.Said(ExploreStatusText.Finished(scan, volume, scoped)));
+        // The progress sentence goes, and nothing replaces it: the map, its readout and its rows
+        // state the figures, and the lower bounds are marked where they are.
+        Status.Say(StatusLine.Empty);
     }
 
     /// <summary>

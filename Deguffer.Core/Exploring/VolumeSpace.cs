@@ -130,13 +130,11 @@ public readonly record struct VolumeSpace(
     /// counted nothing inside <c>System Volume Information</c>, where it is kept, so bytes the scan
     /// counted there are never drawn a second time.</para>
     ///
-    /// <para><b>A scan that counted more than is in use leaves nothing, and says by how much.</b>
-    /// Both routes count a hard-linked file once for each of its names (see
-    /// <see cref="Scanning.Mft.MftLink"/>), and on a system volume much of Windows' component store
-    /// is such a file. A walk also counts a CompactOS file at its length, and files written while
-    /// the scan ran. The block is clamped at zero, and
-    /// <see cref="VolumeParts.Overcounted"/> keeps what the clamp hid, so the page can say so rather
-    /// than draw a picture that only appears to add up.</para>
+    /// <para><b>A scan that counted more than is in use leaves nothing.</b> Both routes count a
+    /// hard-linked file once for each of its names (see <see cref="Scanning.Mft.MftLink"/>), and on
+    /// a system volume much of Windows' component store is such a file. A walk also counts a
+    /// CompactOS file at its length, and files written while the scan ran. The block is clamped at
+    /// zero rather than drawn at a negative size.</para>
     /// </summary>
     public VolumeParts Parts(long scannedBytes)
     {
@@ -146,7 +144,7 @@ public readonly record struct VolumeSpace(
         var reserved = Take(Hidden.Reserved is { Statement: Statement.Stated, Bytes: var bytes } ? bytes : 0);
         var shadowCopies = Take(ShadowCopiesBeside);
 
-        return new VolumeParts(shadowCopies, reserved, left, FreeBytes, Math.Max(0, scannedBytes - inUse));
+        return new VolumeParts(shadowCopies, reserved, left, FreeBytes);
 
         long Take(long part)
         {
