@@ -49,9 +49,9 @@ namespace Deguffer.App.Controls;
 /// <para>Over 500 lines because it is where the pointer, the drawings and the page meet, and each
 /// input has to be resolved against whichever picture is on screen at that moment (§7.1). Everything
 /// that can stand apart does: the drawings kept (<see cref="ExploreLayers"/>), the camera and what
-/// moves it (<see cref="ExploreZoom"/>), the clock of a change of folder (<see cref="ExploreDescent"/>), the names and
-/// the outlines, and in Core the arithmetic and the rule telling a click from a drag
-/// (<see cref="MapDrag"/>). Most of the length is the reasoning behind each ordering.</para>
+/// moves it (<see cref="ExploreZoom"/>), the clock of a change of folder (<see cref="ExploreDescent"/>),
+/// the names, what is marked out on the picture (<see cref="ExploreMarking"/>) and the lines that mark
+/// it, and in Core the arithmetic and the rule telling a click from a drag (<see cref="MapDrag"/>). Most of the length is the reasoning behind each ordering.</para>
 /// </summary>
 public sealed class ExploreMap : UserControl
 {
@@ -206,23 +206,11 @@ public sealed class ExploreMap : UserControl
 
     private readonly Grid _layers;
 
-    /// <summary>What the user picked, as a set because it is asked of every shape in the drawing.</summary>
-    private readonly HashSet<int> _picked = [];
-
-    /// <summary>What a removal under way is acting on, and the tree it is in. See <see cref="MarkRemoving"/>.</summary>
-    private readonly HashSet<int> _marked = [];
-
-    private ISizedTree? _markedTree;
+    /// <summary>The picks, the hatch, the card's light and the outlines round the pointer's and the keyboard's shapes.</summary>
+    private readonly ExploreMarking _marking;
 
     /// <summary>What the map follows while it is loaded, undone when it is unloaded.</summary>
     private Subscriptions? _watching;
-
-    /// <summary>
-    /// The one node under the pointer, in the shape <see cref="ExploreSurface.Outlines"/> wants.
-    /// Kept and rewritten rather than built per move: a pointer crosses a treemap's shapes many
-    /// times a second, and each crossing would otherwise be an allocation (G5).
-    /// </summary>
-    private readonly HashSet<int> _under = [];
 
     private ISizedTree? _tree;
     private int _node;
@@ -297,16 +285,10 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>
     /// How a drawing is read in the tree the page handed over last, for <see cref="MapHitTest"/>. One
-    /// for the life of the map, because the pointer asks at the display's rate (G5). See
-    /// <see cref="ReadingOf"/>.
+    /// for the life of the map, because the pointer asks at the display's rate (G5). The marking's own
+    /// (<see cref="ExploreMarking.ReadingOf"/>), so an outline marks the shape a click there picks.
     /// </summary>
     private readonly Func<ISizedTree, MapReading?> _readingOf;
-
-    /// <summary>The last reading found, kept while it is of the same two trees. See <see cref="ReadingOf"/>.</summary>
-    private MapReading? _reading;
-
-    /// <summary>What a card beside the map lights on it, or null. See <see cref="Light"/>.</summary>
-    private MapLight? _light;
 
     /// <summary>Which shape the keyboard is on. See <see cref="ExploreFocus"/>.</summary>
     private readonly ExploreFocus _focus = new();
@@ -337,8 +319,9 @@ public sealed class ExploreMap : UserControl
         _pictures = new ExploreLayers(compositor, _graphics, _camera, SystemMotion.Current, owner);
         _departing = new ExploreLayers(compositor, _graphics, _camera, SystemMotion.Current, owner);
         _tileOver = (x, y) => _pictures.TileOver(x, y);
-        _readingOf = ReadingOf;
         _highlight = new ExploreHighlight(compositor, _graphics.Geometry, _camera);
+        _marking = new ExploreMarking(_highlight);
+        _readingOf = _marking.ReadingOf;
         _shift = new ExploreShift(compositor, _camera);
         _morph = new ExploreMorph(compositor, _graphics.Geometry, _camera);
         _labels = new ExploreLabels(_camera, _pictures.Root, SystemMotion.Current);
@@ -901,6 +884,7 @@ public sealed class ExploreMap : UserControl
         }
 
         (_tree, _node, _view, _volume) = change.Asked;
+        _marking.ReadIn(_tree);
         _colours = colours;
         _labelText = labelText;
         _look = look;
@@ -945,7 +929,7 @@ public sealed class ExploreMap : UserControl
         // of folder has none on screen, and the pointer is over nothing until it lands.
         if (change.Another)
         {
-            ShowPicked();
+            Remark();
             ReportWhatThePointerIsOver();
         }
 
@@ -971,15 +955,10 @@ public sealed class ExploreMap : UserControl
     {
         ArgumentNullException.ThrowIfNull(nodes);
 
-        if (_picked.SetEquals(nodes))
+        if (!_marking.Select(nodes, _drawing))
         {
             return;
         }
-
-        _picked.Clear();
-        _picked.UnionWith(nodes);
-
-        ShowPicked();
 
         // What the pointer is over may have just become what is picked, in which case it stops
         // being outlined separately. See ShowHovered.
@@ -997,11 +976,7 @@ public sealed class ExploreMap : UserControl
     {
         ArgumentNullException.ThrowIfNull(nodes);
 
-        _markedTree = tree;
-        _marked.Clear();
-        _marked.UnionWith(nodes);
-
-        ShowMarked();
+        _marking.MarkRemoving(tree, nodes, _drawing, _scale);
     }
 
     /// <summary>
@@ -1012,12 +987,7 @@ public sealed class ExploreMap : UserControl
     /// lit again on every new drawing, so it stays on the shapes it names through a zoom, a resize or a
     /// snapshot, as long as the page keeps it.</para>
     /// </summary>
-    public void Light(MapLight? light)
-    {
-        _light = light;
-
-        ShowLit();
-    }
+    public void Light(MapLight? light) => _marking.Light(light, _drawing);
 
     /// <summary>
     /// Wait for the drag to stop before redrawing, on the terms
@@ -1418,9 +1388,7 @@ public sealed class ExploreMap : UserControl
         // now, and so is whatever the pointer is over.
         Fit();
         Place();
-        ShowPicked();
-        ShowLit();
-        ShowMarked();
+        Remark();
         ReportWhatThePointerIsOver();
 
         // A step out flies now that there is a picture to pull back into, from the shape the folder
@@ -1567,135 +1535,22 @@ public sealed class ExploreMap : UserControl
         ? MapShapeText.Label(block.Name, label.Bytes)
         : _labelText(label.Node);
 
-    /// <summary>Draw the outline round whatever is picked and this drawing actually drew.</summary>
-    private void ShowPicked()
-    {
-        if (Outlining is not { } outlining)
-        {
-            _highlight.ShowPicked([], 0);
-            return;
-        }
-
-        var drawing = outlining.Drawing;
-
-        // Twice the whole picture in the drawing's canvas pixels, which is a canvas as many times
-        // over as the drawing is zoomed: the picture is within that of the canvas's corner whichever
-        // part of it the canvas shows, and so is the margin the outlines are drawn into round it.
-        var far = 2 * Math.Max(drawing.Width, drawing.Height) * (drawing.Viewport?.Zoom ?? 1);
-
-        _highlight.ShowPicked(drawing.Outlines(outlining.Reading.InDrawing(_picked)), (float)far);
-    }
+    /// <summary>Mark everything the map marks out again, on the drawing it works from now. See <see cref="ExploreMarking.Remark"/>.</summary>
+    private void Remark() => _marking.Remark(_drawing, _scale);
 
     /// <summary>
-    /// Light what a card beside the map is pointing at, in the drawing the outlines are drawn in, and
-    /// nothing while that drawing is of another tree or a change of folder is still on its way.
+    /// Outline what the pointer is over, and the shape the keyboard is on, in the drawing the map works
+    /// from. See <see cref="ExploreMarking.ShowHovered"/>.
     /// </summary>
-    private void ShowLit() =>
-        _highlight.ShowLit(_light is { } light && Outlining is { } outlining ? light.On(outlining.Drawing) : null);
-    /// <summary>
-    /// The drawing the outlines are drawn in, which is the one the map works from, with how it is read
-    /// in the tree the page handed over last. What is picked is named in that tree, and the same
-    /// numbers in an older one are other shapes, so a drawing of an older tree of the same place,
-    /// still on screen while the new one lands, marks out each node where it draws the node's
-    /// counterpart (<see cref="MapReading"/>). A drawing of anything else marks nothing out.
-    /// </summary>
-    private (ExploreSurface Drawing, MapReading Reading)? Outlining =>
-        _drawing is { } drawing && ReadingOf(drawing.Tree) is { } reading ? (drawing, reading) : null;
+    private void ShowHovered() =>
+        _marking.ShowHovered(_drawing, _hovered, _hoveredTile, KeyboardShape, _drawing is { } drawing ? _pictures.SurfaceOf(drawing) : null);
 
     /// <summary>
-    /// How a drawing of <paramref name="drawn"/> is read in the tree the page handed over last, or null
-    /// where it cannot be. Found once for each pair of trees, because finding nodes again builds an
-    /// index of each folder it looks in.
+    /// The shape the keyboard is on, while the keyboard has the map, in a drawing of the tree the page
+    /// handed over last, which is the one the keyboard's nodes are numbers in; and null otherwise.
     /// </summary>
-    private MapReading? ReadingOf(ISizedTree drawn)
-    {
-        if (_reading is not { } reading || !ReferenceEquals(reading.Drawn, drawn) || !ReferenceEquals(reading.Current, _tree))
-        {
-            _reading = MapReading.Of(drawn, _tree);
-        }
-
-        return _reading;
-    }
-
-    /// <summary>
-    /// Draw the accent outline round whatever the pointer is over.
-    ///
-    /// <para>A shape already picked gets nothing, because it would carry two outlines, leaving the
-    /// weaker claim on top of the stronger one. Nor does a block that stands for something other than
-    /// a node, which cannot be picked (§7.1).</para>
-    ///
-    /// <para>The shape the keyboard is on is outlined the same way, while the keyboard has the map,
-    /// blocks too: a reader moving with the arrow keys has to see where they are, and a block is where
-    /// they can be.</para>
-    /// </summary>
-    private void ShowHovered()
-    {
-        _under.Clear();
-
-        if (_hovered is { IsNode: true } hit
-            && !_picked.Contains(hit.Node))
-        {
-            _under.Add(hit.Node);
-        }
-
-        if (Outlining is not { } outlining)
-        {
-            _highlight.ShowHovered([], null, Vector2.Zero);
-            return;
-        }
-
-        var drawing = outlining.Drawing;
-        var focused = FocusOutlines(drawing);
-
-        // Found on a tile, the shape may be one the drawing does not draw, so the tile outlines it, in
-        // the drawing's canvas. Nothing is lifted: the drawing's surface holds coarser pixels there.
-        if (_hoveredTile is { } tile && drawing.Viewport is { } drawn)
-        {
-            _highlight.ShowHovered(
-                [
-                    .. _under.Count > 0 && ReadingOf(tile.Picture.Tree) is { } inTile
-                        ? tile.Outlines(inTile.InDrawing(_under), drawn, drawing.Width, drawing.Height)
-                        : [],
-                    .. focused,
-                ],
-                null,
-                new Vector2(drawing.Width, drawing.Height));
-            return;
-        }
-
-        _highlight.ShowHovered(
-            [.. _under.Count > 0 ? drawing.Outlines(outlining.Reading.InDrawing(_under)) : [], .. focused],
-            _pictures.SurfaceOf(drawing),
-            new Vector2(drawing.Width, drawing.Height));
-    }
-
-    /// <summary>
-    /// The outline of the shape the keyboard is on, while the keyboard has the map and the shape is
-    /// neither picked nor under the pointer, which mark it already; and none otherwise. Only in a drawing
-    /// of the tree the page handed over last, which is the one the keyboard's nodes are numbers in.
-    /// </summary>
-    private IReadOnlyList<ExploreOutline> FocusOutlines(ExploreSurface drawing)
-    {
-        if (!_keyboard || !ReferenceEquals(drawing, Readable) || _focus.Find(drawing) is not { } found)
-        {
-            return [];
-        }
-
-        var shape = found.Shapes[found.Index];
-
-        return _picked.Contains(shape.Node) || _under.Contains(shape.Node) ? [] : drawing.OutlineOf(shape);
-    }
-
-    /// <summary>
-    /// Hatch what a removal under way is acting on, in the drawing on screen while it is of the tree
-    /// those nodes are numbers in: in any other tree the same numbers are other shapes (§7.1).
-    /// </summary>
-    private void ShowMarked() =>
-        _highlight.ShowMarked(
-            _marked.Count > 0 && _drawing is { } drawing && ReferenceEquals(drawing.Tree, _markedTree)
-                ? drawing.Outlines(_marked)
-                : [],
-            _scale);
+    private MapShape? KeyboardShape =>
+        _keyboard && Readable is { } drawing && _focus.Find(drawing) is { } found ? found.Shapes[found.Index] : null;
 
     /// <summary>
     /// What is under <paramref name="point"/>, in the control's own coordinates.
@@ -2388,10 +2243,10 @@ public sealed class ExploreMap : UserControl
 
     internal bool HasFocusOn(int? folder, int node) => FocusedShape() == (folder, node);
 
-    internal bool IsPicked(int node) => _picked.Contains(node);
+    internal bool IsPicked(int node) => _marking.Picked.Contains(node);
 
     /// <summary>What is picked, each with the folder whose shapes hold it.</summary>
-    internal IEnumerable<(int? Folder, int Node)> PickedShapes() => _picked.Select(node => (FolderOf(node), node));
+    internal IEnumerable<(int? Folder, int Node)> PickedShapes() => _marking.Picked.Select(node => (FolderOf(node), node));
 
     /// <summary>
     /// Put the keyboard on <paramref name="shape"/> of <paramref name="drawing"/>, as a screen reader
@@ -2487,7 +2342,7 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>The one node picked, which the keyboard starts on where it is at the top of the picture.</summary>
-    private int? PickedAlone => _picked.Count == 1 ? _picked.First() : null;
+    private int? PickedAlone => _marking.Picked.Count == 1 ? _marking.Picked.First() : null;
 
     /// <summary>Where <paramref name="drawing"/> lies on a screen showing <paramref name="shown"/>.</summary>
     private static MapPlacement PlacementOn(MapViewport shown, ExploreSurface drawing) =>
@@ -2984,9 +2839,7 @@ public sealed class ExploreMap : UserControl
         // Marked out again for the drawing worked from now, before they show: one settled before its
         // picture arrived has none, and the hatch and outlines hidden with the picture left belong to
         // its shapes, which in this picture are other shapes or none (§7.1).
-        ShowPicked();
-        ShowLit();
-        ShowMarked();
+        Remark();
 
         _labels.Reveal();
         _highlight.Reveal();
