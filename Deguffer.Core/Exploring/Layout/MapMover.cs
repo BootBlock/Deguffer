@@ -1,9 +1,9 @@
-namespace Deguffer.App.Controls;
+namespace Deguffer.Core.Exploring.Layout;
 
-/// <summary>What is moving a map's camera (see <see cref="CameraMotion"/>).</summary>
-internal enum CameraMover
+/// <summary>What is moving a map's camera (see <see cref="MapMotion"/>).</summary>
+public enum MapMover
 {
-    /// <summary>Nothing: the camera is at rest where the screen shows.</summary>
+    /// <summary>Nothing that asks the tracker for more: the camera is where the screen shows, or springing back to it from a drag.</summary>
     Nothing,
 
     /// <summary>A jump, which rests once nothing has moved the camera again for a moment.</summary>

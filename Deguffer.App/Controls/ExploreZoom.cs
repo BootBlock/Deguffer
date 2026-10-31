@@ -27,7 +27,7 @@ namespace Deguffer.App.Controls;
 /// how far the zoom goes (<see cref="MapCeiling"/>) and what follows a move of the origin
 /// (<see cref="MapOriginMove"/>). The requests are put to the tracker by <see cref="TrackerMoves"/>, and
 /// the origin is moved by <see cref="ExploreOrigin"/>. What is left here is what the camera is doing
-/// (<see cref="CameraMotion"/>) and what the screen shows as the tracker answers (G1).</para>
+/// (<see cref="MapMotion"/>) and what the screen shows as the tracker answers (G1).</para>
 ///
 /// <para>A reader who has turned animation effects off gets no inertia, no spring at an edge, and a
 /// jump in place of every glide (<see cref="MotionToken.Camera"/>).</para>
@@ -62,7 +62,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     private readonly ExploreOrigin _origin;
 
     /// <summary>What is moving the camera. Set through <see cref="Become"/>, which runs the jump's settle timer.</summary>
-    private CameraMotion _moving;
+    private MapMotion _moving;
 
     /// <summary>The map's size, in device-independent pixels, which is what the tracker's pixels are.</summary>
     private (double Width, double Height) _size;
@@ -174,7 +174,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
 
         var springing = _camera.Unstretch();
 
-        if (_moving.By != CameraMover.Tracker && !springing)
+        if (_moving.By != MapMover.Tracker && !springing)
         {
             return;
         }
@@ -197,6 +197,13 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         if (_size == (width, height))
         {
             return;
+        }
+
+        // A drag measures the screen it started on, so it ends here, and the next move of the mouse
+        // starts a new one at the new size.
+        if (_moving.Drag is not null)
+        {
+            Become(MapMotion.Still);
         }
 
         _size = (width, height);
@@ -263,7 +270,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     /// </summary>
     public void Halt()
     {
-        if (_moving.By == CameraMover.Tracker)
+        if (_moving.By == MapMover.Tracker)
         {
             _requests.Halted(TrackerMoves.Halt(_tracker));
         }
@@ -299,7 +306,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         if (_moving.Drag is not { } drag)
         {
             drag = new MapStretch(MapTracking.Of(Shown, _size.Width, _size.Height, Origin), _size.Width, _size.Height, _elastic);
-            Become(CameraMotion.Dragged(drag));
+            Become(MapMotion.Dragged(drag));
         }
 
         _fling.Track(handX, handY, at);
@@ -325,24 +332,26 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
 
         var held = Shown.Held(Ceiling);
 
+        // The hand let go, so the drag is over without being cut short: whatever stretch it gave the
+        // camera springs back below rather than being taken away (see MapMotion.CutsShort).
+        _moving = MapMotion.Still;
+
         switch (MapFling.LetGo(held != Shown, _elastic, speed))
         {
             case MapLetGo.SpringBack:
                 // The map takes it as where it is going from now, which is where a press during the
                 // spring lands it.
-                Become(CameraMotion.Still);
                 Shown = held;
                 Target = held;
                 _camera.SpringBack(_motion.For(MotionToken.Camera), Rest);
                 break;
 
             case MapLetGo.Rest:
-                Become(CameraMotion.Still);
                 Rest();
                 break;
 
             case MapLetGo.Fling:
-                Become(CameraMotion.Tracked);
+                Become(MapMotion.Tracked);
                 _requests.Asked(TrackerMoves.Fling(_tracker, speed), null);
                 break;
         }
@@ -358,7 +367,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     /// </summary>
     public void Reset(MapViewport viewport)
     {
-        Become(CameraMotion.Still);
+        Become(MapMotion.Still);
         Cap(MapCeiling.Afresh(viewport));
 
         var moved = viewport != Target;
@@ -379,9 +388,9 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     /// </summary>
     public void Stop()
     {
-        var tracked = _moving.By == CameraMover.Tracker;
+        var tracked = _moving.By == MapMover.Tracker;
 
-        Become(CameraMotion.Still);
+        Become(MapMotion.Still);
 
         if (tracked)
         {
@@ -417,12 +426,12 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
 
         _requests.Settled();
 
-        if (_moving.By != CameraMover.Tracker)
+        if (_moving.By != MapMover.Tracker)
         {
             return;
         }
 
-        Become(CameraMotion.Still);
+        Become(MapMotion.Still);
         Shown = _requests.Rest(_reported, Ceiling);
         Target = Shown;
 
@@ -442,7 +451,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
             return;
         }
 
-        Become(CameraMotion.Tracked);
+        Become(MapMotion.Tracked);
 
         var position = args.ModifiedRestingPosition ?? args.NaturalRestingPosition;
         var scale = args.ModifiedRestingScale ?? args.NaturalRestingScale;
@@ -499,14 +508,20 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
 
     /// <summary>
     /// Change what is moving the camera to <paramref name="motion"/>, which ends whatever moved it
-    /// before. A jump rests once <see cref="JumpSettleTime"/> passes with nothing else moving it.
+    /// before. A drag cut short takes its stretch with it (<see cref="MapMotion.CutsShort"/>), and a
+    /// jump rests once <see cref="JumpSettleTime"/> passes with nothing else moving it.
     /// </summary>
-    private void Become(CameraMotion motion)
+    private void Become(MapMotion motion)
     {
+        if (_moving.CutsShort(motion))
+        {
+            _camera.Unstretch();
+        }
+
         _settle.Stop();
         _moving = motion;
 
-        if (motion.By == CameraMover.Jump)
+        if (motion.Settles)
         {
             _settle.Start();
         }
@@ -515,7 +530,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     /// <summary>A jump rested for <see cref="JumpSettleTime"/>.</summary>
     private void Settled()
     {
-        _moving = CameraMotion.Still;
+        _moving = MapMotion.Still;
         Rest();
     }
 
@@ -567,11 +582,11 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         {
             Jump(target);
             Moved?.Invoke(this, EventArgs.Empty);
-            Become(CameraMotion.Jumped);
+            Become(MapMotion.Jumped);
             return;
         }
 
-        Become(CameraMotion.Tracked);
+        Become(MapMotion.Tracked);
         _requests.Asked(TrackerMoves.Glide(_tracker, Between(Shown, target), motion), target);
     }
 
@@ -671,11 +686,11 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
 
         if (carried == MapOriginCarried.Coasts)
         {
-            Become(CameraMotion.Tracked);
+            Become(MapMotion.Tracked);
             return;
         }
 
-        Become(CameraMotion.Still);
+        Become(MapMotion.Still);
         Rest();
     }
 
@@ -719,7 +734,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
 
         // Asked again as the reader's setting is now: a hand can have started the move with animation
         // effects off, and then the camera jumps.
-        if (_moving.By == CameraMover.Tracker)
+        if (_moving.By == MapMover.Tracker)
         {
             Go(destination, _motion.For(MotionToken.Camera));
             return;
@@ -732,7 +747,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     /// <summary>A hand took the camera on the compositor: every request before it is over.</summary>
     private void TakenByHand()
     {
-        Become(CameraMotion.Tracked);
+        Become(MapMotion.Tracked);
         _requests.Taken();
 
         Started?.Invoke(this, EventArgs.Empty);

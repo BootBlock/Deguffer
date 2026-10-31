@@ -38,9 +38,9 @@ public sealed class MapTrackerMoveTests
         Assert.False(move.Rescales, "a pan asked for a scale as well");
     }
 
-    /// <summary>A zoom that barely changes has its still point too far off the screen, so it changes the scale and then the position.</summary>
+    /// <summary>A zoom that barely changes has its still point too far off the screen, so a jump changes the scale as well as the position.</summary>
     [Fact]
-    public void AZoomThatBarelyChangesRescalesAndThenPans()
+    public void AZoomThatBarelyChangesHasNoStillPointAndRescales()
     {
         var move = MapTrackerMove.Between(MapViewport.Seen(4, 0.1, 0.1), MapViewport.Seen(4 * (1 + 1e-6), 0.3, 0.2), Width, Height, Origin);
 
