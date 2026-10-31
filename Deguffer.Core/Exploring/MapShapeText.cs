@@ -1,5 +1,6 @@
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Exploring.Layout;
+using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Exploring;
@@ -8,9 +9,10 @@ namespace Deguffer.Core.Exploring;
 /// What the page that owns a tree knows of one of its nodes and the map does not: what it is called,
 /// what kind of thing it is, and whether opening it shows what it holds.
 ///
-/// <para>Not whether it may be removed, which <see cref="MapShapeText.Help"/> is given apart. A screen
-/// reader names every shape in a search of the window, and the verdict asks the machine where the
-/// item's volume is mounted, so a verdict carried here would be asked once a shape.</para>
+/// <para>Not whether it may be removed, which <see cref="MapShapeText.Help(MapShapeFacts, ExploreVerdict?)"/>
+/// is given apart. A screen reader names every shape in a search of the window, and the verdict asks
+/// the machine where the item's volume is mounted, so a verdict carried here would be asked once a
+/// shape.</para>
 /// </summary>
 /// <param name="Name">Its own name, not its path: the shapes round it are its siblings, and a screen reader reads the name first.</param>
 /// <param name="Kind">What it is, as one capitalised noun or two: "Folder", "File", "Program".</param>
@@ -65,6 +67,54 @@ public static class MapShapeText
         var shared = ofBytes > 0 ? $"{size}, {Share(bytes, ofBytes)} of {ofName ?? "the drive"}" : size;
 
         return lowerBound ? shared + ExploreNodeText.Unread : shared;
+    }
+
+    /// <summary>
+    /// What a screen reader calls <paramref name="shape"/>, one of <paramref name="folder"/>'s shapes in
+    /// <paramref name="drawing"/>, or of the top of the picture for null: its name, its size and its share
+    /// of what holds it (<see cref="MapFolders.ShareBasis"/>), which at the top of a volume's picture is
+    /// the drive. Empty where nothing names it.
+    /// </summary>
+    /// <param name="factsOf">What the page says of a node of the drawing's tree, or null where it says nothing.</param>
+    public static string Name(ExploreSurface drawing, int? folder, MapShape shape, Func<int, MapShapeFacts?> factsOf)
+    {
+        ArgumentNullException.ThrowIfNull(drawing);
+        ArgumentNullException.ThrowIfNull(factsOf);
+
+        var facts = shape.IsNode ? factsOf(shape.Node) : null;
+
+        if ((MapBlock.Of(shape.Node) is { } block ? block.Name : facts?.Name) is not { } name)
+        {
+            return string.Empty;
+        }
+
+        var (ofBytes, named) = MapFolders.ShareBasis(drawing.Tree, drawing.Root, drawing.HasVolumeBeside, folder, () => drawing.Shapes(null));
+        var lowerBound = facts?.LowerBound ?? false;
+
+        // A share of the drive is named by no node. A share of a folder the page says nothing of is not
+        // said at all, rather than said to be of the drive.
+        return named switch
+        {
+            null => Name(name, shape.Bytes, ofBytes, ofName: null, lowerBound),
+            { } folderNode when factsOf(folderNode) is { } of => Name(name, shape.Bytes, ofBytes, of.Name, lowerBound),
+            _ => Name(name, shape.Bytes, ofBytes: 0, ofName: null, lowerBound),
+        };
+    }
+
+    /// <summary>
+    /// What <paramref name="shape"/> is and what can be done with it (<see cref="Help(MapShapeFacts, ExploreVerdict?)"/>),
+    /// or what a block stands for. Empty where the page says nothing of the shape's node.
+    /// </summary>
+    /// <param name="factsOf">What the page says of a node, or null where it says nothing.</param>
+    /// <param name="removal">Whether a node may be removed, asked only of a node the page says something of.</param>
+    public static string Help(MapShape shape, Func<int, MapShapeFacts?> factsOf, Func<int, ExploreVerdict?> removal)
+    {
+        ArgumentNullException.ThrowIfNull(factsOf);
+        ArgumentNullException.ThrowIfNull(removal);
+
+        return MapBlock.Of(shape.Node) is { } block ? block.Help
+            : shape.IsNode && factsOf(shape.Node) is { } facts ? Help(facts, removal(shape.Node))
+            : string.Empty;
     }
 
     /// <summary>
