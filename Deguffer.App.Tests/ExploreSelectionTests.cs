@@ -39,6 +39,31 @@ public sealed class ExploreSelectionTests : IDisposable
     }
 
     /// <summary>
+    /// The figures under the map say a selection's size is a lower bound where the scan could not
+    /// read all of it, alone or among others (§7.1).
+    /// </summary>
+    [Fact]
+    public void ASelectionThatIsALowerBoundSaysSo()
+    {
+        var builder = new ExploreTreeBuilder(@"C:\");
+        builder.MarkSizeUnknown(builder.AddChildren(ExploreTreeBuilder.RootNode, [ExploreFixture.Folder("refused"), ExploreFixture.File("file", 5)]));
+        var tree = builder.Build(ExploreChildOrder.ByName);
+        var children = tree.ChildrenOf(tree.RootNode).ToArray();
+        var refused = children.Single(node => tree.NameOf(node) == "refused");
+        var file = children.Single(node => tree.NameOf(node) == "file");
+        var selection = Selection(tree);
+
+        selection.Select([refused]);
+        Assert.Equal($"≥ {FreeSpace.Format(0)}", selection.Figures);
+
+        selection.Select([refused, file]);
+        Assert.Equal($"≥ {FreeSpace.Format(5)}", selection.Figures);
+
+        selection.Select([file]);
+        Assert.Equal(FreeSpace.Format(5), selection.Figures);
+    }
+
+    /// <summary>
     /// Removing takes something picked; opening, revealing and the properties sheet take exactly one
     /// thing. None of them is offered while the page is busy, because a removal and a scan of the
     /// same drive have no business overlapping.

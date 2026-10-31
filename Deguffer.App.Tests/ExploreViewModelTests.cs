@@ -396,6 +396,8 @@ public sealed class ExploreViewModelTests : IDisposable
         Assert.Equal(@"C:\", _explore.Scanner.Current.Root);
         Assert.Equal(StatusLine.Empty, page.Status.Line);
         Assert.False(page.Status.HasSentence);
+        Assert.True(page.ShapeFacts(scan.Tree, refused)?.LowerBound);
+        Assert.False(page.ShapeFacts(scan.Tree, refused + 1)?.LowerBound);
         Assert.True(page.Notes.HasRouteNote);
         Assert.True(page.Elevation.CanElevate);
     });
@@ -1126,7 +1128,7 @@ public sealed class ExploreViewModelTests : IDisposable
         await _explore.ScanAsync(page, ExploreScan.Fast(tree));
 
         Assert.Same(tree, page.Tree);
-        Assert.Equal(new MapShapeFacts("kept", "Folder", Opens: true), page.ShapeFacts(tree, Child(tree, "kept")));
+        Assert.Equal(new MapShapeFacts("kept", "Folder", Opens: true, LowerBound: false), page.ShapeFacts(tree, Child(tree, "kept")));
         Assert.Equal(ExploreVerdict.Refuse("Kept for a reason."), page.ShapeRemoval(tree, Child(tree, "kept")));
 
         var loose = page.ShapeFacts(tree, Child(tree, "loose.bin"));

@@ -73,7 +73,7 @@ public sealed class MapReadoutTests
 
     [Fact]
     public void AScreenReaderIsToldOfAShapeOfTheTreeOnScreen() =>
-        Assert.Equal(new MapShapeFacts("kept", "Kind", Opens: true), MapShapeFacts.For(_tree, _tree, _kept, _shapes));
+        Assert.Equal(new MapShapeFacts("kept", "Kind", Opens: true, LowerBound: false), MapShapeFacts.For(_tree, _tree, _kept, _shapes));
 
     /// <summary>
     /// A replay of what grew is drawn from a tree of its own, whose node numbers mean nothing in the
@@ -95,7 +95,7 @@ public sealed class MapReadoutTests
     {
         public List<int> ReadoutsAsked { get; } = [];
 
-        public MapShapeFacts FactsOf(ExploreTree tree, int node) => new(tree.NameOf(node), "Kind", Opens: true);
+        public MapShapeFacts FactsOf(ExploreTree tree, int node) => new(tree.NameOf(node), "Kind", Opens: true, LowerBound: false);
 
         public MapReadout ReadoutOf(ExploreTree tree, int node)
         {

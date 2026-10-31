@@ -21,14 +21,27 @@ public static class ExploreNodeText
     /// A node's size, marked where it is a lower bound.
     ///
     /// <para>A directory the walk was refused totals only what it could see, and the plain figure
-    /// reads as a measurement. This mark is where the page says so (§7.1), on the row a reader acts
-    /// on, such as the one for <c>System Volume Information</c> showing "0 B". A row says the same
-    /// in words for a screen reader, because a symbol read aloud is not a sentence.</para>
+    /// reads as a measurement. This mark is where the page says so (§7.1), on every figure a reader
+    /// acts on, such as the one for <c>System Volume Information</c> showing "0 B". A row says the
+    /// same in words for a screen reader, because a symbol read aloud is not a sentence.</para>
     /// </summary>
-    public static string Size(ExploreTree tree, int node) =>
-        tree.HasUnknownSizeBelow(node)
-            ? "≥ " + FreeSpace.Format(tree.SizeOf(node))
-            : FreeSpace.Format(tree.SizeOf(node));
+    public static string Size(ExploreTree tree, int node) => Size(tree.SizeOf(node), tree.HasUnknownSizeBelow(node));
+
+    /// <summary>
+    /// The size of <paramref name="nodes"/> together, marked where any of them is a lower bound: a
+    /// sum with one short part in it is short too.
+    /// </summary>
+    public static string Total(ExploreTree tree, IReadOnlyList<int> nodes)
+    {
+        ArgumentNullException.ThrowIfNull(tree);
+        ArgumentNullException.ThrowIfNull(nodes);
+
+        return Size(nodes.Sum(tree.SizeOf), nodes.Any(tree.HasUnknownSizeBelow));
+    }
+
+    /// <summary><paramref name="bytes"/> as the page writes a size, marked where it is a lower bound. See <see cref="Size(ExploreTree, int)"/>.</summary>
+    public static string Size(long bytes, bool lowerBound) =>
+        lowerBound ? "≥ " + FreeSpace.Format(bytes) : FreeSpace.Format(bytes);
 
     /// <summary>
     /// What a node's space on disk leaves out: its length, where that reads differently, and why the

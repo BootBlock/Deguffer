@@ -26,7 +26,11 @@ public enum ExploreRemovalMode
 /// bound — §7.1 allows Explore's numbers to be short, provided the picture says so — which is why
 /// the report words a total as what was removed rather than as what was reclaimed.
 /// </param>
-public sealed record ExploreItem(string Path, bool IsDirectory, long Bytes);
+/// <param name="LowerBound">
+/// Whether <paramref name="Bytes"/> is a lower bound, because the scan could not read all of it, so
+/// the confirmation marks the size it states (<see cref="ExploreRemovalPrompt"/>).
+/// </param>
+public sealed record ExploreItem(string Path, bool IsDirectory, long Bytes, bool LowerBound = false);
 
 /// <param name="Message">
 /// What happened, written for the user. On a refusal it is the policy's own sentence, because §7.1

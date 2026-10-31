@@ -15,7 +15,11 @@ namespace Deguffer.Core.Exploring;
 /// <param name="Name">Its own name, not its path: the shapes round it are its siblings, and a screen reader reads the name first.</param>
 /// <param name="Kind">What it is, as one capitalised noun or two: "Folder", "File", "Program".</param>
 /// <param name="Opens">Whether opening it shows what it holds, as a double-click on its shape does.</param>
-public sealed record MapShapeFacts(string Name, string Kind, bool Opens)
+/// <param name="LowerBound">
+/// Whether its size is a lower bound, because the scan could not read all of it, so its name marks
+/// the size as its label and its row do (§7.1).
+/// </param>
+public sealed record MapShapeFacts(string Name, string Kind, bool Opens, bool LowerBound)
 {
     /// <summary>
     /// What a screen reader is told of <paramref name="node"/> of <paramref name="asked"/>, where that
@@ -49,11 +53,12 @@ public static class MapShapeText
     /// What holds it: the folder's name, or null for the drive, beside which a scan of a whole volume
     /// draws its root and the space that is not in it.
     /// </param>
-    public static string Name(string name, long bytes, long ofBytes, string? ofName)
+    /// <param name="lowerBound">Whether the size is a lower bound. See <see cref="ExploreNodeText.Size(ExploreTree, int)"/>.</param>
+    public static string Name(string name, long bytes, long ofBytes, string? ofName, bool lowerBound)
     {
         ArgumentNullException.ThrowIfNull(name);
 
-        var size = $"{name}, {FreeSpace.Format(bytes)}";
+        var size = $"{name}, {ExploreNodeText.Size(bytes, lowerBound)}";
 
         return ofBytes > 0 ? $"{size}, {Share(bytes, ofBytes)} of {ofName ?? "the drive"}" : size;
     }
@@ -94,8 +99,21 @@ public static class MapShapeText
     {
         ArgumentNullException.ThrowIfNull(name);
 
-        return $"{name}  {FreeSpace.Format(bytes)}";
+        return Labelled(name, FreeSpace.Format(bytes));
     }
+
+    /// <summary>
+    /// What is written on the shape of <paramref name="node"/>: its name, then its size, marked where
+    /// the size is a lower bound (§7.1), as its row marks it.
+    /// </summary>
+    public static string Label(ExploreTree tree, int node)
+    {
+        ArgumentNullException.ThrowIfNull(tree);
+
+        return Labelled(tree.NameOf(node), ExploreNodeText.Size(tree, node));
+    }
+
+    private static string Labelled(string name, string size) => $"{name}  {size}";
 
     /// <summary>
     /// <paramref name="bytes"/> as a share of <paramref name="ofBytes"/>, to the nearest percent:

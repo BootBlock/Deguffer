@@ -1,4 +1,5 @@
 using Deguffer.Core.Exploring.Acting;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Tests;
 
@@ -74,5 +75,21 @@ public sealed class ExploreRemovalPromptTests
 
         Assert.Contains("'big.iso'", one.Title, StringComparison.Ordinal);
         Assert.Contains("2 items", several.Title, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// §7.1: where the scan could not read all of what is removed, the size the prompt states is a
+    /// lower bound and is marked as one. Stated as a measurement, it would understate what goes.
+    /// </summary>
+    [Theory]
+    [InlineData(ExploreRemovalMode.RecycleBin)]
+    [InlineData(ExploreRemovalMode.Permanent)]
+    public void ASizeThatIsALowerBoundIsMarkedAsOne(ExploreRemovalMode mode)
+    {
+        var whole = new ExploreItem(@"C:\Users\testuser\big.iso", false, 1024);
+        var refused = new ExploreItem(@"C:\Users\testuser\locked", true, 2048, LowerBound: true);
+
+        Assert.Contains($"(≥ {FreeSpace.Format(3072)})", ExploreRemovalPrompt.For(mode, [whole, refused]).Consequence, StringComparison.Ordinal);
+        Assert.Contains($"({FreeSpace.Format(1024)})", ExploreRemovalPrompt.For(mode, [whole]).Consequence, StringComparison.Ordinal);
     }
 }

@@ -26,8 +26,12 @@ public static class MemoryText
     /// and whether opening it shows what it holds. Nothing of removing: what the page does to a
     /// program is close it, which its own button says (§7.2.1).
     /// </summary>
+    /// <remarks>
+    /// No shape is marked as a lower bound, because every figure on the page is one and the page
+    /// says so once (<see cref="MemoryNotes"/>, §7.2). Marked on each shape, the mark says nothing.
+    /// </remarks>
     public static MapShapeFacts Facts(MemoryTree tree, int node) =>
-        new(Name(tree, node), Kind(tree, node), MemoryPlace.Inside(tree, node) is not null);
+        new(Name(tree, node), Kind(tree, node), MemoryPlace.Inside(tree, node) is not null, LowerBound: false);
 
     /// <summary>What to call <paramref name="node"/>.</summary>
     public static string Name(MemoryTree tree, int node)
