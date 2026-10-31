@@ -4,7 +4,8 @@ namespace Deguffer.Core.Exploring.Layout;
 /// Whether a tap, a right-tap or a double-tap on the map may act, from the press that made it and the
 /// press before.
 ///
-/// <para>Only a press of the left button, a touch or a pen may pick or open. The framework makes a tap
+/// <para>A tap picks, and a double-tap opens, only from a press of the left button, a touch or a pen. The
+/// right button's own tap is the right-tap, which may pick and offer a menu. The framework makes a tap
 /// and a double-tap of the mouse's Back and Forward buttons too, which pick and open nothing anywhere
 /// else in Windows. Where the page goes back or forward with them, picking or opening the shape under
 /// the pointer as well would act on a picture the step is about to replace.</para>

@@ -56,9 +56,9 @@ public static class MapKeys
     ///
     /// <para>A key with Alt or Ctrl held is left alone, because Alt+Left and Alt+Right step back and
     /// forward. On the map itself, unshifted, Enter opens the shape the keyboard is on, Backspace goes up
-    /// a folder, and an arrow moves between the shapes. Everywhere else, and with Shift, plus and minus
-    /// zoom about the middle, the arrows pan, and Home shows the whole picture: on the overview's
-    /// buttons the arrows pan as they always have.</para>
+    /// a folder, and an arrow moves between the shapes. With Shift, or on the overview's buttons, an
+    /// arrow pans. Plus and minus zoom about the middle, and Home shows the whole picture, wherever the
+    /// key lands.</para>
     /// </summary>
     public static MapKeyAction? Resolve(VirtualKey key, bool shift, bool alt, bool ctrl, bool onMap)
     {
