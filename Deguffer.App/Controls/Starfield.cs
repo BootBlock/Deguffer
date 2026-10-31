@@ -9,7 +9,6 @@ using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
 using Windows.UI;
-using Windows.UI.ViewManagement;
 
 namespace Deguffer.App.Controls;
 
@@ -76,8 +75,6 @@ public sealed partial class Starfield : Grid
     /// <summary>The steps the loop is played in: a quarter of a second each, too short to see a corner in.</summary>
     private const int Steps = 160;
 
-    private static readonly UISettings SystemSettings = new();
-
     private static readonly StarFlight Flight = new(MotionToken.Starfield.Full.Duration, Depth, Speed);
 
     private readonly Compositor _compositor;
@@ -86,7 +83,9 @@ public sealed partial class Starfield : Grid
     private readonly CompositionColorGradientStop _core;
     private readonly CompositionColorGradientStop _rim;
     private readonly AnimationController _flight;
-    private readonly CompositionCapabilities _capabilities = new();
+
+    /// <summary>What the field follows while it is loaded, undone when it is unloaded.</summary>
+    private Subscriptions? _watching;
 
     private StarfieldMode _mode = StarfieldMode.Still;
     private bool _flown;
@@ -212,10 +211,13 @@ public sealed partial class Starfield : Grid
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        XamlRoot.Changed += OnRootChanged;
-        SystemSettings.ColorValuesChanged += OnSystemColoursChanged;
-        _capabilities.Changed += OnCapabilitiesChanged;
-        SystemMotion.Current.Changed += OnMotionChanged;
+        var root = XamlRoot;
+
+        _watching?.Dispose();
+        _watching = new Subscriptions()
+            .Add(() => root.Changed += OnRootChanged, () => root.Changed -= OnRootChanged)
+            .Add(() => SystemLook.Current.Changed += OnLookChanged, () => SystemLook.Current.Changed -= OnLookChanged)
+            .Add(() => SystemMotion.Current.Changed += OnMotionChanged, () => SystemMotion.Current.Changed -= OnMotionChanged);
 
         Frame();
         Tint();
@@ -224,14 +226,13 @@ public sealed partial class Starfield : Grid
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        if (XamlRoot is { } root)
+        // A field moved to a new parent can be loaded there before it is unloaded from the old one, and
+        // one still loaded keeps following what it was following.
+        if (!IsLoaded)
         {
-            root.Changed -= OnRootChanged;
+            _watching?.Dispose();
+            _watching = null;
         }
-
-        SystemSettings.ColorValuesChanged -= OnSystemColoursChanged;
-        _capabilities.Changed -= OnCapabilitiesChanged;
-        SystemMotion.Current.Changed -= OnMotionChanged;
 
         Decide();
     }
@@ -239,13 +240,8 @@ public sealed partial class Starfield : Grid
     /// <summary>The window was minimised, restored, hidden or shown, or moved between displays.</summary>
     private void OnRootChanged(XamlRoot sender, XamlRootChangedEventArgs args) => Decide();
 
-    /// <summary>High contrast turned on or off. Raised off the UI thread.</summary>
-    private void OnSystemColoursChanged(UISettings sender, object args) =>
-        DispatcherQueue.TryEnqueueGuarded(Decide);
-
-    /// <summary>The compositor's word on whether effects are fast, which a remote session changes. Raised off the UI thread.</summary>
-    private void OnCapabilitiesChanged(CompositionCapabilities sender, object args) =>
-        DispatcherQueue.TryEnqueueGuarded(Decide);
+    /// <summary>High contrast turned on or off, or the compositor's word on whether effects are fast changed.</summary>
+    private void OnLookChanged(object? sender, SystemLookChange change) => Decide();
 
     /// <summary>The reader turned animation effects on or off. Raised on the UI thread.</summary>
     private void OnMotionChanged(object? sender, EventArgs e) => Decide();
@@ -257,8 +253,8 @@ public sealed partial class Starfield : Grid
 
         Play(StarfieldModes.For(
             SystemMotion.Current.For(MotionToken.Starfield),
-            HighContrast.IsEnabled(),
-            _capabilities.AreEffectsFast(),
+            SystemLook.Current.State.Contrast is not null,
+            SystemLook.Current.State.EffectsFast,
             seen));
     }
 

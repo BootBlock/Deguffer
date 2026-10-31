@@ -15,7 +15,7 @@ namespace Deguffer.Core.Memory;
 /// <para>A node number means something only in the tree that gave it. A refresh builds a new tree, and
 /// <see cref="MemoryPlace"/> is what finds the same process or part in it.</para>
 /// </summary>
-public sealed class MemoryTree : ITrackedTree
+public sealed class MemoryTree : ITrackedTree, IShownTree
 {
     private readonly string[] _names;
     private readonly MemoryPart[] _parts;

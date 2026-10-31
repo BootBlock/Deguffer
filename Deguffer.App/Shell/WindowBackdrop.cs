@@ -47,11 +47,16 @@ internal sealed class WindowBackdrop
         _motion = motion;
 
         // XAML raises a theme change when high contrast is switched on or off, which saves
-        // pumping WM_SETTINGCHANGE ourselves. It also fires on every light/dark switch, hence
-        // the no-op guard in Apply.
+        // pumping WM_SETTINGCHANGE ourselves. It can arrive before Windows' own colour event, so the
+        // system's look is read again here rather than taken as last heard. It also fires on every
+        // light/dark switch, hence the no-op guard in Apply.
         if (window.Content is FrameworkElement root)
         {
-            root.ActualThemeChanged += (_, _) => Apply();
+            root.ActualThemeChanged += (_, _) =>
+            {
+                SystemLook.Current.Refresh();
+                Apply();
+            };
         }
     }
 
@@ -73,7 +78,7 @@ internal sealed class WindowBackdrop
     public void Apply()
     {
         var (acrylic, mica) = Supported.Value;
-        var wanted = BackdropChoice.For(_requested, HighContrast.IsEnabled(), acrylic, mica);
+        var wanted = BackdropChoice.For(_requested, SystemLook.Current.State.Contrast is not null, acrylic, mica);
 
         if (_applied == wanted)
         {

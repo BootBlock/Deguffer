@@ -22,7 +22,7 @@ namespace Deguffer.Core.Exploring;
 /// building them is the passes that make them mean anything. What is taken out after a
 /// removal is its own type, <see cref="Exploring.RemovedSinceScan"/>, which this only consults.</para>
 /// </summary>
-public sealed class ExploreTree : Layout.ITrackedTree
+public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
 {
     private readonly int[] _nameNumbers;
     private readonly NamePool.Frozen _names;

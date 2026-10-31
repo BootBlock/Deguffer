@@ -52,11 +52,11 @@ public sealed partial class ExploreRow : ObservableObject, IExploreListed
         IsDirectory = tree.IsDirectory(node);
         IsLink = tree.IsLink(node);
 
-        SizeLabel = ExploreRowText.Size(tree, node);
-        StorageLabel = ExploreRowText.Storage(tree, node);
+        SizeLabel = ExploreNodeText.Size(tree, node);
+        StorageLabel = ExploreNodeText.Storage(tree, node);
         Share = ShareOf(tree, node, parentTotal);
         IsApproximate = tree.HasUnknownSizeBelow(node);
-        AgeLabel = ExploreRowText.Age(tree, node, now);
+        AgeLabel = ExploreNodeText.Age(tree, node, now);
         DatesLabel = ExploreRowText.Dates(tree, node);
     }
 
@@ -204,11 +204,11 @@ public sealed partial class ExploreRow : ObservableObject, IExploreListed
         ArgumentNullException.ThrowIfNull(tree);
 
         Node = node;
-        SizeLabel = ExploreRowText.Size(tree, Node);
-        StorageLabel = ExploreRowText.Storage(tree, Node);
+        SizeLabel = ExploreNodeText.Size(tree, Node);
+        StorageLabel = ExploreNodeText.Storage(tree, Node);
         Share = ShareOf(tree, Node, parentTotal);
         IsApproximate = tree.HasUnknownSizeBelow(Node);
-        AgeLabel = ExploreRowText.Age(tree, Node, now);
+        AgeLabel = ExploreNodeText.Age(tree, Node, now);
         DatesLabel = ExploreRowText.Dates(tree, Node);
     }
 

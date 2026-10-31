@@ -14,7 +14,7 @@ namespace Deguffer.App.ViewModels;
 /// One type for both, because they describe one place and are rewritten together: updating them
 /// apart is how a breadcrumb comes to name a directory the list below it is no longer showing.
 /// Where each step of the trail leads is <see cref="ExplorePosition.Trail"/>'s, and how a row is
-/// worded is <see cref="ExploreRowText"/>'s.</para>
+/// worded is <see cref="ExploreNodeText"/>'s and <see cref="ExploreRowText"/>'s.</para>
 /// </summary>
 public sealed class ExploreRows
 {
