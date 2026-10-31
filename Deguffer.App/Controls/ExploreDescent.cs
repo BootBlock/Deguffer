@@ -12,7 +12,7 @@ namespace Deguffer.App.Controls;
 /// <para>The arithmetic is Core's: where the two pictures are is <see cref="MapDescent"/>'s, how the
 /// flight moves is a <see cref="Spring"/>'s, and how long it takes is
 /// <see cref="MotionToken.Entrance"/>'s, and which leg of a flight through a folder is under way is
-/// <see cref="MapPassage"/>'s. What is left here is following the frames.</para>
+/// <see cref="MapCourse"/>'s. What is left here is following the frames.</para>
 /// </summary>
 internal sealed class ExploreDescent
 {
@@ -20,19 +20,8 @@ internal sealed class ExploreDescent
 
     private readonly IFrameClock _clock;
 
-    private MapDescent _path;
-
-    /// <summary>The two legs of a flight through a folder, while one is under way. See <see cref="Pass"/>.</summary>
-    private MapPassage? _passage;
-
-    /// <summary>Whether the flight through a folder under way has reached the middle picture. See <see cref="Midway"/>.</summary>
-    private bool _pastMidway;
-
-    /// <summary>
-    /// Whether the flight through a folder under way still goes on past the middle picture: not once it
-    /// was turned round on the way out, when it goes back to the folder it left.
-    /// </summary>
-    private bool _onward;
+    /// <summary>The way the flight under way goes, and which part of it is under way. See <see cref="MapCourse"/>.</summary>
+    private MapCourse _course;
 
     /// <summary>
     /// How far the flight is from the outer picture, at 0, to the inner one, at 1; or, through a
@@ -84,8 +73,7 @@ internal sealed class ExploreDescent
         var motion = _motion.For(MotionToken.Entrance);
         var inward = step == FolderStep.Into;
 
-        _path = new MapDescent(shape, motion.Travels);
-        _passage = null;
+        _course = MapCourse.Descent(new MapDescent(shape, motion.Travels));
         _playing = motion;
         _progress = Spring.At(inward ? 0 : 1).Toward(inward ? 1 : 0, now, motion);
 
@@ -103,9 +91,7 @@ internal sealed class ExploreDescent
         var now = _clock.Now;
         var motion = _motion.For(MotionToken.Entrance);
 
-        _passage = new MapPassage(Leg(outOf, motion), Leg(into, motion));
-        _pastMidway = false;
-        _onward = true;
+        _course = MapCourse.Through(new MapPassage(Leg(outOf, motion), Leg(into, motion)));
         _playing = motion;
         _progress = Spring.At(0).Toward(1, now, motion);
 
@@ -129,20 +115,7 @@ internal sealed class ExploreDescent
         }
 
         var now = _clock.Now;
-        double back;
-
-        if (_passage is { } passage)
-        {
-            var (start, end) = _pastMidway ? (passage.Midway, 1.0) : (0.0, passage.Midway);
-
-            back = _progress.Target == start ? end : start;
-        }
-        else
-        {
-            back = 1 - _progress.Target;
-        }
-
-        _onward &= _pastMidway;
+        (_course, var back) = _course.Turned(_progress.Target);
 
         _progress = _progress.Toward(back, now, _playing);
 
@@ -205,23 +178,14 @@ internal sealed class ExploreDescent
 
     private void Follow(double progress)
     {
-        var (path, along) = (_path, progress);
+        (_course, var midway) = _course.Reached(progress);
 
-        if (_passage is { } passage)
+        if (midway)
         {
-            if (_onward && !_pastMidway && progress >= passage.Midway)
-            {
-                _pastMidway = true;
-                Midway?.Invoke(this, EventArgs.Empty);
-            }
-
-            // Turned round on the way out, the spring carries its speed on a little before it comes
-            // back, and can carry it past the middle: the way out holds there rather than going on into
-            // a folder no longer asked for. Midway is above 0 here, or the middle was passed at the start.
-            (path, along) = _onward || _pastMidway
-                ? passage.At(progress)
-                : (passage.Out, 1 - Math.Min(progress / passage.Midway, 1));
+            Midway?.Invoke(this, EventArgs.Empty);
         }
+
+        var (path, along) = _course.At(progress);
 
         Inner = path.Inner(along);
         Outer = path.Outer(along);
