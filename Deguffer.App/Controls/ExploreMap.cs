@@ -1900,7 +1900,7 @@ public sealed class ExploreMap : UserControl
         _hovered = null;
         _hoveredTile = null;
         _labels.Hide();
-        _highlight.Clear();
+        _highlight.Renew();
         Report(null);
 
         Redraw();

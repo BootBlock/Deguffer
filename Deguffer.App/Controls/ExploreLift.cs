@@ -112,6 +112,19 @@ internal sealed class ExploreLift
         _placed.IsVisible = true;
     }
 
+    /// <summary>
+    /// Lift nothing, and let go of the mask's surface, for a device that has replaced the one it was
+    /// filled through: made before the replacement, it would take every later fill and show nothing,
+    /// so no shape would be lifted again (see <see cref="CompositionDevice.Replaced"/>).
+    /// </summary>
+    public void Renew()
+    {
+        _maskSurface = null;
+        _mask.Surface = null;
+        _drawing.Surface = null;
+        _placed.IsVisible = false;
+    }
+
     /// <summary>Lay it over a canvas that lies at <paramref name="placed"/> in the picture.</summary>
     public void PlaceOver(MapTransform placed) => _placed.Place(placed);
 }

@@ -340,6 +340,16 @@ internal sealed class ExploreHighlight
         ShowMarked([], _hatchScale);
     }
 
+    /// <summary>
+    /// Take all of it off, and let go of the surface the lift is cut out by, for a device that has
+    /// replaced the one it was drawn through (see <see cref="ExploreLift.Renew"/>).
+    /// </summary>
+    public void Renew()
+    {
+        Clear();
+        _lift.Renew();
+    }
+
     /// <summary>Black or white, or a grey, at <paramref name="level"/>, seen through at <paramref name="opacity"/>.</summary>
     internal static Color Shade(byte level, double opacity) =>
         Color.FromArgb((byte)Math.Round(opacity * 255), level, level, level);
