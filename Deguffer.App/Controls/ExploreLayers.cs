@@ -310,7 +310,7 @@ internal sealed class ExploreLayers
             {
                 // The drawings of the pictures this one replaces have been showing round it while it
                 // landed. Covered now, they go.
-                HideCoveredBy(layer);
+                HideCoveredBy(layer, spared: null);
             }
             else
             {
@@ -338,7 +338,7 @@ internal sealed class ExploreLayers
         _fadesLanded++;
 
         current.EndFade();
-        HideCoveredBy(current);
+        HideCoveredBy(current, spared: null);
     }
 
     /// <summary>
@@ -531,12 +531,15 @@ internal sealed class ExploreLayers
         return layer;
     }
 
-    /// <summary>Stop showing every drawing <paramref name="cover"/> covers. See <see cref="KeptDrawings.IsCoveredBy"/>.</summary>
-    private void HideCoveredBy(ExploreLayer cover)
+    /// <summary>
+    /// Stop showing every drawing <paramref name="cover"/> covers, but <paramref name="spared"/>. See
+    /// <see cref="KeptDrawings.IsCoveredBy"/>.
+    /// </summary>
+    private void HideCoveredBy(ExploreLayer cover, ExploreLayer? spared)
     {
         foreach (var other in _layers)
         {
-            if (KeptDrawings.IsCoveredBy(other, cover))
+            if (KeptDrawings.IsCoveredBy(other, cover, spared))
             {
                 other.Withdraw();
             }
@@ -573,7 +576,9 @@ internal sealed class ExploreLayers
 
         fading.Completed += (_, _) =>
         {
-            HideCoveredBy(layer);
+            // The layer can have been taken for a later picture since the fade began, so the drawing
+            // worked from now is spared rather than covered by a drawing that has not arrived.
+            HideCoveredBy(layer, spared: _current);
 
             // Brought to its end already, and counted then.
             if (landed == _fadesLanded && --_fading == 0)

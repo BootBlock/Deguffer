@@ -38,14 +38,18 @@ public sealed class KeptDrawingsTests
         Assert.Equal([whole, twiceEarlier, twiceLater, thrice, current, replacing], stacked);
     }
 
-    /// <summary>A drawing landing under the one on top, as the whole picture under a zoomed one, takes its place by zoom.</summary>
+    /// <summary>
+    /// A drawing landing under the one on top, as the whole picture under a zoomed one, takes its place
+    /// among the rest by zoom, under a finer one kept, rather than over everything.
+    /// </summary>
     [Fact]
     public void AnUnderlayStacksByItsZoomUnderTheCurrentDrawing()
     {
         var current = Drawn(Twice, shown: 2);
+        var finer = Drawn(Thrice, shown: 1);
         var underlay = Landing(MapViewport.Whole, onTop: false);
 
-        Assert.Equal([underlay, current], KeptDrawings.Stacked<Kept>([current, underlay], current));
+        Assert.Equal([underlay, finer, current], KeptDrawings.Stacked<Kept>([current, underlay, finer], current));
     }
 
     /// <summary>A surface with nothing shown on it is not stacked at all.</summary>
@@ -150,10 +154,25 @@ public sealed class KeptDrawingsTests
     {
         var cover = Drawn(MapViewport.Whole, shown: 3, picture: 2);
 
-        Assert.True(KeptDrawings.IsCoveredBy(Drawn(Twice, shown: 1, picture: 1), cover));
-        Assert.False(KeptDrawings.IsCoveredBy(Landing(Twice, onTop: false, picture: 1), cover));
-        Assert.False(KeptDrawings.IsCoveredBy(Drawn(Twice, shown: 2, picture: 2), cover));
-        Assert.False(KeptDrawings.IsCoveredBy(cover, cover));
+        Assert.True(KeptDrawings.IsCoveredBy(Drawn(Twice, shown: 1, picture: 1), cover, spared: null));
+        Assert.False(KeptDrawings.IsCoveredBy(Landing(Twice, onTop: false, picture: 1), cover, spared: null));
+        Assert.False(KeptDrawings.IsCoveredBy(Drawn(Twice, shown: 2, picture: 2), cover, spared: null));
+        Assert.False(KeptDrawings.IsCoveredBy(cover, cover, spared: null));
+    }
+
+    /// <summary>
+    /// A fade that ends after its surface was taken for a later picture spares the drawing worked from,
+    /// though that drawing is of an earlier picture than the one the surface now lands.
+    /// </summary>
+    [Fact]
+    public void TheDrawingSparedIsNeverCovered()
+    {
+        var retaken = Landing(MapViewport.Whole, onTop: true, picture: 3);
+        var current = Drawn(MapViewport.Whole, shown: 2, picture: 2);
+        var older = Drawn(Twice, shown: 1, picture: 2);
+
+        Assert.False(KeptDrawings.IsCoveredBy(current, retaken, spared: current));
+        Assert.True(KeptDrawings.IsCoveredBy(older, retaken, spared: current));
     }
 
     /// <summary>A drawing is shown again only where all of it is there, of the same part of the same picture.</summary>

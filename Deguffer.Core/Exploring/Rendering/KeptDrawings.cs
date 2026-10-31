@@ -42,12 +42,9 @@ public static class KeptDrawings
     /// replace the one on top above everything, <paramref name="current"/> above the rest, and each other
     /// above every one coarser than it, or as fine and shown less recently.
     /// </summary>
-    public static bool Above<T>(T drawing, T other, T? current)
+    private static bool Above<T>(T drawing, T other, T? current)
         where T : class, IKeptDrawing
     {
-        ArgumentNullException.ThrowIfNull(drawing);
-        ArgumentNullException.ThrowIfNull(other);
-
         var drawingReplaces = drawing is { IsLanding: true, LandsOnTop: true };
         var otherReplaces = other is { IsLanding: true, LandsOnTop: true };
 
@@ -146,15 +143,22 @@ public static class KeptDrawings
 
     /// <summary>
     /// Whether <paramref name="other"/> goes once <paramref name="cover"/> covers the screen: it is of a
-    /// picture before <paramref name="cover"/>'s, and is not landing. A drawing still landing belongs
-    /// to a redraw that has not arrived, which takes it down itself if it is superseded.
+    /// picture before <paramref name="cover"/>'s, is not landing, and is not <paramref name="spared"/>.
+    /// A drawing still landing belongs to a redraw that has not arrived, which takes it down itself if
+    /// it is superseded.
     /// </summary>
-    public static bool IsCoveredBy(IKeptDrawing other, IKeptDrawing cover)
+    /// <param name="spared">
+    /// The drawing the map works from, where <paramref name="cover"/> may no longer be the drawing it
+    /// was: a fade that ends late reads a surface that can since have been taken for a later picture,
+    /// and the drawing worked from then must stay. Null where <paramref name="cover"/> is the drawing
+    /// arriving or worked from now.
+    /// </param>
+    public static bool IsCoveredBy(IKeptDrawing other, IKeptDrawing cover, IKeptDrawing? spared)
     {
         ArgumentNullException.ThrowIfNull(other);
         ArgumentNullException.ThrowIfNull(cover);
 
-        return other.Picture < cover.Picture && !other.IsLanding;
+        return other.Picture < cover.Picture && !other.IsLanding && !ReferenceEquals(other, spared);
     }
 
     /// <summary>How many drawings stack under <paramref name="drawing"/>. See <see cref="Above"/>.</summary>
