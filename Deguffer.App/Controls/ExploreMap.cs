@@ -892,7 +892,12 @@ public sealed class ExploreMap : UserControl
         if (another)
         {
             _picturesHanded++;
-            EndDrag();
+
+            // The camera's drag ends with the map's, where it was held, and the new picture is drawn there.
+            if (EndDrag())
+            {
+                _zoom.Stop();
+            }
 
             if (_left is { Drawing: { } drawing } left
                 && ReferenceEquals(tree, left.Tree) && node == left.Node && view == left.View && volume == left.Volume

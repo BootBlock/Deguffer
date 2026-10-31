@@ -382,9 +382,10 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     }
 
     /// <summary>
-    /// Finish any move where it was going, without raising anything. For a map leaving the screen: a
-    /// move left going would ease a picture nobody can see, and the map draws the arrival when it is
-    /// back.
+    /// Finish any move where it was going, and a drag where it is held inside the picture, without
+    /// raising anything. For a map leaving the screen, where a move left going would ease a picture
+    /// nobody can see and the map draws the arrival when it is back, and for a map handed a new picture
+    /// of the same place during a drag, which it draws where the drag stops.
     /// </summary>
     public void Stop()
     {
@@ -513,9 +514,12 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     /// </summary>
     private void Become(MapMotion motion)
     {
+        // The screen no longer shows the picture past the edge, so neither does what the map takes it
+        // to show. A drag does not change the zoom, so holding it changes only the position.
         if (_moving.CutsShort(motion))
         {
             _camera.Unstretch();
+            Shown = Shown.Held(Ceiling);
         }
 
         _settle.Stop();
