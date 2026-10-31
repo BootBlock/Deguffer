@@ -138,4 +138,63 @@ public sealed class MapStretchTests
             Assert.Equal(expected.Y, remeasured.Y, Precision);
         }
     }
+
+    /// <summary>
+    /// Inside the picture the tracker goes where the hand puts it, the camera does not stretch, and the
+    /// screen shows the tracker.
+    /// </summary>
+    [Fact]
+    public void AStepInsideThePictureAsksTheTrackerForAllOfIt()
+    {
+        var stretch = new MapStretch(Middle, Width, Height, elastic: true);
+
+        var pull = stretch.Move(200, -150, MapCeiling.Least);
+
+        Assert.Equal(Middle.X - 200, pull.Tracker.X, Precision);
+        Assert.Equal(Middle.Y + 150, pull.Tracker.Y, Precision);
+        Assert.Equal(0, pull.StretchX, Precision);
+        Assert.Equal(0, pull.StretchY, Precision);
+        Assert.Equal(pull.Tracker.Shown(Width, Height, elastic: true, MapCeiling.Least), pull.Shown);
+        Assert.Equal(pull.Shown, pull.Target);
+    }
+
+    /// <summary>
+    /// Past an edge the tracker is asked only as far as the edge, which is as far as it goes, and the
+    /// camera stretches the rest of the way, so the screen shows the picture past the edge and the
+    /// camera is going back inside it.
+    /// </summary>
+    [Fact]
+    public void AStepPastAnEdgeHoldsTheTrackerAndStretchesTheCamera()
+    {
+        var stretch = new MapStretch(Middle, Width, Height, elastic: true);
+
+        var pull = stretch.Move(Middle.X + 300, 0, MapCeiling.Least);
+
+        Assert.Equal(0, pull.Tracker.X, Precision);
+        Assert.True(pull.StretchX > 0, $"the camera was not stretched past the edge, by {pull.StretchX}");
+        Assert.True(pull.Shown.Left < 0, $"the screen was taken to show the picture inside its edge, at {pull.Shown.Left}");
+        Assert.Equal(pull.Shown.Held(MapCeiling.Least), pull.Target);
+        Assert.True(pull.Target.Left >= 0, $"the camera was going past the edge, to {pull.Target.Left}");
+    }
+
+    /// <summary>
+    /// A drag measured from a new origin and asked again from where it is puts the screen where the
+    /// hand had it, so a refused move of the origin does not move the picture under the hand.
+    /// </summary>
+    [Fact]
+    public void AStepOfNothingAfterRemeasuringShowsWhereTheHandHasThePicture()
+    {
+        var stretch = new MapStretch(Middle, Width, Height, elastic: true);
+        var before = stretch.Move(120, 40, MapCeiling.Least);
+        var origin = new MapOrigin(0.4, 0.45);
+
+        stretch.Remeasure(origin);
+
+        var after = stretch.Move(0, 0, MapCeiling.Least);
+
+        Assert.Equal(before.Shown.Zoom, after.Shown.Zoom, Precision);
+        Assert.Equal(before.Shown.Left, after.Shown.Left, Precision);
+        Assert.Equal(before.Shown.Top, after.Shown.Top, Precision);
+        Assert.Equal(origin, after.Tracker.Origin);
+    }
 }

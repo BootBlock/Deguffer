@@ -188,6 +188,44 @@ public sealed class MapCeilingTests
         }
     }
 
+    /// <summary>
+    /// A drawing that allows less than the camera has already reached stops the next zoom, never one
+    /// already made: the ceiling stays at where the camera is going, or at what it shows within the
+    /// ceiling it had, and a drawing that allows more raises it.
+    /// </summary>
+    [Theory]
+    [InlineData(100, 400, 300, 200, 300)]
+    [InlineData(100, 250, 64, 200, 200)]
+    [InlineData(100, 150, 64, 200, 150)]
+    [InlineData(500, 400, 300, 200, 500)]
+    public void ADrawingNeverLowersTheCeilingBelowAZoomAlreadyMade(double drawn, double ceiling, double going, double showing, double expected) =>
+        Assert.Equal(expected, MapCeiling.Drawn(drawn, ceiling, MapViewport.Seen(going, 0, 0), MapViewport.Seen(showing, 0, 0)));
+
+    /// <summary>A target deeper than the ceiling raises it to its zoom, and a shallower one leaves it.</summary>
+    [Theory]
+    [InlineData(100, 400, 400)]
+    [InlineData(100, 50, 100)]
+    public void ATargetDeeperThanTheCeilingRaisesIt(double ceiling, double going, double expected) =>
+        Assert.Equal(expected, MapCeiling.Toward(ceiling, MapViewport.Seen(going, 0, 0)));
+
+    /// <summary>A map handed something else starts at the least ceiling, or at the zoom the reader was at there.</summary>
+    [Theory]
+    [InlineData(1, MapCeiling.Least)]
+    [InlineData(300, 300)]
+    public void AMapHandedSomethingElseStartsTheCeilingAgain(double zoom, double expected) =>
+        Assert.Equal(expected, MapCeiling.Afresh(MapViewport.Seen(zoom, 0, 0)));
+
+    /// <summary>However deep a drawing, a target or a reopened place goes, the ceiling stops at the precision limit.</summary>
+    [Fact]
+    public void NoCeilingGoesPastThePrecisionLimit()
+    {
+        var deeper = MapViewport.Seen(MapCeiling.Most * 4, 0, 0);
+
+        Assert.Equal(MapCeiling.Most, MapCeiling.Drawn(MapCeiling.Most * 2, MapCeiling.Least, deeper, deeper));
+        Assert.Equal(MapCeiling.Most, MapCeiling.Toward(MapCeiling.Least, deeper));
+        Assert.Equal(MapCeiling.Most, MapCeiling.Afresh(deeper));
+    }
+
     private static ExploreSurface Draw(ExploreTree tree, ExploreView view, MapViewport viewport) =>
         ExploreSurface.Create(
             tree, tree.RootNode, view, Width, Height, scale: 1, textScale: 1,

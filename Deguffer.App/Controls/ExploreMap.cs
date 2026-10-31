@@ -427,7 +427,7 @@ public sealed class ExploreMap : UserControl
         _overview.HiddenChanged += (_, _) => OverviewHiddenChanged?.Invoke(this, EventArgs.Empty);
 
         // The camera is held where it was, measured from its new origin, until this returns, so
-        // everything on it is placed from that origin at once (see ExploreZoom.Rebase).
+        // everything on it is placed from that origin at once (see ExploreOrigin.Move).
         _zoom.OriginMoved += (_, _) => Fit();
 
         // A pinch, a touch or the wheel with Ctrl held moves the picture on the compositor before the

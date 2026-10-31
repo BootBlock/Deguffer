@@ -96,6 +96,19 @@ public readonly record struct MapTracking(double X, double Y, double Scale, MapO
     }
 
     /// <summary>
+    /// Whether the screen shows this somewhere else once the ceiling goes from
+    /// <paramref name="before"/> to <paramref name="after"/>.
+    ///
+    /// <para>Where the picture may stretch, <paramref name="elastic"/>, the screen shows the tracker as
+    /// it is and never moves with the ceiling. Where it may not, the screen shows the tracker held to
+    /// the ceiling (see <see cref="Shown"/>), so a new one moves the screen at once wherever the tracker
+    /// is past either: a pinch gives a little past the ceiling under the hand. Held to both alike, the
+    /// screen has not moved.</para>
+    /// </summary>
+    public bool MovesWithCeiling(double before, double after, bool elastic) =>
+        !elastic && Math.Min(Scale, before) != Math.Min(Scale, after);
+
+    /// <summary>
     /// The tracker's <paramref name="scale"/> held to its limits: between 1 and
     /// <paramref name="ceiling"/>. One rule with the camera's expression, as <see cref="ShownEdge{T}"/> is.
     /// </summary>
