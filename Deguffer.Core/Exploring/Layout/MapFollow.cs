@@ -20,6 +20,22 @@ namespace Deguffer.Core.Exploring.Layout;
 public static class MapFollow
 {
     /// <summary>
+    /// Where the camera goes as <paramref name="later"/> lays out again the place
+    /// <paramref name="earlier"/> showed, or null where it stays: only from a camera at rest where both
+    /// were drawn, shown at <paramref name="shown"/> and going to <paramref name="target"/>, which the
+    /// reader can move. A camera the reader is moving is the reader's, and a drawing the zoom does not
+    /// place has no camera to follow.
+    /// </summary>
+    public static MapViewport? From(ExploreSurface? earlier, ExploreSurface later, MapViewport shown, MapViewport target, bool movable)
+    {
+        ArgumentNullException.ThrowIfNull(later);
+
+        return movable && earlier is not null && later.Viewport is { } drawn && shown == drawn && target == drawn
+            ? Onward(earlier, later)
+            : null;
+    }
+
+    /// <summary>
     /// The viewport that keeps the reader on the same thing after <paramref name="earlier"/> is laid
     /// out again as <paramref name="later"/>: two drawings of the same place at the same zoom, which
     /// fills the screen. The zoom <paramref name="later"/> was drawn at where nothing can be followed: a

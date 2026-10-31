@@ -17,95 +17,37 @@ namespace Deguffer.App.Controls;
 /// leaving the later drawing, which has faded in under them over the same time.</para>
 ///
 /// <para>Where the sprites are, and which drawing each shows, is Core's; this only builds them and
-/// runs them (G1).</para>
+/// sets them moving, on a stage of their own (<see cref="ExploreMoveStage"/>) (G1).</para>
 /// </summary>
-internal sealed class ExploreShift
+internal sealed class ExploreShift(Compositor compositor)
 {
-    private readonly Compositor _compositor;
-
-    /// <summary>Follows the map's camera, as every drawing does.</summary>
-    private readonly ContainerVisual _camera;
-
-    /// <summary>Where the canvas both drawings share lies in the picture, which the camera places on the screen.</summary>
-    private readonly ContainerVisual _placed;
-
-    /// <summary>The move under way, until its animations have finished; null while there is none.</summary>
-    private CompositionScopedBatch? _moving;
-
-    public ExploreShift(Compositor compositor, MapCamera camera)
-    {
-        _compositor = compositor;
-        _camera = compositor.CreateContainerVisual();
-        _placed = compositor.CreateContainerVisual();
-        _camera.Children.InsertAtTop(_placed);
-        camera.Follow(_camera);
-    }
-
-    /// <summary>Raised once when a move is over, whether it ran its course or was finished early.</summary>
-    public event EventHandler? Arrived;
-
-    /// <summary>The top of the moving shapes in the composition tree.</summary>
-    public Visual Root => _camera;
-
-    public bool IsMoving => _moving is not null;
+    private readonly Compositor _compositor = compositor;
 
     /// <summary>
-    /// Move <paramref name="travels"/> as <paramref name="motion"/> says, each showing
-    /// <paramref name="earlier"/> or <paramref name="later"/>, two drawings on a canvas that lies at
-    /// <paramref name="placed"/> in the picture, over <paramref name="motion"/>, which travels.
+    /// Put <paramref name="travels"/> on <paramref name="stage"/>, each showing
+    /// <paramref name="earlier"/> or <paramref name="later"/>, two drawings of the canvas the stage is
+    /// placed at, and move each as it says over <paramref name="motion"/>, which travels.
     /// </summary>
-    public void Start(
+    public void Build(
+        VisualCollection stage,
         IReadOnlyList<ShapeTravel> travels,
         ICompositionSurface earlier,
         ICompositionSurface later,
-        MapTransform placed,
         Motion motion)
     {
-        Finish();
-
-        _placed.Place(placed);
-
-        var moving = _compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
-
         foreach (var travel in travels)
         {
-            _placed.Children.InsertAtTop(Sprite(travel, travel.ShowsEarlier ? earlier : later, motion));
+            stage.InsertAtTop(Sprite(travel, travel.ShowsEarlier ? earlier : later, motion));
         }
-
-        moving.End();
-        moving.Completed += (sender, _) =>
-        {
-            // A move finished early has gone already, and a later one may be under way.
-            if (ReferenceEquals(sender, _moving))
-            {
-                Finish();
-            }
-        };
-
-        _moving = moving;
     }
 
-    /// <summary>
-    /// End the move where it was going: the sprites go. The crossfade under them is the layers' to
-    /// bring to its end (<see cref="ExploreLayers.LandFades"/>).
-    /// </summary>
-    public void Finish()
+    /// <summary>Let go of a sprite <see cref="Build"/> made, and its brush.</summary>
+    public static void Release(Visual visual)
     {
-        if (_moving is null)
-        {
-            return;
-        }
+        var sprite = (SpriteVisual)visual;
 
-        _moving = null;
-
-        foreach (var sprite in _placed.Children.OfType<SpriteVisual>().ToList())
-        {
-            _placed.Children.Remove(sprite);
-            sprite.Brush.Dispose();
-            sprite.Dispose();
-        }
-
-        Arrived?.Invoke(this, EventArgs.Empty);
+        sprite.Brush.Dispose();
+        sprite.Dispose();
     }
 
     private SpriteVisual Sprite(ShapeTravel travel, ICompositionSurface surface, Motion motion)
