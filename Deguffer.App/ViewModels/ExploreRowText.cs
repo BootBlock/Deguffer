@@ -1,127 +1,22 @@
 using Deguffer.Core.Exploring;
-using Deguffer.Core.Scanning;
 
 namespace Deguffer.App.ViewModels;
 
 /// <summary>
-/// How a node of a scanned tree is worded: its size, its age, and its two dates in full.
+/// How a row's tooltip is worded: its dates in full, and the space on disk set beside them.
 ///
-/// <para>Separate from <see cref="ExploreViewModel"/> because it is a different job. That one
-/// decides which node is being looked at; this decides what a reader is told about one, and every
-/// rule here is about honesty rather than about navigation — where a figure is a bound rather than
-/// a measurement, and in which direction it can be wrong (G1).</para>
-///
-/// <para>Static and in the shell rather than in Core, unlike <see cref="FreeSpace"/> and
-/// <see cref="RelativeAge"/>, which it composes. Those two are rules about what any part of the app
-/// may say; these are this page's own columns, and no other page has them.</para>
+/// <para>In the shell, unlike the size, the storage and the age, which are
+/// <see cref="ExploreNodeText"/>'s: those are rules about what the page may say of a node anywhere,
+/// and these are this page's own tooltip, in the reader's own time zone and format.</para>
 /// </summary>
 internal static class ExploreRowText
 {
-    /// <summary>
-    /// A row's size, marked where it is a lower bound.
-    ///
-    /// <para>A directory the walk was refused totals only what it could see, and the plain figure
-    /// reads as a measurement. The page says so once in its status line, which is true and is not
-    /// enough — it is the row for <c>System Volume Information</c> showing "0 B" that a reader acts
-    /// on. <see cref="ExploreRow.Description"/> says the same in words for a screen reader, because
-    /// a symbol read aloud is not a sentence.</para>
-    /// </summary>
-    public static string Size(ExploreTree tree, int node) =>
-        tree.HasUnknownSizeBelow(node)
-            ? "≥ " + FreeSpace.Format(tree.SizeOf(node))
-            : FreeSpace.Format(tree.SizeOf(node));
-
-    /// <summary>
-    /// What a node's space on disk leaves out: its length, where that reads differently, and why the
-    /// two part. Empty where there is nothing to add, which is most files.
-    ///
-    /// <para>The length is compared as it is shown rather than to the byte. On the file table every
-    /// file's space on disk is rounded up to whole clusters, and "4.0 KB on disk, 4.0 KB long" tells
-    /// the reader nothing.</para>
-    ///
-    /// <para>A folder holds the reasons found anywhere under it, so it says it holds such files
-    /// rather than that it is one.</para>
-    /// </summary>
-    public static string Storage(ExploreTree tree, int node)
-    {
-        var parts = new List<string>(2);
-
-        var length = FreeSpace.Format(tree.LengthOf(node));
-        if (length != FreeSpace.Format(tree.SizeOf(node)))
-        {
-            parts.Add($"{length} long");
-        }
-
-        if (Kinds(tree.StorageOf(node)) is { } kinds)
-        {
-            parts.Add(tree.IsDirectory(node) ? $"holds {kinds} files" : kinds);
-        }
-
-        return string.Join(", ", parts);
-    }
-
     /// <summary>
     /// What a row's tooltip says before anything else about it: the space on disk with the length
     /// and its explanation where there is one, then the two dates.
     /// </summary>
     public static string Details(string size, string storage, string dates) =>
         storage.Length > 0 ? $"{size} on disk, {storage}{Environment.NewLine}{dates}" : dates;
-
-    /// <summary>The kinds of storage <paramref name="storage"/> names, in words, or null for none.</summary>
-    private static string? Kinds(FileStorage storage)
-    {
-        var kinds = new List<string>(3);
-
-        if (storage.HasFlag(FileStorage.CloudOnly))
-        {
-            kinds.Add("online-only");
-        }
-
-        if (storage.HasFlag(FileStorage.Compressed))
-        {
-            kinds.Add("compressed");
-        }
-
-        if (storage.HasFlag(FileStorage.Sparse))
-        {
-            kinds.Add("sparse");
-        }
-
-        return kinds.Count switch
-        {
-            0 => null,
-            1 => kinds[0],
-            _ => $"{string.Join(", ", kinds[..^1])} and {kinds[^1]}",
-        };
-    }
-
-    /// <summary>
-    /// A row's age, marked where the scan could not see under it.
-    ///
-    /// <para>A directory the walk was refused contributes only its own timestamp to the roll-up,
-    /// and a directory's own timestamp moves when its layout changes rather than when its contents
-    /// do — so a log being appended to right now behind a refused listing reads as years idle.
-    /// Core's <c>DirectoryAge</c> answers "unknown" in that position rather than risk it, which is
-    /// the right trade for a row that prices a deletion and the wrong one here: nearly every drive
-    /// has some corner it cannot read, so blanking the column would blank the drive root and every
-    /// folder above the refusal.</para>
-    ///
-    /// <para>So the date is kept and qualified, in the direction the error actually runs. The age
-    /// shown can only be too old, never too new — the same asymmetry <see cref="Size"/> marks with
-    /// "≥", and stated in words rather than a symbol because a screen reader reads this one
-    /// aloud.</para>
-    /// </summary>
-    /// <param name="now">
-    /// Passed in rather than read, so one list is dated against one instant and two rows a
-    /// millisecond apart cannot land in different days.
-    /// </param>
-    public static string Age(ExploreTree tree, int node, DateTime now)
-    {
-        var written = tree.ModifiedOf(node);
-        var age = RelativeAge.Describe(written.Utc, now);
-
-        return written.IsKnown && tree.HasUnknownSizeBelow(node) ? $"{age} or newer" : age;
-    }
 
     /// <summary>
     /// Both of a row's dates in full, for its tooltip.

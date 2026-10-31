@@ -1,4 +1,5 @@
 using Deguffer.Core.Exploring.Acting;
+using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Exploring;
@@ -14,7 +15,21 @@ namespace Deguffer.Core.Exploring;
 /// <param name="Name">Its own name, not its path: the shapes round it are its siblings, and a screen reader reads the name first.</param>
 /// <param name="Kind">What it is, as one capitalised noun or two: "Folder", "File", "Program".</param>
 /// <param name="Opens">Whether opening it shows what it holds, as a double-click on its shape does.</param>
-public sealed record MapShapeFacts(string Name, string Kind, bool Opens);
+public sealed record MapShapeFacts(string Name, string Kind, bool Opens)
+{
+    /// <summary>
+    /// What a screen reader is told of <paramref name="node"/> of <paramref name="asked"/>, where that
+    /// is the tree on screen and holds it (<see cref="ShownTree"/>); otherwise null, so a shape of
+    /// any other tree is named by the map alone.
+    /// </summary>
+    public static MapShapeFacts? For<TTree>(ISizedTree asked, TTree? shown, int node, IMapShapes<TTree> shapes)
+        where TTree : class, IShownTree
+    {
+        ArgumentNullException.ThrowIfNull(shapes);
+
+        return ShownTree.Of(asked, shown, node) is { } tree ? shapes.FactsOf(tree, node) : null;
+    }
+}
 
 /// <summary>
 /// What a screen reader says of one shape on the map: its name, how much it is and how much of what

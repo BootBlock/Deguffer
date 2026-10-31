@@ -1,19 +1,34 @@
 using Deguffer.Core.Exploring;
-using Deguffer.Core.Memory;
 using Deguffer.Core.Scanning;
 
-namespace Deguffer.App.ViewModels;
+namespace Deguffer.Core.Memory;
 
 /// <summary>
-/// What one node of a <see cref="MemoryTree"/> is called on screen, and what its figures read as.
+/// What one node of a <see cref="MemoryTree"/> is called wherever the page names it, and what its
+/// figures read as: in its rows and trail, on the line under its map and to a screen reader.
 ///
-/// <para>Here rather than in the tree, because a name is presentation: the tree holds a process's
-/// image name and the services it hosts, and this decides that a process's own share reads as the
-/// process "itself". What a service host is called is <see cref="ServiceHostText"/>'s, because §7.2
-/// states that one as a rule and the words that promise it are beside it.</para>
+/// <para>Apart from the tree, because a name is wording: the tree holds a process's image name and
+/// the services it hosts, and this decides that a process's own share reads as the process
+/// "itself". What a service host is called is <see cref="ServiceHostText"/>'s, because §7.2 states
+/// that one as a rule and the words that promise it are beside it.</para>
 /// </summary>
-internal static class MemoryText
+public static class MemoryText
 {
+    /// <summary>
+    /// The line under the map, where the pointer or the keyboard is on <paramref name="node"/>: its
+    /// name, its figures, and what part of memory it is.
+    /// </summary>
+    public static MapReadout Readout(MemoryTree tree, int node) =>
+        new(Name(tree, node), Figures(tree, node), MemoryPartGuide.Describe(tree, node));
+
+    /// <summary>
+    /// What a screen reader is told of <paramref name="node"/>: its name, what part of memory it is,
+    /// and whether opening it shows what it holds. Nothing of removing: what the page does to a
+    /// program is close it, which its own button says (§7.2.1).
+    /// </summary>
+    public static MapShapeFacts Facts(MemoryTree tree, int node) =>
+        new(Name(tree, node), Kind(tree, node), MemoryPlace.Inside(tree, node) is not null);
+
     /// <summary>What to call <paramref name="node"/>.</summary>
     public static string Name(MemoryTree tree, int node)
     {

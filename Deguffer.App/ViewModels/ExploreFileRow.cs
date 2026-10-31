@@ -20,7 +20,7 @@ namespace Deguffer.App.ViewModels;
 /// </param>
 /// <param name="SizeLabel">The space the file takes on the disk, which is what the list is ordered by.</param>
 /// <param name="StorageLabel">
-/// Its length and why that is not its size, or empty where it is. See <see cref="ExploreRowText.Storage"/>.
+/// Its length and why that is not its size, or empty where it is. See <see cref="ExploreNodeText.Storage"/>.
 /// </param>
 public sealed record ExploreFileRow(
     int Node,
@@ -92,9 +92,9 @@ public sealed record ExploreFileRow(
             path,
             tree.NameOf(node),
             tree.PathOf(tree.ParentOf(node)),
-            ExploreRowText.Size(tree, node),
-            ExploreRowText.Storage(tree, node),
-            ExploreRowText.Age(tree, node, now),
+            ExploreNodeText.Size(tree, node),
+            ExploreNodeText.Storage(tree, node),
+            ExploreNodeText.Age(tree, node, now),
             ExploreRowText.Dates(tree, node),
             answer.IsAllowed ? null : answer.Reason);
     }
