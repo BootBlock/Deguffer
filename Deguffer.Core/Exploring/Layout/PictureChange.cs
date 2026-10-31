@@ -12,84 +12,53 @@ namespace Deguffer.Core.Exploring.Layout;
 /// </summary>
 public sealed record PictureChange
 {
-    private readonly bool _zooms;
-
-    private PictureChange(MapPicture shown, MapPicture asked, MapViewport? viewport, bool zoomable)
+    /// <summary>Made only by <see cref="Between"/>, which decides every answer.</summary>
+    private PictureChange()
     {
-        Shown = shown;
-        Asked = asked;
-
-        // A zoom is into one picture. Another tree, another folder or another view is another
-        // picture, and the part of this one the reader had magnified means nothing in it. So is the
-        // same root with the volume beside it or without it, which is the root opened or closed.
-        Another = asked != shown;
-
-        _zooms = zoomable && asked.Tree is not null && ExploreSurface.Zooms(asked.Tree, asked.View);
-
-        // The same place in a new tree, drawn the same way: a scan's next snapshot, or what a removal
-        // left. A change of view, such as a finished scan drawn as a treemap after its snapshots'
-        // icicles, is not. The volume beside it may have new figures, as a removal frees space, but
-        // it is drawn beside both or beside neither.
-        SamePlace = Another
-            && viewport is null
-            && asked.View == shown.View
-            && asked.Beside == shown.Beside
-            && asked.Tree is not null
-            && shown.Tree is ITrackedTree tracked
-            && ExploreSurface.Drawn(asked.Tree, asked.View) == ExploreSurface.Drawn(tracked, shown.View)
-            && tracked.CounterpartsIn(asked.Tree)?.Invoke(shown.Node) == asked.Node;
-
-        Morph = Another
-            && viewport is null
-            && asked.Tree is not null
-            && ReferenceEquals(asked.Tree, shown.Tree)
-            && asked.Node == shown.Node
-            && asked.Volume == shown.Volume
-            && ViewMorph.Morphs(asked.Tree, shown.View, asked.View);
-
-        Opened = _zooms && viewport is { } revisited ? revisited : MapViewport.Whole;
-        Glide = !Another && _zooms ? viewport : null;
     }
 
     /// <summary>The picture on screen when the other was asked for.</summary>
-    public MapPicture Shown { get; }
+    public MapPicture Shown { get; private init; }
 
     /// <summary>The picture asked for.</summary>
-    public MapPicture Asked { get; }
+    public MapPicture Asked { get; private init; }
 
     /// <summary>
     /// Whether <see cref="Asked"/> is another picture than <see cref="Shown"/>. Where it is not, the
     /// zoom stays, as it does for a new colouring, scheme, spacing or finish.
     /// </summary>
-    public bool Another { get; }
+    public bool Another { get; private init; }
 
     /// <summary>
     /// Whether <see cref="Asked"/> is the same place as <see cref="Shown"/> laid out again, in a new
     /// tree of it drawn the same way, so the zoom stays and the shapes move to where they are now.
     /// Never for a page going back or forward, which asks for a zoom of its own.
     /// </summary>
-    public bool SamePlace { get; }
+    public bool SamePlace { get; private init; }
 
     /// <summary>
     /// Whether <see cref="Asked"/> is the same place in another of the views that draw a picture, so
     /// its largest shapes travel from where the one view draws them to where the other does, from the
     /// whole of one picture to the whole of the other (<see cref="ViewMorph"/>).
     /// </summary>
-    public bool Morph { get; }
+    public bool Morph { get; private init; }
 
     /// <summary>
     /// The zoom <see cref="Asked"/> is drawn at from the start, rather than drawn whole and then glided
     /// in: the zoom a page going back or forward asked for, on a picture that zooms, and the whole of
     /// it otherwise.
     /// </summary>
-    public MapViewport Opened { get; }
+    public MapViewport Opened { get; private init; }
 
     /// <summary>
     /// The zoom the same picture moves to, as a zoom to a shape does, for a page going back or forward
     /// to where the reader had zoomed on it. Null for another picture, which opens at
     /// <see cref="Opened"/>, and for a picture that does not zoom.
     /// </summary>
-    public MapViewport? Glide { get; }
+    public MapViewport? Glide { get; private init; }
+
+    /// <summary>Whether <see cref="Asked"/> is drawn as a picture the map lets the reader zoom.</summary>
+    private bool Zooms { get; init; }
 
     /// <summary>
     /// What the map is to do, showing <paramref name="shown"/>, when it is asked for
@@ -100,8 +69,46 @@ public sealed record PictureChange
     /// keep the zoom on the same picture and start another at the whole of it.
     /// </param>
     /// <param name="zoomable">Whether the map lets the reader zoom at all.</param>
-    public static PictureChange Between(MapPicture shown, MapPicture asked, MapViewport? viewport, bool zoomable) =>
-        new(shown, asked, viewport, zoomable);
+    public static PictureChange Between(MapPicture shown, MapPicture asked, MapViewport? viewport, bool zoomable)
+    {
+        // A zoom is into one picture. Another tree, another folder or another view is another
+        // picture, and the part of this one the reader had magnified means nothing in it. So is the
+        // same root with the volume beside it or without it, which is the root opened or closed.
+        var another = asked != shown;
+        var zooms = zoomable && asked.Tree is not null && ExploreSurface.Zooms(asked.Tree, asked.View);
+
+        return new PictureChange
+        {
+            Shown = shown,
+            Asked = asked,
+            Another = another,
+
+            // The same place in a new tree, drawn the same way: a scan's next snapshot, or what a
+            // removal left. A change of view, such as a finished scan drawn as a treemap after its
+            // snapshots' icicles, is not. The volume beside it may have new figures, as a removal
+            // frees space, but it is drawn beside both or beside neither.
+            SamePlace = another
+                && viewport is null
+                && asked.View == shown.View
+                && asked.Beside == shown.Beside
+                && asked.Tree is not null
+                && shown.Tree is ITrackedTree tracked
+                && ExploreSurface.Drawn(asked.Tree, asked.View) == ExploreSurface.Drawn(tracked, shown.View)
+                && tracked.CounterpartsIn(asked.Tree)?.Invoke(shown.Node) == asked.Node,
+
+            Morph = another
+                && viewport is null
+                && asked.Tree is not null
+                && ReferenceEquals(asked.Tree, shown.Tree)
+                && asked.Node == shown.Node
+                && asked.Volume == shown.Volume
+                && ViewMorph.Morphs(asked.Tree, shown.View, asked.View),
+
+            Zooms = zooms,
+            Opened = zooms && viewport is { } revisited ? revisited : MapViewport.Whole,
+            Glide = !another && zooms ? viewport : null,
+        };
+    }
 
     /// <summary>
     /// Whether this asks for the picture a flight on its way is leaving, <paramref name="left"/> as it
@@ -125,7 +132,7 @@ public sealed record PictureChange
     /// </param>
     public PictureStep Step(bool drawingZooms)
     {
-        if (!_zooms || !drawingZooms || !ReferenceEquals(Asked.Tree, Shown.Tree) || Asked.View != Shown.View)
+        if (!Zooms || !drawingZooms || !ReferenceEquals(Asked.Tree, Shown.Tree) || Asked.View != Shown.View)
         {
             return PictureStep.Across;
         }
