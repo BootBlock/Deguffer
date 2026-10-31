@@ -12,9 +12,10 @@ namespace Deguffer.App.Controls;
 /// pointer is over is outlined, and how it is reported. The drag, the wheel and the routed pointer
 /// handlers stay in the map, which owns the pointer capture and the cursor.</para>
 ///
-/// <para>This is the only thing that says what the pointer is over, so a report it skips because nothing
-/// changed is never one the page needed: a page that also cleared the readout would blank its own line
-/// and never hear otherwise, and the outline would then mark a shape nothing named.</para>
+/// <para>A report is skipped only where what the pointer is over has not changed. That holds because only
+/// the map writes the readout, through this and through the keyboard's landings: a page that also
+/// cleared it would blank its own line and never hear otherwise, and the outline would then mark a
+/// shape nothing named.</para>
 /// </summary>
 internal sealed class ExplorePointer
 {
