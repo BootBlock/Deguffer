@@ -605,8 +605,9 @@ not the shell asked.
   be the largest block on a drive it takes none of. The page says which figure it draws, keeps the
   length beside it where the two differ, and says why: online-only, compressed or sparse. Both routes
   draw the same file alike. The walk learns lengths alone, so it asks the file system only about a
-  file whose attributes mark it, and says that it counts a CompactOS file, whose mark the filter
-  hides, at its length. Where a scan still counts more than the volume has in use, the page says so.
+  file whose attributes mark it, and it counts a CompactOS file, whose mark the filter hides, at its
+  length. A finished scan puts no sentence of its own under the map: the readout and the rows state
+  each figure, and a lower bound is marked on the figure it qualifies.
 
 ### 7.2 Memory — where the memory goes
 

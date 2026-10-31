@@ -380,15 +380,15 @@ public sealed partial class ExploreSelection : ObservableObject
     private IReadOnlyList<ExploreItem> Items() =>
         _tree is not { } tree
             ? []
-            : [.. _nodes.Select(n => new ExploreItem(tree.PathOf(n), tree.IsDirectory(n), tree.SizeOf(n)))];
+            : [.. _nodes.Select(n => new ExploreItem(tree.PathOf(n), tree.IsDirectory(n), tree.SizeOf(n), tree.HasUnknownSizeBelow(n)))];
 
     /// <summary>What is selected, in <see cref="Label"/> and <see cref="Figures"/>. Raises nothing.</summary>
     private void Describe() =>
         (_label, _figures) = (_tree, _nodes) switch
         {
             (null, _) or (_, []) => (string.Empty, string.Empty),
-            ({ } tree, [var only]) => ($"Selected: {tree.PathOf(only)}", FreeSpace.Format(tree.SizeOf(only))),
-            ({ } tree, var many) => ($"Selected: {many.Count} items", FreeSpace.Format(many.Sum(tree.SizeOf))),
+            ({ } tree, [var only]) => ($"Selected: {tree.PathOf(only)}", ExploreNodeText.Size(tree, only)),
+            ({ } tree, var many) => ($"Selected: {many.Count} items", ExploreNodeText.Total(tree, many)),
         };
 
     /// <summary>

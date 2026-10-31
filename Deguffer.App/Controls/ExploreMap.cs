@@ -788,7 +788,7 @@ public sealed class ExploreMap : UserControl
     {
         ArgumentNullException.ThrowIfNull(tree);
 
-        return node => MapShapeText.Label(tree.NameOf(node), tree.SizeOf(node));
+        return node => MapShapeText.Label(tree, node);
     }
 
     /// <summary>
@@ -2400,17 +2400,19 @@ public sealed class ExploreMap : UserControl
             return string.Empty;
         }
 
-        var name = MapBlock.Of(shape.Node) is { } block ? block.Name : shape.IsNode ? FactsOf(drawing, shape.Node)?.Name : null;
+        var facts = shape.IsNode ? FactsOf(drawing, shape.Node) : null;
+        var name = MapBlock.Of(shape.Node) is { } block ? block.Name : facts?.Name;
         var (ofBytes, named) = MapFolders.ShareBasis(drawing.Tree, DrawnNode, drawing.HasVolumeBeside, folder, drawing.Shapes(null));
+        var lowerBound = facts?.LowerBound ?? false;
 
         // A share of the drive is named by no node. A share of a folder the page says nothing of is not
         // said at all, rather than said to be of the drive.
         return (name, named) switch
         {
             (null, _) => string.Empty,
-            (_, null) => MapShapeText.Name(name, shape.Bytes, ofBytes, ofName: null),
-            (_, { } folderNode) when FactsOf(drawing, folderNode) is { } of => MapShapeText.Name(name, shape.Bytes, ofBytes, of.Name),
-            _ => MapShapeText.Name(name, shape.Bytes, ofBytes: 0, ofName: null),
+            (_, null) => MapShapeText.Name(name, shape.Bytes, ofBytes, ofName: null, lowerBound),
+            (_, { } folderNode) when FactsOf(drawing, folderNode) is { } of => MapShapeText.Name(name, shape.Bytes, ofBytes, of.Name, lowerBound),
+            _ => MapShapeText.Name(name, shape.Bytes, ofBytes: 0, ofName: null, lowerBound),
         };
     }
 

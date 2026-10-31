@@ -1215,8 +1215,9 @@
                  the sentence saying a deletion may have removed something it was not asked to,
                  and leave the part saying it worked. So this one is allowed to change height, and
                  it does so when a scan starts or ends or a removal reports — never while the map
-                 is being read. -->
+                 is being read. A finished scan leaves it empty, and then it takes no room. -->
             <TextBlock Text="{x:Bind ViewModel.Status.Sentence, Mode=OneWay}"
+                       Visibility="{x:Bind ViewModel.Status.HasSentence, Mode=OneWay}"
                        TextWrapping="Wrap"
                        AutomationProperties.LiveSetting="Polite" />
 

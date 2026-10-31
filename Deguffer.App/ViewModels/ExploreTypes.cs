@@ -228,8 +228,8 @@ public sealed partial class ExploreTypes : ObservableObject
             Summary = files switch
             {
                 0 => "There are no files here.",
-                1 => $"{FreeSpace.Format(total)} in 1 file.",
-                _ => $"{FreeSpace.Format(total)} in {files:N0} files.",
+                1 => $"{ExploreNodeText.Size(tree, root)} in 1 file.",
+                _ => $"{ExploreNodeText.Size(tree, root)} in {files:N0} files.",
             };
         }
         catch (OperationCanceledException)

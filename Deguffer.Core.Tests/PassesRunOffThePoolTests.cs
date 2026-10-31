@@ -139,7 +139,7 @@ public sealed class PassesRunOffThePoolTests : IDisposable
         var bin = new FakeRecycleBin();
 
         CrewThreads.AssertOffThePool(await CrewThreads.MadeBy(() => ExploreRemover.RemoveAsync(
-            [new ExploreItem(folder, IsDirectory: true, Bytes: 96)],
+            [new ExploreItem(folder, IsDirectory: true, Bytes: 96, LowerBound: false)],
             ExploreRemovalMode.RecycleBin,
             policy,
             bin)));

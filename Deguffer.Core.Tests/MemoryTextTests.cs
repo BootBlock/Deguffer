@@ -42,8 +42,8 @@ public sealed class MemoryTextTests
         var parent = _tree.Find(Parent)!.Value;
         var lone = _tree.Find(Lone)!.Value;
 
-        Assert.Equal(new MapShapeFacts(MemoryText.Name(_tree, parent), "Program", Opens: true), MemoryText.Facts(_tree, parent));
-        Assert.Equal(new MapShapeFacts(MemoryText.Name(_tree, lone), "Program", Opens: false), MemoryText.Facts(_tree, lone));
+        Assert.Equal(new MapShapeFacts(MemoryText.Name(_tree, parent), "Program", Opens: true, LowerBound: false), MemoryText.Facts(_tree, parent));
+        Assert.Equal(new MapShapeFacts(MemoryText.Name(_tree, lone), "Program", Opens: false, LowerBound: false), MemoryText.Facts(_tree, lone));
     }
 
     [Fact]

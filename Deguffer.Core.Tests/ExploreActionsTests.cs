@@ -544,7 +544,7 @@ public sealed class ExploreActionsTests : IDisposable
 
         Assert.True(actions.Verdict(folder).IsAllowed);
 
-        var report = await actions.RemoveAsync([new ExploreItem(folder, IsDirectory: true, Bytes: 0)], ExploreRemovalMode.Permanent);
+        var report = await actions.RemoveAsync([new ExploreItem(folder, IsDirectory: true, Bytes: 0, LowerBound: false)], ExploreRemovalMode.Permanent);
 
         Assert.Contains("whole drive", Assert.Single(report!.Refused).Message);
         Assert.Empty(prompt.Asked);
@@ -645,5 +645,5 @@ public sealed class ExploreActionsTests : IDisposable
             [],
             volumes ?? new FakeVolumeInventory());
 
-    private static ExploreItem Item(string file) => new(file, IsDirectory: false, Bytes: new FileInfo(file).Length);
+    private static ExploreItem Item(string file) => new(file, IsDirectory: false, Bytes: new FileInfo(file).Length, LowerBound: false);
 }
