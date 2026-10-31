@@ -167,11 +167,11 @@ public sealed class CanvasRedraw
                     // per region.
                     if (Interlocked.Exchange(ref _handOverPosted, 1) == 0)
                     {
-                        _owner.Post(_ => HandOver(), null);
+                        _owner.Post(_ => HandOver(pixels), null);
                     }
                 });
 
-            _owner.Post(_ => Arrive(), null);
+            _owner.Post(_ => Arrive(surface, pixels), null);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
@@ -189,11 +189,11 @@ public sealed class CanvasRedraw
         }
 
         Surface = surface;
-        _target.Begin(this);
+        _target.Begin(this, surface);
         _target.Shade(this, quads, _ground);
 
         IsArrived = true;
-        _target.Arrive(this);
+        _target.Arrive(this, surface);
     }
 
     private void Begin(ExploreSurface surface)
@@ -204,11 +204,11 @@ public sealed class CanvasRedraw
         }
 
         Surface = surface;
-        _target.Begin(this);
+        _target.Begin(this, surface);
     }
 
     /// <summary>Put every region painted so far on screen.</summary>
-    private void HandOver()
+    private void HandOver(byte[] pixels)
     {
         // Cleared before the queue is emptied, so a region finished from here on posts a hand-over
         // of its own rather than waiting in the queue for one that has already looked.
@@ -232,10 +232,10 @@ public sealed class CanvasRedraw
         }
 
         _landed.AddRange(regions);
-        _target.Land(this, regions);
+        _target.Land(this, pixels, regions);
     }
 
-    private void Arrive()
+    private void Arrive(ExploreSurface surface, byte[] pixels)
     {
         if (IsSuperseded)
         {
@@ -244,10 +244,10 @@ public sealed class CanvasRedraw
 
         // The last regions can still be queued: their hand-over is posted but has not run, and it
         // will find nothing to do once this has.
-        HandOver();
+        HandOver(pixels);
 
         IsArrived = true;
         _landed.Clear();
-        _target.Arrive(this);
+        _target.Arrive(this, surface);
     }
 }

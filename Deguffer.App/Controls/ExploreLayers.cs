@@ -1,9 +1,9 @@
 using System.Numerics;
+using Deguffer.App.Shell;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Viewing;
 using Microsoft.UI.Composition;
-using Windows.Graphics;
 
 namespace Deguffer.App.Controls;
 
@@ -32,35 +32,29 @@ namespace Deguffer.App.Controls;
 /// landed yet. A picture that changed leaves its drawings on screen in the same way until the new
 /// one has landed, and only then are they let go.</para>
 ///
-/// <para>The drawing the map works from is on top, under only a drawing landing to replace it. The
-/// others are under it by how far they are zoomed, finest uppermost, so where one runs out the next
-/// finest shows through. At rest the one on top covers the whole screen, because a viewport never
-/// shows past the picture's edge, so what a click picks is always what it drew (§7.1).</para>
+/// <para>The drawing the map works from is on top, under only a drawing landing to replace it, and the
+/// others under it by how far they are zoomed: see <see cref="KeptDrawings"/>, which also decides which
+/// surface the next drawing lands on and which drawings a new one covers. At rest the one on top covers
+/// the whole screen, because a viewport never shows past the picture's edge, so what a click picks is
+/// always what it drew (§7.1).</para>
 ///
 /// <para>While the camera moves, the tiles of the picture (<see cref="ExploreTiles"/>) are stacked
 /// round the drawing on top: those drawn more finely than it over it, so a zoom in is sharp, and the
 /// rest under it, where they show only past its edges. They go once the drawing the camera comes to
-/// rest at has arrived, and with the picture they are tiles of.</para>
+/// rest at has arrived, and with the picture they are tiles of. These own the tiles, and the map asks
+/// for them only through these.</para>
 ///
 /// <para>Separate from <see cref="ExploreMap"/>, which decides what is drawn and what the pointer is
 /// over; this holds surfaces and places them, and knows nothing of trees (G1).</para>
 ///
-/// <para>Over 500 lines because keeping the drawings, landing one a region at a time, stacking them
-/// and carrying them while a folder opens all act on the one set of layers and its order, and each
-/// would otherwise reach into the others' state.</para>
+/// <para>Over 250 lines because keeping the drawings, landing one, crossfading it in, stacking them
+/// with the tiles and carrying them while a folder opens all act on the one set of layers and its
+/// order, and each would otherwise reach into the others' state. The rules they follow are in
+/// <see cref="KeptDrawings"/>, a landing's own calls in <see cref="ExploreLanding"/>, and the
+/// overview's copy in <see cref="ExploreMiniature"/>.</para>
 /// </summary>
 internal sealed class ExploreLayers
 {
-    /// <summary>
-    /// How many zoomed drawings to keep besides the whole picture, the one on screen included.
-    ///
-    /// <para>Each is a surface the size of the canvas, which is 33 MB at 3840 by 2160. Two keeps the
-    /// last place a zoom or a drag stopped at under the one it stops at next: finer than the whole
-    /// picture where the reader goes back over it, and shown again outright where they return to
-    /// exactly that place.</para>
-    /// </summary>
-    private const int ZoomedKept = 2;
-
     private readonly Compositor _compositor;
 
     private readonly MapGraphics _graphics;
@@ -68,12 +62,19 @@ internal sealed class ExploreLayers
     /// <summary>Where all of it is carried to, in the screen's terms, while an opened folder grows over it.</summary>
     private readonly ContainerVisual _carried;
 
-    /// <summary>The camera: where the whole picture is on the screen.</summary>
-    private readonly ContainerVisual _camera;
+    /// <summary>The visual the camera moves: where the whole picture is on the screen.</summary>
+    private readonly ContainerVisual _cameraVisual;
 
-    private readonly MapCamera _mapCamera;
+    /// <summary>The map's camera, which <see cref="_cameraVisual"/> follows while these are the picture the map works from.</summary>
+    private readonly MapCamera _camera;
 
     private readonly List<ExploreLayer> _layers = [];
+
+    /// <summary>The overview's copy of the latest whole drawing: see <see cref="Overview"/>.</summary>
+    private readonly ExploreMiniature _miniature;
+
+    /// <summary>The tiles of the picture now, shown round the drawing on top while the camera moves.</summary>
+    private readonly ExploreTiles _tiles;
 
     /// <summary>A count of the drawings shown, so the least recently shown is the first to go.</summary>
     private long _showings;
@@ -104,68 +105,68 @@ internal sealed class ExploreLayers
     /// </summary>
     private int _fadesLanded;
 
-    /// <summary>
-    /// A small copy of the latest whole drawing to arrive, for the map's overview, kept until another
-    /// replaces it or the map says the picture is of another place: see <see cref="Overview"/>.
-    /// </summary>
-    private CompositionDrawingSurface? _overview;
-
-    private bool _hasOverview;
-
-    /// <summary>The tiles of the picture now, shown round the drawing on top while the camera moves.</summary>
-    private readonly ExploreTiles _tiles;
-
-    public ExploreLayers(Compositor compositor, MapGraphics graphics, MapCamera camera, ExploreTiles tiles)
+    /// <param name="motion">Whether the tiles crossfade in. See <see cref="ExploreTiles"/>.</param>
+    /// <param name="owner">The map's thread, where the tiles drawn off it are put on screen.</param>
+    public ExploreLayers(
+        Compositor compositor,
+        MapGraphics graphics,
+        MapCamera camera,
+        IMotionPolicy motion,
+        SynchronizationContext owner)
     {
         _compositor = compositor;
         _graphics = graphics;
-        _mapCamera = camera;
-        _tiles = tiles;
+        _camera = camera;
+        _miniature = new ExploreMiniature(graphics, () => OverviewChanged?.Invoke(this, EventArgs.Empty));
+        _tiles = new ExploreTiles(compositor, graphics, motion, owner);
+        _tiles.AnswersChanged += (_, _) => TileAnswersChanged?.Invoke(this, EventArgs.Empty);
 
-        _camera = compositor.CreateContainerVisual();
+        _cameraVisual = compositor.CreateContainerVisual();
         _carried = compositor.CreateContainerVisual();
-        _carried.Children.InsertAtTop(_camera);
-        _camera.Children.InsertAtBottom(tiles.Under);
-        _camera.Children.InsertAtTop(tiles.Over);
+        _carried.Children.InsertAtTop(_cameraVisual);
+        _cameraVisual.Children.InsertAtBottom(_tiles.Under);
+        _cameraVisual.Children.InsertAtTop(_tiles.Over);
     }
-
-    /// <summary>The tiles of the picture now. See <see cref="ExploreTiles"/>.</summary>
-    public ExploreTiles Tiles => _tiles;
-
-    /// <summary>
-    /// The drawing the map works from, where it is of the picture now and is a treemap that can be cut
-    /// into tiles; null otherwise. A drawing of a picture that has changed would cut tiles of the old one.
-    /// </summary>
-    public TiledSurface? Tiled =>
-        _current is { Drawing: TiledSurface { Viewport: not null } drawing } current && current.Picture == _picture
-            ? drawing
-            : null;
 
     /// <summary>The top of these drawings in the composition tree.</summary>
     public Visual Root => _carried;
 
     /// <summary>
     /// A small copy of the whole picture, for the overview a zoomed map shows in a corner, or null
-    /// while none has arrived of the place on screen.
-    ///
-    /// <para>A copy rather than the whole drawing's own surface, because that surface is taken for
-    /// another drawing as soon as the picture changes, and the overview is of the same place in the
-    /// old look until the new whole drawing arrives. Kept with these drawings rather than by the
-    /// overview, so a change of folder turned round brings back the overview of the folder it returns
-    /// to with its drawings.</para>
+    /// while none has arrived of the place on screen. See <see cref="ExploreMiniature"/> for why it is a
+    /// copy, and kept here.
     /// </summary>
-    public ICompositionSurface? Overview => _hasOverview ? _overview : null;
+    public ICompositionSurface? Overview => _miniature.Surface;
 
     /// <summary><see cref="Overview"/> has a new answer.</summary>
     public event EventHandler? OverviewChanged;
+
+    /// <summary>What a tile on screen answers for the pointer has changed. See <see cref="ExploreTiles.AnswersChanged"/>.</summary>
+    public event EventHandler? TileAnswersChanged;
+
+    /// <summary>
+    /// Whether a drawing is still fading in over the ones before it: the screen shows two drawings at
+    /// once, and a point on it is in neither of them alone (§7.1).
+    /// </summary>
+    public bool IsFading => _fading > 0;
+
+    /// <summary>Raised when the last crossfade under way has run its course.</summary>
+    public event EventHandler? Faded;
 
     /// <summary>
     /// Whether the whole picture is missing under a zoomed drawing on top, and is not landing either.
     /// See <see cref="ExploreMap"/>, which asks for it once the drawing on top is on screen.
     /// </summary>
-    public bool LacksWhole =>
-        _current is { Viewport.IsWhole: false }
-        && !_layers.Exists(layer => layer.Picture == _picture && layer.Viewport.IsWhole && layer.IsShown);
+    public bool LacksWhole => KeptDrawings.LacksWhole(_layers, _current, _picture);
+
+    /// <summary>
+    /// The drawing the map works from, where it is of the picture now and is a treemap that can be cut
+    /// into tiles; null otherwise. A drawing of a picture that has changed would cut tiles of the old one.
+    /// </summary>
+    private TiledSurface? Tiled =>
+        _current is { Drawing: TiledSurface { Viewport: not null } drawing } current && current.Picture == _picture
+            ? drawing
+            : null;
 
     /// <summary>
     /// Show the drawing already made of <paramref name="viewport"/> of the picture now, on top, and
@@ -173,7 +174,7 @@ internal sealed class ExploreLayers
     /// </summary>
     public ExploreSurface? Show(MapViewport viewport)
     {
-        if (Kept(viewport) is not { } layer)
+        if (KeptDrawings.Kept(_layers, viewport, _picture) is not { } layer)
         {
             return null;
         }
@@ -188,8 +189,7 @@ internal sealed class ExploreLayers
     /// The surface <paramref name="drawing"/> is painted on, once all of it is there, or null where
     /// none of these holds it whole.
     /// </summary>
-    public ICompositionSurface? SurfaceOf(ExploreSurface drawing) =>
-        _layers.Find(layer => ReferenceEquals(layer.Drawing, drawing))?.Surface;
+    public ICompositionSurface? SurfaceOf(ExploreSurface drawing) => Holding(drawing)?.Surface;
 
     /// <summary>
     /// Put the pointer's light at <paramref name="light"/> on <paramref name="drawing"/>, and take it off
@@ -198,7 +198,7 @@ internal sealed class ExploreLayers
     /// </summary>
     public void Light(ExploreSurface? drawing, PointerLight? light)
     {
-        var layer = drawing is null ? null : _layers.Find(kept => ReferenceEquals(kept.Drawing, drawing));
+        var layer = drawing is null ? null : Holding(drawing);
 
         if (layer != _lit)
         {
@@ -213,33 +213,115 @@ internal sealed class ExploreLayers
     /// Move with the map's camera, for the drawings of the picture the map works from. The compositor
     /// follows it: nothing here is written as it moves.
     /// </summary>
-    public void Follow() => _mapCamera.Follow(_camera);
+    public void Follow() => _camera.Follow(_cameraVisual);
 
     /// <summary>
     /// Stay where <paramref name="camera"/> put the picture, for the drawings a folder is opening out
     /// of: the map's camera goes on to the new picture, and these stay where the folder was opened.
     /// </summary>
-    public void Freeze(MapTransform camera) => MapCamera.Freeze(_camera, camera);
+    public void Freeze(MapTransform camera) => MapCamera.Freeze(_cameraVisual, camera);
 
     /// <summary>
-    /// Where a redraw of the picture now lands: over everything, as the drawing the map works from
-    /// once it has landed, where <paramref name="onTop"/>; and otherwise in its place among the rest by
-    /// how far it is zoomed, which is how the whole picture is painted under a zoomed one.
-    /// <paramref name="arrived"/> is told once all of it has landed.
+    /// Show the tiles of the picture the screen shows, <paramref name="shown"/> on the way to
+    /// <paramref name="target"/>, and draw those missing from the point of the picture
+    /// <paramref name="focusX"/>, <paramref name="focusY"/> outwards. Nothing where the drawing the map
+    /// works from cannot be cut into tiles. See <see cref="ExploreTiles.Want"/>.
+    /// </summary>
+    public void WantTiles(MapViewport shown, MapViewport target, double focusX, double focusY, TileColour ground)
+    {
+        if (Tiled is { } picture)
+        {
+            _tiles.Want(picture, shown, target, focusX, focusY, ground);
+        }
+    }
+
+    /// <summary>The camera has come to rest: see <see cref="ExploreTiles.Rest"/>.</summary>
+    public void RestTiles() => _tiles.Rest();
+
+    /// <summary>The drawing on top covers the screen at rest: see <see cref="ExploreTiles.Hide"/>.</summary>
+    public void HideTiles() => _tiles.Hide();
+
+    /// <summary>Nobody sees a move of the map: see <see cref="ExploreTiles.Release"/>.</summary>
+    public void ReleaseTiles() => _tiles.Release();
+
+    /// <summary>The tile on screen at the point of the picture <paramref name="x"/>, <paramref name="y"/>: see <see cref="ExploreTiles.TileOver"/>.</summary>
+    public MapTile? TileOver(double x, double y) => _tiles.TileOver(x, y);
+
+    /// <summary>
+    /// Where a redraw of the picture now lands to replace the drawing the map works from: over
+    /// everything, and the drawing worked from once it has landed, when <paramref name="arrived"/> is
+    /// told.
     /// </summary>
     /// <param name="fade">
-    /// How a drawing on top comes in over the one it replaces. Unseen while it lands and faded in once
-    /// all of it has, for the same picture in a new look, so the old look turns into the new one rather
-    /// than giving way to it a region at a time. <see cref="Motion.Instant"/> lands it as it is painted.
+    /// How it comes in over the one it replaces. Unseen while it lands and faded in once all of it has,
+    /// for the same picture in a new look, so the old look turns into the new one rather than giving way
+    /// to it a region at a time. <see cref="Motion.Instant"/> lands it as it is painted.
     /// </param>
-    /// <summary>
-    /// Whether a drawing is still fading in over the ones before it: the screen shows two drawings at
-    /// once, and a point on it is in neither of them alone (§7.1).
-    /// </summary>
-    public bool IsFading => _fading > 0;
+    public ICanvasRedrawTarget Replacement(Action<ExploreSurface> arrived, Motion fade) =>
+        new ExploreLanding(this, onTop: true, arrived, fade);
 
-    /// <summary>Raised when the last crossfade under way has run its course.</summary>
-    public event EventHandler? Faded;
+    /// <summary>
+    /// Where a redraw of the whole picture lands under a zoomed drawing on top: in its place among the
+    /// rest by how far it is zoomed, as it is painted, so a move has something to show wherever it goes.
+    /// See <see cref="LacksWhole"/>.
+    /// </summary>
+    public ICanvasRedrawTarget Underlay() =>
+        new ExploreLanding(this, onTop: false, static _ => { }, Motion.Instant);
+
+    /// <summary>
+    /// Start a redraw of <paramref name="drawing"/> landing, on a surface of its own, placed where its part
+    /// of the picture lies and stacked with the rest. See <see cref="ExploreLanding"/>.
+    /// </summary>
+    /// <param name="onTop">Whether it replaces the drawing the map works from.</param>
+    /// <param name="fade">How it comes in, where it replaces it. See <see cref="Replacement"/>.</param>
+    public ExploreLayer StartLanding(ExploreSurface drawing, bool onTop, Motion fade)
+    {
+        var viewport = drawing.Viewport ?? MapViewport.Whole;
+        var layer = Take(drawing.Width, drawing.Height, viewport);
+
+        layer.Begin(drawing.Width, drawing.Height, viewport, onTop, _picture, unseen: !fade.IsInstant);
+        layer.Fit(_size.Width, _size.Height, _origin);
+
+        Restack();
+
+        return layer;
+    }
+
+    /// <summary>
+    /// All of <paramref name="drawing"/> has landed on <paramref name="layer"/>. A whole drawing is copied
+    /// for the overview, and one that replaces the drawing worked from takes its place, faded in over it
+    /// or covering it at once. See <see cref="ExploreLanding"/>.
+    /// </summary>
+    /// <param name="pixels">The drawing as painted on the CPU, or null for one shaded on the GPU.</param>
+    /// <param name="onTop">Whether it replaces the drawing the map works from.</param>
+    /// <param name="fade">How it comes in, where it replaces it. See <see cref="Replacement"/>.</param>
+    public void FinishLanding(ExploreLayer layer, ExploreSurface drawing, byte[]? pixels, bool onTop, Motion fade)
+    {
+        layer.Arrive(drawing, ++_showings);
+
+        if (layer.Viewport.IsWhole)
+        {
+            _miniature.Copy(pixels, drawing.Width, drawing.Height, _size.Width, _size.Height);
+        }
+
+        if (onTop)
+        {
+            if (fade.IsInstant)
+            {
+                // The drawings of the pictures this one replaces have been showing round it while it
+                // landed. Covered now, they go.
+                HideCoveredBy(layer);
+            }
+            else
+            {
+                FadeIn(layer, fade.Duration);
+            }
+
+            Promote(layer);
+        }
+
+        Restack();
+    }
 
     /// <summary>
     /// Bring every crossfade under way to its end at once, for an input that needs the screen settled
@@ -255,20 +337,9 @@ internal sealed class ExploreLayers
         _fading = 0;
         _fadesLanded++;
 
-        current.Sprite.StopAnimation(nameof(Visual.Opacity));
-        current.Sprite.Opacity = 1;
-
-        foreach (var other in _layers)
-        {
-            if (other.Picture < current.Picture && other.Landing is null)
-            {
-                Hide(other);
-            }
-        }
+        current.EndFade();
+        HideCoveredBy(current);
     }
-
-    public ICanvasRedrawTarget Arrival(bool onTop, Action<ExploreSurface> arrived, Motion fade) =>
-        new Landing(this, onTop, arrived, onTop ? fade : Motion.Instant);
 
     /// <summary>
     /// Stop showing any drawing again, for a picture that has changed: another tree, colours, size or
@@ -285,16 +356,7 @@ internal sealed class ExploreLayers
     /// The picture is of another place now: another tree, folder or view. The overview of the old
     /// one goes at once, rather than standing for the new one until its whole drawing arrives.
     /// </summary>
-    public void ForgetOverview()
-    {
-        if (!_hasOverview)
-        {
-            return;
-        }
-
-        _hasOverview = false;
-        OverviewChanged?.Invoke(this, EventArgs.Empty);
-    }
+    public void ForgetOverview() => _miniature.Forget();
 
     /// <summary>
     /// Drop every drawing, and the memory its surface held, for a map with nothing to show or nobody
@@ -306,7 +368,7 @@ internal sealed class ExploreLayers
 
         foreach (var layer in _layers)
         {
-            Hide(layer);
+            layer.Withdraw();
         }
 
         _current = null;
@@ -330,11 +392,9 @@ internal sealed class ExploreLayers
 
         _tiles.Release();
 
-        // Made before the replacement, it would take a write and show nothing (see CompositionDevice.Replaced).
         _current = null;
         _lit = null;
-        _overview = null;
-        ForgetOverview();
+        _miniature.Renew();
     }
 
     /// <summary>
@@ -348,7 +408,7 @@ internal sealed class ExploreLayers
         {
             if (layer != _current)
             {
-                Hide(layer);
+                layer.Withdraw();
             }
         }
 
@@ -382,6 +442,11 @@ internal sealed class ExploreLayers
     /// Carry all of it so the screen lands on <paramref name="screen"/>, at
     /// <paramref name="opacity"/>, while a folder that was opened grows over the picture or out of it.
     /// </summary>
+    /// <param name="width">
+    /// The control's width now. Not the size <see cref="Fit"/> stored: the set a change of folder is
+    /// leaving is not fitted again when the control is resized while the change flies.
+    /// </param>
+    /// <param name="height">The control's height now, as <paramref name="width"/>.</param>
     public void Carry(MapFrame screen, double opacity, double width, double height)
     {
         _carried.Scale = new Vector3((float)screen.Width, (float)screen.Height, 1);
@@ -395,7 +460,7 @@ internal sealed class ExploreLayers
     /// </summary>
     private void Promote(ExploreLayer layer)
     {
-        layer.LastShown = ++_showings;
+        layer.Show(++_showings);
         _current = layer;
         _tiles.Stack(layer.Viewport);
 
@@ -403,150 +468,79 @@ internal sealed class ExploreLayers
     }
 
     /// <summary>
-    /// Stack the drawings by <see cref="Rank"/>, lowest first, with the tiles round the one on top: the
-    /// finer under a drawing landing to replace it and over it, the coarser under it. Only what is
-    /// shown, and which drawing is worked from, changes the order, so this runs when they change and
-    /// never as the picture moves.
+    /// Stack the drawings by <see cref="KeptDrawings.Stacked"/>, lowest first, with the tiles round the
+    /// one on top: the finer under a drawing landing to replace it and over it, the coarser under it.
+    /// Only what is shown, and which drawing is worked from, changes the order, so this runs when they
+    /// change and never as the picture moves.
     /// </summary>
     private void Restack()
     {
-        foreach (var layer in _layers.Where(layer => layer.IsShown).OrderBy(Rank).ToList())
+        foreach (var layer in KeptDrawings.Stacked(_layers, _current))
         {
-            _camera.Children.Remove(layer.Sprite);
-            _camera.Children.InsertAtTop(layer.Sprite);
+            _cameraVisual.Children.Remove(layer.Sprite);
+            _cameraVisual.Children.InsertAtTop(layer.Sprite);
         }
 
-        _camera.Children.Remove(_tiles.Under);
-        _camera.Children.Remove(_tiles.Over);
+        _cameraVisual.Children.Remove(_tiles.Under);
+        _cameraVisual.Children.Remove(_tiles.Over);
 
         if (_current is { IsShown: true } current)
         {
-            _camera.Children.InsertBelow(_tiles.Under, current.Sprite);
-            _camera.Children.InsertAbove(_tiles.Over, current.Sprite);
+            _cameraVisual.Children.InsertBelow(_tiles.Under, current.Sprite);
+            _cameraVisual.Children.InsertAbove(_tiles.Over, current.Sprite);
         }
         else
         {
-            _camera.Children.InsertAtBottom(_tiles.Over);
-            _camera.Children.InsertAtBottom(_tiles.Under);
+            _cameraVisual.Children.InsertAtBottom(_tiles.Over);
+            _cameraVisual.Children.InsertAtBottom(_tiles.Under);
         }
     }
 
-    /// <summary>
-    /// Where <paramref name="layer"/> is stacked: a drawing landing to replace the one on top above
-    /// everything, the one on top above the rest, and each other above every one coarser than it, or
-    /// as fine and shown less recently. A rank rather than the zoom itself, because two drawings a
-    /// drag apart share a zoom and would share a place, and which of them showed through would then
-    /// be the compositor's choice.
-    /// </summary>
-    private int Rank(ExploreLayer layer)
+    /// <summary>The layer whose whole drawing is <paramref name="drawing"/>, or null. A loop, as the pointer asks it at every move.</summary>
+    private ExploreLayer? Holding(ExploreSurface drawing)
     {
-        var rank = 0;
-
-        foreach (var other in _layers)
+        foreach (var layer in _layers)
         {
-            if (other != layer && other.IsShown && Above(layer, other))
+            if (ReferenceEquals(layer.Drawing, drawing))
             {
-                rank++;
+                return layer;
             }
         }
 
-        return rank;
+        return null;
     }
-
-    /// <summary>Whether <paramref name="layer"/> is stacked above <paramref name="other"/>. See <see cref="Rank"/>.</summary>
-    private bool Above(ExploreLayer layer, ExploreLayer other)
-    {
-        var layerReplaces = layer is { Landing: not null, LandsOnTop: true };
-        var otherReplaces = other is { Landing: not null, LandsOnTop: true };
-
-        if (layerReplaces || otherReplaces)
-        {
-            return layerReplaces && !otherReplaces;
-        }
-
-        if (layer == _current || other == _current)
-        {
-            return layer == _current;
-        }
-
-        return other.Viewport.Zoom < layer.Viewport.Zoom
-            || (other.Viewport.Zoom == layer.Viewport.Zoom && other.LastShown < layer.LastShown);
-    }
-
-    /// <summary>The drawing already made of <paramref name="viewport"/> of the picture now, or null.</summary>
-    private ExploreLayer? Kept(MapViewport viewport) =>
-        _layers.Find(layer => layer.Drawing is not null && layer.Picture == _picture && layer.Viewport == viewport);
 
     /// <summary>
-    /// A surface for a drawing of <paramref name="viewport"/> to land on: one no drawing is using; or
-    /// one of a picture that has changed; or where every one is in use, the zoomed one least recently
-    /// shown. Never the whole picture of the picture now, nor the one on top, which goes on showing
-    /// until this one has landed over it.
+    /// A surface for a drawing <paramref name="width"/> by <paramref name="height"/> of
+    /// <paramref name="viewport"/> to land on: the one <see cref="KeptDrawings.Reusable"/> picks, or a
+    /// new one where it picks none.
     /// </summary>
     private ExploreLayer Take(int width, int height, MapViewport viewport)
     {
-        var layer = Free(width, height)
-            ?? _layers
-                .Where(kept => kept.Drawing is not null && kept.Picture != _picture && kept != _current && _fading == 0)
-                .MinBy(kept => kept.LastShown);
-
-        if (layer is null && !viewport.IsWhole)
+        // Emptied and resized when it begins, rather than made again: a scan redraws a map as often as
+        // every three quarters of a second, and the surface's size only changes with the window's (G5).
+        if (KeptDrawings.Reusable(_layers, width, height, viewport, _picture, _current, _fading > 0) is { } reused)
         {
-            var zoomed = _layers.Where(kept => kept.Drawing is not null && !kept.Viewport.IsWhole).ToList();
-
-            if (zoomed.Count >= ZoomedKept)
-            {
-                layer = zoomed.Where(kept => kept != _current).MinBy(kept => kept.LastShown);
-            }
+            return reused;
         }
 
-        if (layer is null)
-        {
-            layer = new ExploreLayer(_compositor, _graphics);
-            _layers.Add(layer);
-            _camera.Children.InsertAtTop(layer.Sprite);
-        }
-
-        // Emptied and resized rather than made again: a scan redraws a map as often as every three
-        // quarters of a second, and the surface's size only changes with the window's (G5).
-        layer.Drawing = null;
-        layer.Prepare(width, height);
+        var layer = new ExploreLayer(_compositor, _graphics);
+        _layers.Add(layer);
+        _cameraVisual.Children.InsertAtTop(layer.Sprite);
 
         return layer;
     }
 
-    /// <summary>A surface nothing is using, of this size where there is one.</summary>
-    private ExploreLayer? Free(int width, int height)
+    /// <summary>Stop showing every drawing <paramref name="cover"/> covers. See <see cref="KeptDrawings.IsCoveredBy"/>.</summary>
+    private void HideCoveredBy(ExploreLayer cover)
     {
-        ExploreLayer? other = null;
-
-        foreach (var layer in _layers)
+        foreach (var other in _layers)
         {
-            if (layer.IsShown)
+            if (KeptDrawings.IsCoveredBy(other, cover))
             {
-                continue;
+                other.Withdraw();
             }
-
-            if (layer.Size.Width == width && layer.Size.Height == height)
-            {
-                return layer;
-            }
-
-            other ??= layer;
         }
-
-        return other;
-    }
-
-    /// <summary>
-    /// Stop showing <paramref name="layer"/>. Its surface keeps what it holds until it is released or
-    /// taken for the next drawing, which empties it first.
-    /// </summary>
-    private static void Hide(ExploreLayer layer)
-    {
-        layer.Drawing = null;
-        layer.Landing = null;
-        layer.Sprite.IsVisible = false;
     }
 
     /// <summary>
@@ -566,139 +560,26 @@ internal sealed class ExploreLayers
     }
 
     /// <summary>
-    /// Copy a whole drawing <paramref name="width"/> by <paramref name="height"/> that has just arrived,
-    /// small, for the overview: at the overview's size on the screen now, in the drawing's own pixels to
-    /// each device-independent one. A map too small for an overview keeps none.
+    /// Fade <paramref name="layer"/> in over the drawings of the pictures before it, which go once it
+    /// covers them. Only those older than it: a picture handed over during the fade has drawings of its
+    /// own on the way, which are not this fade's to take.
     /// </summary>
-    /// <param name="pixels">The drawing as painted on the CPU, or null for one just shaded on the GPU.</param>
-    private void Miniaturise(byte[]? pixels, int width, int height)
+    private void FadeIn(ExploreLayer layer, TimeSpan duration)
     {
-        if (MapOverview.Size(_size.Width, _size.Height) is not { } shown)
+        var fading = layer.Sprite.FadeIn(duration);
+        _fading++;
+
+        var landed = _fadesLanded;
+
+        fading.Completed += (_, _) =>
         {
-            ForgetOverview();
-            return;
-        }
+            HideCoveredBy(layer);
 
-        var size = new SizeInt32(
-            Math.Max(1, (int)Math.Round(width * shown.Width / _size.Width)),
-            Math.Max(1, (int)Math.Round(height * shown.Height / _size.Height)));
-
-        var shrunk = pixels is null
-            ? _graphics.ShrinkShaded(_overview, width, height, size)
-            : _graphics.Shrink(_overview, pixels, width, height, size);
-
-        if (shrunk is not { } overview)
-        {
-            return;
-        }
-
-        _overview = overview;
-        _hasOverview = true;
-        OverviewChanged?.Invoke(this, EventArgs.Empty);
-    }
-
-    /// <summary>One redraw landing in one of these layers. See <see cref="ICanvasRedrawTarget"/>.</summary>
-    private sealed class Landing(ExploreLayers layers, bool onTop, Action<ExploreSurface> arrived, Motion fade)
-        : ICanvasRedrawTarget
-    {
-        private ExploreLayer? _layer;
-
-        public void Begin(CanvasRedraw redraw)
-        {
-            var drawing = redraw.Surface!;
-            var viewport = drawing.Viewport ?? MapViewport.Whole;
-            var layer = layers.Take(drawing.Width, drawing.Height, viewport);
-
-            layer.Landing = redraw;
-            layer.Viewport = viewport;
-            layer.LandsOnTop = onTop;
-            layer.Picture = layers._picture;
-            layer.Fit(layers._size.Width, layers._size.Height, layers._origin);
-            layer.Sprite.StopAnimation(nameof(Visual.Opacity));
-            layer.Sprite.Opacity = fade.IsInstant ? 1 : 0;
-            layer.Sprite.IsVisible = true;
-
-            _layer = layer;
-
-            layers.Restack();
-        }
-
-        public void Land(CanvasRedraw redraw, IReadOnlyList<CanvasRegion> regions) =>
-            _layer!.Land(redraw.Pixels!, regions);
-
-        public void Shade(CanvasRedraw redraw, CushionQuads quads, TileColour ground) =>
-            _layer!.Shade(quads, ground);
-
-        public void Arrive(CanvasRedraw redraw)
-        {
-            var layer = _layer!;
-            var drawing = redraw.Surface!;
-
-            layer.Landing = null;
-            layer.Drawing = drawing;
-            layer.LastShown = ++layers._showings;
-
-            if (layer.Viewport.IsWhole)
+            // Brought to its end already, and counted then.
+            if (landed == _fadesLanded && --_fading == 0)
             {
-                layers.Miniaturise(redraw.Pixels, drawing.Width, drawing.Height);
+                Faded?.Invoke(this, EventArgs.Empty);
             }
-
-            if (onTop)
-            {
-                if (fade.IsInstant)
-                {
-                    // The drawings of the picture this one replaces have been showing round it while it
-                    // landed. Covered now, they go.
-                    foreach (var other in layers._layers)
-                    {
-                        if (other.Picture != layer.Picture)
-                        {
-                            Hide(other);
-                        }
-                    }
-                }
-                else
-                {
-                    FadeIn(layer);
-                }
-
-                layers.Promote(layer);
-            }
-
-            layers.Restack();
-            arrived(drawing);
-        }
-
-        public void Withdraw(CanvasRedraw redraw) => Hide(_layer!);
-
-        /// <summary>
-        /// Fade <paramref name="layer"/> in over the drawings of the pictures before it, which go once
-        /// it covers them. Only those older than it: a picture handed over during the fade has
-        /// drawings of its own on the way, which are not this fade's to take.
-        /// </summary>
-        private void FadeIn(ExploreLayer layer)
-        {
-            var fading = layer.Sprite.FadeIn(fade.Duration);
-            layers._fading++;
-
-            var landed = layers._fadesLanded;
-
-            fading.Completed += (_, _) =>
-            {
-                foreach (var other in layers._layers)
-                {
-                    if (other.Picture < layer.Picture && other != layers._current && other.Landing is null)
-                    {
-                        Hide(other);
-                    }
-                }
-
-                // Brought to its end already, and counted then.
-                if (landed == layers._fadesLanded && --layers._fading == 0)
-                {
-                    layers.Faded?.Invoke(layers, EventArgs.Empty);
-                }
-            };
-        }
+        };
     }
 }

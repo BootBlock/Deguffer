@@ -62,7 +62,7 @@ internal sealed class MapGraphics
     public MapGeometry Geometry { get; }
 
     /// <summary>
-    /// Whether a treemap's canvas is shaded on the GPU (see <see cref="Shade"/>) rather than painted on
+    /// Whether a treemap's canvas is shaded on the GPU (see <see cref="Shade(CompositionDrawingSurface, CushionQuads, TileColour)"/>) rather than painted on
     /// the CPU. Asked at each redraw, so a change of the compositor's word is followed at the next.
     ///
     /// <para>Only where the compositor says effects are fast, which a remote session is not, and only on
@@ -196,7 +196,7 @@ internal sealed class MapGraphics
         });
 
     /// <summary>
-    /// The canvas <see cref="Shade"/> shaded last, <paramref name="width"/> by <paramref name="height"/>,
+    /// The canvas <see cref="Shade(CompositionDrawingSurface, CushionQuads, TileColour)"/> shaded last, <paramref name="width"/> by <paramref name="height"/>,
     /// drawn small as <see cref="Shrink(CompositionDrawingSurface?, byte[], int, int, SizeInt32)"/> draws
     /// a painted one. Asked straight after the shading, before anything else is shaded.
     /// </summary>

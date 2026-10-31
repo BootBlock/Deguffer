@@ -208,7 +208,7 @@ public sealed class ExploreMap : UserControl
     private ExploreLayers _departing;
 
     /// <summary>
-    /// How many different pictures <see cref="Show(ISizedTree, int, ExploreView, Func{DateTime, ShapeColours}, Func{int, string}, MapLook, VolumeSpace)"/>
+    /// How many different pictures <see cref="Show(ISizedTree, int, ExploreView, Func{DateTime, ShapeColours}, Func{int, string}, MapLook, VolumeSpace, MapViewport?)"/>
     /// has been handed, so a double-click can tell whether the page opened what it asked for.
     /// </summary>
     private int _picturesHanded;
@@ -249,7 +249,7 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>
     /// What the colours are to say, asked for at each repaint rather than held. See
-    /// <see cref="ShapeColours.For"/>: an age band is relative to the moment it is drawn.
+    /// <see cref="ShapeColours.For(ExploreTree, ExploreColouring, ExploreScheme, DateTime, Deguffer.Core.Exploring.History.ScanGrowth, Deguffer.Core.Exploring.Files.DominantTypes)"/>: an age band is relative to the moment it is drawn.
     /// </summary>
     private Func<DateTime, ShapeColours> _colours = _ => ShapeColours.ByBranch(ExploreScheme.Standard);
 
@@ -360,9 +360,9 @@ public sealed class ExploreMap : UserControl
         _zoom = new ExploreZoom(ElementCompositionPreview.GetElementVisual(this), _camera, SystemMotion.Current, DispatcherQueue);
         var owner = new DispatcherQueueSynchronizationContext(DispatcherQueue);
 
-        _pictures = new ExploreLayers(compositor, _graphics, _camera, new ExploreTiles(compositor, _graphics, SystemMotion.Current, owner));
-        _departing = new ExploreLayers(compositor, _graphics, _camera, new ExploreTiles(compositor, _graphics, SystemMotion.Current, owner));
-        _tileOver = (x, y) => _pictures.Tiles.TileOver(x, y);
+        _pictures = new ExploreLayers(compositor, _graphics, _camera, SystemMotion.Current, owner);
+        _departing = new ExploreLayers(compositor, _graphics, _camera, SystemMotion.Current, owner);
+        _tileOver = (x, y) => _pictures.TileOver(x, y);
         _readingOf = ReadingOf;
         _highlight = new ExploreHighlight(compositor, _graphics.Geometry, _camera);
         _shift = new ExploreShift(compositor, _camera);
@@ -448,8 +448,8 @@ public sealed class ExploreMap : UserControl
         // Both sets, as the two change places with each change of folder that flies (see Swap).
         _pictures.Faded += OnFaded;
         _departing.Faded += OnFaded;
-        _pictures.Tiles.AnswersChanged += OnTileAnswersChanged;
-        _departing.Tiles.AnswersChanged += OnTileAnswersChanged;
+        _pictures.TileAnswersChanged += OnTileAnswersChanged;
+        _departing.TileAnswersChanged += OnTileAnswersChanged;
 
         _settled = DispatcherQueue.CreateTimer();
         _settled.Interval = ResizeSettleTime;
@@ -557,7 +557,7 @@ public sealed class ExploreMap : UserControl
             // moves.
             _pictures.Light(null, null);
             _pictures.Trim();
-            _departing.Tiles.Release();
+            _departing.ReleaseTiles();
             _buffers.Release();
             _graphics.Device.Trim();
 
@@ -1212,7 +1212,7 @@ public sealed class ExploreMap : UserControl
 
     private void Redraw() => Redraw(Motion.Instant);
 
-    /// <param name="fade">How the new drawing comes in over the old. See <see cref="ExploreLayers.Arrival"/>.</param>
+    /// <param name="fade">How the new drawing comes in over the old. See <see cref="ExploreLayers.Replacement"/>.</param>
     private void Redraw(Motion fade)
     {
         // Whatever brought us here is more current than a size change still waiting to be drawn, or a
@@ -1309,7 +1309,7 @@ public sealed class ExploreMap : UserControl
     {
         // The drawing of where it stopped is on its way, and wants the cores the tiles would take. The
         // tiles already under way still arrive, and show until it has.
-        _pictures.Tiles.Rest();
+        _pictures.RestTiles();
 
         // Left for Loaded, which shows the arrival when the map is back, as it does a redraw.
         if (!IsLoaded || Visibility != Visibility.Visible || _drawing is not { } drawing)
@@ -1333,7 +1333,7 @@ public sealed class ExploreMap : UserControl
         // has changed since this drawing was made.
         if (_zoom.Shown == _drawn && _arriving is not { IsSettled: false })
         {
-            _pictures.Tiles.Hide();
+            _pictures.HideTiles();
             _labels.Reveal();
             Place();
             ReportWhatThePointerIsOver();
@@ -1347,7 +1347,7 @@ public sealed class ExploreMap : UserControl
     /// Show <paramref name="viewport"/> of the picture: the drawing kept of it, at once, where there
     /// is one, and otherwise a redraw of it, which lands over the picture on screen.
     /// </summary>
-    /// <param name="fade">How a new drawing comes in over the one on screen. See <see cref="ExploreLayers.Arrival"/>.</param>
+    /// <param name="fade">How a new drawing comes in over the one on screen. See <see cref="ExploreLayers.Replacement"/>.</param>
     private void Request(MapViewport viewport, Motion fade)
     {
         if (_pictures.Show(viewport) is { } kept)
@@ -1371,7 +1371,7 @@ public sealed class ExploreMap : UserControl
             width,
             height,
             Focus(viewport, width, height),
-            _pictures.Arrival(onTop: true, Present, fade));
+            _pictures.Replacement(Present, fade));
     }
 
     /// <summary>
@@ -1463,7 +1463,7 @@ public sealed class ExploreMap : UserControl
         // shapes and answers the pointer, and a tile drawn deeper would show detail it does not have.
         if (_zoom.Shown == _drawn)
         {
-            _pictures.Tiles.Hide();
+            _pictures.HideTiles();
         }
 
         Unlock();
@@ -1562,7 +1562,7 @@ public sealed class ExploreMap : UserControl
             drawing.Width,
             drawing.Height,
             focus: null,
-            _pictures.Arrival(onTop: false, static _ => { }, Motion.Instant));
+            _pictures.Underlay());
     }
 
     /// <summary>
@@ -1601,7 +1601,7 @@ public sealed class ExploreMap : UserControl
     /// <summary>
     /// How many canvas pixels a control extent of <paramref name="extent"/> device-independent
     /// pixels asks for. One expression, so that a caller asking whether the drawing still matches
-    /// the control gets the same answer <see cref="Redraw"/> would lay out to.
+    /// the control gets the same answer <see cref="Redraw()"/> would lay out to.
     /// </summary>
     private int DevicePixels(double extent) =>
         (int)Math.Round(extent * (XamlRoot?.RasterizationScale ?? 1));
@@ -1988,7 +1988,7 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void Sharpen()
     {
-        if (Stepping || !IsLoaded || ActualWidth <= 0 || ActualHeight <= 0 || _pictures.Tiled is not { } picture)
+        if (Stepping || !IsLoaded || ActualWidth <= 0 || ActualHeight <= 0)
         {
             return;
         }
@@ -1998,7 +1998,7 @@ public sealed class ExploreMap : UserControl
             ? shown.PictureAt(pointer.X / ActualWidth, pointer.Y / ActualHeight)
             : shown.PictureAt(0.5, 0.5);
 
-        _pictures.Tiles.Want(picture, shown, _zoom.Target, x, y, Ground());
+        _pictures.WantTiles(shown, _zoom.Target, x, y, Ground());
     }
 
     /// <summary>
@@ -2214,8 +2214,8 @@ public sealed class ExploreMap : UserControl
         // for itself, go, and the next move draws them again.
         if (!sender.IsHostVisible)
         {
-            _pictures.Tiles.Release();
-            _departing.Tiles.Release();
+            _pictures.ReleaseTiles();
+            _departing.ReleaseTiles();
             _graphics.Device.Trim();
         }
 
