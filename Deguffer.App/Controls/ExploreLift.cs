@@ -1,5 +1,7 @@
 using System.Numerics;
 using Deguffer.Core.Exploring.Layout;
+using Deguffer.Core.Exploring.Rendering;
+using Microsoft.Graphics.Canvas.Geometry;
 using Microsoft.UI.Composition;
 using Windows.UI;
 
@@ -11,8 +13,14 @@ namespace Deguffer.App.Controls;
 ///
 /// <para>A copy of the drawing masked to the shape rather than anything drawn of its own, so what is
 /// lifted is exactly what was there, and its neighbours stay as they are. A mask rather than a clip,
-/// because a layer's shadow is cast by its content before any clip, and a clipped canvas cast the
-/// whole canvas's shadow over the map.</para>
+/// because a shadow is cast by a visual's content before any clip, and a clipped canvas cast the
+/// whole canvas's shadow over the map. The same mask shapes the shadow.</para>
+///
+/// <para>One sprite over the part of the canvas the shape covers, with a shadow of its own and a mask
+/// this fills each time the shape changes. Not a layer visual holding a canvas-sized sprite masked
+/// by a visual surface: at the end of a zoom the compositor composed that layer again only where it
+/// had been before, so the shape stayed lifted by its outline from before the zoom, or not at all
+/// where it had grown, until the pointer moved to another shape.</para>
 ///
 /// <para>Separate from <see cref="ExploreHighlight"/>, which decides which shape is lifted and when
 /// effects are drawn at all; this is how one shape is lifted (G1).</para>
@@ -27,56 +35,44 @@ internal sealed class ExploreLift
 
     private const float ShadowDrop = 2;
 
-    private readonly MapGeometry _geometry;
+    private readonly MapGraphics _graphics;
 
     /// <summary>Where the canvas lies in the picture, which the camera above it places on the screen.</summary>
     private readonly ContainerVisual _placed;
 
-    private readonly LayerVisual _layer;
-
+    /// <summary>The part of the canvas the shape covers (<see cref="MapLift.Area"/>), placed at that part.</summary>
     private readonly SpriteVisual _sprite;
 
     /// <summary>The drawing's surface, one pixel of it to one unit of the sprite, as its own layer has it.</summary>
     private readonly CompositionSurfaceBrush _drawing;
 
-    /// <summary>The shape, filled, drawn into the surface the mask is read from.</summary>
-    private readonly ShapeVisual _maskShape;
+    /// <summary>The mask's surface, the size of the part of the canvas the shape covers.</summary>
+    private readonly CompositionSurfaceBrush _mask;
 
-    private readonly CompositionVisualSurface _maskSurface;
+    /// <summary>The surface the shape is filled into, resized for each shape rather than made again (G5).</summary>
+    private CompositionDrawingSurface? _maskSurface;
 
-    private readonly CompositionPathGeometry _shape;
-
-    public ExploreLift(Compositor compositor, MapGeometry geometry, MapCamera camera)
+    public ExploreLift(Compositor compositor, MapGraphics graphics, MapCamera camera)
     {
-        _geometry = geometry;
+        _graphics = graphics;
 
         _drawing = compositor.CreateUnstretchedBrush();
-
-        _shape = compositor.CreatePathGeometry(geometry.Nothing);
-        var fill = compositor.CreateSpriteShape(_shape);
-        fill.FillBrush = compositor.CreateColorBrush(Color.FromArgb(255, 255, 255, 255));
-        _maskShape = compositor.CreateShapeVisual();
-        _maskShape.Shapes.Add(fill);
-        _maskSurface = compositor.CreateVisualSurface();
-        _maskSurface.SourceVisual = _maskShape;
+        _mask = compositor.CreateUnstretchedBrush();
 
         var masked = compositor.CreateMaskBrush();
         masked.Source = _drawing;
-        masked.Mask = compositor.CreateUnstretchedBrush(_maskSurface);
+        masked.Mask = _mask;
 
         _sprite = compositor.CreateSpriteVisual();
         _sprite.Brush = masked;
 
         var shadow = compositor.CreateDropShadow();
         shadow.Color = Color.FromArgb(153, 0, 0, 0);
-        shadow.SourcePolicy = CompositionDropShadowSourcePolicy.InheritFromVisualContent;
-
-        _layer = compositor.CreateLayerVisual();
-        _layer.Shadow = shadow;
-        _layer.Children.InsertAtTop(_sprite);
+        shadow.Mask = _mask;
+        _sprite.Shadow = shadow;
 
         _placed = compositor.CreateContainerVisual();
-        _placed.Children.InsertAtTop(_layer);
+        _placed.Children.InsertAtTop(_sprite);
         _placed.IsVisible = false;
 
         // The canvas is magnified by the camera and by its placement, so the shadow is divided by
@@ -89,20 +85,44 @@ internal sealed class ExploreLift
     public Visual Root => _placed;
 
     /// <summary>
-    /// Lift <paramref name="shape"/>, in the pixels of a canvas <paramref name="canvas"/> across that is
-    /// painted on <paramref name="surface"/>; or lift nothing, where either is missing.
+    /// Lift <paramref name="shape"/>, the geometry of <paramref name="outlines"/>, in the pixels of a
+    /// canvas <paramref name="canvas"/> across that is painted on <paramref name="surface"/>; or lift
+    /// nothing, where either is missing or the shape covers none of the canvas.
     /// </summary>
-    public void Show(CompositionPath shape, ICompositionSurface? surface, Vector2 canvas)
+    public void Show(CanvasGeometry? shape, IReadOnlyList<ExploreOutline> outlines, ICompositionSurface? surface, Vector2 canvas)
     {
-        var lifted = surface is not null && shape != _geometry.Nothing;
+        var area = shape is not null && surface is not null
+            ? MapLift.Area(outlines, (int)canvas.X, (int)canvas.Y)
+            : null;
 
-        _drawing.Surface = lifted ? surface : null;
-        _shape.Path = lifted ? shape : _geometry.Nothing;
-        _layer.Size = canvas;
-        _sprite.Size = canvas;
-        _maskShape.Size = canvas;
-        _maskSurface.SourceSize = canvas;
-        _placed.IsVisible = lifted;
+        if (area is not { } covered || _graphics.Fill(_maskSurface, shape!, covered) is not { } mask)
+        {
+            _drawing.Surface = null;
+            _placed.IsVisible = false;
+            return;
+        }
+
+        _maskSurface = mask;
+        _mask.Surface = mask;
+        _drawing.Surface = surface;
+        _drawing.Offset = new Vector2(-covered.X, -covered.Y);
+
+        _sprite.Offset = new Vector3(covered.X, covered.Y, 0);
+        _sprite.Size = new Vector2(covered.Width, covered.Height);
+        _placed.IsVisible = true;
+    }
+
+    /// <summary>
+    /// Lift nothing, and let go of the mask's surface, for a device that has replaced the one it was
+    /// filled through: made before the replacement, it would take every later fill and show nothing,
+    /// so no shape would be lifted again (see <see cref="CompositionDevice.Replaced"/>).
+    /// </summary>
+    public void Renew()
+    {
+        _maskSurface = null;
+        _mask.Surface = null;
+        _drawing.Surface = null;
+        _placed.IsVisible = false;
     }
 
     /// <summary>Lay it over a canvas that lies at <paramref name="placed"/> in the picture.</summary>

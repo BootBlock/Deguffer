@@ -255,7 +255,7 @@ public sealed class ExploreMap : UserControl
 
         var pictures = new ExploreLayers(compositor, _graphics, _camera, SystemMotion.Current, owner);
         var departing = new ExploreLayers(compositor, _graphics, _camera, SystemMotion.Current, owner);
-        _highlight = new ExploreHighlight(compositor, _graphics.Geometry, _camera);
+        _highlight = new ExploreHighlight(compositor, _graphics, _camera);
         _marking = new ExploreMarking(_highlight);
         _readingOf = _marking.ReadingOf;
         _keyboard = new ExploreKeyboard(_marking.Picked, node => Reader?.FolderOf(node));
@@ -1900,7 +1900,7 @@ public sealed class ExploreMap : UserControl
         _hovered = null;
         _hoveredTile = null;
         _labels.Hide();
-        _highlight.Clear();
+        _highlight.Renew();
         Report(null);
 
         Redraw();
