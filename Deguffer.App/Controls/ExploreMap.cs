@@ -831,44 +831,12 @@ public sealed class ExploreMap : UserControl
         ArgumentNullException.ThrowIfNull(labelText);
         ArgumentNullException.ThrowIfNull(look);
 
-        // A zoom is into one picture. Another tree, another folder or another view is another
-        // picture, and the part of this one the reader had magnified means nothing in it. So is the
-        // same root with the volume beside it or without it, which is the root opened or closed. A
-        // new colouring, scheme, spacing or finish is the same picture, so the zoom stays.
         var was = _zoom.Shown;
-        var another = !ReferenceEquals(tree, _tree) || node != _node || view != _view || volume != _volume;
-
-        // The same place in a new tree, drawn the same way: a scan's next snapshot, or what a removal
-        // left. The same picture laid out again, so the zoom stays and the shapes move to where they
-        // are now. A change of view, such as a finished scan drawn as a treemap after its snapshots'
-        // icicles, is not. The volume beside it may have new figures, as a removal frees space, but
-        // it is drawn beside both or beside neither.
-        var samePlace = another
-            && viewport is null
-            && view == _view
-            && (volume == VolumeSpace.None) == (_volume == VolumeSpace.None)
-            && tree is not null
-            && _tree is ITrackedTree shown
-            && ExploreSurface.Drawn(tree, view) == ExploreSurface.Drawn(shown, _view)
-            && shown.CounterpartsIn(tree)?.Invoke(_node) == node;
-        var zooms = Zoomable && tree is not null && ExploreSurface.Zooms(tree, view);
-
-        // The same place in another view: its largest shapes travel from where this view draws them
-        // to where that one does, from the whole of one picture to the whole of the other.
-        var morph = another
-            && viewport is null
-            && tree is not null
-            && ReferenceEquals(tree, _tree)
-            && node == _node
-            && volume == _volume
-            && ViewMorph.Morphs(tree, _view, view);
-
-        // Drawn at the zoom asked for from the start, rather than drawn whole and then glided in.
-        var opened = zooms && viewport is { } revisited ? revisited : MapViewport.Whole;
+        var change = PictureChange.Between(Shown, new MapPicture(tree, node, view, volume), viewport, Zoomable);
 
         MapFrame? into = null;
 
-        if (another)
+        if (change.Another)
         {
             _picturesHanded++;
 
@@ -878,10 +846,7 @@ public sealed class ExploreMap : UserControl
                 _zoom.Stop();
             }
 
-            if (_left is { Drawing: { } drawing } left
-                && ReferenceEquals(tree, left.Tree) && node == left.Node && view == left.View && volume == left.Volume
-                && opened == left.Viewport
-                && Stepping)
+            if (_left is { Drawing: { } drawing } left && change.Returns(left.Picture, left.Viewport) && Stepping)
             {
                 Return(drawing, colours, labelText, look);
                 return;
@@ -891,22 +856,13 @@ public sealed class ExploreMap : UserControl
             // flight between two pictures, and this one starts from the picture it arrived at.
             LandStep();
 
-            var step = zooms && ReferenceEquals(tree, _tree) && view == _view && _drawing is { Viewport: not null }
-                ? FolderSteps.Between(tree!, _node, _volume != VolumeSpace.None, node, volume != VolumeSpace.None)
-                : FolderStep.Across;
-
-            // A folder with nothing in it to draw has nothing to fly into, and the folder passed
-            // through on the way would be the last thing seen.
-            if (step == FolderStep.Through && tree!.SizeOf(node) <= 0)
-            {
-                step = FolderStep.Across;
-            }
+            var (step, meeting) = change.Step(_drawing is { Viewport: not null });
 
             // A flight through a folder starts as a step out to it, drawn whole as any folder opened is.
-            _through = step == FolderStep.Through ? new Through(FolderSteps.Meeting(tree!, _node, node), opened) : null;
-            if (!samePlace)
+            _through = meeting is { } passing ? new Through(passing, change.Opened) : null;
+            if (!change.SamePlace)
             {
-                _zoom.Reset(_through is null ? opened : MapViewport.Whole);
+                _zoom.Reset(_through is null ? change.Opened : MapViewport.Whole);
             }
 
             // The picture on screen stays, to fly from, and the new one is drawn into the other set
@@ -915,10 +871,10 @@ public sealed class ExploreMap : UserControl
             if (step != FolderStep.Across)
             {
                 into = step == FolderStep.Into
-                    ? _drawing!.ScreenOf(node, was, opened) ?? MapFrame.Whole
+                    ? _drawing!.ScreenOf(node, was, change.Opened) ?? MapFrame.Whole
                     : null;
 
-                _left = new Left(_tree!, _node, _view, _volume, was, _drawing, _shapeColours);
+                _left = new Left(Shown, was, _drawing, _shapeColours);
                 _step = step == FolderStep.Into ? FolderStep.Into : FolderStep.OutOf;
                 _awaitingOuter = _step == FolderStep.OutOf;
 
@@ -934,29 +890,26 @@ public sealed class ExploreMap : UserControl
         // The overview of the place left goes with it, rather than standing for this one until its
         // whole drawing arrives. A change of folder has drawn into the other set, which has none. The
         // same place laid out again keeps it until its own replaces it, as it keeps the zoom.
-        if (another && !samePlace)
+        if (change.Another && !change.SamePlace)
         {
             _pictures.ForgetOverview();
         }
 
-        if (another)
+        if (change.Another)
         {
-            CarryFocus(tree, node, volume != VolumeSpace.None, samePlace);
+            CarryFocus(tree, node, volume != VolumeSpace.None, change.SamePlace);
         }
 
-        _tree = tree;
-        _node = node;
-        _view = view;
+        (_tree, _node, _view, _volume) = change.Asked;
         _colours = colours;
         _labelText = labelText;
         _look = look;
-        _volume = volume;
 
         // A step in starts before the new picture is drawn, so the drawing arrives into a flight
         // already on its way: its outlines wait for it the way they wait for a zoom, its names ride it in, and
         // the pointer is over nothing until the picture it is over is the one on screen. The names
         // of the picture left go with it. A step out flies once the picture it goes out to is drawn.
-        if (_step != FolderStep.Across && another)
+        if (_step != FolderStep.Across && change.Another)
         {
             _labels.Hide();
             _highlight.Hide();
@@ -967,11 +920,11 @@ public sealed class ExploreMap : UserControl
             }
         }
 
-        if (samePlace)
+        if (change.SamePlace)
         {
             Shift();
         }
-        else if (morph)
+        else if (change.Morph)
         {
             Morph();
         }
@@ -990,7 +943,7 @@ public sealed class ExploreMap : UserControl
         // this one now. The drawing on screen stays until the new one has arrived, and answers through
         // the counterparts of the shapes it draws where it is of the same place (MapReading); a change
         // of folder has none on screen, and the pointer is over nothing until it lands.
-        if (another)
+        if (change.Another)
         {
             ShowPicked();
             ReportWhatThePointerIsOver();
@@ -998,7 +951,7 @@ public sealed class ExploreMap : UserControl
 
         // The same picture, zoomed to where the reader was, moves there as a zoom to a shape does.
         // After the redraw, which draws where the zoom is now and is the drawing the move starts from.
-        if (!another && Zoomable && viewport is { } returning && tree is not null && ExploreSurface.Zooms(tree, view))
+        if (change.Glide is { } returning)
         {
             _zoom.GlideTo(returning);
         }
@@ -1380,6 +1333,9 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private VolumeSpace DrawnVolume => _through is null ? _volume : VolumeSpace.None;
 
+    /// <summary>The picture the map was last handed, which a change of folder may still be on its way to.</summary>
+    private MapPicture Shown => new(_tree, _node, _view, _volume);
+
     /// <summary>
     /// How to lay out a drawing of the picture on screen at <paramref name="viewport"/>, on a canvas
     /// of <paramref name="width"/> by <paramref name="height"/>.
@@ -1478,10 +1434,10 @@ public sealed class ExploreMap : UserControl
             if (_left is { } passed && _through is { } through)
             {
                 _descent.Pass(
-                    drawing.ScreenOf(passed.Node, _zoom.Shown, passed.Viewport),
+                    drawing.ScreenOf(passed.Picture.Node, _zoom.Shown, passed.Viewport),
                     drawing.ScreenOf(_node, _zoom.Shown, through.Opened));
             }
-            else if (_left is { } left && drawing.ScreenOf(left.Node, _zoom.Shown, left.Viewport) is { } shape)
+            else if (_left is { } left && drawing.ScreenOf(left.Picture.Node, _zoom.Shown, left.Viewport) is { } shape)
             {
                 _descent.Start(shape, FolderStep.OutOf);
             }
@@ -2775,7 +2731,7 @@ public sealed class ExploreMap : UserControl
 
         // The folder being left is the one drawn: on the way out of a step through a folder, the
         // folder passed through, which the drawing kept is of.
-        _left = new Left(_tree!, DrawnNode, _view, DrawnVolume, leaving, _drawing, _shapeColours);
+        _left = new Left(new MapPicture(_tree, DrawnNode, _view, DrawnVolume), leaving, _drawing, _shapeColours);
         _step = _step == FolderStep.Into ? FolderStep.OutOf : FolderStep.Into;
         _through = null;
         _awaitingOuter = false;
@@ -2784,10 +2740,7 @@ public sealed class ExploreMap : UserControl
         _zoom.Reset(left.Viewport);
         Swap(leaving);
 
-        _tree = left.Tree;
-        _node = left.Node;
-        _view = left.View;
-        _volume = left.Volume;
+        (_tree, _node, _view, _volume) = left.Picture;
         _colours = colours;
         _labelText = labelText;
         _look = look;
@@ -2983,7 +2936,7 @@ public sealed class ExploreMap : UserControl
         var through = _through!;
         var passing = _zoom.Shown;
 
-        _left = new Left(_tree!, through.Folder, _view, VolumeSpace.None, passing, _drawing, _shapeColours);
+        _left = new Left(new MapPicture(_tree, through.Folder, _view, VolumeSpace.None), passing, _drawing, _shapeColours);
         _through = null;
         _step = FolderStep.Into;
 
@@ -3043,14 +2996,11 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>
-    /// The folder a change of folder left, as it was on screen: the zoom it was at, the drawing the map
-    /// worked from, if one had arrived, and the colours its drawings were made in.
+    /// The folder a change of folder left, as it was on screen: the picture of it, the zoom it was at,
+    /// the drawing the map worked from, if one had arrived, and the colours its drawings were made in.
     /// </summary>
     private sealed record Left(
-        ISizedTree Tree,
-        int Node,
-        ExploreView View,
-        VolumeSpace Volume,
+        MapPicture Picture,
         MapViewport Viewport,
         ExploreSurface? Drawing,
         ShapeColours? Colours);
