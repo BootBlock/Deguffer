@@ -143,7 +143,8 @@ public sealed class MapNeighboursTests
 
     /// <summary>
     /// Where the shape the keyboard was on has gone, it goes on from the shape nearest where that one
-    /// stood, in pixels; and from nowhere where there are none.
+    /// stood, in pixels. There is always one: the keyboard is only ever among the shapes of a folder
+    /// that has some, so none is a mistake in the caller rather than a place to go.
     /// </summary>
     [Fact]
     public void WhereItsShapeHasGoneTheKeyboardGoesOnFromTheNearest()
@@ -157,7 +158,7 @@ public sealed class MapNeighboursTests
 
         Assert.Equal(1, MapNeighbours.Nearest(shapes, 0.45, 0.45, 100, 100));
         Assert.Equal(2, MapNeighbours.Nearest(shapes, 0.45, 0.45, 100, 1000));
-        Assert.Null(MapNeighbours.Nearest([], 0.5, 0.5, 100, 100));
+        Assert.Throws<ArgumentOutOfRangeException>(() => MapNeighbours.Nearest([], 0.5, 0.5, 100, 100));
     }
 
     private static MapShape Box(double x, double y, double width, double height) =>

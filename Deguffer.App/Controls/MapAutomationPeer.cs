@@ -107,15 +107,7 @@ internal sealed partial class MapAutomationPeer : FrameworkElementAutomationPeer
 
         var shapes = _map.ShapesIn(folder);
 
-        for (var i = 0; i < shapes.Count; i++)
-        {
-            if (shapes[i].Node == node)
-            {
-                return Peer(drawing, folder, shapes[i], i + 1, shapes.Count);
-            }
-        }
-
-        return null;
+        return MapShapes.IndexOf(shapes, node) is { } index ? Peer(drawing, folder, shapes[index], index + 1, shapes.Count) : null;
     }
 
     /// <summary>
