@@ -401,7 +401,7 @@ public sealed class ExploreMap : UserControl
         _overview.HiddenChanged += (_, _) => OverviewHiddenChanged?.Invoke(this, EventArgs.Empty);
 
         // The camera is held where it was, measured from its new origin, until this returns, so
-        // everything on it is placed from that origin at once (see ExploreZoom.Rebase).
+        // everything on it is placed from that origin at once (see ExploreOrigin.Move).
         _zoom.OriginMoved += (_, _) => Fit();
 
         // A pinch, a touch or the wheel with Ctrl held moves the picture on the compositor before the
@@ -871,7 +871,12 @@ public sealed class ExploreMap : UserControl
         if (another)
         {
             _picturesHanded++;
-            EndDrag();
+
+            // The camera's drag ends with the map's, where it was held, and the new picture is drawn there.
+            if (EndDrag())
+            {
+                _zoom.Stop();
+            }
 
             if (_left is { Drawing: { } drawing } left
                 && ReferenceEquals(tree, left.Tree) && node == left.Node && view == left.View && volume == left.Volume

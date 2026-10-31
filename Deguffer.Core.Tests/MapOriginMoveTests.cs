@@ -53,4 +53,47 @@ public sealed class MapOriginMoveTests
         Assert.Equal(Move.To, Move.MeasuredFor(12));
         Assert.Equal(Move.To, Move.MeasuredFor(40));
     }
+
+    /// <summary>
+    /// A coast's rest before the answer is remembered only for a hand's request while the map was
+    /// following the coast, and it stays remembered.
+    /// </summary>
+    [Fact]
+    public void OnlyAHandsRestWhileCoastingCountsAsRestingBeforeTheAnswer()
+    {
+        var move = NewMove();
+
+        move.HeardRest(11, coasting: true);
+        Assert.False(move.RestedBeforeAnswer, "a rest of an earlier request of the map's was taken as the coast resting");
+
+        move.HeardRest(0, coasting: false);
+        Assert.False(move.RestedBeforeAnswer, "a hand's rest the map was not following was taken as the coast resting");
+
+        move.HeardRest(0, coasting: true);
+        Assert.True(move.RestedBeforeAnswer);
+
+        move.HeardRest(11, coasting: true);
+        Assert.True(move.RestedBeforeAnswer, "a later rest forgot that the coast had rested");
+    }
+
+    /// <summary>
+    /// Once carried out, a move that stopped a coast leaves the camera coasting to where it went, or at
+    /// rest there if the coast had already rested. A move the map's own request follows changes nothing.
+    /// </summary>
+    [Fact]
+    public void WhatFollowsACarriedMoveIsWhatTheCoastHadDone()
+    {
+        var move = NewMove();
+
+        Assert.Equal(MapOriginCarried.Unchanged, move.Carried(coasting: false));
+        Assert.Equal(MapOriginCarried.Coasts, move.Carried(coasting: true));
+
+        move.HeardRest(0, coasting: true);
+
+        Assert.Equal(MapOriginCarried.Rests, move.Carried(coasting: true));
+        Assert.Equal(MapOriginCarried.Unchanged, move.Carried(coasting: false));
+    }
+
+    /// <summary>A move like <see cref="Move"/> that has heard nothing yet, for a test that changes what it has heard.</summary>
+    private static MapOriginMove NewMove() => new(Move.Request, Move.From, Move.To, Move.Viewport);
 }

@@ -66,4 +66,33 @@ public static class MapCeiling
     /// zoom, nor below <see cref="Least"/>, nor above <see cref="Most"/>.
     /// </summary>
     public static double Of(double zoom, double deeper) => Math.Clamp(zoom * deeper, Least, Most);
+
+    /// <summary>
+    /// The ceiling once a drawing allowing a zoom up to <paramref name="drawn"/> arrives, with the
+    /// camera going to <paramref name="target"/>, showing <paramref name="shown"/>, and held to
+    /// <paramref name="ceiling"/> until now. Never above <see cref="Most"/>.
+    ///
+    /// <para>Never below where the camera is going, nor below what it shows within the ceiling it had:
+    /// a drawing can arrive while the camera is on its way somewhere deeper than the drawing was made
+    /// at, and a lower ceiling stops the next zoom, never one already made. The drawing made where the
+    /// camera stops sets it again.</para>
+    /// </summary>
+    public static double Drawn(double drawn, double ceiling, MapViewport target, MapViewport shown) =>
+        Math.Min(Math.Max(drawn, Math.Max(target.Zoom, Math.Min(shown.Zoom, ceiling))), Most);
+
+    /// <summary>
+    /// The ceiling once the camera is asked to <paramref name="target"/> under
+    /// <paramref name="ceiling"/>: raised to the target's zoom where that is deeper, and never above
+    /// <see cref="Most"/>. Every target the map works out itself is held to the ceiling, so a deeper
+    /// one is a place the reader was, which had detail to show when they were there.
+    /// </summary>
+    public static double Toward(double ceiling, MapViewport target) => Math.Min(Math.Max(ceiling, target.Zoom), Most);
+
+    /// <summary>
+    /// The ceiling for a map handed something else to draw, opened at <paramref name="viewport"/>: the
+    /// old ceiling belonged to the drawing of what the map showed before, so it goes back to
+    /// <see cref="Least"/>, or to the zoom the reader was at, until the new picture's first drawing
+    /// sets it. Never above <see cref="Most"/>.
+    /// </summary>
+    public static double Afresh(MapViewport viewport) => Math.Min(Math.Max(Least, viewport.Zoom), Most);
 }
