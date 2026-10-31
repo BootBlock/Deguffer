@@ -106,10 +106,10 @@ public sealed class ExploreTypesTests : IDisposable
         Assert.Null(page.Types.Dominant);
 
         page.Hover(new ExploreHit(Find(snapshot, "Videos"), snapshot.SizeOf(Find(snapshot, "Videos"))));
-        Assert.DoesNotContain("kind", page.HoveredFigures);
+        Assert.DoesNotContain("kind", page.Readout.Figures);
 
         page.Hover(new ExploreHit(Find(snapshot, "trip.mp4"), 1));
-        Assert.EndsWith(", video", page.HoveredFigures);
+        Assert.EndsWith(", video", page.Readout.Figures);
 
         var finished = builder.Build(ExploreChildOrder.BySize);
         scan.Finish(ExploreScan.Fast(finished));
@@ -120,11 +120,11 @@ public sealed class ExploreTypesTests : IDisposable
         Assert.True(drawnWithKinds, "The map was not drawn again when the folders' kinds arrived.");
 
         page.Hover(new ExploreHit(Find(finished, "Videos"), finished.SizeOf(Find(finished, "Videos"))));
-        Assert.EndsWith(", largest kind: video", page.HoveredFigures);
+        Assert.EndsWith(", largest kind: video", page.Readout.Figures);
 
         page.SelectedColouring = ExploreColouring.Branch;
         page.Hover(new ExploreHit(Find(finished, "Videos"), finished.SizeOf(Find(finished, "Videos"))));
-        Assert.DoesNotContain("kind", page.HoveredFigures);
+        Assert.DoesNotContain("kind", page.Readout.Figures);
     });
 
     /// <summary>

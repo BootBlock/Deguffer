@@ -957,9 +957,9 @@ public sealed class ExploreViewModelTests : IDisposable
         await _explore.ScanAsync(page, ExploreScan.Fast(tree));
         page.Hover(new ExploreHit(ExploreTile.Unaccounted, 2_500));
 
-        Assert.Equal(MapBlock.Unaccounted.Readout, page.Hovered);
-        Assert.Equal(ExploreUnaccountedNote.For(isElevated, page.Volume, tree.TotalBytes, ScanStrategy.MasterFileTable), page.HoveredNote);
-        Assert.Contains("Reserved storage", page.HoveredNote);
+        Assert.Equal(MapBlock.Unaccounted.Readout, page.Readout.Name);
+        Assert.Equal(ExploreUnaccountedNote.For(isElevated, page.Volume, tree.TotalBytes, ScanStrategy.MasterFileTable), page.Readout.Note);
+        Assert.Contains("Reserved storage", page.Readout.Note);
     });
 
     /// <summary>
@@ -978,9 +978,9 @@ public sealed class ExploreViewModelTests : IDisposable
         {
             page.Hover(new ExploreHit(block.Node, 6_000));
 
-            Assert.Equal(block.Readout, page.Hovered);
-            Assert.Equal(FreeSpace.Format(6_000), page.HoveredFigures);
-            Assert.Equal(string.Empty, page.HoveredNote);
+            Assert.Equal(block.Readout, page.Readout.Name);
+            Assert.Equal(FreeSpace.Format(6_000), page.Readout.Figures);
+            Assert.Equal(string.Empty, page.Readout.Note);
         }
     });
 
@@ -1003,14 +1003,14 @@ public sealed class ExploreViewModelTests : IDisposable
 
         page.Hover(new ExploreHit(ExploreTile.ShadowCopies, 1_000));
 
-        Assert.Equal(MapBlock.ShadowCopies.Readout, page.Hovered);
-        Assert.Equal(FreeSpace.Format(1_000), page.HoveredFigures);
-        Assert.Equal(HiddenSpaceNote.ShadowCopies(shadow), page.HoveredNote);
+        Assert.Equal(MapBlock.ShadowCopies.Readout, page.Readout.Name);
+        Assert.Equal(FreeSpace.Format(1_000), page.Readout.Figures);
+        Assert.Equal(HiddenSpaceNote.ShadowCopies(shadow), page.Readout.Note);
 
         page.Hover(new ExploreHit(ExploreTile.ReservedStorage, 500));
 
-        Assert.Equal(MapBlock.ReservedStorage.Readout, page.Hovered);
-        Assert.Equal(HiddenSpaceNote.ReservedStorage(), page.HoveredNote);
+        Assert.Equal(MapBlock.ReservedStorage.Readout, page.Readout.Name);
+        Assert.Equal(HiddenSpaceNote.ReservedStorage(), page.Readout.Note);
     });
 
     /// <summary>
@@ -1050,8 +1050,8 @@ public sealed class ExploreViewModelTests : IDisposable
         Assert.True(page.Volume.CountedSystemVolumeInformation);
         Assert.EndsWith(
             HiddenSpaceNote.For(tree, Child(tree, VolumeSpace.SystemVolumeInformation), page.Volume),
-            page.HoveredNote);
-        Assert.Contains(FreeSpace.Format(1_000), page.HoveredNote);
+            page.Readout.Note);
+        Assert.Contains(FreeSpace.Format(1_000), page.Readout.Note);
     });
 
     /// <summary>
@@ -1072,11 +1072,11 @@ public sealed class ExploreViewModelTests : IDisposable
 
         Assert.StartsWith(
             $"{FreeSpace.Format(0)} on disk, {FreeSpace.Format(5_000_000)} long, online-only, last written ",
-            page.HoveredFigures);
+            page.Readout.Figures);
 
         page.Hover(new ExploreHit(Child(tree, "file"), 3_000));
 
-        Assert.StartsWith($"{FreeSpace.Format(3_000)} on disk, last written ", page.HoveredFigures);
+        Assert.StartsWith($"{FreeSpace.Format(3_000)} on disk, last written ", page.Readout.Figures);
     });
 
     /// <summary>

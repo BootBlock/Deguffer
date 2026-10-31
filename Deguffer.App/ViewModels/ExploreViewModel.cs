@@ -25,8 +25,8 @@ namespace Deguffer.App.ViewModels;
 /// <para>This orchestrates. It holds no knowledge of how a volume is read — that is
 /// <see cref="ExploreScanner"/>'s, and it chooses between §5.5's two routes on its own — none of
 /// how a rectangle is drawn, which belongs to the layout and the rasteriser in Core, and none of
-/// how a row is worded, which is <see cref="ExploreRowText"/>'s. What is left here is the tree on
-/// screen and the node being looked at (G2).</para>
+/// how a node is worded, which is <see cref="ExploreNodeText"/>'s and <see cref="ExploreReadout"/>'s.
+/// What is left here is the tree on screen and the node being looked at (G2).</para>
 ///
 /// <para>Every part of the page that does not read those two is a type beside this one, which it
 /// hands what it needs: what the page is pointed at (<see cref="ExploreTargeting"/>) and the offer to
@@ -44,7 +44,7 @@ namespace Deguffer.App.ViewModels;
 /// into and out of folders all read and write the one tree and the one node, and each is a few
 /// members long. A type over any of them would share that state rather than own any of it.</para>
 /// </summary>
-public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator
+public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, IMapShapes<ExploreTree>
 {
     private readonly IExploreScanner _scanner;
     private readonly IVolumeInventory _volumes;
@@ -411,44 +411,18 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator
     /// </summary>
     public int CurrentNode => _position.Node;
 
-    /// <summary>What is under the pointer, or the current node when nothing is.</summary>
-    [ObservableProperty]
-    public partial string Hovered { get; private set; } = string.Empty;
-
     /// <summary>
-    /// How big that is, and how old, said apart from the path.
-    ///
-    /// <para>Two properties for one sentence, because the line they share holds one line's worth
-    /// and a path is what overruns it. Written as one string, a deep path pushed the size off the
-    /// end — and the size is the answer to the question the whole page exists to ask. Split, the
-    /// figures take the width they need and the path trims into what is left.</para>
-    /// </summary>
-    [ObservableProperty]
-    public partial string HoveredFigures { get; private set; } = string.Empty;
-
-    /// <summary>
-    /// What Deguffer knows about the thing under the pointer, or about the nearest folder above it
-    /// that it knows anything about, ready to show. Empty where nothing on the way to the top of
-    /// the volume is described.
+    /// The line under the map: what the pointer or the keyboard is on, how big and how old it is, and
+    /// what Deguffer knows of it, or of the nearest folder above it that it knows anything about.
     ///
     /// <para>Nearest rather than exact, because a treemap draws a folder as a frame round its
     /// children and the pointer is nearly always on a file inside it. Asked exactly, the whole of
-    /// <c>C:\Windows</c> answered nothing but that frame.</para>
-    ///
-    /// <para>Only what the reference says, and not the size or the date: those are already on the
-    /// status line under the picture, where they can be read without waiting for anything to
-    /// appear. This is the part that has nowhere else to go.</para>
+    /// <c>C:\Windows</c> answered nothing but that frame. The note says only what the reference says,
+    /// and not the size or the date: those are on the line itself, where they can be read without
+    /// waiting for the tooltip to appear.</para>
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasHoveredNote))]
-    public partial string HoveredNote { get; private set; } = string.Empty;
-
-    /// <summary>
-    /// Whether there is anything to say about what the pointer is over. The map's tooltip is
-    /// collapsed by this, so nothing appears where nothing on the way to the top of the volume is
-    /// described — which is most of a data drive and little of a system one.
-    /// </summary>
-    public bool HasHoveredNote => HoveredNote.Length > 0;
+    public partial MapReadout Readout { get; private set; } = MapReadout.None;
 
     public bool HasTree => Tree is not null;
 
@@ -649,13 +623,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator
     /// Nothing of a tree other than the one this page scanned, such as a step of a replay of what grew,
     /// whose node numbers mean nothing here.
     /// </summary>
-    public MapShapeFacts? ShapeFacts(ISizedTree tree, int node) =>
-        Scanned(tree, node) is { } scanned
-            ? new MapShapeFacts(
-                scanned.NameOf(node),
-                scanned.IsDirectory(node) ? "Folder" : "File",
-                _position.Opening(scanned, node, Volume) is not null)
-            : null;
+    public MapShapeFacts? ShapeFacts(ISizedTree tree, int node) => MapShapeFacts.For(tree, Tree, node, this);
 
     /// <summary>
     /// Whether <paramref name="node"/> of <paramref name="tree"/> may be removed, and if not why (§7.1),
@@ -666,10 +634,26 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator
     /// time it is asked, and a search of the window names every shape it meets.</para>
     /// </summary>
     public ExploreVerdict? ShapeRemoval(ISizedTree tree, int node) =>
-        Scanned(tree, node) is { } scanned ? Selection.VerdictOf(scanned.PathOf(node)) : null;
+        ShownTree.Of(tree, Tree, node) is { } scanned ? Selection.VerdictOf(scanned.PathOf(node)) : null;
 
-    private ExploreTree? Scanned(ISizedTree tree, int node) =>
-        ReferenceEquals(tree, Tree) && Tree is { } scanned && scanned.Holds(node) ? scanned : null;
+    MapShapeFacts IMapShapes<ExploreTree>.FactsOf(ExploreTree tree, int node) =>
+        new(tree.NameOf(node), ExploreNodeText.Kind(tree, node), _position.Opening(tree, node, Volume) is not null);
+
+    MapReadout IMapShapes<ExploreTree>.ReadoutOf(ExploreTree tree, int node) => ExploreReadout.Over(tree, node, ReadoutState);
+
+    string IMapShapes<ExploreTree>.NoteOn(ExploreTree tree, MapBlock block) => ExploreReadout.NoteOn(tree, block, ReadoutState);
+
+    /// <summary>What the line under the map says beside the tree, read as it is now.</summary>
+    private ExploreReadoutState ReadoutState => new(
+        _time.GetUtcNow().UtcDateTime,
+        SelectedColouring,
+        Growth.Comparison,
+        Types.Dominant,
+        CurrentNode,
+        _guide,
+        Volume,
+        _isElevated,
+        _strategy);
 
     /// <summary>
     /// Show what is inside <paramref name="node"/>. Ignored for anything the tree on screen no longer
@@ -712,19 +696,13 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator
     }
 
     /// <summary>
-    /// Say what the pointer is over. Called from the map on every move, so it formats and assigns
-    /// and does nothing else — anything heavier here runs at the display's refresh rate.
+    /// Say what the pointer or the keyboard is on. Called from the map on every move to another shape,
+    /// so it formats and assigns and does nothing else: anything heavier here runs at the display's
+    /// refresh rate.
     /// </summary>
     public void Hover(ExploreHit? hit)
     {
-        (Hovered, HoveredFigures, HoveredNote) = (Tree, hit) switch
-        {
-            ({ } tree, { Block: { } block, Bytes: var bytes }) => (block.Readout, FreeSpace.Format(bytes), NoteOn(tree, block)),
-
-            ({ } tree, { IsNode: true } node) => Over(tree, node.Node),
-
-            _ => (string.Empty, string.Empty, string.Empty),
-        };
+        Readout = MapReadout.For(Tree, hit, this);
 
         // The card beside the map marks the row of what is pointed at, so the map answers "what" too.
         var pointed = hit is { IsNode: true } over ? over.Node : (int?)null;
@@ -732,71 +710,6 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator
         Types.Point(Tree, pointed);
         Growth.Point(Tree, pointed);
     }
-
-    /// <summary>
-    /// Why the space a block stands for is there, where the page can say: what the scan could not
-    /// count, and what Windows states of the space it keeps.
-    /// </summary>
-    private string NoteOn(ExploreTree tree, MapBlock block) =>
-        block == MapBlock.Unaccounted ? ExploreUnaccountedNote.For(_isElevated, Volume, tree.TotalBytes, _strategy)
-        : block == MapBlock.ShadowCopies ? HiddenSpaceNote.ShadowCopies(Volume.Hidden.ShadowCopies)
-        : block == MapBlock.ReservedStorage ? HiddenSpaceNote.ReservedStorage()
-        : string.Empty;
-
-    /// <summary>
-    /// The three things a pointer settling on one shape says: where it is, how big and how old it
-    /// is, and what it is.
-    ///
-    /// <para>The age is here whichever colouring is on, not only when the map is drawn by age. A
-    /// pointer is how somebody checks one shape against the rest, and having to change the
-    /// colouring to read a date would be a worse answer than showing it always.</para>
-    ///
-    /// <para>The path is built once and the reference is asked with it, rather than each walking
-    /// the tree's parent chain for itself. This runs on every pointer move that lands on a
-    /// different shape (G4).</para>
-    /// </summary>
-    private (string Path, string Figures, string Note) Over(ExploreTree tree, int node)
-    {
-        var path = tree.PathOf(node);
-        var storage = ExploreRowText.Storage(tree, node);
-        var figures = $"{FreeSpace.Format(tree.SizeOf(node))} on disk, "
-            + (storage.Length > 0 ? $"{storage}, " : string.Empty)
-            + $"last written {ExploreRowText.Age(tree, node, _time.GetUtcNow().UtcDateTime)}";
-
-        // The shape's own change, where the map is coloured by growth: compared, or settled by its
-        // dates. A shape painted by the folder above it has none of its own, and the readout says
-        // nothing rather than borrow that one.
-        if (SelectedColouring == ExploreColouring.Growth
-            && Growth.Comparison is { } growth && growth.Describes(tree)
-            && growth.ChangeOf(node) is { } change)
-        {
-            figures += $", {GrowthText.Change(change, growth.Earlier.UnrecordedAtMost)} since the last scan";
-        }
-
-        // The kind the shape is painted, where the map is coloured by type, so the colour is never the
-        // only thing saying it (§6.5). A folder not measured yet says nothing rather than guess.
-        if (SelectedColouring == ExploreColouring.Type && DominantTypes.KindOf(tree, node, Types.Dominant) is { } category)
-        {
-            var kind = FileCategories.Label(category).ToLowerInvariant();
-
-            figures += tree.IsDirectory(node) ? $", largest kind: {kind}" : $", {kind}";
-        }
-
-        // The level the shape is painted for, where the map is coloured by depth, for the same reason.
-        if (SelectedColouring == ExploreColouring.Depth && DepthPalette.LevelOf(tree, node, CurrentNode) is { } level)
-        {
-            figures += $", {DepthPalette.Name(level).ToLowerInvariant()}";
-        }
-
-        return (path, figures, Joined(_guide.DescribeNearest(path)?.Tip(), HiddenSpaceNote.For(tree, node, Volume)));
-    }
-
-    /// <summary>
-    /// What the reference says about a shape, then what Windows states about it, either of which may
-    /// be absent.
-    /// </summary>
-    private static string Joined(string? described, string stated) =>
-        string.Join("\n\n", new[] { described, stated }.Where(part => !string.IsNullOrEmpty(part)));
 
     private void Report(ExploreProgress progress)
     {

@@ -108,7 +108,7 @@ public sealed partial class ExploreSelection : ObservableObject
     /// How big it is, said apart from what it is.
     ///
     /// <para>Split from <see cref="Label"/> for the reason
-    /// <see cref="ExploreViewModel.HoveredFigures"/> gives: the two share one line, and a path long
+    /// <see cref="MapReadout.Figures"/> gives: the two share one line, and a path long
     /// enough to fill it would otherwise push the size off the end.</para>
     /// </summary>
     public string Figures => _figures;

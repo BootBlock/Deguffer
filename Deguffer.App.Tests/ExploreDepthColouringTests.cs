@@ -37,14 +37,14 @@ public sealed class ExploreDepthColouringTests : IDisposable
         Assert.Equal(DepthPalette.Bands.Select(band => band.Label), page.Legend.Select(band => band.Label));
 
         page.Hover(new ExploreHit(Find(tree, "top.txt"), 10));
-        Assert.EndsWith(", 1 level in", page.HoveredFigures);
+        Assert.EndsWith(", 1 level in", page.Readout.Figures);
 
         page.Hover(new ExploreHit(Find(tree, "deep.bin"), 4_000));
-        Assert.EndsWith(", 3 levels in", page.HoveredFigures);
+        Assert.EndsWith(", 3 levels in", page.Readout.Figures);
 
         page.SelectedColouring = ExploreColouring.Branch;
         page.Hover(new ExploreHit(Find(tree, "deep.bin"), 4_000));
-        Assert.DoesNotContain("level", page.HoveredFigures);
+        Assert.DoesNotContain("level", page.Readout.Figures);
     });
 
     private static int Find(ExploreTree tree, string name)
