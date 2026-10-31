@@ -18,8 +18,12 @@ public readonly record struct MapLocation(
     /// <summary>
     /// What is at the point, read in the tree the page holds now, or null where it is over nothing or
     /// over a shape with no counterpart in that tree.
+    ///
+    /// <para>Found once, as the point is located. The map keeps the location the pointer is over and asks
+    /// it again at every report and every outline, and a drawing and a tile never change, so finding it
+    /// again would be the same search at the pointer's rate (G5).</para>
     /// </summary>
-    public ExploreHit? Hit =>
+    public ExploreHit? Hit { get; } =
         (Tile is { } tile ? tile.At(X, Y) : Drawing.At(X, Y)) is { } found ? Reading.Read(found) : null;
 
     /// <summary>

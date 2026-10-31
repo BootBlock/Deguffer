@@ -50,7 +50,8 @@ namespace Deguffer.App.Controls;
 /// that can stand apart does: the redraws (<see cref="ExploreCanvas"/>), the drawings kept (<see cref="ExploreLayers"/>), the camera and what
 /// moves it (<see cref="ExploreZoom"/>), the clock of a change of folder (<see cref="ExploreDescent"/>),
 /// the shapes moving from one drawing to the next (<see cref="ExploreMoves"/>), the names, what is marked out on the picture (<see cref="ExploreMarking"/>) and the lines that mark
-/// it, and in Core the arithmetic and the rule telling a click from a drag (<see cref="MapDrag"/>). Most of the length is the reasoning behind each ordering.</para>
+/// it, what the pointer is over and when that is said (<see cref="ExplorePointer"/>), and in Core the arithmetic, the rule telling a click from a drag
+/// (<see cref="MapDrag"/>), and what a click picks (<see cref="MapPick"/>) and a double-click opens (<see cref="MapOpen"/>). Most of the length is the reasoning behind each ordering.</para>
 /// </summary>
 public sealed class ExploreMap : UserControl
 {
@@ -152,12 +153,8 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private VolumeSpace _volume = VolumeSpace.None;
 
-    /// <summary>
-    /// Where the pointer was last seen, in this control's coordinates, or null while it is elsewhere.
-    /// Kept so a redraw can say what is under it again: a page that refreshes on its own would
-    /// otherwise drop the outline and the readout under a pointer that never moved.
-    /// </summary>
-    private Point? _pointer;
+    /// <summary>Where the pointer is, what it is over, and the readout and outline that follow it. See <see cref="ExplorePointer"/>.</summary>
+    private readonly ExplorePointer _pointer;
 
     private ExploreSurface? _drawing;
 
@@ -181,13 +178,6 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private ContrastColours? _contrast;
 
-    private ExploreHit? _hovered;
-
-    /// <summary>
-    /// The tile <see cref="_hovered"/> was found on, while the camera moves, or null where it was found
-    /// on a drawing. Its outline is the tile's, because the drawing worked from may not draw it.
-    /// </summary>
-    private MapTile? _hoveredTile;
 
     /// <summary>
     /// The finest tile shown over the drawing worked from at a point of the picture, asked of whichever
@@ -228,7 +218,8 @@ public sealed class ExploreMap : UserControl
         _keyboard.Landed += OnKeyboardLanded;
         _moves = new ExploreMoves(compositor, _graphics.Geometry, _camera, SystemMotion.Current);
         _labels = new ExploreLabels(_camera, pictures.Root, SystemMotion.Current);
-        _overview = new ExploreOverview(_camera, _zoom, SystemMotion.Current, () => _pointer);
+        _pointer = new ExplorePointer(Locate, Shine, ShowHovered, Report);
+        _overview = new ExploreOverview(_camera, _zoom, SystemMotion.Current, () => _pointer.Position);
 
         pictures.Follow();
 
@@ -239,7 +230,7 @@ public sealed class ExploreMap : UserControl
         _root = compositor.CreateContainerVisual();
         _flight = new ExploreFlight(_root, pictures, departing, this);
         _tileOver = (x, y) => _flight.Pictures.TileOver(x, y);
-        _canvas = new ExploreCanvas(this, _graphics, _zoom, _flight, owner, () => _pointer, Present, () => Painting, Redraw);
+        _canvas = new ExploreCanvas(this, _graphics, _zoom, _flight, owner, () => _pointer.Position, Present, () => Painting, Redraw);
         _root.Children.InsertAtTop(_moves.Root);
         _root.Children.InsertAtTop(_highlight.Root);
 
@@ -278,7 +269,7 @@ public sealed class ExploreMap : UserControl
         // A press on the overview moves the camera as any other input does, from a settled screen
         // with the whole picture under the zoomed one.
         _overview.Moving += (_, _) => PrepareMove();
-        _overview.Entered += (_, _) => FollowPointer();
+        _overview.Entered += (_, _) => _pointer.Follow();
         _overview.HiddenChanged += (_, _) => OverviewHiddenChanged?.Invoke(this, EventArgs.Empty);
 
         // The camera is held where it was, measured from its new origin, until this returns, so
@@ -307,7 +298,7 @@ public sealed class ExploreMap : UserControl
         PointerReleased += OnPointerReleased;
         PointerCanceled += OnDragEnded;
         PointerCaptureLost += OnDragEnded;
-        PointerExited += OnPointerExited;
+        PointerExited += (_, _) => _pointer.Leave();
         PointerWheelChanged += OnPointerWheelChanged;
         DoubleTapped += OnDoubleTapped;
         KeyDown += OnKeyDown;
@@ -812,7 +803,7 @@ public sealed class ExploreMap : UserControl
         if (change.Another)
         {
             Remark();
-            ReportWhatThePointerIsOver();
+            _pointer.Reread();
         }
 
         // The same picture, zoomed to where the reader was, moves there as a zoom to a shape does.
@@ -1081,8 +1072,7 @@ public sealed class ExploreMap : UserControl
     private void Forget()
     {
         _drawing = null;
-        _hovered = null;
-        _hoveredTile = null;
+        _pointer.Forget();
     }
 
     /// <summary>
@@ -1119,7 +1109,7 @@ public sealed class ExploreMap : UserControl
             _flight.Pictures.HideTiles();
             _labels.Reveal();
             Place();
-            ReportWhatThePointerIsOver();
+            _pointer.Reread();
             return;
         }
 
@@ -1221,7 +1211,7 @@ public sealed class ExploreMap : UserControl
         Fit();
         Place();
         Remark();
-        ReportWhatThePointerIsOver();
+        _pointer.Reread();
 
         // A step out flies now that there is a picture to pull back into, from the shape the folder
         // left has in it. One that does not draw that folder's branch has nothing to fly from. A step
@@ -1281,39 +1271,6 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>
-    /// Say what is under the pointer in the drawing that has just replaced the last one, and mark it.
-    ///
-    /// <para>Asked again rather than dropped, because a page that redraws on its own leaves the pointer
-    /// where it was: a scan publishing a snapshot, or a memory view refreshing every couple of seconds.
-    /// Dropping it took the outline and the readout away from a reader who had not moved, until they
-    /// moved. Nothing is raised while the answer has not changed, so a redraw that leaves the same shape
-    /// under the pointer costs nothing.</para>
-    ///
-    /// <para>That last part holds only because this control is the only thing that writes the readout.
-    /// A page that also cleared it would blank its own line and never hear otherwise, and the outline
-    /// drawn below would then mark a shape nothing named.</para>
-    /// </summary>
-    private void ReportWhatThePointerIsOver()
-    {
-        var spot = _pointer is { } pointer ? Locate(pointer) : null;
-        var hit = spot?.Hit;
-
-        _hoveredTile = spot?.Tile;
-        Shine(spot);
-
-        if (hit == _hovered)
-        {
-            ShowHovered();
-            return;
-        }
-
-        _hovered = hit;
-
-        ShowHovered();
-        Report(hit);
-    }
-
-    /// <summary>
     /// The canvas ground (see <see cref="MapGround"/>), for the theme this control is in and the high
     /// contrast theme the picture on screen is drawn in.
     ///
@@ -1342,7 +1299,7 @@ public sealed class ExploreMap : UserControl
     /// from. See <see cref="ExploreMarking.ShowHovered"/>.
     /// </summary>
     private void ShowHovered() =>
-        _marking.ShowHovered(_drawing, _hovered, _hoveredTile, KeyboardShape, _drawing is { } drawing ? _flight.Pictures.SurfaceOf(drawing) : null);
+        _marking.ShowHovered(_drawing, _pointer.Over?.Hit, _pointer.Over?.Tile, KeyboardShape, _drawing is { } drawing ? _flight.Pictures.SurfaceOf(drawing) : null);
 
     /// <summary>
     /// The shape the keyboard is on, while the keyboard has the map, in a drawing of the tree the page
@@ -1351,7 +1308,8 @@ public sealed class ExploreMap : UserControl
     private MapShape? KeyboardShape => _keyboard.ShapeIn(Readable);
 
     /// <summary>
-    /// What is under <paramref name="point"/>, in the control's own coordinates.
+    /// Where <paramref name="point"/>, in the control's own coordinates, falls in the drawing that
+    /// shows there, or null where none does.
     ///
     /// <para>Mapped through the drawing's own dimensions rather than through the display scale,
     /// because the two part company for as long as a resize is still settling. The canvas is
@@ -1378,12 +1336,6 @@ public sealed class ExploreMap : UserControl
     /// <see cref="MapHitTest"/>, which also reads a drawing of an older tree of the same place in the
     /// newer one, and refuses an answer from a drawing of anything else. So are the tiles a move shows
     /// over the drawing, which draw the folders it has opened.</para>
-    /// </summary>
-    private ExploreHit? At(Point point) => Locate(point)?.Hit;
-
-    /// <summary>
-    /// Where <paramref name="point"/>, in the control's own coordinates, falls in the drawing that
-    /// shows there, or null where none does. See <see cref="At"/>.
     /// </summary>
     private MapLocation? Locate(Point point) =>
         !_canvas.HasSize || Stepping || _overview.Covers(point)
@@ -1420,7 +1372,7 @@ public sealed class ExploreMap : UserControl
 
         PrepareMove();
 
-        _pointer = point.Position;
+        _pointer.MoveTo(point.Position);
         _overview.Avoid(point.Position);
 
         // A wheel tilted right reports a turn away from the reader, and shows what is to the right.
@@ -1504,11 +1456,11 @@ public sealed class ExploreMap : UserControl
         ShowOverview();
         Sharpen();
 
-        // Not ReportWhatThePointerIsOver, which marks the shape out again whether or not it changed.
-        // That is right once per new drawing and wrong at every frame of a move over the same one:
-        // the outline is in the drawing's own pixels and moves with the placement, and redrawing it
-        // is a pass over every shape and two new geometries, sixty times a second.
-        FollowPointer();
+        // Not Reread, which marks the shape out again whether or not it changed. That is right once
+        // per new drawing and wrong at every frame of a move over the same one: the outline is in the
+        // drawing's own pixels and moves with the placement, and redrawing it is a pass over every
+        // shape and two new geometries, sixty times a second.
+        _pointer.Follow();
     }
 
     /// <summary>
@@ -1590,7 +1542,7 @@ public sealed class ExploreMap : UserControl
         var position = point.Position;
         var began = _drag.IsDragging;
 
-        _pointer = position;
+        _pointer.MoveTo(position);
 
         if (_canvas.HasSize
             && _drag.Move(position.X, position.Y, Drags(point)) is (var x, var y))
@@ -1608,7 +1560,7 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        FollowPointer();
+        _pointer.Follow();
     }
 
     /// <summary>
@@ -1654,44 +1606,6 @@ public sealed class ExploreMap : UserControl
         ReleasePointerCaptures();
 
         return true;
-    }
-
-    /// <summary>
-    /// Say what is under the pointer, and mark it out, where that is not what was already under it.
-    /// </summary>
-    private void FollowPointer()
-    {
-        if (_pointer is not { } pointer)
-        {
-            return;
-        }
-
-        var spot = Locate(pointer);
-        var hit = spot?.Hit;
-        var tile = spot?.Tile;
-
-        Shine(spot);
-
-        // Only when it changed. A pointer moves at the display's refresh rate and lands on the same
-        // shape for most of that, so reporting every move would rebuild the same string sixty times
-        // a second. The same shape found on another tile, or on the drawing, is outlined again from
-        // there, and not reported again.
-        if (hit == _hovered && tile == _hoveredTile)
-        {
-            return;
-        }
-
-        var moved = hit != _hovered;
-
-        _hovered = hit;
-        _hoveredTile = tile;
-
-        ShowHovered();
-
-        if (moved)
-        {
-            Report(hit);
-        }
     }
 
     /// <summary>Say what the pointer found.</summary>
@@ -1816,17 +1730,6 @@ public sealed class ExploreMap : UserControl
         _highlight.Restyle(look.Accent, look.Contrast?.ToHighlight(), look.EffectsFast);
     }
 
-    private void OnPointerExited(object sender, PointerRoutedEventArgs e)
-    {
-        _pointer = null;
-        _hovered = null;
-        _hoveredTile = null;
-
-        Shine(null);
-        ShowHovered();
-        Report(null);
-    }
-
     private void OnTapped(object sender, TappedRoutedEventArgs e)
     {
         if (_press.TapPicks(_drag.Dragged))
@@ -1838,7 +1741,7 @@ public sealed class ExploreMap : UserControl
     private void OnRightTapped(object sender, RightTappedRoutedEventArgs e)
     {
         // A picture that answers nothing has nothing to offer a menu for (§7.1).
-        if (!MapReading.Answers(_tree) || !_press.RightTapActs)
+        if (!Answers || !_press.RightTapActs)
         {
             return;
         }
@@ -1849,32 +1752,15 @@ public sealed class ExploreMap : UserControl
         MenuRequested?.Invoke(this, point);
     }
 
-    /// <summary>
-    /// Say what is at <paramref name="point"/>. Neither block picks anything. The one standing in
-    /// for items too small to draw is several thousand files at once, and §7.1 has no bulk action,
-    /// and free space is not on the disk to be acted on. A picture that answers nothing, such as a
-    /// step of a replay of what grew (<see cref="MapReading.Answers"/>), says nothing, so a click on it
-    /// leaves the selection as it is rather than clearing it.
-    /// </summary>
+    /// <summary>Pick what is at <paramref name="point"/>, as <see cref="MapPick.Click"/> says a click there does.</summary>
     private void Pick(Point point)
     {
-        if (!MapReading.Answers(_tree))
-        {
-            return;
-        }
+        var pictured = _drawing is not null || _canvas.Arriving is { Landed.Count: > 0 };
 
-        // A click on nothing at all, with no picture yet, leaves the selection as it is. A click on a
-        // picture still landing picks what has landed under it, as the readout already names.
-        if (_drawing is null && _canvas.Arriving is not { Landed.Count: > 0 })
+        if (MapPick.Click(Answers, pictured, Locate(point)?.Hit) is { } pick)
         {
-            return;
+            Picked?.Invoke(this, pick.Node);
         }
-
-        Picked?.Invoke(this, At(point) switch
-        {
-            { IsNode: true } hit => hit.Node,
-            _ => null,
-        });
     }
 
     /// <summary>
@@ -1883,11 +1769,7 @@ public sealed class ExploreMap : UserControl
     /// <para>The page is what decides whether a node opens, and it says so by showing it here before
     /// <see cref="Activated"/> returns. The camera then flies into the folder's shape, as it does for
     /// every step into a folder however the page asked for it (see <see cref="Show(ISizedTree, int, ExploreView, Func{DateTime, ShapeColours}, Func{int, string}, MapLook, VolumeSpace, MapViewport?)"/>).
-    /// The root of a scan of a whole volume opens the same way, out of the volume drawn beside it.</para>
-    ///
-    /// <para>What does not open, a file, the block standing in for items too small to draw, or the
-    /// block standing for free space, is zoomed to until it fills the map as far as its shape allows.
-    /// For the block of small items that is how they come to be drawn one by one.</para>
+    /// What does not open is zoomed to: see <see cref="MapOpen"/>.</para>
     /// </summary>
     private void OnDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
@@ -1909,10 +1791,7 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void Open(ExploreSurface drawing, ExploreHit hit, MapFrame? shape)
     {
-        // The shape the whole drawing is of opens only out of what is drawn beside it: the volume's
-        // free space, beside the root of a treemap of a whole drive. Anywhere else it is already
-        // open, and asking the page to open it again would be asking for the picture on screen.
-        if (hit.IsNode && (hit.Node != _node || drawing.HasVolumeBeside))
+        if (MapOpen.AsksPage(hit, _node, drawing.HasVolumeBeside))
         {
             // Counted rather than compared by node: the root opened out of its volume is the same
             // node drawn as another picture.
@@ -1926,10 +1805,8 @@ public sealed class ExploreMap : UserControl
             }
         }
 
-        if (Zoomable && shape is { } frame)
+        if (MapOpen.ZoomTo(Zoomable, shape, _zoom.Shown, _zoom.Ceiling) is { } fitting)
         {
-            var fitting = MapViewport.Fitting(_zoom.Shown.PictureOf(frame), _zoom.Ceiling);
-
             // Already going there, which is a step to nowhere.
             if (fitting != _zoom.Target)
             {
@@ -1995,14 +1872,15 @@ public sealed class ExploreMap : UserControl
     private void OnKeyboardLanded(object? sender, ExploreKeyboardLanding landing)
     {
         var (drawing, folder, shape, pick) = landing;
+        var hit = new ExploreHit(shape.Node, shape.Bytes);
 
-        if (pick && Answers)
+        if (pick && MapPick.Landing(Answers, hit) is { } picked)
         {
-            Picked?.Invoke(this, shape.IsNode ? shape.Node : null);
+            Picked?.Invoke(this, picked.Node);
         }
 
         ShowHovered();
-        Report(new ExploreHit(shape.Node, shape.Bytes));
+        Report(hit);
         Bring(drawing, shape);
 
         if (FrameworkElementAutomationPeer.FromElement(this) is not MapAutomationPeer peer)
@@ -2228,13 +2106,13 @@ public sealed class ExploreMap : UserControl
     }
 
     /// <summary>A new drawing has finished fading in: the pointer is over what it shows.</summary>
-    private void OnFaded(object? sender, EventArgs e) => ReportWhatThePointerIsOver();
+    private void OnFaded(object? sender, EventArgs e) => _pointer.Reread();
 
     /// <summary>
     /// A tile has come in under a pointer that has not moved, or one it was over has gone: the pointer
     /// is over what the screen shows now (§7.1).
     /// </summary>
-    private void OnTileAnswersChanged(object? sender, EventArgs e) => ReportWhatThePointerIsOver();
+    private void OnTileAnswersChanged(object? sender, EventArgs e) => _pointer.Reread();
 
     /// <summary>
     /// Shapes have started to travel, to a new layout or into a new view: the names and the outlines,
@@ -2244,7 +2122,7 @@ public sealed class ExploreMap : UserControl
     {
         _labels.Hide();
         _highlight.Hide();
-        ReportWhatThePointerIsOver();
+        _pointer.Reread();
     }
 
     /// <summary>
@@ -2255,7 +2133,7 @@ public sealed class ExploreMap : UserControl
     {
         _labels.Reveal();
         _highlight.Reveal();
-        ReportWhatThePointerIsOver();
+        _pointer.Reread();
     }
 
     /// <summary>
@@ -2312,6 +2190,6 @@ public sealed class ExploreMap : UserControl
         _highlight.Reveal();
         Place();
         ShowOverview();
-        ReportWhatThePointerIsOver();
+        _pointer.Reread();
     }
 }
