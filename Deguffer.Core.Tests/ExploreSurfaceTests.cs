@@ -57,6 +57,29 @@ public sealed class ExploreSurfaceTests
         }
     }
 
+    /// <summary>
+    /// A drawing lies on the screen where its own zoom puts it, and one that cannot be zoomed lies as the
+    /// whole picture, whatever the screen shows: the screen is placed by what was drawn (§7.1).
+    /// </summary>
+    [Theory]
+    [InlineData(ExploreView.Treemap)]
+    [InlineData(ExploreView.Sunburst)]
+    public void ADrawingIsPlacedAtTheZoomItWasDrawnAt(ExploreView view)
+    {
+        var tree = FlatTree(10);
+        var drawn = MapViewport.Fitting(new MapFrame(0.25, 0.25, 0.5, 0.5), MapCeiling.Least);
+        var shown = MapViewport.Fitting(new MapFrame(0.3, 0.3, 0.25, 0.25), MapCeiling.Least);
+
+        var surface = ExploreSurface.Create(
+            tree, tree.RootNode, view, Width, Height, scale: 1, textScale: 1,
+            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None, drawn);
+
+        Assert.Equal(
+            shown.PlacementOf(view == ExploreView.Treemap ? drawn : MapViewport.Whole),
+            surface.PlacementOn(shown));
+        Assert.NotEqual(shown.PlacementOf(drawn), shown.PlacementOf(MapViewport.Whole));
+    }
+
     [Theory]
     [InlineData(ExploreView.Treemap)]
     [InlineData(ExploreView.Icicle)]

@@ -83,8 +83,11 @@ public static class MapFolders
     /// holds and which node names it; at the top of the picture, the drawn node; and beside a volume,
     /// everything the top of the picture draws, which is the drive, named by no node.
     /// </summary>
-    /// <param name="top">The shapes at the top of the picture, which beside a volume are the whole of the drive.</param>
-    public static (long Bytes, int? Named) ShareBasis(ISizedTree tree, int drawn, bool beside, int? folder, IReadOnlyList<MapShape> top)
+    /// <param name="top">
+    /// The shapes at the top of the picture, which beside a volume are the whole of the drive. Asked only
+    /// there, because finding them lays the picture out.
+    /// </param>
+    public static (long Bytes, int? Named) ShareBasis(ISizedTree tree, int drawn, bool beside, int? folder, Func<IReadOnlyList<MapShape>> top)
     {
         ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(top);
@@ -92,7 +95,7 @@ public static class MapFolders
         return folder switch
         {
             { } inside => (tree.SizeOf(inside), inside),
-            null when beside => (top.Sum(shape => shape.Bytes), null),
+            null when beside => (top().Sum(shape => shape.Bytes), null),
             null => (tree.SizeOf(drawn), drawn),
         };
     }
