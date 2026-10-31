@@ -1,5 +1,6 @@
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Exploring.Layout;
+using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Exploring;
@@ -8,14 +9,19 @@ namespace Deguffer.Core.Exploring;
 /// What the page that owns a tree knows of one of its nodes and the map does not: what it is called,
 /// what kind of thing it is, and whether opening it shows what it holds.
 ///
-/// <para>Not whether it may be removed, which <see cref="MapShapeText.Help"/> is given apart. A screen
-/// reader names every shape in a search of the window, and the verdict asks the machine where the
-/// item's volume is mounted, so a verdict carried here would be asked once a shape.</para>
+/// <para>Not whether it may be removed, which <see cref="MapShapeText.Help(MapShapeFacts, ExploreVerdict?)"/>
+/// is given apart. A screen reader names every shape in a search of the window, and the verdict asks
+/// the machine where the item's volume is mounted, so a verdict carried here would be asked once a
+/// shape.</para>
 /// </summary>
 /// <param name="Name">Its own name, not its path: the shapes round it are its siblings, and a screen reader reads the name first.</param>
 /// <param name="Kind">What it is, as one capitalised noun or two: "Folder", "File", "Program".</param>
 /// <param name="Opens">Whether opening it shows what it holds, as a double-click on its shape does.</param>
-public sealed record MapShapeFacts(string Name, string Kind, bool Opens)
+/// <param name="LowerBound">
+/// Whether its size is a lower bound, because the scan could not read all of it, so its name marks
+/// the size as its label and its row do (§7.1).
+/// </param>
+public sealed record MapShapeFacts(string Name, string Kind, bool Opens, bool LowerBound)
 {
     /// <summary>
     /// What a screen reader is told of <paramref name="node"/> of <paramref name="asked"/>, where that
@@ -49,13 +55,66 @@ public static class MapShapeText
     /// What holds it: the folder's name, or null for the drive, beside which a scan of a whole volume
     /// draws its root and the space that is not in it.
     /// </param>
-    public static string Name(string name, long bytes, long ofBytes, string? ofName)
+    /// <param name="lowerBound">
+    /// Whether the size is a lower bound, which is said in words at the end, as a row says it
+    /// (<see cref="ExploreNodeText.Unread"/>): a symbol read aloud is not a sentence.
+    /// </param>
+    public static string Name(string name, long bytes, long ofBytes, string? ofName, bool lowerBound)
     {
         ArgumentNullException.ThrowIfNull(name);
 
         var size = $"{name}, {FreeSpace.Format(bytes)}";
+        var shared = ofBytes > 0 ? $"{size}, {Share(bytes, ofBytes)} of {ofName ?? "the drive"}" : size;
 
-        return ofBytes > 0 ? $"{size}, {Share(bytes, ofBytes)} of {ofName ?? "the drive"}" : size;
+        return lowerBound ? shared + ExploreNodeText.Unread : shared;
+    }
+
+    /// <summary>
+    /// What a screen reader calls <paramref name="shape"/>, one of <paramref name="folder"/>'s shapes in
+    /// <paramref name="drawing"/>, or of the top of the picture for null: its name, its size and its share
+    /// of what holds it (<see cref="MapFolders.ShareBasis"/>), which at the top of a volume's picture is
+    /// the drive. Empty where nothing names it.
+    /// </summary>
+    /// <param name="factsOf">What the page says of a node of the drawing's tree, or null where it says nothing.</param>
+    public static string Name(ExploreSurface drawing, int? folder, MapShape shape, Func<int, MapShapeFacts?> factsOf)
+    {
+        ArgumentNullException.ThrowIfNull(drawing);
+        ArgumentNullException.ThrowIfNull(factsOf);
+
+        var facts = shape.IsNode ? factsOf(shape.Node) : null;
+
+        if ((MapBlock.Of(shape.Node) is { } block ? block.Name : facts?.Name) is not { } name)
+        {
+            return string.Empty;
+        }
+
+        var (ofBytes, named) = MapFolders.ShareBasis(drawing.Tree, drawing.Root, drawing.HasVolumeBeside, folder, () => drawing.Shapes(null));
+        var lowerBound = facts?.LowerBound ?? false;
+
+        // A share of the drive is named by no node. A share of a folder the page says nothing of is not
+        // said at all, rather than said to be of the drive.
+        return named switch
+        {
+            null => Name(name, shape.Bytes, ofBytes, ofName: null, lowerBound),
+            { } folderNode when factsOf(folderNode) is { } of => Name(name, shape.Bytes, ofBytes, of.Name, lowerBound),
+            _ => Name(name, shape.Bytes, ofBytes: 0, ofName: null, lowerBound),
+        };
+    }
+
+    /// <summary>
+    /// What <paramref name="shape"/> is and what can be done with it (<see cref="Help(MapShapeFacts, ExploreVerdict?)"/>),
+    /// or what a block stands for. Empty where the page says nothing of the shape's node.
+    /// </summary>
+    /// <param name="factsOf">What the page says of a node, or null where it says nothing.</param>
+    /// <param name="removal">Whether a node may be removed, asked only of a node the page says something of.</param>
+    public static string Help(MapShape shape, Func<int, MapShapeFacts?> factsOf, Func<int, ExploreVerdict?> removal)
+    {
+        ArgumentNullException.ThrowIfNull(factsOf);
+        ArgumentNullException.ThrowIfNull(removal);
+
+        return MapBlock.Of(shape.Node) is { } block ? block.Help
+            : shape.IsNode && factsOf(shape.Node) is { } facts ? Help(facts, removal(shape.Node))
+            : string.Empty;
     }
 
     /// <summary>
@@ -94,8 +153,21 @@ public static class MapShapeText
     {
         ArgumentNullException.ThrowIfNull(name);
 
-        return $"{name}  {FreeSpace.Format(bytes)}";
+        return Labelled(name, FreeSpace.Format(bytes));
     }
+
+    /// <summary>
+    /// What is written on the shape of <paramref name="node"/>: its name, then its size, marked where
+    /// the size is a lower bound (§7.1), as its row marks it.
+    /// </summary>
+    public static string Label(ExploreTree tree, int node)
+    {
+        ArgumentNullException.ThrowIfNull(tree);
+
+        return Labelled(tree.NameOf(node), ExploreNodeText.Size(tree, node));
+    }
+
+    private static string Labelled(string name, string size) => $"{name}  {size}";
 
     /// <summary>
     /// <paramref name="bytes"/> as a share of <paramref name="ofBytes"/>, to the nearest percent:

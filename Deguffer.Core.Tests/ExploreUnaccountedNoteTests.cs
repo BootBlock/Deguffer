@@ -143,33 +143,8 @@ public sealed class ExploreUnaccountedNoteTests
         Assert.True(tree.TotalLength > Volume.TotalBytes - Volume.FreeBytes);
 
         Assert.Equal(3_000, Volume.Parts(tree.TotalBytes).Unaccounted);
-        Assert.Equal(0, Volume.Parts(tree.TotalBytes).Overcounted);
-        Assert.Null(ExploreUnaccountedNote.Overcount(Volume, tree.TotalBytes, ScanStrategy.MasterFileTable));
 
-        // What the length would have drawn: no block, and the page has to say why.
+        // What the length would have drawn: no block.
         Assert.Equal(0, Volume.Parts(tree.TotalLength).Unaccounted);
-        Assert.Equal(7_000, Volume.Parts(tree.TotalLength).Overcounted);
-    }
-
-    /// <summary>
-    /// Where a scan still counts more than is in use, the page says by how much and why, rather
-    /// than drawing a picture that only appears to add up. The causes are the route's own, beside
-    /// the one both share: a file with several names counts once for each (#171).
-    /// </summary>
-    [Fact]
-    public void SaysWhereTheScanCountedMoreThanIsInUse()
-    {
-        var walked = ExploreUnaccountedNote.Overcount(Volume, 7_000, ScanStrategy.ParallelEnumeration);
-        var indexed = ExploreUnaccountedNote.Overcount(Volume, 7_000, ScanStrategy.MasterFileTable);
-
-        Assert.StartsWith($"The scan counted {FreeSpace.Format(1_000)} more than Windows says is in use", walked);
-        Assert.Contains("several names", walked);
-        Assert.Contains("CompactOS", walked);
-        Assert.Contains("several names", indexed);
-        Assert.DoesNotContain("CompactOS", indexed);
-        Assert.Contains("written while the scan ran", indexed);
-
-        // Nothing to say about a folder, which has no volume drawn beside it.
-        Assert.Null(ExploreUnaccountedNote.Overcount(VolumeSpace.None, 7_000, ScanStrategy.ParallelEnumeration));
     }
 }

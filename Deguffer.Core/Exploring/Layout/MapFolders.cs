@@ -71,11 +71,11 @@ public static class MapFolders
     /// otherwise. What the map's tree lists under a shape, so the rule bounds the tree itself rather than
     /// a copy of it.
     /// </summary>
-    public static IReadOnlyList<MapShape> Listed(Rendering.ExploreSurface drawing, int drawn, int folder, int? keyboard, IReadOnlySet<int> expanded)
+    public static IReadOnlyList<MapShape> Listed(Rendering.ExploreSurface drawing, int folder, int? keyboard, IReadOnlySet<int> expanded)
     {
         ArgumentNullException.ThrowIfNull(drawing);
 
-        return Lists(drawing.Tree, drawn, drawing.HasVolumeBeside, folder, keyboard, expanded) ? drawing.Shapes(folder) : [];
+        return Lists(drawing.Tree, drawing.Root, drawing.HasVolumeBeside, folder, keyboard, expanded) ? drawing.Shapes(folder) : [];
     }
 
     /// <summary>
@@ -83,8 +83,11 @@ public static class MapFolders
     /// holds and which node names it; at the top of the picture, the drawn node; and beside a volume,
     /// everything the top of the picture draws, which is the drive, named by no node.
     /// </summary>
-    /// <param name="top">The shapes at the top of the picture, which beside a volume are the whole of the drive.</param>
-    public static (long Bytes, int? Named) ShareBasis(ISizedTree tree, int drawn, bool beside, int? folder, IReadOnlyList<MapShape> top)
+    /// <param name="top">
+    /// The shapes at the top of the picture, which beside a volume are the whole of the drive. Asked only
+    /// there, because finding them lays the picture out.
+    /// </param>
+    public static (long Bytes, int? Named) ShareBasis(ISizedTree tree, int drawn, bool beside, int? folder, Func<IReadOnlyList<MapShape>> top)
     {
         ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(top);
@@ -92,7 +95,7 @@ public static class MapFolders
         return folder switch
         {
             { } inside => (tree.SizeOf(inside), inside),
-            null when beside => (top.Sum(shape => shape.Bytes), null),
+            null when beside => (top().Sum(shape => shape.Bytes), null),
             null => (tree.SizeOf(drawn), drawn),
         };
     }

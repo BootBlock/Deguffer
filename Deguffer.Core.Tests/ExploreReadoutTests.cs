@@ -51,6 +51,23 @@ public sealed class ExploreReadoutTests
         Assert.StartsWith($"{FreeSpace.Format(0)} on disk, {FreeSpace.Format(5_000_000)} long, online-only, last written ", figures);
     }
 
+    /// <summary>
+    /// §7.1: a shape the scan could not read all of says its size is a lower bound, and a shape it
+    /// read whole does not, as its row in the list does. On the map, this line is where a shape's
+    /// size is stated.
+    /// </summary>
+    [Fact]
+    public void ASizeThatIsALowerBoundSaysSo()
+    {
+        var builder = new ExploreTreeBuilder(@"C:\");
+        var first = builder.AddChildren(ExploreTreeBuilder.RootNode, [Folder("refused"), File("read.bin", 3_000)]);
+        builder.MarkSizeUnknown(first);
+        var tree = builder.Build(ExploreChildOrder.BySize);
+
+        Assert.StartsWith($"≥ {FreeSpace.Format(0)} on disk, ", ExploreReadout.Over(tree, Child(tree, "refused"), State(ExploreColouring.Branch)).Figures);
+        Assert.StartsWith($"{FreeSpace.Format(3_000)} on disk, ", ExploreReadout.Over(tree, Child(tree, "read.bin"), State(ExploreColouring.Branch)).Figures);
+    }
+
     /// <summary>The kind is said under the type colouring alone, so the colour is never the only thing saying it (§6.5).</summary>
     [Fact]
     public void TheKindIsSaidOnlyUnderTheTypeColouring()

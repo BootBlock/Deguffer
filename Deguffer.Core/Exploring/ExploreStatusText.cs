@@ -1,12 +1,11 @@
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
-using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Exploring;
 
 /// <summary>
-/// What the Explore page's status line says of a finished scan and of where the page is pointed,
-/// and when a refusal it stated is taken back.
+/// What the Explore page's status line says of where the page is pointed, and when a refusal it
+/// stated is taken back.
 /// </summary>
 public static class ExploreStatusText
 {
@@ -15,33 +14,6 @@ public static class ExploreStatusText
     /// is taken off it. See <see cref="Retargeted"/>.
     /// </summary>
     public const string Prompt = "Choose a drive or a folder and scan it to see what is using the space.";
-
-    /// <summary>
-    /// What a finished scan says: which figure the map draws, once, where the total is, with the
-    /// length beside it so a gap between the two is something the reader was told about rather than
-    /// found; that the totals are lower bounds where any of it could not be read (§7.1); what the
-    /// route's figures leave out; and where they count more than the drive has in use.
-    /// </summary>
-    /// <param name="volume">What the volume held when the scan finished. See <see cref="VolumeSpace"/>.</param>
-    /// <param name="scoped">
-    /// Whether the scan was started on a folder rather than a drive, read as it started: the scope can
-    /// change while a scan runs, and the sentence describes this scan rather than the next one.
-    /// </param>
-    public static string Finished(ExploreScan scan, VolumeSpace volume, bool scoped)
-    {
-        ArgumentNullException.ThrowIfNull(scan);
-
-        return string.Join(" ", new[]
-        {
-            $"{FreeSpace.Format(scan.Tree.TotalBytes)} on disk accounted for, in files whose lengths "
-                + $"add up to {FreeSpace.Format(scan.Tree.TotalLength)}.",
-            scan.Tree.HasUnknownSizes
-                ? $"Some of this {(scoped ? "folder" : "drive")} could not be read, so the totals are lower bounds."
-                : null,
-            ExploreRouteText.Sizing(scan.Strategy),
-            ExploreUnaccountedNote.Overcount(volume, scan.Tree.TotalBytes, scan.Strategy),
-        }.Where(sentence => sentence is not null));
-    }
 
     /// <summary>
     /// What the line says when the folder picker returned something that is not a folder on a disk.

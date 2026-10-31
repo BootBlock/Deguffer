@@ -32,7 +32,7 @@ public static class ExploreReadout
 
         var path = tree.PathOf(node);
         var storage = ExploreNodeText.Storage(tree, node);
-        var figures = $"{FreeSpace.Format(tree.SizeOf(node))} on disk, "
+        var figures = $"{ExploreNodeText.Size(tree, node)} on disk, "
             + (storage.Length > 0 ? $"{storage}, " : string.Empty)
             + $"last written {ExploreNodeText.Age(tree, node, state.Now)}";
 

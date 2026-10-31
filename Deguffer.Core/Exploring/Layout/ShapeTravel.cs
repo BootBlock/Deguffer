@@ -1,3 +1,5 @@
+using Deguffer.Core.Exploring.Rendering;
+
 namespace Deguffer.Core.Exploring.Layout;
 
 /// <summary>
@@ -15,6 +17,36 @@ namespace Deguffer.Core.Exploring.Layout;
 /// <param name="End">Where it is as the move ends.</param>
 public readonly record struct ShapeTravel(bool ShowsEarlier, MapFrame Source, SpritePlacement Start, SpritePlacement End)
 {
+    /// <summary>
+    /// The travels of the shapes that moved between <paramref name="earlier"/> and
+    /// <paramref name="later"/>, the same place laid out again, which has just arrived
+    /// (<see cref="ShapeChanges"/>). Only between two drawings of one canvas at one zoom, whose shapes
+    /// are where the same rectangles of the screen say: empty for any other two, and where nothing
+    /// moved that is wide enough to show.
+    /// </summary>
+    public static IReadOnlyList<ShapeTravel> Between(ExploreSurface earlier, ExploreSurface later)
+    {
+        ArgumentNullException.ThrowIfNull(earlier);
+        ArgumentNullException.ThrowIfNull(later);
+
+        if (earlier.Width != later.Width || earlier.Height != later.Height || earlier.Viewport != later.Viewport)
+        {
+            return [];
+        }
+
+        var travels = new List<ShapeTravel>();
+
+        foreach (var change in ShapeChanges.Between(earlier, later))
+        {
+            if (Of(change, later.Width, later.Height) is { } travel)
+            {
+                travels.Add(travel);
+            }
+        }
+
+        return travels;
+    }
+
     /// <summary>
     /// The travel of <paramref name="change"/> on a canvas of <paramref name="width"/> by
     /// <paramref name="height"/> pixels, or null for a shape too thin to show at its end.

@@ -45,7 +45,7 @@ public sealed class ExploreRemoverTests : IDisposable
         var bin = new FakeRecycleBin();
 
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(file, IsDirectory: false, Bytes: 64)],
+            [new ExploreItem(file, IsDirectory: false, Bytes: 64, LowerBound: false)],
             ExploreRemovalMode.RecycleBin,
             _policy,
             bin);
@@ -74,7 +74,7 @@ public sealed class ExploreRemoverTests : IDisposable
         });
 
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(lost, IsDirectory: false, Bytes: 64), new ExploreItem(binned, IsDirectory: false, Bytes: 32)],
+            [new ExploreItem(lost, IsDirectory: false, Bytes: 64, LowerBound: false), new ExploreItem(binned, IsDirectory: false, Bytes: 32, LowerBound: false)],
             ExploreRemovalMode.RecycleBin,
             _policy,
             bin);
@@ -83,6 +83,30 @@ public sealed class ExploreRemoverTests : IDisposable
         Assert.Contains("Moved 'binned.bin' (32 B) to the Recycle Bin.", report.Summary);
         Assert.Contains("Windows deleted 'lost.bin' (64 B) outright rather than moving it to the Recycle Bin", report.Summary);
         Assert.True(report.Removed.Single(item => item.Path == lost).DeletedOutright);
+    }
+
+    /// <summary>
+    /// §7.1: the report gives a size the scan could not read all of as the lower bound it is, as the
+    /// confirmation before it did, and a measured one plainly.
+    /// </summary>
+    [Fact]
+    public async Task AReportedSizeThatIsALowerBoundIsMarkedAsOne()
+    {
+        var partial = _temp.CreateFile(64, "profile", "Downloads", "partial.bin");
+        var whole = _temp.CreateFile(32, "profile", "Downloads", "whole.bin");
+        var bin = new FakeRecycleBin(path =>
+        {
+            File.Delete(path);
+            return new RecycleOutcome(Removed: true);
+        });
+
+        var one = await ExploreRemover.RemoveAsync(
+            [new ExploreItem(partial, IsDirectory: false, Bytes: 64, LowerBound: true)], ExploreRemovalMode.RecycleBin, _policy, bin);
+        var other = await ExploreRemover.RemoveAsync(
+            [new ExploreItem(whole, IsDirectory: false, Bytes: 32, LowerBound: false)], ExploreRemovalMode.RecycleBin, _policy, bin);
+
+        Assert.Contains("Moved 'partial.bin' (≥ 64 B) to the Recycle Bin.", one.Summary);
+        Assert.Contains("Moved 'whole.bin' (32 B) to the Recycle Bin.", other.Summary);
     }
 
     /// <summary>
@@ -103,7 +127,7 @@ public sealed class ExploreRemoverTests : IDisposable
         var bin = new FakeRecycleBin();
 
         await ExploreRemover.RemoveAsync(
-            [new ExploreItem(awkward, IsDirectory: false, Bytes: 8)],
+            [new ExploreItem(awkward, IsDirectory: false, Bytes: 8, LowerBound: false)],
             ExploreRemovalMode.RecycleBin,
             _policy,
             bin);
@@ -126,7 +150,7 @@ public sealed class ExploreRemoverTests : IDisposable
         var recorder = new RecordingFileSystem(WindowsFileSystem.Default);
 
         await ExploreRemover.RemoveAsync(
-            [new ExploreItem(file, IsDirectory: false, Bytes: 16)],
+            [new ExploreItem(file, IsDirectory: false, Bytes: 16, LowerBound: false)],
             ExploreRemovalMode.Permanent,
             _policy,
             recycleBin: null,
@@ -164,7 +188,7 @@ public sealed class ExploreRemoverTests : IDisposable
         }
 
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(item, isDirectory, Bytes: 16)],
+            [new ExploreItem(item, isDirectory, Bytes: 16, LowerBound: false)],
             ExploreRemovalMode.Permanent,
             _policy);
 
@@ -196,7 +220,7 @@ public sealed class ExploreRemoverTests : IDisposable
             new RecycleBinReach(new FakeVolumeInventory(), new RecycleBinRooms(_ => null, _environment)));
 
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(item, IsDirectory: false, Bytes: 16)],
+            [new ExploreItem(item, IsDirectory: false, Bytes: 16, LowerBound: false)],
             ExploreRemovalMode.RecycleBin,
             _policy,
             bin);
@@ -216,7 +240,7 @@ public sealed class ExploreRemoverTests : IDisposable
         _temp.CreateFile(32, "profile", "Downloads", "junk", "nested", "b.bin");
 
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(folder, IsDirectory: true, Bytes: 64)],
+            [new ExploreItem(folder, IsDirectory: true, Bytes: 64, LowerBound: false)],
             ExploreRemovalMode.Permanent,
             _policy);
 
@@ -236,7 +260,7 @@ public sealed class ExploreRemoverTests : IDisposable
         var sibling = _temp.CreateFile(8, "profile", "Downloads", "keep.bin");
 
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(file, IsDirectory: true, Bytes: 32)],
+            [new ExploreItem(file, IsDirectory: true, Bytes: 32, LowerBound: false)],
             ExploreRemovalMode.Permanent,
             _policy);
 
@@ -262,7 +286,7 @@ public sealed class ExploreRemoverTests : IDisposable
         var bin = new FakeRecycleBin();
 
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(file, IsDirectory: true, Bytes: 32)],
+            [new ExploreItem(file, IsDirectory: true, Bytes: 32, LowerBound: false)],
             ExploreRemovalMode.RecycleBin,
             _policy,
             bin);
@@ -291,7 +315,7 @@ public sealed class ExploreRemoverTests : IDisposable
         using (new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.None))
         {
             report = await ExploreRemover.RemoveAsync(
-                [new ExploreItem(file, IsDirectory: false, Bytes: 16)],
+                [new ExploreItem(file, IsDirectory: false, Bytes: 16, LowerBound: false)],
                 ExploreRemovalMode.Permanent,
                 _policy);
         }
@@ -316,7 +340,7 @@ public sealed class ExploreRemoverTests : IDisposable
             new Dictionary<string, RefusalReason> { [denied] = RefusalReason.Denied });
 
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(folder, IsDirectory: true, Bytes: 64)],
+            [new ExploreItem(folder, IsDirectory: true, Bytes: 64, LowerBound: false)],
             ExploreRemovalMode.Permanent,
             _policy,
             recycleBin: null,
@@ -344,7 +368,7 @@ public sealed class ExploreRemoverTests : IDisposable
         using var cts = new CancellationTokenSource();
 
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(folder, IsDirectory: true, Bytes: 64)],
+            [new ExploreItem(folder, IsDirectory: true, Bytes: 64, LowerBound: false)],
             ExploreRemovalMode.Permanent,
             _policy,
             recycleBin: null,
@@ -387,7 +411,7 @@ public sealed class ExploreRemoverTests : IDisposable
         });
 
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(first, IsDirectory: false, Bytes: 32), new ExploreItem(second, IsDirectory: false, Bytes: 32)],
+            [new ExploreItem(first, IsDirectory: false, Bytes: 32, LowerBound: false), new ExploreItem(second, IsDirectory: false, Bytes: 32, LowerBound: false)],
             ExploreRemovalMode.RecycleBin,
             _policy,
             bin,
@@ -424,7 +448,7 @@ public sealed class ExploreRemoverTests : IDisposable
         using (new HeldDirectory(working))
         {
             report = await ExploreRemover.RemoveAsync(
-                [new ExploreItem(folder, IsDirectory: true, Bytes: 32)],
+                [new ExploreItem(folder, IsDirectory: true, Bytes: 32, LowerBound: false)],
                 ExploreRemovalMode.Permanent,
                 _policy);
         }
@@ -447,7 +471,7 @@ public sealed class ExploreRemoverTests : IDisposable
         var bin = new FakeRecycleBin();
 
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(inside, IsDirectory: true, Bytes: 1024)],
+            [new ExploreItem(inside, IsDirectory: true, Bytes: 1024, LowerBound: false)],
             ExploreRemovalMode.RecycleBin,
             _policy,
             bin);
@@ -498,8 +522,8 @@ public sealed class ExploreRemoverTests : IDisposable
 
         var report = await ExploreRemover.RemoveAsync(
             [
-                new ExploreItem(mailbox, IsDirectory: false, Bytes: 64),
-                new ExploreItem(ordinary, IsDirectory: false, Bytes: 32),
+                new ExploreItem(mailbox, IsDirectory: false, Bytes: 64, LowerBound: false),
+                new ExploreItem(ordinary, IsDirectory: false, Bytes: 32, LowerBound: false),
             ],
             mode,
             _policy,
@@ -529,7 +553,7 @@ public sealed class ExploreRemoverTests : IDisposable
         var bin = new FakeRecycleBin();
 
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(folder, IsDirectory: true, Bytes: 96)],
+            [new ExploreItem(folder, IsDirectory: true, Bytes: 96, LowerBound: false)],
             ExploreRemovalMode.RecycleBin,
             _policy,
             bin);
@@ -557,7 +581,7 @@ public sealed class ExploreRemoverTests : IDisposable
         var notes = _temp.CreateFile(32, "profile", "Downloads", "old mail", "notes.txt");
 
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(folder, IsDirectory: true, Bytes: 96)],
+            [new ExploreItem(folder, IsDirectory: true, Bytes: 96, LowerBound: false)],
             ExploreRemovalMode.Permanent,
             _policy);
 
@@ -602,7 +626,7 @@ public sealed class ExploreRemoverTests : IDisposable
         try
         {
             var report = await ExploreRemover.RemoveAsync(
-                [new ExploreItem(folder, IsDirectory: true, Bytes: 96)],
+                [new ExploreItem(folder, IsDirectory: true, Bytes: 96, LowerBound: false)],
                 ExploreRemovalMode.Permanent,
                 _policy,
                 fileSystem: fs);
@@ -649,7 +673,7 @@ public sealed class ExploreRemoverTests : IDisposable
         try
         {
             var report = await ExploreRemover.RemoveAsync(
-                [new ExploreItem(target, IsDirectory: false, Bytes: 8)],
+                [new ExploreItem(target, IsDirectory: false, Bytes: 8, LowerBound: false)],
                 ExploreRemovalMode.RecycleBin,
                 _policy,
                 bin);
@@ -675,7 +699,7 @@ public sealed class ExploreRemoverTests : IDisposable
         var bin = new FakeRecycleBin();
 
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(folder, IsDirectory: true, Bytes: 32)],
+            [new ExploreItem(folder, IsDirectory: true, Bytes: 32, LowerBound: false)],
             ExploreRemovalMode.RecycleBin,
             _policy,
             bin);
@@ -702,7 +726,7 @@ public sealed class ExploreRemoverTests : IDisposable
         var bin = new FakeRecycleBin(_ => new RecycleOutcome(Removed: true));
 
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(link, IsDirectory: true, Bytes: 0)],
+            [new ExploreItem(link, IsDirectory: true, Bytes: 0, LowerBound: false)],
             ExploreRemovalMode.RecycleBin,
             _policy,
             bin);
@@ -726,7 +750,7 @@ public sealed class ExploreRemoverTests : IDisposable
         var bin = new FakeRecycleBin();
 
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(folder, IsDirectory: true, Bytes: 64)],
+            [new ExploreItem(folder, IsDirectory: true, Bytes: 64, LowerBound: false)],
             ExploreRemovalMode.RecycleBin,
             _policy,
             bin,
@@ -754,7 +778,7 @@ public sealed class ExploreRemoverTests : IDisposable
         var bin = new FakeRecycleBin();
 
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(folder, IsDirectory: true, Bytes: 64)],
+            [new ExploreItem(folder, IsDirectory: true, Bytes: 64, LowerBound: false)],
             ExploreRemovalMode.RecycleBin,
             _policy,
             bin,
@@ -779,7 +803,7 @@ public sealed class ExploreRemoverTests : IDisposable
     public async Task TheRemoverRefusesEvenWhenNothingAskedItFirst()
     {
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(_environment.UserProfile, IsDirectory: true, Bytes: 1)],
+            [new ExploreItem(_environment.UserProfile, IsDirectory: true, Bytes: 1, LowerBound: false)],
             ExploreRemovalMode.Permanent,
             _policy);
 
@@ -796,7 +820,7 @@ public sealed class ExploreRemoverTests : IDisposable
         _temp.CreateFile(8, "profile", "Downloads", "keep-two.bin");
 
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(target, IsDirectory: false, Bytes: 8)],
+            [new ExploreItem(target, IsDirectory: false, Bytes: 8, LowerBound: false)],
             ExploreRemovalMode.RecycleBin,
             _policy,
             new FakeRecycleBin());
@@ -819,7 +843,7 @@ public sealed class ExploreRemoverTests : IDisposable
         _temp.CreateFile(8, "profile", "Downloads", "keep-one.bin");
 
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(target, IsDirectory: false, Bytes: 8)],
+            [new ExploreItem(target, IsDirectory: false, Bytes: 8, LowerBound: false)],
             ExploreRemovalMode.RecycleBin,
             _policy,
             FakeRecycleBin.TakingTheParentToo());
@@ -843,7 +867,7 @@ public sealed class ExploreRemoverTests : IDisposable
         _temp.CreateFile(8, "profile", "Downloads", "keep-two.bin");
 
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(target, IsDirectory: false, Bytes: 8)],
+            [new ExploreItem(target, IsDirectory: false, Bytes: 8, LowerBound: false)],
             ExploreRemovalMode.RecycleBin,
             _policy,
             FakeRecycleBin.TakingAlso("keep-one.bin"));
@@ -874,7 +898,7 @@ public sealed class ExploreRemoverTests : IDisposable
         _temp.CreateFile(8, "profile", "Exact", "A.bin");
 
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(target, IsDirectory: false, Bytes: 8)],
+            [new ExploreItem(target, IsDirectory: false, Bytes: 8, LowerBound: false)],
             ExploreRemovalMode.RecycleBin,
             _policy,
             FakeRecycleBin.TakingAlso("A.bin"));
@@ -901,8 +925,8 @@ public sealed class ExploreRemoverTests : IDisposable
 
         var report = await ExploreRemover.RemoveAsync(
             [
-                new ExploreItem(target, IsDirectory: false, Bytes: 8),
-                new ExploreItem(second, IsDirectory: false, Bytes: 8),
+                new ExploreItem(target, IsDirectory: false, Bytes: 8, LowerBound: false),
+                new ExploreItem(second, IsDirectory: false, Bytes: 8, LowerBound: false),
             ],
             ExploreRemovalMode.RecycleBin,
             _policy,
@@ -929,7 +953,7 @@ public sealed class ExploreRemoverTests : IDisposable
         var parent = Path.GetDirectoryName(target)!;
 
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(target, IsDirectory: false, Bytes: 8)],
+            [new ExploreItem(target, IsDirectory: false, Bytes: 8, LowerBound: false)],
             ExploreRemovalMode.RecycleBin,
             _policy,
             new FakeRecycleBin(),
@@ -953,7 +977,7 @@ public sealed class ExploreRemoverTests : IDisposable
         var file = _temp.CreateFile(8, "profile", "Downloads", "big.bin");
 
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(file, IsDirectory: false, Bytes: 8)],
+            [new ExploreItem(file, IsDirectory: false, Bytes: 8, LowerBound: false)],
             ExploreRemovalMode.RecycleBin,
             _policy,
             FakeRecycleBin.Refusing("Windows would not move this to the Recycle Bin."));
@@ -978,7 +1002,7 @@ public sealed class ExploreRemoverTests : IDisposable
             [ToolRoot.Of(gradle, "Gradle's own folder.", GradleCacheProvider.DisposableChildren)], new FakeVolumeInventory());
 
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(properties, IsDirectory: false, Bytes: 8)],
+            [new ExploreItem(properties, IsDirectory: false, Bytes: 8, LowerBound: false)],
             ExploreRemovalMode.Permanent,
             policy);
 
@@ -1006,8 +1030,8 @@ public sealed class ExploreRemoverTests : IDisposable
 
         var report = await ExploreRemover.RemoveAsync(
             [
-                new ExploreItem(vendor, IsDirectory: true, Bytes: 8),
-                new ExploreItem(ordinary, IsDirectory: true, Bytes: 32),
+                new ExploreItem(vendor, IsDirectory: true, Bytes: 8, LowerBound: false),
+                new ExploreItem(ordinary, IsDirectory: true, Bytes: 32, LowerBound: false),
             ],
             ExploreRemovalMode.Permanent,
             policy);

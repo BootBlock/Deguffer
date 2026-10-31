@@ -37,6 +37,22 @@ public sealed class ExploreNodeTextTests
         Assert.Equal(RelativeAge.Describe(written, Now), ExploreNodeText.Age(tree, plain, Now));
     }
 
+    /// <summary>A total with one bound in it is a bound too, and one of measurements alone is not.</summary>
+    [Fact]
+    public void ATotalWithABoundInItIsMarkedAsABound()
+    {
+        var tree = Drive(
+            new ExploreChild("refused", IsDirectory: true, IsLink: false, Size: 4_000, SizeUnknown: true),
+            File("plain.bin", 3_000),
+            File("other.bin", 2_000));
+        var refused = Child(tree, "refused");
+        var plain = Child(tree, "plain.bin");
+        var other = Child(tree, "other.bin");
+
+        Assert.Equal("≥ " + FreeSpace.Format(7_000), ExploreNodeText.Total(tree, [plain, refused]));
+        Assert.Equal(FreeSpace.Format(5_000), ExploreNodeText.Total(tree, [plain, other]));
+    }
+
     [Fact]
     public void AnAgeNotKnownIsNotQualified()
     {

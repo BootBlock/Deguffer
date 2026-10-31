@@ -138,6 +138,38 @@ public sealed class MapFollowTests
         Assert.Equal(viewport, MapFollow.Onward(Drawing(earlier, viewport), Drawing(later, viewport)));
     }
 
+    /// <summary>
+    /// The camera follows only from rest where both drawings were drawn, and only where the reader can
+    /// move it: a camera shown or going anywhere else is the reader's, and a drawing the zoom does not
+    /// place has no camera.
+    /// </summary>
+    [Fact]
+    public void TheCameraFollowsOnlyFromRestWhereBothWereDrawn()
+    {
+        var before = Memory(hostMiB: 500);
+        var after = Memory(hostMiB: 1_200);
+        var viewport = MapViewport.Fitting(Quarter(Drawing(before, MapViewport.Whole).FrameOf(Host(before))!.Value), Ceiling);
+        var elsewhere = viewport.Panned(0.1, 0);
+        var earlier = Drawing(before, viewport);
+        var later = Drawing(after, viewport);
+        var onward = MapFollow.Onward(earlier, later);
+
+        Assert.NotEqual(viewport, onward);
+        Assert.Equal(onward, MapFollow.From(earlier, later, viewport, viewport, movable: true));
+
+        Assert.Null(MapFollow.From(earlier, later, viewport, viewport, movable: false));
+        Assert.Null(MapFollow.From(null, later, viewport, viewport, movable: true));
+        Assert.Null(MapFollow.From(earlier, later, elsewhere, viewport, movable: true));
+        Assert.Null(MapFollow.From(earlier, later, viewport, elsewhere, movable: true));
+
+        var unplaced = ExploreSurface.Create(
+            after, after.RootNode, ExploreView.Icicle, Width, Height, scale: 1, textScale: 1,
+            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None);
+
+        Assert.Null(unplaced.Viewport);
+        Assert.Null(MapFollow.From(earlier, unplaced, viewport, viewport, movable: true));
+    }
+
     /// <summary>The middle quarter of <paramref name="frame"/>.</summary>
     private static MapFrame Quarter(MapFrame frame) =>
         new(frame.X + (frame.Width * 3 / 8), frame.Y + (frame.Height * 3 / 8), frame.Width / 4, frame.Height / 4);

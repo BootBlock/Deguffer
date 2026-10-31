@@ -239,6 +239,26 @@ public sealed class MapShapesTests
     }
 
     /// <summary>
+    /// A node, or a block of the rest, is found where the drawing lists it among a folder's shapes, and
+    /// not at all where the drawing lists it elsewhere or nowhere: a shape found in the wrong folder would
+    /// put the keyboard, or a screen reader, on a shape the screen does not show there (§7.1).
+    /// </summary>
+    [Fact]
+    public void AShapeIsFoundWhereTheDrawingListsIt()
+    {
+        var tree = Tree();
+        var drawing = Tiled(tree, ExploreView.Treemap);
+        var top = drawing.Shapes(null);
+        var folder = Named(tree, "folder");
+        var held = drawing.Shapes(folder);
+
+        Assert.All(top.Select((shape, index) => (shape, index)), each => Assert.Equal(each.index, MapShapes.IndexOf(top, each.shape.Node)));
+        Assert.Equal(top.Count - 1, MapShapes.IndexOf(top, ExploreTile.Aggregated));
+        Assert.Null(MapShapes.IndexOf(top, held[0].Node));
+        Assert.Null(MapShapes.IndexOf([], tree.RootNode));
+    }
+
+    /// <summary>
     /// A drawing finds each folder's shapes once and answers with the same ones after. A screen reader's
     /// search of the window asks for every folder's shapes at each step through them, and each finding
     /// is a pass over the drawing or a layout of the folders above.
@@ -298,7 +318,7 @@ public sealed class MapShapesTests
             {
                 pending.Push(everything
                     ? drawing.Shapes(shape.Node)
-                    : MapFolders.Listed(drawing, drawing.Tree.RootNode, shape.Node, keyboard, new HashSet<int>()));
+                    : MapFolders.Listed(drawing, shape.Node, keyboard, new HashSet<int>()));
             }
         }
 

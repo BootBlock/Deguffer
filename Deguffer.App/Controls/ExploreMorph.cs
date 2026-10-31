@@ -14,66 +14,23 @@ namespace Deguffer.App.Controls;
 /// <para>Decoration only. The shapes go when the move lands, leaving the new view's drawing, which
 /// has faded in under them over the same time and is the record of what is where.</para>
 ///
-/// <para>Which shapes travel, their outlines and their colours are Core's; this only builds them and
-/// runs them (G1).</para>
+/// <para>Which shapes travel, their outlines, their colours and how visible they are over the move
+/// (<see cref="MorphEnvelope"/>) are Core's; this only builds them and sets them moving, on a stage of
+/// their own (<see cref="ExploreMoveStage"/>) (G1).</para>
 /// </summary>
-internal sealed class ExploreMorph
+internal sealed class ExploreMorph(Compositor compositor, MapGeometry geometry)
 {
-    /// <summary>
-    /// How far into the move the shapes are fully over the picture, and how far from its end they
-    /// start to give way to it. A shape is flat and the drawings under it are shaded, so the shapes
-    /// fade in over the view left and out over the view arrived at rather than standing in for either
-    /// at once: a cut to them would flatten the picture as the move starts, and a cut from them would
-    /// flash the shading on as it lands.
-    /// </summary>
-    private const float Over = 0.2f;
+    private readonly Compositor _compositor = compositor;
 
-    private readonly Compositor _compositor;
-
-    private readonly MapGeometry _geometry;
-
-    /// <summary>Follows the map's camera, as every drawing does.</summary>
-    private readonly ContainerVisual _camera;
-
-    /// <summary>Where the canvas both views are drawn on lies in the picture, which the camera places on the screen.</summary>
-    private readonly ContainerVisual _placed;
-
-    /// <summary>The shapes moving, until their animations have finished; null while none are.</summary>
-    private ShapeVisual? _shapes;
-
-    /// <summary>The move under way, until its animations have finished; null while there is none.</summary>
-    private CompositionScopedBatch? _moving;
-
-    public ExploreMorph(Compositor compositor, MapGeometry geometry, MapCamera camera)
-    {
-        _compositor = compositor;
-        _geometry = geometry;
-        _camera = compositor.CreateContainerVisual();
-        _placed = compositor.CreateContainerVisual();
-        _camera.Children.InsertAtTop(_placed);
-        camera.Follow(_camera);
-    }
-
-    /// <summary>Raised once when a move is over, whether it ran its course or was finished early.</summary>
-    public event EventHandler? Arrived;
-
-    /// <summary>The top of the moving shapes in the composition tree.</summary>
-    public Visual Root => _camera;
-
-    public bool IsMoving => _moving is not null;
+    private readonly MapGeometry _geometry = geometry;
 
     /// <summary>
-    /// Move <paramref name="morphs"/>, on a canvas of <paramref name="width"/> by
-    /// <paramref name="height"/> that lies at <paramref name="placed"/> in the picture, over
+    /// Put <paramref name="morphs"/> on <paramref name="stage"/>, on a canvas of
+    /// <paramref name="width"/> by <paramref name="height"/>, and move them over
     /// <paramref name="motion"/>, which travels.
     /// </summary>
-    public void Start(IReadOnlyList<ShapeMorph> morphs, int width, int height, MapTransform placed, Motion motion)
+    public void Build(VisualCollection stage, IReadOnlyList<ShapeMorph> morphs, int width, int height, Motion motion)
     {
-        Finish();
-
-        _placed.Place(placed);
-
-        var moving = _compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
         var shapes = _compositor.CreateShapeVisual();
         shapes.Size = new Vector2(width, height);
 
@@ -84,54 +41,25 @@ internal sealed class ExploreMorph
 
         shapes.Opacity = 0;
         shapes.StartAnimation(nameof(Visual.Opacity), Envelope(motion));
-        _placed.Children.InsertAtTop(shapes);
-
-        moving.End();
-        moving.Completed += (sender, _) =>
-        {
-            // A move finished early has gone already, and a later one may be under way.
-            if (ReferenceEquals(sender, _moving))
-            {
-                Finish();
-            }
-        };
-
-        _shapes = shapes;
-        _moving = moving;
+        stage.InsertAtTop(shapes);
     }
 
-    /// <summary>
-    /// End the move where it was going: the shapes go. The crossfade under them is the layers' to
-    /// bring to its end (<see cref="ExploreLayers.LandFades"/>).
-    /// </summary>
-    public void Finish()
+    /// <summary>Let go of the shapes <see cref="Build"/> made, and what each of them draws with.</summary>
+    public static void Release(Visual visual)
     {
-        if (_moving is null)
+        var shapes = (ShapeVisual)visual;
+
+        foreach (var shape in shapes.Shapes.OfType<CompositionSpriteShape>())
         {
-            return;
+            shape.FillBrush.Dispose();
+
+            // Only in a high contrast theme's colours: see Shape.
+            shape.StrokeBrush?.Dispose();
+            shape.Geometry.Dispose();
+            shape.Dispose();
         }
 
-        _moving = null;
-
-        if (_shapes is { } shapes)
-        {
-            _shapes = null;
-            _placed.Children.Remove(shapes);
-
-            foreach (var shape in shapes.Shapes.OfType<CompositionSpriteShape>())
-            {
-                shape.FillBrush.Dispose();
-
-                // Only in a high contrast theme's colours: see Shape.
-                shape.StrokeBrush?.Dispose();
-                shape.Geometry.Dispose();
-                shape.Dispose();
-            }
-
-            shapes.Dispose();
-        }
-
-        Arrived?.Invoke(this, EventArgs.Empty);
+        shapes.Dispose();
     }
 
     private CompositionSpriteShape Shape(ShapeMorph morph, Motion motion)
@@ -161,10 +89,12 @@ internal sealed class ExploreMorph
     private ScalarKeyFrameAnimation Envelope(Motion motion)
     {
         var envelope = _compositor.CreateScalarKeyFrameAnimation();
-        envelope.InsertKeyFrame(0, 0);
-        envelope.InsertKeyFrame(Over, 1);
-        envelope.InsertKeyFrame(1 - Over, 1);
-        envelope.InsertKeyFrame(1, 0);
+
+        foreach (var (progress, opacity) in MorphEnvelope.Steps)
+        {
+            envelope.InsertKeyFrame(progress, opacity);
+        }
+
         envelope.Duration = motion.Duration;
 
         return envelope;

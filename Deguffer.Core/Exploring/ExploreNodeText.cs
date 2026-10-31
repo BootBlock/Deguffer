@@ -14,6 +14,12 @@ namespace Deguffer.Core.Exploring;
 /// </summary>
 public static class ExploreNodeText
 {
+    /// <summary>
+    /// What a screen reader is told after a node's other facts where its size is a lower bound: the
+    /// words for the "≥" that <see cref="Size(ExploreTree, int)"/> puts on the figure.
+    /// </summary>
+    public const string Unread = ", and some of this could not be read";
+
     /// <summary>What kind of thing <paramref name="node"/> is, as a screen reader names it.</summary>
     public static string Kind(ExploreTree tree, int node) => tree.IsDirectory(node) ? "Folder" : "File";
 
@@ -21,15 +27,27 @@ public static class ExploreNodeText
     /// A node's size, marked where it is a lower bound.
     ///
     /// <para>A directory the walk was refused totals only what it could see, and the plain figure
-    /// reads as a measurement. The page says so once in its status line, which is true and is not
-    /// enough: it is the row for <c>System Volume Information</c> showing "0 B" that a reader acts
-    /// on. A row says the same in words for a screen reader, because a symbol read aloud is not a
-    /// sentence.</para>
+    /// reads as a measurement. This mark is where the page says so (§7.1), on every figure a reader
+    /// acts on, such as the one for <c>System Volume Information</c> showing "0 B". A row says the
+    /// same in words for a screen reader, because a symbol read aloud is not a sentence.</para>
     /// </summary>
-    public static string Size(ExploreTree tree, int node) =>
-        tree.HasUnknownSizeBelow(node)
-            ? "≥ " + FreeSpace.Format(tree.SizeOf(node))
-            : FreeSpace.Format(tree.SizeOf(node));
+    public static string Size(ExploreTree tree, int node) => Size(tree.SizeOf(node), tree.HasUnknownSizeBelow(node));
+
+    /// <summary>
+    /// The size of <paramref name="nodes"/> together, marked where any of them is a lower bound: a
+    /// sum with one short part in it is short too.
+    /// </summary>
+    public static string Total(ExploreTree tree, IReadOnlyList<int> nodes)
+    {
+        ArgumentNullException.ThrowIfNull(tree);
+        ArgumentNullException.ThrowIfNull(nodes);
+
+        return Size(nodes.Sum(tree.SizeOf), nodes.Any(tree.HasUnknownSizeBelow));
+    }
+
+    /// <summary><paramref name="bytes"/> as the page writes a size, marked where it is a lower bound. See <see cref="Size(ExploreTree, int)"/>.</summary>
+    public static string Size(long bytes, bool lowerBound) =>
+        lowerBound ? "≥ " + FreeSpace.Format(bytes) : FreeSpace.Format(bytes);
 
     /// <summary>
     /// What a node's space on disk leaves out: its length, where that reads differently, and why the

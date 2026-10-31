@@ -178,6 +178,58 @@ public sealed class MapViewportTests
     }
 
     /// <summary>
+    /// The reverse: a point of the drawing lands, through the placement, on the point of the screen that
+    /// shows it, which is where the menu key opens the menu on a shape (§7.1). A part of the drawing
+    /// lands with its corner there.
+    /// </summary>
+    [Theory]
+    [InlineData(0.1, 0.2)]
+    [InlineData(0.45, 0.5)]
+    [InlineData(0.8, 0.33)]
+    public void APlacementTakesAPointOfTheDrawingToTheScreenPointThatShowsIt(double pictureX, double pictureY)
+    {
+        var drawn = MapViewport.Anchored(2, 0.4, 0.4, 0.5, 0.5, MapCeiling.Least);
+        var shown = MapViewport.Anchored(5, 0.5, 0.35, 0.3, 0.6, MapCeiling.Least);
+        var placement = shown.PlacementOf(drawn);
+
+        var screen = ((pictureX - shown.Left) * shown.Zoom, (pictureY - shown.Top) * shown.Zoom);
+        var inDrawing = ((pictureX - drawn.Left) * drawn.Zoom, (pictureY - drawn.Top) * drawn.Zoom);
+
+        var (x, y) = placement.OnScreen(inDrawing.Item1, inDrawing.Item2);
+        var part = placement.OnScreen(new MapFrame(inDrawing.Item1, inDrawing.Item2, 0.1, 0.2));
+
+        Assert.Equal(screen.Item1, x, Precision);
+        Assert.Equal(screen.Item2, y, Precision);
+        Assert.Equal(screen.Item1, part.X, Precision);
+        Assert.Equal(screen.Item2, part.Y, Precision);
+        Assert.Equal(0.1 * placement.Scale, part.Width, Precision);
+        Assert.Equal(0.2 * placement.Scale, part.Height, Precision);
+    }
+
+    /// <summary>
+    /// A point of the picture is on the screen where the screen shows it: the point a zoom was anchored
+    /// at is where it was anchored, and every point comes back from the picture to where it started.
+    /// What the keyboard finds the shape nearest where it was with, once the shape is no longer drawn.
+    /// </summary>
+    [Theory]
+    [InlineData(0.3, 0.6)]
+    [InlineData(0, 1)]
+    [InlineData(-0.2, 1.4)]
+    public void APointOfThePictureIsOnTheScreenWhereTheScreenShowsIt(double screenX, double screenY)
+    {
+        var viewport = MapViewport.Anchored(4, pictureX: 0.4, pictureY: 0.55, screenX: 0.3, screenY: 0.6, MapCeiling.Least);
+
+        Assert.Equal(0.3, viewport.ScreenAt(0.4, 0.55).X, Precision);
+        Assert.Equal(0.6, viewport.ScreenAt(0.4, 0.55).Y, Precision);
+
+        var (pictureX, pictureY) = viewport.PictureAt(screenX, screenY);
+        var (x, y) = viewport.ScreenAt(pictureX, pictureY);
+
+        Assert.Equal(screenX, x, Precision);
+        Assert.Equal(screenY, y, Precision);
+    }
+
+    /// <summary>
     /// Zoomed out past what the drawing on hand covers, the edge of the screen is beyond it. That point
     /// has to come back outside the drawing, so the caller can say it is over nothing.
     /// </summary>

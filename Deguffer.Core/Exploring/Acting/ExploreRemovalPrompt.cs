@@ -28,7 +28,7 @@ public sealed record ExploreRemovalPrompt(string Title, string Consequence, stri
             ? $"'{Path.GetFileName(only.Path)}'"
             : $"{items.Count} items";
 
-        var size = FreeSpace.Format(items.Sum(i => i.Bytes));
+        var size = ExploreNodeText.Size(items.Sum(i => i.Bytes), items.Any(i => i.LowerBound));
 
         return mode == ExploreRemovalMode.RecycleBin
             ? new ExploreRemovalPrompt(

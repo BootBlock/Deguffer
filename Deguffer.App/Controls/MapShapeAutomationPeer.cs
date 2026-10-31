@@ -1,5 +1,4 @@
 using Deguffer.Core.Exploring.Layout;
-using Deguffer.Core.Exploring.Rendering;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
@@ -22,60 +21,40 @@ internal sealed partial class MapShapeAutomationPeer : AutomationPeer, IInvokePr
 {
     private readonly MapAutomationPeer _owner;
 
-    private readonly ExploreMap _map;
+    /// <summary>
+    /// The reader of the drawing the shape is of. Everything the peer says is said while that drawing
+    /// is on screen, and nothing after, because another drawing's node numbers may be other nodes (§7.1).
+    /// </summary>
+    private readonly MapReader _reader;
 
     private readonly int? _folder;
 
-    private MapShape _shape;
+    private readonly MapShape _shape;
 
-    /// <summary>
-    /// The drawing the shape is of. Everything the peer does is asked of it, and refused once another
-    /// drawing is on screen, whose node numbers may be other nodes (§7.1).
-    /// </summary>
-    private ExploreSurface? _drawing;
+    private readonly int _position;
 
-    private int _position;
+    private readonly int _count;
 
-    private int _count;
-
-    public MapShapeAutomationPeer(MapAutomationPeer owner, ExploreMap map, int? folder)
+    /// <summary>The peer of <paramref name="shape"/>, which is <paramref name="position"/> of <paramref name="folder"/>'s <paramref name="count"/> shapes.</summary>
+    public MapShapeAutomationPeer(MapAutomationPeer owner, MapReader reader, int? folder, MapShape shape, int position, int count)
     {
         _owner = owner;
-        _map = map;
+        _reader = reader;
         _folder = folder;
-    }
-
-    public bool IsSelected => Current && _shape.IsNode && _map.IsPicked(_shape.Node);
-
-    public IRawElementProviderSimple SelectionContainer => ProviderFromPeer(_owner);
-
-    /// <summary>Whether the drawing the shape is of is the one on screen.</summary>
-    private bool Current => _drawing is not null && ReferenceEquals(_drawing, _map.Readable);
-
-    /// <summary>Where the shape is in <paramref name="drawing"/>, and which of its folder's shapes it is.</summary>
-    public void Describe(ExploreSurface drawing, MapShape shape, int position, int count)
-    {
-        _drawing = drawing;
         _shape = shape;
         _position = position;
         _count = count;
     }
 
-    public void Invoke()
-    {
-        if (_drawing is { } drawing)
-        {
-            _map.OpenShape(drawing, _folder, _shape);
-        }
-    }
+    public bool IsSelected => Current && _shape.IsNode && _reader.IsPicked(_shape.Node);
 
-    public void Select()
-    {
-        if (_drawing is { } drawing)
-        {
-            _map.PickShape(drawing, _folder, _shape);
-        }
-    }
+    public IRawElementProviderSimple SelectionContainer => ProviderFromPeer(_owner);
+
+    private bool Current => _reader.IsOnScreen;
+
+    public void Invoke() => _reader.Open(_folder, _shape);
+
+    public void Select() => _reader.Pick(_folder, _shape);
 
     public void AddToSelection() => Select();
 
@@ -83,30 +62,24 @@ internal sealed partial class MapShapeAutomationPeer : AutomationPeer, IInvokePr
     {
         if (IsSelected)
         {
-            _map.Unpick();
+            _reader.Unpick();
         }
     }
 
-    public void ScrollIntoView()
-    {
-        if (_drawing is { } drawing)
-        {
-            _map.BringIntoView(drawing, _shape);
-        }
-    }
+    public void ScrollIntoView() => _reader.BringIntoView(_shape);
 
     /// <summary>
     /// A leaf where the drawing draws nothing in the shape, which is a file, a block, or a folder drawn
     /// as one block; otherwise whether its shapes are listed under it.
     /// </summary>
     public ExpandCollapseState ExpandCollapseState =>
-        !Current || !_shape.IsNode || _map.ShapesIn(_shape.Node).Count == 0 ? ExpandCollapseState.LeafNode
-        : _map.Lists(_shape.Node) ? ExpandCollapseState.Expanded
+        !Current || !_shape.IsNode || _reader.Shapes(_shape.Node).Count == 0 ? ExpandCollapseState.LeafNode
+        : _owner.Lists(_reader, _shape.Node) ? ExpandCollapseState.Expanded
         : ExpandCollapseState.Collapsed;
 
     public void Expand()
     {
-        if (ExpandCollapseState == ExpandCollapseState.Collapsed && _map.Expand(_shape.Node))
+        if (ExpandCollapseState == ExpandCollapseState.Collapsed && _owner.Expand(_shape.Node))
         {
             Restructured(ExpandCollapseState.Collapsed);
         }
@@ -119,18 +92,18 @@ internal sealed partial class MapShapeAutomationPeer : AutomationPeer, IInvokePr
     /// </summary>
     public void Collapse()
     {
-        if (!Current || !_shape.IsNode || _drawing is not { } drawing)
+        if (!Current || !_shape.IsNode)
         {
             return;
         }
 
         var was = ExpandCollapseState;
 
-        _map.Collapse(_shape.Node);
+        _owner.Collapse(_shape.Node);
 
-        if (_map.Lists(_shape.Node) && _map.FocusedShape() is not null)
+        if (_owner.Lists(_reader, _shape.Node) && _reader.FocusedShape() is not null)
         {
-            _map.FocusShape(drawing, _folder, _shape);
+            _reader.Focus(_folder, _shape);
         }
 
         if (was == ExpandCollapseState.Expanded && ExpandCollapseState == ExpandCollapseState.Collapsed)
@@ -139,9 +112,9 @@ internal sealed partial class MapShapeAutomationPeer : AutomationPeer, IInvokePr
         }
     }
 
-    protected override string GetNameCore() => Current ? _map.NameOf(_folder, _shape) : string.Empty;
+    protected override string GetNameCore() => Current ? _reader.NameOf(_folder, _shape) : string.Empty;
 
-    protected override string GetHelpTextCore() => Current ? _map.HelpOf(_shape) : string.Empty;
+    protected override string GetHelpTextCore() => Current ? _reader.HelpOf(_shape) : string.Empty;
 
     protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.TreeItem;
 
@@ -155,18 +128,21 @@ internal sealed partial class MapShapeAutomationPeer : AutomationPeer, IInvokePr
 
     protected override bool IsKeyboardFocusableCore() => true;
 
-    protected override bool HasKeyboardFocusCore() => Current && _map.HasFocusOn(_folder, _shape.Node);
+    protected override bool HasKeyboardFocusCore() => Current && _reader.HasFocusOn(_folder, _shape.Node);
 
-    protected override void SetFocusCore()
+    protected override void SetFocusCore() => _reader.Focus(_folder, _shape);
+
+    protected override bool IsOffscreenCore()
     {
-        if (_drawing is { } drawing)
+        if (!Current)
         {
-            _map.FocusShape(drawing, _folder, _shape);
+            return true;
         }
-    }
 
-    protected override bool IsOffscreenCore() => !Current || _map.OnScreenOf(_shape) is not { } frame
-        || frame.X + frame.Width <= 0 || frame.Y + frame.Height <= 0 || frame.X >= 1 || frame.Y >= 1;
+        var frame = _reader.OnScreenOf(_shape);
+
+        return frame.X + frame.Width <= 0 || frame.Y + frame.Height <= 0 || frame.X >= 1 || frame.Y >= 1;
+    }
 
     /// <summary>
     /// The part of the map's own rectangle the shape covers on the screen, cut to the map, so it is in
@@ -174,11 +150,12 @@ internal sealed partial class MapShapeAutomationPeer : AutomationPeer, IInvokePr
     /// </summary>
     protected override Rect GetBoundingRectangleCore()
     {
-        if (!Current || _map.OnScreenOf(_shape) is not { } frame)
+        if (!Current)
         {
             return default;
         }
 
+        var frame = _reader.OnScreenOf(_shape);
         var map = _owner.GetBoundingRectangle();
         var shown = frame.Clipped(MapFrame.Whole);
 
@@ -200,7 +177,7 @@ internal sealed partial class MapShapeAutomationPeer : AutomationPeer, IInvokePr
     {
         PatternInterface.Invoke => this,
         PatternInterface.ScrollItem => this,
-        PatternInterface.SelectionItem when _shape.IsNode && _map.Answers => this,
+        PatternInterface.SelectionItem when _shape.IsNode && _reader.Answers => this,
         PatternInterface.ExpandCollapse => this,
         _ => null,
     };
