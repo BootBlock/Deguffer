@@ -155,18 +155,18 @@ internal sealed class ExploreHighlight
 
     private bool _effects = true;
 
-    public ExploreHighlight(Compositor compositor, MapGeometry geometry, MapCamera camera)
+    public ExploreHighlight(Compositor compositor, MapGraphics graphics, MapCamera camera)
     {
-        _geometry = geometry;
+        _geometry = graphics.Geometry;
 
         _camera = compositor.CreateContainerVisual();
         camera.Follow(_camera);
 
         // The dimming first, so the lifted shape and every line are over it.
-        _dimming = new ExploreDimming(compositor, geometry);
+        _dimming = new ExploreDimming(compositor, _geometry);
         _camera.Children.InsertAtTop(_dimming.Root);
 
-        _lift = new ExploreLift(compositor, geometry, camera);
+        _lift = new ExploreLift(compositor, graphics, camera);
         _camera.Children.InsertAtTop(_lift.Root);
 
         _bounds = compositor.CreateShapeVisual();
@@ -175,11 +175,11 @@ internal sealed class ExploreHighlight
         _placed = compositor.CreateContainerShape();
         _bounds.Shapes.Add(_placed);
 
-        _lit = compositor.CreatePathGeometry(geometry.Nothing);
-        _hovered = compositor.CreatePathGeometry(geometry.Nothing);
-        _picked = compositor.CreatePathGeometry(geometry.Nothing);
-        _marked = compositor.CreatePathGeometry(geometry.Nothing);
-        _markedBetween = compositor.CreatePathGeometry(geometry.Nothing);
+        _lit = compositor.CreatePathGeometry(_geometry.Nothing);
+        _hovered = compositor.CreatePathGeometry(_geometry.Nothing);
+        _picked = compositor.CreatePathGeometry(_geometry.Nothing);
+        _marked = compositor.CreatePathGeometry(_geometry.Nothing);
+        _markedBetween = compositor.CreatePathGeometry(_geometry.Nothing);
 
         _hoveredHalo = compositor.CreateColorBrush();
         _hoveredEdge = compositor.CreateColorBrush(Color.FromArgb(255, 255, 255, 255));
@@ -244,9 +244,11 @@ internal sealed class ExploreHighlight
         _hoveredOutlines = outlines;
         _hoveredSurface = surface;
         _hoveredCanvas = canvas;
-        _hovered.Path = _geometry.Trace(outlines);
 
-        _lift.Show(_hovered.Path, _effects ? surface : null, canvas);
+        var shape = _geometry.Shape(outlines);
+
+        _hovered.Path = _geometry.PathOf(shape);
+        _lift.Show(shape, outlines, _effects ? surface : null, canvas);
     }
 
     /// <summary>
@@ -336,6 +338,16 @@ internal sealed class ExploreHighlight
 
         ShowHovered([], null, _hoveredCanvas);
         ShowMarked([], _hatchScale);
+    }
+
+    /// <summary>
+    /// Take all of it off, and let go of the surface the lift is cut out by, for a device that has
+    /// replaced the one it was drawn through (see <see cref="ExploreLift.Renew"/>).
+    /// </summary>
+    public void Renew()
+    {
+        Clear();
+        _lift.Renew();
     }
 
     /// <summary>Black or white, or a grey, at <paramref name="level"/>, seen through at <paramref name="opacity"/>.</summary>
