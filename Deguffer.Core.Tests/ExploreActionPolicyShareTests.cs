@@ -161,7 +161,7 @@ public sealed class ExploreActionPolicyShareTests : IDisposable
         var handed = recording.Paths.Count;
 
         var report = await ExploreRemover.RemoveAsync(
-            [new ExploreItem(item, IsDirectory: true, Bytes: 64)],
+            [new ExploreItem(item, IsDirectory: true, Bytes: 64, LowerBound: false)],
             ExploreRemovalMode.Permanent,
             policy,
             bin,

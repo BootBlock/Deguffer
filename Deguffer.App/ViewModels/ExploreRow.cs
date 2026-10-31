@@ -173,7 +173,7 @@ public sealed partial class ExploreRow : ObservableObject, IExploreListed
     public string Description =>
         $"{Name}, {SizeLabel} on disk{(StorageLabel.Length > 0 ? $", {StorageLabel}" : string.Empty)}"
         + $"{(IsLink ? ", a link" : string.Empty)}, last written {AgeLabel}"
-        + (IsApproximate ? ", and some of this could not be read" : string.Empty);
+        + (IsApproximate ? ExploreNodeText.Unread : string.Empty);
 
     /// <summary>
     /// What <paramref name="node"/> of <paramref name="tree"/> is, for matching it against the rows

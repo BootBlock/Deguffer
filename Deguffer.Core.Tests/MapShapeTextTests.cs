@@ -79,7 +79,7 @@ public sealed class MapShapeTextTests
         var refused = tree.ChildrenOf(tree.RootNode).ToArray().Single(node => tree.NameOf(node) == "refused");
         var plain = tree.ChildrenOf(tree.RootNode).ToArray().Single(node => tree.NameOf(node) == "plain.bin");
 
-        Assert.Equal($"refused, ≥ {FreeSpace.Format(450)}, 45% of Users", MapShapeText.Name("refused", 450, 1000, "Users", lowerBound: true));
+        Assert.Equal($"refused, {FreeSpace.Format(450)}, 45% of Users{ExploreNodeText.Unread}", MapShapeText.Name("refused", 450, 1000, "Users", lowerBound: true));
         Assert.Equal($"refused  ≥ {FreeSpace.Format(450)}", MapShapeText.Label(tree, refused));
         Assert.Equal($"plain.bin  {FreeSpace.Format(450)}", MapShapeText.Label(tree, plain));
     }

@@ -14,6 +14,12 @@ namespace Deguffer.Core.Exploring;
 /// </summary>
 public static class ExploreNodeText
 {
+    /// <summary>
+    /// What a screen reader is told after a node's other facts where its size is a lower bound: the
+    /// words for the "≥" that <see cref="Size(ExploreTree, int)"/> puts on the figure.
+    /// </summary>
+    public const string Unread = ", and some of this could not be read";
+
     /// <summary>What kind of thing <paramref name="node"/> is, as a screen reader names it.</summary>
     public static string Kind(ExploreTree tree, int node) => tree.IsDirectory(node) ? "Folder" : "File";
 

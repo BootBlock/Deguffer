@@ -19,7 +19,7 @@ public sealed class ExploreRemovalPromptTests
     public void TheRecycleBinPromptSaysTheSpaceDoesNotComeBackYet()
     {
         var prompt = ExploreRemovalPrompt.For(
-            ExploreRemovalMode.RecycleBin, [new ExploreItem(@"C:\Users\testuser\big.iso", false, 1024)]);
+            ExploreRemovalMode.RecycleBin, [new ExploreItem(@"C:\Users\testuser\big.iso", false, 1024, LowerBound: false)]);
 
         Assert.Contains("Recycle Bin", prompt.Title, StringComparison.Ordinal);
         Assert.Contains("put it back", prompt.Consequence, StringComparison.Ordinal);
@@ -34,7 +34,7 @@ public sealed class ExploreRemovalPromptTests
     public void ThePermanentPromptSaysItCannotBeUndone()
     {
         var prompt = ExploreRemovalPrompt.For(
-            ExploreRemovalMode.Permanent, [new ExploreItem(@"C:\Users\testuser\big.iso", false, 1024)]);
+            ExploreRemovalMode.Permanent, [new ExploreItem(@"C:\Users\testuser\big.iso", false, 1024, LowerBound: false)]);
 
         Assert.Contains("Permanently", prompt.Title, StringComparison.Ordinal);
         Assert.Contains("cannot be undone", prompt.Consequence, StringComparison.Ordinal);
@@ -50,7 +50,7 @@ public sealed class ExploreRemovalPromptTests
     {
         foreach (var mode in new[] { ExploreRemovalMode.RecycleBin, ExploreRemovalMode.Permanent })
         {
-            var prompt = ExploreRemovalPrompt.For(mode, [new ExploreItem(@"C:\Users\testuser\x", false, 1)]);
+            var prompt = ExploreRemovalPrompt.For(mode, [new ExploreItem(@"C:\Users\testuser\x", false, 1, LowerBound: false)]);
 
             Assert.DoesNotContain("safe", prompt.Consequence, StringComparison.OrdinalIgnoreCase);
         }
@@ -64,13 +64,13 @@ public sealed class ExploreRemovalPromptTests
     public void OneItemIsNamedAndSeveralAreCounted()
     {
         var one = ExploreRemovalPrompt.For(
-            ExploreRemovalMode.RecycleBin, [new ExploreItem(@"C:\Users\testuser\big.iso", false, 1)]);
+            ExploreRemovalMode.RecycleBin, [new ExploreItem(@"C:\Users\testuser\big.iso", false, 1, LowerBound: false)]);
 
         var several = ExploreRemovalPrompt.For(
             ExploreRemovalMode.RecycleBin,
             [
-                new ExploreItem(@"C:\Users\testuser\a", false, 1),
-                new ExploreItem(@"C:\Users\testuser\b", false, 1),
+                new ExploreItem(@"C:\Users\testuser\a", false, 1, LowerBound: false),
+                new ExploreItem(@"C:\Users\testuser\b", false, 1, LowerBound: false),
             ]);
 
         Assert.Contains("'big.iso'", one.Title, StringComparison.Ordinal);
@@ -86,7 +86,7 @@ public sealed class ExploreRemovalPromptTests
     [InlineData(ExploreRemovalMode.Permanent)]
     public void ASizeThatIsALowerBoundIsMarkedAsOne(ExploreRemovalMode mode)
     {
-        var whole = new ExploreItem(@"C:\Users\testuser\big.iso", false, 1024);
+        var whole = new ExploreItem(@"C:\Users\testuser\big.iso", false, 1024, LowerBound: false);
         var refused = new ExploreItem(@"C:\Users\testuser\locked", true, 2048, LowerBound: true);
 
         Assert.Contains($"(≥ {FreeSpace.Format(3072)})", ExploreRemovalPrompt.For(mode, [whole, refused]).Consequence, StringComparison.Ordinal);

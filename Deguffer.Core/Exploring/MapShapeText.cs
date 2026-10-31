@@ -53,14 +53,18 @@ public static class MapShapeText
     /// What holds it: the folder's name, or null for the drive, beside which a scan of a whole volume
     /// draws its root and the space that is not in it.
     /// </param>
-    /// <param name="lowerBound">Whether the size is a lower bound. See <see cref="ExploreNodeText.Size(ExploreTree, int)"/>.</param>
+    /// <param name="lowerBound">
+    /// Whether the size is a lower bound, which is said in words at the end, as a row says it
+    /// (<see cref="ExploreNodeText.Unread"/>): a symbol read aloud is not a sentence.
+    /// </param>
     public static string Name(string name, long bytes, long ofBytes, string? ofName, bool lowerBound)
     {
         ArgumentNullException.ThrowIfNull(name);
 
-        var size = $"{name}, {ExploreNodeText.Size(bytes, lowerBound)}";
+        var size = $"{name}, {FreeSpace.Format(bytes)}";
+        var shared = ofBytes > 0 ? $"{size}, {Share(bytes, ofBytes)} of {ofName ?? "the drive"}" : size;
 
-        return ofBytes > 0 ? $"{size}, {Share(bytes, ofBytes)} of {ofName ?? "the drive"}" : size;
+        return lowerBound ? shared + ExploreNodeText.Unread : shared;
     }
 
     /// <summary>

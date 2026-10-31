@@ -504,6 +504,30 @@ public sealed class ExploreSelectionTests : IDisposable
         await removing;
     });
 
+    /// <summary>
+    /// The selection tells the confirmation which sizes are lower bounds, so the size it states is
+    /// marked where the scan could not read all of what goes (§7.1).
+    /// </summary>
+    [Fact]
+    public void TheConfirmationIsToldASizeIsALowerBound() => UiThread.Run(async () =>
+    {
+        var root = _explore.Temp.CreateDirectory("scan");
+        _explore.Temp.CreateFile(10, "scan", "old", "a.bin");
+        var builder = new ExploreTreeBuilder(root);
+        var folder = builder.AddChildren(ExploreTreeBuilder.RootNode, [ExploreFixture.Folder("old")]);
+        builder.AddChildren(folder, [ExploreFixture.File("a.bin", 10)]);
+        builder.MarkSizeUnknown(folder);
+        var tree = builder.Build(ExploreChildOrder.BySize);
+        var prompt = new FakeExploreConfirmation(answer: false);
+        _explore.Prompt = prompt;
+        var selection = Selection(tree);
+
+        selection.Select([folder]);
+        await selection.DeleteCommand.ExecuteAsync(null);
+
+        Assert.Contains($"(≥ {FreeSpace.Format(10)})", Assert.Single(prompt.Asked).Consequence, StringComparison.Ordinal);
+    });
+
     /// <summary>A removal declined at the dialog marks nothing once the dialog has gone.</summary>
     [Fact]
     public void ADeclinedRemovalMarksNothing() => UiThread.Run(async () =>
