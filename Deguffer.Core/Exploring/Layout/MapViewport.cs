@@ -231,10 +231,12 @@ public readonly record struct MapViewport
     /// magnified to where its shapes belong in this viewport, which is the right picture at the wrong
     /// resolution and costs nothing to show, and it is drawn again only once the zoom stops.</para>
     /// </summary>
-    public MapPlacement PlacementOf(MapViewport drawn) => new(
-        Zoom / drawn.Zoom,
-        (drawn.Left - Left) * Zoom,
-        (drawn.Top - Top) * Zoom);
+    public MapPlacement PlacementOf(MapViewport drawn)
+    {
+        var (x, y) = ScreenAt(drawn.Left, drawn.Top);
+
+        return new MapPlacement(Zoom / drawn.Zoom, x, y);
+    }
 
     /// <summary>
     /// Where the whole picture, laid out unmagnified over a screen <paramref name="width"/> by

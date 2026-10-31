@@ -77,7 +77,7 @@ public sealed class MapFocusEntryTests
     [Fact]
     public void TheMenuKeyWhileTheKeyboardMovesActsOnWhereItIs()
     {
-        var entry = MapFocusEntry.ByMenu(keyboard: true, Clicked)!.Value;
+        var entry = Assert.NotNull(MapFocusEntry.ByMenu(keyboard: true, Clicked));
 
         Assert.Null(entry.StartsOn);
         Assert.True(entry.Accepts(Shape(Clicked + 1)));
@@ -92,7 +92,7 @@ public sealed class MapFocusEntryTests
     [Fact]
     public void TheMenuKeyAfterAClickActsOnWhatItPickedAndNothingElse()
     {
-        var entry = MapFocusEntry.ByMenu(keyboard: false, Clicked)!.Value;
+        var entry = Assert.NotNull(MapFocusEntry.ByMenu(keyboard: false, Clicked));
 
         Assert.Equal(Clicked, entry.StartsOn);
         Assert.True(entry.Accepts(Shape(Clicked)));
