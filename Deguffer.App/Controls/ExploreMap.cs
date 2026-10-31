@@ -239,7 +239,7 @@ public sealed class ExploreMap : UserControl
         _root = compositor.CreateContainerVisual();
         _flight = new ExploreFlight(_root, pictures, departing, this);
         _tileOver = (x, y) => _flight.Pictures.TileOver(x, y);
-        _canvas = new ExploreCanvas(this, _graphics, _zoom, _flight, owner, () => _pointer, Present, Redraw);
+        _canvas = new ExploreCanvas(this, _graphics, _zoom, _flight, owner, () => _pointer, Present, () => Painting, Redraw);
         _root.Children.InsertAtTop(_moves.Root);
         _root.Children.InsertAtTop(_highlight.Root);
 
@@ -735,13 +735,14 @@ public sealed class ExploreMap : UserControl
             // The picture on screen stays, to fly from, and the new one is drawn into the other set
             // of layers: over it for a step in, which the new picture grows out of, and under it for a
             // step out, which it shrinks back into.
-            if (step.Way != FolderStep.Across)
+            // Only a drawing placed by the zoom has a step other than across (PictureChange.Step).
+            if (step.Way != FolderStep.Across && _drawing is { } leaving)
             {
                 into = step.Way == FolderStep.Into
-                    ? _drawing!.ScreenOf(node, was, change.Opened) ?? MapFrame.Whole
+                    ? leaving.ScreenOf(node, was, change.Opened) ?? MapFrame.Whole
                     : null;
 
-                _flight.State = FolderFlight.Begin(step, new FolderLeft(Shown, was, _drawing, _shapeColours), change.Opened);
+                _flight.State = FolderFlight.Begin(step, new FolderLeft(Shown, was, leaving, _shapeColours), change.Opened);
 
                 Swap(was);
 
@@ -1275,7 +1276,7 @@ public sealed class ExploreMap : UserControl
     {
         if (_drawing is { } drawing)
         {
-            _canvas.Underlay(Painting, drawing);
+            _canvas.Underlay(drawing);
         }
     }
 

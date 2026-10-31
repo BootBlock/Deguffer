@@ -56,6 +56,12 @@ internal sealed class ExploreCanvas
     /// <summary>What the map does with each drawing that arrives: work from it.</summary>
     private readonly Action<ExploreSurface> _present;
 
+    /// <summary>
+    /// What the drawing the map works from was drawn from, asked only once the whole picture is to be
+    /// painted under it.
+    /// </summary>
+    private readonly Func<ExplorePainting> _painting;
+
     private readonly PaintBuffers _buffers = new();
 
     /// <summary>
@@ -68,6 +74,7 @@ internal sealed class ExploreCanvas
 
     /// <param name="host">The map drawn.</param>
     /// <param name="present">Work from a drawing that has arrived, which is on top of the rest now.</param>
+    /// <param name="painting">What the drawing the map works from was drawn from.</param>
     /// <param name="settled">Draw the map again, once a run of size changes has stopped.</param>
     public ExploreCanvas(
         FrameworkElement host,
@@ -77,6 +84,7 @@ internal sealed class ExploreCanvas
         SynchronizationContext owner,
         Func<Point?> pointer,
         Action<ExploreSurface> present,
+        Func<ExplorePainting> painting,
         Action settled)
     {
         _host = host;
@@ -85,6 +93,7 @@ internal sealed class ExploreCanvas
         _flight = flight;
         _pointer = pointer;
         _present = present;
+        _painting = painting;
         _redraws = new CanvasRedraws(owner);
 
         _settled = host.DispatcherQueue.CreateTimer();
@@ -243,8 +252,8 @@ internal sealed class ExploreCanvas
     }
 
     /// <summary>
-    /// Paint the whole picture under <paramref name="drawing"/>, a zoomed drawing of
-    /// <paramref name="painting"/>, where it is not there already, so a move has something to show
+    /// Paint the whole picture under <paramref name="drawing"/>, the zoomed drawing the map works
+    /// from, where it is not there already, so a move has something to show
     /// wherever it goes. See <see cref="ExploreLayers"/>.
     ///
     /// <para>Never in place of a redraw still landing, which is the picture the reader asked for: the
@@ -252,12 +261,14 @@ internal sealed class ExploreCanvas
     /// again once that one has arrived. Not while a resize is settling either: painted at the new size,
     /// it would be thrown away with every other drawing when the settling redraws the picture.</para>
     /// </summary>
-    public void Underlay(ExplorePainting painting, ExploreSurface drawing)
+    public void Underlay(ExploreSurface drawing)
     {
         if (!IsShowing || IsSettling || _redraws.Pending is not null || !_flight.Pictures.LacksWhole)
         {
             return;
         }
+
+        var painting = _painting();
 
         Start(
             painting,
