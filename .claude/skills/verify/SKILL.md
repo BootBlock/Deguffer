@@ -35,6 +35,18 @@ C:\Users\<user>\AppData\Local\DriveNet\DriveNet.Cli.exe
 
 `DriveNet.Server.exe` sits beside it, if registering the MCP server ever becomes worthwhile.
 
+Hold the automation overlay for the whole run, so the user sees one overlay instead of one that
+disappears and reappears between your bursts of commands:
+
+1. Before the first command that drives Deguffer, run
+   `DriveNet.Cli.exe overlay --action begin --label "Verify <what you are checking>"`.
+2. Drive the app. The overlay stays on screen between commands, however long you pause.
+3. After the last command, run `DriveNet.Cli.exe overlay --action finish`, also when the run
+   stops early on an error or a crash, before you report.
+
+The `drivenet-overlay` skill describes the rest: `plan` for a progress bar, and how a forgotten hold
+ends.
+
 ## Traps, each of which has cost a session
 
 - **Never pass `--single-instance restart`.** It matches on the process *name*, which spans
