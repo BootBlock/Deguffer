@@ -1,8 +1,8 @@
 namespace Deguffer.Core.Exploring.Layout;
 
 /// <summary>
-/// Which of the map's moves is under way, one at a time: a move started finishes the one before it,
-/// and the end of a move that was finished early, or replaced, finishes nothing.
+/// Which of the map's moves is under way, one at a time: a move starts only once the one before it
+/// has finished, and the end of a move that was finished early, or replaced, finishes nothing.
 ///
 /// <para>The compositor reports a move's animations over after the fact, and a move can be finished
 /// early in the meantime (a press, a new folder, the next move). That late report must not end the
