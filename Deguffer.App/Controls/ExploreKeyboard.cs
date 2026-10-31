@@ -110,21 +110,22 @@ internal sealed class ExploreKeyboard(IReadOnlySet<int> picked, Func<int, int?> 
     }
 
     /// <summary>
-    /// Where the keyboard is in the picture handed over, <paramref name="tree"/> at <paramref name="node"/>,
-    /// from <paramref name="shown"/> at <paramref name="shownNode"/>: on the same shapes in a new tree of
-    /// the same place, read through their counterparts; on the folder it came out of, in a folder above
-    /// it; on the root, where the root is drawn again beside its volume; and on the first shape of
-    /// anything else. Gives the counterparts it read through, or null where the picture is another place.
+    /// Where the keyboard is in the picture <paramref name="change"/> hands over: on the same shapes in a
+    /// new tree of the same place, read through the counterparts the change was found through; on the
+    /// folder it came out of, in a folder above it; on the root, where the root is drawn again beside its
+    /// volume; and on the first shape of anything else.
     /// </summary>
-    public Func<int, int?>? Carry(ISizedTree? shown, int shownNode, ISizedTree? tree, int node, bool beside, bool samePlace)
+    public void Carry(PictureChange change)
     {
-        if (samePlace && shown is ITrackedTree tracked && tree is not null && tracked.CounterpartsIn(tree) is { } counterpart)
-        {
-            _focus.Carry(counterpart);
-            return counterpart;
-        }
+        var (shown, asked) = (change.Shown, change.Asked);
 
-        if (tree is not null && ReferenceEquals(tree, shown) && MapFolders.CameUpFrom(tree, shownNode, node, beside) is { } left)
+        if (change.Counterparts is { } counterparts)
+        {
+            _focus.Carry(counterparts);
+        }
+        else if (asked.Tree is { } tree
+            && ReferenceEquals(tree, shown.Tree)
+            && MapFolders.CameUpFrom(tree, shown.Node, asked.Node, asked.Beside) is { } left)
         {
             _focus.Expect(null, left);
         }
@@ -132,8 +133,6 @@ internal sealed class ExploreKeyboard(IReadOnlySet<int> picked, Func<int, int?> 
         {
             _focus.Clear();
         }
-
-        return null;
     }
 
     /// <summary>
