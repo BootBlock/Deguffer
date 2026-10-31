@@ -41,7 +41,7 @@ internal sealed class MapReader(ExploreMap map, ExploreSurface drawing, ExploreK
     /// <summary>The shapes given under <paramref name="folder"/>'s own shape, none while it is collapsed. See <see cref="MapFolders.Listed"/>.</summary>
     /// <param name="expanded">The folders the reader expanded.</param>
     public IReadOnlyList<MapShape> Listed(int folder, IReadOnlySet<int> expanded) =>
-        Described ? MapFolders.Listed(drawing, drawing.Root, folder, keyboard.Folder, expanded) : [];
+        Described ? MapFolders.Listed(drawing, folder, keyboard.Folder, expanded) : [];
 
     /// <summary>Whether <paramref name="folder"/>'s shapes are given. See <see cref="MapFolders.Lists"/>.</summary>
     /// <param name="expanded">The folders the reader expanded.</param>

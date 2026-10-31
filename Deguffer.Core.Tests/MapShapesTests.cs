@@ -318,7 +318,7 @@ public sealed class MapShapesTests
             {
                 pending.Push(everything
                     ? drawing.Shapes(shape.Node)
-                    : MapFolders.Listed(drawing, drawing.Tree.RootNode, shape.Node, keyboard, new HashSet<int>()));
+                    : MapFolders.Listed(drawing, shape.Node, keyboard, new HashSet<int>()));
             }
         }
 

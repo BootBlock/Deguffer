@@ -36,6 +36,19 @@ public sealed class MapShapeTextDrawingTests
             $"Users, {FreeSpace.Format(1000)}, 50% of {Tree.NameOf(Tree.RootNode)}",
             MapShapeText.Name(Alone(), null, ShapeOf(Alone(), null, Users), Facts));
 
+    /// <summary>A drawing of a folder opened is read from that folder, which its top shapes are a share of.</summary>
+    [Fact]
+    public void AShapeAtTheTopOfAnOpenedFolderIsAShareOfThatFolder()
+    {
+        var drawing = ExploreSurface.Create(
+            Tree, Users, ExploreView.Treemap, Width, Height, 1, 1,
+            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None);
+
+        Assert.Equal(
+            $"Documents, {FreeSpace.Format(600)}, 60% of Users",
+            MapShapeText.Name(drawing, null, ShapeOf(drawing, null, Documents), Facts));
+    }
+
     /// <summary>Beside a volume the top of the picture is the whole drive, which no node names.</summary>
     [Fact]
     public void BesideAVolumeTheTopIsAShareOfTheDrive()
@@ -66,7 +79,7 @@ public sealed class MapShapeTextDrawingTests
             $"Documents, {FreeSpace.Format(600)}, 60% of Users{ExploreNodeText.Unread}",
             MapShapeText.Name(
                 Alone(), Users, ShapeOf(Alone(), Users, Documents),
-                node => node == Documents ? Facts(node)! with { LowerBound = true } : Facts(node)));
+                node => node == Documents ? Facts(node) with { LowerBound = true } : Facts(node)));
 
     /// <summary>A block says what it stands for, and is never asked about, being no node of the tree.</summary>
     [Fact]
@@ -92,7 +105,7 @@ public sealed class MapShapeTextDrawingTests
             string.Empty,
             MapShapeText.Help(ShapeOf(Alone(), null, Users), _ => null, Unasked<ExploreVerdict>));
 
-    private static MapShapeFacts? Facts(int node) =>
+    private static MapShapeFacts Facts(int node) =>
         new(Tree.NameOf(node), Tree.IsDirectory(node) ? "Folder" : "File", Opens: Tree.IsDirectory(node), LowerBound: false);
 
     private static T? Unasked<T>(int node)

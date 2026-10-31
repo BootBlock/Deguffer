@@ -71,11 +71,11 @@ public static class MapFolders
     /// otherwise. What the map's tree lists under a shape, so the rule bounds the tree itself rather than
     /// a copy of it.
     /// </summary>
-    public static IReadOnlyList<MapShape> Listed(Rendering.ExploreSurface drawing, int drawn, int folder, int? keyboard, IReadOnlySet<int> expanded)
+    public static IReadOnlyList<MapShape> Listed(Rendering.ExploreSurface drawing, int folder, int? keyboard, IReadOnlySet<int> expanded)
     {
         ArgumentNullException.ThrowIfNull(drawing);
 
-        return Lists(drawing.Tree, drawn, drawing.HasVolumeBeside, folder, keyboard, expanded) ? drawing.Shapes(folder) : [];
+        return Lists(drawing.Tree, drawing.Root, drawing.HasVolumeBeside, folder, keyboard, expanded) ? drawing.Shapes(folder) : [];
     }
 
     /// <summary>

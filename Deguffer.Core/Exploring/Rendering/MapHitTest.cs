@@ -150,7 +150,7 @@ public static class MapHitTest
     private static Spot? Place(MapViewport shown, double x, double y, ExploreSurface drawing)
     {
         var viewport = drawing.Viewport ?? MapViewport.Whole;
-        var (inX, inY) = shown.PlacementOf(viewport).InDrawing(x, y);
+        var (inX, inY) = drawing.PlacementOn(shown).InDrawing(x, y);
 
         return inX is >= 0 and < 1 && inY is >= 0 and < 1
             ? new Spot(drawing, viewport, (float)(inX * drawing.Width), (float)(inY * drawing.Height), Tile: null)
