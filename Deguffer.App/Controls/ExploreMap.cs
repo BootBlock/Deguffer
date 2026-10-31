@@ -1,4 +1,3 @@
-using System.Numerics;
 using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
@@ -883,8 +882,7 @@ public sealed class ExploreMap : UserControl
             CarryFocus(tree, node, volume != VolumeSpace.None, change.SamePlace);
         }
 
-        (_tree, _node, _view, _volume) = change.Asked;
-        _marking.ReadIn(_tree);
+        Hold(change.Asked);
         _colours = colours;
         _labelText = labelText;
         _look = look;
@@ -1305,6 +1303,16 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>The picture the map was last handed, which a change of folder may still be on its way to.</summary>
     private MapPicture Shown => new(_tree, _node, _view, _volume);
+
+    /// <summary>
+    /// Work from <paramref name="picture"/>. The marks and the hit test read every drawing in its tree
+    /// from now on, so the two never name nodes of different trees.
+    /// </summary>
+    private void Hold(MapPicture picture)
+    {
+        (_tree, _node, _view, _volume) = picture;
+        _marking.ReadIn(_tree);
+    }
 
     /// <summary>
     /// How to lay out a drawing of the picture on screen at <paramref name="viewport"/>, on a canvas
@@ -2595,7 +2603,7 @@ public sealed class ExploreMap : UserControl
         _zoom.Reset(left.Viewport);
         Swap(leaving);
 
-        (_tree, _node, _view, _volume) = left.Picture;
+        Hold(left.Picture);
         _colours = colours;
         _labelText = labelText;
         _look = look;

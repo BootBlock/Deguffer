@@ -15,11 +15,12 @@ namespace Deguffer.App.Controls;
 /// <see cref="Remark"/> after each one, so a kind of mark added here is marked out again everywhere
 /// the others are.</para>
 ///
-/// <para>A mark names nodes of the tree the page handed over last. A drawing of an older tree of the
-/// same place, still on screen while the new one lands, marks each node out where it draws the node's
-/// counterpart (<see cref="MapReading"/>), and a drawing of anything else marks nothing out. The hit test
-/// reads the drawing the same way, through <see cref="ReadingOf"/>, so an outline marks the shape a
-/// click there picks (§7.1).</para>
+/// <para>The picks, the light and the outlines name nodes of the tree the page handed over last. A
+/// drawing of an older tree of the same place, still on screen while the new one lands, marks each node
+/// out where it draws the node's counterpart (<see cref="MapReading"/>), and a drawing of anything else
+/// marks nothing out. The hit test reads the drawing the same way, through <see cref="ReadingOf"/>, so
+/// an outline marks the shape a click there picks (§7.1). The hatch names nodes of the tree the removal
+/// was asked in, and goes only on a drawing of that tree.</para>
 /// </summary>
 internal sealed class ExploreMarking(ExploreHighlight highlight)
 {
