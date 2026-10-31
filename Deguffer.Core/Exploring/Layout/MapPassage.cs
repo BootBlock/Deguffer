@@ -44,7 +44,15 @@ public readonly record struct MapPassage(MapDescent Out, MapDescent In)
         var midway = Midway;
 
         return progress < midway
-            ? (Out, 1 - (progress / midway))
+            ? OutAt(progress)
             : (In, midway < 1 ? (progress - midway) / (1 - midway) : 1);
     }
+
+    /// <summary>
+    /// How far along <see cref="Out"/> <paramref name="progress"/> is, held at the middle picture past
+    /// it: for a flight that does not go on into the folder going to. Only where <see cref="Midway"/>
+    /// is above 0, as it is for any flight still on its way out.
+    /// </summary>
+    public (MapDescent Leg, double Progress) OutAt(double progress) =>
+        (Out, 1 - Math.Min(Math.Max(progress, 0) / Midway, 1));
 }

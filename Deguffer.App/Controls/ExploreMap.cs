@@ -91,40 +91,6 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private bool _redrawOwed;
 
-    /// <summary>
-    /// Which way the change of folder on its way goes, from the moment the page hands the map another
-    /// folder until the flight has finished and the picture it went to has arrived; and
-    /// <see cref="FolderStep.Across"/> while there is none. The pointer is over nothing while it flies,
-    /// because the screen is on its way from one picture to another (§7.1): see <see cref="Stepping"/>.
-    /// </summary>
-    private FolderStep _step;
-
-    /// <summary>
-    /// The folder the change of folder on its way left, and the drawing of it, so a reader who asks
-    /// for it back before the flight has arrived is flown back from where the flight is.
-    /// </summary>
-    private Left? _left;
-
-    /// <summary>
-    /// Whether a step out is waiting for the picture it goes out to: until that is drawn, there is
-    /// nothing to pull back into, and the picture left stays filling the screen.
-    /// </summary>
-    private bool _awaitingOuter;
-
-    /// <summary>
-    /// The folder that holds both ends of a change of folder between folders where neither holds the
-    /// other, while the flight is on its way out to it: the picture drawn in the meantime is of this
-    /// folder, which the flight passes through, rather than of the folder asked for. Null otherwise,
-    /// and from the middle of that flight on. See <see cref="FolderStep.Through"/>.
-    /// </summary>
-    private Through? _through;
-
-    /// <summary>
-    /// Whether a flight into a folder has finished and the picture of it has not arrived yet. The old
-    /// picture stays, stretched where the flight left it, until the new one has landed over it.
-    /// </summary>
-    private bool _stepOwed;
-
     /// <summary>Whether a tap, a right-tap or a double-tap may act, from the presses that made it.</summary>
     private readonly MapPress _press = new();
 
@@ -154,7 +120,11 @@ public sealed class ExploreMap : UserControl
 
     private readonly ExploreZoom _zoom;
 
-    private readonly ExploreDescent _descent = new(SystemMotion.Current, RenderingClock.Current);
+    /// <summary>
+    /// The two pictures of a change of folder, the picture worked from and the picture left, and the
+    /// phase the change is in. See <see cref="ExploreFlight"/>.
+    /// </summary>
+    private readonly ExploreFlight _flight;
 
     /// <summary>
     /// The large shapes moving from the drawing on screen to the next as it arrives, and the move the
@@ -164,16 +134,6 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>The pointer's look while it drags the picture. One for the life of the map (G5).</summary>
     private readonly InputCursor _dragCursor = InputSystemCursor.Create(InputSystemCursorShape.SizeAll);
-
-    /// <summary>
-    /// The drawings of the picture on screen. See <see cref="ExploreLayers"/>. Swapped with
-    /// <see cref="_departing"/> as the folder changes, so the old picture can go on showing while the
-    /// camera flies from it to the new one.
-    /// </summary>
-    private ExploreLayers _pictures;
-
-    /// <summary>The picture a change of folder is leaving, while it does, and empty otherwise.</summary>
-    private ExploreLayers _departing;
 
     /// <summary>
     /// How many different pictures <see cref="Show(ISizedTree, int, ExploreView, Func{DateTime, ShapeColours}, Func{int, string}, MapLook, VolumeSpace, MapViewport?)"/>
@@ -296,28 +256,27 @@ public sealed class ExploreMap : UserControl
         _zoom = new ExploreZoom(ElementCompositionPreview.GetElementVisual(this), _camera, SystemMotion.Current, DispatcherQueue);
         var owner = new DispatcherQueueSynchronizationContext(DispatcherQueue);
 
-        _pictures = new ExploreLayers(compositor, _graphics, _camera, SystemMotion.Current, owner);
-        _departing = new ExploreLayers(compositor, _graphics, _camera, SystemMotion.Current, owner);
-        _tileOver = (x, y) => _pictures.TileOver(x, y);
+        var pictures = new ExploreLayers(compositor, _graphics, _camera, SystemMotion.Current, owner);
+        var departing = new ExploreLayers(compositor, _graphics, _camera, SystemMotion.Current, owner);
         _highlight = new ExploreHighlight(compositor, _graphics.Geometry, _camera);
         _marking = new ExploreMarking(_highlight);
         _readingOf = _marking.ReadingOf;
         _keyboard = new ExploreKeyboard(_marking.Picked, FolderOf);
         _keyboard.Landed += OnKeyboardLanded;
         _moves = new ExploreMoves(compositor, _graphics.Geometry, _camera, SystemMotion.Current);
-        _labels = new ExploreLabels(_camera, _pictures.Root, SystemMotion.Current);
+        _labels = new ExploreLabels(_camera, pictures.Root, SystemMotion.Current);
         _redraws = new CanvasRedraws(owner);
         _overview = new ExploreOverview(_camera, _zoom, SystemMotion.Current, () => _pointer);
 
-        _pictures.Follow();
+        pictures.Follow();
 
         // The outlines go over the picture, and the labels over both. A label is inset from its
         // shape's edge and an outline runs along it, so the two rarely meet — and where they do, the
         // name of the thing is worth more than the last pixel of the line round it. The picture a
         // change of folder is leaving is stacked against the new one as each step starts (see Swap).
         _root = compositor.CreateContainerVisual();
-        _root.Children.InsertAtTop(_departing.Root);
-        _root.Children.InsertAtTop(_pictures.Root);
+        _flight = new ExploreFlight(_root, pictures, departing, this);
+        _tileOver = (x, y) => _flight.Pictures.TileOver(x, y);
         _root.Children.InsertAtTop(_moves.Root);
         _root.Children.InsertAtTop(_highlight.Root);
 
@@ -350,8 +309,8 @@ public sealed class ExploreMap : UserControl
 
         // The overview is of the picture the map works from: the set of drawings a change of folder
         // leaves keeps its own, for a change turned round.
-        _pictures.OverviewChanged += OnOverviewChanged;
-        _departing.OverviewChanged += OnOverviewChanged;
+        pictures.OverviewChanged += OnOverviewChanged;
+        departing.OverviewChanged += OnOverviewChanged;
 
         // A press on the overview moves the camera as any other input does, from a settled screen
         // with the whole picture under the zoomed one.
@@ -376,17 +335,16 @@ public sealed class ExploreMap : UserControl
             Underlay();
         };
 
-        _descent.Moved += OnDescentMoved;
-        _descent.Midway += OnDescentMidway;
-        _descent.Arrived += OnDescentArrived;
+        _flight.Descent.Midway += OnDescentMidway;
+        _flight.Descent.Arrived += OnDescentArrived;
         _moves.Started += OnMoveStarted;
         _moves.Landed += OnMoveLanded;
 
         // Both sets, as the two change places with each change of folder that flies (see Swap).
-        _pictures.Faded += OnFaded;
-        _departing.Faded += OnFaded;
-        _pictures.TileAnswersChanged += OnTileAnswersChanged;
-        _departing.TileAnswersChanged += OnTileAnswersChanged;
+        pictures.Faded += OnFaded;
+        departing.Faded += OnFaded;
+        pictures.TileAnswersChanged += OnTileAnswersChanged;
+        departing.TileAnswersChanged += OnTileAnswersChanged;
 
         _settled = DispatcherQueue.CreateTimer();
         _settled.Interval = ResizeSettleTime;
@@ -494,9 +452,9 @@ public sealed class ExploreMap : UserControl
             // held: at 4K, 33 MB for each drawing kept and for the paint buffer. Only the drawing on
             // screen is needed to come back to, and the rest is asked for again when the picture next
             // moves.
-            _pictures.Light(null, null);
-            _pictures.Trim();
-            _departing.ReleaseTiles();
+            _flight.Pictures.Light(null, null);
+            _flight.Pictures.Trim();
+            _flight.Departing.ReleaseTiles();
             _buffers.Release();
             _graphics.Device.Trim();
 
@@ -646,9 +604,9 @@ public sealed class ExploreMap : UserControl
     /// <summary>The overview of the picture the map works from has a new answer.</summary>
     private void OnOverviewChanged(object? sender, EventArgs e)
     {
-        if (sender == _pictures)
+        if (sender == _flight.Pictures)
         {
-            _overview.ShowWhole(_pictures.Overview);
+            _overview.ShowWhole(_flight.Pictures.Overview);
         }
     }
 
@@ -809,7 +767,7 @@ public sealed class ExploreMap : UserControl
                 _zoom.Stop();
             }
 
-            if (_left is { Drawing: { } drawing } left && change.Returns(left.Picture, left.Viewport) && Stepping)
+            if (_flight.State.Left is { Drawing: { } drawing } left && change.Returns(left.Picture, left.Viewport) && Stepping)
             {
                 Return(drawing, colours, labelText, look);
                 return;
@@ -819,27 +777,24 @@ public sealed class ExploreMap : UserControl
             // flight between two pictures, and this one starts from the picture it arrived at.
             LandStep();
 
-            var (step, meeting) = change.Step(_drawing is { Viewport: not null });
+            var step = change.Step(_drawing is { Viewport: not null });
 
             // A flight through a folder starts as a step out to it, drawn whole as any folder opened is.
-            _through = meeting is { } passing ? new Through(passing, change.Opened) : null;
             if (!change.SamePlace)
             {
-                _zoom.Reset(_through is null ? change.Opened : MapViewport.Whole);
+                _zoom.Reset(step.Meeting is null ? change.Opened : MapViewport.Whole);
             }
 
             // The picture on screen stays, to fly from, and the new one is drawn into the other set
             // of layers: over it for a step in, which the new picture grows out of, and under it for a
             // step out, which it shrinks back into.
-            if (step != FolderStep.Across)
+            if (step.Way != FolderStep.Across)
             {
-                into = step == FolderStep.Into
+                into = step.Way == FolderStep.Into
                     ? _drawing!.ScreenOf(node, was, change.Opened) ?? MapFrame.Whole
                     : null;
 
-                _left = new Left(Shown, was, _drawing, _shapeColours);
-                _step = step == FolderStep.Into ? FolderStep.Into : FolderStep.OutOf;
-                _awaitingOuter = _step == FolderStep.OutOf;
+                _flight.State = FolderFlight.Begin(step, new FolderLeft(Shown, was, _drawing, _shapeColours), change.Opened);
 
                 Swap(was);
 
@@ -855,7 +810,7 @@ public sealed class ExploreMap : UserControl
         // same place laid out again keeps it until its own replaces it, as it keeps the zoom.
         if (change.Another && !change.SamePlace)
         {
-            _pictures.ForgetOverview();
+            _flight.Pictures.ForgetOverview();
         }
 
         if (change.Another)
@@ -872,14 +827,14 @@ public sealed class ExploreMap : UserControl
         // already on its way: its outlines wait for it the way they wait for a zoom, its names ride it in, and
         // the pointer is over nothing until the picture it is over is the one on screen. The names
         // of the picture left go with it. A step out flies once the picture it goes out to is drawn.
-        if (_step != FolderStep.Across && change.Another)
+        if (_flight.State.IsUnderWay && change.Another)
         {
             _labels.Hide();
             _highlight.Hide();
 
             if (into is { } shape)
             {
-                _descent.Start(shape, FolderStep.Into);
+                _flight.Descent.Start(shape, FolderStep.Into);
             }
         }
 
@@ -897,7 +852,7 @@ public sealed class ExploreMap : UserControl
         }
 
         // Nothing to fly to after all: a folder with nothing in it to draw.
-        if (_step != FolderStep.Across && _drawing is null && _redraws.Pending is null)
+        if (_flight.State.IsUnderWay && _drawing is null && _redraws.Pending is null)
         {
             LandStep();
         }
@@ -1012,7 +967,7 @@ public sealed class ExploreMap : UserControl
     {
         // Cut only while something can run past the edges. Unzoomed, nothing does except the halo of
         // an outline round a shape at the edge, which has always been drawn whole.
-        var cut = !(_zoom.Shown.IsWhole && _drawn.IsWhole && _step == FolderStep.Across);
+        var cut = !(_zoom.Shown.IsWhole && _drawn.IsWhole && !_flight.State.IsUnderWay);
 
         if (cut)
         {
@@ -1029,7 +984,7 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void Fit()
     {
-        _pictures.Fit(ActualWidth, ActualHeight, _zoom.Origin);
+        _flight.Pictures.Fit(ActualWidth, ActualHeight, _zoom.Origin);
 
         if (_drawing is not { } drawing)
         {
@@ -1114,7 +1069,7 @@ public sealed class ExploreMap : UserControl
         if (Visibility != Visibility.Visible)
         {
             _redraws.Cancel();
-            _pictures.Clear();
+            _flight.Pictures.Clear();
             _drawing = null;
             _hovered = null;
             _hoveredTile = null;
@@ -1131,7 +1086,7 @@ public sealed class ExploreMap : UserControl
             // Every drawing goes, and the buffer they were painted through: a map with nothing to
             // show holds no memory for it.
             _redraws.Cancel();
-            _pictures.Clear();
+            _flight.Pictures.Clear();
             _buffers.Release();
             _drawing = null;
             _shapeColours = null;
@@ -1147,7 +1102,7 @@ public sealed class ExploreMap : UserControl
             Report(null);
 
             // A folder opened into nothing: the picture it opened out of goes too.
-            if (_stepOwed)
+            if (_flight.State.Owed)
             {
                 FinishStep();
             }
@@ -1175,7 +1130,7 @@ public sealed class ExploreMap : UserControl
         // they stay on screen until the new one has landed over them. Drawn at the zoom on screen
         // now, which is partway through a move if one is on its way: a repaint mid-move is placed
         // for the rest of the move like any other drawing.
-        _pictures.Forget();
+        _flight.Pictures.Forget();
 
         Request(_zoom.Shown, fade);
     }
@@ -1189,7 +1144,7 @@ public sealed class ExploreMap : UserControl
     {
         // The drawing of where it stopped is on its way, and wants the cores the tiles would take. The
         // tiles already under way still arrive, and show until it has.
-        _pictures.RestTiles();
+        _flight.Pictures.RestTiles();
 
         // Left for Loaded, which shows the arrival when the map is back, as it does a redraw.
         if (!IsLoaded || Visibility != Visibility.Visible || _drawing is not { } drawing)
@@ -1213,7 +1168,7 @@ public sealed class ExploreMap : UserControl
         // has changed since this drawing was made.
         if (_zoom.Shown == _drawn && _arriving is not { IsSettled: false })
         {
-            _pictures.HideTiles();
+            _flight.Pictures.HideTiles();
             _labels.Reveal();
             Place();
             ReportWhatThePointerIsOver();
@@ -1230,7 +1185,7 @@ public sealed class ExploreMap : UserControl
     /// <param name="fade">How a new drawing comes in over the one on screen. See <see cref="ExploreLayers.Replacement"/>.</param>
     private void Request(MapViewport viewport, Motion fade)
     {
-        if (_pictures.Show(viewport) is { } kept)
+        if (_flight.Pictures.Show(viewport) is { } kept)
         {
             _redraws.Cancel();
             Present(kept);
@@ -1251,7 +1206,7 @@ public sealed class ExploreMap : UserControl
             width,
             height,
             Focus(viewport, width, height),
-            _pictures.Replacement(Present, fade));
+            _flight.Pictures.Replacement(Present, fade));
     }
 
     /// <summary>
@@ -1265,16 +1220,13 @@ public sealed class ExploreMap : UserControl
             : _redraws.Start(layout, _buffers.PixelsFor(width, height), Ground(), focus, target);
 
     /// <summary>
-    /// The folder drawn: the one asked for, or the one a change of folder is passing through on its
-    /// way there. See <see cref="_through"/>.
+    /// The picture drawn: the one asked for, or the folder a change of folder is passing through on its
+    /// way there. See <see cref="FolderFlight.Drawn"/>.
     /// </summary>
-    private int DrawnNode => _through?.Folder ?? _node;
+    private MapPicture Drawn => _flight.State.Drawn(Shown);
 
-    /// <summary>
-    /// The volume drawn beside <see cref="DrawnNode"/>. None beside a folder passed through, which is
-    /// drawn opened, as any folder the reader opens is.
-    /// </summary>
-    private VolumeSpace DrawnVolume => _through is null ? _volume : VolumeSpace.None;
+    /// <summary>The folder drawn. See <see cref="Drawn"/>.</summary>
+    private int DrawnNode => Drawn.Node;
 
     /// <summary>The picture the map was last handed, which a change of folder may still be on its way to.</summary>
     private MapPicture Shown => new(_tree, _node, _view, _volume);
@@ -1300,13 +1252,11 @@ public sealed class ExploreMap : UserControl
     private Func<ExploreSurface> Layout(MapViewport viewport, int width, int height)
     {
         var tree = _tree!;
-        var node = DrawnNode;
-        var view = _view;
+        var (_, node, view, volume) = Drawn;
         var scale = _scale;
         var textScale = SystemLook.Current.State.TextScale;
         var colours = _shapeColours!;
         var look = _look;
-        var volume = DrawnVolume;
 
         return () => ExploreSurface.Create(
             tree, node, view, width, height, scale, textScale, colours, look.Spacing, volume, viewport, look.Style);
@@ -1356,7 +1306,7 @@ public sealed class ExploreMap : UserControl
         // shapes and answers the pointer, and a tile drawn deeper would show detail it does not have.
         if (_zoom.Shown == _drawn)
         {
-            _pictures.HideTiles();
+            _flight.Pictures.HideTiles();
         }
 
         Unlock();
@@ -1378,19 +1328,19 @@ public sealed class ExploreMap : UserControl
         // left has in it. One that does not draw that folder's branch has nothing to fly from. A step
         // through the folder now drawn flies on into the folder asked for, from its shape in the same
         // drawing. A folder with no shape in it fades on its leg rather than flies (see MapPassage).
-        if (_awaitingOuter)
+        if (_flight.State is { AwaitsOuter: true, Left: { } left } waiting)
         {
-            _awaitingOuter = false;
+            var shape = drawing.ScreenOf(left.Picture.Node, _zoom.Shown, left.Viewport);
 
-            if (_left is { } passed && _through is { } through)
+            _flight.State = waiting.OuterDrawn(shape is not null);
+
+            if (waiting.Passing is { } through)
             {
-                _descent.Pass(
-                    drawing.ScreenOf(passed.Picture.Node, _zoom.Shown, passed.Viewport),
-                    drawing.ScreenOf(_node, _zoom.Shown, through.Opened));
+                _flight.Descent.Pass(shape, drawing.ScreenOf(_node, _zoom.Shown, through.Opened));
             }
-            else if (_left is { } left && drawing.ScreenOf(left.Picture.Node, _zoom.Shown, left.Viewport) is { } shape)
+            else if (_flight.State.IsUnderWay)
             {
-                _descent.Start(shape, FolderStep.OutOf);
+                _flight.Descent.Start(shape!.Value, FolderStep.OutOf);
             }
             else
             {
@@ -1399,14 +1349,14 @@ public sealed class ExploreMap : UserControl
         }
 
         // A flight in that arrived before its picture did finishes now, over it.
-        if (_stepOwed && !_descent.IsMoving)
+        if (_flight.State.Owed && !_flight.Descent.IsMoving)
         {
             FinishStep();
         }
 
         var placed = _drawn.Canvas(drawing.Width, drawing.Height, ActualWidth, ActualHeight, _zoom.Origin);
 
-        if (_moves.Arrive(earlier, drawing, _pictures, placed) == MapMove.Shift)
+        if (_moves.Arrive(earlier, drawing, _flight.Pictures, placed) == MapMove.Shift)
         {
             Follow(earlier, drawing);
         }
@@ -1437,7 +1387,7 @@ public sealed class ExploreMap : UserControl
             || _drawing is not { } drawing
             || _settled.IsRunning
             || _redraws.Pending is not null
-            || !_pictures.LacksWhole)
+            || !_flight.Pictures.LacksWhole)
         {
             return;
         }
@@ -1447,7 +1397,7 @@ public sealed class ExploreMap : UserControl
             drawing.Width,
             drawing.Height,
             focus: null,
-            _pictures.Underlay());
+            _flight.Pictures.Underlay());
     }
 
     /// <summary>
@@ -1520,7 +1470,7 @@ public sealed class ExploreMap : UserControl
     /// from. See <see cref="ExploreMarking.ShowHovered"/>.
     /// </summary>
     private void ShowHovered() =>
-        _marking.ShowHovered(_drawing, _hovered, _hoveredTile, KeyboardShape, _drawing is { } drawing ? _pictures.SurfaceOf(drawing) : null);
+        _marking.ShowHovered(_drawing, _hovered, _hoveredTile, KeyboardShape, _drawing is { } drawing ? _flight.Pictures.SurfaceOf(drawing) : null);
 
     /// <summary>
     /// The shape the keyboard is on, while the keyboard has the map, in a drawing of the tree the page
@@ -1576,7 +1526,7 @@ public sealed class ExploreMap : UserControl
     /// Whether the screen is between two pictures: a change of folder flying or waiting for the
     /// picture it is to fly out to, shapes moving to a new layout, or a new drawing fading in.
     /// </summary>
-    private bool Stepping => _descent.IsMoving || _awaitingOuter || _moves.IsMoving || _pictures.IsFading;
+    private bool Stepping => _flight.Descent.IsMoving || _flight.State.AwaitsOuter || _moves.IsMoving || _flight.Pictures.IsFading;
 
     /// <summary>
     /// Zoom at the pointer, or with Shift held, or on a wheel that tilts, pan across, where the page
@@ -1710,7 +1660,7 @@ public sealed class ExploreMap : UserControl
             ? shown.PictureAt(pointer.X / ActualWidth, pointer.Y / ActualHeight)
             : shown.PictureAt(0.5, 0.5);
 
-        _pictures.WantTiles(shown, _zoom.Target, x, y, Ground());
+        _flight.Pictures.WantTiles(shown, _zoom.Target, x, y, Ground());
     }
 
     /// <summary>
@@ -1904,11 +1854,11 @@ public sealed class ExploreMap : UserControl
             && _graphics.Shades
             && !Contrasted)
         {
-            _pictures.Light(found.Drawing, PointerLight.At(found.X, found.Y, _scale, _look.Light.Amount));
+            _flight.Pictures.Light(found.Drawing, PointerLight.At(found.X, found.Y, _scale, _look.Light.Amount));
         }
         else
         {
-            _pictures.Light(null, null);
+            _flight.Pictures.Light(null, null);
         }
     }
 
@@ -1923,8 +1873,8 @@ public sealed class ExploreMap : UserControl
         // for itself, go, and the next move draws them again.
         if (!sender.IsHostVisible)
         {
-            _pictures.ReleaseTiles();
-            _departing.ReleaseTiles();
+            _flight.Pictures.ReleaseTiles();
+            _flight.Departing.ReleaseTiles();
             _graphics.Device.Trim();
         }
 
@@ -1945,8 +1895,8 @@ public sealed class ExploreMap : UserControl
 
         LandStep();
         _redraws.Cancel();
-        _departing.Renew();
-        _pictures.Renew();
+        _flight.Departing.Renew();
+        _flight.Pictures.Renew();
 
         _drawing = null;
         _hovered = null;
@@ -2427,30 +2377,14 @@ public sealed class ExploreMap : UserControl
 
     /// <summary>
     /// Hand the set of layers on screen to the picture being left, held where the camera had it at
-    /// <paramref name="left"/>, and draw the new picture into the other set, which follows the camera.
+    /// <paramref name="left"/>, and draw the new picture into the other set, which follows the camera
+    /// and takes the names and the overview. See <see cref="ExploreFlight.Swap"/>.
     /// </summary>
     private void Swap(MapViewport left)
     {
-        (_pictures, _departing) = (_departing, _pictures);
-
-        _departing.Freeze(left.Camera(ActualWidth, ActualHeight, _zoom.Origin));
-        _pictures.Follow();
-        _pictures.Fit(ActualWidth, ActualHeight, _zoom.Origin);
-        _labels.Ride(_pictures.Root);
-        _overview.ShowWhole(_pictures.Overview);
-
-        // The inner picture goes over the outer one: a folder opened grows over the picture it was
-        // in, and a folder left shrinks back into the picture it is in. The outlines stay on top.
-        _root.Children.Remove(_departing.Root);
-
-        if (_step == FolderStep.OutOf)
-        {
-            _root.Children.InsertAbove(_departing.Root, _pictures.Root);
-        }
-        else
-        {
-            _root.Children.InsertAtBottom(_departing.Root);
-        }
+        _flight.Swap(left.Camera(ActualWidth, ActualHeight, _zoom.Origin), _zoom.Origin);
+        _labels.Ride(_flight.Pictures.Root);
+        _overview.ShowWhole(_flight.Pictures.Overview);
     }
 
     /// <summary>
@@ -2460,18 +2394,14 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void Return(ExploreSurface drawing, Func<DateTime, ShapeColours> colours, Func<int, string> labelText, MapLook look)
     {
-        var left = _left!;
+        var left = _flight.State.Left!;
         var leaving = _zoom.Shown;
 
         _redraws.Cancel();
 
         // The folder being left is the one drawn: on the way out of a step through a folder, the
         // folder passed through, which the drawing kept is of.
-        _left = new Left(new MapPicture(_tree, DrawnNode, _view, DrawnVolume), leaving, _drawing, _shapeColours);
-        _step = _step == FolderStep.Into ? FolderStep.OutOf : FolderStep.Into;
-        _through = null;
-        _awaitingOuter = false;
-        _stepOwed = false;
+        _flight.State = _flight.State.Turned(new FolderLeft(Drawn, leaving, _drawing, _shapeColours));
 
         _zoom.Reset(left.Viewport);
         Swap(leaving);
@@ -2483,9 +2413,9 @@ public sealed class ExploreMap : UserControl
         _shapeColours = left.Colours;
 
         // A step out still waiting for its picture had not moved yet: there is nothing to turn round.
-        var flying = _descent.IsMoving;
+        var flying = _flight.Descent.IsMoving;
 
-        _descent.Turn();
+        _flight.Descent.Turn();
         Present(drawing);
 
         if (!flying)
@@ -2504,17 +2434,17 @@ public sealed class ExploreMap : UserControl
     private void SettleStep()
     {
         _moves.Finish();
-        _pictures.LandFades();
+        _flight.Pictures.LandFades();
 
-        if (_descent.IsMoving)
+        if (_flight.Descent.IsMoving)
         {
-            _descent.Finish();
+            _flight.Descent.Finish();
         }
-        else if (_awaitingOuter)
+        else if (_flight.State.AwaitsOuter)
         {
-            if (_through is { } through)
+            if (_flight.State.Passing is { } through)
             {
-                _through = null;
+                _flight.State = FolderFlight.None;
                 _zoom.Reset(through.Opened);
                 Redraw();
             }
@@ -2531,23 +2461,10 @@ public sealed class ExploreMap : UserControl
     {
         SettleStep();
 
-        if (_step != FolderStep.Across)
+        if (_flight.State.IsUnderWay)
         {
             FinishStep();
         }
-    }
-
-    /// <summary>
-    /// One frame of a change of folder: the outer picture stretched so the inner folder's shape fills
-    /// more of the map or less, and the inner folder's own drawing over it on the same frame, coming in
-    /// or going.
-    /// </summary>
-    private void OnDescentMoved(object? sender, EventArgs e)
-    {
-        var (inner, outer) = _step == FolderStep.OutOf ? (_departing, _pictures) : (_pictures, _departing);
-
-        outer.Carry(_descent.Outer, 1, ActualWidth, ActualHeight);
-        inner.Carry(_descent.Inner, _descent.Opacity, ActualWidth, ActualHeight);
     }
 
     /// <summary>
@@ -2609,15 +2526,13 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void OnDescentMidway(object? sender, EventArgs e)
     {
-        var through = _through!;
+        var through = _flight.State.Passing!;
         var passing = _zoom.Shown;
 
-        _left = new Left(new MapPicture(_tree, through.Folder, _view, VolumeSpace.None), passing, _drawing, _shapeColours);
-        _through = null;
-        _step = FolderStep.Into;
+        _flight.State = _flight.State.Midway(Shown, passing, _drawing, _shapeColours);
 
         // The set the folder left was in takes the folder asked for.
-        _departing.Clear();
+        _flight.Departing.Clear();
         _zoom.Reset(through.Opened);
         Swap(passing);
 
@@ -2635,27 +2550,18 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void OnDescentArrived(object? sender, EventArgs e)
     {
-        if (_drawing is null && _redraws.Pending is not null)
-        {
-            _stepOwed = true;
-            return;
-        }
+        _flight.State = _flight.State.Arrived(landing: _drawing is null && _redraws.Pending is not null);
 
-        FinishStep();
+        if (!_flight.State.Owed)
+        {
+            FinishStep();
+        }
     }
 
     /// <summary>The end of a change of folder, once its flight is over and its picture has arrived.</summary>
     private void FinishStep()
     {
-        _step = FolderStep.Across;
-        _left = null;
-        _through = null;
-        _awaitingOuter = false;
-        _stepOwed = false;
-
-        _departing.Clear();
-        _departing.Carry(MapFrame.Whole, 1, ActualWidth, ActualHeight);
-        _pictures.Carry(MapFrame.Whole, 1, ActualWidth, ActualHeight);
+        _flight.Land();
 
         // Marked out again for the drawing worked from now, before they show: one settled before its
         // picture arrived has none, and the hatch and outlines hidden with the picture left belong to
@@ -2668,20 +2574,4 @@ public sealed class ExploreMap : UserControl
         ShowOverview();
         ReportWhatThePointerIsOver();
     }
-
-    /// <summary>
-    /// The folder a change of folder left, as it was on screen: the picture of it, the zoom it was at,
-    /// the drawing the map worked from, if one had arrived, and the colours its drawings were made in.
-    /// </summary>
-    private sealed record Left(
-        MapPicture Picture,
-        MapViewport Viewport,
-        ExploreSurface? Drawing,
-        ShapeColours? Colours);
-
-    /// <summary>
-    /// The folder a change of folder through a folder is passing through, and the zoom the folder
-    /// asked for is shown at once the flight has passed it.
-    /// </summary>
-    private sealed record Through(int Folder, MapViewport Opened);
 }
