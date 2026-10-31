@@ -30,7 +30,7 @@ public static class MapFollow
     {
         ArgumentNullException.ThrowIfNull(later);
 
-        return movable && earlier is not null && later.Viewport is { } drawn && shown == drawn && target == drawn
+        return movable && earlier is not null && later.Zoom?.Viewport is { } drawn && shown == drawn && target == drawn
             ? Onward(earlier, later)
             : null;
     }
@@ -47,13 +47,13 @@ public static class MapFollow
         ArgumentNullException.ThrowIfNull(earlier);
         ArgumentNullException.ThrowIfNull(later);
 
-        if (earlier is not TiledSurface { Viewport: { IsWhole: false } viewport } drawn
+        if (earlier is not TiledSurface { Zoom.Viewport: { IsWhole: false } viewport } drawn
             || later is not TiledSurface redrawn
-            || later.Viewport != viewport
+            || later.Zoom?.Viewport != viewport
             || earlier.Tree is not ITrackedTree before
             || before.CounterpartsIn(later.Tree) is not { } onward)
         {
-            return later.Viewport ?? MapViewport.Whole;
+            return later.ShownAt;
         }
 
         // Deepest last: a layout emits a folder before what it holds, and every shape under a point

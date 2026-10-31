@@ -63,15 +63,13 @@ internal sealed class GatedSurface(TiledSurface drawing, Func<CanvasRegion, bool
         LayoutLimits.Default,
         ShapeColours.ByBranch(ExploreScheme.Standard),
         MapStyle.Default,
-        drawing.Viewport)
+        drawing.Zoom)
 {
     private readonly ManualResetEventSlim _open = new();
 
     public override IReadOnlyList<ExploreLabel> Labels => drawing.Labels;
 
     public override bool HasVolumeBeside => drawing.HasVolumeBeside;
-
-    public override double? Ceiling => drawing.Ceiling;
 
     /// <summary>Let every region held back be painted.</summary>
     public void Open() => _open.Set();

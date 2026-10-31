@@ -29,7 +29,7 @@ public readonly record struct ShapeTravel(bool ShowsEarlier, MapFrame Source, Sp
         ArgumentNullException.ThrowIfNull(earlier);
         ArgumentNullException.ThrowIfNull(later);
 
-        if (earlier.Width != later.Width || earlier.Height != later.Height || earlier.Viewport != later.Viewport)
+        if (earlier.Width != later.Width || earlier.Height != later.Height || earlier.Zoom?.Viewport != later.Zoom?.Viewport)
         {
             return [];
         }

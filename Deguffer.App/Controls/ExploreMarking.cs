@@ -112,7 +112,7 @@ internal sealed class ExploreMarking(ExploreHighlight highlight)
 
         // Found on a tile, the shape may be one the drawing does not draw, so the tile outlines it, in
         // the drawing's canvas. Nothing is lifted: the drawing's surface holds coarser pixels there.
-        if (tile is not null && outlining.Drawing.Viewport is { } drawn)
+        if (tile is not null && outlining.Drawing.Zoom?.Viewport is { } drawn)
         {
             highlight.ShowHovered(
                 [
@@ -159,7 +159,7 @@ internal sealed class ExploreMarking(ExploreHighlight highlight)
         // Twice the whole picture in the drawing's canvas pixels, which is a canvas as many times
         // over as the drawing is zoomed: the picture is within that of the canvas's corner whichever
         // part of it the canvas shows, and so is the margin the outlines are drawn into round it.
-        var far = 2 * Math.Max(outlining.Drawing.Width, outlining.Drawing.Height) * (outlining.Drawing.Viewport?.Zoom ?? 1);
+        var far = 2 * Math.Max(outlining.Drawing.Width, outlining.Drawing.Height) * outlining.Drawing.ShownAt.Zoom;
 
         highlight.ShowPicked(outlining.Drawing.Outlines(outlining.Reading.InDrawing(_marks.Picked)), (float)far);
     }

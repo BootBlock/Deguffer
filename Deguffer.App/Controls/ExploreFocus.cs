@@ -58,7 +58,7 @@ internal sealed class ExploreFocus
     {
         Folder = folder;
         Node = shape.Node;
-        _at = (drawing.Viewport ?? MapViewport.Whole).PictureAt(shape.X, shape.Y);
+        _at = drawing.ShownAt.PictureAt(shape.X, shape.Y);
     }
 
     /// <summary>
@@ -94,7 +94,7 @@ internal sealed class ExploreFocus
 
     private int Nearest(ExploreSurface drawing, IReadOnlyList<MapShape> shapes)
     {
-        var (x, y) = (drawing.Viewport ?? MapViewport.Whole).ScreenAt(_at.X, _at.Y);
+        var (x, y) = drawing.ShownAt.ScreenAt(_at.X, _at.Y);
 
         return MapNeighbours.Nearest(shapes, x, y, drawing.Width, drawing.Height);
     }

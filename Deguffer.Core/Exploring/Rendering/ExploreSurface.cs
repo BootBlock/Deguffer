@@ -60,7 +60,7 @@ public abstract class ExploreSurface
         LayoutLimits limits,
         ShapeColours colours,
         MapStyle style,
-        MapViewport? viewport)
+        DrawnZoom? zoom)
     {
         ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(colours);
@@ -72,7 +72,7 @@ public abstract class ExploreSurface
         Root = root;
         Width = width;
         Height = height;
-        Viewport = viewport;
+        Zoom = zoom;
         Limits = limits;
         Style = style;
         _colours = colours;
@@ -92,8 +92,8 @@ public abstract class ExploreSurface
     public int Height { get; }
 
     /// <summary>
-    /// The part of the whole picture this drawing shows, or null where this way of drawing cannot be
-    /// zoomed and it shows all of it.
+    /// Where this drawing was drawn and how far the map can zoom while it is on screen, or null where
+    /// this way of drawing cannot be zoomed and it shows all of the picture.
     ///
     /// <para>Said by the drawing rather than assumed by the caller, because the caller asks for a view
     /// and does not always get it: a scan still running is drawn as an icicle whichever view was
@@ -101,24 +101,18 @@ public abstract class ExploreSurface
     /// A caller that took its own zoom as what was drawn would place the picture, and resolve a click
     /// on it, for a zoom the picture does not have (§7.1).</para>
     /// </summary>
-    public MapViewport? Viewport { get; }
+    public DrawnZoom? Zoom { get; }
 
     /// <summary>
-    /// Where this drawing lies on a screen showing <paramref name="shown"/>: at its own
-    /// <see cref="Viewport"/>, or as the whole picture where it cannot be zoomed and shows all of it.
+    /// The part of the whole picture this drawing shows: where it was drawn (<see cref="Zoom"/>), or
+    /// the whole picture where it cannot be zoomed.
     /// </summary>
-    public MapPlacement PlacementOn(MapViewport shown) => shown.PlacementOf(Viewport ?? MapViewport.Whole);
+    public MapViewport ShownAt => Zoom?.Viewport ?? MapViewport.Whole;
 
     /// <summary>
-    /// How far the map can zoom while this drawing is on screen, or null where it cannot be zoomed:
-    /// null exactly where <see cref="Viewport"/> is (see <see cref="MapCeiling"/>).
-    ///
-    /// <para>Said by the drawing because only it knows what in view it could not draw one by one, and
-    /// how small what it drew is, and what it drew is what the screen shows: a ceiling worked out from
-    /// anything else would stop a zoom short of detail the reader can see is there, or let it run on
-    /// past the last shape.</para>
+    /// Where this drawing lies on a screen showing <paramref name="shown"/>: at <see cref="ShownAt"/>.
     /// </summary>
-    public abstract double? Ceiling { get; }
+    public MapPlacement PlacementOn(MapViewport shown) => shown.PlacementOf(ShownAt);
 
     /// <summary>
     /// Where the text goes. At most <see cref="MaximumLabels"/> inside shapes, and for a treemap a
@@ -200,7 +194,7 @@ public abstract class ExploreSurface
     /// </param>
     /// <param name="viewport">
     /// The part of the picture to show. Only the treemap can be zoomed, and every other drawing shows
-    /// the whole picture whatever this asks; <see cref="Viewport"/> says which happened.
+    /// the whole picture whatever this asks; <see cref="Zoom"/> says which happened.
     /// </param>
     /// <param name="style">
     /// How every shape is finished and what is written on them, or null for

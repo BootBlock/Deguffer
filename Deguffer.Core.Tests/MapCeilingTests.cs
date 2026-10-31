@@ -64,7 +64,7 @@ public sealed class MapCeilingTests
         {
             Assert.True(drawings < 12, $"still a block in view after {drawings} drawings, at {viewport.Zoom}");
 
-            var ceiling = Draw(tree, ExploreView.Treemap, viewport).Ceiling!.Value;
+            var ceiling = Draw(tree, ExploreView.Treemap, viewport).Zoom!.Ceiling;
 
             Assert.True(ceiling > viewport.Zoom, $"the ceiling {ceiling} did not rise above the zoom {viewport.Zoom}");
 
@@ -80,7 +80,7 @@ public sealed class MapCeilingTests
 
         // Every file in view is drawn, the smallest of them too small yet to name: the ceiling goes as
         // far as gives each room for its name, and there it stops.
-        var naming = Draw(tree, ExploreView.Treemap, viewport).Ceiling!.Value;
+        var naming = Draw(tree, ExploreView.Treemap, viewport).Zoom!.Ceiling;
 
         Assert.Contains(tiles, tile => tile.IsNode && OnCanvas(tile) && !tile.HasRoomForALabel(LayoutLimits.Default));
         Assert.True(naming > viewport.Zoom, $"the ceiling {naming} did not rise to give the files in view room for a name");
@@ -90,7 +90,7 @@ public sealed class MapCeilingTests
         Assert.All(
             Layout(tree, named).Where(tile => tile.IsNode && OnCanvas(tile)),
             tile => Assert.True(tile.HasRoomForALabel(LayoutLimits.Default), $"{tile} has no room for a name"));
-        Assert.Equal(named.Zoom, Draw(tree, ExploreView.Treemap, named).Ceiling!.Value, named.Zoom * 1e-9);
+        Assert.Equal(named.Zoom, Draw(tree, ExploreView.Treemap, named).Zoom!.Ceiling, named.Zoom * 1e-9);
     }
 
     /// <summary>
@@ -109,7 +109,7 @@ public sealed class MapCeilingTests
         Assert.NotEmpty(blocks);
         Assert.DoesNotContain(tiles, tile => tile.Block == MapBlock.Aggregate && OnCanvas(tile));
 
-        var ceiling = Draw(tree, ExploreView.Treemap, viewport).Ceiling!.Value;
+        var ceiling = Draw(tree, ExploreView.Treemap, viewport).Zoom!.Ceiling;
 
         Assert.True(ceiling > viewport.Zoom, $"the ceiling {ceiling} did not rise above the zoom on screen");
 
@@ -126,8 +126,8 @@ public sealed class MapCeilingTests
         var deep = MapViewport.Anchored(100, 0.3, 0.3, 0.5, 0.5, 1000);
 
         Assert.DoesNotContain(Layout(tree, deep), tile => tile.Block == MapBlock.Aggregate);
-        Assert.Equal(100, Draw(tree, ExploreView.Treemap, deep).Ceiling!.Value, 9);
-        Assert.Equal(MapCeiling.Least, Draw(tree, ExploreView.Treemap, MapViewport.Whole).Ceiling);
+        Assert.Equal(100, Draw(tree, ExploreView.Treemap, deep).Zoom!.Ceiling, 9);
+        Assert.Equal(MapCeiling.Least, Draw(tree, ExploreView.Treemap, MapViewport.Whole).Zoom?.Ceiling);
     }
 
     /// <summary>Detail the drawing left undrawn off the screen is not in view, and does not lift the ceiling.</summary>
@@ -142,7 +142,7 @@ public sealed class MapCeilingTests
         var away = MapViewport.Anchored(100, 1 - x, 1 - y, 0.5, 0.5, 1000);
 
         Assert.DoesNotContain(Layout(tree, away), tile => tile.Block == MapBlock.Aggregate && OnCanvas(tile));
-        Assert.Equal(100, Draw(tree, ExploreView.Treemap, away).Ceiling!.Value, 9);
+        Assert.Equal(100, Draw(tree, ExploreView.Treemap, away).Zoom!.Ceiling, 9);
     }
 
     /// <summary>
@@ -160,8 +160,8 @@ public sealed class MapCeilingTests
         Assert.Contains(Layout(even, viewport), tile => tile.Block == MapBlock.Aggregate);
         Assert.Contains(Layout(uneven, viewport), tile => tile.Block == MapBlock.Aggregate);
 
-        var evenCeiling = Draw(even, ExploreView.Treemap, viewport).Ceiling!.Value;
-        var unevenCeiling = Draw(uneven, ExploreView.Treemap, viewport).Ceiling!.Value;
+        var evenCeiling = Draw(even, ExploreView.Treemap, viewport).Zoom!.Ceiling;
+        var unevenCeiling = Draw(uneven, ExploreView.Treemap, viewport).Zoom!.Ceiling;
 
         Assert.True(evenCeiling > viewport.Zoom, $"the ceiling {evenCeiling} did not rise above the zoom on screen");
         Assert.True(
@@ -170,21 +170,22 @@ public sealed class MapCeilingTests
     }
 
     /// <summary>
-    /// A drawing says how far the map can zoom exactly where it can be zoomed at all: the map limits
-    /// the zoom of every drawing with a viewport by its ceiling, and has nothing to limit it by without.
+    /// A drawing says where it was drawn and how far the map can zoom exactly where it can be zoomed at
+    /// all, and is shown at where it was drawn there and at the whole picture everywhere else: the map
+    /// places, limits and resolves a click on every drawing by these.
     /// </summary>
     [Theory]
     [InlineData(ExploreView.Treemap, true)]
     [InlineData(ExploreView.Icicle, false)]
     [InlineData(ExploreView.Sunburst, false)]
-    public void ADrawingHasACeilingExactlyWhereItHasAViewport(ExploreView view, bool zooms)
+    public void ADrawingIsShownAtWhereItWasDrawnExactlyWhereItCanBeZoomed(ExploreView view, bool zooms)
     {
         foreach (var viewport in new[] { MapViewport.Whole, MapViewport.Anchored(100, 0.3, 0.3, 0.5, 0.5, 1000) })
         {
             var drawing = Draw(LongTail(), view, viewport);
 
-            Assert.Equal(zooms, drawing.Viewport is not null);
-            Assert.Equal(zooms, drawing.Ceiling is not null);
+            Assert.Equal(zooms, drawing.Zoom is not null);
+            Assert.Equal(zooms ? viewport : MapViewport.Whole, drawing.ShownAt);
         }
     }
 

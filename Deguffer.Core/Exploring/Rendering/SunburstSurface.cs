@@ -19,7 +19,7 @@ public sealed class SunburstSurface : ExploreSurface
         LayoutLimits limits,
         ShapeColours colours,
         MapStyle style)
-        : base(tree, root, width, height, limits, colours, style, viewport: null)
+        : base(tree, root, width, height, limits, colours, style, zoom: null)
     {
         _hits = new SectorHitTest(SunburstLayout.Compute(tree, root, width, height, limits));
 
@@ -38,10 +38,7 @@ public sealed class SunburstSurface : ExploreSurface
 
     public override bool HasVolumeBeside => false;
 
-    /// <summary>Null: a sunburst draws the whole picture and is never zoomed.</summary>
-    public override double? Ceiling => null;
-
-    /// <summary>Null throughout, for the reason <see cref="Ceiling"/> is.</summary>
+    /// <summary>Null throughout: a sunburst draws the whole picture and is never zoomed.</summary>
     public override MapFrame? ScreenOf(int node, MapViewport shown, MapViewport opened) => null;
 
     /// <summary>

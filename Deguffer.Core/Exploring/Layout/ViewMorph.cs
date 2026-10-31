@@ -88,5 +88,5 @@ public static class ViewMorph
 
     private static bool Pictures(ExploreView view) => view is ExploreView.Treemap or ExploreView.Icicle or ExploreView.Sunburst;
 
-    private static bool IsWhole(ExploreSurface drawing) => drawing.Viewport is not { IsWhole: false };
+    private static bool IsWhole(ExploreSurface drawing) => drawing.ShownAt.IsWhole;
 }
