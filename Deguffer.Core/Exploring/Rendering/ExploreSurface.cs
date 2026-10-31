@@ -104,6 +104,12 @@ public abstract class ExploreSurface
     public MapViewport? Viewport { get; }
 
     /// <summary>
+    /// Where this drawing lies on a screen showing <paramref name="shown"/>: at its own
+    /// <see cref="Viewport"/>, or as the whole picture where it cannot be zoomed and shows all of it.
+    /// </summary>
+    public MapPlacement PlacementOn(MapViewport shown) => shown.PlacementOf(Viewport ?? MapViewport.Whole);
+
+    /// <summary>
     /// How far the map can zoom while this drawing is on screen, or null where it cannot be zoomed:
     /// null exactly where <see cref="Viewport"/> is (see <see cref="MapCeiling"/>).
     ///
@@ -127,7 +133,7 @@ public abstract class ExploreSurface
     public ISizedTree Tree { get; }
 
     /// <summary>The node being drawn, which is the whole canvas rather than the tree's own root.</summary>
-    protected int Root { get; }
+    public int Root { get; }
 
     protected LayoutLimits Limits { get; }
 

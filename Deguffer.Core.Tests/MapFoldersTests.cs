@@ -39,8 +39,8 @@ public sealed class MapFoldersTests
     [Fact]
     public void AShapeIsAShareOfItsFolderOrOfTheDrawnFolderAtTheTop()
     {
-        Assert.Equal((Tree.SizeOf(Users), (int?)Users), MapFolders.ShareBasis(Tree, Root, beside: false, Users, []));
-        Assert.Equal((Tree.SizeOf(Root), (int?)Root), MapFolders.ShareBasis(Tree, Root, beside: false, folder: null, []));
+        Assert.Equal((Tree.SizeOf(Users), (int?)Users), MapFolders.ShareBasis(Tree, Root, beside: false, Users, () => []));
+        Assert.Equal((Tree.SizeOf(Root), (int?)Root), MapFolders.ShareBasis(Tree, Root, beside: false, folder: null, () => []));
     }
 
     /// <summary>Beside a volume, the top of the picture is the whole drive, which no node names.</summary>
@@ -53,7 +53,31 @@ public sealed class MapFoldersTests
             MapShape.Of(ExploreTile.FreeSpace, 7_000, MapFrame.Whole),
         ];
 
-        Assert.Equal((Tree.SizeOf(Root) + 7_000, (int?)null), MapFolders.ShareBasis(Tree, Root, beside: true, folder: null, top));
+        Assert.Equal((Tree.SizeOf(Root) + 7_000, (int?)null), MapFolders.ShareBasis(Tree, Root, beside: true, folder: null, () => top));
+    }
+
+    /// <summary>
+    /// The top of the picture is found only for the one share that is of it, because finding it lays the
+    /// picture out, and a screen reader names every shape in a search of the window.
+    /// </summary>
+    [Fact]
+    public void TheTopIsFoundOnlyForAShareOfTheDrive()
+    {
+        var asked = 0;
+        IReadOnlyList<MapShape> Top()
+        {
+            asked++;
+            return [MapShape.Of(Root, Tree.SizeOf(Root), MapFrame.Whole)];
+        }
+
+        MapFolders.ShareBasis(Tree, Root, beside: true, Users, Top);
+        MapFolders.ShareBasis(Tree, Root, beside: false, folder: null, Top);
+
+        Assert.Equal(0, asked);
+
+        MapFolders.ShareBasis(Tree, Root, beside: true, folder: null, Top);
+
+        Assert.Equal(1, asked);
     }
 
     /// <summary>
