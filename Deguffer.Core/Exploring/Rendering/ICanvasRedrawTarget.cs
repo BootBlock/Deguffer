@@ -10,17 +10,18 @@ namespace Deguffer.Core.Exploring.Rendering;
 public interface ICanvasRedrawTarget
 {
     /// <summary>
-    /// <paramref name="redraw"/> is laid out, and its regions are about to land. Nothing of it is on
+    /// <paramref name="redraw"/> is laid out as <paramref name="surface"/>, its
+    /// <see cref="CanvasRedraw.Surface"/>, and its regions are about to land. Nothing of it is on
     /// screen yet, so whatever is there now goes on showing until a region covers it.
     /// </summary>
-    void Begin(CanvasRedraw redraw);
+    void Begin(CanvasRedraw redraw, ExploreSurface surface);
 
     /// <summary>
-    /// Put <paramref name="regions"/> of <paramref name="redraw"/>'s
-    /// <see cref="CanvasRedraw.Pixels"/> on screen. Each is painted in full and is never handed over
+    /// Put <paramref name="regions"/> of <paramref name="pixels"/>, <paramref name="redraw"/>'s
+    /// <see cref="CanvasRedraw.Pixels"/>, on screen. Each is painted in full and is never handed over
     /// twice.
     /// </summary>
-    void Land(CanvasRedraw redraw, IReadOnlyList<CanvasRegion> regions);
+    void Land(CanvasRedraw redraw, byte[] pixels, IReadOnlyList<CanvasRegion> regions);
 
     /// <summary>
     /// Put the whole of <paramref name="redraw"/> on screen, shading <paramref name="quads"/> on
@@ -28,8 +29,11 @@ public interface ICanvasRedrawTarget
     /// </summary>
     void Shade(CanvasRedraw redraw, CushionQuads quads, TileColour ground);
 
-    /// <summary>Every region of <paramref name="redraw"/> is on screen, so its drawing is the picture now.</summary>
-    void Arrive(CanvasRedraw redraw);
+    /// <summary>
+    /// Every region of <paramref name="redraw"/> is on screen, so <paramref name="surface"/>, the drawing
+    /// <see cref="Begin"/> was given, is the picture now.
+    /// </summary>
+    void Arrive(CanvasRedraw redraw, ExploreSurface surface);
 
     /// <summary>
     /// <paramref name="redraw"/> was superseded before it arrived. Whatever of it landed comes off the

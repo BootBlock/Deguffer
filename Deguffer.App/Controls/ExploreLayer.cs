@@ -11,13 +11,13 @@ namespace Deguffer.App.Controls;
 /// <summary>
 /// One drawing of a map in the composition tree: a sprite painted by a surface, the drawing in it or
 /// on its way into it, and where in the whole picture it lies. See <see cref="ExploreLayers"/>, which
-/// decides which drawing goes in which.
+/// decides which drawing goes in which, by the rules of <see cref="KeptDrawings"/>.
 ///
 /// <para>Made once and written through. A new drawing of another size resizes the surface rather than
 /// making another, and a layer nothing is using is emptied rather than thrown away (G5). Only a
 /// replaced device makes it take another surface: see <see cref="Renew"/>.</para>
 /// </summary>
-internal sealed class ExploreLayer
+internal sealed class ExploreLayer : IKeptDrawing
 {
     private readonly Compositor _compositor;
 
@@ -59,36 +59,90 @@ internal sealed class ExploreLayer
     public SizeInt32 Size { get; private set; } = new(1, 1);
 
     /// <summary>The drawing on the surface, once all of it is there, or null.</summary>
-    public ExploreSurface? Drawing { get; set; }
+    public ExploreSurface? Drawing { get; private set; }
 
-    /// <summary>The redraw landing on the surface, while it does, or null.</summary>
-    public CanvasRedraw? Landing { get; set; }
+    /// <summary>Whether a redraw is landing on the surface: between <see cref="Begin"/> and <see cref="Arrive"/>.</summary>
+    public bool IsLanding { get; private set; }
 
-    /// <summary>
-    /// Whether the redraw landing here replaces the drawing on top, and so shows over it while it
-    /// lands, rather than going under it.
-    /// </summary>
-    public bool LandsOnTop { get; set; }
+    /// <inheritdoc/>
+    public bool LandsOnTop { get; private set; }
 
-    /// <summary>The part of the picture the drawing shows, or will once it has landed.</summary>
-    public MapViewport Viewport { get; set; }
+    /// <inheritdoc/>
+    public MapViewport Viewport { get; private set; }
 
     /// <summary>Which picture the drawing is of, on the count <see cref="ExploreLayers"/> keeps.</summary>
-    public int Picture { get; set; }
+    public int Picture { get; private set; }
 
     /// <summary>When it was last shown, on the count <see cref="ExploreLayers"/> keeps.</summary>
-    public long LastShown { get; set; }
+    public long LastShown { get; private set; }
 
-    /// <summary>Whether anything of a drawing is on the surface to be seen.</summary>
-    public bool IsShown => Drawing is not null || Landing is not null;
+    /// <inheritdoc/>
+    public bool HasDrawing => Drawing is not null;
+
+    /// <inheritdoc/>
+    public bool IsShown => HasDrawing || IsLanding;
+
+    /// <inheritdoc/>
+    public int CanvasWidth => Size.Width;
+
+    /// <inheritdoc/>
+    public int CanvasHeight => Size.Height;
 
     /// <summary>
-    /// Get ready for a canvas <paramref name="width"/> by <paramref name="height"/> to land a region
-    /// at a time: nothing of it shows, so whatever is under it shows until each region lands, rather
-    /// than whatever the surface held last.
+    /// Get ready for a canvas <paramref name="width"/> by <paramref name="height"/> of
+    /// <paramref name="viewport"/> of <paramref name="picture"/> to land a region at a time: nothing of
+    /// it shows, so whatever is under it shows until each region lands, rather than whatever the
+    /// surface held last. The sprite shows from now on, at once, or unseen where <paramref name="unseen"/>
+    /// until it is faded in.
     /// </summary>
-    public void Prepare(int width, int height)
+    /// <param name="landsOnTop">Whether the drawing replaces the one on top: see <see cref="LandsOnTop"/>.</param>
+    public void Begin(int width, int height, MapViewport viewport, bool landsOnTop, int picture, bool unseen)
     {
+        Prepare(width, height);
+
+        IsLanding = true;
+        Viewport = viewport;
+        LandsOnTop = landsOnTop;
+        Picture = picture;
+
+        Sprite.StopAnimation(nameof(Visual.Opacity));
+        Sprite.Opacity = unseen ? 0 : 1;
+        Sprite.IsVisible = true;
+    }
+
+    /// <summary>All of <paramref name="drawing"/> has landed, and is shown, as the <paramref name="showing"/>th drawing.</summary>
+    public void Arrive(ExploreSurface drawing, long showing)
+    {
+        IsLanding = false;
+        Drawing = drawing;
+        LastShown = showing;
+    }
+
+    /// <summary>The drawing is shown again, as the <paramref name="showing"/>th.</summary>
+    public void Show(long showing) => LastShown = showing;
+
+    /// <summary>Bring a fade in under way to its end at once.</summary>
+    public void EndFade()
+    {
+        Sprite.StopAnimation(nameof(Visual.Opacity));
+        Sprite.Opacity = 1;
+    }
+
+    /// <summary>
+    /// Stop showing the drawing, or the redraw landing. The surface keeps what it holds until it is
+    /// emptied or taken for the next drawing, which empties it first.
+    /// </summary>
+    public void Withdraw()
+    {
+        Drawing = null;
+        IsLanding = false;
+        Sprite.IsVisible = false;
+    }
+
+    /// <summary>Empty the surface, and size it for a canvas <paramref name="width"/> by <paramref name="height"/>.</summary>
+    private void Prepare(int width, int height)
+    {
+        Drawing = null;
         MapGraphics.Empty(_surface);
         _light.Forget();
 
@@ -148,9 +202,7 @@ internal sealed class ExploreLayer
     /// <summary>Let go of the drawing and of everything on the surface, keeping the layer for the next one.</summary>
     public void Empty()
     {
-        Drawing = null;
-        Landing = null;
-        Sprite.IsVisible = false;
+        Withdraw();
 
         MapGraphics.Empty(_surface);
         _light.Forget();
@@ -163,9 +215,7 @@ internal sealed class ExploreLayer
     /// </summary>
     public void Renew()
     {
-        Drawing = null;
-        Landing = null;
-        Sprite.IsVisible = false;
+        Withdraw();
 
         _surface = _graphics.CreateSurface(Size.Width, Size.Height);
         _brush.Surface = _surface;

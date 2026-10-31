@@ -48,6 +48,11 @@ public sealed class CanvasRedrawTests
 
         Assert.Equal(whole, redraw.Pixels);
         Assert.Same(drawing, redraw.Surface);
+
+        // The target is handed the drawing and the buffer, rather than reading them off the redraw.
+        Assert.Equal([(redraw, RedrawCall.Begin, drawing), (redraw, RedrawCall.Arrive, drawing)], _target.Surfaces);
+        Assert.NotEmpty(_target.Buffers);
+        Assert.All(_target.Buffers, landed => Assert.Same(redraw.Pixels, landed.Pixels));
     }
 
     /// <summary>
@@ -67,6 +72,7 @@ public sealed class CanvasRedrawTests
         Assert.Empty(_target.Landed);
         Assert.Null(redraw.Pixels);
         Assert.Same(drawing, redraw.Surface);
+        Assert.Equal([(redraw, RedrawCall.Begin, drawing), (redraw, RedrawCall.Arrive, drawing)], _target.Surfaces);
 
         var (_, quads, ground) = Assert.Single(_target.Shaded);
 

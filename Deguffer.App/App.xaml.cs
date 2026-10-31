@@ -125,7 +125,7 @@ public partial class App : Application
     public static BusyWork Work { get; } = new();
 
     /// <summary>
-    /// The shell window, for the Win32 interop a folder picker needs — a <see cref="Page"/> has no
+    /// The shell window, for the Win32 interop a folder picker needs — a <see cref="Microsoft.UI.Xaml.Controls.Page"/> has no
     /// route to its own window, and a picker without an owner handle throws rather than opening.
     /// </summary>
     public static Window? MainWindow => _shell;

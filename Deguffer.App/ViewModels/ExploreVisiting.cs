@@ -5,7 +5,7 @@ using Deguffer.Core.Exploring.Layout;
 namespace Deguffer.App.ViewModels;
 
 /// <summary>What the Explore page has on screen, which a step to or from it is measured against.</summary>
-/// <param name="Zooms">Whether a zoom is part of where the reader is. See <see cref="ExploreDisplay.Zooms"/>.</param>
+/// <param name="Zooms">Whether a zoom is part of where the reader is. See <see cref="Deguffer.Core.Exploring.Rendering.ExploreSurface.Zooms"/>.</param>
 public readonly record struct ExploreOnScreen(ExploreTree Tree, ExplorePosition Position, VolumeSpace Volume, bool Zooms);
 
 /// <summary>
