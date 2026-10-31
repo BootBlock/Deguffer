@@ -74,6 +74,21 @@ public sealed class MapStretch
     }
 
     /// <summary>
+    /// The hand moved by (<paramref name="x"/>, <paramref name="y"/>) pixels of the screen, with the
+    /// zoom held to <paramref name="ceiling"/>. Says what the tracker is asked for, how far the camera
+    /// stretches past it, and what the screen shows. A move of nothing says where the drag has the
+    /// picture now, for a drag asked again after it was <see cref="Remeasure">remeasured</see>.
+    /// </summary>
+    public MapPull Move(double x, double y, double ceiling)
+    {
+        var tracking = Pull(x, y);
+        var held = tracking.Held(_width, _height, ceiling);
+        var shown = tracking.Shown(_width, _height, _elastic, ceiling);
+
+        return new MapPull(held, held.X - tracking.X, held.Y - tracking.Y, shown, shown.Held(ceiling));
+    }
+
+    /// <summary>
     /// Measure the drag from <paramref name="origin"/> from now on, for a tracker that turned out to
     /// be measured from it: where the hand has the picture stays where it is.
     /// </summary>

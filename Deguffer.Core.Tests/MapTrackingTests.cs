@@ -254,6 +254,21 @@ public sealed class MapTrackingTests
     }
 
     /// <summary>
+    /// For a reader with animation effects off the screen shows the tracker held to the ceiling, so a
+    /// new ceiling moves it wherever the tracker is past either one, and nowhere else. With them on
+    /// the screen shows the tracker as it is, and a ceiling never moves it.
+    /// </summary>
+    [Theory]
+    [InlineData(50, 64, 128, false, false)]
+    [InlineData(100, 64, 128, false, true)]
+    [InlineData(200, 64, 128, false, true)]
+    [InlineData(200, 128, 64, false, true)]
+    [InlineData(200, 64, 128, true, false)]
+    [InlineData(200, 64, 64, false, false)]
+    public void ANewCeilingMovesTheScreenOnlyWhereItHoldsTheTrackerDifferently(double scale, double before, double after, bool elastic, bool expected) =>
+        Assert.Equal(expected, new MapTracking(0, 0, scale, default).MovesWithCeiling(before, after, elastic));
+
+    /// <summary>
     /// The tracker's own rule for a scale about a point, as it documents it: the point stays where it
     /// is on the screen, so the position grows with the scale about it.
     /// </summary>
