@@ -6,7 +6,7 @@ namespace Deguffer.App.Shell;
 /// The one door every <see cref="ContentDialog"/> in this app opens through.
 ///
 /// WinUI permits one dialog at a time and throws a <c>COMException</c> out of
-/// <see cref="ContentDialog.ShowAsync"/> when a second one asks. Every call site is an
+/// <see cref="ContentDialog.ShowAsync()"/> when a second one asks. Every call site is an
 /// <c>async void</c> handler or an awaited command, so that throw is nobody's to catch: it reaches
 /// <c>Application.UnhandledException</c> and ends the process with no window and no message. A
 /// guard on the one handler that was seen to do it would leave the other three, because the rule
@@ -28,7 +28,7 @@ internal static class ModalDialog
 {
     /// <summary>
     /// Whether a dialog is on screen. A plain field with no lock because
-    /// <see cref="ContentDialog.ShowAsync"/> is UI-thread-only in the first place, so every reader
+    /// <see cref="ContentDialog.ShowAsync()"/> is UI-thread-only in the first place, so every reader
     /// and writer is the one thread.
     /// </summary>
     private static bool _showing;

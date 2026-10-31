@@ -29,6 +29,18 @@
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
         <!--
+            Generated so the compiler checks every doc comment: one left on the wrong member, or
+            naming a parameter that is not there, or a cref that resolves to nothing or to more than
+            one overload, fails the build. Not every member is documented, and a parameter is often
+            described in the summary rather than a param tag, so a missing comment (CS1591) and a
+            missing param tag (CS1573) are not warnings. The file stays in obj and is not shipped.
+        -->
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
+        <CopyDocumentationFileToOutputDirectory>false</CopyDocumentationFileToOutputDirectory>
+        <PublishDocumentationFile>false</PublishDocumentationFile>
+
+        <!--
             Build and publish output land flat in the repo-root !Distribution folder: the exe is
             !Distribution\Deguffer.App.exe, not buried under platform/configuration/framework/RID.
             OutputPath is set outright rather than BaseOutputPath, and the framework and RID

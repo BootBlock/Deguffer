@@ -21,11 +21,22 @@ internal sealed class RedrawRecorder : ICanvasRedrawTarget
 
     public List<(CanvasRedraw Redraw, CushionQuads Quads, TileColour Ground)> Shaded { get; } = [];
 
-    public void Begin(CanvasRedraw redraw) => Calls.Add((redraw, RedrawCall.Begin));
+    /// <summary>The drawing each call to begin or to arrive was given.</summary>
+    public List<(CanvasRedraw Redraw, RedrawCall Call, ExploreSurface Surface)> Surfaces { get; } = [];
 
-    public void Land(CanvasRedraw redraw, IReadOnlyList<CanvasRegion> regions)
+    /// <summary>The buffer each hand-over was given.</summary>
+    public List<(CanvasRedraw Redraw, byte[] Pixels)> Buffers { get; } = [];
+
+    public void Begin(CanvasRedraw redraw, ExploreSurface surface)
+    {
+        Calls.Add((redraw, RedrawCall.Begin));
+        Surfaces.Add((redraw, RedrawCall.Begin, surface));
+    }
+
+    public void Land(CanvasRedraw redraw, byte[] pixels, IReadOnlyList<CanvasRegion> regions)
     {
         Calls.Add((redraw, RedrawCall.Land));
+        Buffers.Add((redraw, pixels));
         Landed.AddRange(regions.Select(region => (redraw, region)));
     }
 
@@ -35,7 +46,11 @@ internal sealed class RedrawRecorder : ICanvasRedrawTarget
         Shaded.Add((redraw, quads, ground));
     }
 
-    public void Arrive(CanvasRedraw redraw) => Calls.Add((redraw, RedrawCall.Arrive));
+    public void Arrive(CanvasRedraw redraw, ExploreSurface surface)
+    {
+        Calls.Add((redraw, RedrawCall.Arrive));
+        Surfaces.Add((redraw, RedrawCall.Arrive, surface));
+    }
 
     public void Withdraw(CanvasRedraw redraw) => Calls.Add((redraw, RedrawCall.Withdraw));
 
