@@ -16,6 +16,9 @@ public sealed class FolderFlightTests
 
     private static readonly MapViewport Zoomed = MapViewport.Anchored(4, 0.3, 0.6, 0.5, 0.5, MapCeiling.Least);
 
+    /// <summary>The zoom the folder asked for opens at: not the zoom the folder left was at, so the two cannot be mistaken.</summary>
+    private static readonly MapViewport Opened = MapViewport.Anchored(2, 0.7, 0.2, 0.5, 0.5, MapCeiling.Least);
+
     private static readonly MapPicture Asked = new(null, 5, ExploreView.Treemap, Volume);
 
     private static readonly FolderLeft Left = new(new MapPicture(null, 3, ExploreView.Treemap, Volume), Zoomed, null, null);
@@ -87,7 +90,7 @@ public sealed class FolderFlightTests
 
         Assert.True(flight.AwaitsOuter);
         Assert.True(flight.Outward);
-        Assert.Equal(new FolderPassed(Meeting, Zoomed), flight.Passing);
+        Assert.Equal(new FolderPassed(Meeting, Opened), flight.Passing);
         Assert.Equal(Asked with { Node = Meeting, Volume = VolumeSpace.None }, flight.Drawn(Asked));
 
         var flying = flight.OuterDrawn(leftDrawn: false);
@@ -196,5 +199,5 @@ public sealed class FolderFlightTests
     }
 
     private static FolderFlight Begin(FolderStep way) =>
-        FolderFlight.Begin(new PictureStep(way, way == FolderStep.Through ? Meeting : null), Left, Zoomed);
+        FolderFlight.Begin(new PictureStep(way, way == FolderStep.Through ? Meeting : null), Left, Opened);
 }
