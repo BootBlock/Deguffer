@@ -114,7 +114,10 @@ public static partial class SymbolStoreLayout
         && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp)
         && MicrosoftHosts.Contains(uri.Host);
 
-    /// <summary>WinDbg's own store, observed on current WinDbg and named by Microsoft's field engineers.</summary>
+    /// <summary>
+    /// WinDbg's own store. Observed on current WinDbg, and named in a 2014 Microsoft field engineer's post,
+    /// "Debugging with symbols: a field perspective". No current Microsoft page names it.
+    /// </summary>
     public static string WinDbgStore(string programData) => Path.Combine(programData, "Dbg", DefaultStoreName);
 
     /// <summary>Visual Studio's store where its setting names none, observed on Visual Studio 2026.</summary>

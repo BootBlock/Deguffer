@@ -870,8 +870,8 @@ It finds the stores where the debuggers are told to keep them:
 - WinDbg's own store, `%PROGRAMDATA%\Dbg\sym`;
 - Visual Studio's "Cache symbols in this directory", read from `debugging.symbols.location.cachePath`
   in each Visual Studio 2026 instance's `settings.json`, and its default folder in the temporary
-  folder. Visual Studio 2022 keeps the setting in a private registry file, so only its default folder
-  is looked in.
+  folder. An older Visual Studio has no `settings.json`, and nothing documents where it keeps the
+  setting, so only its default folder is looked in, and the plan says so.
 
 A folder is left alone, with a note, where it is not a full path, is on a network share that other
 computers' debuggers may be reading, is a folder Deguffer never treats as one tool's own (a drive
@@ -933,7 +933,8 @@ Sources:
 - Microsoft, Visual Studio symbol settings:
   <https://learn.microsoft.com/en-us/visualstudio/debugger/specify-symbol-dot-pdb-and-source-files-in-the-visual-studio-debugger>
 - WinDbg's `%PROGRAMDATA%\Dbg\sym` and Visual Studio 2026's `settings.json` key are observed, not
-  documented.
+  documented. The WinDbg store is also named in a 2014 Microsoft field engineer's post:
+  <https://learn.microsoft.com/en-us/archive/blogs/robertsmith/debugging-with-symbols-a-field-perspective>
 
 ---
 

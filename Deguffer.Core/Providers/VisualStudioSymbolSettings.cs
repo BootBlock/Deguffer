@@ -6,15 +6,20 @@ namespace Deguffer.Core.Providers;
 
 /// <summary>The symbol cache one Visual Studio instance's settings name.</summary>
 /// <param name="SettingsFile">The settings file, for a note that names where the value came from.</param>
-/// <param name="Folder">What the setting holds, or null where it names nothing.</param>
-public sealed record VisualStudioSymbolCacheSetting(string SettingsFile, string? Folder);
+/// <param name="Folder">What the setting holds.</param>
+public sealed record VisualStudioSymbolCacheSetting(string SettingsFile, string Folder);
 
 /// <summary>Every Visual Studio instance's symbol cache setting this user's profile holds.</summary>
-/// <param name="Settings">One for each instance whose settings file was read.</param>
+/// <param name="Settings">One for each instance whose settings file names a folder.</param>
 /// <param name="Unread">Each settings file that is there and could not be read as JSON.</param>
+/// <param name="WithoutSettingsFile">
+/// Each instance folder with no settings file, as an older Visual Studio's is, whose setting Deguffer
+/// cannot read.
+/// </param>
 public sealed record VisualStudioSymbolSettingsReading(
     IReadOnlyList<VisualStudioSymbolCacheSetting> Settings,
-    IReadOnlyList<string> Unread);
+    IReadOnlyList<string> Unread,
+    IReadOnlyList<string> WithoutSettingsFile);
 
 /// <summary>
 /// Reads "Cache symbols in this directory" from each Visual Studio instance's settings.
@@ -25,9 +30,9 @@ public sealed record VisualStudioSymbolSettingsReading(
 /// option and its automation property. The file opens with a comment, so it is read as JSON with
 /// comments.</para>
 ///
-/// <para><b>Visual Studio 2022 keeps its settings in a private registry hive</b> that nothing documents,
-/// so its setting is not read. Its default folder is the one Visual Studio 2026 uses, and the plan says
-/// that a moved cache of an older Visual Studio is not looked for.</para>
+/// <para><b>An older Visual Studio has no <c>settings.json</c></b>, and nothing documents where it keeps
+/// the setting, so it is not read. Each such instance is reported, so the plan can say that a cache moved
+/// in its options is not looked for.</para>
 /// </summary>
 public static partial class VisualStudioSymbolSettings
 {
@@ -58,18 +63,21 @@ public static partial class VisualStudioSymbolSettings
 
         if (LongPath.ProbeDirectory(root) is not PathPresence.Present)
         {
-            return new VisualStudioSymbolSettingsReading([], []);
+            return new VisualStudioSymbolSettingsReading([], [], []);
         }
 
         List<VisualStudioSymbolCacheSetting> settings = [];
         List<string> unread = [];
+        List<string> withoutFile = [];
 
         foreach (var instance in ChildDirectories.Under(root).Directories.Where(folder => InstanceFolder().IsMatch(folder.Name)))
         {
-            var file = Path.Combine(LongPath.Display(instance.FullName), SettingsFileName);
+            var folder = LongPath.Display(instance.FullName);
+            var file = Path.Combine(folder, SettingsFileName);
 
             if (LongPath.ProbeEntry(file) is PathPresence.Absent)
             {
+                withoutFile.Add(folder);
                 continue;
             }
 
@@ -81,11 +89,12 @@ public static partial class VisualStudioSymbolSettings
                 continue;
             }
 
-            settings.Add(new VisualStudioSymbolCacheSetting(
-                file,
-                BoundedJsonFile.StringProperty(document.RootElement, CachePathKey) is { Length: > 0 } folder ? folder : null));
+            if (BoundedJsonFile.StringProperty(document.RootElement, CachePathKey) is { Length: > 0 } cache)
+            {
+                settings.Add(new VisualStudioSymbolCacheSetting(file, cache));
+            }
         }
 
-        return new VisualStudioSymbolSettingsReading(settings, unread);
+        return new VisualStudioSymbolSettingsReading(settings, unread, withoutFile);
     }
 }

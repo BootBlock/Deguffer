@@ -127,7 +127,8 @@ public sealed class DebuggerSymbolCacheProviderTests : IDisposable
         var image = Entry(Store, "Acx01000.sys", ImageIndex);
         var compressed = Entry(Store, "wow64.dll", ImageIndex, "wow64.dl_");
         var pointer = Entry(Store, "combase.pdb", file: SymbolStoreLayout.PointerFile);
-        var noExtension = WriteFile(Path.Combine(Store, "notes", "todo.txt"));
+        var noExtension = WriteFile(Path.Combine(Store, "notes", PdbIndex, "notes"));
+        var notes = Path.Combine(Store, "notes");
         var notAnIndex = Entry(Store, "mine.pdb", index: "latest");
         var strangerInIndex = Entry(Store, "user32.pdb");
         var stranger = WriteFile(Path.Combine(strangerInIndex, PdbIndex, "readme.txt"));
@@ -144,11 +145,11 @@ public sealed class DebuggerSymbolCacheProviderTests : IDisposable
             new[] { pdb, image, compressed, pointer }.Order(StringComparer.OrdinalIgnoreCase),
             plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
 
-        AssertProtected(plan, Store, ping, Path.GetDirectoryName(noExtension)!, notAnIndex, strangerInIndex, atRoot);
+        AssertProtected(plan, Store, ping, notes, notAnIndex, strangerInIndex, atRoot);
 
         var policy = Explore(await microsoft.DiscoverToolRootsAsync());
 
-        foreach (var survivor in new[] { Store, ping, Path.GetDirectoryName(noExtension)!, notAnIndex, strangerInIndex, atRoot })
+        foreach (var survivor in new[] { Store, ping, notes, notAnIndex, strangerInIndex, atRoot })
         {
             Assert.False(policy.MayRemove(survivor).IsAllowed, $"Explore would remove '{survivor}'");
         }
@@ -344,6 +345,23 @@ public sealed class DebuggerSymbolCacheProviderTests : IDisposable
         Assert.Equal([entry], (await other.PlanAsync()).TargetedPaths);
     }
 
+    /// <summary>
+    /// An older Visual Studio keeps no <c>settings.json</c>, so its setting cannot be read, and the plan
+    /// says that only the default folder was looked in rather than staying silent.
+    /// </summary>
+    [Fact]
+    public async Task SaysAnOlderVisualStudiosMovedCacheIsNotLookedFor()
+    {
+        var instance = Path.Combine(VisualStudioSymbolSettings.InstancesRoot(_environment.LocalAppData), "17.0_5e6f7a8b");
+        Directory.CreateDirectory(instance);
+        Entry(VisualStudioStore, "ntdll.pdb");
+
+        var (_, other) = CreateRows();
+        var plan = await other.PlanAsync();
+
+        Assert.Contains(plan.Notes, note => note.Message.Contains(instance, StringComparison.OrdinalIgnoreCase));
+    }
+
     /// <summary>A settings file that is not JSON is said out loud rather than read as naming nothing.</summary>
     [Fact]
     public async Task SaysWhereVisualStudiosSettingsCouldNotBeRead()
@@ -431,8 +449,13 @@ public sealed class DebuggerSymbolCacheProviderTests : IDisposable
         Assert.Contains((await microsoft.PlanAsync()).Notes, note => note.Message.Contains(Store, StringComparison.OrdinalIgnoreCase));
 
         // The near store is a copy of somebody's own folder, so it is the other row's.
-        Assert.Equal([copy], (await other.PlanAsync()).TargetedPaths);
-        Assert.True(Directory.Exists(mine));
+        var plan = await other.PlanAsync();
+        Assert.Equal([copy], plan.TargetedPaths);
+
+        var result = await other.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(mine), "a store the symbol path reads as its own lost an entry");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
     /// <summary>A store named by a relative path, or on a network share, is left alone and said so.</summary>

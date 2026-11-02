@@ -120,9 +120,14 @@ public sealed class SymbolStoreDiscovery
             $"Deguffer could not read Visual Studio's settings at '{file}', so a symbol cache only they name was neither "
             + "cleared nor ruled out."))));
 
-        foreach (var setting in visualStudio.Settings.Where(setting => setting.Folder is not null))
+        notes.AddRange(visualStudio.WithoutSettingsFile.Select(instance => (SymbolStoreFeed.Other, new PlanNote(
+            PlanNoteSeverity.Information,
+            $"The Visual Studio in '{instance}' keeps its symbol cache setting where Deguffer cannot read it, so only "
+            + "Visual Studio's default folder was looked in. A cache moved in its options is not found."))));
+
+        foreach (var setting in visualStudio.Settings)
         {
-            Name(setting.Folder!, SymbolStoreFeed.Other, SymbolStoreLayout.VisualStudioProcessNames, $"Visual Studio's settings in '{setting.SettingsFile}'");
+            Name(setting.Folder, SymbolStoreFeed.Other, SymbolStoreLayout.VisualStudioProcessNames, $"Visual Studio's settings in '{setting.SettingsFile}'");
         }
 
         Found(SymbolStoreLayout.VisualStudioDefaultStore(_environment.TempPath), SymbolStoreLayout.VisualStudioProcessNames, "Visual Studio");
