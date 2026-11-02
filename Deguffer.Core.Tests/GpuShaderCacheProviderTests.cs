@@ -752,7 +752,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The driver writes its OpenGL and Vulkan cache inside a container as it does outside one, so a
+    /// The driver writes its <c>GLCache</c> inside a container as it does outside one, so a
     /// container holding only <c>GLCache</c> is found, its cache is planned, and the container, the
     /// NVIDIA folder and an unrecognised sibling survive.
     /// </summary>

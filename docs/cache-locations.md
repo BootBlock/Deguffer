@@ -1647,9 +1647,10 @@ measured on, that was the only Intel shader cache: `%LOCALAPPDATA%\Intel` held n
 
 **NVIDIA's cache also appears inside each packaged app.** Windows runs a Store or packaged app in a
 container, and gives it `%LOCALAPPDATA%\Packages\<package>\AC` in place of your local application
-data. The driver rendering for that app writes `AC\NVIDIA\DXCache` there, so there is one more
-cache for each packaged app that has drawn anything. They are small on most machines, about 7 MB
-across 19 apps on the one measured, but a packaged game is where one would be large.
+data. The driver rendering for that app writes `AC\NVIDIA\DXCache` there, and `AC\NVIDIA\GLCache`
+for an app that draws through OpenGL, so there is more cache for each packaged app that has drawn
+anything. The `DXCache` folders are small on most machines, about 7 MB across 19 apps on the one
+measured, but a packaged game is where one would be large.
 
 ### What Deguffer does
 
