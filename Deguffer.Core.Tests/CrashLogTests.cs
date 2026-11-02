@@ -199,6 +199,10 @@ public class CrashLogTests
 
         public IReadOnlyList<string> ReadCurrentUserRegistrySubKeyNames(string keyPath) => [];
 
+        public IReadOnlyList<string> ReadCurrentUserRegistryValueNames(string keyPath) => [];
+
+        public byte[]? ReadCurrentUserRegistryBytes(string keyPath, string valueName) => null;
+
         public string? ReadLocalMachineRegistryValue(string keyPath, string valueName, Microsoft.Win32.RegistryView view) => null;
 
         public IReadOnlyList<string> ReadLocalMachineRegistrySubKeyNames(string keyPath, Microsoft.Win32.RegistryView view) => [];

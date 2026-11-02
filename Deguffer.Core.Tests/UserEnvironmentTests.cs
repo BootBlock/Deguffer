@@ -326,4 +326,45 @@ public sealed class UserEnvironmentTests : IDisposable
         Assert.Null(UserEnvironment.Current.ReadCurrentUserRegistryNumber(scratch.Path, "Missing"));
         Assert.Null(UserEnvironment.Current.ReadCurrentUserRegistryValue(scratch.Path, "Flags"));
     }
+
+    /// <summary>
+    /// That the value-name read lists the values directly under a key and not its subkeys, and answers
+    /// nothing for a key that is not there. Written for the reason
+    /// <see cref="TheRegistryReadTellsTheTwoValueKindsApart"/> gives.
+    /// </summary>
+    [Fact]
+    public void TheValueNameReadNamesValuesAndNotKeys()
+    {
+        using var scratch = new ScratchKey();
+
+        scratch.Key.SetValue("GICacheFolder_h3275139823", new byte[] { 0x44, 0 }, RegistryValueKind.Binary);
+        scratch.Key.SetValue("GICacheEnableCustomPath_h2093405155", 1, RegistryValueKind.DWord);
+        scratch.Key.CreateSubKey("A key, not a value").Dispose();
+
+        Assert.Equal(
+            ["GICacheEnableCustomPath_h2093405155", "GICacheFolder_h3275139823"],
+            UserEnvironment.Current.ReadCurrentUserRegistryValueNames(scratch.Path).Order(StringComparer.Ordinal));
+        Assert.Empty(UserEnvironment.Current.ReadCurrentUserRegistryValueNames(scratch.Path + @"\Missing"));
+    }
+
+    /// <summary>
+    /// That the bytes read answers for a <c>REG_BINARY</c> and for nothing else, so Unity's text
+    /// preferences are read as bytes and a string or a number is not. Written for the reason
+    /// <see cref="TheRegistryReadTellsTheTwoValueKindsApart"/> gives.
+    /// </summary>
+    [Fact]
+    public void TheBytesReadAnswersOnlyForABinaryValue()
+    {
+        using var scratch = new ScratchKey();
+
+        scratch.Key.SetValue("Bytes", new byte[] { 0x44, 0x3A, 0 }, RegistryValueKind.Binary);
+        scratch.Key.SetValue("Text", "D:", RegistryValueKind.String);
+        scratch.Key.SetValue("Number", 1, RegistryValueKind.DWord);
+
+        Assert.Equal([0x44, 0x3A, 0], UserEnvironment.Current.ReadCurrentUserRegistryBytes(scratch.Path, "Bytes"));
+        Assert.Null(UserEnvironment.Current.ReadCurrentUserRegistryBytes(scratch.Path, "Text"));
+        Assert.Null(UserEnvironment.Current.ReadCurrentUserRegistryBytes(scratch.Path, "Number"));
+        Assert.Null(UserEnvironment.Current.ReadCurrentUserRegistryBytes(scratch.Path, "Missing"));
+        Assert.Null(UserEnvironment.Current.ReadCurrentUserRegistryValue(scratch.Path, "Bytes"));
+    }
 }
