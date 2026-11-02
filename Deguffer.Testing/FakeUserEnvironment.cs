@@ -14,8 +14,8 @@ public sealed class FakeUserEnvironment : IUserEnvironment
     private readonly Dictionary<string, string> _executables = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _variables = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _toolVariables = new(StringComparer.OrdinalIgnoreCase);
-    // Holds a string or an int, as the registry holds REG_SZ and REG_DWORD, so a read of the wrong
-    // type is told nothing, as it would be on a real machine.
+    // Holds a string, an int or bytes, as the registry holds REG_SZ, REG_DWORD and REG_BINARY, so a
+    // read of the wrong type is told nothing, as it would be on a real machine.
     private readonly Dictionary<string, object> _registry = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _machineRegistry = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _movedPersonalFolders = [];
@@ -199,6 +199,13 @@ public sealed class FakeUserEnvironment : IUserEnvironment
         return this;
     }
 
+    /// <summary>Pretend the <c>REG_BINARY</c> <paramref name="valueName"/> is recorded under <paramref name="keyPath"/>.</summary>
+    public FakeUserEnvironment WithRegistryBytes(string keyPath, string valueName, byte[] value)
+    {
+        _registry[keyPath + "\\" + valueName] = value;
+        return this;
+    }
+
     /// <summary>
     /// Pretend <paramref name="valueName"/> is recorded under <paramref name="keyPath"/> in the machine
     /// hive's <paramref name="view"/>. Keyed by the view, so a provider that asks the wrong one is
@@ -249,6 +256,32 @@ public sealed class FakeUserEnvironment : IUserEnvironment
                 .Select(segments => segments[0])
                 .Distinct(StringComparer.OrdinalIgnoreCase),
         ];
+    }
+
+    /// <summary>
+    /// Every value recorded directly under <paramref name="keyPath"/>. One recorded under a key below
+    /// it is that key's, so it names nothing here.
+    /// </summary>
+    public IReadOnlyList<string> ReadCurrentUserRegistryValueNames(string keyPath)
+    {
+        RegistryReads++;
+
+        var prefix = keyPath + "\\";
+
+        return
+        [
+            .. _registry.Keys
+                .Where(entry => entry.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                .Select(entry => entry[prefix.Length..])
+                .Where(name => !name.Contains('\\', StringComparison.Ordinal)),
+        ];
+    }
+
+    public byte[]? ReadCurrentUserRegistryBytes(string keyPath, string valueName)
+    {
+        RegistryReads++;
+
+        return _registry.TryGetValue(keyPath + "\\" + valueName, out var value) ? value as byte[] : null;
     }
 
     public string? ReadLocalMachineRegistryValue(string keyPath, string valueName, RegistryView view)

@@ -53,7 +53,7 @@ public sealed class CleanupPlanner
     /// temporary folders, the GPU shader caches, the Chromium application caches and the offline storage sites keep beside them, the Firefox
     /// profile caches, the Epic Games launcher's store cache and its own logs, the Battle.net
     /// launcher's cache and its logs, the Steam client's
-    /// HTTP cache and the shader caches it downloads per game, the Unreal Engine derived data cache every project shares, the Spotify desktop app's streaming cache, the transcoder leftovers of Plex, Jellyfin and Emby, Affinity's machine-learning models, Capture One's previews, DaVinci Resolve's render cache, the media cache Adobe's video and audio applications share, the Squirrel updater's staging and the builds it superseded, the Dart analysis
+    /// HTTP cache and the shader caches it downloads per game, the Unreal Engine derived data cache every project shares, the Unity Editor's shared GI cache, the Spotify desktop app's streaming cache, the transcoder leftovers of Plex, Jellyfin and Emby, Affinity's machine-learning models, Capture One's previews, DaVinci Resolve's render cache, the media cache Adobe's video and audio applications share, the Squirrel updater's staging and the builds it superseded, the Dart analysis
     /// server's byte store, Roslyn's solution indexes, the Azure Functions Core Tools releases Visual Studio downloads, the driver packages graphics driver installers leave behind, what
     /// Claude Code's sessions leave behind, its conversations, its rewind snapshots and the logs of the MCP servers it runs, the
     /// caches, installer downloads and logs named tools leave in the temporary folders, the
@@ -64,7 +64,7 @@ public sealed class CleanupPlanner
     /// <c>docs/cache-locations.md</c>.
     ///
     /// Tier 1 throughout except Unity, Unreal's per-project intermediate files and derived data, Cargo's per-project target, node_modules, Python virtual
-    /// environments, conda, Maven, vcpkg, Steam's shader caches, the shared Unreal Engine derived data cache, Affinity's models, Capture One's previews, DaVinci Resolve's render cache, PlatformIO, Playwright, Puppeteer, the Azure Functions Core Tools
+    /// environments, conda, Maven, vcpkg, Steam's shader caches, the shared Unreal Engine derived data cache, Unity's GI cache, Affinity's models, Capture One's previews, DaVinci Resolve's render cache, PlatformIO, Playwright, Puppeteer, the Azure Functions Core Tools
     /// releases, the graphics driver installer files, the installer downloads in the temporary folders, the superseded Squirrel builds, the local copies of cloud files and the component store's cleanup, which are Tier 2, and the
     /// Recycle Bins, the component store's reset, the File History target, the crash dumps, the servicing logs, the Epic
     /// launcher's logs, the VS Code logs, the tool logs in the temporary folders, and Claude Code's conversations, rewind snapshots and MCP server logs, which are Tier 3. Neither tier is ever
@@ -186,6 +186,7 @@ public sealed class CleanupPlanner
         IDirectoryScanner scanner) =>
     [
         new DotNetObjProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+        new VisualStudioSolutionCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
         new UnityLibraryProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
         new UnrealIntermediateProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
         new UnrealProjectDerivedDataProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
@@ -287,6 +288,7 @@ public sealed class CleanupPlanner
             new RetroArchDownloadProvider(environment, discovery: retroArch, scanner: scanner),
             new RetroArchThumbnailProvider(environment, discovery: retroArch, scanner: scanner),
             new UnrealDerivedDataCacheProvider(environment, scanner: scanner),
+            new UnityGiCacheProvider(environment, scanner: scanner),
             new SpotifyCacheProvider(environment, scanner: scanner),
             new PlexTranscodeProvider(environment, scanner: scanner),
             new JellyfinTranscodeProvider(environment, scanner: scanner),

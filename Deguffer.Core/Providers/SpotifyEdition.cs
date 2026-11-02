@@ -73,7 +73,7 @@ public sealed record SpotifyEdition(
     public static IReadOnlyList<SpotifyEdition> In(IUserEnvironment environment)
     {
         var local = Path.Combine(environment.LocalAppData, "Spotify");
-        var package = Path.Combine(environment.LocalAppData, "Packages", StorePackageFamily);
+        var package = Path.Combine(environment.LocalAppData, PackageContainers.PackagesFolderName, StorePackageFamily);
         var state = Path.Combine(package, "LocalState", "Spotify");
 
         return

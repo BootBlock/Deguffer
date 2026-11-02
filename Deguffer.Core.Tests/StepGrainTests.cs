@@ -67,6 +67,7 @@ public class StepGrainTests
             "unity-library",
             "unreal-intermediate",
             "unreal-project-ddc",
+            "visual-studio-solution-cache",
             "vscode-cpptools",
             "vscode-extension-browsers",
         ];

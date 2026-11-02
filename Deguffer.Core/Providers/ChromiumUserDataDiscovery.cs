@@ -101,9 +101,6 @@ public sealed partial class ChromiumUserDataDiscovery(
     /// </summary>
     public const string WebView2ProcessName = "msedgewebview2";
 
-    /// <summary>The folder of <c>%LOCALAPPDATA%</c> that holds each packaged application's data.</summary>
-    public const string PackagesFolderName = "Packages";
-
     /// <summary>
     /// A WebView2 profile directory: the prefix the runtime writes, then a profile name in the
     /// characters and length Microsoft documents for one. Anything else is not looked inside.
@@ -208,7 +205,7 @@ public sealed partial class ChromiumUserDataDiscovery(
         {
             // Windows keeps every packaged application's data in one folder of the local root.
             var packages = root.Equals(environment.LocalAppData, StringComparison.OrdinalIgnoreCase)
-                ? Path.Combine(root, PackagesFolderName)
+                ? Path.Combine(root, PackageContainers.PackagesFolderName)
                 : null;
 
             var walk = reach switch

@@ -38,7 +38,7 @@ largest files inside it:
 
 Besides Settings and About, Deguffer has six pages:
 
-- [Storage](#storage) checks 102 sources of waste, from package-manager and browser caches to
+- [Storage](#storage) checks 105 sources of waste, from package-manager and browser caches to
   `Windows.old` and old restore points, and puts each one in a [safety tier](#safety-tiers). You
   choose what goes, and when the clean has finished Deguffer checks that everything it said it would
   leave alone is still there.
@@ -121,10 +121,11 @@ remove one by any route.
 
 ## Storage
 
-Each of the 102 sources has its own provider, which knows what that location is and what sits next
+Each of the 105 sources has its own provider, which knows what that location is and what sits next
 to it. Rows for tools you do not have are hidden unless you ask the Storage page to show them. Build
-output and project caches, such as `node_modules`, `obj`, Rust's `target` and Python's `.tox` and
-`.pytest_cache` folders, are only looked for inside the source folders you add in Settings.
+output and project caches, such as `node_modules`, `obj`, Rust's `target`, Python's `.tox` and
+`.pytest_cache` folders, and the caches in Visual Studio's `.vs` folders, are only looked for
+inside the source folders you add in Settings.
 [What Deguffer cleans, and what it costs you](docs/cache-locations.md) describes most of these
 sources in more detail.
 
@@ -162,6 +163,7 @@ you would lose by deleting it. By default, only Tier 1 rows start out selected:
 | mypy caches | `.mypy_cache` folders under your own source folders, only where mypy's own cache tag is inside and a mypy settings file is next to it |
 | ruff caches | `.ruff_cache` folders under your own source folders, only where ruff's own cache tag and `.gitignore` are inside and a ruff settings file is next to it |
 | .NET intermediate build output | `obj` folders under your own source folders |
+| Visual Studio solution caches | Inside the `.vs` folder beside a solution under your own source folders: the design-time build and project evaluation caches, the Find in Files index, and the C++ browsing database and precompiled headers, each only where the files inside it are the ones Visual Studio writes; never Copilot conversations or snapshots, solution options or window layouts, and nothing while the solution is open |
 | Dart analysis server cache | |
 | Roslyn solution index cache | One dated row per set of indexes, so that sets left behind when a program moved folder can go; never the rest of Visual Studio's folder |
 | Superseded JetBrains IDE caches | The caches, indexes and temporary files of IntelliJ-based IDE versions an update replaced, Android Studio's included, once nothing in them has changed for 180 days; never local history, logs, settings, plugins or licences |
@@ -214,6 +216,7 @@ you would lose by deleting it. By default, only Tier 1 rows start out selected:
 | Emulator shader caches | What Cemu, RPCS3, Dolphin, PCSX2, Ryujinx, Eden, Citron and yuzu compile for your GPU, and Ryujinx's translated code, found where each one keeps its data and in the emulator folders you add in Settings; never Cemu's transferable cache or a Switch emulator's guest shader cache, saves, memory cards, firmware or Dolphin's own `Shaders`, and nothing while the emulator is running |
 | RetroArch shaders and game databases | The shader sets and `.rdb` databases its Online Updater downloaded, found through Steam's records and the emulator folders you add in Settings, in the folders named by its own `retroarch.cfg`; never the presets you saved, `system`, cores, cheats, overlays or saves, and nothing while RetroArch is running |
 | Unreal Engine derived data cache | The cache that every project shares, in both the older folder and each Zen store; a store is left alone while its server is running |
+| Unity GI cache | The lighting cache that every project shares, in `%LOCALAPPDATA%\Unity\Caches\GiCache`, and nothing while a Unity Editor is running; never the build cache next to it. A cache moved in Unity's preferences is named, never removed |
 | Node.js project dependencies | `node_modules` under your own source folders |
 | Python virtual environments | |
 | tox environments | `.tox` folders under your own source folders, only where tox's own cache tag is inside and a tox configuration is next to it |

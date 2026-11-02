@@ -30,7 +30,18 @@ namespace Deguffer.Core.Providers;
 /// reaching only the first leaves roughly half the reclaim on the disk. That is what
 /// <see cref="ProfileArea"/> on a row is for, and why every note names its root by
 /// <see cref="ShaderCacheRoot.Label"/>: two rows called "NVIDIA" would otherwise be
-/// indistinguishable to whoever reads the plan.</para>
+/// indistinguishable to whoever reads the plan. Intel's driver does the same with
+/// <c>AppData\LocalLow\Intel\ShaderCache</c>, which was measured on a machine whose
+/// <c>%LOCALAPPDATA%\Intel</c> held no shader cache at all.</para>
+///
+/// <para><b>NVIDIA's cache appears once more inside each packaged application.</b> Windows gives a
+/// packaged application <c>Packages\&lt;package&gt;\AC</c> in place of the local application data,
+/// so the driver rendering for it writes <c>AC\NVIDIA\DXCache</c> there: nineteen containers held one
+/// on the machine measured. Those roots are found rather than known, so they come from
+/// <see cref="PackageContainers"/>, once a pass, and are declared in <see cref="ToolRoots"/> with
+/// the rows that are known.
+/// The container is never a target, and §5.6 asserts it survived: it holds the application's own
+/// web cache, cookies and temporary files beside the driver's folder.</para>
 ///
 /// <para>§5.2 is live here rather than theoretical: <c>%LOCALAPPDATA%\NVIDIA</c> holds
 /// <c>accounts</c> — NVIDIA sign-in state — beside the two caches, so the root is never a target.
@@ -44,6 +55,10 @@ namespace Deguffer.Core.Providers;
 /// it from inside whichever application is rendering, so there is no process to name and a warning
 /// would have to name one. A blob held open is skipped by the remover and rebuilt on demand, which
 /// is the same outcome as deleting it.</para>
+///
+/// <para>Past five hundred lines because the table and the one plan that reads it are a single
+/// rule, and most of the length is the evidence for each row. Finding the packaged roots is the
+/// part that is not this provider's knowledge, and it is <see cref="PackageContainers"/>.</para>
 /// </summary>
 public sealed class GpuShaderCacheProvider : CleanupProviderBase
 {
@@ -54,11 +69,15 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
     /// AMD is deliberately thin. <c>DxCache</c> is the child the survey documented, and no AMD
     /// machine was available to establish what else that root holds — so the other names sometimes
     /// attributed to it are absent rather than guessed at. The consequence is an incomplete reclaim
-    /// on an AMD machine, which is the safe direction to be wrong in.
+    /// on an AMD machine, which is the safe direction to be wrong in. <c>VkCache</c>, <c>DxcCache</c>,
+    /// <c>GLCache</c> and <c>OglCache</c> are the names in question: AMD's AMDVLK documentation names
+    /// <c>VkCache</c> as the Vulkan pipeline cache on Linux only, and the rest come from third-party
+    /// guides. Each becomes a recognised name once it has been measured on an AMD machine.
     ///
     /// NVIDIA's LocalLow row is thin for the same reason. Only <c>DXCache</c> was measured there,
     /// so <c>GLCache</c> is left out rather than assumed to exist in both tiers. A name that has
-    /// not been seen in a directory is Tier 4 in that directory.
+    /// not been seen in a directory is Tier 4 in that directory. Intel's LocalLow row is thin for the
+    /// same reason: only <c>ShaderCache</c> was measured there.
     /// </summary>
     public static readonly IReadOnlyList<ShaderCacheRoot> Roots =
     [
@@ -97,7 +116,39 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
                 SafetyTier.RegenerableCache,
                 "Compiled shader pipelines. The driver rebuilds each one the first time it is needed again."),
         ]), []),
+        new ShaderCacheRoot(ProfileArea.LocalLowAppData, "Intel", new DisposableChildSet(
+        [
+            new ChildClassification(
+                "ShaderCache",
+                SafetyTier.RegenerableCache,
+                "Compiled shader pipelines. The driver rebuilds each one the first time it is needed again."),
+        ]), []),
     ];
+
+    /// <summary>
+    /// The vendor folder NVIDIA's driver writes inside a packaged application's container, and what
+    /// may be deleted from it.
+    ///
+    /// <para>Only <c>DXCache</c>, because it is the only name measured there: nineteen containers
+    /// held that and nothing else. <c>GLCache</c> is plausible, since the container stands in for the
+    /// local application data where NVIDIA writes both, but a name that has not been seen in a
+    /// directory is Tier 4 in that directory, as it is under LocalLow.</para>
+    /// </summary>
+    public static readonly PackagedShaderCacheRoot PackagedNvidia = new(
+        "NVIDIA",
+        new DisposableChildSet(
+        [
+            new ChildClassification(
+                "DXCache",
+                SafetyTier.RegenerableCache,
+                "Compiled Direct3D shader pipelines the driver wrote for this app. It rebuilds each one "
+                + "the first time it is needed again."),
+        ]),
+        [("accounts", "NVIDIA account and sign-in state. It is not a shader cache, and it is named "
+            + "here whether or not this folder currently holds one.")]);
+
+    /// <summary>The heading the packaged applications' caches are listed under, so they read as one.</summary>
+    public const string PackagedGroup = "NVIDIA, inside packaged apps";
 
     /// <summary>
     /// Direct3D's own shader cache, which the OS writes rather than any one vendor's driver.
@@ -122,6 +173,7 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
     private const string Direct3DCacheName = "D3DSCache";
 
     private readonly string _direct3DCache;
+    private readonly PassMemo<PackageContainerSearch> _packaged = new();
 
     public GpuShaderCacheProvider(
         IUserEnvironment? environment = null,
@@ -163,46 +215,66 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
     };
 
     /// <summary>
-    /// The vendor root paths on this machine. Exposed so tests can assert none is targeted.
+    /// The vendor root paths on this machine, those inside packaged applications included. Exposed so
+    /// tests can assert none is targeted.
     ///
     /// A root whose tier the platform would not locate is absent rather than represented by a
     /// guess, which is the answer planning gives it too.
     /// </summary>
     public IReadOnlyList<string> RootPaths =>
-        [.. Roots.Select(r => r.PathIn(Environment)).OfType<string>()];
+        [.. KnownRoots().Concat(PackagedRoots(CancellationToken.None)).Select(root => root.Path)];
 
     /// <inheritdoc />
+    /// <summary>
+    /// Every vendor root, those inside packaged applications included. Those are found by listing the
+    /// packages, which the first read of a pass does and every later one reuses. They belong here
+    /// rather than in <see cref="DiscoverToolRootsAsync"/>, because each recognises the cache its plan
+    /// offers, and a discovered root is read only as a refusal.
+    /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
-    [
-        .. Roots
-            .Select(root => (Path: root.PathIn(Environment), root.Label, root.Children))
-            .Where(root => root.Path is not null)
-            .Select(root => ToolRoot.Of(
-                root.Path!,
-                // Named by Label, not by vendor: Explore states this sentence on its own when it
-                // refuses a root, with no path beside it, so the two NVIDIA roots would otherwise
-                // produce refusals a user cannot tell apart.
-                $"This is the {root.Label} folder. Deguffer removes the shader caches inside it and "
-                + "nothing else — a graphics vendor keeps driver settings and profiles in the same "
-                + "place.",
-                root.Children)),
-    ];
+        [.. KnownRoots().Concat(PackagedRoots(CancellationToken.None)).Select(Declare)];
+
+    public override void InvalidateCaches()
+    {
+        _packaged.Forget();
+        base.InvalidateCaches();
+    }
+
+    private static ToolRoot Declare(LocatedRoot root) => ToolRoot.Of(
+        root.Path,
+        // Named by Label, not by vendor: Explore states this sentence on its own when it refuses a
+        // root, with no path beside it, so the NVIDIA roots would otherwise produce refusals a user
+        // cannot tell apart.
+        $"This is the {root.Label} folder. Deguffer removes the shader caches inside it and "
+        + "nothing else — a graphics vendor keeps driver settings and profiles in the same "
+        + "place.",
+        root.Children);
 
     /// <summary>
     /// Presence is a cache actually on disk, never a vendor directory existing.
     /// <c>%LOCALAPPDATA%\Intel</c> is present on machines with no Intel graphics cache at all, and
     /// treating that as a hit would report a source the plan then has nothing to say about.
+    ///
+    /// <para>A packaged application's cache that could not be examined counts too, because the plan
+    /// has something to say about it, and a row that never appears cannot say it.</para>
     /// </summary>
-    public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(RecognisedCachePaths().Any(LongPath.DirectoryMayExist));
+    public override Task<bool> IsPresentAsync(CancellationToken ct = default)
+    {
+        var packaged = SearchPackages(ct);
+
+        return Task.FromResult(
+            RecognisedCachePaths(ct).Any(LongPath.DirectoryMayExist)
+            || packaged.Obstructed.Count > 0
+            || packaged.Unlisted is not null);
+    }
 
     /// <summary>
-    /// Each cache every vendor's folder recognises, and Direct3D's own cache in the local application
-    /// data. The vendors' folders hold driver settings and account state beside the caches, so none of
-    /// them is a place.
+    /// Each cache every vendor's folder recognises, inside packaged applications too, and Direct3D's
+    /// own cache in the local application data. The vendors' folders hold driver settings and account
+    /// state beside the caches, so none of them is a place.
     /// </summary>
     public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<CleanedPlace>>([.. RecognisedCachePaths().Select(CleanedPlace.Whole)]);
+        Task.FromResult<IReadOnlyList<CleanedPlace>>([.. RecognisedCachePaths(ct).Select(CleanedPlace.Whole)]);
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
@@ -212,19 +284,38 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
         var survivors = new List<(string Path, string Reason)>();
         var unreadable = false;
 
-        foreach (var root in Roots)
+        var packaged = SearchPackages(ct);
+
+        if (packaged.Unlisted is { } packages)
+        {
+            notes.Add(UnreadableRoot.Note(packages));
+            unreadable = true;
+        }
+
+        // Each obstacle has a recognised cache behind it, or the search would not have kept it, so
+        // it is named rather than passed over.
+        foreach (var obstacle in packaged.Obstructed)
+        {
+            if (obstacle.IsLink)
+            {
+                notes.Add(new PlanNote(
+                    PlanNoteSeverity.Information,
+                    $"Leaving '{obstacle.Path}' alone: it is a link to somewhere else, and Deguffer "
+                    + "does not look through a link."));
+                declined.Add((obstacle.Path, "A link rather than a directory, so what it holds was never classified."));
+            }
+            else
+            {
+                notes.Add(UnreadableRoot.UnreachedNote(obstacle.Path));
+                unreadable = true;
+            }
+        }
+
+        foreach (var root in KnownRoots().Concat(PackagedRoots(ct)))
         {
             ct.ThrowIfCancellationRequested();
 
-            var rootPath = root.PathIn(Environment);
-
-            // A null path is a tier the platform would not locate, which only LocalLow can be.
-            // §5.2 forbids guessing where it is, so the row contributes nothing rather than a path
-            // assembled by hand.
-            if (rootPath is null)
-            {
-                continue;
-            }
+            var rootPath = root.Path;
 
             switch (LongPath.ProbeDirectory(rootPath))
             {
@@ -256,6 +347,13 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
                 $"The {root.Label} directory itself must survive — only its known-disposable children are removed."));
 
             survivors.AddRange(root.ProtectedNames.Select(p => (Path.Combine(rootPath, p.Name), p.Reason)));
+
+            if (root.Container is { } container)
+            {
+                survivors.Add((
+                    container,
+                    "The app's own container must survive — only the shader caches in its NVIDIA folder are removed."));
+            }
 
             unreadable |= !CollectFrom(root, rootPath, targets, declined, notes, ct);
         }
@@ -346,7 +444,7 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
     /// claiming no driver has written a shader cache.
     /// </returns>
     private static bool CollectFrom(
-        ShaderCacheRoot root,
+        LocatedRoot root,
         string rootPath,
         List<DeletionTarget> targets,
         List<(string Path, string Reason)> declined,
@@ -391,7 +489,7 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
                 continue;
             }
 
-            targets.Add(new DeletionTarget(path, classification.Reason));
+            targets.Add(new DeletionTarget(path, classification.Reason, Group: root.Group));
         }
 
         return true;
@@ -402,21 +500,60 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
     /// so answering "is there anything here?" costs one existence check each and can never reach a
     /// child the table does not name.
     /// </summary>
-    private IEnumerable<string> RecognisedCachePaths()
+    private IEnumerable<string> RecognisedCachePaths(CancellationToken ct)
     {
-        foreach (var root in Roots)
+        foreach (var root in KnownRoots().Concat(PackagedRoots(ct)))
         {
-            if (root.PathIn(Environment) is not { } rootPath)
-            {
-                continue;
-            }
-
             foreach (var child in root.Children.DisposableNames)
             {
-                yield return Path.Combine(rootPath, child);
+                yield return Path.Combine(root.Path, child);
             }
         }
 
         yield return _direct3DCache;
     }
+
+    /// <summary>
+    /// The rows of <see cref="Roots"/> on this machine. A null path is a tier the platform would not
+    /// locate, which only LocalLow can be, and §5.2 forbids guessing where it is, so that row
+    /// contributes nothing rather than a path assembled by hand.
+    /// </summary>
+    private IEnumerable<LocatedRoot> KnownRoots() =>
+        Roots
+            .Select(row => (Row: row, Path: row.PathIn(Environment)))
+            .Where(row => row.Path is not null)
+            .Select(row => new LocatedRoot(row.Path!, row.Row.Label, row.Row.Children, row.Row.ProtectedNames));
+
+    private IEnumerable<LocatedRoot> PackagedRoots(CancellationToken ct) =>
+        SearchPackages(ct).Found.Select(found => new LocatedRoot(
+            found.Path,
+            // The package family name, because it is what the folder is called, and every container
+            // holds a folder called NVIDIA.
+            $"{PackagedNvidia.DirectoryName} ({found.Package})",
+            PackagedNvidia.Children,
+            PackagedNvidia.ProtectedNames,
+            found.Container,
+            PackagedGroup));
+
+    /// <summary>
+    /// The one listing of the packages that presence, the plan and Explore's refusals all read, kept
+    /// for a planning pass (G4). A pass that is cancelled throws before it is kept.
+    /// </summary>
+    private PackageContainerSearch SearchPackages(CancellationToken ct) =>
+        _packaged.Get(() => PackageContainers.Find(
+            Environment, PackagedNvidia.DirectoryName, [.. PackagedNvidia.Children.DisposableNames], ct));
+
+    /// <summary>One vendor root as it is on this machine, however it was found.</summary>
+    /// <param name="Container">
+    /// The packaged application's container the root is inside, which must survive too. Null for a
+    /// root in the profile itself.
+    /// </param>
+    /// <param name="Group">The heading its caches are listed under. Null for none.</param>
+    private sealed record LocatedRoot(
+        string Path,
+        string Label,
+        DisposableChildSet Children,
+        IReadOnlyList<(string Name, string Reason)> ProtectedNames,
+        string? Container = null,
+        string? Group = null);
 }
