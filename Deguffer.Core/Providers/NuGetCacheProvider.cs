@@ -15,7 +15,7 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTenant
 {
-    private readonly PassMemo<Task<IReadOnlyList<string>>> _resolvedLocals = new();
+    private readonly PassMemo<Task<NuGetLocals>> _resolvedLocals = new();
 
     public NuGetCacheProvider(
         IUserEnvironment? environment = null,
@@ -115,7 +115,7 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
     public override async Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default)
     {
         IReadOnlyList<string> reported = Environment.FindExecutable("dotnet") is { } dotnet
-            ? await ResolveLocalsAsync(dotnet, ct).ConfigureAwait(false)
+            ? (await ResolveLocalsAsync(dotnet, ct).ConfigureAwait(false)).Paths
             : [];
 
         return
@@ -162,7 +162,7 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
             return [];
         }
 
-        var locals = await ResolveLocalsAsync(dotnet, ct).ConfigureAwait(false);
+        var locals = (await ResolveLocalsAsync(dotnet, ct).ConfigureAwait(false)).Paths;
         var holders = locals
             .Select(local => (Local: local, Parent: Path.GetDirectoryName(local)))
             .Where(local => local.Parent is not null)
@@ -192,12 +192,15 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
             return EmptyPlan("The .NET SDK is not installed on this machine.");
         }
 
-        var locals = await ResolveLocalsAsync(dotnet, ct).ConfigureAwait(false);
+        var listed = await ResolveLocalsAsync(dotnet, ct).ConfigureAwait(false);
+        var locals = listed.Paths;
         var found = ReachedDirectories.Of(locals);
 
         if (NothingToPlanFor(
                 found,
-                "The .NET SDK is installed but none of its NuGet cache locations exist yet.") is { } nothing)
+                listed.Answered
+                    ? "The .NET SDK is installed but none of its NuGet cache locations exist yet."
+                    : "NuGet did not list its cache locations, and none of the documented defaults exist.") is { } nothing)
         {
             return nothing;
         }
@@ -207,9 +210,13 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
 
         var notes = new List<PlanNote>
         {
-            new(PlanNoteSeverity.Information,
-                "Cleared by NuGet itself, which reaches locations outside .nuget that a folder delete would miss: " +
-                string.Join(", ", present.Select(LongPath.Display))),
+            new(PlanNoteSeverity.Information, listed.Answered
+                ? "Cleared by NuGet itself, which reaches locations outside .nuget that a folder delete would miss: "
+                  + string.Join(", ", present.Select(LongPath.Display))
+                : "NuGet did not list its cache locations, so these are the documented defaults rather than this "
+                  + "machine's settings: " + string.Join(", ", present.Select(LongPath.Display)) + ". NuGet's own "
+                  + "command clears wherever NuGet really keeps its caches, which may not be these folders, so the "
+                  + "figure may not describe what the command removes."),
         };
 
         // NuGet's command clears these too, so they are named rather than dropped: the figure above
@@ -306,14 +313,14 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
             .Select(child => (child.Path, child.Reason));
     }
 
-    private Task<IReadOnlyList<string>> ResolveLocalsAsync(string dotnet, CancellationToken ct) =>
+    private Task<NuGetLocals> ResolveLocalsAsync(string dotnet, CancellationToken ct) =>
         _resolvedLocals.Get(() => ListLocalsAsync(dotnet, ct));
 
     /// <summary>
     /// Ask NuGet where its caches are. Output lines look like
     /// <c>global-packages: C:\Users\me\.nuget\packages\</c>.
     /// </summary>
-    private async Task<IReadOnlyList<string>> ListLocalsAsync(string dotnet, CancellationToken ct)
+    private async Task<NuGetLocals> ListLocalsAsync(string dotnet, CancellationToken ct)
     {
         var outcome = await Runner.RunAsync(dotnet, "nuget locals all --list", ToolRun.Query, ct).ConfigureAwait(false);
 
@@ -336,7 +343,7 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
             }
         }
 
-        return parsed.Count > 0 ? parsed : DefaultLocals();
+        return parsed.Count > 0 ? new(parsed, Answered: true) : new(DefaultLocals(), Answered: false);
     }
 
     /// <summary>Documented defaults, used only when NuGet declines to tell us.</summary>
@@ -347,4 +354,13 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
         Path.Combine(Environment.LocalAppData, "NuGet", "plugins-cache"),
         Path.Combine(Environment.TempPath, "NuGetScratch"),
     ];
+
+    /// <summary>Where NuGet keeps its caches, and whether NuGet itself is what said so.</summary>
+    /// <param name="Paths">Every location, in the order NuGet listed them. Never empty.</param>
+    /// <param name="Answered">
+    /// False when <c>nuget locals all --list</c> failed or listed no rooted path, in which case
+    /// <paramref name="Paths"/> are the documented defaults, and the plan says so: see
+    /// <see cref="AskedLocation"/> for why the difference reaches the user.
+    /// </param>
+    private sealed record NuGetLocals(IReadOnlyList<string> Paths, bool Answered);
 }

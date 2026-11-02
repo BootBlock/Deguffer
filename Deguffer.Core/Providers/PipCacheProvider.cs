@@ -28,7 +28,7 @@ public sealed class PipCacheProvider : CleanupProviderBase
     /// </summary>
     private static readonly string[] CommandNames = ["pip", "pip3"];
 
-    private readonly PassMemo<Task<string>> _resolvedCacheDirectory = new();
+    private readonly PassMemo<Task<AskedLocation>> _resolvedCacheDirectory = new();
 
     public PipCacheProvider(
         IUserEnvironment? environment = null,
@@ -119,7 +119,7 @@ public sealed class PipCacheProvider : CleanupProviderBase
 
         var reported = await ResolveCacheDirectoryAsync(pip, ct).ConfigureAwait(false);
 
-        return [CleanedPlace.Whole(DefaultCacheDirectory), CleanedPlace.Whole(reported)];
+        return [CleanedPlace.Whole(DefaultCacheDirectory), CleanedPlace.Whole(reported.Path)];
     }
 
     /// <summary>
@@ -139,11 +139,10 @@ public sealed class PipCacheProvider : CleanupProviderBase
             return EmptyPlan("pip is not installed on this machine.");
         }
 
-        var cacheDirectory = await ResolveCacheDirectoryAsync(pip, ct).ConfigureAwait(false);
+        var located = await ResolveCacheDirectoryAsync(pip, ct).ConfigureAwait(false);
+        var cacheDirectory = located.Path;
 
-        if (NothingToPlanFor(
-                cacheDirectory,
-                $"pip is installed but its cache directory does not exist yet ({cacheDirectory}).") is { } nothing)
+        if (NothingToPlanFor(cacheDirectory, located.DescribeAbsent("pip", "cache directory")) is { } nothing)
         {
             return nothing;
         }
@@ -163,7 +162,7 @@ public sealed class PipCacheProvider : CleanupProviderBase
 
         var notes = new List<PlanNote>
         {
-            new(PlanNoteSeverity.Information, $"pip reports its cache directory as {cacheDirectory}."),
+            new(PlanNoteSeverity.Information, located.Describe("pip", "cache directory")),
         };
 
         if (measured.Note is { } scanNote)
@@ -221,21 +220,15 @@ public sealed class PipCacheProvider : CleanupProviderBase
         return null;
     }
 
-    private Task<string> ResolveCacheDirectoryAsync(string pip, CancellationToken ct) =>
+    private Task<AskedLocation> ResolveCacheDirectoryAsync(string pip, CancellationToken ct) =>
         _resolvedCacheDirectory.Get(() => AskCacheDirectoryAsync(pip, ct));
 
-    private async Task<string> AskCacheDirectoryAsync(string pip, CancellationToken ct)
+    private async Task<AskedLocation> AskCacheDirectoryAsync(string pip, CancellationToken ct)
     {
         // --no-color because pip colourises output when it believes it is writing to a terminal,
         // and the escape sequences would land inside the parsed path.
         var outcome = await Runner.RunAsync(pip, "cache dir --no-color", ToolRun.Query, ct).ConfigureAwait(false);
 
-        var reported = outcome.Succeeded
-            ? outcome.StandardOutput
-                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .LastOrDefault(Path.IsPathRooted)
-            : null;
-
-        return reported ?? DefaultCacheDirectory;
+        return AskedLocation.FromLastRootedLine(outcome, DefaultCacheDirectory);
     }
 }
