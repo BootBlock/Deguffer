@@ -5,6 +5,12 @@ namespace Deguffer.Testing;
 /// <summary>
 /// Volumes rooted in a temp directory, so a per-volume provider is asserted against drives we build
 /// rather than against whichever ones the developer happens to have mounted.
+///
+/// <para><b>Only what is asked of this fake is invented.</b> A provider or the Explore policy still
+/// reads a path on the real disk through whichever name it is given, so a test whose paths at a
+/// letter it named here reach such a reading takes the letter from <see cref="UnmappedDriveLetter"/>,
+/// or gives the reader <see cref="EmptyFileSystem"/>. A letter the machine uses would let whatever it
+/// keeps there decide the answer.</para>
 /// </summary>
 public sealed class FakeVolumeInventory : IVolumeInventory
 {

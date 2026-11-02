@@ -17,15 +17,22 @@ namespace Deguffer.Core.Tests;
 /// </summary>
 public abstract class DuplicateMarkingScene : IDisposable
 {
-    private protected const string Usb = @"U:\";
+    /// <summary>
+    /// Letters the machine does not use, one for each drive, because the marks ask Windows where each
+    /// copy's folder really is, through whichever name it is given. A letter the machine uses would
+    /// let whatever it keeps there decide where a copy is, and so whether it counts as kept.
+    /// </summary>
+    private readonly IReadOnlyList<string> _letters = UnmappedDriveLetter.Take(5);
 
-    private protected const string Unknown = @"V:\";
+    private protected string Usb => _letters[0];
 
-    private protected const string Rotational = @"R:\";
+    private protected string Unknown => _letters[1];
 
-    private protected const string SolidState = @"S:\";
+    private protected string Rotational => _letters[2];
 
-    private protected const string Virtual = @"W:\";
+    private protected string SolidState => _letters[3];
+
+    private protected string Virtual => _letters[4];
 
     private protected static readonly DateTime Older = new(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
     private protected static readonly DateTime Newer = Older.AddDays(1);
@@ -37,7 +44,7 @@ public abstract class DuplicateMarkingScene : IDisposable
     private protected readonly List<ProgramFolder> _programs = [];
     private protected readonly List<UnsearchedLocation> _unsearchedReferences = [];
     private protected readonly LocalVolume _internal;
-    private protected readonly LocalVolume _usb = new(Usb, DriveType.Fixed, VolumeReadiness.Ready);
+    private protected readonly LocalVolume _usb;
     private protected readonly FakeStorageQueries _queries;
     private protected readonly VolumeMediaCache _media;
     private int _files;
@@ -48,6 +55,7 @@ public abstract class DuplicateMarkingScene : IDisposable
         _tree.Environment.WithTempPath(Path.Combine(_tree.Environment.LocalAppData, "Temp"));
         _tree.Volumes.With(Usb).With(Unknown).With(Rotational).With(SolidState).With(Virtual);
         _internal = new LocalVolume(_tree.Top + Path.DirectorySeparatorChar, DriveType.Fixed, VolumeReadiness.Ready);
+        _usb = new LocalVolume(Usb, DriveType.Fixed, VolumeReadiness.Ready);
         _media = new VolumeMediaCache(_queries = new FakeStorageQueries()
             .Volume(_internal.RootPath, 0).Disk(0, bus: 0x11, seekPenalty: null)
             .Volume(Usb, 1).Disk(1, bus: 0x07, seekPenalty: null)

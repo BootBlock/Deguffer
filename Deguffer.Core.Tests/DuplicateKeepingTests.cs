@@ -32,11 +32,18 @@ public sealed class DuplicateKeepingTests : DuplicateMarkingScene
 
     /// <summary>A drive is internal by its disks: rotational and solid state are, and a virtual disk, which can be detached, is not.</summary>
     [Theory]
-    [InlineData(Rotational, StorageMedia.Rotational, true)]
-    [InlineData(SolidState, StorageMedia.SolidState, true)]
-    [InlineData(Virtual, StorageMedia.Virtual, false)]
-    public void ACopyCountsAsKeptOutsideAReferenceOnlyOnAnInternalDrive(string root, StorageMedia media, bool kept)
+    [InlineData(StorageMedia.Rotational, true)]
+    [InlineData(StorageMedia.SolidState, true)]
+    [InlineData(StorageMedia.Virtual, false)]
+    public void ACopyCountsAsKeptOutsideAReferenceOnlyOnAnInternalDrive(StorageMedia media, bool kept)
     {
+        var root = media switch
+        {
+            StorageMedia.Rotational => Rotational,
+            StorageMedia.SolidState => SolidState,
+            StorageMedia.Virtual => Virtual,
+            _ => throw new ArgumentOutOfRangeException(nameof(media), media, null),
+        };
         var volume = new LocalVolume(root, DriveType.Fixed, VolumeReadiness.Ready);
         Assert.Equal(media, _media.Of(volume).Class);
 

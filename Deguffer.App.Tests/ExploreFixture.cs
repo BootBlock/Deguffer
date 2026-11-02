@@ -115,12 +115,18 @@ internal sealed class ExploreFixture : IDisposable
 
     private ScanHistory? _history;
 
-    /// <summary>A policy that refuses each of <paramref name="refusing"/>, and everything under it, with <paramref name="reason"/>.</summary>
+    /// <summary>
+    /// A policy that refuses each of <paramref name="refusing"/>, and everything under it, with
+    /// <paramref name="reason"/>. Over a filesystem with nothing on it, because the trees a test hands
+    /// the page are invented at letters such as <c>C:\</c>, and the policy would otherwise ask the
+    /// machine's own drive there where each folder leads.
+    /// </summary>
     public ExploreActionPolicy Policy(string reason = "Kept by a test.", params string[] refusing) =>
         new(
             [.. refusing.Select(path => ProtectedRegion.Refusing(path, RegionScope.PathAndBelow, reason))],
             [],
-            Volumes);
+            Volumes,
+            EmptyFileSystem.Instance);
 
     /// <summary>Scan what the page is pointed at, and finish with <paramref name="scan"/>.</summary>
     public async Task ScanAsync(ExploreViewModel page, ExploreScan scan)
