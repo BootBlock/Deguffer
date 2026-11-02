@@ -186,6 +186,7 @@ public sealed class CleanupPlanner
         IDirectoryScanner scanner) =>
     [
         new DotNetObjProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+        new VisualStudioSolutionCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
         new UnityLibraryProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
         new UnrealIntermediateProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
         new UnrealProjectDerivedDataProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),

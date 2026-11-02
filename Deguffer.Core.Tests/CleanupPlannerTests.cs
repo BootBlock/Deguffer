@@ -464,7 +464,7 @@ public sealed class CleanupPlannerTests
 
         Assert.Equal(
             [
-                "dotnet-obj", "unity-library", "unreal-intermediate", "unreal-project-ddc", "cargo-target", "node-modules", "python-venv",
+                "dotnet-obj", "visual-studio-solution-cache", "unity-library", "unreal-intermediate", "unreal-project-ddc", "cargo-target", "node-modules", "python-venv",
                 "pytest-cache", "mypy-cache", "ruff-cache", "tox-environments", "nox-environments", "dart-tool",
                 "nuget", "gradle", "npm", "pnpm", "yarn", "bun", "composer", "scoop-cache", "vscode-cpptools", "dart-analysis-server", "roslyn-cache", "jetbrains-superseded-system", "temp-tool-caches",
                 "uv", "pip", "poetry", "conda", "cargo", "go", "zig", "deno", "electron", "typescript-typings", "ccache", "sccache", "maven", "vcpkg", "conan", "gpu-shader-cache",

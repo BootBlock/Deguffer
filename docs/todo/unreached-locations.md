@@ -2,7 +2,7 @@
 
 > **Status:** 🟢 ACTIVE — a researched candidate set, sequenced and under way. §1's Cargo, Go, Maven
 > and vcpkg providers, §1a's pnpm and conda, §2's Unity, Rust, node_modules and virtual-environment
-> providers, §4's Chromium application caches, §4a's Code - OSS editor caches and logs, §5's GPU
+> providers and the Tier 1 caches inside Visual Studio's `.vs`, §4's Chromium application caches, §4a's Code - OSS editor caches and logs, §5's GPU
 > shader caches, Steam shader pre-cache and graphics driver installer leftovers, §6's crash dumps,
 > servicing logs, completed upgrade scaffolding and Delivery Optimization cache, §7's per-volume recycle bins and older restore points, §8's Unreal Engine
 > derived-data caches, DaVinci Resolve render cache, Adobe media cache and After Effects disk cache, §10's release of OneDrive's local copies,
@@ -52,7 +52,7 @@ form throughout this document.
 | Windows Search index (`Windows.db`) | 2.2 GB | 2 | Needs a service stop, so no cleaner attempts it. **Service control declined — see §6** |
 | `C:\$WinREAgent` | 1.7 GB | 2 | Disk Cleanup's update pass does not remove it |
 | .NET SDKs, 8 versions, one out of support | 1.8 GB | 4 | An uninstall, not a delete. §2 rules it out |
-| Visual Studio `.vs\` per solution | 1.5 GB | mixed | Inside source trees, beside the `obj\` already walked. **Re-measured across 51 solutions, and the tier is a correction — see §2** |
+| Visual Studio `.vs\` per solution | 1.5 GB | mixed | Inside source trees, beside the `obj\` already walked. **Re-measured across 51 solutions, and the tier is a correction — see §2. Its Tier 1 caches shipped (#420)** |
 | Chromium-shaped caches across 10 desktop apps | 0.8 GB | 1 | Recognisable by shape, not by name. **Shipped — see §4** |
 | Crash dumps, CBS logs, WER archives | 0.2 GB | 3 | Small here; routinely tens of GB after a bugcheck. **Shipped — see §6**, and the tier is a correction |
 
@@ -749,7 +749,7 @@ tag is the part that says Cargo made this directory. No Rust toolchain is instal
 so the sizes remain vendor documentation and community report, and the rules are proved through a
 synthetic tree rather than against a real `target`.
 
-### Visual Studio `.vs` — measured at 1.45 GB across 51 solutions, **split out, not shipped**
+### Visual Studio `.vs` — measured at 1.45 GB across 51 solutions, **split out; its Tier 1 caches shipped** ✅
 
 Per-solution IntelliSense database, browsing data and editor state, hidden beside the `.sln`.
 
@@ -786,6 +786,38 @@ mostly not disposable. It is its own row in the sequencing table now.
 Issue #84 has since decided the same question for Visual Studio Code: its chat history is offered at
 Tier 3, one conversation at a time, through `CacheLevel` (`_spec.md` §4.3). Issue #404 builds that
 row, and whichever of the two is built first sets the shape for the other.
+
+**Outcome: the Tier 1 caches shipped, and nothing else in the folder (#420).**
+`VisualStudioSolutionCacheProvider` offers six caches, re-measured across 42 `.vs` folders (569 MB,
+of which about 165 MB is these caches): `ProjectEvaluation`, `<solution>\FileContentIndex`,
+`<solution>\DesignTimeBuild`, and under `<solution>\v<N>` the `ipch` folder and the
+`Browse.VC.db` and `Solution.VC.db` databases. `VisualStudioCacheLayout` is the one table that says
+so, and every other entry stays and is asserted to survive. Four things the work settled.
+
+- **Recognition is by the files inside each cache, because no Microsoft page names the folders.**
+  Microsoft documents the behaviour behind each one, so each cache must hold only the file shapes
+  observed (`VisualStudioCacheEvidence`), and the `.vs` folder must have a `.sln` or `.slnx` beside
+  it. The solution folder is named from that file, without the extension for a `.sln` and with it
+  for a `.slnx`. A folder named for a solution that is no longer there is left alone whole.
+- **The design-time build cache sits under the solution folder, not under `v<N>`.** The issue
+  placed it at `<solution>\v<N>\...\DesignTimeBuild`. All 30 found across 39 `.vs` folders on the
+  surveyed workstation were at `<solution>\DesignTimeBuild`, so the rule names that level and no
+  other.
+- **`CacheLevelWalk` was not reused.** Two of the caches are files, which that walk does not read,
+  and the level names come from the solution files and the version folders rather than a fixed
+  table. The walk's three safety facts are kept: a link is declined and never followed, a level
+  that cannot be listed is said, and every entry left alone is asserted to survive.
+- **In use is asked through the existing veto, with the cache files as lock files.** Visual Studio
+  works in the solution's folder, which the process table sees. `DevHub.exe` holds the index open
+  from elsewhere, which only the Restart Manager sees, so every file in the caches is a lock file.
+  Those files are read by name and level alone (`VisualStudioCacheFiles`), never through the
+  evidence: at the clean, an index still being written can fail the evidence, and a question built
+  from it would ask about none of its files. A database with a `-journal`, `-wal` or `-shm` beside
+  it is left alone as well.
+
+Still not offered: `copilot-chat`, `CopilotSnapshots` and `lut` (Tier 3, waiting on #404's shape),
+and `CopilotIndices`, `Server\sqlite3\storage.ide`, `CodeChunks.db` and `SemanticSymbols.db`,
+whose purpose is not established (Tier 4).
 
 ### The rest of the shape — `node_modules` and `.venv` ✅ done; `dist` and Dart `build` declined
 
@@ -1731,7 +1763,7 @@ Not a schedule. An observation about what each item costs, given the machinery t
 | pnpm and conda ✅ | Expected one link-aware measurement to unblock both. The walk can answer and the file table cannot do it better, but only pnpm needed the answer — conda reports its own link-aware figure, so it shipped on PlatformIO's shape. §1a records the split | researched |
 | Per-project build output ✅ | Expected §5.3's exclusion generalised, and that was indeed the larger half. Unity, Rust, node_modules and .venv shipped; `.vs` split out below, `dist` and Dart's `build` declined for want of evidence inside the directory — §2 records why | 5.8 GB |
 | Squirrel staging and superseded builds ✅ | Expected the survey's "old application builds" to stay out of scope, and one framework's own source moved it. Two providers rather than one, because the staging and the builds land at different tiers; and the `packages` folder had to be read through the application's own index rather than removed, because a shortcut reads the index in it — §12 records both | 1.3 GB |
-| Visual Studio `.vs` per solution | Split out of the row above once measured properly. Not the Tier 1 folder with one `.suo` the survey assumed: a quarter of it by size is AI chat history, file snapshots and coverage records, and it needs recognised children applied *inside* it at two nesting levels | 1.5 GB |
+| Visual Studio `.vs` per solution, Tier 1 caches ✅ | Split out of the row above once measured properly. Not the Tier 1 folder with one `.suo` the survey assumed: a quarter of it by size is AI chat history, file snapshots and coverage records, and it needs recognised children applied *inside* it at three levels. What shipped reaches the caches alone, about 165 MB of 569 MB re-measured across 42 folders | 1.5 GB, of which the caches are a fraction |
 | MSIX redirection | A classification rule, not a provider. Changes what every other provider can see | 16.1 GB |
 | Cloud sync dehydration ✅ | A third kind of `CleanupStep`, and a §5.6 negative that asserts survival rather than removal | 0.2 GB |
 | Windows Search index | Expected service control. Declined for the whole product (§2 of the spec), so the index waits on Windows' own `Reset` being measured — §6 records it | 2.2 GB |

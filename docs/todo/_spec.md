@@ -211,7 +211,8 @@ under [#404](https://github.com/BootBlock/Deguffer/issues/404), to these rules:
 
 Visual Studio's `.vs` holds the same material in the same shape, recorded in
 [unreached-locations.md](unreached-locations.md) §2. Whichever is built first sets the shape for the
-other.
+other. Only the Tier 1 caches inside `.vs` are offered today, by their own row, and its chat history
+is not.
 
 ### 4.4 Tier 4 / out of scope
 
