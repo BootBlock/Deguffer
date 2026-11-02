@@ -245,6 +245,23 @@ public sealed class DebuggerSymbolCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A cache element keeps a copy of what every element to its right loads, so one store can be filled
+    /// from Microsoft and from another server at once. One server that is not Microsoft's is enough to put
+    /// it on the Tier 2 row.
+    /// </summary>
+    [Fact]
+    public async Task PutsAStoreFilledFromMicrosoftAndAnotherServerOnTheTierTwoRow()
+    {
+        SymbolPath($"cache*{Store};srv*{Microsoft};srv*{PrivateServer}");
+        var entry = Entry(Store, "ntdll.pdb");
+
+        var (microsoft, other) = CreateRows();
+
+        Assert.Empty((await microsoft.PlanAsync()).Steps);
+        Assert.Equal([entry], (await other.PlanAsync()).TargetedPaths);
+    }
+
+    /// <summary>
     /// A folder the symbol path fills from Microsoft and Visual Studio's settings also name is filled from
     /// servers Deguffer cannot read as well, so it is on the Tier 2 row alone.
     /// </summary>
@@ -420,9 +437,9 @@ public sealed class DebuggerSymbolCacheProviderTests : IDisposable
 
     /// <summary>A store named by a relative path, or on a network share, is left alone and said so.</summary>
     [Theory]
-    [InlineData("Symbols")]
-    [InlineData(@"\\builds\cache")]
-    public async Task LeavesAStoreItCannotOwnAloneAndSaysSo(string store)
+    [InlineData("Symbols", "not a full path")]
+    [InlineData(@"\\builds\cache", "network share")]
+    public async Task LeavesAStoreItCannotOwnAloneAndSaysSo(string store, string why)
     {
         SymbolPath($"srv*{store}*{Microsoft}");
 
@@ -430,7 +447,8 @@ public sealed class DebuggerSymbolCacheProviderTests : IDisposable
         var plan = await microsoft.PlanAsync();
 
         Assert.Empty(plan.Steps);
-        Assert.Contains(plan.Notes, note => note.Message.Contains(store, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.Notes, note =>
+            note.Message.Contains(store, StringComparison.OrdinalIgnoreCase) && note.Message.Contains(why, StringComparison.Ordinal));
     }
 
     /// <summary>

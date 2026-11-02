@@ -38,7 +38,7 @@ largest files inside it:
 
 Besides Settings and About, Deguffer has six pages:
 
-- [Storage](#storage) checks 105 sources of waste, from package-manager and browser caches to
+- [Storage](#storage) checks 107 sources of waste, from package-manager and browser caches to
   `Windows.old` and old restore points, and puts each one in a [safety tier](#safety-tiers). You
   choose what goes, and when the clean has finished Deguffer checks that everything it said it would
   leave alone is still there.
@@ -121,7 +121,7 @@ remove one by any route.
 
 ## Storage
 
-Each of the 105 sources has its own provider, which knows what that location is and what sits next
+Each of the 107 sources has its own provider, which knows what that location is and what sits next
 to it. Rows for tools you do not have are hidden unless you ask the Storage page to show them. Build
 output and project caches, such as `node_modules`, `obj`, Rust's `target`, Python's `.tox` and
 `.pytest_cache` folders, and the caches in Visual Studio's `.vs` folders, are only looked for
@@ -155,6 +155,7 @@ you would lose by deleting it. By default, only Tier 1 rows start out selected:
 | TypeScript typings cache | One folder per TypeScript version; never one that a running program is working in |
 | ccache compiler cache | Cleared with `ccache --clear`, which keeps its settings |
 | sccache compiler cache | sccache's server is stopped first; never its settings |
+| Debugger symbol cache | The symbol files and programs that debuggers downloaded into a store that only Microsoft's public symbol servers fill, as `_NT_SYMBOL_PATH` names it; never the store's markers or anything else in it, a store that SymStore built, or anything while a debugger that writes to the store is running |
 | Conan package cache | Conan's own cache clean, limited to sources, build folders and unfinished builds; the packages you built or downloaded stay, with their metadata and your configuration |
 | pip package cache | |
 | uv package cache | |
@@ -196,6 +197,7 @@ you would lose by deleting it. By default, only Tier 1 rows start out selected:
 | --- | --- |
 | Maven local repository | |
 | Conda package cache | |
+| Debugger symbol cache, other servers | The same, in WinDbg's own store, Visual Studio's symbol cache, and any store that another server fills. A private server may no longer keep an old build's symbols, so the copy here may be the last one |
 | Chromium offline site storage | What sites' service workers stored so that they work offline, in the same browsers and applications as the Chromium caches row; a web application that worked offline will not do so again until it is next opened online |
 | vcpkg build caches | |
 | PlatformIO cache and unused packages | PlatformIO's own prune decides which installed packages are no longer needed |
