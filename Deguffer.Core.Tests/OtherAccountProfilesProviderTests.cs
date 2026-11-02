@@ -39,7 +39,7 @@ public sealed class OtherAccountProfilesProviderTests : IDisposable
     private static RemoveProfileStep Step(CleanupPlan plan) => Assert.IsType<RemoveProfileStep>(Assert.Single(plan.Steps));
 
     private static string NoteAbout(CleanupPlan plan, UserProfile profile) =>
-        Assert.Single(plan.Notes, note => note.Message.StartsWith(ProfileReport.Name(profile), StringComparison.Ordinal)).Message;
+        Assert.Single(plan.Notes, note => note.Message.StartsWith(ProfileReport.Name(profile) + ":", StringComparison.Ordinal)).Message;
 
     [Fact]
     public async Task ALocalAccountThatNoLongerExistsIsOfferedForWindowsToRemove()
@@ -148,16 +148,16 @@ public sealed class OtherAccountProfilesProviderTests : IDisposable
     [Fact]
     public async Task TheRunningAccountsProfileIsNeitherOfferedNorReportedEvenUnderAnotherIdentifier()
     {
-        var running = Assert.Single(_profiles.Profiles);
-        _profiles.Profiles.Clear();
-        _profiles.AddEntry(running with { Load = ProfileLoad.NotLoaded, Sid = $"{FakeUserProfiles.MachineDomain}-1001" });
-        var holder = _profiles.AddEntry(new UserProfile($"{FakeUserProfiles.MachineDomain}-1009", _temp.Path, ProfileLoad.NotLoaded, null));
+        // Profiles kept in the folder that holds the running account's, so its folder passes every folder
+        // rule and only the running-account rule can keep it.
+        var profiles = new FakeUserProfiles(_temp.Path);
+        Directory.CreateDirectory(_environment.UserProfile);
+        var renamed = profiles.AddEntry(new UserProfile($"{FakeUserProfiles.MachineDomain}-1009", _environment.UserProfile, ProfileLoad.NotLoaded, null));
 
-        var plan = await Provider().PlanAsync();
+        var plan = await new OtherAccountProfilesProvider(profiles, _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning).PlanAsync();
 
         Assert.Empty(plan.Steps);
-        Assert.DoesNotContain(plan.Notes, note => note.Message.StartsWith(ProfileReport.Name(running), StringComparison.Ordinal));
-        Assert.DoesNotContain(plan.Notes, note => note.Message.StartsWith(ProfileReport.Name(holder), StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, note => note.Message.StartsWith(ProfileReport.Name(renamed), StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -231,8 +231,59 @@ public sealed class OtherAccountProfilesProviderTests : IDisposable
         Assert.All(
             plan.Notes.Where(note => note.Message.StartsWith(ProfileReport.Name(first), StringComparison.Ordinal)),
             note => Assert.Contains("names the same folder", note.Message, StringComparison.Ordinal));
-        Assert.Equal(2, plan.Notes.Count(note => note.Message.Contains("names the same folder", StringComparison.Ordinal)));
-        Assert.NotNull(second);
+        Assert.Equal(2, plan.Notes.Count(note => note.Message.StartsWith(ProfileReport.Name(second), StringComparison.Ordinal)
+            && note.Message.Contains("names the same folder", StringComparison.Ordinal)));
+    }
+
+    /// <summary>Windows removes a folder whole, so one holding another entry's profile takes that profile with it.</summary>
+    [Fact]
+    public async Task AFolderHoldingAnotherEntrysFolderIsNotOffered()
+    {
+        var gone = _profiles.AddLocal(1002, "olduser");
+        var nested = Path.Combine(gone.Folder!, "kiosk");
+        Directory.CreateDirectory(nested);
+        var inside = _profiles.AddEntry(new UserProfile($"{FakeUserProfiles.MachineDomain}-1006", nested, ProfileLoad.NotLoaded, null));
+        _profiles.Accounts[inside.Sid] = new AccountReading(AccountAnswer.Exists);
+
+        var plan = await Provider().PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.Contains("one inside it", NoteAbout(plan, gone), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A folder written so that it reads as a child of the profiles folder while Windows resolves it to the
+    /// profiles folder itself, its parent, or another name, is never offered.
+    /// </summary>
+    [Theory]
+    [InlineData("..")]
+    [InlineData(".")]
+    [InlineData("former.")]
+    [InlineData("former ")]
+    public async Task AFolderWindowsResolvesElsewhereIsNotOffered(string written)
+    {
+        Directory.CreateDirectory(Path.Combine(_profiles.ProfilesFolder, "former"));
+        var odd = _profiles.AddEntry(new UserProfile(
+            $"{FakeUserProfiles.MachineDomain}-1002", _profiles.ProfilesFolder + Path.DirectorySeparatorChar + written, ProfileLoad.NotLoaded, null));
+
+        var plan = await Provider().PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.Contains("not one Windows keeps profiles in", NoteAbout(plan, odd), StringComparison.Ordinal);
+        Assert.True(Directory.Exists(_profiles.ProfilesFolder));
+    }
+
+    /// <summary>Nothing documents what Windows' removal does with the <c>.bak</c> copy of a profile, so neither is offered.</summary>
+    [Fact]
+    public async Task AProfileWithABackupEntryIsNotOffered()
+    {
+        var gone = _profiles.AddLocal(1002, "former");
+        _profiles.Add(gone.Sid + ".bak", "former.MACHINE");
+
+        var plan = await Provider().PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.Contains("a copy of a profile it could not load", NoteAbout(plan, gone), StringComparison.Ordinal);
     }
 
     [Fact]

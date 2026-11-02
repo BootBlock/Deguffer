@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Deguffer.Core.Profiles;
 using Deguffer.Core.Safety;
 using Microsoft.Win32;
 
@@ -43,9 +44,6 @@ internal sealed partial class ReportRedaction
     private const string UnknownName = @"(?:[^\\/`'""\r\n\uE000]|'(?=\p{L}))+";
 
     private const string OneDrivePrefix = "OneDrive - ";
-
-    /// <summary>Windows' list of profiles, under <c>HKEY_LOCAL_MACHINE</c>.</summary>
-    private const string ProfileList = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList";
 
     private const RegexOptions Options = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
 
@@ -129,15 +127,15 @@ internal sealed partial class ReportRedaction
     }
 
     /// <summary>
-    /// The folder of every account's profile in Windows' list of profiles but this one's, longest first so
-    /// one inside another goes first. Only accounts' entries: Windows' own accounts' profiles name no
-    /// person, and a drive's root is no one's folder.
+    /// The folder of every profile in Windows' list of profiles but this one's and Windows' own accounts',
+    /// longest first so one inside another goes first. An entry not named after an account, such as the
+    /// copy Windows keeps of a profile it could not load, is a person's too. A drive's root is no one's.
     /// </summary>
     private static IEnumerable<string> OtherProfiles(IUserEnvironment environment, string profile) =>
-        environment.ReadLocalMachineRegistrySubKeyNames(ProfileList, RegistryView.Registry64)
-            .Where(sid => sid.StartsWith("S-1-5-21-", StringComparison.OrdinalIgnoreCase)
-                || sid.StartsWith("S-1-12-1-", StringComparison.OrdinalIgnoreCase))
-            .Select(sid => environment.ReadLocalMachineRegistryValue($@"{ProfileList}\{sid}", "ProfileImagePath", RegistryView.Registry64))
+        environment.ReadLocalMachineRegistrySubKeyNames(WindowsUserProfiles.ProfileList, RegistryView.Registry64)
+            .Where(sid => !ProfileJudgement.IsWindowsOwn(sid))
+            .Select(sid => environment.ReadLocalMachineRegistryValue(
+                $@"{WindowsUserProfiles.ProfileList}\{sid}", "ProfileImagePath", RegistryView.Registry64))
             .OfType<string>()
             .Select(Path.TrimEndingDirectorySeparator)
             .Where(folder => Path.GetDirectoryName(folder) is { Length: > 0 }

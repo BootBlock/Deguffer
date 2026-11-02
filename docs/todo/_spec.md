@@ -1524,8 +1524,9 @@ deletes a profile folder by path. It is a Storage row, "Other accounts' profiles
   the account domain the Local Security Authority states), `LookupAccountSid` answers
   `ERROR_NONE_MAPPED`, Windows has no hive of it loaded and its `RefCount` is zero, it is not the
   account Deguffer runs as and its folder neither holds nor is inside that account's profile, and the
-  folder is directly inside `ProfilesDirectory`, is neither the Default nor the Public profile, is
-  named by no other entry, is there, and is not a link.
+  folder, as Windows resolves it, is directly inside `ProfilesDirectory`, is neither the Default nor
+  the Public profile, neither holds nor is inside any other entry's folder, has no `.bak` entry of
+  the same identifier beside it, is there, and is not a link.
 - **A refusal is never absence.** A domain account fails to resolve on a machine away from its
   domain controller exactly as a deleted one does, so a domain account's profile, and a Microsoft
   Entra account's, is reported and never offered. Any other lookup error, an unknown load state, a
@@ -1534,7 +1535,8 @@ deletes a profile folder by path. It is a Storage row, "Other accounts' profiles
 - **Removed by `DeleteProfileW`** with no path and no computer, so Windows removes the folder its
   own list records. The run judges the profile again on the same rules immediately before, refuses
   where Windows now records another folder, and looks into it for an Outlook data file, because
-  Windows removes a profile whole. A profile holding one is withheld at planning too.
+  Windows removes a profile whole. A profile holding one, or holding a virtual machine's registered
+  storage, is withheld at planning too, and its folder counts as part of what the run removes.
 - **§5.6 by Windows' own list:** afterwards the removed profile is gone from the list and from the
   disk, and every other profile the preview listed, the running account's included, is still listed
   with the same folder and that folder is still there, as is `ProfilesDirectory`.

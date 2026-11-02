@@ -51,7 +51,7 @@ public static class ProfileJudgement
 
         // Before the load: Windows' own accounts' profiles are loaded whenever Windows runs, and are no
         // one's to report as in use.
-        if (!IsAccount(sid.Value))
+        if (IsWindowsOwn(sid.Value))
         {
             return ProfileStanding.WindowsAccount;
         }
@@ -81,6 +81,13 @@ public static class ProfileJudgement
     /// <summary>Whether Windows' answer about <paramref name="sid"/>'s account means anything to report.</summary>
     public static bool IsAccount(string sid) =>
         sid.StartsWith(EntraPrefix, StringComparison.OrdinalIgnoreCase) || Identifier(sid)?.AccountDomainSid is not null;
+
+    /// <summary>
+    /// Whether <paramref name="sid"/> names an account Windows itself runs as, such as a service, rather
+    /// than a person's. An entry not named after an identifier at all is not Windows' own: nothing is
+    /// known about whose it is.
+    /// </summary>
+    public static bool IsWindowsOwn(string sid) => Identifier(sid) is not null && !IsAccount(sid);
 
     private static SecurityIdentifier? Identifier(string sid)
     {
@@ -152,12 +159,23 @@ public static class ProfileJudgement
             return ProfileStanding.OutsideProfiles;
         }
 
-        if (listing.Profiles.Any(other =>
-                !string.Equals(other.Sid, facts.Profile.Sid, StringComparison.OrdinalIgnoreCase)
-                && other.Folder is { } theirs
-                && SameFolder(theirs, folder)))
+        var others = listing.Profiles
+            .Where(other => !string.Equals(other.Sid, facts.Profile.Sid, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        // Windows removes the folder whole, so a folder that holds another entry's, or is inside it, would
+        // take that profile with it.
+        if (others.Any(other => other.Folder is { } theirs
+                && (LongPath.Contains(theirs, folder) || LongPath.Contains(folder, theirs))))
         {
             return ProfileStanding.SharedFolder;
+        }
+
+        // The copy Windows keeps of a profile it could not load is named after the same identifier, and
+        // nothing documents what Windows' removal does with it.
+        if (others.Any(other => string.Equals(other.Sid, facts.Profile.Sid + ".bak", StringComparison.OrdinalIgnoreCase)))
+        {
+            return ProfileStanding.BackupEntry;
         }
 
         return facts.FolderPresence switch
@@ -171,11 +189,16 @@ public static class ProfileJudgement
 
     /// <summary>
     /// Directly inside the folder Windows keeps profiles in, and neither of the two profiles there that
-    /// belong to no account.
+    /// belong to no account. Judged on the folder as Windows resolves it: <c>C:\Users\..</c> reads as a
+    /// child of <c>C:\Users</c> but is the drive's root, and Windows drops a trailing dot or space.
     /// </summary>
     private static bool IsRecognisedFolder(string folder, ProfileFolders folders)
     {
-        if (folders.Profiles is not { } profiles || Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(folder)) is not { } parent)
+        var written = Path.TrimEndingDirectorySeparator(LongPath.Display(folder));
+
+        if (folders.Profiles is not { } profiles
+            || !IsResolvedAsWritten(written)
+            || Path.GetDirectoryName(written) is not { } parent)
         {
             return false;
         }
@@ -183,6 +206,26 @@ public static class ProfileJudgement
         return SameFolder(parent, profiles)
             && !(folders.Default is { } shipped && SameFolder(folder, shipped))
             && !(folders.Public is { } shared && SameFolder(folder, shared));
+    }
+
+    private static bool IsResolvedAsWritten(string folder)
+    {
+        var name = Path.GetFileName(folder);
+
+        if (name.Length == 0 || name.EndsWith('.') || name.EndsWith(' '))
+        {
+            return false;
+        }
+
+        try
+        {
+            return string.Equals(Path.GetFullPath(folder), folder, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (ArgumentException)
+        {
+            // A value Windows would not accept as a path is no folder Deguffer can name.
+            return false;
+        }
     }
 
     private static bool SameFolder(string first, string second) =>

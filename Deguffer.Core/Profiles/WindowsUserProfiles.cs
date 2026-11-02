@@ -18,7 +18,8 @@ namespace Deguffer.Core.Profiles;
 /// </summary>
 public sealed class WindowsUserProfiles : IUserProfiles
 {
-    private const string ProfileList = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList";
+    /// <summary>Windows' list of profiles, under <c>HKEY_LOCAL_MACHINE</c>.</summary>
+    internal const string ProfileList = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList";
 
     private WindowsUserProfiles()
     {

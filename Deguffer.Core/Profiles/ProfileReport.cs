@@ -75,7 +75,11 @@ public static class ProfileReport
         ProfileStanding.AccountUnanswered => "Windows did not say whether its account still exists.",
         ProfileStanding.NoFolder => "Windows records no folder for it.",
         ProfileStanding.OutsideProfiles => "its folder is not one Windows keeps profiles in.",
-        ProfileStanding.SharedFolder => "another entry in Windows' list of profiles names the same folder.",
+        ProfileStanding.SharedFolder =>
+            "another entry in Windows' list of profiles names the same folder, one inside it, or one that holds it.",
+        ProfileStanding.BackupEntry =>
+            "Windows keeps a second entry for the same account, a copy of a profile it could not load, which "
+            + "Windows' removal may act on too.",
         ProfileStanding.FolderAbsent => "its folder is already gone, and only Windows' entry for it is left.",
         ProfileStanding.FolderRefused => "Windows would not say whether its folder is there.",
         ProfileStanding.FolderIsLink => "its folder is a link to somewhere else, which a removal could follow.",

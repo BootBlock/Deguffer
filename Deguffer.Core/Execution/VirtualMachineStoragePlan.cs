@@ -66,7 +66,7 @@ public static class VirtualMachineStoragePlan
             reached.AddRange(inReach);
             notes.Add(new PlanNote(PlanNoteSeverity.Warning, WhyWithheld(plan, step, inReach)));
 
-            if (step is DeleteStep)
+            if (step is DeleteStep or RemoveProfileStep)
             {
                 // Each path the step would have destroyed that holds the storage, protected on its
                 // contents, so a rule elsewhere in the run that emptied it is caught as well. A path
@@ -130,6 +130,7 @@ public static class VirtualMachineStoragePlan
     {
         DeleteStep deletion => deletion.Destroys,
         RunCommandStep command => command.MeasuredPaths.Concat(command.Subjects),
+        RemoveProfileStep profile => [profile.Folder],
         _ => [],
     };
 
@@ -158,6 +159,10 @@ public static class VirtualMachineStoragePlan
                 $"Not running {plan.ProviderName}'s own command ({Path.GetFileName(command.FileName)} "
                 + $"{command.Arguments}): where it works holds {named}. The tool decides for itself what it "
                 + "removes, and deleting that storage deletes the machine and everything in it.",
+
+            RemoveProfileStep profile =>
+                $"Leaving the profile at {LongPath.Display(profile.Folder)} as it is: it holds {named}. Windows "
+                + "removes a profile whole, and deleting that storage deletes the machine and everything in it.",
 
             DeleteStep whole =>
                 $"Leaving {LongPath.Display(whole.Path)} as it is: it holds {named}. Deleting that storage "

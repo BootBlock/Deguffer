@@ -23,13 +23,9 @@ internal static class ProfileRemovalProof
 
     private const string RunningReason = "The profile of the account Deguffer is running as, which is never removed.";
 
+    /// <param name="removals">Every removal in the plan, of which there is at least one.</param>
     public static IEnumerable<VerificationCheck> Checks(IReadOnlyList<RemoveProfileStep> removals, IUserProfiles profiles)
     {
-        if (removals.Count == 0)
-        {
-            yield break;
-        }
-
         var removed = removals.Select(step => step.Profile.Sid).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var after = profiles.List();
 

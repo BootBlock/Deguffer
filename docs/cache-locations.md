@@ -6922,10 +6922,13 @@ It never offers:
   resolve exactly as a deleted one does, so this PC cannot prove it is gone. Only Microsoft Entra can
   say a Microsoft Entra account is gone;
 - **an account Windows did not answer about**, whatever the reason;
-- **a folder Windows does not keep profiles in**, the Default or Public profile, a folder two entries
-  name, a folder that is a link, or a folder that is already gone;
-- **a profile holding an Outlook data file**, because Windows removes a profile whole and Deguffer
-  never removes one. The run looks again immediately before the removal.
+- **a folder Windows does not keep profiles in**, the Default or Public profile, a folder that holds
+  or is inside another profile's folder, a folder that is a link, or a folder that is already gone;
+- **a profile Windows keeps a second, `.bak` entry for**, because nothing documents what Windows'
+  removal does with it;
+- **a profile holding an Outlook data file or a virtual machine's registered storage**, because
+  Windows removes a profile whole and Deguffer never removes either. The run looks for Outlook data
+  files again immediately before the removal.
 
 Immediately before each removal, the run asks Windows again and judges the profile on the same rules,
 so an account made again, or a profile loaded, since the preview stays.

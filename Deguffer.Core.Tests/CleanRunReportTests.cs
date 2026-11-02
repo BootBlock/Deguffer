@@ -153,12 +153,17 @@ public sealed class CleanRunReportTests : IDisposable
         environment.WithMachineRegistryValue(
             $@"{list}\S-1-5-21-1111111111-2222222222-3333333333-1002", "ProfileImagePath", @"D:\Profiles\Joe Smith", RegistryView.Registry64);
         environment.WithMachineRegistryValue(
+            $@"{list}\S-1-5-21-1111111111-2222222222-3333333333-1003.bak", "ProfileImagePath", @"D:\Profiles\Ann Lee", RegistryView.Registry64);
+        environment.WithMachineRegistryValue(
             $@"{list}\S-1-5-18", "ProfileImagePath", @"C:\Windows\system32\config\systemprofile", RegistryView.Registry64);
 
         var report = CleanRunReport.Describe(
-            [Failed(@"D:\Profiles\Joe Smith", "Remove", @"Kept C:\Windows\system32\config\systemprofile")], Origin, environment);
+            [Failed(@"D:\Profiles\Joe Smith", "Remove", @"Kept C:\Windows\system32\config\systemprofile and D:\Profiles\Ann Lee")],
+            Origin,
+            environment);
 
         Assert.DoesNotContain("Joe Smith", report, StringComparison.Ordinal);
+        Assert.DoesNotContain("Ann Lee", report, StringComparison.Ordinal);
         Assert.Contains(@"D:\Profiles\<user>", report, StringComparison.Ordinal);
         Assert.Contains(@"C:\Windows\system32\config\systemprofile", report, StringComparison.Ordinal);
     }

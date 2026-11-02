@@ -10,8 +10,7 @@ namespace Deguffer.Core.Profiles;
 /// same rules from the machine as it then stands: an account can be made again, and a profile loaded,
 /// while the preview is on screen.</para>
 /// </summary>
-/// <param name="MachineDomain">This machine's own account domain, or null where Windows did not say.</param>
-public sealed record ProfileSurvey(ProfileListing Listing, string? MachineDomain, IReadOnlyList<ProfileVerdict> Verdicts)
+public sealed record ProfileSurvey(ProfileListing Listing, IReadOnlyList<ProfileVerdict> Verdicts)
 {
     /// <summary>
     /// Ask Windows for its list and, for each entry, whether its account exists and whether its folder is
@@ -23,7 +22,7 @@ public sealed record ProfileSurvey(ProfileListing Listing, string? MachineDomain
 
         if (listing.Presence is not PathPresence.Present)
         {
-            return new ProfileSurvey(listing, MachineDomain: null, []);
+            return new ProfileSurvey(listing, []);
         }
 
         var machineDomain = profiles.MachineAccountDomain();
@@ -32,7 +31,7 @@ public sealed record ProfileSurvey(ProfileListing Listing, string? MachineDomain
             .Select(facts => new ProfileVerdict(facts, ProfileJudgement.Judge(facts, listing, machineDomain, environment)))
             .ToList();
 
-        return new ProfileSurvey(listing, machineDomain, verdicts);
+        return new ProfileSurvey(listing, verdicts);
     }
 
     /// <summary>The verdict on the entry named <paramref name="sid"/>, or null where Windows no longer lists it.</summary>

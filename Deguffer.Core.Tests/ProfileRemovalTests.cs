@@ -201,6 +201,20 @@ public sealed class ProfileRemovalTests : IDisposable
         Assert.Contains("folder and its entry are both still there", outcome.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A path another row protects inside a profile Windows removes is the run's to answer for, never an
+    /// outside removal, so the run's reach holds the profile's folder.
+    /// </summary>
+    [Fact]
+    public async Task TheRunsReachHoldsTheRemovedProfilesFolder()
+    {
+        var gone = _profiles.AddLocal(1002, "former");
+
+        var plan = await Provider().PlanAsync();
+
+        Assert.Contains(gone.Folder!, RunReach.Of([plan]).TargetedPaths, StringComparer.OrdinalIgnoreCase);
+    }
+
     /// <summary>The executor never falls back to the machine's profiles: a plan holding the step needs the route given.</summary>
     [Fact]
     public async Task AnExecutorGivenNoRouteRefusesThePlanBeforeAnythingRuns()

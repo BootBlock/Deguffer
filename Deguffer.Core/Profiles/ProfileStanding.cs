@@ -53,8 +53,11 @@ public enum ProfileStanding
     /// </summary>
     OutsideProfiles,
 
-    /// <summary>Another entry in Windows' list names the same folder.</summary>
+    /// <summary>Another entry in Windows' list names the same folder, one inside it, or one that holds it.</summary>
     SharedFolder,
+
+    /// <summary>Windows keeps a <c>.bak</c> entry for the same identifier, which its removal may also act on.</summary>
+    BackupEntry,
 
     /// <summary>The folder is not there: the entry is all that is left.</summary>
     FolderAbsent,
