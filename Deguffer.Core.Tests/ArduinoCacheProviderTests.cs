@@ -475,5 +475,31 @@ public sealed class ArduinoCacheProviderTests : IDisposable
         Assert.NotEmpty(asked);
         Assert.True(plan.WasNotExamined);
     }
+
+    /// <summary>
+    /// A configuration edited while the CLI answers may have given answers from two configurations,
+    /// so the plan holds nothing to it and offers no clean.
+    /// </summary>
+    [Fact]
+    public async Task OffersNoCleanWhenTheConfigurationChangedWhileTheCliAnswered()
+    {
+        InstalledData();
+        var config = Path.Combine(Data, "arduino-cli.yaml");
+        var answer = CliAnswering();
+        var provider = CreateProvider(new FakeProcessRunner().Replying(Cli, arguments =>
+        {
+            if (arguments.Contains("directories.downloads", StringComparison.Ordinal))
+            {
+                File.AppendAllText(config, "# edited\n");
+            }
+
+            return answer.RunAsync(Cli, arguments, ToolRun.Query, CancellationToken.None).GetAwaiter().GetResult();
+        }));
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.Steps.OfType<RunCommandStep>());
+        Assert.Contains(plan.Notes, n => n.Message.Contains("changed while it was asked", StringComparison.Ordinal));
+    }
 }
 

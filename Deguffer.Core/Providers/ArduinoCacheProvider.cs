@@ -225,7 +225,8 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
         if (known.Count == 0)
         {
             return UnexaminedPlan(
-                "The Arduino CLI did not say where its folders are, and its cache clean removes its downloads "
+                "The Arduino CLI did not say where its folders are, or its configuration changed while it was asked, and its "
+                + "cache clean removes its downloads "
                 + "folder outright, so Deguffer cannot tell what it would remove.");
         }
 
@@ -237,8 +238,8 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Warning,
-                "One Arduino configuration did not say where its folders are, so Deguffer leaves everything it "
-                + "names alone."));
+                "One Arduino configuration did not say where its folders are, or changed while it was asked, so "
+                + "Deguffer leaves everything it names alone."));
         }
 
         var (commands, staged) = await PlanDownloadsAsync(known, notes, survivors, unreachable, ct).ConfigureAwait(false);
@@ -455,13 +456,16 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
 
             foreach (var (cli, configFile) in asked)
             {
-                // Read before the CLI is asked, so the clean is held to what the CLI read when it answered.
-                var configuration = ReadConfiguration(configFile);
+                // Read on both sides of the four queries, so the clean is held to what the CLI read when it
+                // answered. A configuration that moved while it answered may have given answers from two
+                // configurations, and none of them is then the one to hold the clean to.
+                var before = ReadConfiguration(configFile);
+                var settings = await ArduinoSettings.AskAsync(Runner, cli, configFile, ct).ConfigureAwait(false);
 
                 installations.Add(new Installation(
                     cli,
-                    configuration,
-                    await ArduinoSettings.AskAsync(Runner, cli, configFile, ct).ConfigureAwait(false)));
+                    before,
+                    ReadConfiguration(configFile).SameAs(before) || before.WhyUnknown is not null ? settings : null));
             }
 
             return (IReadOnlyList<Installation>)installations;
