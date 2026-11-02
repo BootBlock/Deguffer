@@ -37,13 +37,16 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
 
     /// <summary>
     /// The browser and helper artefacts Playwright downloads, each of which appears on disk as
-    /// <c>{name}-{revision}</c>. This is an allow-list for the same reason
-    /// <see cref="DisposableChildSet"/> is: a name this does not know is Tier 4, never a guess.
+    /// <c>{name}-{revision}</c>. Playwright writes every hyphen in a download's own name as an
+    /// underscore, so the one before the revision is the only hyphen in the folder's name: its
+    /// <c>chromium-tip-of-tree</c> is <c>chromium_tip_of_tree-1229</c> here. This is an allow-list
+    /// for the same reason <see cref="DisposableChildSet"/> is: a name this does not know is Tier 4,
+    /// never a guess.
     ///
     /// <c>.links</c> is deliberately absent — see <see cref="BuildProtectedPaths"/>.
     /// </summary>
     [GeneratedRegex(
-        @"\A(?:chromium|chromium_headless_shell|chromium-tip-of-tree|chromium-tip-of-tree_headless_shell|firefox|firefox-asan|firefox-beta|webkit|ffmpeg|winldd|android)-[0-9]+\z",
+        @"\A(?:chromium|chromium_headless_shell|chromium_tip_of_tree|chromium_tip_of_tree_headless_shell|chromium_with_symbols|firefox|firefox_asan|firefox_beta|webkit|ffmpeg|winldd|android)-[0-9]+\z",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex RecognisedChild();
 
@@ -286,9 +289,9 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
         {
             var name = builds[cleared.Path];
 
-            // The revision is everything after the last hyphen: RecognisedChild ends every name in
-            // one, followed only by digits, however many hyphens the browser's own name holds.
-            var revision = name.LastIndexOf('-');
+            // The revision is everything after the hyphen: RecognisedChild allows exactly one, and
+            // only digits after it.
+            var revision = name.IndexOf('-', StringComparison.Ordinal);
 
             return new DeletionTarget(
                 cleared.Path,
