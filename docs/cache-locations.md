@@ -1279,6 +1279,81 @@ already deletes the oldest of it on its own.
 
 ---
 
+## Arduino downloads and build cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\Arduino15\staging` and `%LOCALAPPDATA%\arduino`, unless moved |
+| **Method** | `arduino-cli cache clean` (the tool's own command) for the downloads, and path deletion of marked build-cache entries |
+| **Typical size** | Not measured: Arduino was not installed on the machine this was written against |
+
+### What it is
+
+Arduino IDE 2 and `arduino-cli` keep two disposable things:
+
+- **Downloaded archives** of boards, tools and libraries, in `staging` inside the data folder, in
+  two folders: `packages` and `libraries`. An archive is read again only to reinstall the same
+  version. The setting `directories.downloads` in `arduino-cli.yaml`, or `ARDUINO_DOWNLOADS_DIR`,
+  moves the folder.
+- **The build cache** of compiled cores and sketches, in `cores` and `sketches` inside
+  `%LOCALAPPDATA%\arduino` from arduino-cli 1.0.4. The setting `build_cache.path` moves it. The CLI
+  writes an empty `.last-used` file into every entry each time it uses it. Its own purge after 30
+  days reaches only `%TEMP%\arduino`, where the cache was before 1.0.4
+  (`commands/service_compile.go`), so nothing trims the current folder. The old `%TEMP%\arduino` is
+  left to the *Temporary files* row, which takes it by age.
+
+The data folder, `%LOCALAPPDATA%\Arduino15`, is not cache. It holds the installed cores and tools in
+`packages`, `internal`, the board and library indexes, `inventory.yaml` and `arduino-cli.yaml`. The
+sketchbook, `Documents\Arduino`, holds your sketches and libraries.
+
+### What Deguffer does
+
+Deguffer asks the CLI for `directories.data`, `directories.downloads`, `build_cache.path` and
+`directories.user` with `arduino-cli config get <key> --json`, so every default, setting and
+environment variable is resolved by the CLI itself. It asks twice where Arduino IDE 2 is set up:
+once for the CLI's own configuration, and once with `--config-file` naming
+`%USERPROFILE%\.arduinoIDE\arduino-cli.yaml`, the file the IDE hands the CLI it bundles. Each
+configuration's downloads folder is cleared through the same file. The CLI is found on the `PATH`,
+or inside Arduino IDE 2's install folder.
+
+`arduino-cli cache clean` removes the downloads folder outright, with no prompt and no dry run
+(`commands/service_cache_clean.go`). So Deguffer runs it only where:
+
+- the downloads folder is one Deguffer accepts as a tool's own;
+- it is not, and does not hold, the data folder, the build cache or the sketchbook, and it is
+  inside the data folder only as its own `staging`;
+- it is not a link, and it holds nothing but the `packages` and `libraries` folders the CLI stages
+  archives in.
+
+Anything else means Deguffer leaves the downloads alone and says why.
+
+In the build cache, Deguffer offers each entry of `cores` and `sketches` that carries the CLI's
+`.last-used` marker, and dates it by that marker. An entry without one, and anything else in the
+cache folder, is left alone.
+
+A clean that you cancel while `cache clean` runs is left to finish. It takes seconds.
+
+### What is protected
+
+The data folder and everything in it beside the downloads folder, the sketchbook, the build cache
+folder, and every unmarked or unrecognised entry in it. Deguffer asserts that each survived the
+run. Explore may remove `staging` and the build cache's `cores` and `sketches`, and refuses
+everything else in the data folder and the IDE's settings folder.
+
+### What it costs you
+
+Installing a board or library version again downloads its archive again, and the next compile of
+each sketch builds its core and sketch from scratch. Installed boards, tools and libraries, your
+sketches and your settings are untouched.
+
+### Why Tier 1
+
+Everything removed is a download the CLI fetches again, or a build the next compile makes again.
+
+---
+
 ## Scoop download cache
 
 **Tier 1 — regenerable cache.** Pre-selected.
