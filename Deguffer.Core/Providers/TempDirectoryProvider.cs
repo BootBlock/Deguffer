@@ -279,11 +279,11 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
                 static _ => false)),
             .. folders.Present.Where(folder => work[folder].Unreadable).Select(folder => new ToolRoot(
                 folder,
-                UnlistedReason,
+                TemporaryUserWork.UnlistedReason,
                 static _ => false)),
             .. work.Values.SelectMany(scan => scan.Entries).Select(entry => new ToolRoot(
                 entry.Path,
-                UserWorkReason(entry),
+                TemporaryUserWork.Reason(entry),
                 static _ => false)),
             .. folders.Present.Where(folder => !live.IsAnswered(folder)).Select(folder => new ToolRoot(
                 folder,
@@ -362,17 +362,14 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
             notes.Add(elsewhere);
         }
 
-        if (UserWorkNote([.. work.Values.SelectMany(w => w.Entries)]) is { } kept)
+        if (TemporaryUserWork.Note([.. work.Values.SelectMany(w => w.Entries)]) is { } kept)
         {
             notes.Add(kept);
         }
 
-        if (unlisted.Count > 0)
+        if (TemporaryUserWork.UnlistedNote(unlisted.Count) is { } unsearched)
         {
-            notes.Add(new PlanNote(
-                PlanNoteSeverity.Warning,
-                $"Deguffer could not look for work that was never saved in {unlisted.Count} temporary "
-                + "folder(s), so it offers nothing in them."));
+            notes.Add(unsearched);
         }
 
         // Three sentences, because there are three states and the difference between them is a rule
@@ -439,8 +436,8 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
                 // First, because the first reason for a path is the one kept, and a folder withheld
                 // whole is also one the scan protects.
                 .. withheld.Select(target => (target.Path, LiveTreeVeto.UncheckedReason)),
-                .. unlisted.Select(target => (target.Path, UnlistedReason)),
-                .. work.Values.SelectMany(w => w.Entries).Select(entry => (entry.Path, UserWorkReason(entry))),
+                .. unlisted.Select(target => (target.Path, TemporaryUserWork.UnlistedReason)),
+                .. work.Values.SelectMany(w => w.Entries).Select(entry => (entry.Path, TemporaryUserWork.Reason(entry))),
                 .. scan.Protected,
                 .. spared,
             ]),
@@ -549,35 +546,6 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
                 : $"{owned.Paths.Count} entries in these folders are offered on the rows of the tools that wrote them")
             + $", so this row leaves {(owned.Paths.Count == 1 ? "it" : "them")} out: "
             + $"{string.Join(", ", owned.Rows)}.");
-
-    /// <summary>
-    /// Why a temporary folder that could not be searched for unsaved work is left alone whole, in the
-    /// plan and in Explore.
-    /// </summary>
-    private const string UnlistedReason =
-        "Deguffer could not look in this temporary folder for work that was never saved, so it leaves "
-        + "all of it alone.";
-
-    /// <summary>Why an entry holding somebody's work survives, in the plan and in Explore.</summary>
-    private static string UserWorkReason(UserWorkEntry entry) =>
-        $"This is {entry.What}. It may be the only copy of that work, so Deguffer never removes it, "
-        + "however old it is.";
-
-    /// <summary>
-    /// The sentence saying what this row keeps because it is somebody's work, or null where it keeps
-    /// none. Information, because nothing is lost: the reader learns why the folder is not emptied.
-    /// </summary>
-    private static PlanNote? UserWorkNote(IReadOnlyList<UserWorkEntry> entries) => entries.Count == 0
-        ? null
-        : new PlanNote(
-            PlanNoteSeverity.Information,
-            (entries.Count == 1
-                ? "One entry in these folders holds work that was never saved anywhere else"
-                : $"{entries.Count} entries in these folders hold work that was never saved anywhere else")
-            + (entries.Count == 1
-                ? ", so this row leaves it alone however old it is: "
-                : ", so this row leaves them alone however old they are: ")
-            + $"{string.Join("; ", entries.Select(e => e.What).Distinct(StringComparer.Ordinal))}.");
 
     /// <param name="Paths">Each entry a tenant claimed, as that tenant named it.</param>
     /// <param name="Rows">The name of each row that claimed at least one, in the order they were asked.</param>

@@ -1,3 +1,4 @@
+using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Providers;
@@ -59,6 +60,47 @@ internal static class TemporaryUserWork
         ],
         children.Unreadable);
     }
+
+    /// <summary>
+    /// Why a temporary folder that could not be searched for unsaved work is left alone whole, in the
+    /// plan and in Explore.
+    /// </summary>
+    public const string UnlistedReason =
+        "Deguffer could not look in this temporary folder for work that was never saved, so it leaves "
+        + "all of it alone.";
+
+    /// <summary>Why an entry holding somebody's work survives, in the plan and in Explore.</summary>
+    public static string Reason(UserWorkEntry entry) =>
+        $"This is {entry.What}. It may be the only copy of that work, so Deguffer never removes it, "
+        + "however old it is.";
+
+    /// <summary>
+    /// The sentence saying what the temporary files row keeps because it is somebody's work, or null
+    /// where it keeps none. Information, because nothing is lost: the reader learns why the folder is
+    /// not emptied.
+    /// </summary>
+    public static PlanNote? Note(IReadOnlyList<UserWorkEntry> entries) => entries.Count == 0
+        ? null
+        : new PlanNote(
+            PlanNoteSeverity.Information,
+            (entries.Count == 1
+                ? "One entry in these folders holds work that was never saved anywhere else"
+                : $"{entries.Count} entries in these folders hold work that was never saved anywhere else")
+            + (entries.Count == 1
+                ? ", so this row leaves it alone however old it is: "
+                : ", so this row leaves them alone however old they are: ")
+            + $"{string.Join("; ", entries.Select(e => e.What).Distinct(StringComparer.Ordinal))}.");
+
+    /// <summary>
+    /// The warning for temporary folders that could not be searched for unsaved work, or null where
+    /// every one was.
+    /// </summary>
+    public static PlanNote? UnlistedNote(int folders) => folders == 0
+        ? null
+        : new PlanNote(
+            PlanNoteSeverity.Warning,
+            $"Deguffer could not look for work that was never saved in {folders} temporary folder(s), "
+            + "so it offers nothing in them.");
 
     /// <summary>What an entry named <paramref name="name"/> is, or null where it is nobody's work.</summary>
     private static string? Recognise(ReadOnlySpan<char> name)

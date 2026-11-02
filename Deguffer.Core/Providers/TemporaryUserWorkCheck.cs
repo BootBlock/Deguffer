@@ -8,8 +8,8 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>Why the preview's list is not enough.</b> An editor can start a new unsaved sketch while
 /// the preview is on screen, and with no age limit set the clean would take it with the rest of the
-/// folder. Each one found now and missing from the step is spared as an entry in use is, because the
-/// editor that made it a moment ago is running.</para>
+/// folder. Each one found now and missing from the step is kept as the step's own are, and reported
+/// as somebody's work.</para>
 ///
 /// <para>A folder whose entries could not be listed is held back whole, because no entry can be
 /// spared on a listing that names none.</para>
@@ -37,7 +37,7 @@ internal sealed class TemporaryUserWorkCheck(IUseCheck inner) : IUseCheck
             .. asked,
             .. scan.Entries
                 .Where(entry => !clear.UserWork.Contains(entry.Path, StringComparer.OrdinalIgnoreCase))
-                .Select(entry => new InUseNow(entry.Path, $"it is {entry.What}")),
+                .Select(entry => new InUseNow(entry.Path, $"it is {entry.What}", IsUserWork: true)),
         ];
     }
 }

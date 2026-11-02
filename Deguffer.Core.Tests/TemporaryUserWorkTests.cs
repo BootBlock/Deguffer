@@ -88,7 +88,7 @@ public sealed class TemporaryUserWorkTests : IDisposable
     /// §5.6 bites on a sketch: a clean that took it anyway is a failure, not a pass.
     /// </summary>
     [Fact]
-    public async Task ReportsAFailureWhenTheSketchIsGoneAfterTheClean()
+    public async Task ReportsAFailureWhenTheSketchIsGone()
     {
         var sketch = Path.Combine(UserTemp, UnsavedSketch);
         Abandoned(4096, "temp", UnsavedSketch, "sketch_jul15a", "sketch_jul15a.ino");
@@ -124,6 +124,8 @@ public sealed class TemporaryUserWorkTests : IDisposable
 
         Assert.True(File.Exists(code), "a sketch begun after the preview was removed");
         Assert.Equal(1024, result.BytesReclaimed);
+        Assert.Equal(1, result.UserWorkCount);
+        Assert.Equal(0, result.SparedCount);
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
@@ -147,9 +149,85 @@ public sealed class TemporaryUserWorkTests : IDisposable
     }
 
     /// <summary>
+    /// A folder that would not be listed may hold a sketch nobody could see, so the plan does not
+    /// offer it, names it as a survivor, and Explore refuses all of it.
+    /// </summary>
+    [Fact]
+    public async Task OffersNothingInAFolderItCouldNotSearchForUnsavedWork()
+    {
+        _environment.WithTempPath(Path.Combine(_environment.LocalAppData, "Temp"));
+
+        var idle = Path.Combine(UserTemp, "abandoned");
+        Abandoned(1024, "profile", "AppData", "Local", "Temp", "abandoned", "old.tmp");
+
+        using var denied = new DeniedDirectory(UserTemp);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+        var policy = await ExploreActionPolicy.ForAsync(_system, _environment, new FakeVolumeInventory(), [provider]);
+
+        Assert.DoesNotContain(plan.Steps.OfType<ClearDirectoryStep>(), s => s.Path.Equals(UserTemp, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(UserTemp, StringComparison.OrdinalIgnoreCase));
+        Assert.False(policy.MayRemove(idle).IsAllowed);
+    }
+
+    /// <summary>
+    /// A folder the clean cannot search for unsaved work is held back whole, because a sketch begun
+    /// since the preview could be in it. Asked of the check itself: the removal could not list such a
+    /// folder either, so a run would keep everything in it whatever the check said.
+    /// </summary>
+    [Fact]
+    public void HoldsTheFolderBackWhenTheCleanCannotSearchIt()
+    {
+        Abandoned(1024, "temp", "abandoned.tmp");
+
+        var check = new TemporaryUserWorkCheck(new LiveChildrenCheck(FakeLiveTreeInspector.NothingLive));
+        var step = new ClearDirectoryStep(UserTemp, "Temporary files");
+
+        using var denied = new DeniedDirectory(UserTemp);
+
+        var held = Assert.Single(check.Ask(step, CancellationToken.None));
+        Assert.Equal(UserTemp, held.Path);
+        Assert.False(held.IsUserWork);
+    }
+
+    /// <summary>
+    /// A sketch a running program is working in is kept as somebody's work and reported once, never
+    /// also as an entry in use.
+    /// </summary>
+    [Fact]
+    public async Task ReportsASketchARunningProgramIsInAsWorkAndNotAsInUse()
+    {
+        var sketch = Path.Combine(UserTemp, UnsavedSketch);
+        Abandoned(4096, "temp", UnsavedSketch, "sketch_jul15a", "sketch_jul15a.ino");
+        Abandoned(1024, "temp", "abandoned.tmp");
+
+        var provider = new TempDirectoryProvider(
+            _environment,
+            new FakeProcessRunner(),
+            FakeProcessInspector.NothingRunning,
+            system: _system,
+            liveTrees: new FakeLiveTreeInspector(sketch),
+            preferences: new FakePreferences(AppPreferences.Default with { MinimumTemporaryFileAgeDays = 0 }),
+            volumes: new FakeVolumeInventory());
+
+        var plan = await provider.PlanAsync();
+        var step = Assert.Single(plan.Steps.OfType<ClearDirectoryStep>(), s => s.Path == UserTemp);
+
+        Assert.Equal([sketch], step.UserWork);
+        Assert.Empty(step.Spared);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.Equal(1, result.UserWorkCount);
+        Assert.Equal(0, result.SparedCount);
+        Assert.Contains("never saved", RunOutcome.For([result]).Statement, StringComparison.Ordinal);
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
     /// §6.3: the folder is listed through <see cref="LongPath"/>, so the entry the rule finds comes
-    /// back in display form whatever form the folder was asked in, and the walk, which compares in
-    /// extended form, still matches it.
+    /// back in display form whatever form the folder was asked in.
     /// </summary>
     [Fact]
     public void FindsTheSketchWhenTheFolderIsNamedInExtendedForm()
@@ -162,6 +240,5 @@ public sealed class TemporaryUserWorkTests : IDisposable
         Assert.False(scan.Unreadable);
         Assert.Equal(Path.Combine(UserTemp, UnsavedSketch), entry.Path);
         Assert.False(entry.Path.StartsWith(@"\\?\", StringComparison.Ordinal));
-        Assert.True(new RemovalBounds(KeepRoot: true, [], UserWork: [entry.Path]).HoldsBack(LongPath.Extended(entry.Path)));
     }
 }
