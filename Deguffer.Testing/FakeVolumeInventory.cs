@@ -9,8 +9,9 @@ namespace Deguffer.Testing;
 /// <para><b>Only what is asked of this fake is invented.</b> A provider or the Explore policy still
 /// reads a path on the real disk through whichever name it is given, so a test whose paths at a
 /// letter it named here reach such a reading takes the letter from <see cref="UnmappedDriveLetter"/>,
-/// or gives the reader <see cref="EmptyFileSystem"/>. A letter the machine uses would let whatever it
-/// keeps there decide the answer.</para>
+/// or gives the reader <see cref="EmptyFileSystem"/>, or <see cref="ConfinedFileSystem"/> where the
+/// test also builds a real tree. A letter the machine uses would let whatever it keeps there decide
+/// the answer.</para>
 /// </summary>
 public sealed class FakeVolumeInventory : IVolumeInventory
 {
