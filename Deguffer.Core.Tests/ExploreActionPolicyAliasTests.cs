@@ -66,7 +66,7 @@ public sealed class ExploreActionPolicyAliasTests : IDisposable
     [Fact]
     public void ADeclaredRootNamedThroughALetterRefusesWhatItDoesNotRecognise()
     {
-        var policy = Policy(toolRoots: [ToolRoot.Folders(Path.Join(Letter, "tool"),"The tool's own folder.", Named("cache"))]);
+        var policy = Policy(toolRoots: [ToolRoot.Folders(Path.Join(Letter, "tool"), "The tool's own folder.", Named("cache"))]);
 
         Assert.False(policy.MayRemove(Path.Combine(Source, "tool")).IsAllowed);
         Assert.False(policy.MayRemove(Path.Combine(Source, "tool", "config")).IsAllowed);

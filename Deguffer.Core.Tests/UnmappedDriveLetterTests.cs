@@ -24,7 +24,17 @@ public sealed class UnmappedDriveLetterTests
         });
     }
 
+    /// <summary>
+    /// Every letter from <c>C</c> to <c>Z</c> the machine has not given to anything can be taken, and
+    /// one more cannot, so a letter the machine uses is never counted as free.
+    /// </summary>
     [Fact]
-    public void RefusesToTakeMoreLettersThanTheMachineHasFree() =>
-        Assert.Throws<InvalidOperationException>(() => UnmappedDriveLetter.Take(25));
+    public void TakesEveryFreeLetterAndRefusesOneMore()
+    {
+        var used = Environment.GetLogicalDrives().Select(root => char.ToUpperInvariant(root[0])).ToHashSet();
+        var free = Enumerable.Range('C', 'Z' - 'C' + 1).Count(letter => !used.Contains((char)letter));
+
+        Assert.Equal(free, UnmappedDriveLetter.Take(free).Count);
+        Assert.Throws<InvalidOperationException>(() => UnmappedDriveLetter.Take(free + 1));
+    }
 }
