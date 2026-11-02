@@ -79,6 +79,59 @@ public sealed class UvCacheProviderTests : IDisposable
             i.Arguments.Contains("--color never", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A failed <c>uv cache dir</c> is no answer, whatever it printed. The reply here fails and still names
+    /// a populated folder that is not the default, so a provider that read the output without the exit
+    /// code would measure that folder and say uv reported it.
+    /// </summary>
+    [Fact]
+    public async Task SaysTheCacheIsTheDefaultWhenUvDidNotAnswer()
+    {
+        _environment.WithExecutable("uv");
+        var cache = CreateCache();
+        var printed = _temp.CreateDirectory("printed-cache");
+        _temp.CreateFile(2048, "printed-cache", "payload.bin");
+
+        var runner = new FakeProcessRunner().Responding(Uv, "cache dir", printed, exitCode: 1);
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.Equal([cache], Assert.Single(plan.Steps.OfType<RunCommandStep>()).MeasuredPaths);
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("uv reports", StringComparison.Ordinal));
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains($"uv did not say where its cache directory is, so {cache} is the documented default", StringComparison.Ordinal)
+            && n.Message.Contains("uv's own command clears wherever uv really keeps it", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task SaysUvReportedTheCacheWhenItDid()
+    {
+        _environment.WithExecutable("uv");
+        var elsewhere = _temp.CreateDirectory("relocated-cache");
+        _temp.CreateFile(2048, "relocated-cache", "payload.bin");
+
+        var runner = new FakeProcessRunner().Responding(Uv, "cache dir", elsewhere);
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.Contains(plan.Notes, n => n.Message == $"uv reports its cache directory as {elsewhere}.");
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("did not say", StringComparison.Ordinal));
+    }
+
+    /// <summary>A missing default says nothing about a cache uv keeps elsewhere.</summary>
+    [Fact]
+    public async Task SaysTheDefaultIsMissingRatherThanTheCacheWhenUvDidNotAnswer()
+    {
+        _environment.WithExecutable("uv");
+
+        var runner = new FakeProcessRunner().Responding(Uv, "cache dir", string.Empty, exitCode: 1);
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.True(plan.IsEmpty);
+        Assert.StartsWith(
+            "uv did not say where its cache directory is, and the documented default",
+            Assert.Single(plan.Notes).Message,
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task FallsBackToTheDocumentedLocationWhenUvCannotAnswer()
     {
@@ -224,7 +277,9 @@ public sealed class UvCacheProviderTests : IDisposable
     {
         _environment.WithExecutable("uv");
 
-        var plan = await CreateProvider(UvAnsweringNothing()).PlanAsync();
+        var reported = Path.Combine(_environment.LocalAppData, "uv", "cache");
+        var runner = new FakeProcessRunner().Responding(Uv, "cache dir", reported);
+        var plan = await CreateProvider(runner).PlanAsync();
 
         Assert.True(plan.IsEmpty);
         Assert.Contains(plan.Notes, n => n.Message.Contains("does not exist yet", StringComparison.Ordinal));

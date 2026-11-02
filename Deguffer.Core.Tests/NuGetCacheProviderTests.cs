@@ -388,6 +388,58 @@ public sealed class NuGetCacheProviderTests : IDisposable
         Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(provider));
     }
 
+    /// <summary>
+    /// A failed <c>nuget locals all --list</c> is no answer, whatever it printed. The reply here fails
+    /// and still lists a populated folder that is not a default, so a provider that read the output
+    /// without the exit code would measure that folder and present it as one NuGet reaches.
+    /// </summary>
+    [Fact]
+    public async Task SaysTheLocationsAreDefaultsWhenNuGetDidNotList()
+    {
+        var packages = Path.Combine(_environment.UserProfile, ".nuget", "packages");
+        Directory.CreateDirectory(packages);
+        File.WriteAllBytes(Path.Combine(packages, "payload.bin"), new byte[1024]);
+        var printed = _temp.CreateDirectory("printed", "nuget-packages");
+        File.WriteAllBytes(Path.Combine(printed, "payload.bin"), new byte[1024]);
+
+        _environment.WithExecutable("dotnet");
+        var runner = new FakeProcessRunner().Responding(Dotnet, "locals all --list", $"global-packages: {printed}\\", exitCode: 1);
+        var plan = await new NuGetCacheProvider(
+            _environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory()).PlanAsync();
+
+        Assert.Equal([packages], Assert.Single(plan.Steps.OfType<RunCommandStep>()).MeasuredPaths);
+        Assert.DoesNotContain(plan.Notes, n => n.Message.StartsWith("Cleared by NuGet itself", StringComparison.Ordinal));
+        Assert.Contains(plan.Notes, n =>
+            n.Message.StartsWith(
+                $"NuGet did not list its cache locations, so these are the documented defaults rather than this machine's settings: {packages}.",
+                StringComparison.Ordinal)
+            && n.Message.Contains("NuGet's own command clears wherever NuGet really keeps its caches", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task SaysNuGetReachesTheLocationsItListed()
+    {
+        var (plan, _) = await PlanWithLocals();
+
+        Assert.Contains(plan.Notes, n => n.Message.StartsWith("Cleared by NuGet itself", StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("did not list", StringComparison.Ordinal));
+    }
+
+    /// <summary>Missing defaults say nothing about caches NuGet keeps elsewhere.</summary>
+    [Fact]
+    public async Task SaysTheDefaultsAreMissingRatherThanTheCachesWhenNuGetDidNotList()
+    {
+        _environment.WithExecutable("dotnet");
+        var runner = new FakeProcessRunner().Responding(Dotnet, "locals all --list", string.Empty, exitCode: 1);
+        var plan = await new NuGetCacheProvider(
+            _environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory()).PlanAsync();
+
+        Assert.True(plan.IsEmpty);
+        Assert.Equal(
+            "NuGet did not list its cache locations, and none of the documented defaults exist.",
+            Assert.Single(plan.Notes).Message);
+    }
+
     private async Task<(CleanupPlan Plan, string[] Locations)> PlanWithLocals()
     {
         // Deliberately mirrors the audit: two locations under .nuget, two well outside it.

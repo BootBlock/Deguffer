@@ -288,7 +288,10 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
                     presence is PathPresence.Refused
                         ? UnreadableRoot.UnreachedNote(locations.CacheDirectory)
                         : Information(
-                            $"PlatformIO's cache directory does not exist yet ({locations.CacheDirectory})."),
+                            new AskedLocation(
+                                    locations.CacheDirectory,
+                                    Answered: locations.CacheSource is not PlatformIoCacheSource.Default)
+                                .DescribeAbsent("PlatformIO", "cache directory")),
                 ],
                 FallbackReason.None,
                 Unreachable: presence is PathPresence.Refused);
@@ -296,10 +299,7 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
 
         var measured = await MeasureAllAsync([locations.CacheDirectory], ct).ConfigureAwait(false);
 
-        var notes = new List<PlanNote>
-        {
-            Information($"PlatformIO reports its cache directory as {locations.CacheDirectory}."),
-        };
+        var notes = new List<PlanNote> { Information(DescribeCacheDirectory(locations)) };
 
         if (measured.Note is { } scanNote)
         {
@@ -326,7 +326,21 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// §5.1 taken as far as it goes: PlatformIO is asked what its own prune would remove from the
+    /// What the plan says about the cache directory. Three sentences rather than two: PlatformIO
+    /// 6.1.19 names its core directory and not its cache directory, and the documented folder inside a
+    /// reported core directory is neither PlatformIO's report nor a guess about where it lives.
+    /// </summary>
+    private static string DescribeCacheDirectory(PlatformIoLocations locations) => locations.CacheSource switch
+    {
+        PlatformIoCacheSource.InReportedCore =>
+            $"PlatformIO reports its core directory as {locations.CoreDirectory} and does not name its cache "
+            + $"directory, so this is the documented one inside it: {locations.CacheDirectory}.",
+        var source => new AskedLocation(locations.CacheDirectory, Answered: source is PlatformIoCacheSource.Reported)
+            .Describe("PlatformIO", "cache directory"),
+    };
+
+    /// <summary>
+    /// §5.1 taken as far as it goes:PlatformIO is asked what its own prune would remove from the
     /// packages it installed, and its answer is the whole of the offer. Where it names nothing, the
     /// packages directory is not even measured and no row appears for it.
     ///

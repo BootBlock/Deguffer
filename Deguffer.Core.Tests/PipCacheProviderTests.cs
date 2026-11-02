@@ -92,6 +92,59 @@ public sealed class PipCacheProviderTests : IDisposable
             i.Arguments.Contains("--no-color", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A failed <c>pip cache dir</c> is no answer, whatever it printed. The reply here fails and still names
+    /// a populated folder that is not the default, so a provider that read the output without the exit
+    /// code would measure that folder and say pip reported it.
+    /// </summary>
+    [Fact]
+    public async Task SaysTheCacheIsTheDefaultWhenPipDidNotAnswer()
+    {
+        _environment.WithExecutable("pip");
+        var cache = CreateCache();
+        var printed = _temp.CreateDirectory("printed-cache");
+        _temp.CreateFile(2048, "printed-cache", "payload.bin");
+
+        var runner = new FakeProcessRunner().Responding(Pip, "cache dir", printed, exitCode: 1);
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.Equal([cache], Assert.Single(plan.Steps.OfType<RunCommandStep>()).MeasuredPaths);
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("pip reports", StringComparison.Ordinal));
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains($"pip did not say where its cache directory is, so {cache} is the documented default", StringComparison.Ordinal)
+            && n.Message.Contains("pip's own command clears wherever pip really keeps it", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task SaysPipReportedTheCacheWhenItDid()
+    {
+        _environment.WithExecutable("pip");
+        var elsewhere = _temp.CreateDirectory("relocated-cache");
+        _temp.CreateFile(2048, "relocated-cache", "payload.bin");
+
+        var runner = new FakeProcessRunner().Responding(Pip, "cache dir", elsewhere);
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.Contains(plan.Notes, n => n.Message == $"pip reports its cache directory as {elsewhere}.");
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("did not say", StringComparison.Ordinal));
+    }
+
+    /// <summary>A missing default says nothing about a cache pip keeps elsewhere.</summary>
+    [Fact]
+    public async Task SaysTheDefaultIsMissingRatherThanTheCacheWhenPipDidNotAnswer()
+    {
+        _environment.WithExecutable("pip");
+
+        var runner = new FakeProcessRunner().Responding(Pip, "cache dir", string.Empty, exitCode: 1);
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.True(plan.IsEmpty);
+        Assert.StartsWith(
+            "pip did not say where its cache directory is, and the documented default",
+            Assert.Single(plan.Notes).Message,
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task FallsBackToTheDocumentedLocationWhenPipCannotAnswer()
     {

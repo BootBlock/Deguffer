@@ -155,6 +155,107 @@ public sealed class PoetryCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A failed <c>poetry config</c> is no answer, whatever it printed. Each reply here fails and still
+    /// names a populated folder that is not the default, so a discovery that read the output without
+    /// the exit code would plan inside that folder and say Poetry reported it.
+    /// </summary>
+    [Fact]
+    public async Task SaysBothFoldersAreDefaultsWhenPoetryDidNotAnswer()
+    {
+        _environment.WithExecutable("poetry");
+        CreateCache();
+        var printed = _temp.CreateDirectory("printed-cache");
+        CreateCache(printed);
+
+        var runner = new FakeProcessRunner()
+            .Responding(PoetryPath, "config cache-dir", printed, exitCode: 1)
+            .Responding(PoetryPath, "config virtualenvs.path", Path.Combine(printed, "virtualenvs"), exitCode: 1)
+            .Responding(PoetryPath, "cache list", "PyPI");
+
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.Contains(Path.Combine(CacheRoot, "artifacts"), plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain(Path.Combine(printed, "artifacts"), plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("Poetry reports", StringComparison.Ordinal));
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains(
+                $"Poetry did not say where its cache directory is, so {LongPath.Display(CacheRoot)} is the documented default",
+                StringComparison.Ordinal)
+            && n.Message.Contains("Poetry's own cache clear acts on wherever Poetry really keeps its cache", StringComparison.Ordinal)
+            && n.Message.Contains(
+                "Poetry did not say where it keeps its virtual environments, so Deguffer takes them to be in "
+                + LongPath.Display(Path.Combine(CacheRoot, "virtualenvs")),
+                StringComparison.Ordinal));
+    }
+
+    /// <summary>The two settings are asked separately, so each is said as what it is.</summary>
+    [Fact]
+    public async Task SaysWhichOfItsFoldersPoetryReported()
+    {
+        _environment.WithExecutable("poetry");
+        CreateCache();
+
+        var runner = new FakeProcessRunner()
+            .Responding(PoetryPath, "config cache-dir", CacheRoot)
+            .Responding(PoetryPath, "config virtualenvs.path", string.Empty, exitCode: 1)
+            .Responding(PoetryPath, "cache list", "PyPI");
+
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.Contains(plan.Notes, n =>
+            n.Message.StartsWith($"Poetry reports its cache directory as {LongPath.Display(CacheRoot)}. ", StringComparison.Ordinal)
+            && n.Message.Contains("Poetry did not say where it keeps its virtual environments", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task SaysPoetryReportedBothFoldersWhenItDid()
+    {
+        CreateCache();
+
+        var plan = await CreateProvider(Poetry()).PlanAsync();
+
+        Assert.Contains(plan.Notes, n => n.Message ==
+            $"Poetry reports its cache directory as {LongPath.Display(CacheRoot)}. Poetry reports its virtual "
+            + $"environments as {LongPath.Display(Path.Combine(CacheRoot, "virtualenvs"))}.");
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("did not say", StringComparison.Ordinal));
+    }
+
+    /// <summary>A missing default says nothing about a cache Poetry keeps elsewhere.</summary>
+    [Fact]
+    public async Task SaysTheDefaultIsMissingRatherThanTheCacheWhenPoetryDidNotAnswer()
+    {
+        _environment.WithExecutable("poetry");
+
+        var runner = new FakeProcessRunner()
+            .Responding(PoetryPath, "config", string.Empty, exitCode: 1)
+            .Responding(PoetryPath, "cache list", "PyPI");
+
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.True(plan.IsEmpty);
+        Assert.StartsWith(
+            "Poetry did not say where its cache directory is, and the documented default",
+            Assert.Single(plan.Notes).Message,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A failed <c>cache list</c> names no cache, whatever it printed: a name from it would be handed
+    /// back to Poetry's clear as though Poetry had listed it.
+    /// </summary>
+    [Fact]
+    public async Task ClearsNoRepositoryCacheWhenPoetryCouldNotListThem()
+    {
+        CreateCache();
+
+        var runner = Poetry().Responding(PoetryPath, "cache list", "PyPI", exitCode: 1);
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.DoesNotContain(plan.Steps.OfType<RunCommandStep>(), s =>
+            s.Arguments.Contains("cache clear", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// The issue this provider exists for. Every environment on the machine sits inside the folder
     /// being cleaned, and each is a full install rather than a cache.
     /// </summary>
