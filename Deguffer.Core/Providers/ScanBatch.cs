@@ -26,11 +26,16 @@ namespace Deguffer.Core.Providers;
 /// reason <paramref name="WithheldRecent"/> is, because each becomes a property of the step that
 /// removes that path. See <see cref="CleanupStep.MailStores"/>.
 /// </param>
+/// <param name="Reached">
+/// One entry per path, saying whether the measurement reached it. A path not reached measures zero, so
+/// a provider that reports a figure for each path needs this to tell "empty" from "not looked into".
+/// </param>
 public sealed record ScanBatch(
     IReadOnlyList<ScanSize> Sizes,
     FallbackReason Fallback,
     IReadOnlyList<bool> WithheldRecent,
-    IReadOnlyList<IReadOnlyList<string>> MailStores)
+    IReadOnlyList<IReadOnlyList<string>> MailStores,
+    IReadOnlyList<bool> Reached)
 {
     public ScanSize Total => TotalOf(..);
 

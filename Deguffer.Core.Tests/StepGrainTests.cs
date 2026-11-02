@@ -52,6 +52,7 @@ public class StepGrainTests
             "mypy-cache",
             "node-modules",
             "nox-environments",
+            "other-account-profiles",
             "playwright",
             "puppeteer",
             "pytest-cache",

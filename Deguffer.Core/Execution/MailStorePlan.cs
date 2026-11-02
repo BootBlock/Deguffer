@@ -88,6 +88,17 @@ public static class MailStorePlan
                         PresenceBefore: PathPresence.Present,
                         HeldContentBefore: true)));
             }
+
+            if (step is RemoveProfileStep profile)
+            {
+                // Windows takes the profile whole, so the whole folder stays, on its contents, for the
+                // reason a subject withheld whole does.
+                leftWhole.Add(new ProtectedPath(
+                    LongPath.Display(profile.Folder),
+                    WholeReason,
+                    PresenceBefore: PathPresence.Present,
+                    HeldContentBefore: true));
+            }
         }
 
         var leftByRemovals = kept.SelectMany(step => step.MailStores).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -188,6 +199,10 @@ public static class MailStorePlan
             + "inside it goes whole or not at all, and Deguffer never removes one. Move what is named here "
             + "out, or delete it yourself, and scan again.",
 
+        RemoveProfileStep profile =>
+            $"Leaving the profile at {LongPath.Display(profile.Folder)} as it is: it holds {Every(profile.MailStores)}. "
+            + "Windows removes a profile whole and cannot be told to leave one file, and Deguffer never removes one. "
+            + "Move what is named here somewhere else, and scan again.",
         DeleteFileStep file =>
             $"Leaving {LongPath.Display(file.Path)} alone: it is an Outlook data file, and Deguffer never "
             + "removes one.",

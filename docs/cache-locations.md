@@ -6887,6 +6887,78 @@ exists to say.
 
 ---
 
+## Other accounts' profiles
+
+**Tier 3 — permanent loss.** Offered, **never pre-selected**, one profile at a time, and confirmed on
+its own.
+
+| | |
+| --- | --- |
+| **Location** | Each profile folder Windows lists under `ProfileList`, ordinarily `C:\Users\<name>` |
+| **Method** | Windows' own `DeleteProfileW`, one profile at a time, run as administrator. Windows removes the folder its list records and the profile's entry together. Deguffer never deletes the folder by path |
+| **Typical size** | Whatever the account kept: from a few hundred megabytes for an account that signed in once, to many gigabytes for a former user's documents and mail |
+
+### What it is
+
+Windows makes a profile for every account that signs in: a folder holding its documents, desktop,
+downloads, pictures and settings, and an entry in its list of profiles. Deleting an account does not
+always remove them, and on a machine more than one person used, the profiles of deleted accounts,
+former members of staff and test accounts stay behind. Nothing else in Deguffer names them, and a
+size picture shows only large folders under `Users`.
+
+### What Deguffer does
+
+It lists every other account's profile with its size, when Windows last loaded or unloaded it,
+whether its account still exists, and whether something is using it. Each profile it does not offer
+says why. It offers a profile only where the account is a local account of this PC, Windows says no
+such account exists, and nothing else stands in the way. It then asks Windows to remove that profile
+with its own profile removal.
+
+It never offers:
+
+- **the account Deguffer runs as**, or a folder that holds or is inside its profile;
+- **a profile in use**, or one Windows did not say is not in use;
+- **a domain or work account's profile.** Away from its domain, a live domain account fails to
+  resolve exactly as a deleted one does, so this PC cannot prove it is gone. Only Microsoft Entra can
+  say a Microsoft Entra account is gone;
+- **an account Windows did not answer about**, whatever the reason;
+- **a folder Windows does not keep profiles in**, the Default or Public profile, a folder two entries
+  name, a folder that is a link, or a folder that is already gone;
+- **a profile holding an Outlook data file**, because Windows removes a profile whole and Deguffer
+  never removes one. The run looks again immediately before the removal.
+
+Immediately before each removal, the run asks Windows again and judges the profile on the same rules,
+so an account made again, or a profile loaded, since the preview stays.
+
+Windows lets only an administrator look inside another account's profile or remove one, so a scan
+without administrator rights lists the profiles and offers to scan as administrator.
+
+### What is protected
+
+The run checks afterwards, by asking Windows again, that the removed profile is gone from Windows'
+list and from the disk, and that every other profile, the one Deguffer runs as included, is still
+listed with the same folder and that the folder is still there. The folder Windows keeps profiles in
+is checked too.
+
+### What it costs you
+
+**Everything the account kept in its profile is gone for good**: documents, pictures, desktop,
+downloads, mail and settings. Nothing brings it back. Copy anything you want to keep out of the folder
+first.
+
+### Why Tier 3
+
+A profile is a person's own files and settings, which is what Tier 3 exists to protect, so it is never
+lower than Tier 3 and is never pre-selected.
+
+### Privacy
+
+A profile's folder is often a person's name. Deguffer shows it on screen and writes it to no log, and a
+clean report it produces replaces every account's profile folder Windows lists with `<user>`, wherever
+the profiles are kept.
+
+---
+
 ## Windows temporary folders
 
 **Tier 2 — regenerable, with cost.** Offered, **not pre-selected**, and it needs an extra

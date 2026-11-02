@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using Deguffer.Core.Cloud;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Profiles;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -322,6 +323,9 @@ public sealed class ProviderInvalidationTests : IDisposable
         // Never the real one: it would remove the previous Windows installation of whoever ran the suite.
         : parameter == typeof(IDiskCleanupHandlers) ? FakeDiskCleanupHandlers.Windows()
         : parameter == typeof(ISystemProtection) ? new FakeSystemProtection()
+
+        // Never the real one: it would remove the profiles of the machine that ran the suite.
+        : parameter == typeof(IUserProfiles) ? new FakeUserProfiles(Path.Combine(_temp.Path, "Users"))
         : parameter == typeof(IWindowsServicing) ? FakeWindowsServicing.Settled
         : parameter == typeof(OwnServicingCalls) ? new OwnServicingCalls()
 
