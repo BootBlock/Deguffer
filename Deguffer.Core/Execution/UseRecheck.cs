@@ -32,10 +32,17 @@ internal sealed record UseRecheck(DeleteStep? Step, string? Withheld, IReadOnlyL
         // independent files to remove around the one in use.
         if (step is ClearDirectoryStep clear && SpareableEntries(clear, inUse) is { } spared)
         {
-            var added = spared.Where(entry => !clear.Spared.Contains(entry.Path, StringComparer.OrdinalIgnoreCase)).ToList();
+            var added = spared
+                .Where(entry => !clear.Spared.Contains(entry.Path, StringComparer.OrdinalIgnoreCase)
+                    && !clear.UserWork.Contains(entry.Path, StringComparer.OrdinalIgnoreCase))
+                .ToList();
 
             return new UseRecheck(
-                clear with { Spared = [.. clear.Spared, .. added.Select(entry => entry.Path)] },
+                clear with
+                {
+                    Spared = [.. clear.Spared, .. added.Where(entry => !entry.IsUserWork).Select(entry => entry.Path)],
+                    UserWork = [.. clear.UserWork, .. added.Where(entry => entry.IsUserWork).Select(entry => entry.Path)],
+                },
                 Withheld: null,
                 [.. added.Select(entry => Survivor(entry.Path, $"Left alone because {entry.Reason}."))]);
         }
@@ -76,7 +83,11 @@ internal sealed record UseRecheck(DeleteStep? Step, string? Withheld, IReadOnlyL
             var separator = relative.IndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]);
             var entry = Path.Combine(root, separator < 0 ? relative : relative[..separator]);
 
-            entries.TryAdd(entry, place with { Path = entry });
+            // Somebody's work outranks a use of it, because it stays for that reason once the use ends.
+            if (!entries.TryGetValue(entry, out var found) || (place.IsUserWork && !found.IsUserWork))
+            {
+                entries[entry] = place with { Path = entry };
+            }
         }
 
         return [.. entries.Values];

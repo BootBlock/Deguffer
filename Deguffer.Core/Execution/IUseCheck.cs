@@ -69,4 +69,9 @@ public interface IUseCheck
 /// What is using it, written for the user as a lower-case clause with no full stop, so that it
 /// completes both "Nothing was removed: …" and "Left alone because …".
 /// </param>
-public readonly record struct InUseNow(string Path, string Reason);
+/// <param name="IsUserWork">
+/// Whether it must stay because it holds somebody's work rather than because something is using it.
+/// A folder emptied in place then keeps it as <see cref="ClearDirectoryStep.UserWork"/>, so the run
+/// reports it for that reason and does not send the reader to close a program.
+/// </param>
+public readonly record struct InUseNow(string Path, string Reason, bool IsUserWork = false);

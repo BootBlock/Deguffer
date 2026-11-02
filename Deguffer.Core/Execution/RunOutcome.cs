@@ -187,6 +187,7 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict, bool Cance
         var folders = results.Aggregate(FolderRefusals.None, (total, result) => total + result.RefusedFolders);
         var kept = results.Sum(r => r.KeptCount);
         var spared = results.Sum(r => r.SparedCount);
+        var userWork = results.Sum(r => r.UserWorkCount);
         var stores = results.Sum(r => r.MailStoreCount);
 
         return (refused.InUse.Files > 0
@@ -215,6 +216,9 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict, bool Cance
             // to release a handle and the other is Deguffer declining to enter a folder it found a
             // program working in, and only the second names a folder the user chose to keep.
             + (spared > 0 ? $" {spared} folder(s) a running program is working in were kept." : string.Empty)
+            + (userWork > 0
+                ? $" {userWork} folder(s) holding work that was never saved anywhere else were kept."
+                : string.Empty)
 
             // Last, and with its reason, because it is the one cause that asks nothing of the reader:
             // no program to close, no setting to change and nothing to wait for (§9).

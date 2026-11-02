@@ -305,7 +305,8 @@ public static class DirectoryRemover
             LeftStanding = [.. leftStanding.Select(LongPath.Display)],
             RefusedFolders = refusedFolders,
             MailStores = [.. inventory.MailStores.Select(LongPath.Display)],
-            LeftAlone = [.. inventory.Spared.Select(LongPath.Display)],
+            LeftAlone = [.. inventory.Spared.Concat(inventory.UserWork).Select(LongPath.Display)],
+            UserWork = inventory.UserWork.Count,
             Interrupted = interrupted,
         };
     }

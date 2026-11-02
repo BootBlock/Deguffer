@@ -101,7 +101,7 @@ internal static class RefusalCheck
         }
 
         var bounds = clear is not null
-            ? new RemovalBounds(KeepRoot: false, clear.Spared, clear.OwnedElsewhere)
+            ? new RemovalBounds(KeepRoot: false, clear.Spared, clear.OwnedElsewhere, clear.UserWork)
             : RemovalBounds.None;
 
         var refused = Refusals.None;
@@ -120,7 +120,7 @@ internal static class RefusalCheck
             var extended = LongPath.Extended(place);
 
             // A spared entry is already out of the estimate, and the removal will not enter it.
-            if (bounds.SparedPaths.Contains(extended) || bounds.OwnedElsewherePaths.Contains(extended))
+            if (bounds.HoldsBack(extended))
             {
                 continue;
             }
