@@ -560,6 +560,10 @@ public sealed class CleanupPlanner
     /// returns is reported here once and in the same order, a plan the clean was cancelled before
     /// starting included, so whatever is summed from these lands on what is summed from the results.
     /// </param>
+    /// <param name="underway">
+    /// The tool the run is waiting on while a command step runs, and null when it returns, so the page
+    /// can say what a cancellation pressed now would wait for. See <see cref="CleanCancelNotice"/>.
+    /// </param>
     /// <param name="ct">
     /// Stops the run. <b>Never thrown:</b> the results hold every plan, the ones that finished, the
     /// one that was stopped and the ones never started, each <see cref="CleanupResult.Interrupted"/>
@@ -573,6 +577,7 @@ public sealed class CleanupPlanner
         IProgress<string>? status = null,
         IProgress<double>? progress = null,
         IProgress<CleanupResult>? finished = null,
+        IProgress<CommandUnderway?>? underway = null,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(selected);
@@ -677,6 +682,7 @@ public sealed class CleanupPlanner
                     reach,
                     residue,
                     ScaledProgress.Within(progress, done / total, weights[i] / total),
+                    underway,
                     plan.IsEmpty ? CancellationToken.None : ct)
                 .ConfigureAwait(false);
 

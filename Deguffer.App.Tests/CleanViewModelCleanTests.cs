@@ -141,6 +141,77 @@ public class CleanViewModelCleanTests
     }
 
     /// <summary>
+    /// Cancel pressed while a tool is left to finish is answered at once: the bar names the tool and
+    /// says the clean stops when it exits, and the button reads as already pressed, rather than the page
+    /// reading as a clean in progress for the minutes DISM can take. A "Checking…" line from the run's
+    /// last plan does not replace what the press said, and the button is itself again for the re-plan.
+    /// </summary>
+    [Fact]
+    public void ACancelWhileAToolIsLeftToFinishSaysSoAtOnceAndTheButtonReadsAsPressed()
+    {
+        var store = new FakeCleanupProvider("store") { Running = new CommandUnderway("Dism.exe", CancelledCommand.Finishes) };
+        var kept = new FakeCleanupProvider("kept");
+        using var page = new StoragePage([store, kept]);
+        store.Steps = [page.Cache("store", 4096)];
+        kept.ProtectedPaths =
+        [
+            new ProtectedPath(page.Cache("kept", 1024).Path, "On the keep list.", PathPresence.Present, Withheld: Withholding.OnKeepList),
+        ];
+        page.Scan();
+        page.Row("kept").IsSelected = false;
+
+        SynchronizationContext? window = null;
+        var statuses = new List<string>();
+        page.ViewModel.PropertyChanged += (_, changed) =>
+        {
+            if (changed.PropertyName == nameof(page.ViewModel.IsCleaning) && page.ViewModel.IsCleaning)
+            {
+                window = SynchronizationContext.Current;
+            }
+
+            if (changed.PropertyName == nameof(page.ViewModel.Status))
+            {
+                statuses.Add(page.ViewModel.Status);
+            }
+        };
+
+        // Pressed on the window's thread while the tool is still running, as a click is.
+        (string Status, InfoBarSeverity Severity, string Label, bool CanPressAgain)? pressed = null;
+        store.AfterCleaning = () =>
+        {
+            using var heard = new ManualResetEventSlim();
+            window!.Post(
+                _ =>
+                {
+                    page.ViewModel.CancelCommand.Execute(null);
+                    pressed = (
+                        page.ViewModel.Status,
+                        page.ViewModel.StatusSeverity,
+                        page.ViewModel.CancelLabel,
+                        page.ViewModel.CancelCommand.CanExecute(null));
+                    heard.Set();
+                },
+                null);
+            heard.Wait(TimeSpan.FromSeconds(10));
+        };
+
+        page.Clean();
+
+        const string waiting = "Cancelling. Dism.exe is being left to finish, because stopping it part-way could do harm. "
+            + "The clean stops as soon as it exits.";
+        Assert.Equal((waiting, InfoBarSeverity.Warning, "Cancelling…", false), pressed);
+
+        var fromThePress = statuses.SkipWhile(status => status != waiting).ToList();
+        Assert.Equal([waiting, "Cancelling the clean…"], fromThePress.Take(2));
+        Assert.DoesNotContain(fromThePress, status => status.StartsWith("Checking what", StringComparison.Ordinal));
+        Assert.Single(kept.Executed);
+
+        Assert.False(page.ViewModel.IsCancellingClean);
+        Assert.Equal("Cancel", page.ViewModel.CancelLabel);
+        Assert.True(page.ViewModel.CancelCommand.CanExecute(null));
+    }
+
+    /// <summary>
     /// Cancel pressed once the last deletion has finished stops nothing, so the run is reported as the
     /// clean it was, and its rows are planned again rather than left withdrawn under a spent token.
     /// </summary>

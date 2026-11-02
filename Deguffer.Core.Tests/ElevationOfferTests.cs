@@ -238,6 +238,7 @@ public sealed class ElevationOfferTests
             RunReach? runReach = null,
             RunResidue? residue = null,
             IProgress<double>? progress = null,
+            IProgress<CommandUnderway?>? underway = null,
             CancellationToken ct = default) =>
             throw new NotSupportedException();
 

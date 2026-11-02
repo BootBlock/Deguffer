@@ -106,6 +106,9 @@ public interface ICleanupProvider
     /// a folder another provider's removal went into is still a folder this run went into. Null means
     /// this plan is the whole run.
     /// </param>
+    /// <param name="underway">
+    /// Each command step's tool as it starts, and null as it returns. See <see cref="CommandUnderway"/>.
+    /// </param>
     /// <param name="ct">
     /// Stops the plan. <b>Never thrown:</b> a cancelled plan returns the steps that ran, is
     /// <see cref="CleanupResult.Interrupted"/>, and is verified (§5.6). The planner keeps the results of
@@ -116,6 +119,7 @@ public interface ICleanupProvider
         RunReach? runReach = null,
         RunResidue? residue = null,
         IProgress<double>? progress = null,
+        IProgress<CommandUnderway?>? underway = null,
         CancellationToken ct = default);
 
     /// <summary>§5.6 — assert the survivors.</summary>
