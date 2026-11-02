@@ -18,6 +18,9 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 internal static class ConfiguredFolder
 {
+    /// <summary>Why a value that names no full path is declined, as the end of a sentence.</summary>
+    public const string NotAFullPath = "it is not a full path, so Deguffer cannot tell which folder it means.";
+
     /// <summary>
     /// The folder a tool keeps where <paramref name="variable"/> moves it, <paramref name="defaultFolder"/>
     /// where it is not set, or the reason the value is declined.
@@ -72,7 +75,7 @@ internal static class ConfiguredFolder
 
         if (LongPath.Configured(value) is not { } named)
         {
-            return new Setting(value, null, null, "it is not a full path, so Deguffer cannot tell which folder it means.");
+            return new Setting(value, null, null, NotAFullPath);
         }
 
         var configured = within is null ? named : Path.Combine(named, within);

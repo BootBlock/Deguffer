@@ -128,18 +128,22 @@ public sealed partial class PreCommitStoreProvider : CleanupProviderBase
             : [];
 
     /// <summary>
-    /// A folder a variable names but this declines is still where pre-commit keeps its record and the
-    /// changes it stashed, so Explore refuses those there and nothing else. See <see cref="ToolRoot.Sparing"/>.
+    /// A folder a variable names but this declines is still where pre-commit keeps its record, its hook
+    /// repositories and the changes it stashed, so Explore refuses those there and nothing else. Built
+    /// as <see cref="ToolRoot.Sparing"/> builds its root, with a predicate rather than a list, because a
+    /// hook folder and a stashed change are known by their pattern, never by a name given in advance.
     /// </summary>
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<ToolRoot>>(
             Resolve().DeclinedFolder is { } declined
                 ?
                 [
-                    ToolRoot.Sparing(
+                    new ToolRoot(
                         declined,
-                        "pre-commit keeps its record of hook repositories here, so Deguffer leaves it alone.",
-                        StoreFiles),
+                        "pre-commit keeps its hook repositories, its record of them and the unstaged changes it "
+                        + "stashed during a commit here, so Deguffer leaves those alone.",
+                        static child => !IsStoreEntry(child.Name),
+                        ToolRootClaim.NamedEntries),
                 ]
                 : []);
 
@@ -160,13 +164,16 @@ public sealed partial class PreCommitStoreProvider : CleanupProviderBase
     /// <summary>
     /// A repository folder in the store, never the store existing: a store holding only stashed changes
     /// has nothing <c>gc</c> could remove. Not the command, so a store whose pre-commit is not on the
-    /// PATH is still reported.
+    /// PATH is still reported. A store Windows would not describe or list, and a store that is a link,
+    /// count as present, because only the plan can say that it left them alone.
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(ResolveStore() is { } store
-            && !LongPath.IsReparsePoint(store)
-            && FolderEntries.Of(store) is { } entries
-            && entries.Any(IsRepository));
+        Task.FromResult(ResolveStore() is { } store && LongPath.ProbeDirectory(store) switch
+        {
+            PathPresence.Absent => false,
+            PathPresence.Refused => true,
+            _ => LongPath.IsReparsePoint(store) || FolderEntries.Of(store) is not { } entries || entries.Any(IsRepository),
+        });
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
@@ -295,14 +302,39 @@ public sealed partial class PreCommitStoreProvider : CleanupProviderBase
     /// For the second, the <c>pre-commit</c> folder inside is what <see cref="ConfiguredFolder"/> judges,
     /// because a cache home is shared by many tools.
     /// </summary>
-    private ConfiguredFolder.Setting Resolve() =>
-        SettingVariable == HomeVariable
+    private ConfiguredFolder.Setting Resolve()
+    {
+        var variable = SettingVariable;
+
+        // Python's "or" keeps a value of spaces, and pre-commit resolves it against its own working
+        // directory, so it is a relative value rather than an unset one, which ConfiguredFolder's trim
+        // would read it as.
+        if (Environment.GetToolEnvironmentVariable(variable) is { Length: > 0 } value && string.IsNullOrWhiteSpace(value))
+        {
+            return new ConfiguredFolder.Setting(value, null, null, ConfiguredFolder.NotAFullPath);
+        }
+
+        return variable == HomeVariable
             ? ConfiguredFolder.FromToolVariable(HomeVariable, DefaultStore, Environment, _system, Volumes)
             : ConfiguredFolder.FromToolVariable(XdgCacheVariable, DefaultStore, Environment, _system, Volumes, within: StoreFolder);
+    }
 
-    /// <summary>The variable pre-commit reads its store from: <see cref="HomeVariable"/> wherever it is set.</summary>
+    /// <summary>
+    /// The variable pre-commit reads its store from: <see cref="HomeVariable"/> wherever it holds anything,
+    /// spaces included, as Python's <c>or</c> decides.
+    /// </summary>
     private string SettingVariable =>
-        string.IsNullOrWhiteSpace(Environment.GetToolEnvironmentVariable(HomeVariable)) ? XdgCacheVariable : HomeVariable;
+        string.IsNullOrEmpty(Environment.GetToolEnvironmentVariable(HomeVariable)) ? XdgCacheVariable : HomeVariable;
+
+    /// <summary>
+    /// A name pre-commit gives something in its store: its own files, a hook repository folder or a
+    /// stashed change. Asked of a folder's children by name alone, so a file carrying a folder's
+    /// pattern is refused too, which is the safe direction.
+    /// </summary>
+    private static bool IsStoreEntry(string name) =>
+        StoreFiles.Contains(name, StringComparer.OrdinalIgnoreCase)
+        || RepositoryFolder().IsMatch(name)
+        || StashedChanges().IsMatch(name);
 
     // Python's tempfile draws its suffix from lowercase letters, digits and the underscore.
     [GeneratedRegex("^repo[a-z0-9_]{8}$", RegexOptions.CultureInvariant)]

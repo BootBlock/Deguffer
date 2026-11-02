@@ -1539,7 +1539,7 @@ this is not about environments being expensive to rebuild.
 | --- | --- |
 | **Location** | `%USERPROFILE%\.cache\pre-commit`, or `PRE_COMMIT_HOME`, or `pre-commit` inside `XDG_CACHE_HOME` |
 | **Method** | `pre-commit gc`. Never `pre-commit clean`, and never a path |
-| **Typical size** | Tens of megabytes for each hook repository and version a project has named |
+| **Typical size** | Grows with every hook repository and version a project names, each with its own installed environment |
 
 ### What it is
 
@@ -1560,7 +1560,8 @@ is in it:
   pre-commit never removes these, and one can be the only copy of that work.
 
 pre-commit finds the store through `PRE_COMMIT_HOME`, then `XDG_CACHE_HOME`, then
-`%USERPROFILE%\.cache\pre-commit`. An empty variable counts as unset.
+`%USERPROFILE%\.cache\pre-commit`. An empty variable counts as unset, and a variable of only spaces
+is a relative path to pre-commit.
 
 ### What Deguffer does
 
@@ -1582,7 +1583,8 @@ for the same reason.
 
 The store is read from the variables as the `pre-commit` Deguffer starts sees them, because that is
 the store `gc` acts on. Deguffer offers nothing if a variable holds a relative path, or names a folder
-such as your profile. If the store is a link to somewhere else, Deguffer says so and leaves it alone.
+such as your profile, and Explore still refuses pre-commit's files, hook folders and stashed changes
+there. If the store is a link to somewhere else, Deguffer says so and leaves it alone.
 If no `pre-commit` command is on the PATH, the row says how many hook repositories the store holds and
 offers nothing, because only `gc` can tell which ones are unused. A started `gc` is left to finish,
 because it records its removals only at the end.
@@ -1597,7 +1599,7 @@ how many stashed changes the store holds.
 
 Nothing for a project whose configuration pre-commit can still read. A project whose configuration
 it cannot read, such as one on a drive that is not connected or one that was deleted, installs its
-hooks again the next time pre-commit runs there, which can take a few minutes.
+hooks again the next time pre-commit runs there, which pre-commit warns may take a few minutes.
 
 ### Why Tier 1
 

@@ -261,10 +261,37 @@ public sealed class PreCommitStoreProviderTests : IDisposable
         _environment.WithExecutable("pre-commit");
         var home = Path.Combine(_temp.Path, "xdg");
         CreateLayout(Path.Combine(home, "pre-commit"));
-        _environment.WithEnvironmentVariable(PreCommitStoreProvider.HomeVariable, "  ");
+        _environment.WithEnvironmentVariable(PreCommitStoreProvider.HomeVariable, string.Empty);
         _environment.WithEnvironmentVariable(PreCommitStoreProvider.XdgCacheVariable, home);
 
         Assert.Equal(Path.Combine(home, "pre-commit"), CreateProvider().ResolveStore(), StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Python's <c>or</c> keeps a value of spaces, which pre-commit then resolves against its own working
+    /// directory, so it is declined as relative rather than read as unset.
+    /// </summary>
+    [Theory]
+    [InlineData(PreCommitStoreProvider.HomeVariable)]
+    [InlineData(PreCommitStoreProvider.XdgCacheVariable)]
+    public async Task AValueOfSpacesIsDeclinedRatherThanReadAsUnset(string variable)
+    {
+        _environment.WithExecutable("pre-commit");
+        CreateLayout(Store);
+        var home = Path.Combine(_temp.Path, "xdg");
+        CreateLayout(Path.Combine(home, "pre-commit"));
+        _environment.WithEnvironmentVariable(PreCommitStoreProvider.XdgCacheVariable, home);
+        _environment.WithEnvironmentVariable(variable, "  ");
+
+        var provider = CreateProvider();
+
+        Assert.Null(provider.ResolveStore());
+        Assert.False(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+        Assert.True(plan.IsEmpty);
+        Assert.Contains(plan.Notes, n => n.Message.StartsWith($"{variable} is set to '  '", StringComparison.Ordinal)
+            && n.Message.Contains("not a full path", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -310,10 +337,10 @@ public sealed class PreCommitStoreProviderTests : IDisposable
 
     /// <summary>
     /// A <c>PRE_COMMIT_HOME</c> naming the profile is declined, and Explore still refuses pre-commit's own
-    /// files there and nothing else.
+    /// files, its hook folders and the changes it stashed there, and nothing else.
     /// </summary>
     [Fact]
-    public async Task ADeclinedFolderStillRefusesPreCommitsRecord()
+    public async Task ADeclinedFolderStillRefusesWhatPreCommitKeepsThere()
     {
         _environment.WithExecutable("pre-commit");
         _environment.WithEnvironmentVariable(PreCommitStoreProvider.HomeVariable, _environment.UserProfile);
@@ -327,7 +354,12 @@ public sealed class PreCommitStoreProviderTests : IDisposable
         Assert.Equal(_environment.UserProfile, root.Path, StringComparer.OrdinalIgnoreCase);
         Assert.Equal(ToolRootClaim.NamedEntries, root.Claim);
         Assert.False(root.Recognises(new ToolRootChild("db.db", ChildKind.File)));
+        Assert.False(root.Recognises(new ToolRootChild(".lock", ChildKind.File)));
+        Assert.False(root.Recognises(new ToolRootChild("patch1761000000-4242", ChildKind.File)));
+        Assert.False(root.RecognisesFolder("repoab12cd_3"));
         Assert.True(root.RecognisesFolder("Documents"));
+        Assert.True(root.RecognisesFolder("repository-notes"));
+        Assert.True(root.Recognises(new ToolRootChild("patch-notes.txt", ChildKind.File)));
     }
 
     /// <summary>
@@ -365,8 +397,9 @@ public sealed class PreCommitStoreProviderTests : IDisposable
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(other, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>A linked store is shown, so the row can say it was left alone, and nothing is offered.</summary>
     [Fact]
-    public async Task LeavesALinkedStoreAlone()
+    public async Task SaysItLeavesALinkedStoreAlone()
     {
         _environment.WithExecutable("pre-commit");
         var target = Path.Combine(_temp.Path, "elsewhere");
@@ -376,11 +409,29 @@ public sealed class PreCommitStoreProviderTests : IDisposable
 
         var provider = CreateProvider();
 
-        Assert.False(await provider.IsPresentAsync());
+        Assert.True(await provider.IsPresentAsync());
 
         var plan = await provider.PlanAsync();
         Assert.True(plan.IsEmpty);
         Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("it is a link to somewhere else", StringComparison.Ordinal));
+    }
+
+    /// <summary>A store Windows would not describe is a row that says so, never a tool that is not there.</summary>
+    [Fact]
+    public async Task AStoreWindowsWouldNotDescribeIsShownAsUnreachable()
+    {
+        _environment.WithExecutable("pre-commit");
+        CreateLayout(Store);
+        using var denied = DeniedDirectory.WithUnreadableAttributes(Store);
+
+        var provider = CreateProvider();
+
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+        Assert.True(plan.IsEmpty);
+        Assert.True(plan.HasUnreadableRoot);
     }
 
     [Fact]
