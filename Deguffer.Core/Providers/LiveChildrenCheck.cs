@@ -12,8 +12,8 @@ namespace Deguffer.Core.Providers;
 /// entry removed on its own, such as a test browser's profile, asks about its folder's entries and
 /// is held back where it is one of them.</para>
 ///
-/// <para>An entry another row offers is not this step's to spare: the removal leaves it alone
-/// already, and that row asks its own question.</para>
+/// <para>An entry another row offers, or one that holds somebody's work, is not this step's to spare:
+/// the removal leaves it alone already, and reports it for its own reason.</para>
 ///
 /// <para>A check that could not read every program's command line holds the whole step back, because
 /// no entry can be spared on an answer that names none. See <see cref="LiveTreeVeto.AtClean"/>.</para>
@@ -33,7 +33,7 @@ internal sealed class LiveChildrenCheck(ILiveTreeInspector inspector) : IUseChec
         // the limit.
         inspector.DiscardOlderThan(IUseCheck.ReadingLimit);
 
-        var elsewhere = step is ClearDirectoryStep clear ? clear.OwnedElsewhere : [];
+        IReadOnlyList<string> elsewhere = step is ClearDirectoryStep clear ? [.. clear.OwnedElsewhere, .. clear.UserWork] : [];
         var findings = inspector.FindLiveChildren([folder], ct);
 
         IReadOnlyList<InUseNow> inUse =

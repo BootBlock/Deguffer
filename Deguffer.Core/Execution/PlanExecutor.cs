@@ -862,7 +862,7 @@ public sealed class PlanExecutor(
             progress,
             ct,
             fileSystem: null,
-            new RemovalBounds(KeepRoot: true, step.Spared, step.OwnedElsewhere)).ConfigureAwait(false);
+            new RemovalBounds(KeepRoot: true, step.Spared, step.OwnedElsewhere, step.UserWork)).ConfigureAwait(false);
 
         refusals.Record(step.Path, removal);
         runResidue.Record(step.Path, removal.LeftStanding);
@@ -881,7 +881,7 @@ public sealed class PlanExecutor(
         // that met no refusal otherwise reports.
         var succeeded = !removal.NotADirectory
             && (removal.BytesReclaimed > 0 || removal.EntriesRemoved > 0 || removal.Kept > 0
-                || removal.Spared > 0 || stores > 0 || (removal.Refused.IsEmpty && removal.RefusedFolders.IsEmpty));
+                || removal.Spared > 0 || removal.UserWork > 0 || stores > 0 || (removal.Refused.IsEmpty && removal.RefusedFolders.IsEmpty));
 
         // Asked of the entries as well as the bytes: a folder holding only empty folders reclaims no
         // bytes, and it was still cleared.
@@ -892,15 +892,15 @@ public sealed class PlanExecutor(
             (false, _, _) => LeftInPlace.WhyNothingHappened(removal.Refused, removal.RefusedFolders),
 
             // Nothing came out, and the reasons are the ones the step promised: files too recent to
-            // touch, entries something is using, and Outlook mail stores. "Cleared" would be a false
-            // statement about a folder that is exactly as full as it was.
-            (true, 0, 0) when removal.Kept > 0 || removal.Spared > 0 || stores > 0 =>
+            // touch, entries something is using, somebody's work, and Outlook mail stores. "Cleared"
+            // would be a false statement about a folder that is exactly as full as it was.
+            (true, 0, 0) when removal.Kept > 0 || removal.Spared > 0 || removal.UserWork > 0 || stores > 0 =>
                 "Nothing was cleared"
-                + $"{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept, removal.Spared, stores)}.",
+                + $"{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept, removal.Spared, stores, removal.UserWork)}.",
 
             (true, 0, 0) => "It held nothing to clear.",
 
-            _ => $"Cleared{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept, removal.Spared, stores)}.",
+            _ => $"Cleared{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept, removal.Spared, stores, removal.UserWork)}.",
         };
 
         return new StepOutcome(
@@ -913,7 +913,8 @@ public sealed class PlanExecutor(
             removal.Spared,
             removal.EntriesRemoved,
             removal.RefusedFolders,
-            stores);
+            stores,
+            UserWork: removal.UserWork);
     }
 
     /// <summary>A command not run because its <see cref="RunCommandStep.TargetCheck"/> said why not.</summary>
@@ -932,13 +933,14 @@ public sealed class PlanExecutor(
         (removal.BytesReclaimed == 0 && removal.EntriesRemoved == 0
             ? "Stopped when the clean was cancelled, before anything was removed"
             : "Stopped part-way when the clean was cancelled")
-        + $"{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept, removal.Spared, stores)}.",
+        + $"{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept, removal.Spared, stores, removal.UserWork)}.",
         removal.Kept,
         removal.Spared,
         removal.EntriesRemoved,
         removal.RefusedFolders,
         stores,
-        Interrupted: true);
+        Interrupted: true,
+        UserWork: removal.UserWork);
 
     private async Task<StepOutcome> DeleteAsync(
         DeleteFileStep step,

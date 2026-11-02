@@ -539,7 +539,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
             throw new ArgumentException($"Only a directory removed outright can carry an index: {unindexable}.", nameof(targets));
         }
 
-        if (targets.FirstOrDefault(t => (t.Spared is { Count: > 0 } || t.OwnedElsewhere is { Count: > 0 }) && t.Kind != TargetKind.DirectoryContents) is { Path: { } unbounded })
+        if (targets.FirstOrDefault(t => (t.Spared is { Count: > 0 } || t.OwnedElsewhere is { Count: > 0 } || t.UserWork is { Count: > 0 }) && t.Kind != TargetKind.DirectoryContents) is { Path: { } unbounded })
         {
             throw new ArgumentException($"Only a folder emptied in place can leave entries standing: {unbounded}.", nameof(targets));
         }
@@ -564,6 +564,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
                 {
                     Spared = target.Spared ?? [],
                     OwnedElsewhere = target.OwnedElsewhere ?? [],
+                    UserWork = target.UserWork ?? [],
                 },
                 _ => new DeleteDirectoryStep(target.Path, target.Reason) { IndexedBy = target.IndexedBy ?? [] },
             };
@@ -671,7 +672,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
     {
         TargetKind.DirectoryContents => new ScanBounds(
             KeepRoot: true,
-            [.. target.Spared ?? [], .. target.OwnedElsewhere ?? []]),
+            [.. target.Spared ?? [], .. target.OwnedElsewhere ?? [], .. target.UserWork ?? []]),
         TargetKind.RecycleBin => ScanBounds.Contents,
         _ => default,
     };

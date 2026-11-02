@@ -71,6 +71,15 @@ public sealed record RemovalOutcome(
     public IReadOnlyList<string> LeftAlone { get; init; } = [];
 
     /// <summary>
+    /// Entries the caller named as somebody's work and this removal did not descend into. Each is in
+    /// <see cref="LeftAlone"/> as well, as evidence for §5.6.
+    ///
+    /// <para>Apart from <see cref="Spared"/> because the sentence for that one sends the reader to
+    /// close a program, and nothing need be running for an unsaved sketch to be kept.</para>
+    /// </summary>
+    public int UserWork { get; init; }
+
+    /// <summary>
     /// The Outlook mail stores this removal found and left where they were, in display form, because
     /// Deguffer never removes one (see <see cref="Safety.MailStore"/>). The folders holding them are
     /// in <see cref="LeftStanding"/> for the reason any folder holding something is.

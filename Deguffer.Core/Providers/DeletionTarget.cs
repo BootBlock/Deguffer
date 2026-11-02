@@ -69,6 +69,10 @@ public enum TargetKind
 /// Entries of a folder emptied in place that another row offers, left standing and left out on the
 /// same terms. Null for none. See <see cref="Execution.ClearDirectoryStep.OwnedElsewhere"/>.
 /// </param>
+/// <param name="UserWork">
+/// Entries of a folder emptied in place that hold somebody's work, left standing and left out on the
+/// same terms. Null for none. See <see cref="Execution.ClearDirectoryStep.UserWork"/>.
+/// </param>
 public readonly record struct DeletionTarget(
     string Path,
     string Reason,
@@ -82,4 +86,5 @@ public readonly record struct DeletionTarget(
     Execution.IUseCheck? UseCheck = null,
     IReadOnlyList<string>? IndexedBy = null,
     IReadOnlyList<string>? Spared = null,
-    IReadOnlyList<string>? OwnedElsewhere = null);
+    IReadOnlyList<string>? OwnedElsewhere = null,
+    IReadOnlyList<string>? UserWork = null);

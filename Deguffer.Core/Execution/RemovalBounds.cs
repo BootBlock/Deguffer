@@ -33,10 +33,16 @@ namespace Deguffer.Core.Execution;
 /// entry is one "something is using", and saying that of an entry the Node.js compile cache row owns
 /// would send the user looking for a program that is not there.
 /// </param>
+/// <param name="UserWork">
+/// Paths this removal must not delete or descend into because they hold somebody's work, in display
+/// form. Held apart from the other two for the same reason they are apart from each other: nothing
+/// need be using one, and no other row offers it.
+/// </param>
 public sealed record RemovalBounds(
     bool KeepRoot,
     IReadOnlyList<string> Spared,
-    IReadOnlyList<string>? OwnedElsewhere = null)
+    IReadOnlyList<string>? OwnedElsewhere = null,
+    IReadOnlyList<string>? UserWork = null)
 {
     /// <summary>Nothing held back: the tree goes, root included.</summary>
     public static readonly RemovalBounds None = new(KeepRoot: false, []);
@@ -60,6 +66,19 @@ public sealed record RemovalBounds(
     /// <see cref="SparedPaths"/> gives.
     /// </summary>
     internal IReadOnlySet<string> OwnedElsewherePaths { get; } = ExtendedSet(OwnedElsewhere ?? []);
+
+    /// <summary>
+    /// <see cref="UserWork"/> as a set the walk can ask cheaply, on the terms
+    /// <see cref="SparedPaths"/> gives.
+    /// </summary>
+    internal IReadOnlySet<string> UserWorkPaths { get; } = ExtendedSet(UserWork ?? []);
+
+    /// <summary>Whether any entry is held back by path, so the walk needs each entry's full path.</summary>
+    internal bool IsBounded => SparedPaths.Count > 0 || OwnedElsewherePaths.Count > 0 || UserWorkPaths.Count > 0;
+
+    /// <summary>Whether <paramref name="extended"/> is an entry this removal leaves standing by its path.</summary>
+    internal bool HoldsBack(string extended) =>
+        SparedPaths.Contains(extended) || OwnedElsewherePaths.Contains(extended) || UserWorkPaths.Contains(extended);
 
     private static HashSet<string> ExtendedSet(IReadOnlyList<string> paths) =>
         new(paths.Select(LongPath.Extended), StringComparer.OrdinalIgnoreCase);

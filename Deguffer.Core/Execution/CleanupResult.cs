@@ -49,6 +49,10 @@ namespace Deguffer.Core.Execution;
 /// Whether the clean was cancelled while this step ran. Its figures are what it did before it
 /// stopped, and a step that could not say is counted as having reclaimed nothing.
 /// </param>
+/// <param name="UserWork">
+/// Entries left alone because they hold somebody's work, such as an editor's unsaved sketch. Apart
+/// from <paramref name="Spared"/> because nothing need be using one, so there is no program to close.
+/// </param>
 public sealed record StepOutcome(
     string Description,
     bool Succeeded,
@@ -62,7 +66,8 @@ public sealed record StepOutcome(
     int MailStores = 0,
     long BytesRequested = 0,
     long BytesScheduled = 0,
-    bool Interrupted = false);
+    bool Interrupted = false,
+    int UserWork = 0);
 
 /// <summary>The outcome of executing a plan, including the §5.6 verification.</summary>
 public sealed record CleanupResult
@@ -107,6 +112,9 @@ public sealed record CleanupResult
 
     /// <summary>Entries left alone because something was found to be using them (§5.3).</summary>
     public int SparedCount => Steps.Sum(s => s.Spared);
+
+    /// <summary>Entries left alone because they hold somebody's work. See <see cref="StepOutcome.UserWork"/>.</summary>
+    public int UserWorkCount => Steps.Sum(s => s.UserWork);
 
     /// <summary>Outlook mail stores left where they were. See <see cref="StepOutcome.MailStores"/>.</summary>
     public int MailStoreCount => Steps.Sum(s => s.MailStores);
