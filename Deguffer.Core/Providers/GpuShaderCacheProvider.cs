@@ -38,7 +38,8 @@ namespace Deguffer.Core.Providers;
 /// packaged application <c>Packages\&lt;package&gt;\AC</c> in place of the local application data,
 /// so the driver rendering for it writes <c>AC\NVIDIA\DXCache</c> there: nineteen containers held one
 /// on the machine measured. Those roots are found rather than known, so they come from
-/// <see cref="PackageContainers"/> and are declared through <see cref="DiscoverToolRootsAsync"/>.
+/// <see cref="PackageContainers"/>, once a pass, and are declared in <see cref="ToolRoots"/> with
+/// the rows that are known.
 /// The container is never a target, and §5.6 asserts it survived: it holds the application's own
 /// web cache, cookies and temporary files beside the driver's folder.</para>
 ///
@@ -54,6 +55,10 @@ namespace Deguffer.Core.Providers;
 /// it from inside whichever application is rendering, so there is no process to name and a warning
 /// would have to name one. A blob held open is skipped by the remover and rebuilt on demand, which
 /// is the same outcome as deleting it.</para>
+///
+/// <para>Past five hundred lines because the table and the one plan that reads it are a single
+/// rule, and most of the length is the evidence for each row. Finding the packaged roots is the
+/// part that is not this provider's knowledge, and it is <see cref="PackageContainers"/>.</para>
 /// </summary>
 public sealed class GpuShaderCacheProvider : CleanupProviderBase
 {
@@ -220,14 +225,14 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
         [.. KnownRoots().Concat(PackagedRoots(CancellationToken.None)).Select(root => root.Path)];
 
     /// <inheritdoc />
-    public override IReadOnlyList<ToolRoot> ToolRoots => [.. KnownRoots().Select(Declare)];
-
     /// <summary>
-    /// The NVIDIA folder inside each packaged application's container, which is found by listing the
-    /// packages and so cannot be answered cheaply by <see cref="ToolRoots"/>.
+    /// Every vendor root, those inside packaged applications included. Those are found by listing the
+    /// packages, which the first read of a pass does and every later one reuses. They belong here
+    /// rather than in <see cref="DiscoverToolRootsAsync"/>, because each recognises the cache its plan
+    /// offers, and a discovered root is read only as a refusal.
     /// </summary>
-    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<ToolRoot>>([.. PackagedRoots(ct).Select(Declare)]);
+    public override IReadOnlyList<ToolRoot> ToolRoots =>
+        [.. KnownRoots().Concat(PackagedRoots(CancellationToken.None)).Select(Declare)];
 
     public override void InvalidateCaches()
     {
@@ -536,7 +541,7 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
     /// </summary>
     private PackageContainerSearch SearchPackages(CancellationToken ct) =>
         _packaged.Get(() => PackageContainers.Find(
-            Environment, PackagedNvidia.DirectoryName, PackagedNvidia.Children.DisposableNames, ct));
+            Environment, PackagedNvidia.DirectoryName, [.. PackagedNvidia.Children.DisposableNames], ct));
 
     /// <summary>One vendor root as it is on this machine, however it was found.</summary>
     /// <param name="Container">

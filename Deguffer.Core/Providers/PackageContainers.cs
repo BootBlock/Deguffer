@@ -41,7 +41,7 @@ internal static class PackageContainers
     public static PackageContainerSearch Find(
         IUserEnvironment environment,
         string folderName,
-        IEnumerable<string> recognised,
+        IReadOnlyList<string> recognised,
         CancellationToken ct)
     {
         var packages = Path.Combine(environment.LocalAppData, PackagesFolderName);

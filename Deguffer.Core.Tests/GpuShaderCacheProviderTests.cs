@@ -875,8 +875,9 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// Explore reads the packaged roots from discovery. Each refuses what its plan would decline and
-    /// allows only the cache, and the container above it is not opened by being declared.
+    /// Each packaged root is declared with the known ones, because it recognises what its plan offers
+    /// and a discovered root is read only as a refusal. It refuses what its plan would decline and
+    /// allows only the cache.
     /// </summary>
     [Fact]
     public async Task ExploreRefusesAnUnrecognisedChildOfAPackagedNvidiaFolder()
@@ -886,13 +887,36 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         var nvidia = Path.Combine(Container(TerminalPackage), "NVIDIA");
 
         var provider = CreateProvider();
-        Assert.Equal([nvidia], (await provider.DiscoverToolRootsAsync()).Select(root => root.Path));
+        Assert.Contains(nvidia, provider.ToolRoots.Select(root => root.Path), StringComparer.OrdinalIgnoreCase);
+        Assert.Empty(await provider.DiscoverToolRootsAsync());
 
         var policy = await ExploreActionPolicy.ForAsync(
             new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [provider]);
 
         Assert.True(policy.MayRemove(cache).IsAllowed);
         Assert.False(policy.MayRemove(sibling).IsAllowed);
+    }
+
+    /// <summary>
+    /// A container Windows will not describe may hide a cache, so it is said to be unexamined rather
+    /// than passed over as though no packaged app had one.
+    /// </summary>
+    [Fact]
+    public async Task AContainerThatWillNotBeDescribedIsSaidToBeUnexamined()
+    {
+        CreatePackagedCache(TerminalPackage, "DXCache");
+        var container = Container(TerminalPackage);
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(container);
+
+        var provider = CreateProvider();
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(container));
+        Assert.Empty(plan.TargetedPaths);
     }
 
     /// <summary>
