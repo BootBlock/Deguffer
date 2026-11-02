@@ -133,12 +133,12 @@ public sealed class PlaywrightBrowsersProviderTests : IDisposable
 
     /// <summary>
     /// Builds are listed under their browser and told apart by revision. A browser's own name can hold
-    /// hyphens, so the revision is what follows the last one.
+    /// underscores, which belong to the name and not the revision.
     /// </summary>
     [Fact]
     public async Task ListsEachBuildUnderItsBrowserWithItsRevision()
     {
-        var root = CreateRoot("chromium-1228", "chromium-tip-of-tree-1229", "firefox-1532");
+        var root = CreateRoot("chromium-1228", "chromium_tip_of_tree-1229", "firefox-1532");
 
         var steps = (await CreateProvider().PlanAsync()).Steps
             .OfType<DeleteStep>()
@@ -148,20 +148,24 @@ public sealed class PlaywrightBrowsersProviderTests : IDisposable
         Assert.Equal("chromium", chromium.Group);
         Assert.Equal([new ItemFacet("Revision", "1228")], chromium.Facets);
 
-        var tipOfTree = steps[Path.Combine(root, "chromium-tip-of-tree-1229")];
-        Assert.Equal("chromium-tip-of-tree", tipOfTree.Group);
+        var tipOfTree = steps[Path.Combine(root, "chromium_tip_of_tree-1229")];
+        Assert.Equal("chromium_tip_of_tree", tipOfTree.Group);
         Assert.Equal([new ItemFacet("Revision", "1229")], tipOfTree.Facets);
 
         Assert.Equal("firefox", steps[Path.Combine(root, "firefox-1532")].Group);
     }
 
     /// <summary>
-    /// The headless shell and tip-of-tree builds carry underscores and extra hyphens in the part
-    /// before the revision, which a naive "split on the last hyphen" rule would mis-handle.
+    /// Playwright writes each hyphen in a download's own name as an underscore, so the pre-release,
+    /// headless and debugging builds carry underscores before the revision.
     /// </summary>
     [Theory]
     [InlineData("chromium_headless_shell-1228")]
-    [InlineData("chromium-tip-of-tree-1229")]
+    [InlineData("chromium_tip_of_tree-1229")]
+    [InlineData("chromium_tip_of_tree_headless_shell-1229")]
+    [InlineData("chromium_with_symbols-1228")]
+    [InlineData("firefox_beta-1533")]
+    [InlineData("firefox_asan-1532")]
     [InlineData("winldd-1007")]
     [InlineData("webkit-2210")]
     public async Task RecognisesTheAwkwardlyNamedBuilds(string name)
@@ -185,6 +189,8 @@ public sealed class PlaywrightBrowsersProviderTests : IDisposable
     [InlineData("chromium-1228-backup")]      // Something a person made, not Playwright.
     [InlineData("my-notes-2024")]             // Unrelated directory that happens to end in digits.
     [InlineData("Xchromium-1228")]            // Prefixed: must not match unanchored.
+    [InlineData("chromium-tip-of-tree-1229")] // Hyphens inside the name, which Playwright never writes.
+    [InlineData("firefox-beta-1533")]         // The same, for a second pre-release channel.
     public async Task LeavesUnrecognisedChildrenAloneAndSaysSo(string name)
     {
         CreateRoot("chromium-1228", name);
