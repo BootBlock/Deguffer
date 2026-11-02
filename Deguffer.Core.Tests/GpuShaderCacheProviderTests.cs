@@ -653,6 +653,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         CreateCache("D3DSCache");
         CreateLocalLowCache(Path.Combine("Intel", "ShaderCache"));
         CreatePackagedCache(TerminalPackage, "DXCache");
+        CreatePackagedCache(GamePackage, "GLCache");
 
         Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
     }
@@ -751,15 +752,47 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// §5.2's unknown case inside a container. <c>GLCache</c> is the case worth naming: it is
-    /// recognised under <c>%LOCALAPPDATA%\NVIDIA</c>, the folder the container stands in for, but it
-    /// was never measured inside one, so it is Tier 4 there.
+    /// The driver writes its OpenGL and Vulkan cache inside a container as it does outside one, so a
+    /// container holding only <c>GLCache</c> is found, its cache is planned, and the container, the
+    /// NVIDIA folder and an unrecognised sibling survive.
     /// </summary>
-    [Theory]
-    [InlineData("GLCache")]
-    [InlineData("Telemetry")]
-    public async Task AnUnrecognisedChildOfAPackagedNvidiaFolderIsTier4AndSurvives(string name)
+    [Fact]
+    public async Task PlansNvidiasGLCacheInsideAPackagedAppAndLeavesItsSiblingsStanding()
     {
+        var glCache = CreatePackagedCache(GamePackage, "GLCache", 8192);
+        var sibling = CreatePackagedCache(GamePackage, "Telemetry");
+        var webCache = CreateCache(Path.Combine("Packages", GamePackage, "AC", "INetCache"));
+        var nvidia = Path.Combine(Container(GamePackage), "NVIDIA");
+
+        var provider = CreateProvider();
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([glCache], plan.TargetedPaths);
+        Assert.All(plan.Steps, step => Assert.Equal(GpuShaderCacheProvider.PackagedGroup, step.Group));
+
+        foreach (var survivor in new[] { Container(GamePackage), nvidia, sibling })
+        {
+            Assert.Contains(plan.ProtectedPaths, p =>
+                p.Path.Equals(survivor, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
+        }
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.False(Directory.Exists(glCache));
+        Assert.True(Directory.Exists(nvidia), "the app's NVIDIA folder was removed with its cache.");
+        Assert.True(Directory.Exists(sibling), "an unrecognised child was removed alongside GLCache.");
+        Assert.True(Directory.Exists(webCache), "the app's web cache was removed with the shader cache.");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>§5.2's unknown case inside a container.</summary>
+    [Fact]
+    public async Task AnUnrecognisedChildOfAPackagedNvidiaFolderIsTier4AndSurvives()
+    {
+        const string name = "Telemetry";
         CreatePackagedCache(TerminalPackage, "DXCache");
         var sibling = CreatePackagedCache(TerminalPackage, name);
 
