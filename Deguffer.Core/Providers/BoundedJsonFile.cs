@@ -12,20 +12,24 @@ internal static class BoundedJsonFile
     /// The record, or null where the file is missing, larger than <paramref name="maximumBytes"/>,
     /// unreadable, not JSON, or not a JSON object. The caller disposes what it is given.
     /// </summary>
-    public static JsonDocument? Read(string path, int maximumBytes)
+    /// <param name="options">
+    /// What the writer allows beyond JSON itself, such as the comments Visual Studio writes into its
+    /// settings file. The default is strict JSON.
+    /// </param>
+    public static JsonDocument? Read(string path, int maximumBytes, JsonDocumentOptions options = default)
     {
-        return BoundedFile.Read(path, maximumBytes) is { } content ? Parse(content) : null;
+        return BoundedFile.Read(path, maximumBytes) is { } content ? Parse(content, options) : null;
     }
 
     /// <summary>
     /// A record already read within its bound, or null where it is not JSON or not a JSON object. The
     /// caller disposes what it is given.
     /// </summary>
-    public static JsonDocument? Parse(ReadOnlyMemory<byte> content)
+    public static JsonDocument? Parse(ReadOnlyMemory<byte> content, JsonDocumentOptions options = default)
     {
         try
         {
-            var document = JsonDocument.Parse(content);
+            var document = JsonDocument.Parse(content, options);
 
             if (document.RootElement.ValueKind == JsonValueKind.Object)
             {
