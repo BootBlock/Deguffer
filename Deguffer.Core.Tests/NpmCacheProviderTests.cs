@@ -290,6 +290,59 @@ public sealed class NpmCacheProviderTests : IDisposable
         Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(provider));
     }
 
+    /// <summary>
+    /// A failed <c>config get cache</c> is no answer, whatever it printed. The reply here fails and
+    /// still names a populated folder that is not the default, so a provider that read the output
+    /// without the exit code would measure that folder and say npm reported it.
+    /// </summary>
+    [Fact]
+    public async Task SaysTheCacheIsTheDefaultWhenNpmDidNotAnswer()
+    {
+        var cache = Path.Combine(_environment.LocalAppData, "npm-cache");
+        WriteFile(4096, cache, "_cacache", "content-v2", "blob");
+        var printed = _temp.CreateDirectory("printed", "npm-cache");
+        WriteFile(2048, printed, "_cacache", "content-v2", "blob");
+
+        _environment.WithExecutable("npm");
+        var runner = new FakeProcessRunner().Responding(Npm, "config get cache", printed, exitCode: 1);
+        var plan = await new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning).PlanAsync();
+
+        var command = Assert.IsType<RunCommandStep>(Assert.Single(plan.Steps));
+        Assert.Equal([Path.Combine(cache, "_cacache")], command.MeasuredPaths);
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("npm reports", StringComparison.Ordinal));
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains($"npm did not say where its cache directory is, so {cache} is the documented default", StringComparison.Ordinal)
+            && n.Message.Contains("npm's own command clears wherever npm really keeps it", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task SaysNpmReportedTheCacheWhenItDid()
+    {
+        var relocated = _temp.CreateDirectory("elsewhere", "npm-cache");
+        WriteFile(2048, relocated, "_cacache", "content-v2", "blob");
+
+        _environment.WithExecutable("npm");
+        var runner = new FakeProcessRunner().Responding(Npm, "config get cache", relocated);
+        var plan = await new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning).PlanAsync();
+
+        Assert.Contains(plan.Notes, n =>
+            n.Message.StartsWith($"npm reports its cache directory as {relocated}.", StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("did not say", StringComparison.Ordinal));
+    }
+
+    /// <summary>A missing default says nothing about a cache npm keeps elsewhere.</summary>
+    [Fact]
+    public async Task SaysTheDefaultIsMissingRatherThanTheCacheWhenNpmDidNotAnswer()
+    {
+        _environment.WithExecutable("npm");
+        var runner = new FakeProcessRunner().Responding(Npm, "config get cache", string.Empty, exitCode: 1);
+        var plan = await new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning).PlanAsync();
+
+        Assert.True(plan.IsEmpty);
+        var note = Assert.Single(plan.Notes);
+        Assert.StartsWith("npm did not say where its cache directory is, and the documented default", note.Message, StringComparison.Ordinal);
+    }
+
     private static string WriteFile(int bytes, string folder, params string[] segments)
     {
         var path = Path.Combine([folder, .. segments]);

@@ -151,8 +151,8 @@ public sealed class RetroArchThumbnailProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A thumbnails folder the settings name through <c>S:</c>, a letter <c>subst</c> made for the
-    /// program's folder, is the program's own, though its text names nothing there. It is read as the
+    /// A thumbnails folder the settings name through a letter <c>subst</c> made for the program's
+    /// folder is the program's own, though its text names nothing there. It is read as the
     /// program's folder names it, so the way down from the program is checked for links and told to
     /// Explore, and Explore refuses it at the other name too. What the program holds beside it survives
     /// (§5.6).
@@ -160,12 +160,13 @@ public sealed class RetroArchThumbnailProviderTests : IDisposable
     [Fact]
     public async Task AThumbnailsFolderTheSettingsNameThroughASubstitutedLetterIsTheProgramsOwn()
     {
-        _retroArch.Install(@"thumbnails_directory = ""S:\thumbnails""").Declare();
+        var letter = UnmappedDriveLetter.Any();
+        _retroArch.Install($"thumbnails_directory = \"{Path.Join(letter, "thumbnails")}\"").Declare();
         var boxArt = _retroArch.Pictures(Nes, "Named_Boxarts");
         var custom = RetroArchFixture.Folder(Path.Combine(_retroArch.Thumbnails, Nes, "Custom"));
         var saves = RetroArchFixture.Folder(Path.Combine(_retroArch.Program, "saves"));
 
-        var volumes = new FakeVolumeInventory().Substituting(@"S:\", _retroArch.Program);
+        var volumes = new FakeVolumeInventory().Substituting(letter, _retroArch.Program);
         var provider = CreateProvider(volumes: volumes);
         var plan = await provider.PlanAsync();
 
@@ -175,8 +176,8 @@ public sealed class RetroArchThumbnailProviderTests : IDisposable
         var explore = new ExploreActionPolicy([], [], volumes, probedRoots: roots);
 
         Assert.Contains(roots, r => r.Path.Equals(_retroArch.Program, StringComparison.OrdinalIgnoreCase) && r.RecognisesFolder("thumbnails"));
-        Assert.True(explore.MayRemove(Path.Combine(@"S:\thumbnails", Nes, "Named_Boxarts")).IsAllowed);
-        Assert.False(explore.MayRemove(@"S:\saves").IsAllowed);
+        Assert.True(explore.MayRemove(Path.Join(letter, "thumbnails", Nes, "Named_Boxarts")).IsAllowed);
+        Assert.False(explore.MayRemove(Path.Join(letter, "saves")).IsAllowed);
 
         var result = await provider.ExecuteAsync(plan);
 

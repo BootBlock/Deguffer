@@ -23,7 +23,7 @@ public sealed class NpmCacheProvider : CleanupProviderBase
     /// <summary>Where npx keeps the packages it ran. No npm command evicts it.</summary>
     private const string NpxCacheName = "_npx";
 
-    private readonly PassMemo<Task<string>> _resolvedCacheDirectory = new();
+    private readonly PassMemo<Task<AskedLocation>> _resolvedCacheDirectory = new();
 
     public NpmCacheProvider(
         IUserEnvironment? environment = null,
@@ -113,7 +113,7 @@ public sealed class NpmCacheProvider : CleanupProviderBase
 
         var reported = await ResolveCacheDirectoryAsync(npm, ct).ConfigureAwait(false);
 
-        return [CleanedPlace.Whole(ContentCacheIn(DefaultCacheDirectory)), CleanedPlace.Whole(ContentCacheIn(reported))];
+        return [CleanedPlace.Whole(ContentCacheIn(DefaultCacheDirectory)), CleanedPlace.Whole(ContentCacheIn(reported.Path))];
     }
 
     /// <summary>
@@ -135,13 +135,12 @@ public sealed class NpmCacheProvider : CleanupProviderBase
             return EmptyPlan("npm is not installed on this machine.");
         }
 
-        var cacheDirectory = await ResolveCacheDirectoryAsync(npm, ct).ConfigureAwait(false);
+        var located = await ResolveCacheDirectoryAsync(npm, ct).ConfigureAwait(false);
+        var cacheDirectory = located.Path;
         var notes = new List<PlanNote>();
         var steps = new List<CleanupStep>();
 
-        if (NothingToPlanFor(
-                cacheDirectory,
-                $"npm is installed but its cache directory does not exist yet ({cacheDirectory}).") is { } nothing)
+        if (NothingToPlanFor(cacheDirectory, located.DescribeAbsent("npm", "cache directory")) is { } nothing)
         {
             return nothing;
         }
@@ -171,8 +170,8 @@ public sealed class NpmCacheProvider : CleanupProviderBase
 
         notes.Add(new PlanNote(
             PlanNoteSeverity.Information,
-            $"npm reports its cache directory as {cacheDirectory}. Its clean command removes {ContentCacheName} "
-            + "there, and leaves everything else, such as the packages npx ran and npm's logs."));
+            located.Describe("npm", "cache directory") + $" Its clean command removes {ContentCacheName} in "
+            + "npm's cache directory, and leaves everything else, such as the packages npx ran and npm's logs."));
 
         if (measured.Note is { } scanNote)
         {
@@ -210,19 +209,13 @@ public sealed class NpmCacheProvider : CleanupProviderBase
 
     private static string ContentCacheIn(string cacheDirectory) => Path.Combine(cacheDirectory, ContentCacheName);
 
-    private Task<string> ResolveCacheDirectoryAsync(string npm, CancellationToken ct) =>
+    private Task<AskedLocation> ResolveCacheDirectoryAsync(string npm, CancellationToken ct) =>
         _resolvedCacheDirectory.Get(() => AskCacheDirectoryAsync(npm, ct));
 
-    private async Task<string> AskCacheDirectoryAsync(string npm, CancellationToken ct)
+    private async Task<AskedLocation> AskCacheDirectoryAsync(string npm, CancellationToken ct)
     {
         var outcome = await Runner.RunAsync(npm, "config get cache", ToolRun.Query, ct).ConfigureAwait(false);
 
-        var reported = outcome.Succeeded
-            ? outcome.StandardOutput
-                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .LastOrDefault(line => Path.IsPathRooted(line))
-            : null;
-
-        return reported ?? DefaultCacheDirectory;
+        return AskedLocation.FromLastRootedLine(outcome, DefaultCacheDirectory);
     }
 }

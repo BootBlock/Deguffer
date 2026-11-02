@@ -716,17 +716,20 @@ public sealed class TempDirectoryProviderTests : IDisposable
     [Fact]
     public async Task RefusesATemporaryFolderInsideOneOfTheAccountsOwnFoldersNamedThroughASubstitutedLetter()
     {
-        _volumes.Substituting(@"S:\", _environment.UserProfile);
-        _environment.WithEnvironmentVariable("TMP", @"S:\Documents\Temp");
-        _environment.WithEnvironmentVariable("TEMP", @"S:\Temp");
+        var letter = UnmappedDriveLetter.Any();
+        var refused = Path.Join(letter, "Documents", "Temp");
+        var kept = Path.Join(letter, "Temp");
+        _volumes.Substituting(letter, _environment.UserProfile);
+        _environment.WithEnvironmentVariable("TMP", refused);
+        _environment.WithEnvironmentVariable("TEMP", kept);
 
         var plan = await CreateProvider().PlanAsync();
 
         Assert.Contains(plan.Notes, n =>
             n.Severity == PlanNoteSeverity.Warning
-            && n.Message.Contains(@"S:\Documents\Temp", StringComparison.OrdinalIgnoreCase)
+            && n.Message.Contains(refused, StringComparison.OrdinalIgnoreCase)
             && n.Message.Contains("one of your own folders", StringComparison.Ordinal));
-        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains(@"S:\Temp'", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains($"{kept}'", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

@@ -240,6 +240,66 @@ public sealed class GoCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A failed <c>go env</c> is no answer, whatever it printed. The reply here fails and still names
+    /// populated caches that are not the defaults, so a provider that read the output without the exit
+    /// code would measure those folders and say Go reported them.
+    /// </summary>
+    [Fact]
+    public async Task SaysTheLocationsAreDefaultsWhenGoFailsWhilePrintingThem()
+    {
+        var defaultModuleCache = Path.Combine(_environment.UserProfile, "go", "pkg", "mod");
+        Populate(BuildCache);
+        Populate(defaultModuleCache);
+        var printedBuild = Populate(Path.Combine(_temp.Path, "printed", "build"));
+        var printedModules = Populate(Path.Combine(_temp.Path, "printed", "mod"));
+
+        var runner = new FakeProcessRunner().Responding(
+            Go, "env", $"{printedBuild}\r\n{printedModules}\r\n{GoPath}\r\n", exitCode: 1);
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.Equal(
+            [BuildCache, defaultModuleCache],
+            plan.Steps.OfType<RunCommandStep>().SelectMany(s => s.MeasuredPaths));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("Go reports", StringComparison.Ordinal));
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains("Go did not say where its caches are", StringComparison.Ordinal)
+            && n.Message.Contains("Go's own commands clear wherever Go really keeps its caches", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Go answers each variable on its own line, so one cache can be reported while the other is a
+    /// guess. Each is said as what it is: neither sentence may borrow the other's standing.
+    /// </summary>
+    [Fact]
+    public async Task SaysWhichCacheGoReportedWhenItAnsweredOnlyOne()
+    {
+        Populate(BuildCache);
+        var moduleCache = Populate(Path.Combine(_temp.Path, "elsewhere", "mod"));
+
+        var runner = new FakeProcessRunner().Responding(Go, "env", $"\r\n{moduleCache}\r\n{GoPath}\r\n");
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.Contains(plan.Notes, n =>
+            n.Message.StartsWith(
+                $"Go did not say where its build cache is, so {BuildCache} is the documented default", StringComparison.Ordinal)
+            && n.Message.EndsWith($" Go reports its module cache as {moduleCache}.", StringComparison.Ordinal));
+    }
+
+    /// <summary>Missing defaults say nothing about caches Go keeps elsewhere.</summary>
+    [Fact]
+    public async Task SaysTheDefaultsAreMissingRatherThanTheCachesWhenGoDidNotAnswer()
+    {
+        var plan = await CreateProvider(new FakeProcessRunner().Responding(Go, "env", string.Empty, exitCode: 1))
+            .PlanAsync();
+
+        Assert.True(plan.IsEmpty);
+        Assert.StartsWith(
+            "Go did not report where all its caches are, and neither",
+            Assert.Single(plan.Notes).Message,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// §5.6. The module cache is <c>pkg\mod</c> inside the workspace, so what the command empties
     /// has the user's installed binaries and their own source as siblings.
     /// </summary>

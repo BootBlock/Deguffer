@@ -43,6 +43,7 @@ public sealed class PlanExecutorCancellationTests : IDisposable
             runReach: null,
             residue: null,
             CancelOnFirstWork(cts),
+            underway: null,
             cts.Token);
 
         Assert.True(result.Interrupted);
@@ -87,6 +88,7 @@ public sealed class PlanExecutorCancellationTests : IDisposable
             runReach: null,
             residue: null,
             CancelOnFirstWork(cts),
+            underway: null,
             cts.Token);
 
         Assert.True(result.Interrupted);
@@ -122,6 +124,7 @@ public sealed class PlanExecutorCancellationTests : IDisposable
             runReach: null,
             residue: null,
             progress: null,
+            underway: null,
             cts.Token);
 
         Assert.True(result.Interrupted);
@@ -163,6 +166,7 @@ public sealed class PlanExecutorCancellationTests : IDisposable
             runReach: null,
             residue: null,
             progress: null,
+            underway: null,
             cts.Token);
 
         Assert.True(result.Interrupted);
@@ -182,6 +186,91 @@ public sealed class PlanExecutorCancellationTests : IDisposable
     }
 
     /// <summary>
+    /// The tool a command step runs is reported as under way while it runs, by its file name and what a
+    /// cancellation does to it, and cleared once it returns: a page told only how far the run had got
+    /// could not say that a Cancel pressed now waits for DISM.
+    /// </summary>
+    [Fact]
+    public async Task ACommandsToolIsReportedAsUnderWayWhileItRunsAndClearedOnceItReturns()
+    {
+        const string dism = @"C:\Windows\System32\Dism.exe";
+        var underway = new ProgressRecorder<CommandUnderway?>();
+        IReadOnlyList<CommandUnderway?> whileRunning = [];
+
+        var runner = new FakeProcessRunner().Replying(dism, _ =>
+        {
+            whileRunning = underway.Reports;
+            return new CommandOutcome(0, "Done.", string.Empty);
+        });
+
+        await new PlanExecutor(runner, ParallelEnumerationScanner.Default, RefusalLog).ExecuteAsync(
+            Plan(
+            [
+                new RunCommandStep(dism, "/Online /Cleanup-Image /StartComponentCleanup /ResetBase", "Reset the store")
+                {
+                    WhenCancelled = CancelledCommand.Finishes,
+                },
+            ]),
+            runReach: null,
+            residue: null,
+            progress: null,
+            underway,
+            CancellationToken.None);
+
+        var running = new CommandUnderway("Dism.exe", CancelledCommand.Finishes);
+        Assert.Equal([running], whileRunning);
+        Assert.Equal([running, null], underway.Reports);
+    }
+
+    /// <summary>
+    /// A tool ended by the cancellation throws rather than returns, and is cleared all the same, so a
+    /// page is never left saying the run waits on a tool that has gone.
+    /// </summary>
+    [Fact]
+    public async Task AToolEndedByTheCancellationIsClearedFromUnderWay()
+    {
+        using var cts = new CancellationTokenSource();
+        var underway = new ProgressRecorder<CommandUnderway?>();
+
+        var runner = new FakeProcessRunner().Replying("tool", _ =>
+        {
+            cts.Cancel();
+            throw new OperationCanceledException(cts.Token);
+        });
+
+        var result = await new PlanExecutor(runner, ParallelEnumerationScanner.Default, RefusalLog).ExecuteAsync(
+            Plan([new RunCommandStep("tool", "clean", "Clean") { WhenCancelled = CancelledCommand.Ended }]),
+            runReach: null,
+            residue: null,
+            progress: null,
+            underway,
+            cts.Token);
+
+        Assert.True(result.Interrupted);
+        Assert.Equal([new CommandUnderway("tool", CancelledCommand.Ended), null], underway.Reports);
+    }
+
+    /// <summary>
+    /// Nothing is reported for a step that runs no tool, so a removal is never described as a tool the
+    /// run is waiting on.
+    /// </summary>
+    [Fact]
+    public async Task AStepThatRunsNoToolReportsNothingUnderWay()
+    {
+        var underway = new ProgressRecorder<CommandUnderway?>();
+
+        await Executor().ExecuteAsync(
+            Plan([new DeleteDirectoryStep(Tree("cache"), "The cache")]),
+            runReach: null,
+            residue: null,
+            progress: null,
+            underway,
+            CancellationToken.None);
+
+        Assert.Empty(underway.Reports);
+    }
+
+    /// <summary>
     /// A command that may be ended is asked of the runner as one, so the runner ends it when the clean
     /// is cancelled rather than leave it working after the page says the clean stopped.
     /// </summary>
@@ -195,6 +284,7 @@ public sealed class PlanExecutorCancellationTests : IDisposable
             runReach: null,
             residue: null,
             progress: null,
+            underway: null,
             CancellationToken.None);
 
         Assert.Equal(ToolRun.Command(CancelledCommand.Ended), Assert.Single(runner.Invocations).Run);
@@ -216,6 +306,7 @@ public sealed class PlanExecutorCancellationTests : IDisposable
             runReach: null,
             residue: null,
             progress: null,
+            underway: null,
             cts.Token);
 
         Assert.True(result.Interrupted);

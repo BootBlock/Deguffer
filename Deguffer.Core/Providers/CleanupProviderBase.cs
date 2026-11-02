@@ -268,6 +268,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         RunReach? runReach = null,
         RunResidue? residue = null,
         IProgress<double>? progress = null,
+        IProgress<CommandUnderway?>? underway = null,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(plan);
@@ -278,7 +279,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
                 $"Plan belongs to provider '{plan.ProviderId}', not '{Id}'.", nameof(plan));
         }
 
-        return _executor.ExecuteAsync(plan, runReach, residue, progress, ct);
+        return _executor.ExecuteAsync(plan, runReach, residue, progress, underway, ct);
     }
 
     public Task<VerificationResult> VerifyAsync(

@@ -655,7 +655,7 @@
                         Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
                         Command="{x:Bind ViewModel.ElevateAndRescanCommand}"
                         AutomationProperties.HelpText="Restart Deguffer as administrator and scan, so it can read the volume's file table and carry out steps only an administrator may perform." />
-                <Button Content="Cancel"
+                <Button Content="{x:Bind ViewModel.CancelLabel, Mode=OneWay}"
                         Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
                         Command="{x:Bind ViewModel.CancelCommand}" />
                 <!-- Beside Clean, because it is part of starting one: what Deguffer does once the clean

@@ -185,8 +185,8 @@ public sealed class GoCacheProvider : CleanupProviderBase
         {
             var located = await ResolveLocationsAsync(go, ct).ConfigureAwait(false);
 
-            caches.Add(located.BuildCache);
-            caches.Add(located.ModuleCache);
+            caches.Add(located.BuildCache.Path);
+            caches.Add(located.ModuleCache.Path);
             caches.AddRange(located.GoPaths.Select(ModuleCacheIn));
         }
 
@@ -215,13 +215,15 @@ public sealed class GoCacheProvider : CleanupProviderBase
         }
 
         var located = await ResolveLocationsAsync(go, ct).ConfigureAwait(false);
-        var (buildCache, moduleCache) = (located.BuildCache, located.ModuleCache);
+        var (buildCache, moduleCache) = (located.BuildCache.Path, located.ModuleCache.Path);
 
         var found = ReachedDirectories.Of([buildCache, moduleCache]);
 
         if (NothingToPlanFor(
                 found,
-                $"Go is installed but has cached nothing yet ({buildCache} and {moduleCache} are both absent).")
+                located.BuildCache.Answered && located.ModuleCache.Answered
+                    ? $"Go is installed but has cached nothing yet ({buildCache} and {moduleCache} are both absent)."
+                    : $"Go did not report where all its caches are, and neither {buildCache} nor {moduleCache} exists.")
             is { } nothing)
         {
             return nothing;
@@ -265,14 +267,7 @@ public sealed class GoCacheProvider : CleanupProviderBase
 
         var notes = new List<PlanNote>
         {
-            new(PlanNoteSeverity.Information, located.Answered
-                // Said two ways, because they are two different claims. The first reports this
-                // machine's configuration; the second admits to a guess, which matters because a
-                // machine whose caches have been moved will not match it and the user is the only
-                // one who can tell.
-                ? $"Go reports its build cache as {buildCache} and its module cache as {moduleCache}."
-                : "Go did not say where its caches are, so these are the documented defaults rather "
-                  + $"than this machine's settings: {buildCache} and {moduleCache}."),
+            new(PlanNoteSeverity.Information, Describe(located)),
         };
 
         notes.AddRange(found.UnreachedNotes);
@@ -318,6 +313,24 @@ public sealed class GoCacheProvider : CleanupProviderBase
         }),
     ]);
 
+    /// <summary>
+    /// What the plan says about the two caches. A report and a guess are two different claims, and
+    /// the second matters because a machine whose caches have been moved will not match it and the
+    /// user is the only one who can tell. Go answers each variable on its own line, so one cache can
+    /// be reported while the other is a guess, and each is then said as what it is.
+    /// </summary>
+    private static string Describe(GoLocations located) => (located.BuildCache, located.ModuleCache) switch
+    {
+        ({ Answered: true } build, { Answered: true } module) =>
+            $"Go reports its build cache as {build.Path} and its module cache as {module.Path}.",
+        ({ Answered: false } build, { Answered: false } module) =>
+            "Go did not say where its caches are, so these are the documented defaults rather than this "
+            + $"machine's settings: {build.Path} and {module.Path}. Go's own commands clear wherever Go really "
+            + "keeps its caches, which may not be these folders, so the figure may not describe what they remove.",
+        var (build, module) =>
+            $"{build.Describe("Go", "build cache")} {module.Describe("Go", "module cache")}",
+    };
+
     private Task<GoLocations> ResolveLocationsAsync(string go, CancellationToken ct) =>
         _locations.Get(() => AskLocationsAsync(go, ct));
 
@@ -342,12 +355,11 @@ public sealed class GoCacheProvider : CleanupProviderBase
         var workspaces = Workspaces(reported);
 
         return new GoLocations(
-            buildCache ?? DefaultBuildCache,
+            AskedLocation.Of(buildCache, DefaultBuildCache),
 
             // Go's own default for a list: the module cache is pkg\mod in the first workspace.
-            moduleCache ?? ModuleCacheIn(workspaces[0]),
-            workspaces,
-            Answered: buildCache is not null && moduleCache is not null);
+            AskedLocation.Of(moduleCache, ModuleCacheIn(workspaces[0])),
+            workspaces);
     }
 
     /// <summary>
@@ -376,20 +388,19 @@ public sealed class GoCacheProvider : CleanupProviderBase
         return listed.Length > 0 ? listed : [DefaultGoPath];
     }
 
-    /// <summary>Where Go keeps things, and whether Go itself is what said so.</summary>
-    /// <param name="Answered">
-    /// False when <c>go env</c> did not run, or answered with nothing usable, in which case these
-    /// are Deguffer's documented defaults rather than this machine's configuration. The plan says
-    /// which of the two it is holding, because "Go reports its build cache as X" is a claim about a
-    /// subprocess that may never have spoken — and if it did not, X is a guess that a machine with a
-    /// moved cache will not match.
+    /// <summary>Where Go keeps things, and for each cache whether Go itself is what said so.</summary>
+    /// <param name="BuildCache">
+    /// <c>GOCACHE</c>, or the documented default where <c>go env</c> did not run or gave nothing
+    /// usable on that line.
+    /// </param>
+    /// <param name="ModuleCache">
+    /// <c>GOMODCACHE</c>, or the documented one inside the first workspace on the same terms.
     /// </param>
     /// <param name="GoPaths">Every workspace <c>GOPATH</c> lists, in Go's order. Never empty.</param>
     private sealed record GoLocations(
-        string BuildCache,
-        string ModuleCache,
-        IReadOnlyList<string> GoPaths,
-        bool Answered);
+        AskedLocation BuildCache,
+        AskedLocation ModuleCache,
+        IReadOnlyList<string> GoPaths);
 
     /// <summary>Where Go puts the module cache in a workspace when <c>GOMODCACHE</c> is unset.</summary>
     private static string ModuleCacheIn(string workspace) => Path.Combine(workspace, "pkg", "mod");

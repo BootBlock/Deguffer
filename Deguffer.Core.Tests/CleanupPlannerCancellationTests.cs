@@ -74,6 +74,27 @@ public sealed class CleanupPlannerCancellationTests : IDisposable
     }
 
     /// <summary>
+    /// The tool a provider's clean waits on reaches the caller of the run, as it starts and as it
+    /// returns, so the page can say what a Cancel pressed now will wait for.
+    /// </summary>
+    [Fact]
+    public async Task TheToolARunWaitsOnIsReportedToItsCaller()
+    {
+        var running = new CommandUnderway("Dism.exe", CancelledCommand.Finishes);
+        var store = new FakeCleanupProvider("store")
+        {
+            Steps = [Step(_temp.CreateDirectory("store"), 1_000)],
+            Running = running,
+        };
+        var underway = new ProgressRecorder<CommandUnderway?>();
+
+        var planner = new CleanupPlanner([store]);
+        await planner.ExecuteAsync(await planner.PlanAllAsync(), underway: underway);
+
+        Assert.Equal([running, null], underway.Reports);
+    }
+
+    /// <summary>
     /// A run cancelled before it starts deletes nothing, verifies every plan, and still proves what
     /// the unticked rows leave standing.
     /// </summary>

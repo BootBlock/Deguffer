@@ -171,6 +171,7 @@ public sealed class UseRecheckTests : IDisposable
                 runReach: null,
                 residue: null,
                 progress: null,
+                underway: null,
                 ct: CancellationToken.None);
 
     private sealed class FakeUseCheck(Func<DeleteStep, IReadOnlyList<InUseNow>> answer) : IUseCheck

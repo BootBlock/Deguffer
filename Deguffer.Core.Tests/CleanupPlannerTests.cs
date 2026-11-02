@@ -1091,6 +1091,7 @@ public sealed class CleanupPlannerTests
             RunReach? runReach = null,
             RunResidue? residue = null,
             IProgress<double>? progress = null,
+            IProgress<CommandUnderway?>? underway = null,
             CancellationToken ct = default)
         {
             WasExecuted = true;
