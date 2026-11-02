@@ -23,8 +23,12 @@ internal sealed class ExploreFixture : IDisposable
         Environment = new FakeUserEnvironment(Temp.Path);
         Faults = new CrashLog(Environment);
         Guide = ItemGuide.For(new FakeSystemDirectories(Temp.Path), Environment, Volumes);
+        _disk = new ConfinedFileSystem(WindowsFileSystem.Default, Temp.Path);
         Build = _ => Task.FromResult(Policy());
     }
+
+    /// <summary>What every <see cref="Policy"/> reads: the disk inside <see cref="Temp"/>, and nothing elsewhere.</summary>
+    private readonly ConfinedFileSystem _disk;
 
     public TempDirectory Temp { get; } = new();
 
@@ -115,12 +119,19 @@ internal sealed class ExploreFixture : IDisposable
 
     private ScanHistory? _history;
 
-    /// <summary>A policy that refuses each of <paramref name="refusing"/>, and everything under it, with <paramref name="reason"/>.</summary>
+    /// <summary>
+    /// A policy that refuses each of <paramref name="refusing"/>, and everything under it, with
+    /// <paramref name="reason"/>. It reads the disk only inside <see cref="Temp"/>, where a test builds
+    /// a real tree, and finds nothing anywhere else: most trees a test hands the page are invented at
+    /// letters such as <c>C:\</c>, and the policy would otherwise ask the machine's own drive there
+    /// where each folder leads.
+    /// </summary>
     public ExploreActionPolicy Policy(string reason = "Kept by a test.", params string[] refusing) =>
         new(
             [.. refusing.Select(path => ProtectedRegion.Refusing(path, RegionScope.PathAndBelow, reason))],
             [],
-            Volumes);
+            Volumes,
+            _disk);
 
     /// <summary>Scan what the page is pointed at, and finish with <paramref name="scan"/>.</summary>
     public async Task ScanAsync(ExploreViewModel page, ExploreScan scan)

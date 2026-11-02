@@ -838,6 +838,106 @@ again the next time a build compiles it.
 
 ---
 
+## Debugger symbol caches
+
+Two rows, one for each tier: **Debugger symbol cache** is **Tier 1 — regenerable cache**,
+pre-selected, and **Debugger symbol cache, other servers** is **Tier 2 — regenerable, with cost**,
+offered but not pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | Every store `_NT_SYMBOL_PATH` and `_NT_ALT_SYMBOL_PATH` name; `<DBGHELP_HOMEDIR>\sym`; WinDbg's own `%PROGRAMDATA%\Dbg\sym`; Visual Studio's symbol cache, `%TEMP%\SymbolCache` unless a Visual Studio 2026 instance's settings move it |
+| **Method** | Delete each downloaded file's folder in the store, whole |
+| **Typical size** | 183 MB in WinDbg's store on one workstation; several gigabytes on a machine that debugs regularly |
+
+### What it is
+
+A debugger needs a symbol file for every program and Windows file it looks at. It downloads each one
+from a symbol server, Microsoft's or another, and keeps a copy in a local *downstream store* so it
+never downloads it twice. WinDbg's store also holds copies of the Windows files themselves. Nothing
+removes old copies, so a store grows with every Windows update and every build debugged, and after an
+update most of it is for files the machine no longer has.
+
+### What Deguffer does
+
+It finds the stores where the debuggers are told to keep them:
+
+- each downstream store in `_NT_SYMBOL_PATH` and `_NT_ALT_SYMBOL_PATH`, which every Microsoft debugger
+  reads and which override Visual Studio's own setting: every store left of the last in a `srv*` or
+  `symsrv*` chain, and every `cache*` folder;
+- the `sym` folder of `DBGHELP_HOMEDIR`, the default store wherever that variable is set. Where it is
+  not, the default store depends on which debugger reads the path, and Deguffer does not guess;
+- WinDbg's own store, `%PROGRAMDATA%\Dbg\sym`;
+- Visual Studio's "Cache symbols in this directory", read from `debugging.symbols.location.cachePath`
+  in each Visual Studio 2026 instance's `settings.json`, and its default folder in the temporary
+  folder. An older Visual Studio has no `settings.json`, and nothing documents where it keeps the
+  setting, so only its default folder is looked in, and the plan says so.
+
+A folder is left alone, with a note, where it is not a full path, is on a network share that other
+computers' debuggers may be reading, is a folder Deguffer never treats as one tool's own (a drive
+root, your profile, or a folder holding a temporary folder), or is one the symbol path also reads as
+a store of its own.
+
+In each store Deguffer removes only a folder shaped like a downloaded copy: a folder named for a file,
+with an extension, whose folders are all hexadecimal index names, each holding only that file, its
+compressed form (`ntdll.pd_`) or a `file.ptr` pointer. In a store with `index2.txt`, each such folder
+must sit under the first two letters of its name. Nothing is removed from a store while a debugger
+that writes to it is running (`windbg`, `DbgX.Shell`, `EngHost`, `cdb`, `kd` or `ntsd` for WinDbg's,
+`devenv` for Visual Studio's, and any of them for a store the symbol path names), and the clean asks
+again before it removes each folder.
+
+Microsoft's trimming tool, AgeStore, is not used. It ships only with Debugging Tools for Windows,
+asks for confirmation on standard input, refuses to run where NTFS does not record when a file was
+last read, and deletes the store itself once it is empty. No debugger reports where its store is.
+
+### What is protected
+
+The store itself, its markers (`pingme.txt`, `index2.txt` and `wantsptr.txt`), the two-letter folders
+of a two-level store, links, and anything else in the store that is not shaped like a downloaded copy.
+Deguffer asserts that each of them survived the run.
+
+**A store holding `000Admin` is left alone whole.** SymStore makes that folder when it builds a store,
+so the store is somebody's own symbol store rather than a cache, and a symbol in it may be the only
+copy there is.
+
+Visual Studio's default store is in the temporary folder, where the *Temporary files* row would take
+its contents by age. The symbol rows claim the whole store instead, so it is offered once, by what it
+is, and the temporary-files row leaves it alone.
+
+### What it costs you
+
+The next time a debugger needs a symbol file, it downloads it again, so loading symbols takes longer
+once. Your symbol path and debugger settings are untouched.
+
+### Why two tiers
+
+Microsoft says of a downstream store that "you can delete this directory at any time to save disk
+space". A store that only Microsoft's public servers fill, `msdl.microsoft.com` and NuGet.org's
+`symbols.nuget.org`, is **Tier 1**, because those servers keep every symbol they publish.
+
+A store that any other server, share or folder fills is **Tier 2**: a company's own symbol server may
+no longer keep an old build's symbols, and then the copy on this machine is the last one. WinDbg's and
+Visual Studio's own stores are Tier 2 as well, because both keep their list of servers where Deguffer
+cannot read it, though both use only Microsoft's unless they are told otherwise. A folder two settings
+name is one store, on the Tier 2 row if either needs it.
+
+Sources:
+
+- Microsoft, advanced SymSrv use, including "Deleting the cache":
+  <https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/advanced-symsrv-use>
+- Microsoft, symbol path syntax: <https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/symbol-path>
+- Microsoft, the symbol store folder tree:
+  <https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/symbol-store-folder-tree>
+- Microsoft, using SymStore (`000Admin`, `file.ptr`): <https://learn.microsoft.com/en-us/windows/win32/debug/using-symstore>
+- Microsoft, AgeStore: <https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/agestore>
+- Microsoft, Visual Studio symbol settings:
+  <https://learn.microsoft.com/en-us/visualstudio/debugger/specify-symbol-dot-pdb-and-source-files-in-the-visual-studio-debugger>
+- WinDbg's `%PROGRAMDATA%\Dbg\sym` and Visual Studio 2026's `settings.json` key are observed, not
+  documented. The WinDbg store is also named in a 2014 Microsoft field engineer's post:
+  <https://learn.microsoft.com/en-us/archive/blogs/robertsmith/debugging-with-symbols-a-field-perspective>
+
+---
+
 ## npm package cache
 
 **Tier 1 — regenerable cache.** Pre-selected.
@@ -7357,7 +7457,7 @@ Two rules decide what comes out, and both of them hold back more than a plain "e
 
 **An entry a tool's own row offers is left to that row.** Where Deguffer knows what wrote an entry
 of a temporary folder — Node's compile cache, a Roslyn session, VS Code's downloaded update, NuGet's
-scratch folder — the row for that tool offers it, under that tool's rules, and this row leaves it
+scratch folder, Visual Studio's symbol cache — the row for that tool offers it, under that tool's rules, and this row leaves it
 out and says which rows have it. So each entry is counted once, and an entry that row would keep is
 not taken here for being a week old: a Roslyn session still in use, or Blender's `quit.blend`. That
 holds however the tool names the entry, through a `subst` letter or a second mount of the volume

@@ -299,6 +299,8 @@ public sealed class ProviderInvalidationTests : IDisposable
         : parameter == typeof(ILiveTreeInspector) ? FakeLiveTreeInspector.NothingLive
         : parameter == typeof(SquirrelDiscovery) ? new SquirrelDiscovery(_environment)
         : parameter == typeof(SteamDiscovery) ? new SteamDiscovery(_environment)
+        : parameter == typeof(SymbolStoreDiscovery)
+            ? new SymbolStoreDiscovery(_environment, new FakeSystemDirectories(_temp.Path), _volumes)
         : parameter == typeof(ChromiumUserDataDiscovery) ? new ChromiumUserDataDiscovery(_environment)
         : parameter == typeof(RowDeclarations) ? new RowDeclarations()
         : parameter == typeof(RetroArchDiscovery)
