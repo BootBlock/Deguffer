@@ -315,6 +315,20 @@ public sealed class UnityGiCacheProviderTests : IDisposable
         Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("GI Cache preferences", StringComparison.Ordinal));
     }
 
+    /// <summary>The hold ages with the process table: with every Editor closed, Explore may remove the cache again.</summary>
+    [Fact]
+    public async Task ExploreAllowsTheCacheOnceEveryEditorIsClosed()
+    {
+        CreateLayout();
+        MoveCacheTo(Path.Combine(_temp.Path, "D", "Lighting"));
+
+        var provider = CreateProvider();
+        var discovered = await provider.DiscoverToolRootsAsync();
+
+        Assert.Empty(discovered);
+        Assert.True(new ExploreActionPolicy([], [.. provider.ToolRoots, .. discovered], new FakeVolumeInventory()).MayRemove(Cache).IsAllowed);
+    }
+
     /// <summary>While an Editor runs, Explore refuses the moved folder as well as the default.</summary>
     [Fact]
     public async Task ExploreRefusesAMovedCacheWhileAnEditorRuns()
