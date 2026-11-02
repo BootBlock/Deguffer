@@ -1,5 +1,7 @@
 using System.Text.RegularExpressions;
+using Deguffer.Core.Profiles;
 using Deguffer.Core.Safety;
+using Microsoft.Win32;
 
 namespace Deguffer.Core.Diagnostics;
 
@@ -72,6 +74,14 @@ internal sealed partial class ReportRedaction
             rules.Add((Literal(profile), Marker("%USERPROFILE%")));
         }
 
+        // Every other account's profile Windows lists, wherever its profiles are kept: the pattern below
+        // knows only a Users folder, and a machine can keep them anywhere.
+        foreach (var other in OtherProfiles(environment, profile))
+        {
+            var parent = Path.GetDirectoryName(other)!.Replace("$", "$$", StringComparison.Ordinal);
+            rules.Add((Literal(other), parent + Path.DirectorySeparatorChar + Marker("<user>")));
+        }
+
         // Before any name is replaced, so a name that is also a folder's cannot take away the
         // "Users" the pattern is anchored on.
         rules.Add((OtherProfile(), "${root}" + Marker("<user>")));
@@ -115,6 +125,23 @@ internal sealed partial class ReportRedaction
 
         return Tokens.Aggregate(marked, (current, token) => current.Replace(Marker(token), token, StringComparison.Ordinal));
     }
+
+    /// <summary>
+    /// The folder of every profile in Windows' list of profiles but this one's and Windows' own accounts',
+    /// longest first so one inside another goes first. An entry not named after an account, such as the
+    /// copy Windows keeps of a profile it could not load, is a person's too. A drive's root is no one's.
+    /// </summary>
+    private static IEnumerable<string> OtherProfiles(IUserEnvironment environment, string profile) =>
+        environment.ReadLocalMachineRegistrySubKeyNames(WindowsUserProfiles.ProfileList, RegistryView.Registry64)
+            .Where(sid => !ProfileJudgement.IsWindowsOwn(sid))
+            .Select(sid => environment.ReadLocalMachineRegistryValue(
+                $@"{WindowsUserProfiles.ProfileList}\{sid}", "ProfileImagePath", RegistryView.Registry64))
+            .OfType<string>()
+            .Select(Path.TrimEndingDirectorySeparator)
+            .Where(folder => Path.GetDirectoryName(folder) is { Length: > 0 }
+                && !string.Equals(folder, profile, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(folder => folder.Length);
 
     /// <summary>
     /// <paramref name="token"/> as a marker no rule can match: private-use characters, none of them

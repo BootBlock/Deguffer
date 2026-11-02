@@ -392,7 +392,8 @@ brand (`Deguffer.Core.Providers`); types describe what they do.
 - MFT reading requires **administrator**; the app should run unelevated by default, scan what it
   can, and request elevation only for the fast scanner, for `C:\Windows\Temp`, for the figures
   Windows states only to an administrator about the space no folder holds (§7.1), for listing and
-  removing restore points (§9), and for changing a machine-wide entry in Installed apps (§7.3).
+  removing restore points (§9), for measuring and removing another account's profile (§9), and for
+  changing a machine-wide entry in Installed apps (§7.3).
 - Enable **long path** support (`\\?\` prefixes or the manifest opt-in). Node and NuGet trees
   routinely exceed `MAX_PATH`, and this is the most likely source of silent partial deletions.
 - Deletion should be genuinely parallel — these trees are hundreds of thousands of small files, and
@@ -1505,6 +1506,45 @@ or was made without writers, because only Windows' own provider makes the kind S
 Nothing can rule one in, so a copy Windows shares between a restore point and its own backup goes with
 the restore point, and the row says so. Lowering System Protection's limit is a setting, which
 Deguffer names and never changes.
+
+**Other accounts' profiles are offered on the same terms: only through Windows' own route, and only
+where the account is proven gone.** A machine more than one person used keeps a profile folder for
+every account that ever signed in, and an account deleted, a former member of staff or a test
+account can leave gigabytes behind. Windows keeps an entry for each profile in its `ProfileList`, and
+a folder deleted without it leaves a profile Windows goes on trying to load, so Deguffer never
+deletes a profile folder by path. It is a Storage row, "Other accounts' profiles", built under
+[#359](https://github.com/BootBlock/Deguffer/issues/359), to these rules:
+
+- **Every other account's profile is reported**, with its size, when Windows last loaded or unloaded
+  it, whether its account exists and whether it is in use, and each profile not offered says why.
+  Windows' own accounts' profiles (`systemprofile`, `LocalService`, `NetworkService`, and any other
+  identifier outside an account domain) are not reported.
+- **Offered, at Tier 3 and one profile at a time, only where every rule holds:** the entry is named
+  by a security identifier, the account is a local account of this machine (its identifier is in
+  the account domain the Local Security Authority states), `LookupAccountSid` answers
+  `ERROR_NONE_MAPPED`, Windows has no hive of it loaded and its `RefCount` is zero, it is not the
+  account Deguffer runs as and its folder neither holds nor is inside that account's profile, and the
+  folder, as Windows resolves it, is directly inside `ProfilesDirectory`, is neither the Default nor
+  the Public profile, neither holds nor is inside any other entry's folder, has no `.bak` entry of
+  the same identifier beside it, is there, and is not a link.
+- **A refusal is never absence.** A domain account fails to resolve on a machine away from its
+  domain controller exactly as a deleted one does, so a domain account's profile, and a Microsoft
+  Entra account's, is reported and never offered. Any other lookup error, an unknown load state, a
+  folder Windows would not describe, and a machine domain Windows did not state each leave the
+  profile reported and not offered.
+- **Removed by `DeleteProfileW`** with no path and no computer, so Windows removes the folder its
+  own list records. The run judges the profile again on the same rules immediately before, refuses
+  where Windows now records another folder, and looks into it for an Outlook data file, because
+  Windows removes a profile whole. A profile holding one, or holding a virtual machine's registered
+  storage, is withheld at planning too, and its folder counts as part of what the run removes.
+- **§5.6 by Windows' own list:** afterwards the removed profile is gone from the list and from the
+  disk, and every other profile the preview listed, the running account's included, is still listed
+  with the same folder and that folder is still there, as is `ProfilesDirectory`.
+- **Measured, removed and verified only as an administrator.** Windows lets only an administrator
+  look inside another account's profile, so an unelevated scan reports each profile and offers to
+  scan as administrator. Sizes are measured through `LongPath`.
+- **A profile folder is often a person's name.** It is shown on screen and never logged, and a
+  report redacts every account's profile folder Windows lists, wherever profiles are kept.
 
 **The installer package caches are two directories, and both are named here rather than implied.**
 `C:\ProgramData\Package Cache` and `C:\ProgramData\Microsoft\VisualStudio\Packages` sit apart, hold

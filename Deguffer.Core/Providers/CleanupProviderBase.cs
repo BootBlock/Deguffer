@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Deguffer.Core.Cloud;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Profiles;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.SystemProtection;
@@ -41,6 +42,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
     private readonly RefusalRecord _refusals;
     private readonly ICloudFiles? _cloud;
     private readonly ISystemProtection? _protection;
+    private readonly IUserProfiles? _profiles;
 
     /// <param name="emptier">
     /// How an <see cref="EmptyRecycleBinStep"/> is carried out, given by the one provider that plans one
@@ -71,6 +73,10 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// How a <see cref="RemoveRestorePointsStep"/> is carried out and proved, on the terms
     /// <paramref name="emptier"/> is given: the real one removes the machine's restore points.
     /// </param>
+    /// <param name="profiles">
+    /// How a <see cref="RemoveProfileStep"/> is carried out and proved, on the terms
+    /// <paramref name="emptier"/> is given: the real one removes the machine's profiles.
+    /// </param>
     /// <param name="scanner">
     /// What every measurement asks. Where none is given, the scanner of the machine
     /// <paramref name="environment"/> describes (<see cref="DirectoryScanner.For"/>), never this
@@ -92,7 +98,8 @@ public abstract class CleanupProviderBase : ICleanupProvider
         IWindowsServicing? servicing = null,
         TimeProvider? time = null,
         ISystemProtection? protection = null,
-        IVolumeInventory? volumes = null)
+        IVolumeInventory? volumes = null,
+        IUserProfiles? profiles = null)
     {
         Environment = environment;
         Volumes = volumes ?? VolumeInventory.Current;
@@ -101,10 +108,11 @@ public abstract class CleanupProviderBase : ICleanupProvider
         _refusals = RefusalRecord.For(environment);
         _cloud = cloud;
         _protection = protection;
+        _profiles = profiles;
         Servicing = servicing ?? WindowsServicing.Current;
         _executor = new PlanExecutor(
             runner, Scanner, _refusals, emptier, cloud, handlers, Servicing, inspector, time, environment,
-            protection: protection, volumes: Volumes);
+            protection: protection, volumes: Volumes, profiles: profiles);
         Runner = runner;
     }
 
@@ -279,7 +287,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         RunReach? runReach = null,
         RunResidue? residue = null,
         CancellationToken ct = default) =>
-        Task.FromResult(PlanVerifier.Verify(plan, runReach, residue, ct, _cloud, _protection, Volumes));
+        Task.FromResult(PlanVerifier.Verify(plan, runReach, residue, ct, _cloud, _protection, Volumes, _profiles));
 
     /// <summary>A plan with nothing to do, and the reason the user is shown.</summary>
     protected CleanupPlan EmptyPlan(string why) => new()
@@ -511,7 +519,8 @@ public abstract class CleanupProviderBase : ICleanupProvider
         // first reason with something to say is the one the user is shown.
         results.Aggregate(FallbackReason.None, (fallback, r) => FallbackReasonText.Prevailing(fallback, r.Fallback)),
         [.. results.Select(r => r.WithheldRecent)],
-        [.. results.Select(r => r.MailStores)]);
+        [.. results.Select(r => r.MailStores)],
+        [.. results.Select(r => r.WasReached)]);
 
     /// <summary>
     /// Measure every target and turn it into the step that will delete it.

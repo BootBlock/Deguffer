@@ -114,6 +114,25 @@ public sealed class VirtualMachineStoragePlanTests
     }
 
     /// <summary>
+    /// Windows removes a profile whole, so a profile holding a registered disk is withheld as a folder
+    /// holding one is, and the profile is protected on its contents.
+    /// </summary>
+    [Fact]
+    public void AProfileHoldingADiskIsWithheld()
+    {
+        var profile = new RemoveProfileStep(
+            new Profiles.UserProfile("S-1-5-21-1-2-3-1002", @"C:\Users\testuser", Profiles.ProfileLoad.NotLoaded, null),
+            "Remove the profile");
+
+        var applied = Apply(Planning(steps: profile), Registered());
+
+        Assert.Empty(applied.Steps);
+        Assert.Contains(applied.Notes, n => n.Message.StartsWith(@"Leaving the profile at C:\Users\testuser as it is", StringComparison.Ordinal));
+        Assert.Contains(applied.ProtectedPaths, p => p.Path == Disk && p.Withheld == Withholding.VirtualMachineStorage);
+        Assert.Contains(applied.ProtectedPaths, p => p.Path == @"C:\Users\testuser" && p.HeldContentBefore);
+    }
+
+    /// <summary>
     /// A registered folder is the machine's whole: a step inside it is withheld as one holding it is. This
     /// is the shape a hypervisor's virtual machine folder registers in.
     /// </summary>

@@ -1,5 +1,6 @@
 using Deguffer.Core.Cloud;
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Profiles;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -329,6 +330,7 @@ public sealed class CleanupPlanner
             new ComponentStoreCleanupProvider(environment, analysis: componentStore, scanner: scanner),
             new ComponentStoreResetBaseProvider(environment, analysis: componentStore, scanner: scanner),
             new RestorePointProvider(WindowsSystemProtection.Default, environment, scanner: scanner),
+            new OtherAccountProfilesProvider(WindowsUserProfiles.Default, environment, scanner: scanner),
             new CrashDumpProvider(environment, scanner: scanner),
             new WindowsServicingLogProvider(handlers, environment, scanner: scanner),
             new EpicLauncherLogProvider(environment, scanner: scanner),

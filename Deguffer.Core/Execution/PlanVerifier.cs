@@ -1,4 +1,5 @@
 using Deguffer.Core.Cloud;
+using Deguffer.Core.Profiles;
 using Deguffer.Core.Safety;
 using Deguffer.Core.SystemProtection;
 
@@ -28,6 +29,10 @@ public static class PlanVerifier
     /// What lists the restore points, shadow copies and storage a <see cref="RemoveRestorePointsStep"/>
     /// must leave, on the terms <paramref name="cloud"/> is given: it only reads.
     /// </param>
+    /// <param name="profiles">
+    /// What lists the profiles a plan's <see cref="RemoveProfileStep"/>s must leave, on the terms
+    /// <paramref name="cloud"/> is given: it only reads.
+    /// </param>
     /// <param name="volumes">
     /// Asked every other path a protected path and each of the run's paths are reachable at, because a
     /// step may name a folder through a letter <c>subst</c> made, or another mount of its volume, that
@@ -40,7 +45,8 @@ public static class PlanVerifier
         CancellationToken ct = default,
         ICloudFiles? cloud = null,
         ISystemProtection? protection = null,
-        IVolumeInventory? volumes = null)
+        IVolumeInventory? volumes = null,
+        IUserProfiles? profiles = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
 
@@ -66,6 +72,12 @@ public static class PlanVerifier
         {
             ct.ThrowIfCancellationRequested();
             checks.AddRange(RestorePointProof.Checks(removal, protection ?? WindowsSystemProtection.Default));
+        }
+
+        if (plan.Steps.OfType<RemoveProfileStep>().ToList() is { Count: > 0 } removals)
+        {
+            ct.ThrowIfCancellationRequested();
+            checks.AddRange(ProfileRemovalProof.Checks(removals, profiles ?? WindowsUserProfiles.Default));
         }
 
         return new VerificationResult { Checks = checks };

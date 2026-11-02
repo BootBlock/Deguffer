@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Deguffer.Core.Cloud;
+using Deguffer.Core.Profiles;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -58,6 +59,10 @@ namespace Deguffer.Core.Execution;
 /// How a <see cref="RemoveRestorePointsStep"/> is carried out and proved. Null, and never defaulted, for
 /// the reasons <paramref name="emptier"/> is: the real one removes the machine's restore points.
 /// </param>
+/// <param name="profiles">
+/// How a <see cref="RemoveProfileStep"/> is carried out. Null, and never defaulted, for the reasons
+/// <paramref name="emptier"/> is: the real one removes the machine's profiles.
+/// </param>
 public sealed class PlanExecutor(
     IProcessRunner runner,
     IDirectoryScanner scanner,
@@ -71,7 +76,8 @@ public sealed class PlanExecutor(
     IUserEnvironment? environment = null,
     ISystemDirectories? system = null,
     ISystemProtection? protection = null,
-    IVolumeInventory? volumes = null)
+    IVolumeInventory? volumes = null,
+    IUserProfiles? profiles = null)
 {
     /// <summary>
     /// How long a command's tool is given to mark the item it will remove later. LM Studio answers
@@ -87,6 +93,7 @@ public sealed class PlanExecutor(
     private readonly ICloudFiles? _cloud = cloud;
     private readonly IDiskCleanupHandlers? _handlers = handlers;
     private readonly ISystemProtection? _protection = protection;
+    private readonly IUserProfiles? _profiles = profiles;
     private readonly IWindowsServicing _servicing = servicing ?? WindowsServicing.Current;
     private readonly IProcessInspector _inspector = inspector ?? ProcessInspector.Default;
     private readonly TimeProvider _time = time ?? TimeProvider.System;
@@ -214,7 +221,8 @@ public sealed class PlanExecutor(
                 CancellationToken.None,
                 _cloud,
                 _protection,
-                _volumes),
+                _volumes,
+                _profiles),
         };
     }
 
@@ -272,6 +280,7 @@ public sealed class PlanExecutor(
             DiskCleanupStep handler => await DiskCleanupRun.RunAsync(_handlers!, scanner, handler, plan.Keep, progress, ct).ConfigureAwait(false),
             ReleaseLocalCopiesStep release => await LocalCopyRelease.RunAsync(_cloud!, release, plan.Keep, progress, ct).ConfigureAwait(false),
             RemoveRestorePointsStep removal => await RestorePointRun.RunAsync(_protection!, removal, progress, ct).ConfigureAwait(false),
+            RemoveProfileStep profile => await ProfileRemovalRun.RunAsync(_profiles!, _environment, scanner, profile, ct).ConfigureAwait(false),
             _ => throw new NotSupportedException($"Unknown step type {step.GetType().Name}."),
         };
     }
@@ -283,6 +292,7 @@ public sealed class PlanExecutor(
         DiskCleanupStep => _handlers is not null,
         ReleaseLocalCopiesStep => _cloud is not null,
         RemoveRestorePointsStep => _protection is not null,
+        RemoveProfileStep => _profiles is not null,
         _ => true,
     };
 
