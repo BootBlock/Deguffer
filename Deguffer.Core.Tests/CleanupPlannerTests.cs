@@ -469,7 +469,7 @@ public sealed class CleanupPlannerTests
                 "nuget", "gradle", "npm", "pnpm", "yarn", "bun", "composer", "scoop-cache", "vscode-cpptools", "dart-analysis-server", "roslyn-cache", "jetbrains-superseded-system", "temp-tool-caches",
                 "uv", "pip", "poetry", "conda", "cargo", "go", "zig", "deno", "electron", "typescript-typings", "ccache", "sccache", "maven", "vcpkg", "conan", "gpu-shader-cache",
                 "chromium-app-cache", "chromium-service-worker-storage", "vscode-cache", "firefox", "epic-launcher-webcache",
-                "epic-launcher-content-cache", "battle-net-cache", "steam", "steam-library-artwork", "steam-shader-cache", "emulator-shader-cache", "retroarch-downloads", "retroarch-thumbnails", "unreal-ddc", "spotify",
+                "epic-launcher-content-cache", "battle-net-cache", "steam", "steam-library-artwork", "steam-shader-cache", "emulator-shader-cache", "retroarch-downloads", "retroarch-thumbnails", "unreal-ddc", "unity-gi-cache", "spotify",
                 "plex-transcode", "jellyfin-transcode", "emby-transcode", "affinity-model-cache", "capture-one-cache", "davinci-resolve-render-cache", "after-effects-disk-cache", "adobe-media-cache",
                 "squirrel-staging",
                 "platformio", "playwright", "puppeteer", "vscode-extension-browsers", "lmstudio-runtimes", "vagrant-boxes", "test-browser-profiles", "squirrel-superseded-versions", "azure-functions-tools",
@@ -485,7 +485,7 @@ public sealed class CleanupPlannerTests
             [
                 "unity-library", "unreal-intermediate", "unreal-project-ddc", "cargo-target", "node-modules", "python-venv",
                 "tox-environments", "nox-environments", "dart-tool",
-                "conda", "maven", "vcpkg", "chromium-service-worker-storage", "steam-library-artwork", "steam-shader-cache", "emulator-shader-cache", "retroarch-downloads", "unreal-ddc", "affinity-model-cache", "capture-one-cache", "davinci-resolve-render-cache", "after-effects-disk-cache", "adobe-media-cache", "platformio", "playwright", "puppeteer", "lmstudio-runtimes", "vagrant-boxes",
+                "conda", "maven", "vcpkg", "chromium-service-worker-storage", "steam-library-artwork", "steam-shader-cache", "emulator-shader-cache", "retroarch-downloads", "unreal-ddc", "unity-gi-cache", "affinity-model-cache", "capture-one-cache", "davinci-resolve-render-cache", "after-effects-disk-cache", "adobe-media-cache", "platformio", "playwright", "puppeteer", "lmstudio-runtimes", "vagrant-boxes",
                 "squirrel-superseded-versions", "azure-functions-tools", "graphics-driver-installers", "autodesk-installers",
                 "cloud-local-copies", "temp-directories", "temp-installer-downloads", "previous-windows-installation",
                 "windows-update-leftovers", "driver-store", "component-store",
