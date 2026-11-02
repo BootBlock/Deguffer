@@ -38,7 +38,7 @@ largest files inside it:
 
 Besides Settings and About, Deguffer has six pages:
 
-- [Storage](#storage) checks 104 sources of waste, from package-manager and browser caches to
+- [Storage](#storage) checks 105 sources of waste, from package-manager and browser caches to
   `Windows.old` and old restore points, and puts each one in a [safety tier](#safety-tiers). You
   choose what goes, and when the clean has finished Deguffer checks that everything it said it would
   leave alone is still there.
@@ -121,7 +121,7 @@ remove one by any route.
 
 ## Storage
 
-Each of the 104 sources has its own provider, which knows what that location is and what sits next
+Each of the 105 sources has its own provider, which knows what that location is and what sits next
 to it. Rows for tools you do not have are hidden unless you ask the Storage page to show them. Build
 output and project caches, such as `node_modules`, `obj`, Rust's `target`, Python's `.tox` and
 `.pytest_cache` folders, and the caches in Visual Studio's `.vs` folders, are only looked for
