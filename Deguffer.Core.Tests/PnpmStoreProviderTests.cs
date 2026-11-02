@@ -111,6 +111,23 @@ public sealed class PnpmStoreProviderTests : IDisposable
         Assert.True(plan.Estimated.IsApproximate);
     }
 
+    /// <summary>
+    /// A failed <c>store path</c> is no answer, whatever it printed. The reply here fails and still
+    /// names a populated store, so a provider that read the output without the exit code would offer
+    /// to prune it.
+    /// </summary>
+    [Fact]
+    public async Task OffersNothingWhenPnpmFailsWhilePrintingAStore()
+    {
+        Populate(Store);
+
+        var plan = await CreateProvider(new FakeProcessRunner().Responding(Pnpm, "store path", Store, exitCode: 1)).PlanAsync();
+
+        Assert.True(plan.IsEmpty);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("did not say where", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task OffersNothingWhenPnpmDoesNotSayWhereItsStoreIs()
     {

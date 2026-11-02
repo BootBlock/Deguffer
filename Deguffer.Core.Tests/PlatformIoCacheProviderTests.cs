@@ -243,6 +243,80 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
         Assert.Contains(plan.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(cache));
     }
 
+    /// <summary>
+    /// A failed <c>system info</c> is no answer, whatever it printed. The reply here fails and still
+    /// names a populated cache directory that is not the default, so a provider that read the output
+    /// without the exit code would measure that folder and say PlatformIO reported it.
+    /// </summary>
+    [Fact]
+    public async Task SaysTheCacheIsTheDefaultWhenPlatformIoDidNotAnswer()
+    {
+        _environment.WithExecutable("pio");
+        var cache = CreateCache();
+        var printed = _temp.CreateDirectory("printed-cache");
+        _temp.CreateFile(2048, "printed-cache", "payload.bin");
+
+        var runner = new FakeProcessRunner().Responding(
+            Pio, "system info", JsonSerializer.Serialize(new { core_dir = _temp.Path, cache_dir = printed }), exitCode: 1);
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.Equal([cache], Assert.Single(plan.Steps.OfType<RunCommandStep>()).MeasuredPaths);
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("PlatformIO reports", StringComparison.Ordinal));
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains($"PlatformIO did not say where its cache directory is, so {cache} is the documented default", StringComparison.Ordinal)
+            && n.Message.Contains("PlatformIO's own command clears wherever PlatformIO really keeps it", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task SaysPlatformIoReportedTheCacheWhenItDid()
+    {
+        _environment.WithExecutable("pio");
+        var elsewhere = _temp.CreateDirectory("relocated-cache");
+        _temp.CreateFile(2048, "relocated-cache", "payload.bin");
+
+        var runner = new FakeProcessRunner().Responding(
+            Pio, "system info", JsonSerializer.Serialize(new { cache_dir = elsewhere }));
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.Contains(plan.Notes, n => n.Message == $"PlatformIO reports its cache directory as {elsewhere}.");
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("did not say", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// PlatformIO 6.1.19 names its core directory and not its cache directory. The folder inside a
+    /// reported core directory is documented, not reported, and not a guess about where PlatformIO lives.
+    /// </summary>
+    [Fact]
+    public async Task SaysTheCacheIsTheOneInsideTheReportedCoreDirectory()
+    {
+        _environment.WithExecutable("pio");
+        var core = _temp.CreateDirectory("relocated-core");
+        var cache = _temp.CreateDirectory("relocated-core", ".cache");
+        _temp.CreateFile(2048, "relocated-core", ".cache", "payload.bin");
+
+        var runner = new FakeProcessRunner().Responding(
+            Pio, "system info", JsonSerializer.Serialize(new { core_dir = core }));
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.Contains(plan.Notes, n => n.Message ==
+            $"PlatformIO reports its core directory as {core} and does not name its cache directory, so this "
+            + $"is the documented one inside it: {cache}.");
+    }
+
+    /// <summary>A missing default says nothing about a cache PlatformIO keeps elsewhere.</summary>
+    [Fact]
+    public async Task SaysTheDefaultIsMissingRatherThanTheCacheWhenPlatformIoDidNotAnswer()
+    {
+        _environment.WithExecutable("pio");
+
+        var runner = new FakeProcessRunner().Responding(Pio, "system info", string.Empty, exitCode: 1);
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.Notes, n => n.Message.StartsWith(
+            "PlatformIO did not say where its cache directory is, and the documented default", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task EvictsWithPlatformIosOwnCommandRatherThanDeletingThePath()
     {
@@ -625,7 +699,9 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
     {
         _environment.WithExecutable("pio");
 
-        var plan = await CreateProvider().PlanAsync();
+        var runner = new FakeProcessRunner().Responding(
+            Pio, "system info", JsonSerializer.Serialize(new { core_dir = CoreRoot }));
+        var plan = await CreateProvider(runner).PlanAsync();
 
         Assert.True(plan.IsEmpty);
         Assert.Contains(plan.Notes, n => n.Message.Contains("does not exist yet", StringComparison.Ordinal));

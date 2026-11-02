@@ -20,10 +20,14 @@ namespace Deguffer.Core.Providers;
 /// The installed toolchains. Never a target: it is measured as the "before" figure for the package
 /// prune's reclaim, and PlatformIO decides which packages inside it go.
 /// </param>
+/// <param name="CacheSource">
+/// How <paramref name="CacheDirectory"/> was found, which decides what the plan may claim about it.
+/// </param>
 internal sealed record PlatformIoLocations(
     string CoreDirectory,
     string CacheDirectory,
-    string PackagesDirectory)
+    string PackagesDirectory,
+    PlatformIoCacheSource CacheSource)
 {
     /// <summary>
     /// The locations in <c>pio system info --json-output</c>, or the documented defaults beneath
@@ -44,12 +48,20 @@ internal sealed record PlatformIoLocations(
     public static PlatformIoLocations Read(string json, string defaultCoreRoot)
     {
         var reported = TryReadReport(json);
-        var core = ReadPath(reported, "core_dir") ?? defaultCoreRoot;
+        var reportedCore = ReadPath(reported, "core_dir");
+        var reportedCache = ReadPath(reported, "cache_dir");
+        var core = reportedCore ?? defaultCoreRoot;
 
         return new PlatformIoLocations(
             core,
-            ReadPath(reported, "cache_dir") ?? Path.Combine(core, ".cache"),
-            ReadPath(reported, "packages_dir") ?? Path.Combine(core, "packages"));
+            reportedCache ?? Path.Combine(core, ".cache"),
+            ReadPath(reported, "packages_dir") ?? Path.Combine(core, "packages"),
+            (reportedCache, reportedCore) switch
+            {
+                (not null, _) => PlatformIoCacheSource.Reported,
+                (null, not null) => PlatformIoCacheSource.InReportedCore,
+                _ => PlatformIoCacheSource.Default,
+            });
     }
 
     /// <summary>

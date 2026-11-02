@@ -591,6 +591,26 @@ public sealed class CondaCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A failed <c>conda info --json</c> is no answer, whatever it printed. The reply here fails and
+    /// still describes a populated package cache, so a provider that read the output without the exit
+    /// code would offer to clean it.
+    /// </summary>
+    [Fact]
+    public async Task OffersNothingWhenCondaFailsWhileDescribingItsCaches()
+    {
+        Populate(PackageCache);
+
+        var runner = new FakeProcessRunner()
+            .Responding(Conda, "info --json", InfoJson(), exitCode: 1)
+            .Responding(Conda, "--dry-run", CleanJson(tarballs: 1_000, packages: 9_000));
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.True(plan.IsEmpty);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("conda did not describe", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// §7.1 over everything <c>conda info --json</c> reports: the installation prefix, the
     /// environment directories and the package cache. The plan asserts each survives and clears the
     /// cache with conda's own command, so none is removable by hand, and an environment directory

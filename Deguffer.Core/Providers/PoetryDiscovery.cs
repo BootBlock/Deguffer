@@ -7,17 +7,17 @@ namespace Deguffer.Core.Providers;
 /// Where Poetry says its two directories are on this machine.
 /// </summary>
 /// <param name="CacheRoot">
-/// The cache directory, which is the folder Deguffer reaches into. Never null: where Poetry cannot
-/// answer, this is the documented default, and the provider still checks it exists before acting.
+/// The cache directory, which is the folder Deguffer reaches into. Where Poetry cannot answer, this
+/// is the documented default, and the provider still checks it exists before acting.
 /// </param>
 /// <param name="Environments">
-/// Where Poetry keeps its virtual environments. Never null for the same reason, and the reason this
-/// record has two fields rather than one: <c>virtualenvs.path</c> defaults to a child of
-/// <paramref name="CacheRoot"/> and can be pointed anywhere, so the two are separate answers that
-/// happen to overlap by default. A provider that derived this from the cache root would be asserting
-/// the default rather than describing the machine.
+/// Where Poetry keeps its virtual environments, and the reason this record has two fields rather
+/// than one: <c>virtualenvs.path</c> defaults to a child of <paramref name="CacheRoot"/> and can be
+/// pointed anywhere, so the two are separate answers that happen to overlap by default. A provider
+/// that derived this from the cache root would be asserting the default rather than describing the
+/// machine. Where Poetry cannot answer, this is that default.
 /// </param>
-public sealed record PoetryLocations(string CacheRoot, string Environments);
+internal sealed record PoetryLocations(AskedLocation CacheRoot, AskedLocation Environments);
 
 /// <summary>
 /// Asks Poetry about itself. Separate from the provider for the reason <see cref="VcpkgDiscovery"/>
@@ -32,7 +32,7 @@ public sealed record PoetryLocations(string CacheRoot, string Environments);
 /// instead. Where Poetry keeps its folders in a profile is what the provider's §5.2 declarations are
 /// written against, so that knowledge stays in one file rather than being stated in two.</para>
 /// </summary>
-public sealed partial class PoetryDiscovery(IProcessRunner runner)
+internal sealed partial class PoetryDiscovery(IProcessRunner runner)
 {
     /// <summary>
     /// What a cache name has to look like before it is pasted into a command line. A repository name
@@ -74,9 +74,11 @@ public sealed partial class PoetryDiscovery(IProcessRunner runner)
 
     private async Task<PoetryLocations> AskBothAsync(string poetry, string defaultCacheRoot, CancellationToken ct)
     {
-        var cacheRoot = await AskAsync(poetry, "cache-dir", ct).ConfigureAwait(false) ?? defaultCacheRoot;
-        var environments = await AskAsync(poetry, "virtualenvs.path", ct).ConfigureAwait(false)
-            ?? Path.Combine(cacheRoot, "virtualenvs");
+        var cacheRoot = AskedLocation.Of(await AskAsync(poetry, "cache-dir", ct).ConfigureAwait(false), defaultCacheRoot);
+
+        var environments = AskedLocation.Of(
+            await AskAsync(poetry, "virtualenvs.path", ct).ConfigureAwait(false),
+            Path.Combine(cacheRoot.Path, "virtualenvs"));
 
         return new PoetryLocations(cacheRoot, environments);
     }
