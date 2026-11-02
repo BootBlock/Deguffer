@@ -58,11 +58,12 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
     ]);
 
     private static readonly DisposableChildSet BuildCacheParts = new(
-        ArduinoBuildCache.Parts.Select(part => new ChildClassification(part, SafetyTier.RegenerableCache, "Builds the Arduino CLI compiled.")));
+        ArduinoBuildCache.Parts.Keys.Select(part => new ChildClassification(part, SafetyTier.RegenerableCache, "Builds the Arduino CLI compiled.")));
 
     private readonly ISystemDirectories _system;
     private readonly ArduinoFolderRules _rules;
     private readonly PassMemo<Task<IReadOnlyList<Installation>>> _installations = new();
+    private readonly PassMemo<FoundClis> _clis = new();
 
     public ArduinoCacheProvider(
         IUserEnvironment? environment = null,
@@ -200,12 +201,13 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
     }
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(OwnCli() is not null || IdeCli() is not null);
+        Task.FromResult(Clis is { Own: not null } or { Ide: not null });
 
     /// <summary>Every answer is configuration, which the user can change between one scan and the next.</summary>
     public override void InvalidateCaches()
     {
         _installations.Forget();
+        _clis.Forget();
         base.InvalidateCaches();
     }
 
@@ -249,6 +251,11 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
         foreach (var settings in known.Select(i => i.Settings!))
         {
             survivors.AddRange(_rules.Survivors(settings, removed));
+
+            if (settings.ConfigFile is { } ideConfig)
+            {
+                survivors.Add((ideConfig, "The settings Arduino IDE 2 hands its Arduino CLI."));
+            }
         }
 
         foreach (var note in new[] { staged.Note, built.Note, BuildRunningProcessNote() })
@@ -273,7 +280,7 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
             Steps = [.. commands, .. builds],
             ProtectedPaths = Protect([.. survivors]),
             Notes = notes,
-            Fallback = staged.Fallback is not FallbackReason.None ? staged.Fallback : built.Fallback,
+            Fallback = FallbackReasonText.Prevailing(staged.Fallback, built.Fallback),
             HasUnreadableRoot = unreachable.Count > 0,
         };
     }
@@ -307,6 +314,16 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
             }
 
             var downloads = settings.Downloads.Folder!;
+
+            if (installation.Configuration.WhyUnknown is { } unknown)
+            {
+                notes.Add(new PlanNote(
+                    PlanNoteSeverity.Information,
+                    "Deguffer cannot check before the clean that the Arduino CLI still means the folder it named, "
+                    + $"because {unknown} Its cache clean removes the folder it is sent to, so the downloads are left alone."));
+                survivors.Add((downloads, "The Arduino downloads folder, which Deguffer is leaving alone."));
+                continue;
+            }
 
             switch (ArduinoFolderRules.WhyNotEmptied(downloads))
             {
@@ -342,6 +359,10 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
                 Estimated = measured.Sizes[index],
                 MeasuredPaths = [installation.Settings.Downloads.Folder!],
                 Group = DownloadsGroup,
+                TargetCheck = new ArduinoCleanTarget(
+                    () => ReadConfiguration(installation.Settings.ConfigFile),
+                    installation.Configuration,
+                    installation.Settings.Downloads.Folder!),
             }),
         ];
 
@@ -398,7 +419,7 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
 
             targets.AddRange(scan.Entries.Select(entry => new DeletionTarget(
                 entry.Path,
-                entry.Kind == "cores"
+                entry.Part is ArduinoBuildPart.Cores
                     ? "A board core the Arduino CLI compiled. The next compile for that board builds it again."
                     : "A sketch build the Arduino CLI made. The next compile of that sketch builds it again.",
                 LastWritten: entry.LastUsed,
@@ -417,12 +438,15 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
         {
             List<(string Cli, string? ConfigFile)> asked = [];
 
-            if ((OwnCli() ?? IdeCli()) is { } own)
+            var clis = Clis;
+
+            if ((clis.Own ?? clis.Ide) is { } own)
             {
                 asked.Add((own, null));
             }
 
-            if (LongPath.ProbeFile(IdeConfigFile) is PathPresence.Present && (IdeCli() ?? OwnCli()) is { } ide)
+            // A refusal may hide the file, so it is asked about then too: the CLI says whether it can read it.
+            if (LongPath.FileMayExist(IdeConfigFile) && (clis.Ide ?? clis.Own) is { } ide)
             {
                 asked.Add((ide, IdeConfigFile));
             }
@@ -431,21 +455,39 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
 
             foreach (var (cli, configFile) in asked)
             {
+                // Read before the CLI is asked, so the clean is held to what the CLI read when it answered.
+                var configuration = ReadConfiguration(configFile);
+
                 installations.Add(new Installation(
                     cli,
+                    configuration,
                     await ArduinoSettings.AskAsync(Runner, cli, configFile, ct).ConfigureAwait(false)));
             }
 
             return (IReadOnlyList<Installation>)installations;
         });
 
-    /// <summary>The Arduino CLI on the PATH, which answers for its own configuration.</summary>
-    private string? OwnCli() => Environment.FindExecutable("arduino-cli");
+    /// <summary>
+    /// The Arduino CLI on the PATH, which answers for its own configuration, and the one Arduino IDE 2
+    /// installed with itself, which answers for the IDE's, found once per planning pass.
+    ///
+    /// <para>A bundled CLI Windows would not describe is taken as there: the row is then planned, and a
+    /// CLI that cannot be started says so, rather than the row reporting Arduino as not installed on a
+    /// refusal.</para>
+    /// </summary>
+    private FoundClis Clis => _clis.Get(() => new FoundClis(
+        Environment.FindExecutable("arduino-cli"),
+        BundledClis.FirstOrDefault(LongPath.FileMayExist)));
 
-    /// <summary>The CLI Arduino IDE 2 installed with itself, which answers for the IDE's configuration.</summary>
-    private string? IdeCli() => BundledClis.FirstOrDefault(path => LongPath.ProbeFile(path) is PathPresence.Present);
+    private ArduinoConfiguration ReadConfiguration(string? configFile) =>
+        ArduinoConfiguration.Read(Environment, configFile, DefaultData);
+
+    /// <param name="Own">The CLI on the PATH, or null.</param>
+    /// <param name="Ide">The CLI Arduino IDE 2 bundles, or null.</param>
+    private sealed record FoundClis(string? Own, string? Ide);
 
     /// <param name="Cli">The executable that answered, and that the clean runs.</param>
+    /// <param name="Configuration">What the CLI read to find its folders, recorded just before it answered.</param>
     /// <param name="Settings">What it said, or null where any answer was missing.</param>
-    private sealed record Installation(string Cli, ArduinoSettings? Settings);
+    private sealed record Installation(string Cli, ArduinoConfiguration Configuration, ArduinoSettings? Settings);
 }

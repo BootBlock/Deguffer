@@ -262,6 +262,8 @@ public sealed class ArduinoCacheProviderTests : IDisposable
 
         var result = await provider.ExecuteAsync(plan);
 
+        Exists(IdeConfig);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(IdeConfig, StringComparison.OrdinalIgnoreCase));
         Assert.False(Directory.Exists(ideDownloads));
         Assert.False(Directory.Exists(Staging));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
@@ -313,4 +315,165 @@ public sealed class ArduinoCacheProviderTests : IDisposable
         Assert.True(policy.MayRemove(Staging).IsAllowed);
         Assert.False(policy.MayRemove(Path.Combine(Data, "packages")).IsAllowed);
     }
+
+    /// <summary>
+    /// The CLI resolves its downloads folder afresh when <c>cache clean</c> starts, and removes it
+    /// outright. A setting that moves it after the preview, through a variable or the configuration
+    /// file, holds the command back, and the folder it would now reach is untouched.
+    /// </summary>
+    [Theory]
+    [InlineData("variable")]
+    [InlineData("file")]
+    public async Task DoesNotRunTheCommandWhenTheSettingsChangedSinceThePreview(string how)
+    {
+        InstalledData();
+        var elsewhere = _temp.CreateFile(100, "profile", "Documents", "Precious", "thesis.docx");
+
+        var ran = new List<string>();
+        var provider = CreateProvider(CliAnswering(ran: ran));
+        var plan = await provider.PlanAsync();
+
+        Assert.Single(plan.Steps.OfType<RunCommandStep>());
+
+        if (how == "variable")
+        {
+            _environment.WithToolEnvironmentVariable("ARDUINO_DIRECTORIES_DOWNLOADS", Path.GetDirectoryName(elsewhere)!);
+        }
+        else
+        {
+            File.WriteAllText(Path.Combine(Data, "arduino-cli.yaml"), "directories:\n  downloads: somewhere-else\n");
+        }
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.DoesNotContain(ran, a => a.StartsWith("cache clean", StringComparison.Ordinal));
+        Exists(elsewhere);
+        Exists(Path.Combine(Staging, "packages", "avr-gcc-7.3.0.tar.bz2"));
+        Assert.Contains(result.Steps, s => s.Message?.Contains("changed since the preview", StringComparison.Ordinal) == true);
+    }
+
+    /// <summary>A file saved into the downloads folder after the preview would go with the archives, so the command is held back.</summary>
+    [Fact]
+    public async Task DoesNotRunTheCommandWhenTheDownloadsGainedSomethingSinceThePreview()
+    {
+        InstalledData();
+
+        var ran = new List<string>();
+        var provider = CreateProvider(CliAnswering(ran: ran));
+        var plan = await provider.PlanAsync();
+
+        var saved = _temp.CreateFile(100, "profile", "AppData", "Local", "Arduino15", "staging", "my-library.zip");
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.DoesNotContain(ran, a => a.StartsWith("cache clean", StringComparison.Ordinal));
+        Exists(saved);
+    }
+
+    /// <summary>
+    /// A configuration file named by a setting that is not a full path cannot be read again before the
+    /// clean, so the downloads are not offered.
+    /// </summary>
+    [Fact]
+    public async Task LeavesTheDownloadsWhenItCannotTellWhichConfigurationTheCliReads()
+    {
+        InstalledData();
+        _environment.WithToolEnvironmentVariable("ARDUINO_CONFIG_FILE", "arduino-cli.yaml");
+
+        var provider = CreateProvider(CliAnswering());
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.Steps.OfType<RunCommandStep>());
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(Staging, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// The IDE's settings file is asked about even when Windows will not describe it, because a refusal
+    /// is not an absence, and it survives the clean.
+    /// </summary>
+    [Fact]
+    public async Task AsksAboutTheIdesConfigurationEvenWhenItCannotBeDescribed()
+    {
+        InstalledData();
+        _temp.CreateFile(10, "profile", ".arduinoIDE", "arduino-cli.yaml");
+
+        var ran = new List<string>();
+        var provider = CreateProvider(CliAnswering(ran: ran));
+
+        using (DeniedDirectory.WithUnreadableFile(IdeConfig))
+        {
+            await provider.PlanAsync();
+        }
+
+        Assert.Contains(ran, a => a.EndsWith($"--config-file \"{IdeConfig}\"", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// §7.1 with folders the CLI moved: the moved downloads folder's two parts and the moved build
+    /// cache's two parts may be removed in Explore, and what sits beside them may not.
+    /// </summary>
+    [Fact]
+    public async Task ExploreFollowsTheFoldersTheCliMoved()
+    {
+        InstalledData();
+        var downloads = Path.Combine(_environment.LocalAppData, "ArduinoDownloads");
+        var cache = Path.Combine(_environment.LocalAppData, "ArduinoBuilds");
+        _temp.CreateFile(10, "profile", "AppData", "Local", "ArduinoDownloads", "packages", "a.zip");
+        _temp.CreateFile(10, "profile", "AppData", "Local", "ArduinoBuilds", "cores", "x", ".last-used");
+        _temp.CreateFile(10, "profile", "AppData", "Local", "ArduinoBuilds", "notes.txt");
+
+        var provider = CreateProvider(CliAnswering(new()
+        {
+            ["directories.downloads"] = downloads,
+            ["build_cache.path"] = cache,
+        }));
+        var policy = await ExploreActionPolicy.ForAsync(_system, _environment, new FakeVolumeInventory(), [provider]);
+
+        Assert.True(policy.MayRemove(Path.Combine(downloads, "packages")).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Combine(cache, "cores")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(cache, "notes.txt")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(Data, "staging")).IsAllowed);
+    }
+
+    /// <summary>An entry is dated by the CLI's marker, which the CLI rewrites each time it uses the entry.</summary>
+    [Fact]
+    public async Task DatesEachBuildByTheClisMarker()
+    {
+        TempDirectory.Age(_temp.CreateFile(100, "profile", "AppData", "Local", "arduino", "sketches", "ABC", "Blink.ino.hex"), TimeSpan.FromDays(90));
+        var marker = TempDirectory.Age(_temp.CreateFile(0, "profile", "AppData", "Local", "arduino", "sketches", "ABC", ".last-used"), TimeSpan.FromDays(12));
+
+        var provider = CreateProvider(CliAnswering());
+        var plan = await provider.PlanAsync();
+
+        var step = Assert.Single(plan.Steps.OfType<DeleteDirectoryStep>());
+        Assert.Equal(File.GetLastWriteTimeUtc(marker), step.LastWritten);
+    }
+
+    /// <summary>
+    /// With no CLI on the PATH, the one Arduino IDE 2 installs with itself answers, even where Windows
+    /// will not describe it: a refusal is not an absence, so the row is still there.
+    /// </summary>
+    [Fact]
+    public async Task FindsTheIdesBundledCliEvenWhenItCannotBeDescribed()
+    {
+        var bundled = _temp.CreateFile(
+            10, "profile", "AppData", "Local", "Programs", "Arduino IDE", "resources", "app", "lib", "backend", "resources", "arduino-cli.exe");
+        var asked = new List<string>();
+        var provider = CreateProvider(new FakeProcessRunner().Replying(bundled, arguments =>
+        {
+            asked.Add(arguments);
+            return new CommandOutcome(1, string.Empty, "unreachable");
+        }));
+
+        using (DeniedDirectory.WithUnreadableFile(bundled))
+        {
+            Assert.True(await provider.IsPresentAsync());
+        }
+
+        var plan = await provider.PlanAsync();
+
+        Assert.NotEmpty(asked);
+        Assert.True(plan.WasNotExamined);
+    }
 }
+

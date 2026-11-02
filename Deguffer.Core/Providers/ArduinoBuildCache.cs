@@ -2,11 +2,21 @@ using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Providers;
 
+/// <summary>The two folders of the Arduino build cache.</summary>
+internal enum ArduinoBuildPart
+{
+    /// <summary><c>cores</c>: one archived core per board and its options.</summary>
+    Cores,
+
+    /// <summary><c>sketches</c>: one build folder per sketch path.</summary>
+    Sketches,
+}
+
 /// <summary>One compiled core or sketch in the Arduino build cache.</summary>
 /// <param name="Path">The entry's folder, in display form.</param>
-/// <param name="Kind">The folder of the cache it is in: <c>cores</c> or <c>sketches</c>.</param>
+/// <param name="Part">The folder of the cache it is in.</param>
 /// <param name="LastUsed">When the CLI last used it, from its <c>.last-used</c> marker.</param>
-internal sealed record ArduinoBuildEntry(string Path, string Kind, DateTime LastUsed);
+internal sealed record ArduinoBuildEntry(string Path, ArduinoBuildPart Part, DateTime LastUsed);
 
 /// <summary>What one Arduino build cache folder holds.</summary>
 /// <param name="Entries">Each entry the CLI marked as its own.</param>
@@ -37,8 +47,13 @@ internal static class ArduinoBuildCache
     /// <summary>The CLI's marker, written into every entry it uses.</summary>
     public const string LastUsedName = ".last-used";
 
-    /// <summary>The two folders of the cache, each a set of entries the CLI keys by a hash.</summary>
-    public static readonly IReadOnlyList<string> Parts = ["cores", "sketches"];
+    /// <summary>The two folders of the cache by name, each a set of entries the CLI keys by a hash.</summary>
+    public static readonly IReadOnlyDictionary<string, ArduinoBuildPart> Parts =
+        new Dictionary<string, ArduinoBuildPart>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["cores"] = ArduinoBuildPart.Cores,
+            ["sketches"] = ArduinoBuildPart.Sketches,
+        };
 
     public static ArduinoBuildCacheScan Read(string cache)
     {
@@ -55,9 +70,9 @@ internal static class ArduinoBuildCache
         {
             if (entry is DirectoryInfo part
                 && !part.Attributes.HasFlag(FileAttributes.ReparsePoint)
-                && Parts.Contains(part.Name, StringComparer.OrdinalIgnoreCase))
+                && Parts.TryGetValue(part.Name, out var kind))
             {
-                ReadPart(part, entries, unrecognised, unlisted);
+                ReadPart(part, kind, entries, unrecognised, unlisted);
             }
             else
             {
@@ -70,6 +85,7 @@ internal static class ArduinoBuildCache
 
     private static void ReadPart(
         DirectoryInfo part,
+        ArduinoBuildPart kind,
         List<ArduinoBuildEntry> entries,
         List<(string Path, string Reason)> unrecognised,
         List<string> unlisted)
@@ -100,7 +116,7 @@ internal static class ArduinoBuildCache
                 continue;
             }
 
-            entries.Add(new ArduinoBuildEntry(path, part.Name, new FileInfo(LongPath.Extended(marker)).LastWriteTimeUtc));
+            entries.Add(new ArduinoBuildEntry(path, kind, new FileInfo(LongPath.Extended(marker)).LastWriteTimeUtc));
         }
     }
 }

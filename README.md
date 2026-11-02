@@ -38,7 +38,7 @@ largest files inside it:
 
 Besides Settings and About, Deguffer has six pages:
 
-- [Storage](#storage) checks 105 sources of waste, from package-manager and browser caches to
+- [Storage](#storage) checks 107 sources of waste, from package-manager and browser caches to
   `Windows.old` and old restore points, and puts each one in a [safety tier](#safety-tiers). You
   choose what goes, and when the clean has finished Deguffer checks that everything it said it would
   leave alone is still there.
@@ -121,7 +121,7 @@ remove one by any route.
 
 ## Storage
 
-Each of the 105 sources has its own provider, which knows what that location is and what sits next
+Each of the 107 sources has its own provider, which knows what that location is and what sits next
 to it. Rows for tools you do not have are hidden unless you ask the Storage page to show them. Build
 output and project caches, such as `node_modules`, `obj`, Rust's `target`, Python's `.tox` and
 `.pytest_cache` folders, and the caches in Visual Studio's `.vs` folders, are only looked for
@@ -145,6 +145,7 @@ you would lose by deleting it. By default, only Tier 1 rows start out selected:
 | Yarn 1 package cache | Cleared with `yarn cache clean`, only where the `yarn` on your PATH is Yarn 1, never Yarn 2 or later |
 | Bun install cache | Cleared with `bun pm cache prune`, which keeps Bun's global store; needs Bun 1.4.4 or later |
 | Composer package cache | Cleared with `composer clear-cache`, only where every folder it empties is Composer's own |
+| Arduino downloads and build cache | Downloaded archives cleared with `arduino-cli cache clean`, only where the downloads folder holds nothing but the archives the CLI stages there; build-cache entries only where the CLI's `.last-used` marker is inside; never the data folder with your installed boards, or your sketchbook |
 | Scoop download cache | Cleared with Scoop's own cache command, only where everything in the cache is a download Scoop made; installed apps are not touched |
 | Gradle build cache | `caches` and `wrapper` only, never the Gradle user home itself: `.gradle`, or wherever `GRADLE_USER_HOME` points |
 | Cargo crate cache | |

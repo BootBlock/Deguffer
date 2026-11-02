@@ -15,8 +15,10 @@ internal sealed record ArduinoFolder(string Reported, string? Folder);
 /// <para><b>Asked, not read from the file.</b> The CLI resolves each setting from its configuration
 /// file, then from <c>ARDUINO_</c> environment variables, then from its defaults
 /// (<c>internal/cli/configuration</c>). The defaults depend on the Windows known folders, and an
-/// empty <c>directories.downloads</c> means <c>{directories.data}\staging</c>
-/// (<c>Settings.DownloadsDir</c>). Asking the CLI gets every one of those rules from the program that
+/// unset <c>directories.downloads</c> means <c>{directories.data}\staging</c>
+/// (<c>Settings.DownloadsDir</c>). <c>config get</c> prints an unset one as an empty string. One a
+/// file sets to an empty string prints the same, and <c>cache clean</c> then names no folder and
+/// removes nothing, so reading it as <c>staging</c> can only offer a clean that fails. Asking the CLI gets every one of those rules from the program that
 /// applies them.</para>
 ///
 /// <para><b>Two configurations.</b> The CLI on its own finds its file from <c>ARDUINO_CONFIG_FILE</c>,
@@ -64,7 +66,7 @@ internal sealed record ArduinoSettings(
 
         var dataFolder = Folder(data);
 
-        // Settings.DownloadsDir: an empty setting is the data folder's staging, and a data folder that
+        // Settings.DownloadsDir: an unset setting is the data folder's staging, and a data folder that
         // is not a full path leaves the downloads unknown as well.
         var downloadsFolder = downloads.Length > 0
             ? Folder(downloads)
@@ -111,7 +113,7 @@ internal sealed record ArduinoSettings(
         }
         catch (JsonException)
         {
-            // Not an answer to read: a CLI too old to know --json prints the value as YAML.
+            // Not an answer to read: the value is one JSON string, and anything else is not it.
             return null;
         }
     }
