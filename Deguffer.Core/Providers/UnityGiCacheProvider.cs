@@ -87,9 +87,6 @@ public sealed class UnityGiCacheProvider : CleanupProviderBase
         base.InvalidateCaches();
     }
 
-    /// <summary>§5.3's warning, where anything is offered. While an Editor runs nothing is.</summary>
-    protected override IReadOnlyList<string> ConflictingProcessNames => UnityGiCacheLayout.ProcessNames;
-
     /// <summary>§5.2 for Explore while no Editor runs: Unity's folder recognises nothing, and <c>Caches</c> only the GI cache.</summary>
     public override IReadOnlyList<ToolRoot> ToolRoots => UnityGiCacheLayout.Roots(Environment);
 
@@ -160,12 +157,6 @@ public sealed class UnityGiCacheProvider : CleanupProviderBase
         if (measured.Note is { } scanNote)
         {
             notes.Add(scanNote);
-        }
-
-        // §5.3, and only where something is going to be removed.
-        if (steps.Count > 0 && BuildRunningProcessNote() is { } warning)
-        {
-            notes.Add(warning);
         }
 
         return new CleanupPlan
