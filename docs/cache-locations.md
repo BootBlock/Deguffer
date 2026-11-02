@@ -5646,13 +5646,14 @@ its own.
 
 ## Per-project build output
 
-**Tier 1 for .NET intermediate output and three Python tools' caches, Tier 2 for the rest.** The
-only thing Deguffer looks for inside your own folders, and the only thing it will not look for
+**Tier 1 for .NET intermediate output, the caches in Visual Studio's `.vs` folders and three Python
+tools' caches, Tier 2 for the rest.** The only thing Deguffer looks for inside your own folders, and the only thing it will not look for
 anywhere else.
 
 | Directory | What it belongs to | Tier |
 | --- | --- | --- |
 | `obj` | .NET intermediate build output | 1 |
+| Caches inside `.vs` | A Visual Studio solution's caches, and nothing else in the folder | 1 |
 | `Library` | A Unity project's imported assets and caches | 2 |
 | `Intermediate` | An Unreal project's intermediate build files | 2 |
 | `DerivedDataCache` | An Unreal project's own derived data cache | 2 |
@@ -5713,6 +5714,7 @@ the tool itself writes inside it.
 | --- | --- | --- |
 | `obj` | A project file the restore manifest names | `project.assets.json`, and the generated NuGet imports for that same project |
 | `obj` of an old-style project | An old-style project file (the MSBuild 2003 namespace, no `Sdk`) that the build's records name | Only configuration and platform directories, at least one holding the build's file list, which names that same directory |
+| Caches inside `.vs` | A `.sln` or `.slnx` | Each cache its own files, and only those. See [Visual Studio's `.vs` folder](#visual-studios-vs-folder-the-caches-and-nothing-else) |
 | `Library` | `Assets`, `Packages`, `ProjectSettings` | — |
 | `Intermediate` / `DerivedDataCache` | A file ending in `.uproject`, whose name is the project's own | — |
 | `target` | `Cargo.toml` | `CACHEDIR.TAG`, opening with the tagging specification's header |
@@ -5758,7 +5760,7 @@ only ([workspaces](https://dart.dev/tools/pub/workspaces)), so a member's `.dart
 removes the folder itself, as it does Cargo's `target`.
 
 Every condition has to hold. A directory that fails any of them is left alone, and the scan says
-how many were left and why. `obj` and `.dart_tool` carry an extra check: git is asked whether the
+how many were left and why. `obj`, `.dart_tool` and `.vs` carry an extra check: git is asked whether the
 directory holds any tracked file, because the tool's output never should, and one that does is not
 the tool's output whatever stands beside it. For `.dart_tool` this was found, not imagined: test
 fixtures holding one are committed into the Flutter SDK's own repository. The check needs git on `PATH`. Where git
@@ -5864,12 +5866,15 @@ space actually is.
 
 ### What is protected
 
-Everything except the one directory in each row, asserted by name after the deletion runs:
+Everything except the one directory in each row, or the caches inside `.vs`, asserted by name after
+the deletion runs:
 
-- **The project folder itself** — only the build directory inside it is removed.
+- **The project folder itself** — only the build directory inside it is removed. For `.vs`, the
+  solution folder, the `.vs` folder and the folders between it and each cache stay standing.
 - **Every file the rebuild reads.** `Assets`, `Packages` and `ProjectSettings` for Unity;
   the .NET project file and `packages.config`; `Cargo.toml`; `package.json` and the lock file; the
-  Python manifest; each Python tool's configuration file; `pubspec.yaml` and `pubspec.lock`. These are what make the directory regenerable, so losing one would falsify the
+  Python manifest; each Python tool's configuration file; `pubspec.yaml` and `pubspec.lock`; the
+  `.sln` or `.slnx`. These are what make the directory regenerable, so losing one would falsify the
   whole claim.
 - **For Unreal, the `.uproject` descriptor, `Source`, `Content`, `Config` and `Plugins`, and `Saved`
   and `Binaries`.** `Saved` holds the editor's autosaves, which are the only copy of work nobody
@@ -5889,6 +5894,7 @@ Everything except the one directory in each row, asserted by name after the dele
 | Directory | The next use |
 | --- | --- |
 | `obj` | The next build regenerates it, so that build is slower. Nothing here is unique. |
+| Caches inside `.vs` | The next time the solution opens, Visual Studio evaluates its projects, runs design-time builds and indexes its files again, and for C++ rebuilds the browsing database and precompiled headers. That open is slower, and Find in Files and IntelliSense can be incomplete until it finishes. |
 | `Library` | Unity reimports every asset when you next open the project. On a large one that is tens of minutes, and packages it had downloaded are fetched again. |
 | `Intermediate` | A C++ project's next build compiles its code from the start, and its Visual Studio solution shows the projects as unavailable until you choose **Generate Visual Studio project files** on the `.uproject`. A Blueprint-only project opens as before. |
 | `DerivedDataCache` | Unreal compiles the project's shaders again the next time it opens, which on a large project can take tens of minutes. |
@@ -5904,10 +5910,11 @@ Where a package manager's own cache still holds the downloads, most of this is o
 cache in the same run is what makes it a download — so a run that takes both the npm cache and a
 `node_modules` needs the network afterwards.
 
-### Why `obj` and three Python caches are Tier 1, and the others Tier 2
+### Why `obj`, Visual Studio's caches and three Python caches are Tier 1, and the others Tier 2
 
 Tier 1 means the tool re-creates it on demand and you lose only time. That is `obj`: a missing one
-makes the next build slower and nothing else. pytest's, mypy's and ruff's caches are the same: each
+makes the next build slower and nothing else. The caches in a `.vs` folder are the same: Visual
+Studio rebuilds each of them by itself the next time the solution opens. pytest's, mypy's and ruff's caches are the same: each
 tool records them as it runs and makes them again on the next run, and what goes is one slower run,
 and for pytest the record of which tests failed last.
 
@@ -5935,9 +5942,9 @@ only by re-downloading gigabytes or re-indexing for minutes" — is met by each 
 
 None of them is pre-selected, and each needs an acknowledgement before it runs.
 
-### Not reached: `dist`, Dart's `build`, and Visual Studio's `.vs`
+### Not reached: `dist` and Dart's `build`
 
-All three are per-project directories that look like obvious candidates and are not offered.
+Both are per-project directories that look like obvious candidates and are not offered.
 
 **`dist` has no evidence to go on.** It is produced by a build script on some projects and curated by
 hand on others, and nothing inside it or beside it tells the two apart. The name is the only signal,
@@ -5952,15 +5959,44 @@ directories and not others, which was checked against real projects rather than 
 directory here is recognised by something written inside it, or by a parent whose identity implies
 the child. This one would be recognised by its name and its neighbours alone.
 
-**`.vs` is not the small, disposable folder it appears to be.** It holds the IntelliSense database,
-the design-time build cache and the file-content index, all of which are rebuilt on the next solution
-open. It also holds `copilot-chat\sessions`, which is AI conversation history, `CopilotSnapshots`,
-which is a record of file states, code-coverage data, and the `.suo` and window-layout files that
-hold your open documents, breakpoints and expanded nodes. On the machine this was surveyed, roughly a
-quarter of `.vs` by size was material of the second kind. That is §3's founding mistake — Visual
-Studio Code's `workspaceStorage`, dominated by chat history — in a second costume, and it needs the
-recognised-children rule applied *inside* `.vs` rather than a rule about `.vs` as a whole. It is
-tracked as its own item rather than folded in here.
+Visual Studio's `.vs` folder was once listed here as well. It is now offered in part, and the
+next section says which part.
+
+### Visual Studio's `.vs` folder: the caches, and nothing else
+
+**`.vs` is not the small, disposable folder it appears to be, so it is never removed whole.**
+Measured across 42 of them on one workstation (569 MB), the caches were about 165 MB, and
+Copilot's snapshots of files alone were 253 MB, beside Copilot conversations, solution options and
+window layouts. Those are yours. The rest is caches Visual Studio rebuilds by itself, and only those are offered, one step per
+cache, named with its solution.
+
+| Cache | Where it sits | What must be inside it |
+| --- | --- | --- |
+| Project evaluation cache | `.vs\ProjectEvaluation` | Only `<name>.projects`, `.metadata` and `.strings` files, each with a format version |
+| Find in Files index | `.vs\<solution>\FileContentIndex` | At least one `<guid>.vsidx`, an optional `read.lock`, and an optional `merges` folder holding only `.vsidx` files |
+| Design-time build cache | `.vs\<solution>\DesignTimeBuild` | Only `.dtbcache.v<n>` |
+| C++ precompiled header cache | `.vs\<solution>\v<N>\ipch` | One `AutoPCH` folder of folders holding only `.ipch` files |
+| C++ browsing database | `.vs\<solution>\v<N>\Browse.VC.db` | An SQLite database, with no `-journal`, `-wal` or `-shm` beside it |
+| C++ solution database | `.vs\<solution>\v<N>\Solution.VC.db` | The same |
+
+- **A solution beside it is required.** `<solution>` is the name of a `.sln` beside the `.vs`
+  folder without its extension, or of a `.slnx` with it, as Visual Studio names them. A folder named
+  for a solution that is no longer there, as renaming one leaves behind, is left alone whole. `v<N>`
+  is the folder of one Visual Studio version, from `v14` (2015) to `v18` (2026). An unknown version
+  is left alone.
+- **No Microsoft page names these folders.** Microsoft documents what each one does instead: the
+  design-time build cache, the project evaluation cache, the Find in Files index, and the C++
+  browsing database and automatic precompiled headers. So the names and file shapes above are what
+  was observed. A folder of the right name holding anything else is left alone.
+- **Everything else in `.vs` stays, and is checked after the clean:** `CopilotSnapshots`,
+  `copilot-chat`, `CopilotIndices`, Live Unit Testing's `lut`, IIS Express's `config`, `.suo` and
+  `.wsuo`, `DocumentLayout.json`, `fileList.bin`, `TestStore`, the `Server` folder, and anything
+  Deguffer does not recognise. A `.vs` folder that git tracks a file in is left alone whole.
+- **A solution that is open is left alone whole.** Visual Studio works in the solution's folder,
+  and `DevHub.exe` holds the Find in Files index open, so Deguffer asks both: whether a program is
+  working there, and whether anything holds a file the caches are recognised by.
+- **Where the C++ caches use the *Fallback Location*,** they are in your temporary folder, and the
+  Windows temporary folders row reaches them there.
 
 ---
 
