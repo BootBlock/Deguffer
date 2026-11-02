@@ -1619,7 +1619,7 @@ connections where that is a real cost.
 
 | | |
 | --- | --- |
-| **Location** | `%LOCALAPPDATA%\NVIDIA\DXCache` and `GLCache`, `%USERPROFILE%\AppData\LocalLow\NVIDIA\DXCache`, `%LOCALAPPDATA%\AMD\DxCache`, `%LOCALAPPDATA%\Intel\ShaderCache`, `%LOCALAPPDATA%\D3DSCache` |
+| **Location** | `%LOCALAPPDATA%\NVIDIA\DXCache` and `GLCache`, `%USERPROFILE%\AppData\LocalLow\NVIDIA\DXCache`, `%LOCALAPPDATA%\Packages\<package>\AC\NVIDIA\DXCache` in every packaged app, `%LOCALAPPDATA%\AMD\DxCache`, `%LOCALAPPDATA%\Intel\ShaderCache`, `%USERPROFILE%\AppData\LocalLow\Intel\ShaderCache`, `%LOCALAPPDATA%\D3DSCache` |
 | **Method** | Delete the recognised cache directories |
 | **Typical size** | A few megabytes to several gigabytes. 3.2 GB was measured on one workstation, nearly all of it NVIDIA's `DXCache`. On another, the two NVIDIA folders held 163 MB and 161 MB |
 
@@ -1642,6 +1642,15 @@ privileges writes because it may not write to the first. They are separate folde
 folder seen twice, and on the machine they were measured on they were much the same size as each
 other. A tool that clears only the first leaves about half of it behind.
 
+Intel's driver does the same, with `AppData\LocalLow\Intel\ShaderCache`. On the machine it was
+measured on, that was the only Intel shader cache: `%LOCALAPPDATA%\Intel` held none.
+
+**NVIDIA's cache also appears inside each packaged app.** Windows runs a Store or packaged app in a
+container, and gives it `%LOCALAPPDATA%\Packages\<package>\AC` in place of your local application
+data. The driver rendering for that app writes `AC\NVIDIA\DXCache` there, so there is one more
+cache for each packaged app that has drawn anything. They are small on most machines, about 7 MB
+across 19 apps on the one measured, but a packaged game is where one would be large.
+
 ### What Deguffer does
 
 It deletes the cache directories it recognises, one step each, so you can keep one vendor's and
@@ -1656,7 +1665,17 @@ directly because that is what it can name, offer and check afterwards.
 
 Only `DXCache` is recognised in the LocalLow folder, because that is the only cache that has been
 observed there. If NVIDIA writes a `GLCache` there on your machine, Deguffer leaves it alone and
-says so, rather than assuming a name it has seen elsewhere applies here too.
+says so, rather than assuming a name it has seen elsewhere applies here too. The same rule holds
+inside a packaged app's `AC\NVIDIA` folder, which only ever held `DXCache` where it was measured,
+and in the LocalLow `Intel` folder, which only ever held `ShaderCache`.
+
+The packaged apps' caches are listed under one heading, **NVIDIA, inside packaged apps**, one item
+for each app, named by its package.
+
+AMD's folder is recognised only for `DxCache`. AMD's Vulkan driver documentation names `VkCache` as
+its pipeline cache on Linux, and third-party guides add `DxcCache`, `GLCache` and `OglCache` on
+Windows, but none of them has been measured on an AMD machine yet. Until one is, Deguffer leaves
+them alone and says so.
 
 `%LOCALAPPDATA%\D3DSCache` is the one entry removed whole rather than child by child. It has no
 configuration to sit beside: everything in it belongs to Direct3D, arriving as opaque per-application
@@ -1679,6 +1698,10 @@ folder holding several unrelated products; Deguffer takes `ShaderCache` from it 
 it is leaving behind. A **file** sitting loose in one of these folders is never a candidate either —
 nothing Deguffer deletes here is a file — but only `accounts` is named, so only `accounts` gets the
 explicit survival check.
+
+**A packaged app's container is never touched.** `AC` holds the app's own web cache, cookies and
+temporary files beside the driver's `NVIDIA` folder. Deguffer removes only the cache inside that
+folder, and asserts afterwards that the container and the folder both survived.
 
 Deguffer also refuses to delete through a link. If you have redirected `%LOCALAPPDATA%\D3DSCache` to
 another drive with a junction, it removes nothing and tells you why: what the link points at is a
@@ -3395,6 +3418,90 @@ engines are untouched.
 Nothing in the cache is anyone's only copy, so it is not Tier 3. But the refill is a shader compile
 measured in tens of minutes on a real project, which is §3's definition of the second tier: re-created,
 but only by re-indexing for minutes.
+
+---
+
+## Unity GI cache
+
+**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+acknowledgement.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\Unity\Caches\GiCache` |
+| **Method** | Delete the folder as a whole, only while no Unity Editor is running |
+| **Typical size** | Nothing measured here: the surveyed machine had no Editor installed. Unity trims the cache to its own **Maximum Cache Size**, which is 10 GB unless you change it |
+
+### What it is
+
+While the Unity Editor precomputes a scene's lighting, it keeps the intermediate files in a *GI
+cache*, so that a later bake can reuse them. Every Unity project on the computer shares the one
+cache, so it sits outside every project, and the Unity project library row never reaches it. Unity
+deletes the oldest files itself once the cache reaches its maximum size.
+
+Unity's documentation says only that the cache is in Unity's `Caches` folder. The full path is
+inferred, not observed: `Caches` on Windows is `%LOCALAPPDATA%\Unity\Caches`, and `GiCache` is the
+name Unity gives the folder. If Unity kept the cache elsewhere by default, Deguffer would not find
+it. It would never remove the wrong folder.
+
+### What Deguffer does
+
+**It removes `GiCache` by name, and nothing else in Unity's folder.** Nothing in
+`%LOCALAPPDATA%\Unity` or `Caches` is listed to find a target. A `GiCache` folder that holds nothing
+produces no row, because the Editor creates the folder each time it starts.
+
+**While a Unity Editor is running, the cache is left alone.** Unity says "It's not safe to delete the
+GI Cache directory manually while the Editor is running", because the Editor keeps references to the
+files in it. The plan says so, Explore refuses the cache too, and closing every Editor and scanning
+again includes it. An Editor building from the command line counts. Unity Hub does not. The question
+is asked again when you press Clean, immediately before the cache is removed.
+
+**A cache moved in Unity's preferences is named, never removed.** **Preferences → GI Cache → Custom
+cache location** moves the cache to a folder you pick. Deguffer reads that setting from the Editor's
+own preferences, under `HKEY_CURRENT_USER\Software\Unity Technologies\Unity Editor 5.x`, and the plan
+names the folder. Unity does not say whether it writes into that folder or into a folder of its own
+inside it, and its files are named by a hash with nothing to recognise them by, so nothing tells
+Unity's files there apart from yours. Use **Clean Cache** on the same preferences page to clear a
+moved cache. The cache it left at the default location is still offered.
+
+**§5.1 has nothing to prefer.** Unity's only route is that **Clean Cache** button, inside the
+running Editor, with no command line behind it.
+
+### What is protected
+
+| Neighbour | What it really is |
+| --- | --- |
+| `%LOCALAPPDATA%\Unity` and `Caches` | Unity's own folders. Only the GI cache inside them goes |
+| `Caches\bee` | Unity's build cache, which every project shares. Unity warns that "Modifying or deleting these files outside of Unity can lead to unexpected issues during subsequent builds", so it is Tier 4 |
+| `Caches\CurlRequestCache.db` | Not classified, so Tier 4 |
+| `cache` | Unity's Package Manager cache, which trims itself and has no supported way to be emptied by hand |
+| `Editor` | The Editor's logs |
+| `licenses` | Your Unity licence |
+| A folder the GI Cache preferences name | Your own folder. Nothing in it is reached |
+
+Explore enforces the same rule: it refuses Unity's folder, `Caches` and everything in them except the
+GI cache itself. Deguffer also refuses to look through a link.
+
+### What it costs you
+
+**The next time a scene's lighting is baked, Unity precomputes it from the start.** On a large scene
+that can take hours. Your projects, your baked lightmaps, your licence and the build cache are
+untouched.
+
+### Why Tier 2, not Tier 1
+
+Nothing in the cache is anyone's only copy, so it is not Tier 3. But Unity calls clearing it "a last
+resort", because the refill is a full lighting bake, which is §3's definition of the second tier:
+re-created, but only by re-computing for a long time.
+
+### Considered and not offered
+
+- **The Package Manager cache** (`%LOCALAPPDATA%\Unity\cache\upm`). It trims itself to 10 GB from
+  Unity 2023.2, and Unity says "There is no equivalent procedure for removing UPM packages from the
+  global cache."
+- **Asset Store downloads** (`%APPDATA%\Unity\Asset Store-5.x`). Some assets are "no longer
+  available for new or existing users" once they are removed from the store, so a download can be
+  the only copy left. That is Tier 3 with no vendor command.
 
 ---
 

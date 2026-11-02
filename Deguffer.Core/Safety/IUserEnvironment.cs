@@ -207,6 +207,30 @@ public interface IUserEnvironment
     IReadOnlyList<string> ReadCurrentUserRegistrySubKeyNames(string keyPath);
 
     /// <summary>
+    /// The names of the values directly under a key in <c>HKEY_CURRENT_USER</c>, or none when the key
+    /// or the permission to read it is missing.
+    ///
+    /// <para>Exists because the Unity Editor names each of its preferences' values with a hash of the
+    /// preference's name appended, as <c>GICacheFolder_h</c> and digits. The names are read rather
+    /// than the hash computed, so a value is found by what Unity wrote, not by a formula nobody
+    /// here has seen Unity apply.</para>
+    /// </summary>
+    /// <param name="keyPath">The key, relative to <c>HKEY_CURRENT_USER</c>.</param>
+    IReadOnlyList<string> ReadCurrentUserRegistryValueNames(string keyPath);
+
+    /// <summary>
+    /// Read a <c>REG_BINARY</c> value from under <c>HKEY_CURRENT_USER</c>, or null when the key, the
+    /// value or the permission to read it is missing, or the value is not a <c>REG_BINARY</c>.
+    ///
+    /// <para>Exists because the Unity Editor stores a text preference, such as where it keeps its GI
+    /// cache, as bytes rather than as a string, so <see cref="ReadCurrentUserRegistryValue"/> would
+    /// read it as absent.</para>
+    /// </summary>
+    /// <param name="keyPath">The key, relative to <c>HKEY_CURRENT_USER</c>.</param>
+    /// <param name="valueName">The value to read.</param>
+    byte[]? ReadCurrentUserRegistryBytes(string keyPath, string valueName);
+
+    /// <summary>
     /// Read a string value from under <c>HKEY_LOCAL_MACHINE</c> in the named registry view, or null
     /// when the key, the value or the permission to read it is missing.
     ///
@@ -477,6 +501,50 @@ public sealed partial class UserEnvironment : IUserEnvironment
             // The same two ordinary failures ReadCurrentUserRegistryValue handles, meaning the same
             // thing: nothing said where the tool is.
             return [];
+        }
+    }
+
+    /// <summary>
+    /// Not memoised, for the reason <see cref="ReadCurrentUserRegistryValue"/> is not.
+    /// </summary>
+    public IReadOnlyList<string> ReadCurrentUserRegistryValueNames(string keyPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(keyPath);
+
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(keyPath);
+
+            return key?.GetValueNames() ?? [];
+        }
+        catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
+        {
+            // The same two ordinary failures ReadCurrentUserRegistryValue handles, meaning the same
+            // thing: nothing said where the tool is.
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Not memoised, for the reason <see cref="ReadCurrentUserRegistryValue"/> is not.
+    /// </summary>
+    public byte[]? ReadCurrentUserRegistryBytes(string keyPath, string valueName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(keyPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(valueName);
+
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(keyPath);
+
+            // A REG_BINARY arrives as a byte array and nothing else does.
+            return key?.GetValue(valueName) as byte[];
+        }
+        catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
+        {
+            // The same two ordinary failures ReadCurrentUserRegistryValue handles, meaning the same
+            // thing: the machine did not say.
+            return null;
         }
     }
 

@@ -1062,6 +1062,17 @@ machine could establish; Steam's `steamapps\shadercache`, which is per-game unde
 rather than under `%LOCALAPPDATA%`; and the extracted driver installers below, which are leftover
 installers rather than shader caches and want their own provider.
 
+Two more locations have since been added to the same provider, from a measurement on a workstation
+with NVIDIA and Intel graphics. `AppData\LocalLow\Intel\ShaderCache` is a row of its own, and was
+the only Intel cache on that machine. NVIDIA's `DXCache` inside each packaged app's container,
+`Packages\<package>\AC\NVIDIA`, is found by listing the packages rather than declared, because the
+driver writes into the container Windows substitutes for the local application data. Nineteen
+containers held one, about 7 MB in all, and none held anything else in that folder, so only
+`DXCache` is recognised there. AMD's `VkCache`, `DxcCache`, `GLCache` and `OglCache` remain open:
+only the Linux documentation for AMDVLK names `VkCache`, and the others come from third-party guides, so
+each needs a measurement on an AMD machine. `C:\ProgramData\NVIDIA Corporation\NV_Cache` was
+rejected: absent on the machine measured, and described only for drivers from 2021 and older.
+
 The Steam shader cache has since shipped as a provider of its own, at Tier 2 rather than Tier 1:
 Valve distributes those pipelines, so removing them costs a download rather than a local rebuild. It
 reads every library from Steam's own `libraryfolders.vdf`, and `docs/cache-locations.md` records the
