@@ -320,17 +320,19 @@ public sealed class VolumeReservationTests : IDisposable
     {
         using var drive = new TempDirectory();
         var policy = SystemVolumePolicy(drive, []);
+        var letters = UnmappedDriveLetter.Take(2);
+        var (profile, system) = (letters[0], letters[1]);
         _volumes
-            .Substituting(@"S:\", Path.Combine(drive.Path, "Users", "profile"))
-            .Substituting(@"T:\", drive.Path);
+            .Substituting(profile, Path.Combine(drive.Path, "Users", "profile"))
+            .Substituting(system, drive.Path);
 
-        Assert.False(policy.MayRemove(@"S:\AppData\Local").IsAllowed);
-        Assert.False(policy.MayRemove(@"T:\Windows").IsAllowed);
-        Assert.False(policy.MayRemove(@"T:\Users\another account").IsAllowed);
+        Assert.False(policy.MayRemove(Path.Join(profile, "AppData", "Local")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Join(system, "Windows")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Join(system, "Users", "another account")).IsAllowed);
 
-        Assert.True(policy.MayRemove(@"S:\Documents\Holiday photos").IsAllowed);
-        Assert.True(policy.MayRemove(@"S:\AppData\Local\SomeTool\Cache").IsAllowed);
-        Assert.True(policy.MayRemove(@"T:\Holiday photos").IsAllowed);
+        Assert.True(policy.MayRemove(Path.Join(profile, "Documents", "Holiday photos")).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Join(profile, "AppData", "Local", "SomeTool", "Cache")).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Join(system, "Holiday photos")).IsAllowed);
     }
 
     /// <summary>

@@ -383,14 +383,14 @@ public sealed class CaptureOneCacheProviderTests : IDisposable
 
     /// <summary>
     /// Capture One records a session as it was opened, so one opened through a letter <c>subst</c>
-    /// made for the folder holding the profile is listed at <c>S:\profile</c>, whose text names
-    /// nothing the profile check knows. Followed to the folder the letter stands for, it is the profile,
-    /// and a session listed inside the application data through the same letter is in it.
+    /// made for the folder holding the profile is listed at <c>profile</c> below the letter, whose text
+    /// names nothing the profile check knows. Followed to the folder the letter stands for, it is the
+    /// profile, and a session listed inside the application data through the same letter is in it.
     /// </summary>
     [Fact]
     public async Task ASessionThatIsTheProfileOrInItsDataThroughASubstitutedLetterIsNotSearched()
     {
-        const string letter = @"S:\";
+        var letter = UnmappedDriveLetter.Any();
         _volumes.Substituting(letter, _temp.Path);
         var profile = Path.Join(letter, Path.GetRelativePath(_temp.Path, _environment.UserProfile));
         var styles = Path.Join(letter, Path.GetRelativePath(_temp.Path, _environment.LocalAppData), "CaptureOne", "Styles");
