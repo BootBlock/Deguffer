@@ -7,10 +7,11 @@ using Deguffer.Testing;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// The shader-cache provider spans five locations across two of the profile's application-data
-/// tiers, so §5.2 has to hold five times over rather than once. These are mostly negative tests:
-/// each <c>NVIDIA</c> root holds sign-in state beside its cache, and <c>%LOCALAPPDATA%</c> is the
-/// parent of the one target that is a whole directory.
+/// The shader-cache provider spans six locations across two of the profile's application-data
+/// tiers, and one more inside every packaged application's container, so §5.2 has to hold at each
+/// rather than once. These are mostly negative tests: each <c>NVIDIA</c> root holds sign-in state
+/// beside its cache, a container holds the app's own data beside it, and <c>%LOCALAPPDATA%</c> is
+/// the parent of the one target that is a whole directory.
 /// </summary>
 public sealed class GpuShaderCacheProviderTests : IDisposable
 {
@@ -117,9 +118,13 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         CreateCache(Path.Combine("NVIDIA", "DXCache"));
         CreateLocalLowCache(Path.Combine("NVIDIA", "DXCache"));
         CreateCache(Path.Combine("Intel", "ShaderCache"));
+        CreateLocalLowCache(Path.Combine("Intel", "ShaderCache"));
+        CreatePackagedCache(TerminalPackage, "DXCache");
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
+
+        Assert.Contains(Path.Combine(Container(TerminalPackage), "NVIDIA"), provider.RootPaths, StringComparer.OrdinalIgnoreCase);
 
         foreach (var root in provider.RootPaths)
         {
@@ -282,11 +287,13 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
     {
         var provider = CreateProvider();
 
-        foreach (var root in GpuShaderCacheProvider.Roots)
+        foreach (var children in GpuShaderCacheProvider.Roots
+                     .Select(root => root.Children)
+                     .Append(GpuShaderCacheProvider.PackagedNvidia.Children))
         {
-            foreach (var name in root.Children.DisposableNames)
+            foreach (var name in children.DisposableNames)
             {
-                Assert.Equal(provider.Tier, root.Children.Classify(name).Tier);
+                Assert.Equal(provider.Tier, children.Classify(name).Tier);
             }
         }
     }
@@ -644,8 +651,264 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         CreateCache(Path.Combine("AMD", "DxCache"));
         CreateCache(Path.Combine("Intel", "ShaderCache"));
         CreateCache("D3DSCache");
+        CreateLocalLowCache(Path.Combine("Intel", "ShaderCache"));
+        CreatePackagedCache(TerminalPackage, "DXCache");
 
         Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
+    }
+
+    /// <summary>
+    /// Intel's driver writes a second cache under LocalLow, and on the machine measured it wrote only
+    /// that one. A plan reaching only <c>%LOCALAPPDATA%\Intel</c> would find nothing there at all.
+    /// </summary>
+    [Fact]
+    public async Task PlansIntelsLocalLowCacheAndLeavesItsRootStanding()
+    {
+        var cache = CreateLocalLowCache(Path.Combine("Intel", "ShaderCache"));
+        var root = Path.Combine(_environment.LocalLowAppData!, "Intel");
+
+        var provider = CreateProvider();
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([cache], plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(root, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.False(Directory.Exists(cache));
+        Assert.True(Directory.Exists(root), "the LocalLow Intel folder was removed with its cache.");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>§5.2's unknown case for the LocalLow Intel root, a declaration of its own.</summary>
+    [Fact]
+    public async Task AnUnrecognisedLocalLowIntelChildIsTier4AndSurvives()
+    {
+        CreateLocalLowCache(Path.Combine("Intel", "ShaderCache"));
+        var sibling = CreateLocalLowCache(Path.Combine("Intel", "GraphicsSettings"));
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.DoesNotContain(sibling, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains("Intel (LocalLow)\\GraphicsSettings", StringComparison.Ordinal));
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(sibling, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
+    }
+
+    private const string TerminalPackage = "Vendor.Terminal_0123456789abc";
+    private const string GamePackage = "Vendor.Game_0123456789abc";
+
+    private string Container(string package) =>
+        Path.Combine(_environment.LocalAppData, "Packages", package, "AC");
+
+    /// <summary>Create <paramref name="child"/> of NVIDIA's folder inside a package's container, holding one file.</summary>
+    private string CreatePackagedCache(string package, string child, int bytes = 4096) =>
+        CreateCache(Path.Combine("Packages", package, "AC", "NVIDIA", child), bytes);
+
+    /// <summary>
+    /// The driver writes inside the container of every packaged application that renders, so each
+    /// container's cache is planned, under one heading, and the container and everything else in it
+    /// survive. The container holds the app's web cache, cookies and temporary files.
+    /// </summary>
+    [Fact]
+    public async Task PlansNvidiasCacheInsideEachPackagedAppAndLeavesTheContainerStanding()
+    {
+        var terminal = CreatePackagedCache(TerminalPackage, "DXCache", 8192);
+        var game = CreatePackagedCache(GamePackage, "DXCache", 8192);
+        var webCache = CreateCache(Path.Combine("Packages", GamePackage, "AC", "INetCache"));
+        var localState = CreateCache(Path.Combine("Packages", GamePackage, "LocalState"));
+
+        var provider = CreateProvider();
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(
+            new[] { terminal, game }.Order(StringComparer.OrdinalIgnoreCase),
+            plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
+        Assert.All(plan.Steps, step => Assert.Equal(GpuShaderCacheProvider.PackagedGroup, step.Group));
+
+        foreach (var survivor in new[] { Container(GamePackage), Path.Combine(Container(GamePackage), "NVIDIA") })
+        {
+            Assert.Contains(plan.ProtectedPaths, p =>
+                p.Path.Equals(survivor, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
+        }
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.False(Directory.Exists(terminal));
+        Assert.False(Directory.Exists(game));
+        Assert.True(Directory.Exists(Path.Combine(Container(GamePackage), "NVIDIA")));
+        Assert.True(Directory.Exists(webCache), "the app's web cache was removed with the shader cache.");
+        Assert.True(Directory.Exists(localState), "the app's own data was removed with the shader cache.");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// §5.2's unknown case inside a container. <c>GLCache</c> is the case worth naming: it is
+    /// recognised under <c>%LOCALAPPDATA%\NVIDIA</c>, the folder the container stands in for, but it
+    /// was never measured inside one, so it is Tier 4 there.
+    /// </summary>
+    [Theory]
+    [InlineData("GLCache")]
+    [InlineData("Telemetry")]
+    public async Task AnUnrecognisedChildOfAPackagedNvidiaFolderIsTier4AndSurvives(string name)
+    {
+        CreatePackagedCache(TerminalPackage, "DXCache");
+        var sibling = CreatePackagedCache(TerminalPackage, name);
+
+        Assert.Equal(SafetyTier.DoNotTouch, GpuShaderCacheProvider.PackagedNvidia.Children.Classify(name).Tier);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.DoesNotContain(sibling, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains($"NVIDIA ({TerminalPackage})\\{name}", StringComparison.Ordinal));
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(sibling, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(sibling), $"{name} was removed alongside the packaged cache.");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// Every installed package has a container, so a container existing is not presence, and nor is
+    /// an NVIDIA folder in one that holds no cache.
+    /// </summary>
+    [Fact]
+    public async Task AContainerHoldingNoNvidiaCacheIsNotPresence()
+    {
+        CreateCache(Path.Combine("Packages", TerminalPackage, "AC", "INetCache"));
+        Directory.CreateDirectory(Path.Combine(Container(GamePackage), "NVIDIA"));
+
+        var provider = CreateProvider();
+
+        Assert.False(await provider.IsPresentAsync());
+        Assert.True((await provider.PlanAsync()).IsEmpty);
+    }
+
+    /// <summary>
+    /// The container and the vendor folder are joined from names rather than listed, so no listing
+    /// set a link at either aside. Planning must not look through one, and must name it where a cache
+    /// is behind it rather than pass over a cache the user can see.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(LinkedSegments))]
+    public async Task ALinkedSegmentOfAPackagedCacheIsNamedAndNeverLookedThrough(string segment, DirectoryLinkKind kind)
+    {
+        var outside = Path.Combine(_temp.Path, "elsewhere");
+        var behind = segment == "AC" ? Path.Combine(outside, "NVIDIA", "DXCache") : Path.Combine(outside, "DXCache");
+        Directory.CreateDirectory(behind);
+        File.WriteAllBytes(Path.Combine(behind, "pipeline.bin"), new byte[4096]);
+
+        var link = segment == "AC" ? Container(TerminalPackage) : Path.Combine(Container(TerminalPackage), "NVIDIA");
+        Directory.CreateDirectory(Path.GetDirectoryName(link)!);
+        DirectoryLink.Create(kind, link, outside);
+
+        var provider = CreateProvider();
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.Notes, n =>
+            n.Message.Contains(link, StringComparison.OrdinalIgnoreCase) && n.Message.Contains("link", StringComparison.Ordinal));
+        Assert.True(plan.WasNotExamined);
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(Path.Combine(behind, "pipeline.bin")), "a packaged cache was deleted through a link.");
+    }
+
+    public static IEnumerable<object[]> LinkedSegments => DirectoryLink.Across("AC", "NVIDIA");
+
+    /// <summary>
+    /// A container moved elsewhere is ordinary, and a sentence about it is a sentence about nothing
+    /// unless a cache is behind it.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task ALinkedContainerWithNoCacheBehindItIsNotMentioned(DirectoryLinkKind kind)
+    {
+        var outside = Path.Combine(_temp.Path, "elsewhere");
+        Directory.CreateDirectory(Path.Combine(outside, "INetCache"));
+
+        var link = Container(TerminalPackage);
+        Directory.CreateDirectory(Path.GetDirectoryName(link)!);
+        DirectoryLink.Create(kind, link, outside);
+
+        var provider = CreateProvider();
+
+        Assert.False(await provider.IsPresentAsync());
+        Assert.DoesNotContain((await provider.PlanAsync()).Notes, n => n.Message.Contains(link, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// A packages folder that will not be listed leaves every container unexamined, which is not the
+    /// same as no packaged app having a cache.
+    /// </summary>
+    [Fact]
+    public async Task APackagesFolderThatWillNotBeListedIsSaidSo()
+    {
+        CreatePackagedCache(TerminalPackage, "DXCache");
+        var packages = Path.Combine(_environment.LocalAppData, "Packages");
+
+        using var denied = new DeniedDirectory(packages);
+
+        var provider = CreateProvider();
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Contains(plan.Notes, n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains(packages));
+        Assert.Empty(plan.TargetedPaths);
+    }
+
+    /// <summary>
+    /// Explore reads the packaged roots from discovery. Each refuses what its plan would decline and
+    /// allows only the cache, and the container above it is not opened by being declared.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesAnUnrecognisedChildOfAPackagedNvidiaFolder()
+    {
+        var cache = CreatePackagedCache(TerminalPackage, "DXCache");
+        var sibling = CreatePackagedCache(TerminalPackage, "Telemetry");
+        var nvidia = Path.Combine(Container(TerminalPackage), "NVIDIA");
+
+        var provider = CreateProvider();
+        Assert.Equal([nvidia], (await provider.DiscoverToolRootsAsync()).Select(root => root.Path));
+
+        var policy = await ExploreActionPolicy.ForAsync(
+            new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [provider]);
+
+        Assert.True(policy.MayRemove(cache).IsAllowed);
+        Assert.False(policy.MayRemove(sibling).IsAllowed);
+    }
+
+    /// <summary>
+    /// The listing of the packages is kept for a pass (G4), so a pass that began after a cache was
+    /// written must see it.
+    /// </summary>
+    [Fact]
+    public async Task APackagedCacheWrittenBetweenPassesIsSeenByTheNextOne()
+    {
+        var provider = CreateProvider();
+        Assert.False(await provider.IsPresentAsync());
+
+        var cache = CreatePackagedCache(TerminalPackage, "DXCache");
+        provider.InvalidateCaches();
+
+        Assert.Contains(cache, (await provider.PlanAsync()).TargetedPaths, StringComparer.OrdinalIgnoreCase);
     }
 
     private static bool IsAtOrUnder(string candidate, string ancestor) =>
