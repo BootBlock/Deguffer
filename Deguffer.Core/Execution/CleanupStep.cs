@@ -519,6 +519,14 @@ public sealed record ClearDirectoryStep(string Path, string What) : DeleteStep(P
     /// </summary>
     public IReadOnlyList<string> OwnedElsewhere { get; init; } = [];
 
+    /// <summary>
+    /// Entries directly inside <see cref="DeleteStep.Path"/> that hold somebody's work rather than
+    /// scratch, such as a sketch an editor keeps there until it is saved, so this step leaves them
+    /// standing however old they are. Each is a survivor the plan names, and the run reports them
+    /// apart from <see cref="Spared"/> because nothing need be using one.
+    /// </summary>
+    public IReadOnlyList<string> UserWork { get; init; } = [];
+
     public override string Description => $"{What} — {LongPath.Display(Path)}";
 }
 

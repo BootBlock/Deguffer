@@ -43,6 +43,12 @@ namespace Deguffer.Core.Providers;
 /// their 5.9 GB again.</item>
 /// </list>
 ///
+/// <para><b>Somebody's work is never offered, however old it is.</b> Age and use are the only things
+/// that tell abandoned scratch from live scratch, and neither protects work a program keeps here until
+/// it is saved: an unsaved Arduino IDE sketch may be a week old with the IDE closed, and it is the only
+/// copy. <see cref="TemporaryUserWork"/> recognises those entries by name. The clean leaves them
+/// standing, Explore refuses them, and §5.6 asserts each one survived.</para>
+///
 /// <para><b>The folder itself stays, and that is not a nicety.</b> Every program on the machine
 /// expects <c>%TEMP%</c> to be there, and Windows does not put it back — a profile whose scratch
 /// folder has been deleted is one where the next installer fails for a reason nobody will connect to
@@ -261,6 +267,7 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     {
         var folders = ReachedDirectories.Of(DeclaredPaths());
         var live = _liveTrees.FindLiveChildren(folders.Present, ct);
+        var work = folders.Present.ToDictionary(folder => folder, TemporaryUserWork.In, StringComparer.OrdinalIgnoreCase);
 
         return Task.FromResult<IReadOnlyList<ToolRoot>>(
         [
@@ -269,6 +276,14 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
                 "Windows would not say what is in this temporary folder, so Deguffer cannot tell whether a "
                 + "running program is working in it. A temporary folder holds live working files among "
                 + "abandoned ones, so Deguffer leaves all of it alone.",
+                static _ => false)),
+            .. folders.Present.Where(folder => work[folder].Unreadable).Select(folder => new ToolRoot(
+                folder,
+                TemporaryUserWork.UnlistedReason,
+                static _ => false)),
+            .. work.Values.SelectMany(scan => scan.Entries).Select(entry => new ToolRoot(
+                entry.Path,
+                TemporaryUserWork.Reason(entry),
                 static _ => false)),
             .. folders.Present.Where(folder => !live.IsAnswered(folder)).Select(folder => new ToolRoot(
                 folder,
@@ -328,12 +343,15 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
         IReadOnlyList<string> folders = [.. scan.Targets.Select(t => t.Path)];
         var live = _liveTrees.FindLiveChildren(folders, ct);
         var owned = await OwnedElsewhereAsync(folders, ct).ConfigureAwait(false);
+        var work = folders.ToDictionary(folder => folder, TemporaryUserWork.In, StringComparer.OrdinalIgnoreCase);
         // The live entries above are the preview's. Each folder carries the same question to the
-        // clean, which spares whatever a program has taken up since. A folder whose question could
-        // not be asked in full is not offered: no entry in it can be spared on an answer that names none.
-        var stillUnused = new LiveChildrenCheck(_liveTrees);
+        // clean, which spares whatever a program has taken up since, and keeps any unsaved work begun
+        // since. A folder whose question could not be asked in full is not offered: no entry in it can
+        // be spared on an answer that names none.
+        var stillUnused = new TemporaryUserWorkCheck(new LiveChildrenCheck(_liveTrees));
         var withheld = scan.Targets.Where(target => !live.IsAnswered(target.Path)).ToList();
-        var (targets, spared) = Spare([.. scan.Targets.Except(withheld)], live, owned);
+        var unlisted = scan.Targets.Except(withheld).Where(target => work[target.Path].Unreadable).ToList();
+        var (targets, spared) = Spare([.. scan.Targets.Except(withheld).Except(unlisted)], live, owned, work);
         var (steps, measured) = await PlanDeletionsAsync(
             [.. targets.Select(target => target with { UseCheck = stillUnused })],
             effective,
@@ -342,6 +360,16 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
         if (OwnedElsewhereNote(owned) is { } elsewhere)
         {
             notes.Add(elsewhere);
+        }
+
+        if (TemporaryUserWork.Note([.. work.Values.SelectMany(w => w.Entries)]) is { } kept)
+        {
+            notes.Add(kept);
+        }
+
+        if (TemporaryUserWork.UnlistedNote(unlisted.Count) is { } unsearched)
+        {
+            notes.Add(unsearched);
         }
 
         // Three sentences, because there are three states and the difference between them is a rule
@@ -408,6 +436,8 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
                 // First, because the first reason for a path is the one kept, and a folder withheld
                 // whole is also one the scan protects.
                 .. withheld.Select(target => (target.Path, LiveTreeVeto.UncheckedReason)),
+                .. unlisted.Select(target => (target.Path, TemporaryUserWork.UnlistedReason)),
+                .. work.Values.SelectMany(w => w.Entries).Select(entry => (entry.Path, TemporaryUserWork.Reason(entry))),
                 .. scan.Protected,
                 .. spared,
             ]),
@@ -440,7 +470,8 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     private static (IReadOnlyList<DeletionTarget> Targets, IReadOnlyList<(string Path, string Reason)> Spared) Spare(
         IReadOnlyList<DeletionTarget> targets,
         LiveTreeFindings live,
-        OwnedEntries owned)
+        OwnedEntries owned,
+        IReadOnlyDictionary<string, UserWorkScan> work)
     {
         var bounded = new List<DeletionTarget>(targets.Count);
         var spared = new List<(string Path, string Reason)>();
@@ -453,14 +484,21 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
                 continue;
             }
 
+            IReadOnlyList<string> keeps = [.. work[target.Path].Entries.Select(entry => entry.Path)];
+
+            // Somebody's work is kept for that reason whether or not a program is in it, so it is
+            // not listed twice as a survivor.
             var held = live.Live
-                .Where(l => LongPath.Contains(target.Path, l.Directory) && !owned.Contains(l.Directory))
+                .Where(l => LongPath.Contains(target.Path, l.Directory)
+                    && !owned.Contains(l.Directory)
+                    && !keeps.Any(k => LongPath.Contains(k, l.Directory)))
                 .ToList();
 
             bounded.Add(target with
             {
                 Spared = [.. held.Select(h => h.Directory)],
                 OwnedElsewhere = [.. owned.Paths.Where(p => LongPath.Contains(target.Path, p))],
+                UserWork = keeps,
             });
 
             spared.AddRange(held.Select(h =>

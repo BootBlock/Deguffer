@@ -14,12 +14,17 @@ namespace Deguffer.Core.Execution;
 /// <param name="Links">Junctions and symbolic links, which are removed as links and never followed.</param>
 /// <param name="Kept">Files and links the guard on recently changed files held back.</param>
 /// <param name="Spared">
-/// Each entry the bounds held back, in the extended form the walk met it in. The walk did not descend
-/// into one, so nothing in the removal acts on it: see <see cref="RemovalOutcome.LeftAlone"/>.
+/// Each entry the bounds held back because something is using it, in the extended form the walk met
+/// it in. The walk did not descend into one, so nothing in the removal acts on it: see
+/// <see cref="RemovalOutcome.LeftAlone"/>.
 /// </param>
 /// <param name="MailStores">
 /// Outlook mail stores the walk met, in the extended form it met them in. Never among
 /// <paramref name="Files"/>, so nothing hands one to a delete. See <see cref="MailStore"/>.
+/// </param>
+/// <param name="UserWork">
+/// Each entry the bounds held back because it holds somebody's work, on the terms
+/// <paramref name="Spared"/> gives.
 /// </param>
 internal sealed record RemovalInventory(
     IReadOnlyList<GatheredDirectory> Directories,
@@ -27,7 +32,8 @@ internal sealed record RemovalInventory(
     IReadOnlyList<WalkEntry> Links,
     int Kept,
     IReadOnlyList<string> Spared,
-    IReadOnlyList<string> MailStores);
+    IReadOnlyList<string> MailStores,
+    IReadOnlyList<string> UserWork);
 
 /// <summary>A directory the walk reached, in the extended form it met it in.</summary>
 /// <param name="Parent">
@@ -87,7 +93,7 @@ internal static class RemovalWalk
         // Most removals hold nothing back, and only a bound needs an entry's full path before the
         // removal acts on it. Building one per file to look up in an empty set would be most of what
         // gathering a large tree allocates.
-        var bounded = bounds.SparedPaths.Count > 0 || bounds.OwnedElsewherePaths.Count > 0;
+        var bounded = bounds.IsBounded;
 
         BoundedFileWalk.Visit(
             extendedRoot,
@@ -118,6 +124,7 @@ internal static class RemovalWalk
         private List<WalkEntry>? _files;
         private List<WalkEntry>? _links;
         private List<string>? _spared;
+        private List<string>? _userWork;
         private List<string>? _mailStores;
         private int _kept;
 
@@ -168,6 +175,14 @@ internal static class RemovalWalk
             bool bounded)
         {
             var path = bounded ? entry.FullName : null;
+
+            // First, because it is the reason that outlasts the others: an unsaved sketch an editor
+            // has open is spared while the editor runs and is still the user's work once it closes.
+            if (path is not null && bounds.UserWorkPaths.Contains(path))
+            {
+                (_userWork ??= []).Add(path);
+                return;
+            }
 
             // Asked before the link branch below, because a spared entry is spared whatever it
             // turns out to be. A scratch directory a running program was handed as a junction is
@@ -244,6 +259,7 @@ internal static class RemovalWalk
             var files = new List<WalkEntry>();
             var links = new List<WalkEntry>();
             var spared = new List<string>();
+            var userWork = new List<string>();
             var mailStores = new List<string>();
             var kept = 0;
 
@@ -259,6 +275,7 @@ internal static class RemovalWalk
                 files.AddRange(folder._files ?? []);
                 links.AddRange(folder._links ?? []);
                 spared.AddRange(folder._spared ?? []);
+                userWork.AddRange(folder._userWork ?? []);
                 mailStores.AddRange(folder._mailStores ?? []);
                 kept += folder._kept;
 
@@ -269,7 +286,7 @@ internal static class RemovalWalk
                 }
             }
 
-            return new RemovalInventory(directories, files, links, kept, spared, mailStores);
+            return new RemovalInventory(directories, files, links, kept, spared, mailStores, userWork);
         }
 
         // The walk lists every folder it is asked to descend into before it returns, so one never

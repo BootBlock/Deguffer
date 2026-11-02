@@ -7289,6 +7289,16 @@ holds however the tool names the entry, through a `subst` letter or a second mou
 included. See
 [Tool caches in temporary folders](#tool-caches-in-temporary-folders) and the three sections after it.
 
+**Work that was never saved is never offered, however old it is.** Some programs keep a document
+here until you save it somewhere else, and that copy is the only one. Arduino IDE 2 keeps every
+sketch made with *File > New* in a folder named `.arduinoIDE-unsaved` followed by random characters,
+and offers it again at its next start. Neither rule above protects one: it may be a week old, and
+the IDE may be closed. So this row recognises those folders by name and never offers them, with the
+age limit at 0 too. They are named on the row, refused in Explore, and checked after every clean to
+prove they are still there. The clean looks again before it empties each folder, so a sketch begun
+after the scan is kept as well. No row offers them: Deguffer cannot tell an abandoned experiment
+from a week of work.
+
 The size shown already has all of those taken out of it, so the number the scan reports is what the
 clean will actually take — with the one exception described next.
 
