@@ -340,7 +340,7 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
     };
 
     /// <summary>
-    /// §5.1 taken as far as it goes:PlatformIO is asked what its own prune would remove from the
+    /// §5.1 taken as far as it goes: PlatformIO is asked what its own prune would remove from the
     /// packages it installed, and its answer is the whole of the offer. Where it names nothing, the
     /// packages directory is not even measured and no row appears for it.
     ///

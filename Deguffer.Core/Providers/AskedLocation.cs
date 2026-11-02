@@ -33,8 +33,14 @@ internal readonly record struct AskedLocation(string Path, bool Answered)
                 .LastOrDefault(System.IO.Path.IsPathRooted)
             : null;
 
-        return reported is null ? new(fallback, Answered: false) : new(reported, Answered: true);
+        return Of(reported, fallback);
     }
+
+    /// <summary>The folder the tool named, or <paramref name="fallback"/> marked as unanswered.</summary>
+    /// <param name="reported">The tool's answer, already vetted, or null where it gave none.</param>
+    /// <param name="fallback">The documented default.</param>
+    public static AskedLocation Of(string? reported, string fallback) =>
+        reported is null ? new(fallback, Answered: false) : new(reported, Answered: true);
 
     /// <summary>
     /// Why a plan offers nothing when the folder is absent. A missing default says nothing about a

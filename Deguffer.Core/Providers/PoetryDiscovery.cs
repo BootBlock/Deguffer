@@ -74,16 +74,13 @@ internal sealed partial class PoetryDiscovery(IProcessRunner runner)
 
     private async Task<PoetryLocations> AskBothAsync(string poetry, string defaultCacheRoot, CancellationToken ct)
     {
-        var cacheRoot = Located(await AskAsync(poetry, "cache-dir", ct).ConfigureAwait(false), defaultCacheRoot);
+        var cacheRoot = AskedLocation.Of(await AskAsync(poetry, "cache-dir", ct).ConfigureAwait(false), defaultCacheRoot);
 
-        var environments = Located(
+        var environments = AskedLocation.Of(
             await AskAsync(poetry, "virtualenvs.path", ct).ConfigureAwait(false),
             Path.Combine(cacheRoot.Path, "virtualenvs"));
 
         return new PoetryLocations(cacheRoot, environments);
-
-        static AskedLocation Located(string? reported, string fallback) =>
-            reported is null ? new(fallback, Answered: false) : new(reported, Answered: true);
     }
 
     /// <summary>

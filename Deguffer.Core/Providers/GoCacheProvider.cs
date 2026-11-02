@@ -355,10 +355,10 @@ public sealed class GoCacheProvider : CleanupProviderBase
         var workspaces = Workspaces(reported);
 
         return new GoLocations(
-            buildCache is null ? new(DefaultBuildCache, Answered: false) : new(buildCache, Answered: true),
+            AskedLocation.Of(buildCache, DefaultBuildCache),
 
             // Go's own default for a list: the module cache is pkg\mod in the first workspace.
-            moduleCache is null ? new(ModuleCacheIn(workspaces[0]), Answered: false) : new(moduleCache, Answered: true),
+            AskedLocation.Of(moduleCache, ModuleCacheIn(workspaces[0])),
             workspaces);
     }
 
