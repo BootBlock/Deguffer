@@ -18,6 +18,9 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 internal static class ConfiguredFolder
 {
+    /// <summary>Why a value that names no full path is declined, as the end of a sentence.</summary>
+    public const string NotAFullPath = "it is not a full path, so Deguffer cannot tell which folder it means.";
+
     /// <summary>
     /// The folder a tool keeps where <paramref name="variable"/> moves it, <paramref name="defaultFolder"/>
     /// where it is not set, or the reason the value is declined.
@@ -37,9 +40,33 @@ internal static class ConfiguredFolder
         IUserEnvironment environment,
         ISystemDirectories machine,
         IVolumeInventory volumes,
-        string? within = null)
+        string? within = null) =>
+        FromValue(environment.GetEnvironmentVariable(variable), defaultFolder, environment, machine, volumes, within);
+
+    /// <summary>
+    /// <see cref="FromVariable"/> for the value a tool Deguffer starts reads
+    /// (<see cref="IUserEnvironment.GetToolEnvironmentVariable"/>), for a provider whose step is that
+    /// tool's own command: the command acts on the folder its own environment names, which is not the
+    /// machine's current one where a variable changed after Deguffer started.
+    /// </summary>
+    public static Setting FromToolVariable(
+        string variable,
+        string defaultFolder,
+        IUserEnvironment environment,
+        ISystemDirectories machine,
+        IVolumeInventory volumes,
+        string? within = null) =>
+        FromValue(environment.GetToolEnvironmentVariable(variable), defaultFolder, environment, machine, volumes, within);
+
+    private static Setting FromValue(
+        string? raw,
+        string defaultFolder,
+        IUserEnvironment environment,
+        ISystemDirectories machine,
+        IVolumeInventory volumes,
+        string? within)
     {
-        var value = environment.GetEnvironmentVariable(variable)?.Trim();
+        var value = raw?.Trim();
 
         if (string.IsNullOrEmpty(value))
         {
@@ -48,7 +75,7 @@ internal static class ConfiguredFolder
 
         if (LongPath.Configured(value) is not { } named)
         {
-            return new Setting(value, null, null, "it is not a full path, so Deguffer cannot tell which folder it means.");
+            return new Setting(value, null, null, NotAFullPath);
         }
 
         var configured = within is null ? named : Path.Combine(named, within);

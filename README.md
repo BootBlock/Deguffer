@@ -159,6 +159,7 @@ you would lose by deleting it. By default, only Tier 1 rows start out selected:
 | pip package cache | |
 | uv package cache | |
 | Poetry package cache | `poetry cache clear` for each repository; never its `virtualenvs` |
+| pre-commit hook environments | Cleared with `pre-commit gc`, which keeps the hooks a project still uses; never `pre-commit clean`, which also deletes the unstaged changes pre-commit stashed during a commit |
 | pytest caches | `.pytest_cache` folders under your own source folders, only where pytest's own cache tag is inside and a pytest settings file is next to it |
 | mypy caches | `.mypy_cache` folders under your own source folders, only where mypy's own cache tag is inside and a mypy settings file is next to it |
 | ruff caches | `.ruff_cache` folders under your own source folders, only where ruff's own cache tag and `.gitignore` are inside and a ruff settings file is next to it |
