@@ -310,21 +310,23 @@ public sealed class SpotifyCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The refusal above where the settings name the storage through <c>S:</c>, a letter <c>subst</c>
-    /// made for Spotify's folder: <c>S:\Data</c> is the cache, though its text names nothing there. A
-    /// location beside the cache reached the same way leaves the cache offered (§5.6).
+    /// The refusal above where the settings name the storage through a letter <c>subst</c> made for
+    /// Spotify's folder: <c>Data</c> below the letter is the cache, though its text names nothing
+    /// there. A location beside the cache reached the same way leaves the cache offered (§5.6).
     /// </summary>
+    /// <param name="named">The folder the settings name, below the letter.</param>
     [Theory]
-    [InlineData(@"S:\Data", false)]
-    [InlineData(@"S:\Data\offline", false)]
-    [InlineData(@"S:\", false)]
-    [InlineData(@"S:\Music", true)]
-    public async Task AStorageLocationOverlappingTheCacheThroughASubstitutedLetterWithholdsIt(string location, bool offered)
+    [InlineData("Data", false)]
+    [InlineData(@"Data\offline", false)]
+    [InlineData("", false)]
+    [InlineData("Music", true)]
+    public async Task AStorageLocationOverlappingTheCacheThroughASubstitutedLetterWithholdsIt(string named, bool offered)
     {
+        var letter = UnmappedDriveLetter.Any();
         var cache = Populate(Path.Combine(LocalFolder, "Data"));
-        WriteSettings(RoamingFolder, $"{SpotifySettings.LocationKey}={Quoted(location)}");
+        WriteSettings(RoamingFolder, $"{SpotifySettings.LocationKey}={Quoted(Path.Join(letter, named))}");
 
-        var plan = await CreateProvider(volumes: new FakeVolumeInventory().Substituting(@"S:\", LocalFolder)).PlanAsync();
+        var plan = await CreateProvider(volumes: new FakeVolumeInventory().Substituting(letter, LocalFolder)).PlanAsync();
 
         Assert.Equal(offered, plan.TargetedPaths.Contains(cache, StringComparer.OrdinalIgnoreCase));
         Assert.Equal(!offered, plan.Notes.Any(n => n.Message.Contains("left the cache alone", StringComparison.Ordinal)));
