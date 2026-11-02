@@ -130,17 +130,16 @@ public static class UnityGiCacheLayout
             return null;
         }
 
-        if (preferences.Text(CustomFolderPreference) is not { } folder)
+        // A folder that is not fully qualified names no place Deguffer can say Unity resolves it against.
+        if (LongPath.Configured(preferences.Text(CustomFolderPreference)) is not { } folder)
         {
             return new UnityGiCacheMove(Folder: null);
         }
 
-        // Unity's folder picker gives forward slashes, and the same folder written either way is no move.
-        var named = Path.TrimEndingDirectorySeparator(folder.Replace('/', Path.DirectorySeparatorChar));
-
-        return named.Equals(DefaultCacheIn(environment), StringComparison.OrdinalIgnoreCase)
+        // The default spelled another way, with Unity's forward slashes for one, moves nothing.
+        return Path.TrimEndingDirectorySeparator(folder).Equals(DefaultCacheIn(environment), StringComparison.OrdinalIgnoreCase)
             ? null
-            : new UnityGiCacheMove(named);
+            : new UnityGiCacheMove(folder);
     }
 }
 

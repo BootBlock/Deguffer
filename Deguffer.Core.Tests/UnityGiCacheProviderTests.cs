@@ -293,6 +293,35 @@ public sealed class UnityGiCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A folder that is not fully qualified names nowhere Deguffer can say Unity resolves it against, so
+    /// the plan says it could not read which folder, rather than naming a path relative to Deguffer.
+    /// </summary>
+    [Fact]
+    public async Task ARelativeCustomFolderIsAMoveToAFolderNotNamed()
+    {
+        CreateLayout();
+        MoveCacheTo("Lighting");
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Contains(plan.Notes, n => n.Message.Contains("could not read which folder", StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("'Lighting'", StringComparison.Ordinal));
+    }
+
+    /// <summary>The default folder spelled with a <c>..</c> segment is still the default, and moves nothing.</summary>
+    [Fact]
+    public async Task TheDefaultSpelledAnotherWayIsNoMove()
+    {
+        CreateLayout();
+        MoveCacheTo(Path.Combine(Caches, "bee", "..", "GiCache") + @"\");
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Equal([Cache], plan.TargetedPaths);
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("GI Cache preferences", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// Unity keeps the folder after the custom location is turned off, and a custom location that names
     /// the default folder moves nothing. Neither is a move to report.
     /// </summary>
