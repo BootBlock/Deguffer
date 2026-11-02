@@ -227,6 +227,11 @@ public sealed class CleanupPlanner
         var claudeSnapshots = new ClaudeCodeCommandSnapshotProvider(
             environment, liveTrees: liveTrees, sessions: claudeSessions, scanner: scanner);
 
+        // One finding for the two symbol rows, so a store two settings name is put on exactly one of them.
+        var symbolStores = new SymbolStoreDiscovery(environment);
+        var microsoftSymbols = new DebuggerSymbolCacheProvider(environment, scanner: scanner, discovery: symbolStores);
+        var otherSymbols = new OtherServerSymbolCacheProvider(environment, scanner: scanner, discovery: symbolStores);
+
         // The routes that hand Windows a whole volume or a cloud account are given here and nowhere else
         // in the product. A provider takes each as a required argument, so a test builds one only by
         // naming a stand-in, and never inherits the one that empties its runner's Recycle Bin.
@@ -269,6 +274,8 @@ public sealed class CleanupPlanner
             new TypeScriptTypingsCacheProvider(environment, liveTrees: liveTrees, scanner: scanner),
             new CcacheProvider(environment, scanner: scanner),
             new SccacheProvider(environment, scanner: scanner),
+            microsoftSymbols,
+            otherSymbols,
             new MavenRepositoryProvider(environment, scanner: scanner),
             new VcpkgCacheProvider(environment, scanner: scanner),
             new ConanCacheProvider(environment, scanner: scanner),
@@ -322,7 +329,7 @@ public sealed class CleanupPlanner
                 environment,
                 liveTrees: liveTrees,
                 preferences: preferences,
-                tenants: [nuget, toolCaches, installerDownloads, toolLogs, testBrowsers, afterEffects, claudeSnapshots],
+                tenants: [nuget, toolCaches, installerDownloads, toolLogs, testBrowsers, afterEffects, claudeSnapshots, microsoftSymbols, otherSymbols],
                 scanner: scanner),
             installerDownloads,
             new DeliveryOptimizationProvider(environment, scanner: scanner),
