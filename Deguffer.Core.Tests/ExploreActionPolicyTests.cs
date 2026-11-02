@@ -22,6 +22,13 @@ public sealed class ExploreActionPolicyTests : IDisposable
     private readonly FakeUserEnvironment _environment;
     private readonly FakeVolumeInventory _volumes = new();
 
+    /// <summary>
+    /// Letters the machine does not use, because the policy reads what it is asked about on the real
+    /// disk, through whichever name it is given. A letter the machine uses would let whatever it keeps
+    /// there decide a verdict.
+    /// </summary>
+    private readonly IReadOnlyList<string> _letters = UnmappedDriveLetter.Take(2);
+
     public ExploreActionPolicyTests()
     {
         _system = new FakeSystemDirectories(_temp.Path);
@@ -29,6 +36,19 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     public void Dispose() => _temp.Dispose();
+
+    /// <summary>The root of a drive the region table knows nothing about.</summary>
+    private string Drive => _letters[0];
+
+    /// <summary>The root of a second volume, which a test may also mount at <see cref="Mount"/>.</summary>
+    private string Other => _letters[1];
+
+    /// <summary>The folder on <see cref="Drive"/> a test mounts <see cref="Other"/> at.</summary>
+    private string Mount => Path.Join(Drive, "Mount");
+
+    /// <summary>Mount <see cref="Other"/> at <see cref="Mount"/> as well as at its own letter.</summary>
+    private void MountOtherAtTheFolder() =>
+        _volumes.With(Drive).With(Other, alsoMountedAt: [Mount + Path.DirectorySeparatorChar]);
 
     [Fact]
     public void TheWindowsDirectoryAndEverythingInItIsRefused()
@@ -240,7 +260,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     public void WhatWindowsKeepsAtAVolumeRootIsRefusedOnAnyDrive(string name)
     {
         Assert.False(Policy().MayRemove(Path.Combine(_temp.Path, name)).IsAllowed);
-        Assert.False(Policy().MayRemove(Path.Combine(@"Q:\", name)).IsAllowed);
+        Assert.False(Policy().MayRemove(Path.Combine(Drive, name)).IsAllowed);
     }
 
     /// <summary>
@@ -254,7 +274,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData(@"$RECYCLE.BIN\S-1-5-21-1000-1000-1000-1002\$IQ4ZKJX.txt")]
     public void EverythingInsideARecycleBinIsRefused(string relative)
     {
-        var verdict = Policy().MayRemove(Path.Combine(@"Q:\", relative));
+        var verdict = Policy().MayRemove(Path.Combine(Drive, relative));
 
         Assert.False(verdict.IsAllowed);
         Assert.Contains("Recycle Bin", verdict.Reason, StringComparison.Ordinal);
@@ -268,7 +288,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData(@"$Recycle.Bin.old\notes.txt")]
     public void ARecycleBinNameElsewhereIsOrdinary(string relative)
     {
-        Assert.True(Policy().MayRemove(Path.Combine(@"Q:\", relative)).IsAllowed);
+        Assert.True(Policy().MayRemove(Path.Combine(Drive, relative)).IsAllowed);
     }
 
     /// <summary>
@@ -309,7 +329,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     public void WhatNtfsReservesIsRefusedOnAnyDrive(string name)
     {
         Assert.False(Policy().MayRemove(Path.Combine(_temp.Path, name)).IsAllowed);
-        Assert.False(Policy().MayRemove(Path.Combine(@"Q:\", name)).IsAllowed);
+        Assert.False(Policy().MayRemove(Path.Combine(Drive, name)).IsAllowed);
     }
 
     /// <summary>
@@ -328,7 +348,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData(@"$Extend\$RmMetadata\$Tops")]
     public void EverythingBelowTheExtendDirectoryIsRefused(string relative)
     {
-        Assert.False(Policy().MayRemove(Path.Combine(@"Q:\", relative)).IsAllowed);
+        Assert.False(Policy().MayRemove(Path.Combine(Drive, relative)).IsAllowed);
     }
 
     /// <summary>
@@ -349,7 +369,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData("MFT")]
     public void ANameNtfsDoesNotReserveIsNotRefusedForThatReason(string name)
     {
-        Assert.True(Policy().MayRemove(Path.Combine(@"Q:\", name)).IsAllowed);
+        Assert.True(Policy().MayRemove(Path.Combine(Drive, name)).IsAllowed);
     }
 
     /// <summary>
@@ -366,9 +386,10 @@ public sealed class ExploreActionPolicyTests : IDisposable
 
     /// <summary>
     /// What Windows and NTFS keep at the top of a volume, on a volume mounted at a folder. Its top
-    /// is that folder, so <c>Q:\Mount\pagefile.sys</c> is the volume's paging file. Read from the
-    /// drive letter it was one level below <c>Q:\</c> under a folder called <c>Mount</c>, and every
-    /// one of these was offered for deletion — another account's deleted files among them.
+    /// is that folder, so <c>pagefile.sys</c> in <see cref="Mount"/> is the volume's paging file. Read
+    /// from the drive letter it was one level below the drive's root under a folder called
+    /// <c>Mount</c>, and every one of these was offered for deletion — another account's deleted files
+    /// among them.
     /// </summary>
     [Theory]
     [InlineData("System Volume Information")]
@@ -380,9 +401,9 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData(@"$Recycle.Bin\S-1-5-21-1000-1000-1000-1002\$RQ4ZKJX.txt")]
     public void WhatWindowsKeepsAtTheTopOfAVolumeMountedAtAFolderIsRefused(string relative)
     {
-        _volumes.With(@"Q:\").With(@"R:\", alsoMountedAt: [@"Q:\Mount\"]);
+        MountOtherAtTheFolder();
 
-        Assert.False(Policy().MayRemove(Path.Combine(@"Q:\Mount", relative)).IsAllowed);
+        Assert.False(Policy().MayRemove(Path.Combine(Mount, relative)).IsAllowed);
     }
 
     /// <summary>
@@ -390,29 +411,30 @@ public sealed class ExploreActionPolicyTests : IDisposable
     /// folder nothing is mounted at, or one whose name only starts like the mount point's. What
     /// decides is where the volume is mounted, not what the folder is called.
     /// </summary>
+    /// <param name="relative">The path below the drive's root.</param>
     [Theory]
-    [InlineData(@"Q:\Mount\Holiday photos")]
-    [InlineData(@"Q:\Mount\Holiday photos\pagefile.sys")]
-    [InlineData(@"Q:\Plain\pagefile.sys")]
-    [InlineData(@"Q:\Plain\$Recycle.Bin\S-1-5-21-1000-1000-1000-1002")]
-    [InlineData(@"Q:\Mountains\$MFT")]
-    public void EverythingElseOnOrBesideAVolumeMountedAtAFolderIsOrdinary(string path)
+    [InlineData(@"Mount\Holiday photos")]
+    [InlineData(@"Mount\Holiday photos\pagefile.sys")]
+    [InlineData(@"Plain\pagefile.sys")]
+    [InlineData(@"Plain\$Recycle.Bin\S-1-5-21-1000-1000-1000-1002")]
+    [InlineData(@"Mountains\$MFT")]
+    public void EverythingElseOnOrBesideAVolumeMountedAtAFolderIsOrdinary(string relative)
     {
-        _volumes.With(@"Q:\").With(@"R:\", alsoMountedAt: [@"Q:\Mount\"]);
+        MountOtherAtTheFolder();
 
-        Assert.True(Policy().MayRemove(path).IsAllowed);
+        Assert.True(Policy().MayRemove(Path.Combine(Drive, relative)).IsAllowed);
     }
 
     /// <summary>
     /// The folder a volume is mounted at is that whole volume. Read from the drive letter it was an
-    /// ordinary folder of <c>Q:</c>.
+    /// ordinary folder of the drive.
     /// </summary>
     [Fact]
     public void TheFolderAVolumeIsMountedAtIsRefusedAsAWholeDrive()
     {
-        _volumes.With(@"Q:\").With(@"R:\", alsoMountedAt: [@"Q:\Mount\"]);
+        MountOtherAtTheFolder();
 
-        var verdict = Policy().MayRemove(@"Q:\Mount");
+        var verdict = Policy().MayRemove(Mount);
 
         Assert.False(verdict.IsAllowed);
         Assert.Contains("whole drive", verdict.Reason, StringComparison.Ordinal);
@@ -425,14 +447,15 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [Fact]
     public void AVolumeMountedAfterThePolicyWasBuiltIsCovered()
     {
-        _volumes.With(@"Q:\");
+        _volumes.With(Drive);
         var policy = Policy();
+        var pagefile = Path.Join(Mount, "pagefile.sys");
 
-        Assert.True(policy.MayRemove(@"Q:\Mount\pagefile.sys").IsAllowed);
+        Assert.True(policy.MayRemove(pagefile).IsAllowed);
 
-        _volumes.With(@"R:\", alsoMountedAt: [@"Q:\Mount\"]);
+        _volumes.With(Other, alsoMountedAt: [Mount + Path.DirectorySeparatorChar]);
 
-        Assert.False(policy.MayRemove(@"Q:\Mount\pagefile.sys").IsAllowed);
+        Assert.False(policy.MayRemove(pagefile).IsAllowed);
     }
 
     /// <summary>
@@ -451,7 +474,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
             [], new FakeVolumeInventory());
 
         Assert.Null(policy.RefusedAtAndBelow(@"\\server\share\folder"));
-        Assert.True(policy.MayRemove(@"C:\anywhere\at\all").IsAllowed);
+        Assert.True(policy.MayRemove(Path.Join(Drive, "anywhere", "at", "all")).IsAllowed);
     }
 
     [Fact]
@@ -1321,13 +1344,13 @@ public sealed class ExploreActionPolicyTests : IDisposable
         var moved = _temp.CreateDirectory("music", "Spotify");
         WriteSpotifySettings(
             $"storage.location=\"{moved.Replace(@"\", @"\\")}\"",
-            @"storage.last-location=""Q:\\""");
+            $"storage.last-location=\"{Drive.Replace(@"\", @"\\")}\"");
         var policy = new ExploreActionPolicy([], new SpotifyCacheProvider(_environment).ToolRoots, new FakeVolumeInventory());
 
         Assert.False(policy.MayRemove(moved).IsAllowed);
         Assert.False(policy.MayRemove(Path.Combine(moved, "0a")).IsAllowed);
 
-        Assert.True(policy.MayRemove(@"Q:\Holiday photos").IsAllowed);
+        Assert.True(policy.MayRemove(Path.Join(Drive, "Holiday photos")).IsAllowed);
     }
 
     /// <summary>
@@ -1339,15 +1362,15 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [Fact]
     public void AMovedSpotifyStorageAtAFolderAVolumeIsMountedAtIsStillRefused()
     {
-        _volumes.With(@"Q:\").With(@"R:\", alsoMountedAt: [@"Q:\Mount\"]);
-        WriteSpotifySettings(@"storage.location=""Q:\\Mount""");
+        MountOtherAtTheFolder();
+        WriteSpotifySettings($"storage.location=\"{Mount.Replace(@"\", @"\\")}\"");
         var policy = new ExploreActionPolicy([], new SpotifyCacheProvider(_environment).ToolRoots, _volumes);
 
-        Assert.Contains("whole drive", policy.MayRemove(@"Q:\Mount").Reason, StringComparison.Ordinal);
+        Assert.Contains("whole drive", policy.MayRemove(Mount).Reason, StringComparison.Ordinal);
 
-        Assert.False(policy.MayRemove(@"Q:\Mount\Storage").IsAllowed);
-        Assert.False(policy.MayRemove(@"Q:\Mount\Holiday photos").IsAllowed);
-        Assert.True(policy.MayRemove(@"Q:\Plain\Holiday photos").IsAllowed);
+        Assert.False(policy.MayRemove(Path.Join(Mount, "Storage")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Join(Mount, "Holiday photos")).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Join(Drive, "Plain", "Holiday photos")).IsAllowed);
     }
 
     /// <summary>
@@ -1358,9 +1381,10 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [Fact]
     public void AVolumeMountedInsideARecycleBinDoesNotOpenIt()
     {
-        _volumes.With(@"Q:\").With(@"R:\", alsoMountedAt: [@"Q:\$Recycle.Bin\S-1-5-21-1000\Archive\"]);
+        var archive = Path.Join(Drive, "$Recycle.Bin", "S-1-5-21-1000", "Archive");
+        _volumes.With(Drive).With(Other, alsoMountedAt: [archive + Path.DirectorySeparatorChar]);
 
-        Assert.False(Policy().MayRemove(@"Q:\$Recycle.Bin\S-1-5-21-1000\Archive\notes.txt").IsAllowed);
+        Assert.False(Policy().MayRemove(Path.Join(archive, "notes.txt")).IsAllowed);
     }
 
     /// <summary>
@@ -1768,8 +1792,8 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [Fact]
     public async Task AMovedGradleHomeIsRefusedAsTheDefaultOneIsAndTheDefaultStaysRefused()
     {
-        const string moved = @"Q:\gradle";
-        _volumes.With(@"Q:\");
+        var moved = Path.Join(Drive, "gradle");
+        _volumes.With(Drive);
         _environment.WithEnvironmentVariable(GradleCacheProvider.HomeVariable, moved);
         var policy = await ExploreActionPolicy.ForAsync(
             _system, _environment, _volumes, [new GradleCacheProvider(_environment, system: _system)]);
@@ -1790,18 +1814,18 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [Fact]
     public async Task ADeclinedGradleHomeStillHasItsConfigurationRefusedAndNothingElse()
     {
-        _volumes.With(@"Q:\");
-        _environment.WithEnvironmentVariable(GradleCacheProvider.HomeVariable, @"Q:\");
+        _volumes.With(Drive);
+        _environment.WithEnvironmentVariable(GradleCacheProvider.HomeVariable, Drive);
         var policy = await ExploreActionPolicy.ForAsync(
             _system, _environment, _volumes, [new GradleCacheProvider(_environment, system: _system)]);
 
-        var properties = policy.MayRemove(@"Q:\gradle.properties");
+        var properties = policy.MayRemove(Path.Join(Drive, "gradle.properties"));
         Assert.False(properties.IsAllowed);
         Assert.Contains("'gradle.properties' is the tool's", properties.Reason, StringComparison.Ordinal);
         Assert.DoesNotContain("refuses what is in there", properties.Reason, StringComparison.Ordinal);
-        Assert.False(policy.MayRemove(@"Q:\init.gradle.kts").IsAllowed);
-        Assert.False(policy.MayRemove(@"Q:\init.d\company.gradle").IsAllowed);
-        Assert.True(policy.MayRemove(@"Q:\Projects").IsAllowed);
+        Assert.False(policy.MayRemove(Path.Join(Drive, "init.gradle.kts")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Join(Drive, "init.d", "company.gradle")).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Join(Drive, "Projects")).IsAllowed);
         Assert.False(policy.MayRemove(Path.Combine(GradleRoot, "gradle.properties")).IsAllowed);
     }
 
@@ -1830,19 +1854,19 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [Fact]
     public async Task TwoToolsDeclinedAtOneFolderEachKeepTheirConfigurationRefused()
     {
-        _volumes.With(@"Q:\");
-        _environment.WithEnvironmentVariable(GradleCacheProvider.HomeVariable, @"Q:\");
-        _environment.WithEnvironmentVariable(CargoCacheProvider.HomeVariable, @"Q:\");
+        _volumes.With(Drive);
+        _environment.WithEnvironmentVariable(GradleCacheProvider.HomeVariable, Drive);
+        _environment.WithEnvironmentVariable(CargoCacheProvider.HomeVariable, Drive);
         var policy = await ExploreActionPolicy.ForAsync(
             _system,
             _environment,
             _volumes,
             [new GradleCacheProvider(_environment, system: _system), new CargoCacheProvider(_environment, system: _system)]);
 
-        Assert.False(policy.MayRemove(@"Q:\gradle.properties").IsAllowed);
-        Assert.False(policy.MayRemove(@"Q:\credentials.toml").IsAllowed);
-        Assert.False(policy.MayRemove(@"Q:\bin\ripgrep.exe").IsAllowed);
-        Assert.True(policy.MayRemove(@"Q:\Projects").IsAllowed);
+        Assert.False(policy.MayRemove(Path.Join(Drive, "gradle.properties")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Join(Drive, "credentials.toml")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Join(Drive, "bin", "ripgrep.exe")).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Join(Drive, "Projects")).IsAllowed);
     }
 
     /// <summary>
@@ -1949,7 +1973,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [Fact]
     public void ADeclaredRootAtTheTopOfAVolumeStillRefusesItsUnrecognisedChildren()
     {
-        var volume = Path.GetPathRoot(_temp.Path)!;
+        var volume = Drive;
         var home = new ToolRoot(
             volume,
             "A tool's own folder, at the top of the drive.",

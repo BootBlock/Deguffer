@@ -172,6 +172,26 @@ public sealed class ExploreSelectionTests : IDisposable
     });
 
     /// <summary>
+    /// A folder on the disk that holds what the policy refuses is refused for it, because removing the
+    /// folder removes what is in it. The policy asks the disk whether the refused file is there, so the
+    /// fixture's policy has to read the tree a test built rather than find nothing.
+    /// </summary>
+    [Fact]
+    public void AFolderOnTheDiskHoldingWhatIsRefusedIsRefusedForIt() => UiThread.Run(async () =>
+    {
+        var (tree, folder, _) = Scanned();
+        var refused = Path.Combine(tree.PathOf(folder), "a.bin");
+        _explore.Build = _ => Task.FromResult(_explore.Policy("Kept for a reason.", refused));
+        var selection = Selection(tree);
+
+        selection.Select([folder]);
+
+        await Eventually.HoldsAsync(() => selection.Note?.Contains("holds", StringComparison.Ordinal) == true, "the folder refused for what it holds");
+        Assert.EndsWith("Kept for a reason.", selection.Note, StringComparison.Ordinal);
+        Assert.True(File.Exists(refused));
+    });
+
+    /// <summary>
     /// The policy is asked off the window's thread, because each path is a question to the machine
     /// and a list selects any number of rows at once: a few thousand held the window for seconds.
     /// </summary>
