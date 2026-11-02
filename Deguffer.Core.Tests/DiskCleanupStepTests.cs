@@ -139,7 +139,7 @@ public sealed class DiskCleanupStepTests : IDisposable
             Keep = MinimumAge.Within(TimeSpan.FromDays(7), DateTime.UtcNow),
         };
 
-        var result = await executor.ExecuteAsync(plan, runReach: null, residue: null, progress: null, CancellationToken.None);
+        var result = await executor.ExecuteAsync(plan, runReach: null, residue: null, progress: null, underway: null, CancellationToken.None);
 
         var outcome = Assert.Single(result.Steps);
         Assert.False(outcome.Succeeded);

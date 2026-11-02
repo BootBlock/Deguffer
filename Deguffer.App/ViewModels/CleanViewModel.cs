@@ -61,6 +61,12 @@ public sealed partial class CleanViewModel : ObservableObject
     private CancellationTokenSource? _replanCancellation;
 
     /// <summary>
+    /// The tool the clean under way is waiting on, as the planner last reported it, so a Cancel pressed
+    /// now can say what it will wait for. See <see cref="CleanCancelNotice"/>.
+    /// </summary>
+    private CommandUnderway? _underway;
+
+    /// <summary>
     /// The locations the last scan measured, or null where it measured every one. The elevated
     /// relaunch measures them again: a user who scanned three chosen locations and asked to elevate
     /// asked for those three, not for every location, nor for whatever is ticked by then.
@@ -328,6 +334,19 @@ public sealed partial class CleanViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     public partial bool IsCleaning { get; set; }
+
+    /// <summary>
+    /// Whether Cancel has been pressed during the clean under way, which may go on for minutes after
+    /// the press while a tool is left to finish. Down with <see cref="IsCleaning"/>, because the
+    /// re-plan after the run is a second operation that Cancel can stop again.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CancelLabel))]
+    [NotifyCanExecuteChangedFor(nameof(CancelCommand))]
+    public partial bool IsCancellingClean { get; set; }
+
+    /// <summary>The Cancel button's words, which read as already pressed once it has been.</summary>
+    public string CancelLabel => IsCancellingClean ? "Cancelling…" : "Cancel";
 
     /// <summary>How far through that clean, 0 to 100.</summary>
     [ObservableProperty]
@@ -697,7 +716,26 @@ public sealed partial class CleanViewModel : ObservableObject
             // knows which of the ticked rows will run. See StandingProof.
             var proving = StandingProof.For(Findings.Select(row => row.Finding), authorised);
 
-            var progress = new Progress<string>(message => Report(message));
+            // A provider's "Cleaning…" line, posted before the press and delivered after it, would
+            // otherwise put back the sentence the press replaced.
+            var progress = new Progress<string>(message =>
+            {
+                if (!IsCancellingClean)
+                {
+                    Report(message);
+                }
+            });
+            var underway = new Progress<CommandUnderway?>(command =>
+            {
+                _underway = command;
+
+                // Said again as each tool starts and returns, because the press can arrive before the
+                // report of the tool it will wait for.
+                if (IsCancellingClean)
+                {
+                    ReportCancelling();
+                }
+            });
             var completed = new Progress<double>(fraction =>
             {
                 SetCleanProgress(fraction);
@@ -718,7 +756,7 @@ public sealed partial class CleanViewModel : ObservableObject
             {
                 results = await Task.Run(
                     () => _planner.ExecuteAsync(
-                        [.. authorised, .. proving], confirmations, requireTypedPhrase, progress, completed, landed, ct),
+                        [.. authorised, .. proving], confirmations, requireTypedPhrase, progress, completed, landed, underway, ct),
                     CancellationToken.None);
             }
             finally
@@ -727,6 +765,8 @@ public sealed partial class CleanViewModel : ObservableObject
                 // describes the run that has just ended, and leaving it up over a scan would show a
                 // full bar against a status line counting providers.
                 IsCleaning = false;
+                IsCancellingClean = false;
+                _underway = null;
 
                 // The re-plan that follows cannot say how far it has got.
                 work.Report(null);
@@ -1176,9 +1216,17 @@ public sealed partial class CleanViewModel : ObservableObject
     /// One Cancel for the user, whichever operation is in flight. G4: a scan the user cannot
     /// abandon is a bug, and two separate cancel buttons is not a UI.
     /// </summary>
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanCancel))]
     private void Cancel()
     {
+        // Said at once, rather than when the run returns: a tool left to finish can hold it for
+        // minutes, and the page would go on reading as a clean in progress.
+        if (IsCleaning && !IsCancellingClean)
+        {
+            IsCancellingClean = true;
+            ReportCancelling();
+        }
+
         if (PreviewCommand.IsRunning)
         {
             PreviewCancelCommand.Execute(null);
@@ -1196,6 +1244,10 @@ public sealed partial class CleanViewModel : ObservableObject
 
         _replanCancellation?.Cancel();
     }
+
+    private bool CanCancel() => !IsCancellingClean;
+
+    private void ReportCancelling() => Report(CleanCancelNotice.For(_underway), InfoBarSeverity.Warning);
 
     private void ClearRunResult()
     {

@@ -149,6 +149,7 @@ public sealed class CleanReadingAgeTests : IDisposable
                 runReach: null,
                 residue: null,
                 progress: null,
+                underway: null,
                 ct: CancellationToken.None);
 
     private static StoppedOnDispose Start(string program)

@@ -63,6 +63,7 @@ internal sealed class DeclaringRow(
         RunReach? runReach = null,
         RunResidue? residue = null,
         IProgress<double>? progress = null,
+        IProgress<CommandUnderway?>? underway = null,
         CancellationToken ct = default) =>
         throw new NotSupportedException("This stub exists only to carry a declaration.");
 

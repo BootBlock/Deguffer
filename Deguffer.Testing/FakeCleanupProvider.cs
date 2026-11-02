@@ -70,6 +70,13 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
     /// </summary>
     public Action? AfterCleaning { get; set; }
 
+    /// <summary>
+    /// The tool its clean waits on, reported as under way around <see cref="AfterCleaning"/> as a
+    /// command step's tool is, so a Cancel pressed there is pressed while the tool runs. Null for a
+    /// clean that runs no command.
+    /// </summary>
+    public CommandUnderway? Running { get; set; }
+
     /// <summary>Run each time it is planned, such as the user pressing Cancel while a re-plan is under way.</summary>
     public Action? WhilePlanning { get; set; }
 
@@ -122,6 +129,7 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
         RunReach? runReach = null,
         RunResidue? residue = null,
         IProgress<double>? progress = null,
+        IProgress<CommandUnderway?>? underway = null,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(plan);
@@ -152,7 +160,17 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
             progress?.Report(fraction);
         }
 
+        if (Running is { } running)
+        {
+            underway?.Report(running);
+        }
+
         AfterCleaning?.Invoke();
+
+        if (Running is not null)
+        {
+            underway?.Report(null);
+        }
 
         return Task.FromResult(new CleanupResult
         {

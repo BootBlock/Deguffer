@@ -104,6 +104,10 @@ public sealed class PlanExecutor(
     /// and §5.6 then reads — see <see cref="RunResidue"/>. Null means this plan is the whole run, and it is given a
     /// record of its own.
     /// </param>
+    /// <param name="underway">
+    /// Each command step's tool as it starts, and null as it returns, so the page can say what a
+    /// cancellation would wait for. See <see cref="CommandUnderway"/>.
+    /// </param>
     /// <param name="ct">
     /// Stops the plan between steps, and inside a step that can stop. <b>Never thrown:</b> the result
     /// holds the steps that ran, is <see cref="CleanupResult.Interrupted"/>, and is verified like any
@@ -114,6 +118,7 @@ public sealed class PlanExecutor(
         RunReach? runReach,
         RunResidue? residue,
         IProgress<double>? progress,
+        IProgress<CommandUnderway?>? underway,
         CancellationToken ct)
     {
         // Before anything runs, so a plan this executor cannot finish removes nothing rather than half
@@ -156,7 +161,7 @@ public sealed class PlanExecutor(
 
             try
             {
-                outcome = await RunStepAsync(plan, plan.Steps[i], heldAtClean, runResidue, stepProgress, ct)
+                outcome = await RunStepAsync(plan, plan.Steps[i], heldAtClean, runResidue, stepProgress, underway, ct)
                     .ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -223,6 +228,7 @@ public sealed class PlanExecutor(
         List<ProtectedPath> heldAtClean,
         RunResidue runResidue,
         IProgress<double>? progress,
+        IProgress<CommandUnderway?>? underway,
         CancellationToken ct)
     {
         if (step.HeldWhileUpdating && StillUpdating(step) is { } updating)
@@ -258,7 +264,7 @@ public sealed class PlanExecutor(
 
         return step switch
         {
-            RunCommandStep command => await RunCommandAsync(command, ct).ConfigureAwait(false),
+            RunCommandStep command => await RunCommandAsync(command, underway, ct).ConfigureAwait(false),
             ClearDirectoryStep clear => await ClearAsync(clear, plan.Keep, runResidue, progress, ct).ConfigureAwait(false),
             DeleteDirectoryStep delete => await DeleteAsync(delete, plan.Keep, runResidue, progress, ct).ConfigureAwait(false),
             DeleteFileStep delete => await DeleteAsync(delete, plan.Keep, progress, ct).ConfigureAwait(false),
@@ -312,7 +318,7 @@ public sealed class PlanExecutor(
                 ? $"Nothing was removed: '{LongPath.Display(found.Path)}' is never removed, because {why}"
                 : null;
 
-    private async Task<StepOutcome> RunCommandAsync(RunCommandStep step, CancellationToken ct)
+    private async Task<StepOutcome> RunCommandAsync(RunCommandStep step, IProgress<CommandUnderway?>? underway, CancellationToken ct)
     {
         // The "before" size was measured when the plan was built; re-walking a multi-gigabyte
         // tree to learn it again would double the cost of the operation.
@@ -397,9 +403,22 @@ public sealed class PlanExecutor(
 
         var run = ToolRun.Command(step.WhenCancelled);
 
-        var outcome = step.ServicingCalls is { } calls
-            ? await calls.MakeAsync(() => runner.RunAsync(step.FileName, step.Arguments, run, ct)).ConfigureAwait(false)
-            : await runner.RunAsync(step.FileName, step.Arguments, run, ct).ConfigureAwait(false);
+        // Around the tool alone, rather than the whole step: the look and the measurement above stop
+        // when the clean is cancelled, and only the tool can hold the run past a press of Cancel.
+        underway?.Report(CommandUnderway.Of(step));
+
+        CommandOutcome outcome;
+
+        try
+        {
+            outcome = step.ServicingCalls is { } calls
+                ? await calls.MakeAsync(() => runner.RunAsync(step.FileName, step.Arguments, run, ct)).ConfigureAwait(false)
+                : await runner.RunAsync(step.FileName, step.Arguments, run, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            underway?.Report(null);
+        }
 
         // A command that returned has run to its end, whether it was left to finish or ended just as the
         // clean was cancelled, so it is reported as run rather than as stopped. What it freed is not
