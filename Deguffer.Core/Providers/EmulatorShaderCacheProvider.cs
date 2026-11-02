@@ -7,7 +7,8 @@ namespace Deguffer.Core.Providers;
 
 /// <summary>
 /// The shaders console emulators compile for this GPU and keep, which reach many gigabytes on a machine
-/// with a real library: Cemu's, RPCS3's, Dolphin's and PCSX2's.
+/// with a real library: Cemu's, RPCS3's, Dolphin's and PCSX2's, and those of the Nintendo Switch
+/// emulators Ryujinx, Eden, Citron and yuzu.
 ///
 /// <para><b>One provider over a table of layouts, as <see cref="GpuShaderCacheProvider"/> is.</b> The
 /// tier, the consequence and the reasoning are one fact for every emulator here, and what differs is
@@ -17,7 +18,7 @@ namespace Deguffer.Core.Providers;
 /// found anywhere.</para>
 ///
 /// <para><b>Tier 2.</b> Each emulator compiles its shaders again, and RPCS3 its PPU and SPU modules
-/// too, but it does so while a game loads or while it is played: minutes before a game starts, or
+/// and Ryujinx each game's translated code too, but it does so while a game loads or while it is played: minutes before a game starts, or
 /// stutter until it has been played through, rather than a slower next use.</para>
 ///
 /// <para><b>§5.1 has nothing to prefer.</b> No emulator here offers an eviction command Deguffer can
@@ -37,7 +38,16 @@ namespace Deguffer.Core.Providers;
 public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
 {
     public static readonly IReadOnlyList<EmulatorLayout> Layouts =
-        [new CemuLayout(), new Rpcs3Layout(), new DolphinLayout(), new Pcsx2Layout()];
+    [
+        new CemuLayout(),
+        new Rpcs3Layout(),
+        new DolphinLayout(),
+        new Pcsx2Layout(),
+        new RyujinxLayout(),
+        YuzuFamilyLayout.Eden,
+        YuzuFamilyLayout.Citron,
+        YuzuFamilyLayout.Yuzu,
+    ];
 
     private readonly EmulatorFolderStore _folders;
     private readonly ISystemDirectories _system;
@@ -75,13 +85,14 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
     public override string WhatHappensOnNextUse =>
         "The emulator compiles its shaders again, so each game stutters until it has been played for a "
         + "while, or waits longer before it starts. RPCS3 also compiles each game's code again the next "
-        + "time it boots, which can take minutes. Your saves, memory cards, save states, firmware, "
-        + "installed games and settings are untouched, and so is Cemu's transferable cache.";
+        + "time it boots, which can take minutes, and Ryujinx translates it again over the next few boots. "
+        + "Your saves, memory cards, save states, firmware, keys, installed games and settings are "
+        + "untouched, and so are Cemu's transferable cache and the Switch emulators' guest shader caches.";
 
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Games,
-        Application = "Cemu, RPCS3, Dolphin and PCSX2, the console emulators",
+        Application = "Cemu, RPCS3, Dolphin, PCSX2, Ryujinx, Eden, Citron and yuzu, the console emulators",
         Publisher = "each emulator's open-source project",
         Purpose = "An emulator translates each game's shaders for your graphics card as the game draws, "
             + "and keeps the result so the next session does not stutter while it translates them again.",
@@ -189,7 +200,7 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
 
         if (examination.FoundNothing)
         {
-            return EmptyPlan("No Cemu, RPCS3, Dolphin or PCSX2 data was found where each keeps it, or in an emulator folder.");
+            return EmptyPlan("No emulator's data was found where each keeps it, or in an emulator folder.");
         }
 
         var notes = new List<PlanNote>(examination.Notes);
