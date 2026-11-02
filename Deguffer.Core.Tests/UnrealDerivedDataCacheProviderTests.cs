@@ -295,22 +295,24 @@ public sealed class UnrealDerivedDataCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A local cache path naming the filesystem cache through <c>S:</c>, a letter <c>subst</c> made for
-    /// Unreal's folder, puts a store inside it as surely as its own path does, so a running server
-    /// holds the cache back. One naming a folder beside it through the same letter does not, and the
-    /// cache is offered (§5.6).
+    /// A local cache path naming the filesystem cache through a letter <c>subst</c> made for Unreal's
+    /// folder puts a store inside it as surely as its own path does, so a running server holds the
+    /// cache back. One naming a folder beside it through the same letter does not, and the cache is
+    /// offered (§5.6).
     /// </summary>
+    /// <param name="named">The folder the path names, below the letter.</param>
     [Theory]
-    [InlineData(@"S:\Common\DerivedDataCache", false)]
-    [InlineData(@"S:\Elsewhere", true)]
-    public async Task AStoreNamedInsideTheFilesystemCacheThroughASubstitutedLetterHoldsItBack(string configured, bool offered)
+    [InlineData(@"Common\DerivedDataCache", false)]
+    [InlineData("Elsewhere", true)]
+    public async Task AStoreNamedInsideTheFilesystemCacheThroughASubstitutedLetterHoldsItBack(string named, bool offered)
     {
+        var letter = UnmappedDriveLetter.Any();
         Populate(LegacyCache);
-        _environment.WithEnvironmentVariable("UE-LocalDataCachePath", configured);
+        _environment.WithEnvironmentVariable("UE-LocalDataCachePath", Path.Join(letter, named));
 
         var plan = await CreateProvider(
             new FakeProcessInspector("zenserver"),
-            new FakeVolumeInventory().Substituting(@"S:\", EngineRoot)).PlanAsync();
+            new FakeVolumeInventory().Substituting(letter, EngineRoot)).PlanAsync();
 
         Assert.Equal(offered, plan.TargetedPaths.Contains(LegacyCache, StringComparer.OrdinalIgnoreCase));
         Assert.Equal(!offered, plan.ProtectedPaths.Any(p => p.Path.Equals(LegacyCache, StringComparison.OrdinalIgnoreCase)));

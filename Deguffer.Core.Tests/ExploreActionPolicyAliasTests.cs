@@ -12,7 +12,11 @@ namespace Deguffer.Core.Tests;
 /// </summary>
 public sealed class ExploreActionPolicyAliasTests : IDisposable
 {
-    private const string Letter = @"S:\";
+    /// <summary>
+    /// Letters the machine does not use, because the policy reads what it is asked about on the real
+    /// disk, through whichever name it is given.
+    /// </summary>
+    private readonly IReadOnlyList<string> _letters = UnmappedDriveLetter.Take(2);
 
     private readonly TempDirectory _temp = new();
     private readonly FakeSystemDirectories _system;
@@ -30,6 +34,9 @@ public sealed class ExploreActionPolicyAliasTests : IDisposable
 
     private string Source => Path.Combine(_environment.UserProfile, "src");
 
+    /// <summary>The letter <c>subst</c> made for <see cref="Source"/>.</summary>
+    private string Letter => _letters[0];
+
     /// <summary>
     /// The case in the report: a vcpkg clone a tool reports through the letter refuses what it does
     /// not recognise when the item is reached through the folder the letter stands for.
@@ -37,7 +44,7 @@ public sealed class ExploreActionPolicyAliasTests : IDisposable
     [Fact]
     public void AProbedRootNamedThroughALetterRefusesWhatIsInItReachedDirectly()
     {
-        var policy = Policy(probedRoots: [Clone(@"S:\vcpkg")]);
+        var policy = Policy(probedRoots: [Clone(Path.Join(Letter, "vcpkg"))]);
 
         Assert.False(policy.MayRemove(Path.Combine(Source, "vcpkg", "installed")).IsAllowed);
         Assert.True(policy.MayRemove(Path.Combine(Source, "vcpkg", "buildtrees")).IsAllowed);
@@ -50,16 +57,16 @@ public sealed class ExploreActionPolicyAliasTests : IDisposable
     {
         var policy = Policy(probedRoots: [Clone(Path.Combine(Source, "vcpkg"))]);
 
-        Assert.False(policy.MayRemove(@"S:\vcpkg\installed").IsAllowed);
-        Assert.True(policy.MayRemove(@"S:\vcpkg\buildtrees").IsAllowed);
-        Assert.True(policy.MayRemove(@"S:\other\installed").IsAllowed);
+        Assert.False(policy.MayRemove(Path.Join(Letter, "vcpkg", "installed")).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Join(Letter, "vcpkg", "buildtrees")).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Join(Letter, "other", "installed")).IsAllowed);
     }
 
     /// <summary>A declared root, which is pooled with the others at its depth, follows the letter too.</summary>
     [Fact]
     public void ADeclaredRootNamedThroughALetterRefusesWhatItDoesNotRecognise()
     {
-        var policy = Policy(toolRoots: [ToolRoot.Folders(@"S:\tool", "The tool's own folder.", Named("cache"))]);
+        var policy = Policy(toolRoots: [ToolRoot.Folders(Path.Join(Letter, "tool"),"The tool's own folder.", Named("cache"))]);
 
         Assert.False(policy.MayRemove(Path.Combine(Source, "tool")).IsAllowed);
         Assert.False(policy.MayRemove(Path.Combine(Source, "tool", "config")).IsAllowed);
@@ -79,11 +86,11 @@ public sealed class ExploreActionPolicyAliasTests : IDisposable
         var policy = Policy(toolRoots:
         [
             ToolRoot.Folders(outer, "The tool's own folder.", Named("cache")),
-            ToolRoot.Folders(@"S:\tool\cache", "The tool's cache.", Named("packages")),
+            ToolRoot.Folders(Path.Join(Letter, "tool", "cache"), "The tool's cache.", Named("packages")),
         ]);
 
         // The premise: the inner root's path is the shorter, so length alone picks the outer one.
-        Assert.True(@"S:\tool\cache".Length < outer.Length);
+        Assert.True(Path.Join(Letter, "tool", "cache").Length < outer.Length);
 
         Assert.False(policy.MayRemove(Path.Combine(outer, "cache", "credentials")).IsAllowed);
         Assert.True(policy.MayRemove(Path.Combine(outer, "cache", "packages")).IsAllowed);
@@ -98,7 +105,7 @@ public sealed class ExploreActionPolicyAliasTests : IDisposable
     {
         var clone = _temp.CreateDirectory("profile", "src", "vcpkg");
         var beside = _temp.CreateDirectory("profile", "elsewhere");
-        var policy = Policy(probedRoots: [Clone(@"S:\vcpkg")]);
+        var policy = Policy(probedRoots: [Clone(Path.Join(Letter, "vcpkg"))]);
 
         var verdict = policy.MayRemove(Source);
 
@@ -111,19 +118,20 @@ public sealed class ExploreActionPolicyAliasTests : IDisposable
     /// A region named through a letter: the temporary folder at the top of a letter made for it, as
     /// <see cref="ProtectedRegions"/> names it from the environment. Added here rather than through
     /// the fake environment, which creates the folder it is given. Read by the length of each
-    /// region's path, the profile's permission answered for the folder, because <c>T:\</c> is
+    /// region's path, the profile's permission answered for the folder, because the letter's root is
     /// shorter than the profile's path.
     /// </summary>
     [Fact]
     public void TheTemporaryFolderNamedThroughALetterIsRefusedAtItsOwnPath()
     {
         var temp = Path.Combine(_environment.LocalAppData, "Temp");
-        _volumes.Substituting(@"T:\", temp);
+        var letter = _letters[1];
+        _volumes.Substituting(letter, temp);
 
         var policy = new ExploreActionPolicy(
             [
                 .. ProtectedRegions.For(_system, _environment),
-                ProtectedRegion.Refusing(@"T:\", RegionScope.PathOnly, "This is your temporary folder."),
+                ProtectedRegion.Refusing(letter, RegionScope.PathOnly, "This is your temporary folder."),
             ],
             [],
             _volumes);

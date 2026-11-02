@@ -137,24 +137,26 @@ public sealed class EmbyTranscodeProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A setting naming Emby's own folder through <c>S:</c>, a letter <c>subst</c> made for it, moves
-    /// nothing: the folder is declared once, as Emby's, and nothing is declared or refused a second
-    /// time under the letter. A folder beside it named the same way is a moved folder (§5.6).
+    /// A setting naming Emby's own folder through a letter <c>subst</c> made for it moves nothing: the
+    /// folder is declared once, as Emby's, and nothing is declared or refused a second time under the
+    /// letter. A folder beside it named the same way is a moved folder (§5.6).
     /// </summary>
+    /// <param name="named">The folder the setting names, below the letter.</param>
     [Theory]
-    [InlineData(@"S:\", false)]
-    [InlineData(@"S:\Scratch", true)]
-    public async Task ASettingNamingEmbysOwnFolderThroughASubstitutedLetterMovesNothing(string configured, bool moved)
+    [InlineData("", false)]
+    [InlineData("Scratch", true)]
+    public async Task ASettingNamingEmbysOwnFolderThroughASubstitutedLetterMovesNothing(string named, bool moved)
     {
+        var letter = UnmappedDriveLetter.Any();
         CreateData();
         Write(Path.Combine(TranscodingTemp, "old.ts"), Old);
-        MoveTranscoder(configured);
+        MoveTranscoder(Path.Join(letter, named));
 
-        var provider = CreateProvider(volumes: new FakeVolumeInventory().Substituting(@"S:\", Data));
+        var provider = CreateProvider(volumes: new FakeVolumeInventory().Substituting(letter, Data));
         var plan = await provider.PlanAsync();
 
         Assert.Equal([TranscodingTemp], plan.TargetedPaths);
-        Assert.Equal(moved, provider.ToolRoots.Any(root => root.Path.StartsWith(@"S:\", StringComparison.OrdinalIgnoreCase)));
+        Assert.Equal(moved, provider.ToolRoots.Any(root => root.Path.StartsWith(letter, StringComparison.OrdinalIgnoreCase)));
     }
 
     /// <summary>The unrecognised case: a moved folder with no <c>transcoding-temp</c> in it offers nothing.</summary>

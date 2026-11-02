@@ -497,7 +497,8 @@ public sealed class PlanExecutorTests : IDisposable
     public async Task NeverRemovesOneOfTheAccountsOwnFoldersNamedThroughASubstitutedLetter()
     {
         var environment = new FakeUserEnvironment(_temp.Path);
-        var volumes = new FakeVolumeInventory().Substituting(@"S:\", environment.UserProfile);
+        var letter = UnmappedDriveLetter.Any();
+        var volumes = new FakeVolumeInventory().Substituting(letter, environment.UserProfile);
         var executor = new PlanExecutor(
             new FakeProcessRunner(),
             ParallelEnumerationScanner.Default,
@@ -508,7 +509,7 @@ public sealed class PlanExecutorTests : IDisposable
         var cache = _temp.CreateDirectory("profile", "cache");
 
         var refused = await executor.ExecuteAsync(
-            PlanDeleting(new DeleteDirectoryStep(@"\\?\S:\Downloads", "A cache")),
+            PlanDeleting(new DeleteDirectoryStep(LongPath.Extended(Path.Join(letter, "Downloads")), "A cache")),
             runReach: null, residue: null, progress: null, default);
 
         var outcome = Assert.Single(refused.Steps);

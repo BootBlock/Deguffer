@@ -396,22 +396,24 @@ public sealed class MavenRepositoryProviderTests : IDisposable
     }
 
     /// <summary>
-    /// §5.2 through an alias. With <c>S:</c> substituted for the profile, <c>S:\.m2</c> is the Maven
-    /// home and <c>S:\.m2\wrapper</c> is a folder in it the plan promises to leave alone, though neither
-    /// text names the home. The negative, a repository reached the same way, is the test after this
-    /// one (§5.6).
+    /// §5.2 through an alias. With a letter substituted for the profile, <c>.m2</c> below it is the
+    /// Maven home and <c>.m2\wrapper</c> is a folder in it the plan promises to leave alone, though
+    /// neither text names the home. The negative, a repository reached the same way, is the test after
+    /// this one (§5.6).
     /// </summary>
+    /// <param name="named">The folder the settings name, below the letter.</param>
     [Theory]
-    [InlineData(@"S:\.m2", "holds your Maven configuration")]
-    [InlineData(@"S:\", "holds your Maven configuration")]
-    [InlineData(@"S:\.m2\wrapper", "'wrapper'")]
-    public async Task RefusesALocalRepositoryThatNamesTheMavenHomeThroughASubstitutedLetter(string configured, string refusal)
+    [InlineData(".m2", "holds your Maven configuration")]
+    [InlineData("", "holds your Maven configuration")]
+    [InlineData(@".m2\wrapper", "'wrapper'")]
+    public async Task RefusesALocalRepositoryThatNamesTheMavenHomeThroughASubstitutedLetter(string named, string refusal)
     {
+        var letter = UnmappedDriveLetter.Any();
         Populate(DefaultRepository);
         Populate(Path.Combine(Home, "wrapper", "dists"));
-        WriteSettings(configured);
+        WriteSettings(Path.Join(letter, named));
 
-        var plan = await CreateProvider(new FakeVolumeInventory().Substituting(@"S:\", _environment.UserProfile)).PlanAsync();
+        var plan = await CreateProvider(new FakeVolumeInventory().Substituting(letter, _environment.UserProfile)).PlanAsync();
 
         Assert.Empty(plan.TargetedPaths);
         Assert.Contains(plan.Notes, n => n.Message.Contains(refusal, StringComparison.Ordinal));
@@ -420,18 +422,20 @@ public sealed class MavenRepositoryProviderTests : IDisposable
 
     /// <summary>
     /// The negative beside the refusal above: a repository named through the same letter, in the home
-    /// or beside it, is not refused as the home's own (§5.6). The letter stands for nothing on disk, so
+    /// or beside it, is not refused as the home's own (§5.6). The machine has nothing at the letter, so
     /// nothing is measured there, and only the refusal is asked about.
     /// </summary>
+    /// <param name="named">The folder the settings name, below the letter.</param>
     [Theory]
-    [InlineData(@"S:\.m2\repository")]
-    [InlineData(@"S:\maven-repository")]
-    public async Task DoesNotRefuseARepositoryNamedThroughASubstitutedLetterAsTheMavenHome(string configured)
+    [InlineData(@".m2\repository")]
+    [InlineData("maven-repository")]
+    public async Task DoesNotRefuseARepositoryNamedThroughASubstitutedLetterAsTheMavenHome(string named)
     {
+        var letter = UnmappedDriveLetter.Any();
         Populate(DefaultRepository);
-        WriteSettings(configured);
+        WriteSettings(Path.Join(letter, named));
 
-        var plan = await CreateProvider(new FakeVolumeInventory().Substituting(@"S:\", _environment.UserProfile)).PlanAsync();
+        var plan = await CreateProvider(new FakeVolumeInventory().Substituting(letter, _environment.UserProfile)).PlanAsync();
 
         Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("holds your Maven configuration", StringComparison.Ordinal));
         Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("in your Maven home", StringComparison.Ordinal));

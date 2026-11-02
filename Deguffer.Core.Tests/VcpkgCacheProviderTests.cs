@@ -389,24 +389,27 @@ public sealed class VcpkgCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// Both refusals above, with the variable naming the clone through <c>S:</c>, a letter <c>subst</c>
-    /// made for the folder holding it. The text names nothing of vcpkg's, and the folder is the clone
-    /// or something in it the plan promises to leave alone. A cache named through the same letter
-    /// beside the clone is not refused as vcpkg's own (§5.6).
+    /// Both refusals above, with the variable naming the clone through a letter <c>subst</c> made for
+    /// the folder holding it. The text names nothing of vcpkg's, and the folder is the clone or
+    /// something in it the plan promises to leave alone. A cache named through the same letter beside
+    /// the clone is not refused as vcpkg's own (§5.6).
     /// </summary>
+    /// <param name="named">The folder the variable names, below the letter.</param>
     [Theory]
-    [InlineData(@"S:\vcpkg", true)]
-    [InlineData(@"S:\", true)]
-    [InlineData(@"S:\vcpkg\installed", true)]
-    [InlineData(@"S:\binary-cache", false)]
-    public async Task RefusesACacheVariableThatNamesTheCloneThroughASubstitutedLetter(string configured, bool refused)
+    [InlineData("vcpkg", true)]
+    [InlineData("", true)]
+    [InlineData(@"vcpkg\installed", true)]
+    [InlineData("binary-cache", false)]
+    public async Task RefusesACacheVariableThatNamesTheCloneThroughASubstitutedLetter(string named, bool refused)
     {
         var root = CreateClone();
+        var letter = UnmappedDriveLetter.Any();
+        var configured = Path.Join(letter, named);
         _environment
             .WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root)
             .WithEnvironmentVariable(VcpkgDiscovery.BinaryCacheVariable, configured);
 
-        var plan = await CreateProvider(new FakeVolumeInventory().Substituting(@"S:\", Path.GetDirectoryName(root)!)).PlanAsync();
+        var plan = await CreateProvider(new FakeVolumeInventory().Substituting(letter, Path.GetDirectoryName(root)!)).PlanAsync();
 
         Assert.Equal(refused, plan.Notes.Any(n => n.Message.Contains($"Leaving '{configured}' alone: that is vcpkg's own directory", StringComparison.Ordinal)));
         Assert.True(Directory.Exists(Path.Combine(root, "installed")));
@@ -778,22 +781,25 @@ public sealed class VcpkgCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The case above with the variable naming the clone's downloads through <c>S:</c>, a letter
-    /// <c>subst</c> made for the folder holding the clone. It is the place vcpkg would have used, so
-    /// the clone's downloads are offered as they are without it, rather than read as moved and then
-    /// refused as the clone's own. A folder beside the clone named the same way has moved them.
+    /// The case above with the variable naming the clone's downloads through a letter <c>subst</c>
+    /// made for the folder holding the clone. It is the place vcpkg would have used, so the clone's
+    /// downloads are offered as they are without it, rather than read as moved and then refused as the
+    /// clone's own. A folder beside the clone named the same way has moved them.
     /// </summary>
+    /// <param name="named">The folder the variable names, below the letter.</param>
     [Theory]
-    [InlineData(@"S:\vcpkg\downloads", true)]
-    [InlineData(@"S:\downloads", false)]
-    public async Task ADownloadsVariableNamingTheClonesDownloadsThroughASubstitutedLetterIsNotAMove(string configured, bool offered)
+    [InlineData(@"vcpkg\downloads", true)]
+    [InlineData("downloads", false)]
+    public async Task ADownloadsVariableNamingTheClonesDownloadsThroughASubstitutedLetterIsNotAMove(string named, bool offered)
     {
         var root = CreateClone();
+        var letter = UnmappedDriveLetter.Any();
+        var configured = Path.Join(letter, named);
         _environment
             .WithEnvironmentVariable(VcpkgDiscovery.RootVariable, root)
             .WithEnvironmentVariable(VcpkgDiscovery.DownloadsVariable, configured);
 
-        var provider = CreateProvider(new FakeVolumeInventory().Substituting(@"S:\", Path.GetDirectoryName(root)!));
+        var provider = CreateProvider(new FakeVolumeInventory().Substituting(letter, Path.GetDirectoryName(root)!));
         var plan = await provider.PlanAsync();
 
         Assert.Equal(offered, plan.TargetedPaths.Contains(Path.Combine(root, "downloads"), StringComparer.OrdinalIgnoreCase));

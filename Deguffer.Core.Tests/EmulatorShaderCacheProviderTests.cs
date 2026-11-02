@@ -358,22 +358,23 @@ public sealed class EmulatorShaderCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A cache folder PCSX2's settings name through <c>S:</c>, a letter <c>subst</c> made for its own
-    /// folder, is inside that folder, though its text names nothing there. It is read as the folder
-    /// names it, so Explore is told the way down to it, and refuses it at the other name too. What
-    /// PCSX2 keeps beside it survives (§5.6).
+    /// A cache folder PCSX2's settings name through a letter <c>subst</c> made for its own folder is
+    /// inside that folder, though its text names nothing there. It is read as the folder names it, so
+    /// Explore is told the way down to it, and refuses it at the other name too. What PCSX2 keeps
+    /// beside it survives (§5.6).
     /// </summary>
     [Fact]
     public async Task FollowsPcsx2sCacheFolderNamedThroughASubstitutedLetterAsItsOwn()
     {
+        var letter = UnmappedDriveLetter.Any();
         File.WriteAllText(
             WriteFile(Path.Combine(Pcsx2Root, "inis", "PCSX2.ini"), 0),
-            "[Folders]\nCache = S:\\shaders\n");
+            $"[Folders]\nCache = {Path.Join(letter, "shaders")}\n");
         var shaders = WriteFile(Path.Combine(Pcsx2Root, "shaders", "vulkan_shaders.bin"));
         var gameList = WriteFile(Path.Combine(Pcsx2Root, "shaders", "gamelist.cache"));
         var memoryCards = Folder(Path.Combine(Pcsx2Root, "memcards"));
 
-        var volumes = new FakeVolumeInventory().Substituting(@"S:\", Pcsx2Root);
+        var volumes = new FakeVolumeInventory().Substituting(letter, Pcsx2Root);
         var provider = CreateProvider(volumes: volumes);
         var plan = await provider.PlanAsync();
 
@@ -383,9 +384,9 @@ public sealed class EmulatorShaderCacheProviderTests : IDisposable
         var explore = new ExploreActionPolicy([], [], volumes, probedRoots: roots);
 
         Assert.Contains(roots, r => r.Path.Equals(Pcsx2Root, StringComparison.OrdinalIgnoreCase) && r.RecognisesFolder("shaders"));
-        Assert.True(explore.MayRemove(@"S:\shaders\vulkan_shaders.bin").IsAllowed);
-        Assert.False(explore.MayRemove(@"S:\shaders\gamelist.cache").IsAllowed);
-        Assert.False(explore.MayRemove(@"S:\memcards").IsAllowed);
+        Assert.True(explore.MayRemove(Path.Join(letter, "shaders", "vulkan_shaders.bin")).IsAllowed);
+        Assert.False(explore.MayRemove(Path.Join(letter, "shaders", "gamelist.cache")).IsAllowed);
+        Assert.False(explore.MayRemove(Path.Join(letter, "memcards")).IsAllowed);
 
         var result = await provider.ExecuteAsync(plan);
 
