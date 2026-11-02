@@ -3,8 +3,12 @@ using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Providers;
 
-/// <summary>One cache entry the examination recognised, and the emulator whose cache it is.</summary>
-internal sealed record EmulatorCacheTarget(EmulatorLayout Layout, string Path, string Reason, TargetKind Kind);
+/// <summary>
+/// One cache entry the examination recognised, the emulator whose layout recognised it, and every
+/// emulator that proved the folder it is in, any of which holds it back while it runs.
+/// </summary>
+internal sealed record EmulatorCacheTarget(
+    EmulatorLayout Layout, IReadOnlyList<EmulatorLayout> Owners, string Path, string Reason, TargetKind Kind);
 
 /// <summary>
 /// A cache folder the examination read, the names in it that it recognised, and the kind of entry
@@ -20,7 +24,16 @@ internal sealed record EmulatorCacheFolderReading(string Path, IReadOnlySet<stri
 }
 
 /// <summary>A root proven to be <paramref name="Layout"/>'s, and the cache folders read in it.</summary>
-internal sealed record EmulatorRoot(EmulatorLayout Layout, string Path, IReadOnlyList<EmulatorCacheFolderReading> CacheFolders);
+/// <param name="Owners">
+/// Every layout that proved this folder, this one included. Each fork of yuzu proves the same
+/// <c>user</c> folder where two forks' programs sit beside it, and reads the same caches in it, so
+/// while any of them runs the folder is in use.
+/// </param>
+internal sealed record EmulatorRoot(
+    EmulatorLayout Layout,
+    string Path,
+    IReadOnlyList<EmulatorCacheFolderReading> CacheFolders,
+    IReadOnlyList<EmulatorLayout> Owners);
 
 /// <summary>
 /// One pass over every emulator's candidate roots: prove each, read each proven root's cache folders,
@@ -43,6 +56,20 @@ internal sealed class EmulatorCacheExamination
     public List<PlanNote> Notes { get; } = [];
 
     public bool Unreadable { get; private set; }
+
+    /// <summary>
+    /// The paths a note already names. A level above several cache folders is met once for each of
+    /// them, and a folder two layouts proved once for each layout, and either is one thing to say.
+    /// </summary>
+    private readonly HashSet<string> _reported = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Each game's folder entered for its caches. Eden's folder of games is a cache folder too, and a
+    /// game's folder met there is answered for by its own caches rather than named as left alone.
+    /// </summary>
+    private readonly HashSet<string> _gameFolders = new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly HashSet<string> _targeted = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// No root was proven and there is nothing to say: no link declined, nothing unread, and no
@@ -125,9 +152,16 @@ internal sealed class EmulatorCacheExamination
                 + "settings file and no RetroArch in it, so nothing in it was looked at."));
         }
 
+        var folders = examination.Roots.Select(root => reach(root.Path)).ToList();
+
         for (var i = 0; i < examination.Roots.Count; i++)
         {
-            examination.Roots[i] = examination.Read(examination.Roots[i], whyNotOwned, reach, ct);
+            IReadOnlyList<EmulatorLayout> owners =
+            [
+                .. examination.Roots.Where((_, j) => folders[j].IsSameAs(folders[i])).Select(root => root.Layout),
+            ];
+
+            examination.Roots[i] = examination.Read(examination.Roots[i] with { Owners = owners }, whyNotOwned, reach, ct);
         }
 
         return examination;
@@ -180,7 +214,7 @@ internal sealed class EmulatorCacheExamination
             return true;
         }
 
-        Roots.Add(new EmulatorRoot(layout, root, []));
+        Roots.Add(new EmulatorRoot(layout, root, [], [layout]));
         return true;
     }
 
@@ -194,11 +228,21 @@ internal sealed class EmulatorCacheExamination
 
         var readings = new List<EmulatorCacheFolderReading>();
 
-        foreach (var listed in layout.CacheFoldersIn(found.Path))
+        foreach (var listed in layout.CacheFoldersIn(found.Path).Concat(GameCacheFolders(layout, found.Path, ct)))
         {
             ct.ThrowIfCancellationRequested();
 
             var folder = listed;
+
+            // A path built from the root has had no level checked on the way, and a link at any of
+            // them would put the deletion somewhere nothing classified, with every survivor named
+            // below it.
+            if (LongPath.Contains(found.Path, listed.Path)
+                && DerivedPath.FirstObstacleBetween(found.Path, listed.Path) is { } obstacle)
+            {
+                Obstructed(obstacle);
+                continue;
+            }
 
             // A folder inside the root is named as the root is, at any path either is reachable at, so
             // a setting naming it through an alias is still read on the way down from the root. One a
@@ -216,7 +260,7 @@ internal sealed class EmulatorCacheExamination
                 continue;
             }
 
-            if (ReadFolder(layout, folder, ct) is { } recognised)
+            if (ReadFolder(found, folder, ct) is { } recognised)
             {
                 readings.Add(new EmulatorCacheFolderReading(
                     folder.Path,
@@ -229,8 +273,10 @@ internal sealed class EmulatorCacheExamination
     }
 
     /// <returns>The names recognised in the folder, or null where it was not read.</returns>
-    private HashSet<string>? ReadFolder(EmulatorLayout layout, EmulatorCacheFolder folder, CancellationToken ct)
+    private HashSet<string>? ReadFolder(EmulatorRoot root, EmulatorCacheFolder folder, CancellationToken ct)
     {
+        var layout = root.Layout;
+
         switch (LongPath.ProbeDirectory(folder.Path))
         {
             case PathPresence.Absent:
@@ -249,9 +295,7 @@ internal sealed class EmulatorCacheExamination
 
         if (FolderEntries.Of(folder.Path) is not { } entries)
         {
-            Notes.Add(UnreadableRoot.Note(folder.Path));
-            Survivors.Add((folder.Path, UnreadableRoot.UnreachedReason));
-            Unreadable = true;
+            Unlisted(folder.Path);
             return null;
         }
 
@@ -266,6 +310,11 @@ internal sealed class EmulatorCacheExamination
 
             var path = LongPath.Display(entry.FullName);
 
+            if (_gameFolders.Contains(path))
+            {
+                continue;
+            }
+
             if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
             {
                 DeclineLink(path);
@@ -278,7 +327,14 @@ internal sealed class EmulatorCacheExamination
             if (classification.Tier.IsOfferable() && isDirectory == (folder.Kind is TargetKind.Directory))
             {
                 recognised.Add(entry.Name);
-                Targets.Add(new EmulatorCacheTarget(layout, path, classification.Reason, folder.Kind));
+
+                // A folder two layouts proved is read by each, and its cache is one item, whose
+                // owners already name both.
+                if (_targeted.Add(path))
+                {
+                    Targets.Add(new EmulatorCacheTarget(layout, root.Owners, path, classification.Reason, folder.Kind));
+                }
+
                 continue;
             }
 
@@ -288,8 +344,8 @@ internal sealed class EmulatorCacheExamination
 
             // A directory is named in the plan because it is what a user would expect to go with the
             // cache. A loose file is protected all the same, but a note for each would bury the ones
-            // that matter.
-            if (isDirectory)
+            // that matter. A folder two layouts proved is read by each, and names it once.
+            if (isDirectory && _reported.Add(path))
             {
                 Notes.Add(new PlanNote(
                     PlanNoteSeverity.Information,
@@ -300,8 +356,85 @@ internal sealed class EmulatorCacheExamination
         return recognised;
     }
 
+    /// <summary>
+    /// The cache folders inside each game's folder in each of <paramref name="layout"/>'s folders of
+    /// games. Only a folder named by a title id is entered, and a link among them is declined.
+    /// </summary>
+    private List<EmulatorCacheFolder> GameCacheFolders(EmulatorLayout layout, string root, CancellationToken ct)
+    {
+        var folders = new List<EmulatorCacheFolder>();
+
+        foreach (var games in layout.GameCachesIn(root))
+        {
+            ct.ThrowIfCancellationRequested();
+
+            if (DerivedPath.FirstObstacleBetween(root, games.GamesFolder) is { } obstacle)
+            {
+                Obstructed(obstacle);
+                continue;
+            }
+
+            var listing = ChildDirectories.Under(games.GamesFolder, SwitchTitleId.IsMatch);
+
+            if (listing.Unreadable)
+            {
+                Unlisted(games.GamesFolder);
+                continue;
+            }
+
+            Survivors.Add((games.GamesFolder, $"{layout.Name}'s folder of games. Only caches inside each game's folder are removed."));
+
+            foreach (var link in listing.Links)
+            {
+                DeclineLink(LongPath.Display(link.FullName));
+            }
+
+            foreach (var entry in listing.Directories)
+            {
+                var game = LongPath.Display(entry.FullName);
+
+                _gameFolders.Add(game);
+                Survivors.Add((game, $"One game's folder in {layout.Name}. Only caches inside it are removed."));
+                Survivors.AddRange(games.ProtectedNames.Select(p => (Path.Combine(game, p.Name), p.Reason)));
+                folders.AddRange(games.CacheFoldersIn(game));
+            }
+        }
+
+        return folders;
+    }
+
+    /// <summary>A folder Windows said is there and then would not list.</summary>
+    private void Unlisted(string path)
+    {
+        if (!_reported.Add(path))
+        {
+            return;
+        }
+
+        Notes.Add(UnreadableRoot.Note(path));
+        Survivors.Add((path, UnreadableRoot.UnreachedReason));
+        Unreadable = true;
+    }
+
+    private void Obstructed(DerivedPathObstacle obstacle)
+    {
+        if (obstacle.IsLink)
+        {
+            DeclineLink(obstacle.Path);
+        }
+        else
+        {
+            Unreached(obstacle.Path);
+        }
+    }
+
     private void Unreached(string path)
     {
+        if (!_reported.Add(path))
+        {
+            return;
+        }
+
         Notes.Add(UnreadableRoot.UnreachedNote(path));
         Survivors.Add((path, UnreadableRoot.UnreachedReason));
         Unreadable = true;
@@ -309,6 +442,11 @@ internal sealed class EmulatorCacheExamination
 
     private void DeclineLink(string path)
     {
+        if (!_reported.Add(path))
+        {
+            return;
+        }
+
         Declined.Add(path);
         Survivors.Add((path, CacheLevelWalk.LinkReason));
         Notes.Add(CacheLevelWalk.Note(path));

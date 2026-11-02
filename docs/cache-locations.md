@@ -3120,8 +3120,8 @@ acknowledgement.
 
 | | |
 | --- | --- |
-| **Location** | Cemu `shaderCache\precompiled` and `shaderCache\driver`; RPCS3 `cache\<serial>`; Dolphin `Cache\Shaders`; PCSX2's shader files in its cache folder. Each inside that emulator's own folder, found as the table below describes |
-| **Method** | Delete the recognised folders, or for PCSX2 the recognised files, one item each |
+| **Location** | Cemu `shaderCache\precompiled` and `shaderCache\driver`; RPCS3 `cache\<serial>`; Dolphin `Cache\Shaders`; PCSX2's shader files in its cache folder; Ryujinx's host shader files in `games\<title id>\cache\shader`, and `cpu\0` and `cpu\1` in `games\<title id>\cache\cpu`; `vulkan_pipelines.bin` in each game's folder in Eden's `cache\shader` and in Citron's and yuzu's `shader`, and Eden's `cache\shader\vulkan_static_pipelines.bin`. Each inside that emulator's own folder, found as the table below describes |
+| **Method** | Delete the recognised folders, or for PCSX2 and the Switch emulators the recognised files, one item each |
 | **Typical size** | Nothing measured: the machine this was written on has no emulator that has compiled a shader. Community reports for a real library run to many gigabytes |
 
 ### What it is
@@ -3129,7 +3129,15 @@ acknowledgement.
 A console emulator translates each game's shaders for your graphics card as the game draws, and
 the game stutters while it does. Every emulator here keeps the result, so the next session loads it
 rather than translating again. RPCS3 also keeps each game's PPU and SPU code, compiled from the
-PlayStation 3 program into code for your processor.
+PlayStation 3 program into code for your processor, and Ryujinx keeps each game's translated code
+(its PPTC cache) for the same reason.
+
+The Nintendo Switch emulators keep two shader caches for each game. The guest cache (Ryujinx's
+`guest` and `shared` files, and `vulkan.bin` and `opengl.bin` in the yuzu family) records every
+shader the game has used. Only playing builds it, and players often share it. The host cache
+(Ryujinx's files named by graphics API and vendor, such as `vulkan_nvidia.toc`) or the driver's
+pipeline cache (`vulkan_pipelines.bin`) is compiled from it for this graphics card when the game
+boots. Deguffer offers the second and never the first, as it does for Cemu.
 
 ### What Deguffer does
 
@@ -3141,12 +3149,16 @@ PlayStation 3 program into code for your processor.
 | RPCS3 | The folder `RPCS3_CONFIG_DIR` names, read as RPCS3 reads it, and in each emulator folder you add: `portable` inside it, or the folder itself | `config\config.yml`, or `config.yml` from an older version |
 | Dolphin | The folder in Dolphin's `UserConfigPath` registry value, `Documents\Dolphin Emulator`, `%APPDATA%\Dolphin Emulator`, and in each emulator folder you add: `User` inside it, or the folder itself | `Config\Dolphin.ini` |
 | PCSX2 | `Documents\PCSX2`, and in each emulator folder you add: the folder `portable.txt` names, or the folder itself | `inis\PCSX2.ini` |
+| Ryujinx | `%APPDATA%\Ryujinx`, and in each emulator folder you add: `portable` inside it, or the folder itself | `Config.json`, or `PRConfig.json` from a test build |
+| Eden | `%APPDATA%\eden`, and `user` inside each emulator folder you add that holds `eden.exe` or `eden-cli.exe`. You can also add that `user` folder itself | `config\qt-config.ini` |
+| Citron | `%APPDATA%\citron`, and the same as Eden for a folder that holds `citron.exe` or `citron-cmd.exe` | `config\qt-config.ini` |
+| yuzu | `%APPDATA%\yuzu`, and the same as Eden for a folder that holds `yuzu.exe` or `yuzu-cmd.exe` | `config\qt-config.ini` |
 
 **Add an emulator folder in Settings for a portable install, and for every RPCS3 install.** RPCS3
-keeps everything beside `rpcs3.exe`, wherever you unpacked it, and a portable Cemu, Dolphin or PCSX2
-does the same. Windows records none of those places anywhere Deguffer can rely on, so Deguffer does
+keeps everything beside `rpcs3.exe`, wherever you unpacked it, and a portable Cemu, Dolphin, PCSX2,
+Ryujinx, Eden, Citron or yuzu does the same. Windows records none of those places anywhere Deguffer can rely on, so Deguffer does
 not search your drives for them. A folder you add is looked in only for the settings file in the
-table. A folder with none in it gets a note on the plan, and this row touches nothing in it. A
+table, and for Eden, Citron and yuzu also for the program. A folder with none in it gets a note on the plan, and this row touches nothing in it. A
 folder that holds RetroArch gets no note, because the
 [RetroArch rows](#retroarchs-downloaded-shaders-databases-and-thumbnails) answer for it.
 
@@ -3154,12 +3166,20 @@ folder that holds RetroArch gets no note, because the
 a `cache` directory is not an emulator's. A folder that holds your whole profile, or a drive's root,
 is never treated as an emulator's folder, whatever file is in it.
 
+**Eden, Citron and yuzu are told apart by their program.** Each one's portable folder is called
+`user` and holds the same settings file, so Deguffer reads a `user` folder as a fork's only where
+that fork's program is beside it. The old `shader` folder that Eden's migration can leave in its
+folder is not Eden's cache, and is left alone.
+
 **Only the paths in the Location row are offered, found by their path from that folder.** This is
 what keeps Dolphin safe: `Shaders` in Dolphin's folder holds post-processing shaders you installed,
 and `Cache\Shaders` is the compiled cache. Only the second is offered. In RPCS3's `cache`, only a
 folder named by a game's serial, such as `BLUS30443`, is offered, which is the folder RPCS3's own
 **Remove All Caches** removes. In PCSX2's cache folder, only the shader and pipeline files each
-renderer writes are offered, as files, because the same folder holds other things.
+renderer writes are offered, as files, because the same folder holds other things. In the Switch
+emulators, only a folder named by a game's title id, such as `0100f2c0115b6000`, is entered, so
+Citron's `shader\nvidia` is left alone, and so is everything beside the game folders except Eden's
+`vulkan_static_pipelines.bin`.
 
 **PCSX2's cache folder is where PCSX2's settings put it.** `[Folders] Cache` in `inis\PCSX2.ini` can
 move it anywhere, and Deguffer reads it rather than assuming the default.
@@ -3170,7 +3190,8 @@ folder a setting names inside the emulator's folder that way is still treated as
 refuses each at both names.
 
 **Nothing of an emulator's while it runs.** An emulator writes its cache while you play, so while
-one is running its caches are not offered, the plan says why, and Explore refuses them. The clean
+one is running its caches are not offered, the plan says why, and Explore refuses them. A folder that
+two forks of yuzu both use is held back while either one runs. The clean
 asks again before it removes each item, so an emulator started while the preview is on screen holds
 its cache back too.
 
@@ -3202,22 +3223,32 @@ are asserted by name after a clean:
 | PCSX2 | `memcards`, `sstates` | Your memory cards and save states |
 | PCSX2 | `inis`, `cheats`, `patches`, `textures`, `covers` | What you set and added |
 | PCSX2 | Everything else in the cache folder | The game list, achievement badges, and the fonts you downloaded |
+| Ryujinx | `guest.toc`, `guest.data`, `shared.toc`, `shared.data` in each game's `cache\shader` | The guest shader cache. Built only by playing, often shared, and the host cache is compiled from it |
+| Ryujinx | `system`, `bis`, `sdcard`, `profiles` | Your keys and firmware, the emulated storage with your saves and games, the SD card and your profiles |
+| Ryujinx | `mods`, `Config.json`, and each game's `Config.json` and `gui` | What you installed and chose |
+| Eden, Citron, yuzu | `vulkan.bin` in each game's folder, and `opengl.bin` from Eden's and yuzu's OpenGL renderer | The guest shader cache. Built only by playing, often shared, and the pipeline cache is compiled from it |
+| Eden, Citron, yuzu | `keys`, `nand`, `sdmc` | Your keys, the emulated storage with your saves, firmware and games, and the SD card |
+| Eden, Citron, yuzu | `load`, `dump`, `amiibo`, `tas`, `screenshots`, `play_time`, `config` | What you installed, dumped, recorded and chose |
+| Eden | `lossless`, `post_shaders`, `post_presets` | What you added for scaling and post-processing |
 
 Explore enforces the same rule. In each emulator's folder it allows only the way to the cache, and
 in the cache folder only what the plan recognised.
 
-Deguffer also refuses to look through a link. If an emulator's folder, its cache folder or one
-game's cache is a link to somewhere else, it removes nothing there and tells you why.
+Deguffer also refuses to look through a link. If an emulator's folder, any folder on the way to its
+cache, its cache folder or one game's cache is a link to somewhere else, it removes nothing there and
+tells you why. Eden's migration can turn its folder into a link to an old yuzu or Citron folder, and
+its link to Ryujinx puts links among your saves.
 
 ### What it costs you
 
 **Each emulator compiles its shaders again, so each game stutters until it has been played for a
 while**, or waits longer before it starts if the emulator is set to compile ahead. **RPCS3 also
 compiles each game's code again the next time the game boots**, a pass that can take minutes and is
-often mistaken for a hang.
+often mistaken for a hang. **Ryujinx translates each game's code again over its next few boots**, so
+they start more slowly.
 
-**Your saves, memory cards, save states, firmware, games and settings are untouched**, and so is
-Cemu's transferable cache.
+**Your saves, memory cards, save states, firmware, keys, games and settings are untouched**, and so
+are Cemu's transferable cache and the Switch emulators' guest shader caches.
 
 ### Why Tier 2, not Tier 1
 

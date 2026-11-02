@@ -283,7 +283,7 @@
 
             <views:SettingsRow Glyph="&#xE7FC;"
                                Title="Where your emulators are installed"
-                               Description="Deguffer finds Cemu, Dolphin and PCSX2 where each keeps its data by default, and RetroArch where Steam installed it. Add the folder of a portable install here, and the folder of every RPCS3 install and any other RetroArch, which keep everything beside the program. Deguffer looks in each folder only for the emulator's own settings file or program, and removes only shader caches and RetroArch's downloads, never saves, memory cards, firmware or games.">
+                               Description="Deguffer finds Cemu, Dolphin, PCSX2, Ryujinx, Eden, Citron and yuzu where each keeps its data by default, and RetroArch where Steam installed it. Add the folder of a portable install here, and the folder of every RPCS3 install and any other RetroArch, which keep everything beside the program. Deguffer looks in each folder only for the emulator's own settings file or program, and removes only the caches the emulator compiled and RetroArch's downloads, never saves, memory cards, firmware or games.">
                 <views:SettingsRow.Control>
                     <Button Content="Add folder…"
                             Click="OnAddEmulatorFolder"

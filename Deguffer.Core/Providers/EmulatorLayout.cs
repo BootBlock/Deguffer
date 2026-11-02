@@ -59,6 +59,13 @@ public abstract class EmulatorLayout
     public abstract IReadOnlyList<EmulatorCacheFolder> CacheFoldersIn(string root);
 
     /// <summary>
+    /// The folders in <paramref name="root"/> holding a folder for each game, where this layout takes a
+    /// cache from inside each game's folder. None for an emulator that keeps one cache folder for every
+    /// game.
+    /// </summary>
+    public virtual IReadOnlyList<EmulatorGameCaches> GameCachesIn(string root) => [];
+
+    /// <summary>
     /// Whether <paramref name="root"/> holds a marker. Refused where no marker is there and Windows
     /// would not answer for one, so an unreadable root is reported rather than read as no emulator.
     /// </summary>
