@@ -214,6 +214,7 @@ you would lose by deleting it. By default, only Tier 1 rows start out selected:
 | Emulator shader caches | What Cemu, RPCS3, Dolphin and PCSX2 compile for your GPU, found where each one keeps its data and in the emulator folders you add in Settings; never Cemu's transferable cache, saves, memory cards, firmware or Dolphin's own `Shaders`, and nothing while the emulator is running |
 | RetroArch shaders and game databases | The shader sets and `.rdb` databases its Online Updater downloaded, found through Steam's records and the emulator folders you add in Settings, in the folders named by its own `retroarch.cfg`; never the presets you saved, `system`, cores, cheats, overlays or saves, and nothing while RetroArch is running |
 | Unreal Engine derived data cache | The cache that every project shares, in both the older folder and each Zen store; a store is left alone while its server is running |
+| Unity GI cache | The lighting cache that every project shares, in `%LOCALAPPDATA%\Unity\Caches\GiCache`, and nothing while a Unity Editor is running; never the build cache next to it. A cache moved in Unity's preferences is named, never removed |
 | Node.js project dependencies | `node_modules` under your own source folders |
 | Python virtual environments | |
 | tox environments | `.tox` folders under your own source folders, only where tox's own cache tag is inside and a tox configuration is next to it |
