@@ -58,8 +58,8 @@ internal sealed class EmulatorCacheExamination
     public bool Unreadable { get; private set; }
 
     /// <summary>
-    /// The links and unreadable levels already reported. A level above several cache folders is met
-    /// once for each of them, and is one thing to say.
+    /// The paths a note already names. A level above several cache folders is met once for each of
+    /// them, and a folder two layouts proved once for each layout, and either is one thing to say.
     /// </summary>
     private readonly HashSet<string> _reported = new(StringComparer.OrdinalIgnoreCase);
 
@@ -344,8 +344,8 @@ internal sealed class EmulatorCacheExamination
 
             // A directory is named in the plan because it is what a user would expect to go with the
             // cache. A loose file is protected all the same, but a note for each would bury the ones
-            // that matter.
-            if (isDirectory)
+            // that matter. A folder two layouts proved is read by each, and names it once.
+            if (isDirectory && _reported.Add(path))
             {
                 Notes.Add(new PlanNote(
                     PlanNoteSeverity.Information,

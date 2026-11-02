@@ -338,12 +338,15 @@ public sealed class SwitchEmulatorShaderCacheTests : IDisposable
         var root = YuzuFamily(Path.Combine(install, "user"));
         var game = Path.Combine(root, "shader", Game);
         var pipelines = WriteFile(Path.Combine(game, "vulkan_pipelines.bin"));
+        var notCache = Folder(Path.Combine(game, "backup"));
         Declare(install);
 
         var inspector = FakeProcessInspector.NothingRunning;
         var provider = CreateProvider(inspector);
+        var offered = await provider.PlanAsync();
 
-        Assert.Equal([pipelines], (await provider.PlanAsync()).TargetedPaths);
+        Assert.Equal([pipelines], offered.TargetedPaths);
+        Assert.Single(offered.Notes, n => n.Message.Contains(notCache, StringComparison.OrdinalIgnoreCase));
 
         var preview = await provider.PlanAsync();
         // yuzu rather than Citron: the item is Citron's by the order the layouts are read in, so only
