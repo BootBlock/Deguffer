@@ -324,6 +324,63 @@ public sealed class SwitchEmulatorShaderCacheTests : IDisposable
         Assert.True(File.Exists(migrated));
     }
 
+    /// <summary>
+    /// Citron unpacked over an old yuzu keeps both programs beside one <c>user</c> folder, which both
+    /// forks prove and read. Its cache is one item, and while either fork runs it is held back on
+    /// every route: the plan, the clean's last check and Explore.
+    /// </summary>
+    [Fact]
+    public async Task AFolderTwoForksShareIsOneItemHeldWhileEitherRuns()
+    {
+        var install = Path.Combine(_temp.Path, "emulators", "citron");
+        WriteFile(Path.Combine(install, "citron.exe"), 64);
+        WriteFile(Path.Combine(install, "yuzu.exe"), 64);
+        var root = YuzuFamily(Path.Combine(install, "user"));
+        var game = Path.Combine(root, "shader", Game);
+        var pipelines = WriteFile(Path.Combine(game, "vulkan_pipelines.bin"));
+        Declare(install);
+
+        var inspector = FakeProcessInspector.NothingRunning;
+        var provider = CreateProvider(inspector);
+
+        Assert.Equal([pipelines], (await provider.PlanAsync()).TargetedPaths);
+
+        var preview = await provider.PlanAsync();
+        // yuzu rather than Citron: the item is Citron's by the order the layouts are read in, so only
+        // the other fork tells a check of every owner from a check of the first.
+        inspector.WithRunning("yuzu");
+        var result = await provider.ExecuteAsync(preview);
+
+        Assert.True(File.Exists(pipelines), "a shared cache was removed under a yuzu started after the preview");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+
+        provider.InvalidateCaches();
+        var held = await provider.PlanAsync();
+
+        Assert.Empty(held.Steps);
+        Assert.Contains(held.Notes, n => n.Severity == PlanNoteSeverity.Warning && n.Message.Contains("yuzu", StringComparison.Ordinal));
+        Assert.False(Allows(await provider.DiscoverToolRootsAsync(), game, "vulkan_pipelines.bin", ChildKind.File));
+    }
+
+    /// <summary>
+    /// Eden's <c>cache\shader</c> is both its folder of games and the folder of its own pipeline cache,
+    /// so a refusal to list it is met twice, and is one thing to say.
+    /// </summary>
+    [Fact]
+    public async Task AnEdenShaderFolderThatWillNotBeListedIsReportedOnce()
+    {
+        YuzuFamily(EdenRoot);
+        var shaders = Path.Combine(EdenRoot, "cache", "shader");
+        WriteFile(Path.Combine(shaders, Game, "vulkan_pipelines.bin"));
+        using var denied = new DeniedDirectory(shaders);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.Single(plan.Notes, n => n.Message.Contains(shaders, StringComparison.OrdinalIgnoreCase));
+    }
+
     [Fact]
     public async Task ADeclaredUserFolderWithNoForksProgramBesideItIsNoEmulators()
     {

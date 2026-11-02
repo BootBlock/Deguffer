@@ -8,7 +8,7 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 internal static partial class SwitchTitleId
 {
-    public static bool IsMatch(string name) => Pattern().IsMatch(name);
+    public static bool IsMatch(ReadOnlySpan<char> name) => Pattern().IsMatch(name);
 
     [GeneratedRegex("^[0-9A-Fa-f]{16}$")]
     private static partial Regex Pattern();

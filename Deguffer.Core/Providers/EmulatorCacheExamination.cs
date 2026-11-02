@@ -3,8 +3,12 @@ using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Providers;
 
-/// <summary>One cache entry the examination recognised, and the emulator whose cache it is.</summary>
-internal sealed record EmulatorCacheTarget(EmulatorLayout Layout, string Path, string Reason, TargetKind Kind);
+/// <summary>
+/// One cache entry the examination recognised, the emulator whose layout recognised it, and every
+/// emulator that proved the folder it is in, any of which holds it back while it runs.
+/// </summary>
+internal sealed record EmulatorCacheTarget(
+    EmulatorLayout Layout, IReadOnlyList<EmulatorLayout> Owners, string Path, string Reason, TargetKind Kind);
 
 /// <summary>
 /// A cache folder the examination read, the names in it that it recognised, and the kind of entry
@@ -20,7 +24,16 @@ internal sealed record EmulatorCacheFolderReading(string Path, IReadOnlySet<stri
 }
 
 /// <summary>A root proven to be <paramref name="Layout"/>'s, and the cache folders read in it.</summary>
-internal sealed record EmulatorRoot(EmulatorLayout Layout, string Path, IReadOnlyList<EmulatorCacheFolderReading> CacheFolders);
+/// <param name="Owners">
+/// Every layout that proved this folder, this one included. Each fork of yuzu proves the same
+/// <c>user</c> folder where two forks' programs sit beside it, and reads the same caches in it, so
+/// while any of them runs the folder is in use.
+/// </param>
+internal sealed record EmulatorRoot(
+    EmulatorLayout Layout,
+    string Path,
+    IReadOnlyList<EmulatorCacheFolderReading> CacheFolders,
+    IReadOnlyList<EmulatorLayout> Owners);
 
 /// <summary>
 /// One pass over every emulator's candidate roots: prove each, read each proven root's cache folders,
@@ -55,6 +68,8 @@ internal sealed class EmulatorCacheExamination
     /// game's folder met there is answered for by its own caches rather than named as left alone.
     /// </summary>
     private readonly HashSet<string> _gameFolders = new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly HashSet<string> _targeted = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// No root was proven and there is nothing to say: no link declined, nothing unread, and no
@@ -137,9 +152,16 @@ internal sealed class EmulatorCacheExamination
                 + "settings file and no RetroArch in it, so nothing in it was looked at."));
         }
 
+        var folders = examination.Roots.Select(root => reach(root.Path)).ToList();
+
         for (var i = 0; i < examination.Roots.Count; i++)
         {
-            examination.Roots[i] = examination.Read(examination.Roots[i], whyNotOwned, reach, ct);
+            IReadOnlyList<EmulatorLayout> owners =
+            [
+                .. examination.Roots.Where((_, j) => folders[j].IsSameAs(folders[i])).Select(root => root.Layout),
+            ];
+
+            examination.Roots[i] = examination.Read(examination.Roots[i] with { Owners = owners }, whyNotOwned, reach, ct);
         }
 
         return examination;
@@ -192,7 +214,7 @@ internal sealed class EmulatorCacheExamination
             return true;
         }
 
-        Roots.Add(new EmulatorRoot(layout, root, []));
+        Roots.Add(new EmulatorRoot(layout, root, [], [layout]));
         return true;
     }
 
@@ -238,7 +260,7 @@ internal sealed class EmulatorCacheExamination
                 continue;
             }
 
-            if (ReadFolder(layout, folder, ct) is { } recognised)
+            if (ReadFolder(found, folder, ct) is { } recognised)
             {
                 readings.Add(new EmulatorCacheFolderReading(
                     folder.Path,
@@ -251,8 +273,10 @@ internal sealed class EmulatorCacheExamination
     }
 
     /// <returns>The names recognised in the folder, or null where it was not read.</returns>
-    private HashSet<string>? ReadFolder(EmulatorLayout layout, EmulatorCacheFolder folder, CancellationToken ct)
+    private HashSet<string>? ReadFolder(EmulatorRoot root, EmulatorCacheFolder folder, CancellationToken ct)
     {
+        var layout = root.Layout;
+
         switch (LongPath.ProbeDirectory(folder.Path))
         {
             case PathPresence.Absent:
@@ -271,9 +295,7 @@ internal sealed class EmulatorCacheExamination
 
         if (FolderEntries.Of(folder.Path) is not { } entries)
         {
-            Notes.Add(UnreadableRoot.Note(folder.Path));
-            Survivors.Add((folder.Path, UnreadableRoot.UnreachedReason));
-            Unreadable = true;
+            Unlisted(folder.Path);
             return null;
         }
 
@@ -305,7 +327,14 @@ internal sealed class EmulatorCacheExamination
             if (classification.Tier.IsOfferable() && isDirectory == (folder.Kind is TargetKind.Directory))
             {
                 recognised.Add(entry.Name);
-                Targets.Add(new EmulatorCacheTarget(layout, path, classification.Reason, folder.Kind));
+
+                // A folder two layouts proved is read by each, and its cache is one item, whose
+                // owners already name both.
+                if (_targeted.Add(path))
+                {
+                    Targets.Add(new EmulatorCacheTarget(layout, root.Owners, path, classification.Reason, folder.Kind));
+                }
+
                 continue;
             }
 
@@ -329,7 +358,7 @@ internal sealed class EmulatorCacheExamination
 
     /// <summary>
     /// The cache folders inside each game's folder in each of <paramref name="layout"/>'s folders of
-    /// games. Only a folder the layout names as a game's is entered, and a link among them is declined.
+    /// games. Only a folder named by a title id is entered, and a link among them is declined.
     /// </summary>
     private List<EmulatorCacheFolder> GameCacheFolders(EmulatorLayout layout, string root, CancellationToken ct)
     {
@@ -345,25 +374,24 @@ internal sealed class EmulatorCacheExamination
                 continue;
             }
 
-            if (FolderEntries.Of(games.GamesFolder) is not { } entries)
+            var listing = ChildDirectories.Under(games.GamesFolder, SwitchTitleId.IsMatch);
+
+            if (listing.Unreadable)
             {
-                Notes.Add(UnreadableRoot.Note(games.GamesFolder));
-                Survivors.Add((games.GamesFolder, UnreadableRoot.UnreachedReason));
-                Unreadable = true;
+                Unlisted(games.GamesFolder);
                 continue;
             }
 
             Survivors.Add((games.GamesFolder, $"{layout.Name}'s folder of games. Only caches inside each game's folder are removed."));
 
-            foreach (var entry in entries.Where(entry => entry is DirectoryInfo && games.IsGame(entry.Name)))
+            foreach (var link in listing.Links)
+            {
+                DeclineLink(LongPath.Display(link.FullName));
+            }
+
+            foreach (var entry in listing.Directories)
             {
                 var game = LongPath.Display(entry.FullName);
-
-                if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
-                {
-                    DeclineLink(game);
-                    continue;
-                }
 
                 _gameFolders.Add(game);
                 Survivors.Add((game, $"One game's folder in {layout.Name}. Only caches inside it are removed."));
@@ -373,6 +401,19 @@ internal sealed class EmulatorCacheExamination
         }
 
         return folders;
+    }
+
+    /// <summary>A folder Windows said is there and then would not list.</summary>
+    private void Unlisted(string path)
+    {
+        if (!_reported.Add(path))
+        {
+            return;
+        }
+
+        Notes.Add(UnreadableRoot.Note(path));
+        Survivors.Add((path, UnreadableRoot.UnreachedReason));
+        Unreadable = true;
     }
 
     private void Obstructed(DerivedPathObstacle obstacle)

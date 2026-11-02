@@ -32,8 +32,9 @@ namespace Deguffer.Core.Providers;
 /// Settings, see <see cref="EmulatorFolderStore"/>.</para>
 ///
 /// <para><b>Nothing of an emulator's while it runs (§5.3).</b> An emulator writes its shader cache
-/// while a game is played, so while it is in the process table its caches are held back and refused
-/// in Explore, and the clean asks again before each removal.</para>
+/// while a game is played, so while it is in the process table every folder it proved is held back
+/// and refused in Explore, and the clean asks again before each removal. A folder two emulators
+/// proved, as two forks of yuzu can, is held while either runs.</para>
 /// </summary>
 public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
 {
@@ -143,7 +144,7 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
     /// <summary>
     /// §5.2 as §7.1 reads it, at every level from a root to the cache: each root recognises only the
     /// way to its cache folders, and each cache folder only what this pass recognised in it. While an
-    /// emulator runs, none of its roots recognises anything. Every other path the plan names as
+    /// emulator runs, no root it proved recognises anything, whichever layout read the root. Every other path the plan names as
     /// protected is refused outright.
     /// </summary>
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
@@ -153,10 +154,10 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
 
         foreach (var root in examination.Roots)
         {
-            if (IsRunning(root.Layout))
+            if (RunningOwner(root) is { } running)
             {
-                roots.Add(new ToolRoot(root.Path, HeldReason(root.Layout), static _ => false));
-                roots.AddRange(root.CacheFolders.Select(folder => new ToolRoot(folder.Path, HeldReason(root.Layout), static _ => false)));
+                roots.Add(new ToolRoot(root.Path, HeldReason(running), static _ => false));
+                roots.AddRange(root.CacheFolders.Select(folder => new ToolRoot(folder.Path, HeldReason(running), static _ => false)));
                 continue;
             }
 
@@ -204,27 +205,34 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
         }
 
         var notes = new List<PlanNote>(examination.Notes);
-        var held = examination.Roots
-            .Where(root => IsRunning(root.Layout))
-            .ToList();
+        var held = new List<(EmulatorRoot Root, EmulatorLayout Running)>();
 
-        foreach (var layout in held.Select(root => root.Layout).Distinct())
+        foreach (var root in examination.Roots)
+        {
+            if (RunningOwner(root) is { } running)
+            {
+                held.Add((root, running));
+            }
+        }
+
+        foreach (var layout in held.Select(root => root.Running).Distinct())
         {
             notes.Add(new PlanNote(PlanNoteSeverity.Warning, $"Left {layout.Name}'s shader caches alone: {HeldReason(layout)}"));
         }
 
-        var heldLayouts = held.Select(root => root.Layout).ToHashSet();
+        // One check for each set of owners, so a folder two emulators share is asked about both.
+        var stillClosed = new Dictionary<IReadOnlyList<EmulatorLayout>, IUseCheck>(ReferenceEqualityComparer.Instance);
 
         var (steps, measured) = await PlanDeletionsAsync(
             [
                 .. examination.Targets
-                    .Where(target => !heldLayouts.Contains(target.Layout))
+                    .Where(target => !target.Owners.Any(IsRunning))
                     .Select(target => new DeletionTarget(
                         target.Path,
                         target.Reason,
                         Kind: target.Kind,
                         Group: target.Layout.Name,
-                        UseCheck: _stillClosed[target.Layout])),
+                        UseCheck: StillClosed(target.Owners, stillClosed))),
             ],
             keep,
             ct).ConfigureAwait(false);
@@ -250,8 +258,8 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
             // the cache inside is taken from.
             ProtectedPaths = Protect(
             [
-                .. held.SelectMany(root => new[] { root.Path }.Concat(root.CacheFolders.Select(folder => folder.Path))
-                        .Select(path => (Path: path, Reason: HeldReason(root.Layout))))
+                .. held.SelectMany(held => new[] { held.Root.Path }.Concat(held.Root.CacheFolders.Select(folder => folder.Path))
+                        .Select(path => (Path: path, Reason: HeldReason(held.Running))))
                     .Concat(examination.Survivors),
             ]),
             Notes = notes,
@@ -264,6 +272,24 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
     }
 
     private bool IsRunning(EmulatorLayout layout) => Inspector.FindRunning(layout.ProcessNames).Count > 0;
+
+    /// <summary>The first emulator that proved <paramref name="root"/>'s folder and is running, if any.</summary>
+    private EmulatorLayout? RunningOwner(EmulatorRoot root) => root.Owners.FirstOrDefault(IsRunning);
+
+    private IUseCheck StillClosed(IReadOnlyList<EmulatorLayout> owners, Dictionary<IReadOnlyList<EmulatorLayout>, IUseCheck> checks)
+    {
+        if (owners is [var only])
+        {
+            return _stillClosed[only];
+        }
+
+        if (!checks.TryGetValue(owners, out var check))
+        {
+            checks[owners] = check = new RunningProcessCheck(Inspector, [.. owners.SelectMany(owner => owner.ProcessNames)]);
+        }
+
+        return check;
+    }
 
     private static string HeldReason(EmulatorLayout layout) =>
         $"{layout.Name} is running and writes its shader cache while a game is played, so the cache is left "

@@ -33,8 +33,9 @@ namespace Deguffer.Core.Providers;
 /// declined rather than read, and nothing below a root is walked except a cache folder, so neither
 /// is followed.</para>
 ///
-/// <para><b>yuzu's layout is inferred.</b> Its source is no longer published. The folder, the cache
-/// path and the program names are those Citron and Eden inherited from it unchanged.</para>
+/// <para><b>yuzu's layout is inferred.</b> Its source is no longer published. Its folder and
+/// program names are the ones its forks renamed (Eden's build still names its targets <c>yuzu</c> and
+/// <c>yuzu-cmd</c>), and its cache path is the <c>shader</c> folder Citron kept unchanged.</para>
 /// </summary>
 public sealed class YuzuFamilyLayout : EmulatorLayout
 {
@@ -164,7 +165,6 @@ public sealed class YuzuFamilyLayout : EmulatorLayout
     [
         new EmulatorGameCaches(
             Path.Combine(root, _shaderFolder),
-            SwitchTitleId.IsMatch,
             game =>
             [
                 new EmulatorCacheFolder(

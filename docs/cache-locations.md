@@ -3132,10 +3132,10 @@ boots. Deguffer offers the second and never the first, as it does for Cemu.
 | yuzu | `%APPDATA%\yuzu`, and the same as Eden for a folder that holds `yuzu.exe` or `yuzu-cmd.exe` | `config\qt-config.ini` |
 
 **Add an emulator folder in Settings for a portable install, and for every RPCS3 install.** RPCS3
-keeps everything beside `rpcs3.exe`, wherever you unpacked it, and a portable Cemu, Dolphin or PCSX2
-does the same. Windows records none of those places anywhere Deguffer can rely on, so Deguffer does
+keeps everything beside `rpcs3.exe`, wherever you unpacked it, and a portable Cemu, Dolphin, PCSX2,
+Ryujinx, Eden, Citron or yuzu does the same. Windows records none of those places anywhere Deguffer can rely on, so Deguffer does
 not search your drives for them. A folder you add is looked in only for the settings file in the
-table. A folder with none in it gets a note on the plan, and this row touches nothing in it. A
+table, and for Eden, Citron and yuzu also for the program. A folder with none in it gets a note on the plan, and this row touches nothing in it. A
 folder that holds RetroArch gets no note, because the
 [RetroArch rows](#retroarchs-downloaded-shaders-databases-and-thumbnails) answer for it.
 
@@ -3155,7 +3155,8 @@ folder named by a game's serial, such as `BLUS30443`, is offered, which is the f
 **Remove All Caches** removes. In PCSX2's cache folder, only the shader and pipeline files each
 renderer writes are offered, as files, because the same folder holds other things. In the Switch
 emulators, only a folder named by a game's title id, such as `0100f2c0115b6000`, is entered, so
-Citron's `shader\nvidia` and anything else beside the game folders is left alone.
+Citron's `shader\nvidia` is left alone, and so is everything beside the game folders except Eden's
+`vulkan_static_pipelines.bin`.
 
 **PCSX2's cache folder is where PCSX2's settings put it.** `[Folders] Cache` in `inis\PCSX2.ini` can
 move it anywhere, and Deguffer reads it rather than assuming the default.
@@ -3166,7 +3167,8 @@ folder a setting names inside the emulator's folder that way is still treated as
 refuses each at both names.
 
 **Nothing of an emulator's while it runs.** An emulator writes its cache while you play, so while
-one is running its caches are not offered, the plan says why, and Explore refuses them. The clean
+one is running its caches are not offered, the plan says why, and Explore refuses them. A folder that
+two forks of yuzu both use is held back while either one runs. The clean
 asks again before it removes each item, so an emulator started while the preview is on screen holds
 its cache back too.
 
@@ -3201,7 +3203,7 @@ are asserted by name after a clean:
 | Ryujinx | `guest.toc`, `guest.data`, `shared.toc`, `shared.data` in each game's `cache\shader` | The guest shader cache. Built only by playing, often shared, and the host cache is compiled from it |
 | Ryujinx | `system`, `bis`, `sdcard`, `profiles` | Your keys and firmware, the emulated storage with your saves and games, the SD card and your profiles |
 | Ryujinx | `mods`, `Config.json`, and each game's `Config.json` and `gui` | What you installed and chose |
-| Eden, Citron, yuzu | `vulkan.bin` and `opengl.bin` in each game's folder | The guest shader cache. Built only by playing, often shared, and the pipeline cache is compiled from it |
+| Eden, Citron, yuzu | `vulkan.bin` in each game's folder, and `opengl.bin` from Eden's and yuzu's OpenGL renderer | The guest shader cache. Built only by playing, often shared, and the pipeline cache is compiled from it |
 | Eden, Citron, yuzu | `keys`, `nand`, `sdmc` | Your keys, the emulated storage with your saves, firmware and games, and the SD card |
 | Eden, Citron, yuzu | `load`, `dump`, `amiibo`, `tas`, `screenshots`, `play_time`, `config` | What you installed, dumped, recorded and chose |
 | Eden | `lossless`, `post_shaders`, `post_presets` | What you added for scaling and post-processing |

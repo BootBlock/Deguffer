@@ -83,7 +83,6 @@ public sealed partial class RyujinxLayout : EmulatorLayout
     [
         new EmulatorGameCaches(
             Path.Combine(root, "games"),
-            SwitchTitleId.IsMatch,
             game =>
             [
                 new EmulatorCacheFolder(
