@@ -36,8 +36,8 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>NVIDIA's cache appears once more inside each packaged application.</b> Windows gives a
 /// packaged application <c>Packages\&lt;package&gt;\AC</c> in place of the local application data,
-/// so the driver rendering for it writes <c>AC\NVIDIA\DXCache</c> there: nineteen containers held one
-/// on the machine measured. Those roots are found rather than known, so they come from
+/// so the driver rendering for it writes <c>AC\NVIDIA\DXCache</c> and <c>AC\NVIDIA\GLCache</c>
+/// there: nineteen containers held the first on the machine measured. Those roots are found rather than known, so they come from
 /// <see cref="PackageContainers"/>, once a pass, and are declared in <see cref="ToolRoots"/> with
 /// the rows that are known.
 /// The container is never a target, and §5.6 asserts it survived: it holds the application's own
@@ -129,10 +129,10 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
     /// The vendor folder NVIDIA's driver writes inside a packaged application's container, and what
     /// may be deleted from it.
     ///
-    /// <para>Only <c>DXCache</c>, because it is the only name measured there: nineteen containers
-    /// held that and nothing else. <c>GLCache</c> is plausible, since the container stands in for the
-    /// local application data where NVIDIA writes both, but a name that has not been seen in a
-    /// directory is Tier 4 in that directory, as it is under LocalLow.</para>
+    /// <para>The two names the driver writes in the local application data, each measured inside a
+    /// container. Nineteen containers held <c>DXCache</c>, and an OpenGL program linked from inside
+    /// an AppContainer on an NVIDIA card wrote <c>AC\NVIDIA\GLCache</c>, laid out as it is outside
+    /// one. Nothing else has been seen there, and anything else is Tier 4.</para>
     /// </summary>
     public static readonly PackagedShaderCacheRoot PackagedNvidia = new(
         "NVIDIA",
@@ -143,6 +143,11 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
                 SafetyTier.RegenerableCache,
                 "Compiled Direct3D shader pipelines the driver wrote for this app. It rebuilds each one "
                 + "the first time it is needed again."),
+            new ChildClassification(
+                "GLCache",
+                SafetyTier.RegenerableCache,
+                "Compiled OpenGL and Vulkan program binaries the driver wrote for this app. It rebuilds "
+                + "them on demand."),
         ]),
         [("accounts", "NVIDIA account and sign-in state. It is not a shader cache, and it is named "
             + "here whether or not this folder currently holds one.")]);
