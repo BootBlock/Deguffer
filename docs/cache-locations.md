@@ -4846,7 +4846,9 @@ already installed on your machine; it downloads its own pinned builds so that a 
 reproducible. Each Playwright release pins specific browser revisions, and the folder name records
 which: `chromium-1228`, `firefox-1532`, `webkit-2210`. Alongside the browsers sit helper downloads
 with the same naming — `ffmpeg-1011` for video capture, `winldd-1007` for dependency checks, and
-`chromium_headless_shell-1228` for headless runs.
+`chromium_headless_shell-1228` for headless runs. Playwright writes every hyphen in a download's own
+name as an underscore, so its pre-release builds appear as `chromium_tip_of_tree-1229` and
+`firefox_beta-1533`.
 
 **This is why the folder grows.** Upgrading Playwright downloads a new revision; it does not
 necessarily remove the old one straight away. A project that has moved through several Playwright
