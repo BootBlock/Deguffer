@@ -1619,7 +1619,7 @@ connections where that is a real cost.
 
 | | |
 | --- | --- |
-| **Location** | `%LOCALAPPDATA%\NVIDIA\DXCache` and `GLCache`, `%USERPROFILE%\AppData\LocalLow\NVIDIA\DXCache`, `%LOCALAPPDATA%\Packages\<package>\AC\NVIDIA\DXCache` in every packaged app, `%LOCALAPPDATA%\AMD\DxCache`, `%LOCALAPPDATA%\Intel\ShaderCache`, `%USERPROFILE%\AppData\LocalLow\Intel\ShaderCache`, `%LOCALAPPDATA%\D3DSCache` |
+| **Location** | `%LOCALAPPDATA%\NVIDIA\DXCache` and `GLCache`, `%USERPROFILE%\AppData\LocalLow\NVIDIA\DXCache`, `%LOCALAPPDATA%\Packages\<package>\AC\NVIDIA\DXCache` and `GLCache` in every packaged app, `%LOCALAPPDATA%\AMD\DxCache`, `%LOCALAPPDATA%\Intel\ShaderCache`, `%USERPROFILE%\AppData\LocalLow\Intel\ShaderCache`, `%LOCALAPPDATA%\D3DSCache` |
 | **Method** | Delete the recognised cache directories |
 | **Typical size** | A few megabytes to several gigabytes. 3.2 GB was measured on one workstation, nearly all of it NVIDIA's `DXCache`. On another, the two NVIDIA folders held 163 MB and 161 MB |
 
@@ -1647,9 +1647,10 @@ measured on, that was the only Intel shader cache: `%LOCALAPPDATA%\Intel` held n
 
 **NVIDIA's cache also appears inside each packaged app.** Windows runs a Store or packaged app in a
 container, and gives it `%LOCALAPPDATA%\Packages\<package>\AC` in place of your local application
-data. The driver rendering for that app writes `AC\NVIDIA\DXCache` there, so there is one more
-cache for each packaged app that has drawn anything. They are small on most machines, about 7 MB
-across 19 apps on the one measured, but a packaged game is where one would be large.
+data. The driver rendering for that app writes `AC\NVIDIA\DXCache` there, and `AC\NVIDIA\GLCache`
+for an app that draws through OpenGL, so there is more cache for each packaged app that has drawn
+anything. The `DXCache` folders are small on most machines, about 7 MB across 19 apps on the one
+measured, but a packaged game is where one would be large.
 
 ### What Deguffer does
 
@@ -1666,8 +1667,9 @@ directly because that is what it can name, offer and check afterwards.
 Only `DXCache` is recognised in the LocalLow folder, because that is the only cache that has been
 observed there. If NVIDIA writes a `GLCache` there on your machine, Deguffer leaves it alone and
 says so, rather than assuming a name it has seen elsewhere applies here too. The same rule holds
-inside a packaged app's `AC\NVIDIA` folder, which only ever held `DXCache` where it was measured,
-and in the LocalLow `Intel` folder, which only ever held `ShaderCache`.
+in the LocalLow `Intel` folder, which only ever held `ShaderCache`. A packaged app's `AC\NVIDIA`
+folder is recognised for both `DXCache` and `GLCache`, because the driver was seen writing each of
+them there, and anything else in it is left alone.
 
 The packaged apps' caches are listed under one heading, **NVIDIA, inside packaged apps**, one item
 for each app, named by its package.

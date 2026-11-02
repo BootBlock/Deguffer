@@ -1073,6 +1073,11 @@ only the Linux documentation for AMDVLK names `VkCache`, and the others come fro
 each needs a measurement on an AMD machine. `C:\ProgramData\NVIDIA Corporation\NV_Cache` was
 rejected: absent on the machine measured, and described only for drivers from 2021 and older.
 
+NVIDIA's `GLCache` inside a packaged app's container has since been measured and added. An OpenGL
+program linked from inside an AppContainer on an NVIDIA card wrote `AC\NVIDIA\GLCache`, with the
+same hashed layout the driver uses under `%LOCALAPPDATA%\NVIDIA\GLCache`, so the container's
+`NVIDIA` folder now recognises `DXCache` and `GLCache`. AMD's names are still open.
+
 The Steam shader cache has since shipped as a provider of its own, at Tier 2 rather than Tier 1:
 Valve distributes those pipelines, so removing them costs a download rather than a local rebuild. It
 reads every library from Steam's own `libraryfolders.vdf`, and `docs/cache-locations.md` records the
