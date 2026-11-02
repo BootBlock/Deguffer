@@ -38,7 +38,7 @@ largest files inside it:
 
 Besides Settings and About, Deguffer has six pages:
 
-- [Storage](#storage) checks 107 sources of waste, from package-manager and browser caches to
+- [Storage](#storage) checks 108 sources of waste, from package-manager and browser caches to
   `Windows.old` and old restore points, and puts each one in a [safety tier](#safety-tiers). You
   choose what goes, and when the clean has finished Deguffer checks that everything it said it would
   leave alone is still there.
@@ -121,7 +121,7 @@ remove one by any route.
 
 ## Storage
 
-Each of the 107 sources has its own provider, which knows what that location is and what sits next
+Each of the 108 sources has its own provider, which knows what that location is and what sits next
 to it. Rows for tools you do not have are hidden unless you ask the Storage page to show them. Build
 output and project caches, such as `node_modules`, `obj`, Rust's `target`, Python's `.tox` and
 `.pytest_cache` folders, and the caches in Visual Studio's `.vs` folders, are only looked for
@@ -160,6 +160,7 @@ you would lose by deleting it. By default, only Tier 1 rows start out selected:
 | pip package cache | |
 | uv package cache | |
 | Poetry package cache | `poetry cache clear` for each repository; never its `virtualenvs` |
+| pre-commit hook environments | Cleared with `pre-commit gc`, which keeps the hooks a project still uses; never `pre-commit clean`, which also deletes the unstaged changes pre-commit stashed during a commit |
 | pytest caches | `.pytest_cache` folders under your own source folders, only where pytest's own cache tag is inside and a pytest settings file is next to it |
 | mypy caches | `.mypy_cache` folders under your own source folders, only where mypy's own cache tag is inside and a mypy settings file is next to it |
 | ruff caches | `.ruff_cache` folders under your own source folders, only where ruff's own cache tag and `.gitignore` are inside and a ruff settings file is next to it |

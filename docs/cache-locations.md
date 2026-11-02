@@ -1631,6 +1631,84 @@ this is not about environments being expensive to rebuild.
 
 ---
 
+## pre-commit hook environments
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%USERPROFILE%\.cache\pre-commit`, or `PRE_COMMIT_HOME`, or `pre-commit` inside `XDG_CACHE_HOME` |
+| **Method** | `pre-commit gc`. Never `pre-commit clean`, and never a path |
+| **Typical size** | Grows with every hook repository and version a project names, each with its own installed environment |
+
+### What it is
+
+[pre-commit](https://pre-commit.com/) runs checks before each Git commit. For every hook repository
+a project's `.pre-commit-config.yaml` names, it clones the repository into its store and installs an
+environment for it, usually a Python virtual environment or a Node install. Its documentation calls
+the store "a cache of installed hook repositories which grows over time". pre-commit's source
+([`store.py`](https://github.com/pre-commit/pre-commit/blob/main/pre_commit/store.py)) defines what
+is in it:
+
+- **`repo` and eight random characters**: one cloned hook repository and its environment.
+- **`db.db`**: which repository and version each folder holds, and which configuration files have
+  used the store.
+- **`.lock`** and **`README`**: the lock that keeps two pre-commit runs apart, and a note naming the
+  folder's owner.
+- **`patch<time>-<process>`**: unstaged changes that pre-commit stashed while it checked a commit
+  ([`staged_files_only.py`](https://github.com/pre-commit/pre-commit/blob/main/pre_commit/staged_files_only.py)).
+  pre-commit never removes these, and one can be the only copy of that work.
+
+pre-commit finds the store through `PRE_COMMIT_HOME`, then `XDG_CACHE_HOME`, then
+`%USERPROFILE%\.cache\pre-commit`. An empty variable counts as unset, and a variable of only spaces
+is a relative path to pre-commit.
+
+### What Deguffer does
+
+It runs `pre-commit gc`. That command reads every configuration file recorded in `db.db`, keeps each
+hook repository one of them still names, forgets each configuration that no longer loads, and removes
+the rest, all under the store's own lock
+([`gc.py`](https://github.com/pre-commit/pre-commit/blob/main/pre_commit/commands/gc.py)).
+
+**It never runs `pre-commit clean`.** That command deletes the whole store
+([`clean.py`](https://github.com/pre-commit/pre-commit/blob/main/pre_commit/commands/clean.py)), and
+with it the stashed changes.
+
+**It never removes a repository folder by path.** The folder's row stays in `db.db`, and every
+project that uses it then fails until the store is cleaned. Explore refuses everything in the store
+for the same reason.
+
+`gc` has no dry run, so the size shown is every hook repository folder in the store, given as
+"up to": `gc` keeps those a project still uses. The size reported after the run is measured.
+
+The store is read from the variables as the `pre-commit` Deguffer starts sees them, because that is
+the store `gc` acts on. Deguffer offers nothing if a variable holds a relative path, or names a folder
+such as your profile, and Explore still refuses pre-commit's files, hook folders and stashed changes
+there. If the store is a link to somewhere else, Deguffer says so and leaves it alone.
+If no `pre-commit` command is on the PATH, the row says how many hook repositories the store holds and
+offers nothing, because only `gc` can tell which ones are unused. A started `gc` is left to finish,
+because it records its removals only at the end.
+
+### What is protected
+
+The store, `db.db`, `.lock`, `README`, every stashed `patch` file and everything else that is not a
+hook repository folder are named survivors, and Deguffer asserts that each survived. The plan says
+how many stashed changes the store holds.
+
+### What it costs you
+
+Nothing for a project whose configuration pre-commit can still read. A project whose configuration
+it cannot read, such as one on a drive that is not connected or one that was deleted, installs its
+hooks again the next time pre-commit runs there, which pre-commit warns may take a few minutes.
+
+### Why Tier 1
+
+Every hook repository `gc` removes is a clone of a public repository at a fixed version, and
+pre-commit installs it again by itself when a project next needs it. The stashed changes are the one
+part with no other copy, and they are the part Deguffer leaves.
+
+---
+
 ## PlatformIO cache and unused packages
 
 **Tier 2 — regenerable, with cost.** Not pre-selected.
@@ -1719,7 +1797,7 @@ connections where that is a real cost.
 
 | | |
 | --- | --- |
-| **Location** | `%LOCALAPPDATA%\NVIDIA\DXCache` and `GLCache`, `%USERPROFILE%\AppData\LocalLow\NVIDIA\DXCache`, `%LOCALAPPDATA%\Packages\<package>\AC\NVIDIA\DXCache` in every packaged app, `%LOCALAPPDATA%\AMD\DxCache`, `%LOCALAPPDATA%\Intel\ShaderCache`, `%USERPROFILE%\AppData\LocalLow\Intel\ShaderCache`, `%LOCALAPPDATA%\D3DSCache` |
+| **Location** | `%LOCALAPPDATA%\NVIDIA\DXCache` and `GLCache`, `%USERPROFILE%\AppData\LocalLow\NVIDIA\DXCache`, `%LOCALAPPDATA%\Packages\<package>\AC\NVIDIA\DXCache` and `GLCache` in every packaged app, `%LOCALAPPDATA%\AMD\DxCache`, `%LOCALAPPDATA%\Intel\ShaderCache`, `%USERPROFILE%\AppData\LocalLow\Intel\ShaderCache`, `%LOCALAPPDATA%\D3DSCache` |
 | **Method** | Delete the recognised cache directories |
 | **Typical size** | A few megabytes to several gigabytes. 3.2 GB was measured on one workstation, nearly all of it NVIDIA's `DXCache`. On another, the two NVIDIA folders held 163 MB and 161 MB |
 
@@ -1747,9 +1825,10 @@ measured on, that was the only Intel shader cache: `%LOCALAPPDATA%\Intel` held n
 
 **NVIDIA's cache also appears inside each packaged app.** Windows runs a Store or packaged app in a
 container, and gives it `%LOCALAPPDATA%\Packages\<package>\AC` in place of your local application
-data. The driver rendering for that app writes `AC\NVIDIA\DXCache` there, so there is one more
-cache for each packaged app that has drawn anything. They are small on most machines, about 7 MB
-across 19 apps on the one measured, but a packaged game is where one would be large.
+data. The driver rendering for that app writes `AC\NVIDIA\DXCache` there, and `AC\NVIDIA\GLCache`
+for an app that draws through OpenGL, so there is more cache for each packaged app that has drawn
+anything. The `DXCache` folders are small on most machines, about 7 MB across 19 apps on the one
+measured, but a packaged game is where one would be large.
 
 ### What Deguffer does
 
@@ -1766,8 +1845,9 @@ directly because that is what it can name, offer and check afterwards.
 Only `DXCache` is recognised in the LocalLow folder, because that is the only cache that has been
 observed there. If NVIDIA writes a `GLCache` there on your machine, Deguffer leaves it alone and
 says so, rather than assuming a name it has seen elsewhere applies here too. The same rule holds
-inside a packaged app's `AC\NVIDIA` folder, which only ever held `DXCache` where it was measured,
-and in the LocalLow `Intel` folder, which only ever held `ShaderCache`.
+in the LocalLow `Intel` folder, which only ever held `ShaderCache`. A packaged app's `AC\NVIDIA`
+folder is recognised for both `DXCache` and `GLCache`, because the driver was seen writing each of
+them there, and anything else in it is left alone.
 
 The packaged apps' caches are listed under one heading, **NVIDIA, inside packaged apps**, one item
 for each app, named by its package.
