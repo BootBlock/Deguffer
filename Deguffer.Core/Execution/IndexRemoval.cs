@@ -49,7 +49,7 @@ internal sealed record IndexRemoval(
     /// </summary>
     /// <param name="indexes">
     /// What the removal of each of <see cref="DeleteDirectoryStep.IndexedBy"/> gathered, in the same
-    /// order, which is what the run judged the step on. Nothing is listed again.
+    /// order, which is what the run judged the step on. No tree is walked again.
     /// </param>
     public static async Task<IndexRemoval> RemoveAsync(
         DeleteDirectoryStep step,

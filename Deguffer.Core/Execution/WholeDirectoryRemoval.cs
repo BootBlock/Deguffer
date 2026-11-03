@@ -43,7 +43,7 @@ internal static class WholeDirectoryRemoval
         try
         {
             // The index first and the directory last, the order the removals below take them in.
-            gathered = await DirectoryRemover.GatherAsync([.. step.IndexedBy, step.Path], keep, fs, ct).ConfigureAwait(false);
+            gathered = await GatheredRemoval.TakeAsync([.. step.IndexedBy, step.Path], keep, fs, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

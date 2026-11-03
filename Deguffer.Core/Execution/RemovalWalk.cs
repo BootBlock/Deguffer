@@ -36,6 +36,11 @@ namespace Deguffer.Core.Execution;
 /// listed, a file most often, on the terms <paramref name="Unlisted"/> gives. Kept apart from it,
 /// because Windows refused nothing there.
 /// </param>
+/// <param name="RecentFolders">
+/// How many folders inside the root the guard would protect by their own timestamps. The removal takes
+/// each once it is empty all the same, so only a removal that goes whole or not at all reads it: a
+/// folder written in or taken from since the guard's moment may be one its owner is working in again.
+/// </param>
 internal sealed record RemovalInventory(
     IReadOnlyList<GatheredDirectory> Directories,
     IReadOnlyList<WalkEntry> Files,
@@ -45,7 +50,8 @@ internal sealed record RemovalInventory(
     IReadOnlyList<string> MailStores,
     IReadOnlyList<string> UserWork,
     IReadOnlyList<string> Unlisted,
-    IReadOnlyList<string> NotFolders);
+    IReadOnlyList<string> NotFolders,
+    int RecentFolders);
 
 /// <summary>A directory the walk reached, in the extended form it met it in.</summary>
 /// <param name="Parent">
@@ -139,6 +145,7 @@ internal static class RemovalWalk
         private List<string>? _userWork;
         private List<string>? _mailStores;
         private int _kept;
+        private int _recentFolders;
 
         // How the listing of this folder was refused, which is the evidence a removal that goes whole
         // or not at all is judged on. See RemovalInventory.Unlisted.
@@ -257,6 +264,11 @@ internal static class RemovalWalk
 
             if (entry.IsDirectory)
             {
+                if (keep.Protects(entry.NewestFileTime))
+                {
+                    _recentFolders++;
+                }
+
                 var folder = new Folder();
                 (_folders ??= []).Add(folder);
                 descend(entry, folder);
@@ -286,6 +298,7 @@ internal static class RemovalWalk
             var unlisted = new List<string>();
             var notFolders = new List<string>();
             var kept = 0;
+            var recentFolders = 0;
 
             var pending = new Stack<(Folder Folder, int Parent)>();
             pending.Push((this, GatheredDirectory.NoParent));
@@ -302,6 +315,7 @@ internal static class RemovalWalk
                 userWork.AddRange(folder._userWork ?? []);
                 mailStores.AddRange(folder._mailStores ?? []);
                 kept += folder._kept;
+                recentFolders += folder._recentFolders;
 
                 switch (folder._refused)
                 {
@@ -324,7 +338,7 @@ internal static class RemovalWalk
                 }
             }
 
-            return new RemovalInventory(directories, files, links, kept, spared, mailStores, userWork, unlisted, notFolders);
+            return new RemovalInventory(directories, files, links, kept, spared, mailStores, userWork, unlisted, notFolders, recentFolders);
         }
 
         // The walk lists every folder it is asked to descend into before it returns, so one never

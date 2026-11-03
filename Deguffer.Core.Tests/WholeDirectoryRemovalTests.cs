@@ -190,6 +190,49 @@ public sealed class WholeDirectoryRemovalTests : IDisposable
     }
 
     /// <summary>
+    /// A folder inside whose own timestamps the guard protects stops an all-or-nothing step, though
+    /// every file in it is old: something was written in it or taken out of it since, and its owner may
+    /// be working in it again. The same tree with the folder dated old goes whole.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ARecentFolderAloneStopsAnAllOrNothingStep(bool folderIsRecent)
+    {
+        var month = DateTime.UtcNow.AddDays(-30);
+        var output = _temp.CreateDirectory("agent");
+        var image = _temp.CreateFile(1024, "agent", "Backup", "winre.wim");
+        Date(image);
+        var backup = Path.GetDirectoryName(image)!;
+
+        if (!folderIsRecent)
+        {
+            Directory.SetCreationTimeUtc(backup, month);
+            Directory.SetLastWriteTimeUtc(backup, month);
+        }
+
+        var result = await Run(
+            new DeleteDirectoryStep(output, "Leftovers") { IsAllOrNothing = true }, MinimumAge.WithinHours(8, DateTime.UtcNow));
+
+        var outcome = Assert.Single(result.Steps);
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+        Assert.Equal(!folderIsRecent, outcome.Succeeded);
+        Assert.Equal(folderIsRecent, File.Exists(image));
+
+        if (folderIsRecent)
+        {
+            Assert.StartsWith("Nothing was removed: something inside ", outcome.Message!, StringComparison.Ordinal);
+        }
+
+        void Date(string file)
+        {
+            File.SetCreationTimeUtc(file, month);
+            File.SetLastWriteTimeUtc(file, month);
+            File.SetLastAccessTimeUtc(file, month);
+        }
+    }
+
+    /// <summary>
     /// An index Windows will not remove in full leaves the directory it indexes untouched, because
     /// what is left of the index still names outputs by where they are (§5.6).
     /// </summary>

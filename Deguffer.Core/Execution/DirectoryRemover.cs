@@ -57,20 +57,6 @@ public static class DirectoryRemover
             CancellationToken.None);
 
     /// <summary>
-    /// Gather every tree in <paramref name="paths"/> as its removal would, off the calling thread, and
-    /// delete nothing. Each is then removed by <see cref="DeleteAsync"/>, which lists nothing again.
-    /// </summary>
-    /// <exception cref="OperationCanceledException">The clean was cancelled before every tree was gathered.</exception>
-    internal static Task<IReadOnlyList<GatheredRemoval>> GatherAsync(
-        IReadOnlyList<string> paths,
-        MinimumAge keep,
-        IFileSystem fs,
-        CancellationToken ct) =>
-        WorkerThreads.Shared.RunAsync<IReadOnlyList<GatheredRemoval>>(
-            () => [.. paths.Select(path => Gather(path, keep, RemovalBounds.None, fs, ct))],
-            ct);
-
-    /// <summary>
     /// Delete what <paramref name="gathered"/> holds, on the terms of
     /// <see cref="RemoveAsync(string, MinimumAge, IProgress{double}?, CancellationToken, IFileSystem?, RemovalBounds?)"/>,
     /// whose cancellation is never thrown either.
@@ -99,7 +85,7 @@ public static class DirectoryRemover
 
         try
         {
-            gathered = Gather(path, keep, bounds, fs, ct);
+            gathered = GatheredRemoval.Take(path, keep, bounds, fs, ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -107,70 +93,6 @@ public static class DirectoryRemover
         }
 
         return Delete(gathered, progress, fs, ct);
-    }
-
-    /// <summary>
-    /// What stands at <paramref name="path"/>, and for a directory, everything its removal would act
-    /// on. Nothing is deleted.
-    /// </summary>
-    /// <exception cref="OperationCanceledException">The walk was cancelled.</exception>
-    internal static GatheredRemoval Gather(
-        string path,
-        MinimumAge keep,
-        RemovalBounds bounds,
-        IFileSystem fs,
-        CancellationToken ct)
-    {
-        var extended = LongPath.Extended(path);
-        var presence = fs.ProbeDirectory(extended);
-
-        // The directory probe answers Absent for a file, so absence is decided by the entry probe. A
-        // file that has taken the directory's name since the preview is nothing this step planned to
-        // remove, and reading it as the directory gone reported "Removed." for a path still occupied —
-        // and let the directory an index belongs to go while a file stood where the index was.
-        if (presence is PathPresence.Absent)
-        {
-            presence = fs.ProbeEntry(extended);
-
-            if (presence is PathPresence.Present)
-            {
-                return new GatheredRemoval.NotAFolder(extended, bounds);
-            }
-        }
-
-        switch (presence)
-        {
-            case PathPresence.Absent:
-                return new GatheredRemoval.Gone(extended, bounds);
-
-            case PathPresence.Refused:
-                return new GatheredRemoval.Refused(extended, bounds);
-        }
-
-        // The root is the one entry no enumeration classified, so it is the one place a link can
-        // still be walked through. Enumerating a junction returns the target's children, which are
-        // ordinary directories and files, so the walk would gather a tree nobody looked at and the
-        // §5.6 negative — written against paths inside the profile — would pass. The link is removed
-        // and nothing behind it, exactly as the walk does for a link it finds below.
-        if (fs.IsReparsePoint(extended))
-        {
-            // The guard covers the root exactly as the walk covers a link below it, and for the same
-            // reason: a junction carries its own timestamps, so one made an hour ago is an hour old
-            // whatever it points at. Without this a cache directory somebody had just relocated with
-            // mklink was removed under a plan promising nothing touched in the last eight hours
-            // would be — silently, because a link's length is zero and the outcome reported success.
-            //
-            // Asked of the path rather than of an enumerated entry, because a root is the one thing
-            // no enumeration classified. FileRemover re-asks the same question the same way.
-            var kept = fs.TryGetNewestFileTime(extended) is { } newest && keep.Protects(newest);
-
-            return new GatheredRemoval.Link(extended, bounds, kept);
-        }
-
-        // Two passes: gather the tree first so progress is a real fraction rather than a guess,
-        // then delete depth-first. Gathering also means a mid-run enumeration failure cannot
-        // leave us deleting a partially-understood tree.
-        return new GatheredRemoval.Tree(extended, bounds, RemovalWalk.Gather(extended, keep, bounds, fs, ct));
     }
 
     private static RemovalOutcome Delete(
