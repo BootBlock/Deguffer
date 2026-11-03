@@ -61,12 +61,6 @@ public sealed class PipenvCacheProvider : CleanupProviderBase
     /// <summary>The recognised children that are pip's own layout, which pip's purge empties.</summary>
     private static readonly HashSet<string> PipLayout = new(["http", "http-v2", "wheels"], StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// The commands pip may be installed as. Either drives a pip that empties whichever cache
-    /// directory it is given.
-    /// </summary>
-    private static readonly string[] PipCommands = ["pip", "pip3"];
-
     private static readonly IReadOnlyList<CacheLevel> Levels = [new CacheLevel(string.Empty, Children)];
 
     private const string ToolRootReason =
@@ -199,7 +193,7 @@ public sealed class PipenvCacheProvider : CleanupProviderBase
 
         List<PlanNote> notes = [.. walk.Notes, .. spared.Select(CacheLevelWalk.SparedNote)];
 
-        var pip = FindPip();
+        var pip = PipCommand.Find(Environment);
         var pipFolders = walk.Targets.Where(target => PipLayout.Contains(Path.GetFileName(target.Path))).ToList();
 
         // pip's purge reaches every one of its three folders that is there, so it is sent only where the
@@ -277,9 +271,6 @@ public sealed class PipenvCacheProvider : CleanupProviderBase
             WasNotExamined = walk.Targets.Count == 0 && walk.Declined.Count > 0,
         };
     }
-
-    private string? FindPip() =>
-        PipCommands.Select(Environment.FindExecutable).FirstOrDefault(found => found is not null);
 
     private IEnumerable<string> Roots() =>
         new[] { ResolveRoot(), DefaultRoot }.OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase);
