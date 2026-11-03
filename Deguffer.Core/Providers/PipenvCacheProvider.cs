@@ -58,9 +58,6 @@ public sealed class PipenvCacheProvider : CleanupProviderBase
             + "the index again at its next lock."),
     ]);
 
-    /// <summary>The recognised children that are pip's own layout, which pip's purge empties.</summary>
-    private static readonly HashSet<string> PipLayout = new(["http", "http-v2", "wheels"], StringComparer.OrdinalIgnoreCase);
-
     private static readonly IReadOnlyList<CacheLevel> Levels = [new CacheLevel(string.Empty, Children)];
 
     private const string ToolRootReason =
@@ -194,13 +191,13 @@ public sealed class PipenvCacheProvider : CleanupProviderBase
         List<PlanNote> notes = [.. walk.Notes, .. spared.Select(CacheLevelWalk.SparedNote)];
 
         var pip = PipCommand.Find(Environment);
-        var pipFolders = walk.Targets.Where(target => PipLayout.Contains(Path.GetFileName(target.Path))).ToList();
+        var pipFolders = walk.Targets.Where(target => PipLayoutTarget.Folders.Contains(Path.GetFileName(target.Path))).ToList();
 
         // pip's purge reaches every one of its three folders that is there, so it is sent only where the
         // walk accepted all of them. One the walk declined as a link would be emptied through the link.
         var purge = pip is not null
             && pipFolders.Count > 0
-            && !walk.Declined.Any(declined => PipLayout.Contains(Path.GetFileName(declined.Path)));
+            && !walk.Declined.Any(declined => PipLayoutTarget.Folders.Contains(Path.GetFileName(declined.Path)));
 
         if (pip is null && pipFolders.Count > 0)
         {
@@ -211,7 +208,7 @@ public sealed class PipenvCacheProvider : CleanupProviderBase
         }
 
         var (deletions, deleted) = await PlanDeletionsAsync(
-            purge ? [.. walk.Targets.Where(target => !PipLayout.Contains(Path.GetFileName(target.Path)))] : walk.Targets,
+            purge ? [.. walk.Targets.Where(target => !PipLayoutTarget.Folders.Contains(Path.GetFileName(target.Path)))] : walk.Targets,
             keep,
             ct).ConfigureAwait(false);
 
@@ -234,6 +231,7 @@ public sealed class PipenvCacheProvider : CleanupProviderBase
                     WhenCancelled = CancelledCommand.Ended,
                     Estimated = measured.Total,
                     MeasuredPaths = probed,
+                    TargetCheck = new PipLayoutTarget(root),
                 },
             ];
 

@@ -242,6 +242,40 @@ public sealed class PipenvCacheProviderTests : IDisposable
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
+    /// <summary>
+    /// A folder of pip's layout that is a link by the time the clean runs is listed through the link by
+    /// the run's own look, and one absent from the plan is not looked at at all. pip walks both, so the
+    /// purge is not sent, and what the link points at is untouched.
+    /// </summary>
+    [Theory]
+    [InlineData("http-v2", true)]
+    [InlineData("http", false)]
+    public async Task AClean_DoesNotPurgeWhenAPipFolderBecameALinkAfterThePreview(string folder, bool replaced)
+    {
+        Populate(Child("http-v2"));
+        Populate(Child("pipenv-manifests"));
+        var outside = Populate(Path.Combine(_temp.Path, "elsewhere"));
+        PipThatPurges();
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+        Assert.Single(plan.Steps.OfType<RunCommandStep>());
+
+        if (replaced)
+        {
+            Directory.Delete(Child(folder), recursive: true);
+        }
+
+        SymbolicLink.ToDirectory(Child(folder), outside);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.Empty(_runner.Invocations);
+        Assert.True(File.Exists(Path.Combine(outside, "payload.bin")));
+        Assert.Contains(result.Steps, step =>
+            !step.Succeeded && step.Message!.Contains("pip's purge would follow it", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task HonoursTheCacheVariableWhenItNamesAFolderOfItsOwn()
     {
