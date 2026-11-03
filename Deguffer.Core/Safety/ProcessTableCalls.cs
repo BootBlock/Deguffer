@@ -36,6 +36,9 @@ internal interface IOpenedProcess : IDisposable
     /// <summary>The command line it was started with, or null where that could not be read.</summary>
     string? CommandLine();
 
+    /// <summary>When the kernel created it, or null where that could not be read.</summary>
+    DateTimeOffset? StartTime();
+
     /// <summary>Its memory, or null where the open was not granted the right to read it.</summary>
     IProcessMemory? Memory { get; }
 }
@@ -129,6 +132,8 @@ internal sealed partial class ProcessTableCalls : IProcessTableCalls
         public IProcessMemory? Memory => readable ? this : null;
 
         public string? ImagePath() => ProcessImagePath.Of(handle);
+
+        public DateTimeOffset? StartTime() => ProcessProbe.CreationTimeOf(handle);
 
         public string? CommandLine()
         {

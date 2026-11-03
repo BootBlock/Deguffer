@@ -5397,10 +5397,26 @@ folder you share with anything else, it would offer your directory for deletion.
 because Squirrel reads it too — and if it is set to something that is not a full path, Deguffer says
 so and leaves the folder alone rather than guessing.
 
-**Before removing a staging directory it asks whether anything is running from inside it, and
-refuses the ones that are.** This is the collision the maintainer named, and it is a refusal rather
-than a warning. It asks again when you press Clean, immediately before each directory is removed, so
-an install that starts after the scan keeps the directory it is running from.
+**Before removing a staging directory it asks whether an install or an update may be using it,
+and refuses the ones that may be.** This is the collision the maintainer named, and it is a refusal
+rather than a warning. It counts three things as in use:
+
+- a program running from inside the directory, which is how a first install runs;
+- a program working anywhere in the staging folder;
+- a program running from an application Deguffer found — its `Update.exe` or one of its `app-`
+  builds — that was already running when the directory was last written. An update is unpacked from
+  there rather than from the staging folder, so where the updater is cannot show which directory it
+  is using, and when it started can.
+
+The third holds back more than it strictly needs to. An application that has been running since
+before a staging directory was written keeps that directory until it exits, updating or not,
+because nothing outside it says which directory it made. A leftover from an update that failed
+while the application was open is offered once the application has been restarted.
+
+It asks again when you press Clean, immediately before each directory is removed, so an install or
+an update that starts after the scan keeps the directory it is using. It cannot see an updater
+running as administrator or as another account, or one belonging to an application installed
+somewhere other than your own `%LOCALAPPDATA%`.
 
 **In a `packages` folder it reads the application's own index.** `RELEASES` lists the packages the
 application still needs. Deguffer removes package files that index has stopped naming, and nothing
@@ -5439,8 +5455,8 @@ Nothing. Every application still starts, still updates itself, and still applies
 a patch rather than a whole download. The next install or update unpacks itself into the staging
 folder again, exactly as it would have done.
 
-If an application is installing or updating while you clean, Deguffer leaves what it is using alone
-and says so.
+If an application found in your `%LOCALAPPDATA%` is installing or updating while you clean, Deguffer
+leaves the staging directories it may be using alone and says so.
 
 ### Why Tier 1
 

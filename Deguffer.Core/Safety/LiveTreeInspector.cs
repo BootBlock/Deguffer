@@ -43,6 +43,7 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
             ct.ThrowIfCancellationRequested();
 
             var holders = new List<string>();
+            var writerUnknown = false;
 
             foreach (var process in table.Processes)
             {
@@ -50,10 +51,17 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
                 {
                     Add(holders, holder);
                 }
+
+                if (match.Writer(candidate, process.Name, process.ImagePath, process.Started, out var unknown) is { } writer)
+                {
+                    Add(holders, writer);
+                }
+
+                writerUnknown |= unknown;
             }
 
             var locks = ExistingLockFiles(candidate, out var anyRefused);
-            var answered = !anyRefused;
+            var answered = !anyRefused && !writerUnknown;
 
             if (locks.Count > 0)
             {

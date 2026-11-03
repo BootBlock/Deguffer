@@ -396,6 +396,48 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
     }
 
     /// <summary>
+    /// An update runs from the application's own folder, not from the staging directory it unpacks
+    /// into. An updater started after the preview, which then writes a directory the preview offered,
+    /// keeps it, and the leftover written before the updater started still goes.
+    /// </summary>
+    [Fact]
+    public async Task AStagingDirectoryAnUpdateStartedAfterThePreviewWritesSurvivesTheClean()
+    {
+        var application = CreateApplication("Chatterbox", "1.0.9254");
+        var staging = Path.Combine(_environment.LocalAppData, SquirrelDiscovery.StagingDirectoryName);
+        var busy = Populate(Path.Combine(staging, "tempa"));
+        var idle = Populate(Path.Combine(staging, "tempb"));
+        var started = DateTimeOffset.UtcNow.AddHours(-1);
+
+        Directory.SetLastWriteTimeUtc(idle, started.AddHours(-1).UtcDateTime);
+        Directory.SetCreationTimeUtc(idle, started.AddHours(-1).UtcDateTime);
+        Directory.SetLastWriteTimeUtc(busy, started.AddHours(-1).UtcDateTime);
+        Directory.SetCreationTimeUtc(busy, started.AddHours(-1).UtcDateTime);
+
+        var provider = new SquirrelStagingProvider(
+            _environment,
+            liveTrees: _liveTrees,
+            runner: new FakeProcessRunner(),
+            inspector: FakeProcessInspector.NothingRunning);
+
+        var plan = await provider.PlanAsync();
+
+        AssertOffered(plan, busy, idle);
+
+        _liveTrees.WithProgram("Update", Path.Combine(application, SquirrelDiscovery.UpdaterName), application, started: started);
+        Directory.SetLastWriteTimeUtc(busy, started.AddMinutes(1).UtcDateTime);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(busy), "a staging directory an update wrote after the preview was removed");
+        Assert.False(Directory.Exists(idle), "a staging directory written before the updater started was kept");
+        Assert.Contains(
+            result.Steps,
+            step => step.Message == "Nothing was removed: Update was already running when it was last written.");
+        AssertProvedStanding(result, busy);
+    }
+
+    /// <summary>
     /// The question is asked about the installation, because an application runs from the build that
     /// replaced the ones offered. One started after the preview keeps its old build, named at the
     /// build's own path, and another application's old build still goes.

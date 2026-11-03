@@ -53,6 +53,8 @@ internal sealed class FakeProcessTableCalls : IProcessTableCalls
 
         public string? CommandLine() => process.CommandLine;
 
+        public DateTimeOffset? StartTime() => process.StartTime;
+
         public void Dispose()
         {
         }
@@ -71,6 +73,9 @@ internal sealed class FakeListedProcess
     public string? ImagePath { get; init; }
 
     public string? CommandLine { get; init; }
+
+    /// <summary>When the kernel created it, or null where Windows would not say.</summary>
+    public DateTimeOffset? StartTime { get; init; }
 
     public FakeProcessMemory? Memory { get; init; }
 }

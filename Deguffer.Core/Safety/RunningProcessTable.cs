@@ -23,7 +23,15 @@ internal sealed record RunningProcess(
     string Name,
     string? ImagePath,
     string? CurrentDirectory,
-    IReadOnlyList<string> PathArguments);
+    IReadOnlyList<string> PathArguments)
+{
+    /// <summary>
+    /// When the kernel created it, or null where that could not be read. Only a query that names
+    /// <see cref="LiveTreeQuery.Writers"/> asks it, so a null here leaves that query unanswered
+    /// rather than the whole table.
+    /// </summary>
+    public DateTimeOffset? Started { get; init; }
+}
 
 /// <param name="Processes">Every process this account was allowed to look at.</param>
 /// <param name="ImagePathsReadable">
@@ -138,7 +146,10 @@ internal static class RunningProcessTable
                 working,
                 commandLines && process.CommandLine() is { } line
                     ? CanonicalArguments(line, Canonical, ref argumentsWhole)
-                    : []));
+                    : [])
+            {
+                Started = process.StartTime(),
+            });
         }
 
         return new ProcessTable(processes, imagesWhole, verified, commandLines && argumentsWhole);

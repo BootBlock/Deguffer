@@ -447,6 +447,132 @@ public sealed class SquirrelStagingProviderTests : IDisposable
     }
 
     /// <summary>
+    /// An update is unpacked by the application's own <c>Update.exe</c>, or by the application
+    /// itself, and both run from the installation folder rather than from the staging directory.
+    /// One already running when a staging directory was last written may be writing it, so the
+    /// directory is refused. One written before the program started cannot be its, and is still
+    /// offered, so the rule does not hold every leftover while an application is open.
+    /// </summary>
+    [Theory]
+    [InlineData(SquirrelDiscovery.UpdaterName)]
+    [InlineData(@"app-1.0.9254\Chatterbox.exe")]
+    public async Task AStagingDirectoryWrittenWhileAnInstalledApplicationsProgramRanIsRefused(string program)
+    {
+        var application = CreateApplication("Chatterbox", "1.0.9254");
+        var busy = Populate(Path.Combine(StagingRoot, "tempa"));
+        var idle = Populate(Path.Combine(StagingRoot, "tempb"));
+        var started = DateTimeOffset.UtcNow.AddHours(-1);
+
+        Written(busy, started.AddMinutes(1));
+        Written(idle, started.AddHours(-1));
+
+        var liveTrees = new FakeLiveTreeInspector().WithProgram(
+            Path.GetFileNameWithoutExtension(program),
+            Path.Combine(application, program),
+            application,
+            started: started);
+
+        var provider = CreateProvider(liveTrees);
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(idle, Assert.Single(plan.TargetedPaths));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == busy && p.PresenceBefore is PathPresence.Present);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("installing or updating", StringComparison.Ordinal));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.True(Directory.Exists(busy), $"{busy} was removed while an update may have been writing it");
+        Assert.True(Directory.Exists(StagingRoot), "the shared staging folder was removed");
+        Assert.True(Directory.Exists(application), "the installation was removed");
+        Assert.False(Directory.Exists(idle), $"{idle} was kept although it was written before anything ran");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// A program with the updater's name running from anywhere other than an installation Deguffer
+    /// found is no evidence about the staging folder. Other software ships an <c>Update.exe</c>.
+    /// </summary>
+    [Fact]
+    public async Task AnUpdaterOutsideEveryFoundInstallationHoldsNothing()
+    {
+        CreateApplication("Chatterbox", "1.0.9254");
+        var staging = Populate(Path.Combine(StagingRoot, "tempa"));
+        var elsewhere = Path.Combine(_temp.Path, "Vendor");
+
+        Written(staging, DateTimeOffset.UtcNow);
+
+        var liveTrees = new FakeLiveTreeInspector().WithProgram(
+            "Update",
+            Path.Combine(elsewhere, SquirrelDiscovery.UpdaterName),
+            elsewhere,
+            started: DateTimeOffset.UtcNow.AddDays(-1));
+
+        var plan = await CreateProvider(liveTrees).PlanAsync();
+
+        Assert.Equal(staging, Assert.Single(plan.TargetedPaths));
+    }
+
+    /// <summary>
+    /// An installation's program whose start Windows would not give cannot be compared with the
+    /// directory's last write, and "could not tell" is not "nothing is using it" (§3).
+    /// </summary>
+    [Fact]
+    public async Task AStagingDirectoryWhoseWriterCannotBeTimedIsHeldBackAsUnchecked()
+    {
+        var application = CreateApplication("Chatterbox", "1.0.9254");
+        var staging = Populate(Path.Combine(StagingRoot, "tempa"));
+
+        var liveTrees = new FakeLiveTreeInspector().WithProgram(
+            "Update",
+            Path.Combine(application, SquirrelDiscovery.UpdaterName),
+            application,
+            started: null);
+
+        var plan = await CreateProvider(liveTrees).PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == staging && p.Reason == LiveTreeVeto.UncheckedReason);
+    }
+
+    /// <summary>
+    /// §7.1 over a staging directory an update may be writing. Its name matches the staging pattern,
+    /// so only the declaration that asks the same question as the plan keeps Explore from offering it.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesAStagingDirectoryAnUpdateMayBeWriting()
+    {
+        var application = CreateApplication("Chatterbox", "1.0.9254");
+        var busy = Populate(Path.Combine(StagingRoot, "tempa"));
+        var idle = Populate(Path.Combine(StagingRoot, "tempb"));
+        var started = DateTimeOffset.UtcNow.AddHours(-1);
+
+        Written(busy, started.AddMinutes(1));
+        Written(idle, started.AddHours(-1));
+
+        var provider = CreateProvider(new FakeLiveTreeInspector().WithProgram(
+            "Update",
+            Path.Combine(application, SquirrelDiscovery.UpdaterName),
+            application,
+            started: started));
+
+        var policy = await ExploreActionPolicy.ForAsync(
+            new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [provider]);
+
+        var refusal = policy.MayRemove(busy);
+        Assert.False(refusal.IsAllowed);
+        Assert.Contains("already running when it was last written", refusal.Reason, StringComparison.Ordinal);
+        Assert.True(policy.MayRemove(idle).IsAllowed);
+    }
+
+    /// <summary>Sets both of a directory's own times, which is what the staging veto compares.</summary>
+    private static void Written(string directory, DateTimeOffset when)
+    {
+        Directory.SetCreationTimeUtc(directory, when.UtcDateTime);
+        Directory.SetLastWriteTimeUtc(directory, when.UtcDateTime);
+    }
+
+    /// <summary>
     /// The single-directory machine, which is the ordinary one: everything the folder holds is in
     /// use, so the plan has no steps. The row must not read "Already clear" and must not carry a
     /// sentence saying the updater left nothing behind, beside a warning saying the opposite.
