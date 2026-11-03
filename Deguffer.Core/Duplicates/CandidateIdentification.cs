@@ -89,18 +89,17 @@ internal sealed class CandidateIdentification
         }
 
         var identified = new IdentifiedFile?[unasked.Count];
-        var counter = new StageCounter(DuplicateSearchStage.Identifying, unasked.Count, progress);
-        var lanes = ReadingLanes.Of(Enumerable.Range(0, unasked.Count), file => unasked[file].Volume, _media);
+        var measure = new IdentifyingProgress(unasked.Count, progress);
+        var lanes = ReadingLanes.Of(unasked.Select(file => file.Volume), _media);
 
-        await ReadingLane<int>.ReadAllAsync(
-            lanes,
+        await new LaneWorkers<int>(lanes.Readers, ct).RunAsync(
+            Enumerable.Range(0, unasked.Count).Select(file => (lanes.LaneOf(unasked[file].Volume), file, Priority: 0L)),
             file =>
             {
                 var found = unasked[file];
                 identified[file] = Decide(found, _files.Describe(found.Tree.PathOf(found.Node), found.Route));
-                counter.Finished();
-            },
-            ct).ConfigureAwait(false);
+                measure.Identified();
+            }).ConfigureAwait(false);
 
         for (var file = 0; file < unasked.Count; file++)
         {

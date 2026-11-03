@@ -321,11 +321,9 @@ public sealed partial class DuplicatesViewModel : ObservableObject
             { Stage: DuplicateSearchStage.Finding } => ("Reading the locations", null),
             { Stage: DuplicateSearchStage.Identifying } =>
                 ($"Identifying the files that may match: {progress.Done:N0} of {progress.Total:N0}", Fraction(progress)),
-            { Stage: DuplicateSearchStage.FirstAndLastBlocks } =>
-                ($"Comparing the start and end of each file: {progress.Done:N0} of {progress.Total:N0}", Fraction(progress)),
-            { Stage: DuplicateSearchStage.FullContent } =>
-                ($"Reading the files that still match in full: {progress.Done:N0} of {progress.Total:N0}", Fraction(progress)),
-            _ => throw new ArgumentOutOfRangeException(nameof(progress), progress.Stage, "A duplicate search has no such stage."),
+            { Total: { } total } =>
+                ($"Comparing the files' content: {FreeSpace.Format(progress.Done)} read, at most {FreeSpace.Format(total - progress.Done)} left", Fraction(progress)),
+            _ => ("Comparing the files' content", null),
         };
 
         StageProgressIsUnknown = fraction is null;
