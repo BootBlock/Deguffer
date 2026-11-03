@@ -20,10 +20,10 @@ namespace Deguffer.Core.Providers;
 /// <para><b>The staging folder is shared by every Squirrel application on the machine, and that is
 /// the hazard here.</b> Squirrel's maintainer gave it as the reason the library cannot clear the
 /// folder itself: one application cannot know that another is using it right now. So this provider
-/// asks whether anything is running from inside a staging directory before it offers it, and refuses
-/// the ones that are, rather than warning about them (§5.3). The clean asks again immediately before
-/// each removal, because an install or an update may have started running from one since the
-/// preview.</para>
+/// asks whether an install or an update may be using a staging directory before it offers it, and
+/// refuses the ones that may be, rather than warning about them (§5.3). What it asks is
+/// <see cref="SquirrelStagingQuestion"/>. The clean asks again immediately before each removal,
+/// because an install or an update may have started since the preview.</para>
 ///
 /// <para><b>§5.1 does not apply.</b> <c>Update.exe</c> has no clean-up action — its whole command
 /// set is install, uninstall, download, update, releasify, shortcut, deshortcut, process-start,
@@ -101,12 +101,14 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
         ILiveTreeInspector? liveTrees = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner)
+            scanner,
+            volumes: volumes)
     {
         _discovery = discovery ?? new SquirrelDiscovery(Environment);
         _liveTrees = liveTrees ?? LiveTreeInspector.Default;
@@ -224,13 +226,13 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
             .Select(child => new RecognisedBuildDirectory(LongPath.Display(child.FullName), root))
             .ToList();
 
-        var live = LiveTreeVeto.Apply(_liveTrees, candidates, lockFiles: [], ct);
+        var live = LiveTreeVeto.Apply(_liveTrees, candidates, QuestionAbout(root), ct);
 
         return Task.FromResult<IReadOnlyList<ToolRoot>>(
         [
             .. live.Vetoed.Select(vetoed => new ToolRoot(
                 vetoed.Directory,
-                "An application is installing or updating through this right now"
+                "An application may be installing or updating through this right now"
                 + (vetoed.Holders.Count > 0 ? $" ({string.Join(", ", vetoed.Holders)})" : string.Empty)
                 + ". Every application on this machine that uses the Squirrel updater shares this "
                 + "folder, so removing it now breaks somebody else's update. It can go once that has "
@@ -239,6 +241,13 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
             .. live.Unchecked.Select(path => new ToolRoot(path, LiveTreeVeto.UncheckedReason, static _ => false)),
         ]);
     }
+
+    /// <summary>
+    /// The rule that builds the veto's question about the directories in <paramref name="root"/>, for
+    /// each reading of the machine. See <see cref="SquirrelStagingQuestion"/>.
+    /// </summary>
+    private Func<CancellationToken, LiveTreeQuestion> QuestionAbout(string root) =>
+        ct => SquirrelStagingQuestion.For(_discovery, Environment, Volumes, root, ct);
 
     public override void InvalidateCaches()
     {
@@ -465,7 +474,7 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
             }
         }
 
-        var live = LiveTreeVeto.Apply(_liveTrees, candidates, lockFiles: [], ct);
+        var live = LiveTreeVeto.Apply(_liveTrees, candidates, QuestionAbout(root), ct);
 
         survivors.AddRange(live.Survivors);
 
@@ -475,7 +484,7 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
                 PlanNoteSeverity.Warning,
                 $"Left {live.Vetoed.Count} staging "
                 + (live.Vetoed.Count == 1 ? "directory" : "directories")
-                + " alone: an application is installing or updating through "
+                + " alone: an application may be installing or updating through "
                 + (live.Vetoed.Count == 1 ? "it" : "them")
                 + " right now. Every Squirrel application shares this folder."));
         }

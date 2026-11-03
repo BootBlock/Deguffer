@@ -385,13 +385,58 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
 
         AssertOffered(plan, busy, idle);
 
-        _liveTrees.WithProgram("Setup", Path.Combine(busy, "Setup.exe"), _temp.Path);
+        // Started after both directories were last written, so the setup program running from the
+        // staging folder is no writer of the leftover beside the one it runs from. A program there
+        // with no start time would hold every directory in the folder.
+        WrittenAt(busy, DateTimeOffset.UtcNow.AddHours(-1));
+        WrittenAt(idle, DateTimeOffset.UtcNow.AddHours(-1));
+        _liveTrees.WithProgram("Setup", Path.Combine(busy, "Setup.exe"), _temp.Path, started: DateTimeOffset.UtcNow);
 
         var result = await provider.ExecuteAsync(plan);
 
         Assert.True(Directory.Exists(busy), "a staging directory an install started running from was removed");
         Assert.False(Directory.Exists(idle), "a staging directory nothing took up was kept");
         Assert.Contains(result.Steps, step => step.Message == "Nothing was removed: Setup is running from inside it.");
+        AssertProvedStanding(result, busy);
+    }
+
+    /// <summary>
+    /// An update runs from the application's own folder, not from the staging directory it unpacks
+    /// into. An updater started after the preview, which then writes a directory the preview offered,
+    /// keeps it, and the leftover written before the updater started still goes.
+    /// </summary>
+    [Fact]
+    public async Task AStagingDirectoryAnUpdateStartedAfterThePreviewWritesSurvivesTheClean()
+    {
+        var application = CreateApplication("Chatterbox", "1.0.9254");
+        var staging = Path.Combine(_environment.LocalAppData, SquirrelDiscovery.StagingDirectoryName);
+        var busy = Populate(Path.Combine(staging, "tempa"));
+        var idle = Populate(Path.Combine(staging, "tempb"));
+        var started = DateTimeOffset.UtcNow.AddHours(-1);
+
+        WrittenAt(idle, started.AddHours(-1));
+        WrittenAt(busy, started.AddHours(-1));
+
+        var provider = new SquirrelStagingProvider(
+            _environment,
+            liveTrees: _liveTrees,
+            runner: new FakeProcessRunner(),
+            inspector: FakeProcessInspector.NothingRunning);
+
+        var plan = await provider.PlanAsync();
+
+        AssertOffered(plan, busy, idle);
+
+        _liveTrees.WithProgram("Update", Path.Combine(application, SquirrelDiscovery.UpdaterName), application, started: started);
+        Directory.SetLastWriteTimeUtc(busy, started.AddMinutes(1).UtcDateTime);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(busy), "a staging directory an update wrote after the preview was removed");
+        Assert.False(Directory.Exists(idle), "a staging directory written before the updater started was kept");
+        Assert.Contains(
+            result.Steps,
+            step => step.Message == "Nothing was removed: Update was already running when it was last written.");
         AssertProvedStanding(result, busy);
     }
 
@@ -491,6 +536,13 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
         Directory.CreateDirectory(path);
         File.WriteAllBytes(Path.Combine(path, "data.bin"), new byte[4096]);
         return path;
+    }
+
+    /// <summary>Sets both of a directory's own times, which is what the staging veto compares.</summary>
+    private static void WrittenAt(string directory, DateTimeOffset when)
+    {
+        Directory.SetCreationTimeUtc(directory, when.UtcDateTime);
+        Directory.SetLastWriteTimeUtc(directory, when.UtcDateTime);
     }
 
     /// <summary>A Squirrel application: the updater beside it, its packages, and a folder per build.</summary>

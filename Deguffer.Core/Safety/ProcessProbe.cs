@@ -104,7 +104,8 @@ internal static partial class ProcessProbe
         }
     }
 
-    private static DateTimeOffset? CreationTimeOf(nint handle) =>
+    /// <summary>When the kernel created the process <paramref name="handle"/> is open on, or null where it would not say.</summary>
+    internal static DateTimeOffset? CreationTimeOf(nint handle) =>
         GetProcessTimes(handle, out var created, out _, out _, out _)
             ? new DateTimeOffset(DateTime.FromFileTimeUtc(created))
             : null;

@@ -54,6 +54,45 @@ internal sealed class LiveTreeMatch(IVolumeInventory volumes)
     }
 
     /// <summary>
+    /// What makes <paramref name="candidate"/> live of a program called <paramref name="name"/>
+    /// running from <paramref name="image"/> since <paramref name="started"/>, through
+    /// <see cref="LiveTreeQuery.Writers"/>: its executable at or below one of their folders, and its
+    /// start no later than the directory's last write. Null where it is no such program.
+    ///
+    /// <para><paramref name="unknown"/> is set where the program runs from one of those folders and
+    /// either time could not be read. Whether it was running then cannot be told, which is not the
+    /// same answer as "it was not".</para>
+    /// </summary>
+    public string? Writer(LiveTreeQuery candidate, string name, string? image, DateTimeOffset? started, out bool unknown)
+    {
+        unknown = false;
+
+        if (candidate.Writers is not { } writers
+            || image is null
+            || !writers.Folders.Any(folder => Reach(folder).Holds(Reach(image))))
+        {
+            return null;
+        }
+
+        if (started is not { } start || writers.LastWritten is not { } written)
+        {
+            unknown = true;
+            return null;
+        }
+
+        return start <= written + TimestampTolerance
+            ? $"{name} was already running when it was last written"
+            : null;
+    }
+
+    /// <summary>
+    /// How far a directory's timestamp may trail the moment it was written. FAT keeps a write time to
+    /// two seconds, so a program started a moment before the directory it made could otherwise read
+    /// as started after it. Erring this way holds a directory back, never offers one.
+    /// </summary>
+    private static readonly TimeSpan TimestampTolerance = TimeSpan.FromSeconds(2);
+
+    /// <summary>
     /// The immediate child of one of <paramref name="directories"/> that <paramref name="inside"/>
     /// is at or below, named below that directory as it was asked, or null where it is below none
     /// of them.

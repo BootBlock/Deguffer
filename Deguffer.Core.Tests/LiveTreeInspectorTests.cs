@@ -148,6 +148,37 @@ public sealed class LiveTreeInspectorTests : IDisposable
     }
 
     /// <summary>
+    /// A real program running from a writer folder makes a directory last written after it started
+    /// live, and leaves one written before it started alone. This is the start time read from
+    /// Windows, which no fake establishes.
+    /// </summary>
+    [Fact]
+    public void AProgramRunningFromAWriterFolderHoldsOnlyWhatWasWrittenSinceItStarted()
+    {
+        var installation = _temp.CreateDirectory("Chatterbox");
+        var updater = Path.Combine(installation, "Update.exe");
+        File.Copy(WaitingProgram, updater);
+
+        var staging = _temp.CreateDirectory("SquirrelTemp");
+        var fresh = new LiveTreeQuery(Path.Combine(staging, "tempa"), staging)
+        {
+            Writers = new LiveTreeWriters([installation], DateTimeOffset.UtcNow.AddMinutes(5)),
+        };
+        var leftover = new LiveTreeQuery(Path.Combine(staging, "tempb"), staging)
+        {
+            Writers = new LiveTreeWriters([installation], DateTimeOffset.UtcNow.AddHours(-1)),
+        };
+
+        using var running = StartWaiting(installation, fresh, updater);
+
+        var findings = new LiveTreeInspector().FindLive([fresh, leftover]);
+
+        Assert.True(findings.IsLive(fresh.Directory));
+        Assert.False(findings.IsLive(leftover.Directory));
+        Assert.True(findings.IsAnswered(leftover.Directory));
+    }
+
+    /// <summary>
     /// A declared lock file that something holds open makes the directory live, which is Unity's
     /// <c>UnityLockfile</c> and Visual Studio's <c>.suo</c>.
     ///
