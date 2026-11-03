@@ -22,7 +22,7 @@ public readonly record struct StepTiming(TimeSpan Elapsed, TimeSpan UseCheck, Ti
 {
     /// <summary>
     /// Everything else: the removal, the command or the emptying, with the measurements and checks
-    /// around it. For a directory step, <see cref="StepOutcome.Passes"/> says where its removal spent
+    /// around it. For a directory step, <see cref="StepOutcome.Passes"/> says where its removals spent
     /// this.
     /// </summary>
     public TimeSpan Acting => Elapsed - UseCheck - Look;

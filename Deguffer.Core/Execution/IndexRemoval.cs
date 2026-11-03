@@ -39,6 +39,12 @@ internal sealed record IndexRemoval(
     bool NotADirectory = false)
 {
     /// <summary>
+    /// Where the index's removals spent their time, pass by pass and summed over every index directory.
+    /// Null where none walked a tree. See <see cref="RemovalOutcome.Passes"/>.
+    /// </summary>
+    public RemovalPasses? Passes { get; init; }
+
+    /// <summary>
     /// Remove every index directory of <paramref name="step"/> in turn, recording what each left, and
     /// stop at the first that is not gone completely: the next would be removed for nothing, and the
     /// indexed directory must not be touched.
@@ -51,13 +57,14 @@ internal sealed record IndexRemoval(
         MinimumAge keep,
         RefusalRecord refusals,
         RunResidue leftStanding,
+        TimeProvider time,
         CancellationToken ct)
     {
         var total = new IndexRemoval(Complete: true, 0, Refusals.None, default, 0, 0, 0);
 
         foreach (var index in step.IndexedBy)
         {
-            var removal = await DirectoryRemover.RemoveAsync(index, keep, progress: null, ct).ConfigureAwait(false);
+            var removal = await DirectoryRemover.RemoveAsync(index, keep, progress: null, ct, time: time).ConfigureAwait(false);
 
             refusals.Record(index, removal);
             leftStanding.Record(index, removal.LeftStanding);
@@ -74,7 +81,10 @@ internal sealed record IndexRemoval(
                 total.Kept + removal.Kept,
                 total.MailStores + removal.MailStores.Count,
                 removal.Interrupted,
-                removal.NotADirectory);
+                removal.NotADirectory)
+            {
+                Passes = RemovalPasses.Combine(total.Passes, removal.Passes),
+            };
 
             if (!complete)
             {
@@ -115,5 +125,8 @@ internal sealed record IndexRemoval(
         EntriesRemoved: EntriesRemoved,
         RefusedFolders: RefusedFolders,
         MailStores: MailStores,
-        Interrupted: Interrupted);
+        Interrupted: Interrupted)
+    {
+        Passes = Passes,
+    };
 }

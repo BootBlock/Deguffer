@@ -1,4 +1,5 @@
 using Deguffer.Core.Execution;
+using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Testing;
@@ -34,7 +35,7 @@ public sealed class StepTimingTests : IDisposable
         var timing = outcome.Timing;
 
         // Zero, because the removal is timed on the executor's clock, which stood still through it.
-        Assert.Equal(TimeSpan.Zero, Assert.IsType<RemovalPasses>(outcome.Passes).Elapsed);
+        Assert.Equal(TimeSpan.Zero, Elapsed(Assert.IsType<RemovalPasses>(outcome.Passes)));
         Assert.Equal(TimeSpan.FromSeconds(3), timing.UseCheck);
         Assert.Equal(TimeSpan.FromSeconds(3), timing.Elapsed);
         Assert.Equal(TimeSpan.Zero, timing.Look);
@@ -102,13 +103,82 @@ public sealed class StepTimingTests : IDisposable
         var passes = Assert.IsType<RemovalPasses>(outcome.Passes);
 
         Assert.True(
-            passes.Elapsed <= outcome.Timing.Acting,
-            $"the passes took {passes.Elapsed}, longer than the {outcome.Timing.Acting} their step spent removing");
+            Elapsed(passes) <= outcome.Timing.Acting,
+            $"the passes took {Elapsed(passes)}, longer than the {outcome.Timing.Acting} their step spent removing");
         Assert.Equal(6, passes.Walk.Entries);
         Assert.Equal(3, passes.Files.Entries);
         Assert.Equal(3, passes.Folders.Entries);
         Assert.True(result.Duration >= outcome.Timing.Elapsed, "the plan took less time than its one step");
     }
+
+    /// <summary>
+    /// A directory that goes with its index reports the passes of both removals, because both are the
+    /// step's work, and both are timed on the executor's clock.
+    /// </summary>
+    [Fact]
+    public async Task ADirectoryRemovedWithItsIndexReportsTheIndexsPassesToo()
+    {
+        var clock = new ManualTimeProvider();
+        var output = _temp.CreateDirectory("output");
+        _temp.CreateFile(10, "output", "a.bin");
+        _temp.CreateFile(10, "output", "b.bin");
+        var index = _temp.CreateDirectory("index");
+        _temp.CreateFile(10, "index", "entries", "1.idx");
+        var sibling = _temp.CreateFile(10, "keep.txt");
+
+        var result = await Execute(new DeleteDirectoryStep(output, "Output") { IndexedBy = [index] }, clock);
+        var outcome = Assert.Single(result.Steps);
+        var passes = Assert.IsType<RemovalPasses>(outcome.Passes);
+
+        Assert.False(Directory.Exists(output), "the indexed directory was left");
+        Assert.False(Directory.Exists(index), "its index was left");
+        Assert.True(File.Exists(sibling), "a file beside them was removed");
+
+        // The output's two files and one folder, and the index's one file and two folders.
+        Assert.Equal(3, passes.Files.Entries);
+        Assert.Equal(3, passes.Folders.Entries);
+        Assert.Equal(6, passes.Walk.Entries);
+
+        // Zero, because both removals are timed on the executor's clock, which stood still through them.
+        Assert.Equal(TimeSpan.Zero, Elapsed(passes));
+    }
+
+    /// <summary>
+    /// A clean cancelled while the use check waits for a program to let go still reports that wait as the
+    /// use check: it is the time a cancelled step most needs to account for.
+    /// </summary>
+    [Fact]
+    public async Task AReleaseCancelledWhileItWaitsIsTimedAsTheUseCheck()
+    {
+        var clock = new ManualTimeProvider();
+        var obj = _temp.CreateDirectory("App", "obj");
+        _temp.CreateFile(10, "App", "obj", "project.assets.json");
+        var inspector = new FakeProcessInspector("server");
+        var check = new ReleasingProcessCheck("server.exe", "stop", ["server"], new FakeProcessRunner().Responding("server.exe", "stop", string.Empty), inspector, clock);
+        using var cts = new CancellationTokenSource();
+
+        var running = new PlanExecutor(
+                new FakeProcessRunner(),
+                ParallelEnumerationScanner.Default,
+                RefusalRecord.For(new FakeUserEnvironment(_temp.Path)),
+                time: clock)
+            .ExecuteAsync(Plan(new DeleteDirectoryStep(obj, "Build output") { UseCheck = check }), null, null, null, null, cts.Token);
+
+        await clock.WhenWaitingAsync(TimeSpan.FromSeconds(10));
+        clock.Advance(TimeSpan.FromMilliseconds(250));
+        await clock.WhenWaitingAsync(TimeSpan.FromSeconds(10));
+        cts.Cancel();
+
+        var result = await running;
+        var outcome = Assert.Single(result.Steps);
+
+        Assert.True(outcome.Interrupted);
+        Assert.True(Directory.Exists(obj), "a directory a cancelled clean had not reached was removed");
+        Assert.Equal(TimeSpan.FromMilliseconds(250), outcome.Timing.UseCheck);
+        Assert.Equal(TimeSpan.FromMilliseconds(250), outcome.Timing.Elapsed);
+    }
+
+    private static TimeSpan Elapsed(RemovalPasses passes) => passes.Walk.Elapsed + passes.Files.Elapsed + passes.Folders.Elapsed;
 
     /// <summary>
     /// Each pass is timed over its own work and nothing else's. The clock moves a millisecond for each
@@ -170,20 +240,16 @@ public sealed class StepTimingTests : IDisposable
                 ParallelEnumerationScanner.Default,
                 RefusalRecord.For(new FakeUserEnvironment(_temp.Path)),
                 time: time)
-            .ExecuteAsync(
-                new CleanupPlan
-                {
-                    ProviderId = "test",
-                    ProviderName = "Test",
-                    Tier = SafetyTier.RegenerableCache,
-                    WhatHappensOnNextUse = "Nothing.",
-                    Steps = [step],
-                },
-                runReach: null,
-                residue: null,
-                progress: null,
-                underway: null,
-                ct: CancellationToken.None);
+            .ExecuteAsync(Plan(step), runReach: null, residue: null, progress: null, underway: null, ct: CancellationToken.None);
+
+    private static CleanupPlan Plan(CleanupStep step) => new()
+    {
+        ProviderId = "test",
+        ProviderName = "Test",
+        Tier = SafetyTier.RegenerableCache,
+        WhatHappensOnNextUse = "Nothing.",
+        Steps = [step],
+    };
 
     /// <summary>A use check that takes <paramref name="takes"/> on the clock, and finds the step's own path in use where told to.</summary>
     private sealed class AdvancingUseCheck(ManualTimeProvider clock, TimeSpan takes, string? inUse = null) : IUseCheck

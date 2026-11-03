@@ -258,14 +258,24 @@ public sealed class PlanExecutor(
         if (step is DeleteStep deletion)
         {
             var asked = clock.Mark();
+            UseRecheck recheck;
 
-            if (deletion.UseCheck is ReleasingProcessCheck releasing)
+            // Timed in a finally, because a release cancelled while it waits for a program to exit
+            // throws, and that wait is the time a cancelled step most needs to account for.
+            try
             {
-                await releasing.ReleaseAsync(ct).ConfigureAwait(false);
+                if (deletion.UseCheck is ReleasingProcessCheck releasing)
+                {
+                    await releasing.ReleaseAsync(ct).ConfigureAwait(false);
+                }
+
+                recheck = UseRecheck.Of(deletion, ct);
+            }
+            finally
+            {
+                clock.UseCheckSince(asked);
             }
 
-            var recheck = UseRecheck.Of(deletion, ct);
-            clock.UseCheckSince(asked);
             heldAtClean.AddRange(recheck.Survivors);
 
             if (recheck.Step is null)
@@ -284,10 +294,10 @@ public sealed class PlanExecutor(
             DeleteDirectoryStep delete => await DeleteAsync(delete, plan.Keep, runResidue, clock, progress, ct).ConfigureAwait(false),
             DeleteFileStep delete => await DeleteAsync(delete, plan.Keep, progress, ct).ConfigureAwait(false),
             EmptyRecycleBinStep empty => await EmptyAsync(empty, plan.Keep, clock, progress, ct).ConfigureAwait(false),
-            DiskCleanupStep handler => await DiskCleanupRun.RunAsync(_handlers!, scanner, handler, plan.Keep, progress, ct).ConfigureAwait(false),
+            DiskCleanupStep handler => await DiskCleanupRun.RunAsync(_handlers!, scanner, handler, plan.Keep, clock, progress, ct).ConfigureAwait(false),
             ReleaseLocalCopiesStep release => await LocalCopyRelease.RunAsync(_cloud!, release, plan.Keep, progress, ct).ConfigureAwait(false),
             RemoveRestorePointsStep removal => await RestorePointRun.RunAsync(_protection!, removal, progress, ct).ConfigureAwait(false),
-            RemoveProfileStep profile => await ProfileRemovalRun.RunAsync(_profiles!, _environment, scanner, profile, ct).ConfigureAwait(false),
+            RemoveProfileStep profile => await ProfileRemovalRun.RunAsync(_profiles!, _environment, scanner, profile, clock, ct).ConfigureAwait(false),
             _ => throw new NotSupportedException($"Unknown step type {step.GetType().Name}."),
         };
     }
@@ -334,25 +344,6 @@ public sealed class PlanExecutor(
             .FirstOrDefault(refused => refused.Why is not null) is { Why: { } why } found
                 ? $"Nothing was removed: '{LongPath.Display(found.Path)}' is never removed, because {why}"
                 : null;
-
-    /// <summary><see cref="WholeTreeLook.TakeAsync"/>, timed as the step's look on <paramref name="clock"/>.</summary>
-    private static async Task<WholeTreeLook> LookAsync(
-        IReadOnlyList<string> paths,
-        MinimumAge keep,
-        StepClock clock,
-        CancellationToken ct)
-    {
-        var started = clock.Mark();
-
-        try
-        {
-            return await WholeTreeLook.TakeAsync(paths, keep, ct).ConfigureAwait(false);
-        }
-        finally
-        {
-            clock.LookSince(started);
-        }
-    }
 
     private async Task<StepOutcome> RunCommandAsync(
         RunCommandStep step,
@@ -409,7 +400,7 @@ public sealed class PlanExecutor(
         // told to leave one file and a store can arrive between the preview and the clean. A folder
         // Windows will not list could hold one. See WholeTreeLook for what the look costs and why it is
         // paid here.
-        var look = await LookAsync(step.MeasuredPaths, MinimumAge.Off, clock, ct).ConfigureAwait(false);
+        var look = await clock.LookAsync(step.MeasuredPaths, MinimumAge.Off, ct).ConfigureAwait(false);
 
         if (look.WhyNot("Not run", "The tool cannot be told to leave anything", MinimumAge.Off) is { } held)
         {
@@ -678,7 +669,7 @@ public sealed class PlanExecutor(
         // §9, for the reason the guard is refused above: Windows empties the bin whole, and a store
         // deleted into it since the preview, or inside a folder Windows will not list, would go with
         // everything else. Looked for on the disk, because the plan was made before it arrived.
-        var look = await LookAsync([step.Path], MinimumAge.Off, clock, ct).ConfigureAwait(false);
+        var look = await clock.LookAsync([step.Path], MinimumAge.Off, ct).ConfigureAwait(false);
 
         if (look.WhyNot("Nothing was removed", "Windows empties a Recycle Bin whole", MinimumAge.Off) is { } held)
         {
@@ -777,7 +768,7 @@ public sealed class PlanExecutor(
                 ? (keep, "Its parts only mean something together, so it goes whole or not at all")
                 : (MinimumAge.Off, "What is inside it goes whole or not at all");
 
-            var look = await LookAsync(step.Destroys, guard, clock, ct).ConfigureAwait(false);
+            var look = await clock.LookAsync(step.Destroys, guard, ct).ConfigureAwait(false);
 
             if (look.WhyNot("Nothing was removed", how, guard) is { } partial)
             {
@@ -788,7 +779,7 @@ public sealed class PlanExecutor(
 
         // The index first, and the directory it indexes only once all of it is gone. See
         // DeleteDirectoryStep.IndexedBy.
-        var index = await IndexRemoval.RemoveAsync(step, keep, refusals, runResidue, ct).ConfigureAwait(false);
+        var index = await IndexRemoval.RemoveAsync(step, keep, refusals, runResidue, _time, ct).ConfigureAwait(false);
 
         if (!index.Complete)
         {
@@ -808,6 +799,7 @@ public sealed class PlanExecutor(
             Refused = removal.Refused + index.Refused,
             RefusedFolders = removal.RefusedFolders + index.RefusedFolders,
             EntriesRemoved = removal.EntriesRemoved + index.EntriesRemoved,
+            Passes = RemovalPasses.Combine(removal.Passes, index.Passes),
             Kept = removal.Kept + index.Kept,
         };
 

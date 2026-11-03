@@ -19,6 +19,7 @@ internal static class ProfileRemovalRun
         IUserEnvironment environment,
         IDirectoryScanner scanner,
         RemoveProfileStep step,
+        StepClock clock,
         CancellationToken ct)
     {
         var survey = await Task.Run(() => ProfileSurvey.Take(profiles, environment), ct).ConfigureAwait(false);
@@ -31,7 +32,7 @@ internal static class ProfileRemovalRun
         // §9, looked for again immediately before the removal, because Windows removes a profile whole
         // and a data file can arrive between the preview and the clean. A folder Windows will not list
         // could hold one.
-        var look = await WholeTreeLook.TakeAsync([step.Folder], MinimumAge.Off, ct).ConfigureAwait(false);
+        var look = await clock.LookAsync([step.Folder], MinimumAge.Off, ct).ConfigureAwait(false);
 
         if (look.WhyNot("Not removed", "Windows removes a profile whole and cannot be told to leave anything", MinimumAge.Off) is { } held)
         {
