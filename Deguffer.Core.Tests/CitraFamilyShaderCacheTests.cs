@@ -168,10 +168,14 @@ public sealed class CitraFamilyShaderCacheTests : IDisposable
         var lookalike = Precompiled(root);
         Declare(install);
 
-        var plan = await CreateProvider(new FakeProcessInspector("azahar")).PlanAsync();
+        var provider = CreateProvider(new FakeProcessInspector("azahar"));
+        var plan = await provider.PlanAsync();
 
         Assert.Empty(plan.Steps);
         Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("Azahar", StringComparison.Ordinal));
+
+        await provider.ExecuteAsync(plan);
+
         Assert.True(Directory.Exists(lookalike));
     }
 

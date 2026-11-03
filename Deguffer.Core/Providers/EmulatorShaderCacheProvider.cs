@@ -23,8 +23,8 @@ namespace Deguffer.Core.Providers;
 /// stutter until it has been played through, rather than a slower next use.</para>
 ///
 /// <para><b>§5.1 has nothing to prefer.</b> No emulator here offers an eviction command Deguffer can
-/// call. RPCS3's and Cemu's are menu items inside the running program, and Cemu's removes the
-/// transferable cache as well. So §5.2 carries the whole burden, and everything a layout does not
+/// call. RPCS3's, Cemu's, Vita3K's and Azahar's are menu items inside the running program, and Cemu's
+/// and Azahar's remove the transferable caches as well. So §5.2 carries the whole burden, and everything a layout does not
 /// name is left alone at every level.</para>
 ///
 /// <para><b>Found where each emulator puts its data, and where the user says it is.</b> The fixed
@@ -35,7 +35,7 @@ namespace Deguffer.Core.Providers;
 /// <para><b>Nothing of an emulator's while it runs (§5.3).</b> An emulator writes its shader cache
 /// while a game is played, so while it is in the process table every folder it proved is held back
 /// and refused in Explore, and the clean asks again before each removal. A folder two emulators
-/// proved, as two forks of yuzu can, is held while either runs.</para>
+/// proved, as two forks of yuzu or of Citra can, is held while either runs.</para>
 /// </summary>
 public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
 {

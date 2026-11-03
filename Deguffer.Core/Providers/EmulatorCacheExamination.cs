@@ -71,7 +71,12 @@ internal sealed class EmulatorCacheExamination
     /// </summary>
     private readonly HashSet<string> _cacheFolders = new(StringComparer.OrdinalIgnoreCase);
 
-    private readonly HashSet<string> _targeted = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>
+    /// Each target's place in <see cref="Targets"/>, by path. A folder two layouts proved, or a cache
+    /// folder two emulators' settings both name, is read once by each, and what both recognise is one
+    /// item that either emulator holds back while it runs.
+    /// </summary>
+    private readonly Dictionary<string, int> _targeted = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// No root was proven and there is nothing to say: no link declined, nothing unread, and no
@@ -156,14 +161,20 @@ internal sealed class EmulatorCacheExamination
 
         var folders = examination.Roots.Select(root => reach(root.Path)).ToList();
 
-        // A folder an emulator knows by its program is not also read as one whose settings file
-        // merely shares a name with that emulator's.
+        // A folder an emulator knows by its program is not also read as the folder of one that nothing
+        // but a settings file of the same name proves. One proven by a file of its own stays an owner,
+        // so it is read, and its program holds the folder back while it runs.
         for (var i = examination.Roots.Count - 1; i >= 0; i--)
         {
             var folder = folders[i];
+            var found = examination.Roots[i];
 
-            if (!examination.Roots[i].Layout.IsKnownByItsProgram
-                && examination.Roots.Where((other, j) => other.Layout.IsKnownByItsProgram && folders[j].IsSameAs(folder)).Any())
+            if (!found.Layout.IsKnownByItsProgram
+                && examination.Roots.Where((other, j) =>
+                        other.Layout.IsKnownByItsProgram
+                        && folders[j].IsSameAs(folder)
+                        && found.Layout.IsProvenOnlyByMarkersOf(other.Layout, found.Path))
+                    .Any())
             {
                 examination.Roots.RemoveAt(i);
                 folders.RemoveAt(i);
@@ -352,10 +363,14 @@ internal sealed class EmulatorCacheExamination
             {
                 recognised.Add(entry.Name);
 
-                // A folder two layouts proved is read by each, and its cache is one item, whose
-                // owners already name both.
-                if (_targeted.Add(path))
+                if (_targeted.TryGetValue(path, out var index))
                 {
+                    var target = Targets[index];
+                    Targets[index] = target with { Owners = [.. target.Owners.Union(root.Owners)] };
+                }
+                else
+                {
+                    _targeted[path] = Targets.Count;
                     Targets.Add(new EmulatorCacheTarget(layout, root.Owners, path, classification.Reason, folder.Kind));
                 }
 

@@ -158,10 +158,16 @@ public sealed class PlayStationEmulatorShaderCacheTests : IDisposable
         var moved = WriteFile(Path.Combine(DuckStationRoot, "fast", "cache", "vulkan_pipelines.bin"));
         var defaultFolder = WriteFile(Path.Combine(DuckStationRoot, "cache", "vulkan_pipelines.bin"));
 
-        var plan = await CreateProvider().PlanAsync();
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
 
         Assert.Equal([moved], plan.TargetedPaths);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.False(File.Exists(moved));
         Assert.True(File.Exists(defaultFolder));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
     /// <summary>
@@ -187,6 +193,67 @@ public sealed class PlayStationEmulatorShaderCacheTests : IDisposable
 
         Assert.Equal(withProgram ? [pipelines] : [], plan.TargetedPaths);
         Assert.Equal(!withProgram, plan.Notes.Any(n => n.Message.Contains(install, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    /// <summary>
+    /// DuckStation and PCSX2 unpacked into one folder each prove it by a file of their own, and both
+    /// name <c>vulkan_shaders.bin</c> in the <c>cache</c> they share. The folder is both emulators',
+    /// so either one running holds the file back.
+    /// </summary>
+    [Theory]
+    [InlineData("pcsx2-qt")]
+    [InlineData("duckstation-qt-x64-ReleaseLTCG")]
+    public async Task AFolderDuckStationAndPcsx2ShareIsHeldWhileEitherRuns(string running)
+    {
+        var install = DuckStation(Path.Combine(_temp.Path, "emulators", "playstation"));
+        WriteFile(Path.Combine(install, DuckStationProgram), 64);
+        WriteFile(Path.Combine(install, "pcsx2-qt.exe"), 64);
+        WriteFile(Path.Combine(install, "portable.ini"), 0);
+        WriteFile(Path.Combine(install, "inis", "PCSX2.ini"), 64);
+        var shaders = WriteFile(Path.Combine(install, "cache", "vulkan_shaders.bin"));
+        Declare(install);
+
+        Assert.Equal([shaders], (await CreateProvider().PlanAsync()).TargetedPaths);
+
+        var provider = CreateProvider(new FakeProcessInspector(running));
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.Steps);
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(shaders));
+    }
+
+    /// <summary>
+    /// Both emulators' settings can send their cache to one folder, where each reads the names it
+    /// shares with the other. The file is one item, held back while either emulator runs.
+    /// </summary>
+    [Theory]
+    [InlineData("pcsx2-qt")]
+    [InlineData("duckstation-qt-x64-ReleaseLTCG")]
+    public async Task ACacheFolderBothEmulatorsSettingsNameIsHeldWhileEitherRuns(string running)
+    {
+        var shared = Path.Combine(_temp.Path, "fast", "shader-cache");
+        var pipelines = WriteFile(Path.Combine(shared, "vulkan_pipelines.bin"));
+        WriteFile(Path.Combine(DuckStationRoot, "settings.ini"), 0);
+        File.WriteAllText(Path.Combine(DuckStationRoot, "settings.ini"), $"[Folders]\nCache = {shared}\n");
+        var pcsx2 = Path.Combine(_environment.Documents!, "PCSX2");
+        WriteFile(Path.Combine(pcsx2, "inis", "PCSX2.ini"), 0);
+        File.WriteAllText(Path.Combine(pcsx2, "inis", "PCSX2.ini"), $"[Folders]\nCache = {shared}\n");
+
+        var idle = await CreateProvider().PlanAsync();
+
+        Assert.Equal([pipelines], idle.TargetedPaths);
+
+        var provider = CreateProvider(new FakeProcessInspector(running));
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.Steps);
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(pipelines));
     }
 
     /// <summary>§5.3, by any of the names DuckStation's builds give the program.</summary>
@@ -311,7 +378,7 @@ public sealed class PlayStationEmulatorShaderCacheTests : IDisposable
             plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
         Assert.Equal(["Vita3K"], plan.Steps.Select(step => step.Group).Distinct());
 
-        foreach (var survivor in new[] { install, shaders, notATitle, settings, Path.Combine(install, "textures") })
+        foreach (var survivor in new[] { install, shaders, notATitle, settings, Path.Combine(install, "textures"), Path.Combine(install, "cache", "decrypted_selfs") })
         {
             Assert.True(Holds(plan.ProtectedPaths, survivor), $"{survivor} is not asserted to survive");
         }
@@ -367,6 +434,25 @@ public sealed class PlayStationEmulatorShaderCacheTests : IDisposable
         Assert.False(explore.MayRemove(Path.Combine(install, "textures")).IsAllowed);
     }
 
+    /// <summary>
+    /// RPCS3's current settings file is its own, so a folder holding it beside Vita3K's program is
+    /// RPCS3's as well as Vita3K's, and each takes its own games' caches.
+    /// </summary>
+    [Fact]
+    public async Task AFolderRpcs3ProvesByItsOwnFileStaysRpcs3sBesideVita3K()
+    {
+        var install = Path.Combine(_temp.Path, "emulators", "consoles");
+        var vita = Folder(Path.Combine(Vita3K(install), "PCSE00001"));
+        WriteFile(Path.Combine(install, "config", "config.yml"), 64);
+        var ps3 = Folder(Path.Combine(install, "cache", "BLUS30443"));
+        Declare(install);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Equal(new[] { vita, ps3 }.Order(StringComparer.OrdinalIgnoreCase), plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
+        Assert.Empty((await CreateProvider(new FakeProcessInspector("rpcs3")).PlanAsync()).Steps);
+    }
+
     /// <summary>Without its program, a folder holding <c>config.yml</c> is still read as an older RPCS3's.</summary>
     [Fact]
     public async Task AFolderWithConfigYmlAndNoVita3KIsStillRpcs3s()
@@ -377,9 +463,14 @@ public sealed class PlayStationEmulatorShaderCacheTests : IDisposable
         var vitaShaped = Folder(Path.Combine(install, "cache", "shaders", "PCSE00001"));
         Declare(install);
 
-        var plan = await CreateProvider().PlanAsync();
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
 
         Assert.Equal([game], plan.TargetedPaths);
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.False(Directory.Exists(game));
         Assert.True(Directory.Exists(vitaShaped));
     }
 

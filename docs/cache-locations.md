@@ -3437,7 +3437,8 @@ install.** RPCS3 keeps everything beside `rpcs3.exe`, and Vita3K its settings an
 `Vita3K.exe`, wherever you unpacked them, and a portable Cemu, Dolphin, PCSX2, DuckStation, PPSSPP,
 Ryujinx, Eden, Citron, yuzu, Azahar, Lime3DS or Citra does the same. Windows records none of those places anywhere Deguffer can rely on, so Deguffer does
 not search your drives for them. A folder you add is looked in only for the settings file in the
-table, and for DuckStation, Vita3K and the Switch and 3DS forks also for the program. A folder with none in it gets a note on the plan, and this row touches nothing in it. A
+table, for DuckStation, Vita3K and the Switch and 3DS forks also for the program, and for PPSSPP
+also for the `installed.txt` that names its memory stick. A folder with none in it gets a note on the plan, and this row touches nothing in it. A
 folder that holds RetroArch gets no note, because the
 [RetroArch rows](#retroarchs-downloaded-shaders-databases-and-thumbnails) answer for it.
 
@@ -3532,13 +3533,17 @@ are asserted by name after a clean:
 | PPSSPP | `PSP\SHADERS` | Post-processing shaders you installed. Not the compiled cache |
 | PPSSPP | `PSP\SAVEDATA`, `PSP\PPSSPP_STATE`, `PSP\GAME` | Your saves, save states, and the games and homebrew you installed |
 | PPSSPP | `PSP\TEXTURES`, `PSP\Cheats`, `PSP\PLUGINS`, `PSP\SCREENSHOT`, `PSP\NAND`, `PSP\SYSTEM\ppsspp.ini` | What you installed, added, took and set, and the firmware you supplied |
-| Vita3K | Everything in `cache` except `cache\shaders` | The compatibility list, decrypted programs you asked for, and install files |
+| Vita3K | `cache\decrypted_selfs` | Game programs you asked Vita3K to decrypt |
 | Vita3K | `config.yml`, `config`, `gui-configs`, `textures`, `patch` | What you set, installed and added |
 | Vita3K | `fs` in a portable install | The emulated PS Vita storage: your saves, games, updates, DLC and firmware |
 | Azahar, Lime3DS, Citra | `shaders\opengl\transferable`, `shaders\vulkan\transferable` | The transferable caches. Built only by playing, and the compiled caches are built from them |
-| Azahar, Lime3DS, Citra | `shaders\*.glsl`, `shaders\anaglyph` | Post-processing and anaglyph shaders you installed |
+| Azahar, Lime3DS, Citra | `shaders\anaglyph` | Anaglyph shaders you installed |
 | Azahar, Lime3DS, Citra | `sdmc`, `nand`, `sysdata` | The emulated SD card and system storage with your games and saves, and your keys and console files |
 | Azahar, Lime3DS, Citra | `states`, `cheats`, `load`, `dump`, `config`, `log` | Your save states, and what you added, dumped and set |
+
+The rest of Vita3K's `cache`, and the post-processing shaders you put loose in a 3DS emulator's
+`shaders` folder, are never reached: Deguffer goes only to `cache\shaders` and to the paths in the
+Location row by name, and lists nothing beside them.
 
 Explore enforces the same rule. In each emulator's folder it allows only the way to the cache, and
 in the cache folder only what the plan recognised.
@@ -3557,7 +3562,7 @@ often mistaken for a hang. **Ryujinx translates each game's code again over its 
 they start more slowly.
 
 **Your saves, memory cards, save states, firmware, keys, games and settings are untouched**, and so
-are Cemu's transferable cache and the Switch emulators' guest shader caches.
+are Cemu's and the 3DS emulators' transferable caches and the Switch emulators' guest shader caches.
 
 ### Why Tier 2, not Tier 1
 

@@ -74,6 +74,16 @@ public abstract class EmulatorLayout
     public virtual bool IsKnownByItsProgram => false;
 
     /// <summary>
+    /// Whether nothing proves <paramref name="root"/> to be this emulator's but a settings file
+    /// <paramref name="other"/> writes there too. A marker of this layout's own that Windows would not
+    /// answer for counts as present, so the folder stays this emulator's as well.
+    /// </summary>
+    public bool IsProvenOnlyByMarkersOf(EmulatorLayout other, string root) =>
+        Markers
+            .Where(marker => !other.Markers.Contains(marker, StringComparer.OrdinalIgnoreCase))
+            .All(marker => LongPath.ProbeFile(Path.Combine(root, marker)) is PathPresence.Absent);
+
+    /// <summary>
     /// Whether one of this emulator's programs is in <paramref name="folder"/>. A refusal counts, so the
     /// root is probed and reported as unread rather than the folder said to hold no emulator.
     /// </summary>

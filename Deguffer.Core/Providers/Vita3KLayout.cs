@@ -40,6 +40,7 @@ public sealed partial class Vita3KLayout : EmulatorLayout
         ("gui-configs", "How Vita3K's window and game list are arranged."),
         ("textures", "Texture packs you installed and textures you dumped."),
         ("patch", "Patches you added."),
+        (Path.Combine("cache", "decrypted_selfs"), "Game programs you asked Vita3K to decrypt."),
         ("fs", "The emulated PS Vita storage of a portable install: your saves, installed games, updates, DLC and firmware."),
     ];
 
