@@ -88,7 +88,7 @@ offers anything.
 | **4. Do not touch** | Settings, credentials and live state | Things stop working | Never shown |
 
 A few rows cover a tool nobody working on Deguffer has installed, and were written from its
-publisher's documentation and its users' reports. Each carries a **Researched** chip and is never
+publisher's documentation, its source code and its users' reports. Each carries a **Researched** chip and is never
 pre-selected, whatever its tier.
 
 Anything Deguffer does not positively recognise is treated as Tier 4, so it is left alone by

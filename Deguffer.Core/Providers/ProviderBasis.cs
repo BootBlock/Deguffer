@@ -54,8 +54,8 @@ public static class ProviderBasisExtensions
             "Deguffer's rules for this location were checked against a real installation of the "
             + "application.",
         ProviderBasis.Researched =>
-            "Deguffer's rules for this location come from the publisher's documentation and from "
-            + "reports by people who use the application, not from an installation Deguffer's "
+            "Deguffer's rules for this location come from the publisher's documentation, the "
+            + "application's source code and reports by people who use it, not from an installation Deguffer's "
             + "developers have seen. It removes only folders it recognises and leaves everything "
             + "else alone, but it never ticks this row for you: look at what it lists before you "
             + "choose it.",
