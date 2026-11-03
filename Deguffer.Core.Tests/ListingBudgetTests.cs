@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -120,6 +121,142 @@ public sealed class ListingBudgetTests
         Assert.Equal(0, budget.InFlight(@"\\?\Q:\next"));
     }
 
+    /// <summary>
+    /// A listing that ends wakes one waiter, the one it hands its slot to, rather than every waiter
+    /// queued. With eight queued behind a budget of one, eight wake-ups let all eight list. Each
+    /// listing lasts until the budget counts every waiter left as queued, so woken together on each
+    /// listing's end they would wake up to thirty-six times between them.
+    /// </summary>
+    [Fact]
+    public async Task AListingThatEndsWakesOnlyTheWaiterItHandsItsSlotTo()
+    {
+        var budget = new ListingBudget();
+        var holder = new HeldListing();
+        var holding = Run(budget, holder, limit: 1);
+        holder.WaitUntilStarted();
+
+        var waiters = new Task[8];
+        var listed = 0;
+        ListDirectory untilTheRestAreQueued = (_, _, _) =>
+        {
+            var left = waiters.Length - Interlocked.Increment(ref listed);
+            WaitUntil(() => budget.Waiting(Listed) == left);
+            return ListingEnd.Listed;
+        };
+
+        for (var i = 0; i < waiters.Length; i++)
+        {
+            waiters[i] = Run(budget, untilTheRestAreQueued, limit: 1);
+            var queued = i + 1;
+            WaitUntil(() => budget.Waiting(Listed) == queued);
+        }
+
+        holder.Release();
+        await Task.WhenAll([holding, .. waiters]).WaitAsync(Deadline);
+
+        Assert.Equal(waiters.Length, budget.Wakes(Listed));
+        Assert.Equal(0, budget.Waiting(Listed));
+        Assert.Equal(0, budget.InFlight(Listed));
+    }
+
+    /// <summary>Waiters held back by one budget list in the order they came to wait.</summary>
+    [Fact]
+    public async Task WaitersListInTheOrderTheyCame()
+    {
+        var budget = new ListingBudget();
+        var holder = new HeldListing();
+        var holding = Run(budget, holder, limit: 1);
+        holder.WaitUntilStarted();
+
+        var order = new ConcurrentQueue<string>();
+        var waiters = new Task[8];
+        for (var i = 0; i < waiters.Length; i++)
+        {
+            waiters[i] = Run(budget, Recording(order, $"{i}"), limit: 1);
+            var queued = i + 1;
+            WaitUntil(() => budget.Waiting(Listed) == queued);
+        }
+
+        holder.Release();
+        await Task.WhenAll([holding, .. waiters]).WaitAsync(Deadline);
+
+        Assert.Equal(Enumerable.Range(0, waiters.Length).Select(i => $"{i}"), order);
+    }
+
+    /// <summary>
+    /// A listing that comes after a slot is given back does not take it from the waiter it was given
+    /// to. The thread that gave it back lists again at once, which a slot left free for the waiter to
+    /// race for would let it win.
+    /// </summary>
+    [Fact]
+    public async Task AListingThatComesLaterDoesNotOvertakeOneThatWaited()
+    {
+        var budget = new ListingBudget();
+        var holder = new HeldListing();
+        var order = new ConcurrentQueue<string>();
+
+        var holding = Task.Factory.StartNew(
+            () =>
+            {
+                budget.Around(holder.List, limit: 1)(Listed, default, []);
+                budget.Around(Recording(order, "later"), limit: 1)(Listed, default, []);
+            },
+            TaskCreationOptions.LongRunning);
+
+        holder.WaitUntilStarted();
+        var waiter = Run(budget, Recording(order, "waited"), limit: 1);
+        WaitUntil(() => budget.Waiting(Listed) == 1);
+
+        holder.Release();
+        await Task.WhenAll(holding, waiter).WaitAsync(Deadline);
+
+        Assert.Equal(["waited", "later"], order);
+    }
+
+    /// <summary>
+    /// A waiter held back by a lower limit is passed over for one queued after it that a freed slot
+    /// admits, stays queued without waking while the count holds it back, and lists once the count
+    /// falls below its limit. Two wake-ups list both: one for each waiter.
+    /// </summary>
+    [Fact]
+    public async Task AWaiterWithALowerLimitIsPassedOverThenListsOnceTheCountFallsBelowIt()
+    {
+        var budget = new ListingBudget();
+        var first = new HeldListing();
+        var second = new HeldListing();
+        var higher = new HeldListing();
+        var lower = new HeldListing();
+
+        var firstTask = Run(budget, first, limit: 2);
+        var secondTask = Run(budget, second, limit: 2);
+        first.WaitUntilStarted();
+        second.WaitUntilStarted();
+
+        var lowerTask = Run(budget, lower, limit: 1);
+        WaitUntil(() => budget.Waiting(Listed) == 1);
+        var higherTask = Run(budget, higher, limit: 2);
+        WaitUntil(() => budget.Waiting(Listed) == 2);
+
+        first.Release();
+        higher.WaitUntilStarted();
+        await firstTask.WaitAsync(Deadline);
+        WaitUntil(() => budget.Waiting(Listed) == 1);
+        Assert.False(lower.Started);
+
+        second.Release();
+        await secondTask.WaitAsync(Deadline);
+        WaitUntil(() => budget.Waiting(Listed) == 1);
+        Assert.False(lower.Started);
+
+        higher.Release();
+        lower.WaitUntilStarted();
+        lower.Release();
+        await Task.WhenAll(higherTask, lowerTask).WaitAsync(Deadline);
+
+        Assert.Equal(2, budget.Wakes(Listed));
+        Assert.Equal(0, budget.InFlight(Listed));
+    }
+
     private static Task Walk(ListingBudget budget, WaitingTree tree, string root, int threads) =>
         Task.Factory.StartNew(
             () => BoundedFileWalk.Visit<byte>(
@@ -142,6 +279,67 @@ public sealed class ListingBudgetTests
 
     private static ListingEnd EmptyListing(string directory, ListingRequest request, List<WalkEntry> into) =>
         ListingEnd.Listed;
+
+    /// <summary>The directory every listing outside a walk lists, so all of them share one volume.</summary>
+    private const string Listed = @"\\?\Q:\listed";
+
+    /// <summary>One listing through <paramref name="budget"/> on a thread of its own, as a walk's helper lists.</summary>
+    private static Task Run(ListingBudget budget, ListDirectory list, int limit) =>
+        Task.Factory.StartNew(
+            () => budget.Around(list, limit)(Listed, default, []),
+            TaskCreationOptions.LongRunning);
+
+    private static Task Run(ListingBudget budget, HeldListing listing, int limit) => Run(budget, listing.List, limit);
+
+    private static ListDirectory Recording(ConcurrentQueue<string> order, string name) =>
+        (_, _, _) =>
+        {
+            order.Enqueue(name);
+            return ListingEnd.Listed;
+        };
+
+    /// <summary>
+    /// Waits for <paramref name="condition"/>, which another thread makes true and nothing signals: a
+    /// listing reaching the budget's queue.
+    /// </summary>
+    private static void WaitUntil(Func<bool> condition)
+    {
+        if (!SpinWait.SpinUntil(condition, Deadline))
+        {
+            throw new TimeoutException("The listings never reached the state the test waits for.");
+        }
+    }
+
+    /// <summary>A listing that, once it has its slot, keeps it until the test releases it.</summary>
+    private sealed class HeldListing
+    {
+        private readonly ManualResetEventSlim _started = new();
+        private readonly ManualResetEventSlim _released = new();
+
+        public bool Started => _started.IsSet;
+
+        public ListingEnd List(string directory, ListingRequest request, List<WalkEntry> into)
+        {
+            _started.Set();
+
+            if (!_released.Wait(Deadline))
+            {
+                throw new TimeoutException("The test never released the listing.");
+            }
+
+            return ListingEnd.Listed;
+        }
+
+        public void WaitUntilStarted()
+        {
+            if (!_started.Wait(Deadline))
+            {
+                throw new TimeoutException("The listing never got a slot.");
+            }
+        }
+
+        public void Release() => _released.Set();
+    }
 
     /// <summary>
     /// Roots holding a row of folders each, every one of which waits while it is listed until
