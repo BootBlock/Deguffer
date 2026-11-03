@@ -167,7 +167,7 @@ Observed on one workstation; sizes will vary, but the *shape* generalises. Paths
 | Source | Observed | Tier | Notes |
 | --- | --- | --- | --- |
 | `%LOCALAPPDATA%\Microsoft\vscode-cpptools` | 6.0 GB | 1 | C++ IntelliSense databases; rebuilt on next open |
-| `%LOCALAPPDATA%\Android` | 6.7 GB | 2 | SDK platforms + emulator images. Huge re-download; only offer if the toolchain looks unused |
+| `%LOCALAPPDATA%\Android` | 6.7 GB | ~~2~~ | ~~SDK platforms + emulator images. Huge re-download; only offer if the toolchain looks unused~~ **Declined**, see §8 question 1 |
 | `%USERPROFILE%\.platformio` | 5.7 GB | 2 | Embedded toolchains; same reasoning |
 | `%USERPROFILE%\.cache` | 3.8 GB | 1 | Mixed tool caches; needs per-subfolder rules |
 | `%LOCALAPPDATA%\uv` | 3.5 GB | 1 | Python (uv) package cache |
@@ -1447,6 +1447,18 @@ where it is.
    so the provider offers that figure and nothing else, and offers no row at all where it comes back
    zero. The question narrows to the Android SDK, and to any toolchain whose own tooling will not
    answer it.
+
+   **Answered for the Android SDK by declining it
+   ([#237](https://github.com/BootBlock/Deguffer/issues/237)).** Measured, the folder is almost
+   entirely installed SDK components rather than cache, so an idle signal would only license
+   uninstalling a toolchain. Its one true cache, `.android\cache`, is about 3 MB, and it sits beside
+   `debug.keystore`, `adbkey` and `avd`, whose loss costs a debug signing identity, every device's
+   trust and emulator data that cannot be downloaded again. The reclaim is not worth that failure
+   mode, so no provider offers any of it, and §4.2's row is struck. The reasoning is in
+   [cache-locations.md](../cache-locations.md#android-sdk--small-reclaim-catastrophic-failure-mode).
+   A narrower target, such as a system image removed through the SDK's own `sdkmanager`, would be a
+   new proposal, not this question reopened. The question stays open only for a toolchain whose own
+   tooling will not answer it.
 2. **Per-workspace attribution for editor state.** `workspaceStorage` folders are opaque hashes;
    the mapping to a real path lives in each folder's `workspace.json`. Worth confirming this is
    stable across editor versions before depending on it.

@@ -6894,6 +6894,70 @@ its own.
 
 ---
 
+## Dropbox cache
+
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+
+| | |
+| --- | --- |
+| **Location** | `.dropbox.cache` at the top of each Dropbox folder that `%APPDATA%\Dropbox\info.json` or `%LOCALAPPDATA%\Dropbox\info.json` records |
+| **Method** | Path deletion of everything inside the folder. The folder itself stays |
+| **Typical size** | Not measured: Dropbox was not installed on the machine this was written against. Normally small, and larger while the app cannot finish syncing |
+
+### What it is
+
+Dropbox describes `.dropbox.cache` as "a hidden folder that stores temporary files" and "a staging
+area for downloading and uploading files", and says "the cache folder is automatically cleared every
+three days". It is at the top of every Dropbox folder. A personal account and a business account
+connected on the same computer each have their own Dropbox folder, and each has its own cache.
+
+The three-day purge keeps the folder small. It grows when the app cannot finish syncing, and one
+user reports hundreds of gigabytes on a client in that state. That user report was not verified.
+
+Dropbox records each Dropbox folder in `info.json`, as the `path` of its `personal` and `business`
+entries, and documents the file in both `%APPDATA%\Dropbox` and `%LOCALAPPDATA%\Dropbox`.
+
+### What Deguffer does
+
+Deguffer reads both records and empties the cache of each Dropbox folder they name, once each
+however it is named. Dropbox has no command for this. Its own instructions are to quit the app
+fully, open the folder, and move the files in it to the Recycle Bin. Deguffer empties the same
+folder with the app closed, but it deletes the files rather than moving them to the Recycle Bin.
+
+A recorded folder is followed only where it may be a Dropbox folder: never the profile, a drive
+root, Documents or a folder holding a temporary folder, and never a value that is not a full path.
+Deguffer says which folder it left alone and why. A record that cannot be read is said, and is never
+read as Dropbox not being set up. A record that names a folder that is no longer there is passed
+over.
+
+While Dropbox (`Dropbox.exe`) is running, nothing is offered, because Dropbox stages its downloads
+and uploads in this folder and its own steps start with quitting it. The clean asks again before it
+empties each cache.
+
+### What is protected
+
+- **The `.dropbox.cache` folder itself.** Only what is inside it is removed.
+- **The Dropbox folder, and every entry beside the cache**: your files and folders, whatever
+  their names.
+- **Both `info.json` records.**
+- **A cache that is a link** to somewhere else, which is never looked through.
+
+After the clean, Deguffer checks that each of these is still there (§5.6). In Explore, what is
+inside a cache may be removed, and the cache itself may not.
+
+### What it costs you
+
+Dropbox downloads again anything it had staged here and still needs. Your files, your settings and
+your account are untouched.
+
+### Why Tier 2
+
+Dropbox calls the folder a staging area for uploads as well as downloads. With the app closed,
+emptying it should be safe, but nothing Dropbox publishes says that a staged upload is never the
+only copy of a change. So the row is not pre-selected, and is confirmed on its own.
+
+---
+
 ## Per-project build output
 
 **Tier 1 for .NET intermediate output, the caches in Visual Studio's `.vs` folders, Nx's task cache

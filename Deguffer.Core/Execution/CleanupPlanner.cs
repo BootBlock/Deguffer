@@ -57,7 +57,7 @@ public sealed class CleanupPlanner
     /// server's byte store, Roslyn's solution indexes, the Azure Functions Core Tools releases Visual Studio downloads, the driver packages graphics driver installers leave behind, what
     /// Claude Code's sessions leave behind, its conversations, its rewind snapshots and the logs of the MCP servers it runs, the
     /// caches, installer downloads and logs named tools leave in the temporary folders, the
-    /// per-volume Recycle Bins, the Windows File History target, the crash
+    /// per-volume Recycle Bins, the Windows File History target, the cache Dropbox keeps in each Dropbox folder, the crash
     /// dumps, the Windows servicing logs, the Windows component store's own cleanup and its reset, and the per-project build output, Unreal's included, inside the user's own
     /// approved folders — which the audit did not cover, and which were investigated on their own
     /// terms before being added. Their reasoning and their rejected alternatives are in
@@ -65,7 +65,7 @@ public sealed class CleanupPlanner
     ///
     /// Tier 1 throughout except Unity, Unreal's per-project intermediate files and derived data, Cargo's per-project target, node_modules, Python virtual
     /// environments, conda, Maven, vcpkg, Steam's shader caches, the shared Unreal Engine derived data cache, Unity's GI cache, Affinity's models, Capture One's previews, DaVinci Resolve's render cache, PlatformIO, the STM32Cube firmware zips, Playwright, Puppeteer, the Azure Functions Core Tools
-    /// releases, the graphics driver installer files, the installer downloads in the temporary folders, the superseded Squirrel builds, the local copies of cloud files and the component store's cleanup, which are Tier 2, and the
+    /// releases, the graphics driver installer files, the installer downloads in the temporary folders, the superseded Squirrel builds, the local copies of cloud files, the Dropbox cache and the component store's cleanup, which are Tier 2, and the
     /// Recycle Bins, the component store's reset, the File History target, the crash dumps, the servicing logs, the Epic
     /// launcher's logs, the VS Code logs, the tool logs in the temporary folders, and Claude Code's conversations, rewind snapshots and MCP server logs, which are Tier 3. Neither tier is ever
     /// pre-selected, and neither is executed without the confirmation §7 requires of it — an
@@ -342,6 +342,7 @@ public sealed class CleanupPlanner
             new RecycleBinProvider(ShellRecycleBinEmptier.Default, environment, preferences: preferences, scanner: scanner),
             new FileHistoryProvider(environment, preferences: preferences, scanner: scanner),
             new CloudLocalCopiesProvider(CloudFiles.Default, environment, scanner: scanner, tuning: tuning),
+            new DropboxCacheProvider(environment, scanner: scanner),
             new TempDirectoryProvider(
                 environment,
                 liveTrees: liveTrees,
