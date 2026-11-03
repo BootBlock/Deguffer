@@ -23,7 +23,8 @@ namespace Deguffer.Testing;
 /// <para><b>One test at a time.</b> Windows shows every placeholder undisguised to a process connected
 /// to any sync root, not only to the one the placeholder is under, so a root another test has
 /// connected changes what this one sees after <see cref="Disconnect"/>. Every test class that makes
-/// one belongs to the <c>Scratch sync roots</c> test collection, which runs them one after another.</para>
+/// one belongs to the <c>Scratch sync roots</c> test collection, which runs them one after another, and
+/// <c>ScratchSyncRootCollectionTests</c> fails for a class that makes one outside it.</para>
 /// </summary>
 public sealed class ScratchSyncRoot : IDisposable
 {
