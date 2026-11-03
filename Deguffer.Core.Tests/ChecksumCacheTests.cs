@@ -96,7 +96,7 @@ public sealed class ChecksumCacheTests : IDisposable
     public void AChangeToAnyKeyFieldMissesTheCache(string field)
     {
         var cache = new ChecksumCache(Store, _clock);
-        var remembered = Description();
+        var remembered = State();
         var value = Value(ChecksumAlgorithm.XxHash128, 1);
         cache.Remember(remembered, ContentPart.Whole, value);
 
@@ -182,7 +182,7 @@ public sealed class ChecksumCacheTests : IDisposable
     [InlineData("an algorithm no value has")]
     public void ACorruptStoreLoadsEmpty(string damage)
     {
-        var description = Description();
+        var description = State();
         var value = Value(ChecksumAlgorithm.Sha256, 2);
         var cache = new ChecksumCache(Store, _clock);
         cache.Remember(description, ContentPart.Whole, value);
@@ -216,8 +216,8 @@ public sealed class ChecksumCacheTests : IDisposable
     [Fact]
     public void AValueUnusedTooLongOrPastTheBoundIsDropped()
     {
-        var unused = Description() with { Identity = new FileIdentity(1, 1) };
-        var used = Description() with { Identity = new FileIdentity(1, 2) };
+        var unused = State() with { Identity = new FileIdentity(1, 1) };
+        var used = State() with { Identity = new FileIdentity(1, 2) };
         var cache = new ChecksumCache(Store, _clock);
         cache.Remember(unused, ContentPart.Whole, Value(ChecksumAlgorithm.XxHash128, 1));
         cache.Remember(used, ContentPart.Whole, Value(ChecksumAlgorithm.XxHash128, 2));
@@ -232,7 +232,7 @@ public sealed class ChecksumCacheTests : IDisposable
         Assert.NotNull(reloaded.Find(used, ContentPart.Whole, ChecksumAlgorithm.XxHash128));
 
         var bounded = new ChecksumCache(Store + ".bounded", _clock, mostKept: 2);
-        var oldest = Description() with { Identity = new FileIdentity(2, 1) };
+        var oldest = State() with { Identity = new FileIdentity(2, 1) };
         bounded.Remember(oldest, ContentPart.Whole, Value(ChecksumAlgorithm.XxHash128, 3));
         _clock.Advance(TimeSpan.FromDays(1));
         bounded.Remember(used, ContentPart.Whole, Value(ChecksumAlgorithm.XxHash128, 4));
@@ -258,8 +258,8 @@ public sealed class ChecksumCacheTests : IDisposable
 
         var online = new ContentReader(
             FileInformation.Default,
-            (path, route) => FileInformation.Default.Hold(path, route) is { Reading.Description: { } description } held
-                ? held with { Reading = held.Reading with { Description = description with { Attributes = description.Attributes | (FileAttributes)0x0040_0000 } } }
+            (path, route) => FileInformation.Default.Hold(path, route) is { Reading.State: { } state } held
+                ? held with { Reading = held.Reading with { State = state with { Attributes = state.Attributes | (FileAttributes)0x0040_0000 } } }
                 : throw new InvalidOperationException("The fixture's file could not be described."),
             (_, _, _) => throw new InvalidOperationException("The content of a file not on this device was opened."),
             NoPath,
@@ -488,8 +488,8 @@ public sealed class ChecksumCacheTests : IDisposable
         return Counted(reader)(file, ContentPart.Whole, checksum, default);
     }
 
-    private static FileDescription Description() => new(
-        new FileIdentity(1, 7), @"X:\Data\a.bin", 3 * Block, 3 * Block, 1, new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc),
+    private static FileState State() => new(
+        new FileIdentity(1, 7), 3 * Block, 3 * Block, 1, new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc),
         new DateTime(2026, 1, 2, 3, 4, 6, DateTimeKind.Utc), FileAttributes.Archive, ReparseTag: 0);
 
     private static ContentChecksum Value(ChecksumAlgorithm algorithm, int seed) =>

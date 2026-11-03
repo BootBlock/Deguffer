@@ -53,15 +53,16 @@ public sealed class MftVolumeIndexLeftOutTests
     private static FileReading Numbered(ulong record, ushort sequence = 3) => new(
         FileReadingResult.Identified,
         new FileDescription(
-            new FileIdentity(Volume: 1, File: ((ulong)sequence << 48) | record),
-            Path: @"C:\Users\testuser\temp\entry",
-            Length: 0,
-            Allocated: 0,
-            Names: 1,
-            Modified: DateTime.UnixEpoch,
-            Changed: DateTime.UnixEpoch,
-            Attributes: FileAttributes.Archive,
-            ReparseTag: 0));
+            new FileState(
+                new FileIdentity(Volume: 1, File: ((ulong)sequence << 48) | record),
+                Length: 0,
+                Allocated: 0,
+                Names: 1,
+                Modified: DateTime.UnixEpoch,
+                Changed: DateTime.UnixEpoch,
+                Attributes: FileAttributes.Archive,
+                ReparseTag: 0),
+            path: @"C:\Users\testuser\temp\entry"));
 
     /// <summary>A describer that answers by the entry's name, and fails the test for any it was not given.</summary>
     private static Func<IReadOnlyList<string>, FileReading> Describing(IReadOnlyDictionary<string, FileReading> byName) =>
