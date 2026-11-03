@@ -165,7 +165,7 @@ internal sealed class ContentReader
             return ContentReading.LeftOut(before);
         }
 
-        var described = held.Reading.Description!;
+        var described = held.Reading.State!;
         var attributes = described.Attributes;
         var remembers = _remembered is not null && ChecksumCache.Keeps(file);
 
@@ -176,7 +176,7 @@ internal sealed class ContentReader
 
         using (content)
         {
-            var opened = _files.Describe(content, file.Route);
+            var opened = _files.State(content, file.Route);
 
             if (Judge(opened, file, attributes) is { } refused)
             {
@@ -186,7 +186,7 @@ internal sealed class ContentReader
             // Asked only once the content is open and judged, so a remembered value stands in for
             // reading the bytes and never for the open: a file another program holds now, or one
             // this account may not read, is left out as a read would leave it (§7.4).
-            if (remembers && _remembered!.Find(opened.Description!, part, checksum.Algorithm) is { } known)
+            if (remembers && _remembered!.Find(opened.State!, part, checksum.Algorithm) is { } known)
             {
                 return new ContentReading(ContentReadResult.Read, known);
             }
@@ -208,7 +208,7 @@ internal sealed class ContentReader
                 return ContentReading.LeftOut(ContentReadResult.Changed);
             }
 
-            var finished = _files.Describe(content, file.Route);
+            var finished = _files.State(content, file.Route);
 
             if (Judge(finished, file, attributes) is { } after)
             {
@@ -217,7 +217,7 @@ internal sealed class ContentReader
 
             // Kept only where nothing Windows records about the file changed while it was read, so
             // the value stands for the file in the state its key names.
-            if (remembers && finished.Description!.Changed == described.Changed)
+            if (remembers && finished.State!.Changed == described.Changed)
             {
                 _remembered!.Remember(described, part, value);
             }
@@ -268,7 +268,7 @@ internal sealed class ContentReader
     /// still the file the search identified, on this device.
     /// </summary>
     /// <param name="attributes">The attributes described before the content was opened, which must not have changed since.</param>
-    internal static ContentReadResult? Judge(FileReading reading, DuplicateCandidate file, FileAttributes? attributes)
+    internal static ContentReadResult? Judge(FileStateReading reading, DuplicateCandidate file, FileAttributes? attributes)
     {
         switch (reading.Result)
         {
@@ -279,22 +279,22 @@ internal sealed class ContentReader
                 return ContentReadResult.Unidentified;
         }
 
-        var description = reading.Description!;
+        var state = reading.State!;
 
-        if (!description.IsFile)
+        if (!state.IsFile)
         {
             return ContentReadResult.Gone;
         }
 
-        if (StorageAttributes.Of(description.Attributes) is FileStorage.CloudOnly)
+        if (StorageAttributes.Of(state.Attributes) is FileStorage.CloudOnly)
         {
             return ContentReadResult.OnlyInTheCloud;
         }
 
-        if (description.Identity != file.Identity
-            || description.Length != file.Length
-            || description.Modified != file.Modified
-            || (attributes is { } before && description.Attributes != before))
+        if (state.Identity != file.Identity
+            || state.Length != file.Length
+            || state.Modified != file.Modified
+            || (attributes is { } before && state.Attributes != before))
         {
             return ContentReadResult.Changed;
         }

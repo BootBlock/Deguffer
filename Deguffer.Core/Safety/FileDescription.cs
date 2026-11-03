@@ -23,7 +23,7 @@ internal enum IdentityRoute
     Legacy,
 }
 
-/// <summary>What <see cref="FileInformation.Describe"/> could say about a path.</summary>
+/// <summary>What <see cref="FileInformation.Describe(string, IdentityRoute)"/> could say about a path.</summary>
 public enum FileReadingResult
 {
     /// <summary>Windows described the file, and the description is given.</summary>
@@ -39,8 +39,14 @@ public enum FileReadingResult
     Unreadable,
 }
 
-/// <summary>A file as an attributes-only handle describes it, at the moment it was asked.</summary>
-/// <param name="Path">Where the handle says the file is, in display form, once the folders on the way are followed.</param>
+/// <summary>
+/// A file as an attributes-only handle describes it, at the moment it was asked, without where it
+/// is: everything Windows answers about the file through the handle, apart from its path.
+///
+/// <para>Answered without a final-path query, which costs about as much as every other read of a
+/// description together, so a caller that judges a file by what it is rather than where it is
+/// asks for this.</para>
+/// </summary>
 /// <param name="Length">Its length in bytes.</param>
 /// <param name="Allocated">
 /// What it occupies on disk, as Windows reports it: less than its length where it is compressed or
@@ -57,9 +63,8 @@ public enum FileReadingResult
 /// what says a remembered checksum is still the file's.
 /// </param>
 /// <param name="ReparseTag">The tag of the reparse point the entry itself carries, or zero.</param>
-public sealed record FileDescription(
+public record FileState(
     FileIdentity Identity,
-    string Path,
     long Length,
     long Allocated,
     int Names,
@@ -75,20 +80,46 @@ public sealed record FileDescription(
     public bool IsFile => !Attributes.HasFlag(FileAttributes.Directory) && (ReparseTag & NameSurrogate) == 0;
 }
 
-/// <summary>What <see cref="FileInformation.Describe"/> answered, and the description where it had one.</summary>
+/// <summary>A file as an attributes-only handle describes it, at the moment it was asked, and where the handle says it is.</summary>
+public sealed record FileDescription : FileState
+{
+    /// <param name="path">Where the handle says the file is, in display form, once the folders on the way are followed.</param>
+    public FileDescription(FileState state, string path)
+        : base(state)
+    {
+        Path = path;
+    }
+
+    /// <summary>Where the handle says the file is, in display form, once the folders on the way are followed.</summary>
+    public string Path { get; init; }
+}
+
+/// <summary>What <see cref="FileInformation.State"/> answered, and the state where it had one.</summary>
+public readonly record struct FileStateReading(FileReadingResult Result, FileState? State)
+{
+    public static FileStateReading Gone => new(FileReadingResult.Gone, null);
+
+    public static FileStateReading Unreadable => new(FileReadingResult.Unreadable, null);
+}
+
+/// <summary>What <see cref="FileInformation.Describe(string, IdentityRoute)"/> answered, and the description where it had one.</summary>
 public readonly record struct FileReading(FileReadingResult Result, FileDescription? Description)
 {
     public static FileReading Gone => new(FileReadingResult.Gone, null);
 
     public static FileReading Unreadable => new(FileReadingResult.Unreadable, null);
+
+    /// <summary>The same answer without the path, for a judgement that compares only what the file is.</summary>
+    public static implicit operator FileStateReading(FileReading reading) => new(reading.Result, reading.Description);
 }
 
 /// <summary>
 /// What <see cref="FileInformation.Hold"/> answered, and the attributes-only handle the file was
-/// described through where it was identified, held until this is disposed.
+/// described through where it was identified, held until this is disposed. The state carries no
+/// path: a caller that needs one asks <see cref="FileInformation.Locate"/>.
 /// </summary>
 /// <param name="Handle">The handle, open on the entry itself, or null where the file was not identified.</param>
-internal sealed record HeldFile(FileReading Reading, SafeFileHandle? Handle) : IDisposable
+internal sealed record HeldFile(FileStateReading Reading, SafeFileHandle? Handle) : IDisposable
 {
     public void Dispose() => Handle?.Dispose();
 }
