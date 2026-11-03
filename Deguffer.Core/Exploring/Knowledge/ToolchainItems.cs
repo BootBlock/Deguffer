@@ -83,6 +83,36 @@ internal static class ToolchainItems
             + "cost of a slow first build and no builds at all while offline."),
 
         new(
+            KnownPlace.LocalAppData,
+            "Coursier",
+            "Coursier's folder, shared by sbt, Scala CLI, Mill and Metals. 'Cache\\v1' is the libraries "
+            + "they downloaded, usually the large part. Beside it, 'Cache\\arc' holds the Java runtimes "
+            + "Coursier installed and 'data' the applications 'cs install' put on the path.",
+
+            "Only the downloads in 'Cache\\v1' come back by themselves, at the next build, so this "
+            + "folder does not go as a whole."),
+
+        new(
+            KnownPlace.LocalAppData,
+            @"Coursier\Cache\arc",
+            "Archives Coursier extracted, among them every Java runtime 'cs java' and 'cs setup' "
+            + "installed, which JAVA_HOME and your PATH may point into. A few hundred megabytes for "
+            + "each runtime is normal.",
+
+            "Deleting it uninstalls those runtimes, and Java programs that use them stop starting "
+            + "until 'cs java' or 'cs setup' installs them again."),
+
+        new(
+            KnownPlace.UserProfile,
+            ".ivy2",
+            "Apache Ivy's folder, used by sbt before 1.3 and by Ant builds. 'cache' is the "
+            + "dependencies it downloaded. 'local' is what 'publishLocal' published from this "
+            + "computer, and '.credentials' is a repository login.",
+
+            "The cache comes back at the next build, but what is in 'local' exists nowhere else, so "
+            + "this folder does not go as a whole."),
+
+        new(
             KnownPlace.UserProfile,
             ".npm",
             "On Windows this is usually not npm's cache, which lives under 'AppData\\Local' "

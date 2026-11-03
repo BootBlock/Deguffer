@@ -318,6 +318,14 @@ public class PreferenceStoreTests
     }
 
     /// <summary>
+    /// The literal <c>null</c> document, which is well-formed JSON and so never reaches the catch.
+    /// Read straight out it is a null record, which the shell would be handed as its preferences.
+    /// </summary>
+    [Fact]
+    public void FallsBackToTheDefaultsWhenTheDocumentIsNull() =>
+        Assert.Equal(AppPreferences.Default, LoadWritten("null"));
+
+    /// <summary>
     /// A theme name that no longer exists — an older or newer build's file. The unknown value must
     /// not take the rest of the settings with it, and must not throw.
     /// </summary>

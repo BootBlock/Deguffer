@@ -39,8 +39,7 @@ public sealed partial class DispatcherCallbackSweepTests
             var name = Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file).Replace('\\', '/');
 
             // Comment lines are skipped, because a doc comment names these to explain them.
-            var uses = File.ReadLines(file)
-                .Where(line => !line.TrimStart().StartsWith("//", StringComparison.Ordinal))
+            var uses = ProductSources.Code(File.ReadAllText(file))
                 .Sum(line => RawCallback().Matches(line).Count);
 
             if (uses > 0)

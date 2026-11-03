@@ -20,15 +20,58 @@ public static class MemoryPartGuide
     /// <para>The names belong here rather than in the shape's label, which the picture trims to the
     /// width of the shape. A host of several services is the one case where the label cannot carry
     /// what <see cref="MemoryPart.Services"/> promises, so this is where that promise is kept.</para>
+    ///
+    /// <para>The memory no figure attributes is the other: what it holds follows from which parts this
+    /// read could draw, so the part's own sentence cannot say it.</para>
     /// </summary>
     public static string Describe(MemoryTree tree, int node)
     {
         ArgumentNullException.ThrowIfNull(tree);
 
-        var part = Describe(tree.PartOf(node));
-        var holds = ServiceHostText.Holds(tree.ServicesOf(node));
+        var kind = tree.PartOf(node);
+        var part = Describe(kind);
+        var more = kind == MemoryPart.Unattributed
+            ? WhatThisTreeLeaves(tree)
+            : ServiceHostText.Holds(tree.ServicesOf(node));
 
-        return holds.Length == 0 ? part : $"{part} {holds}";
+        return more.Length == 0 ? part : $"{part} {more}";
+    }
+
+    /// <summary>
+    /// What the memory no figure attributes holds beyond what it always holds, in the tree
+    /// <see cref="MemoryTreeBuilder"/> drew (§7.2).
+    ///
+    /// <para>Said for every read, the lists' own included. Told that free memory is inside a shape it
+    /// is not in, or left to find an unexplained remainder, a reader takes the rest for a leak, which
+    /// is the reading this part is drawn to prevent. Decided by the parts the tree drew rather than by
+    /// the read that fed it, so the words cannot describe shapes the picture does not have.</para>
+    ///
+    /// <para>Where the system cache is drawn, the system working set is named as possibly here rather
+    /// than as inside the cache: Windows documents the cache as the standby list and the system working
+    /// set, but <see cref="SystemMemory.SystemCache"/> was measured below the standby list alone.</para>
+    /// </summary>
+    private static string WhatThisTreeLeaves(MemoryTree tree)
+    {
+        // Where the figures overlap, this part is drawn at nothing and the notes say why, so a
+        // sentence about what it holds in this read would contradict them.
+        if (tree.Overcount > 0)
+        {
+            return "In this picture the figures overlap, so nothing is left over to be drawn here.";
+        }
+
+        var lists = tree.Find(MemoryNodeKey.Of(MemoryPart.Standby)) is not null
+            ? "In this picture it also holds the system working set: the memory Windows keeps in use for "
+                + "its file cache, its own code and the part of the paged pool in memory, which no figure "
+                + "here separates out."
+            : "In this picture it also holds the free, zeroed and modified pages, because the separate "
+                + "page lists could not be used and the system cache drawn beside it takes the place of "
+                + "the standby list only. Windows reports that cache smaller than it documents, so part "
+                + "of the standby list and the system working set can be here as well.";
+
+        return tree.Snapshot.Processes.Figures == ProcessFigures.Checked
+            ? lists
+            : $"{lists} It holds every process's own memory as well, the compression store's included, "
+                + "because the per-process figures were not used.";
     }
 
     /// <summary>
@@ -111,11 +154,13 @@ public static class MemoryPartGuide
         // Named rather than left to the arm below, so that a part added with no sentence of its own
         // fails the test that every part says what it is, instead of silently inheriting this one.
         // The compiler will not catch it: an enum switch needs a default arm whatever it covers.
+        // Only what it holds in every read: the rest follows from the read, and Describe(tree, node)
+        // says it.
         MemoryPart.Unattributed =>
             "Physical memory these figures cannot attribute: shared and shareable pages, page tables, "
-            + "kernel stacks, memory drivers have locked, and the paged pool. Separating it needs "
-            + "rights Deguffer does not ask for, so a large figure here is what could not be told "
-            + "apart rather than memory that has gone missing.",
+            + "kernel stacks, memory drivers have locked, and whatever the parts beside it leave. "
+            + "Separating it needs rights Deguffer does not ask for, so a large figure here is what "
+            + "could not be told apart rather than memory that has gone missing.",
 
         _ => throw new ArgumentOutOfRangeException(nameof(part)),
     };

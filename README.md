@@ -38,7 +38,7 @@ largest files inside it:
 
 Besides Settings and About, Deguffer has six pages:
 
-- [Storage](#storage) checks 121 sources of waste, from package-manager and browser caches to
+- [Storage](#storage) checks 123 sources of waste, from package-manager and browser caches to
   `Windows.old` and old restore points, and puts each one in a [safety tier](#safety-tiers). You
   choose what goes, and when the clean has finished Deguffer checks that everything it said it would
   leave alone is still there.
@@ -125,7 +125,7 @@ remove one by any route.
 
 ## Storage
 
-Each of the 121 sources has its own provider, which knows what that location is and what sits next
+Each of the 123 sources has its own provider, which knows what that location is and what sits next
 to it. Rows for tools you do not have are hidden unless you ask the Storage page to show them. Build
 output and project caches, such as `node_modules`, `obj`, Rust's `target`, Python's `.tox` and
 `.pytest_cache` folders, and the caches in Visual Studio's `.vs` folders, are only looked for
@@ -153,6 +153,8 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | ESP-IDF downloaded tool archives | The archives in each `dist` folder: `%USERPROFILE%\.espressif\dist`, wherever `IDF_TOOLS_PATH` points, the ESP-IDF Installation Manager's `C:\Espressif\dist`, and the `dist` inside and beside each tools folder it records; never the installed tools every ESP-IDF version shares, the Python environments, the installers' records or an ESP-IDF checkout, or anything while the Installation Manager is running. Researched |
 | Scoop download cache | Cleared with Scoop's own cache command, only where everything in the cache is a download Scoop made; installed apps are not touched. Researched |
 | Gradle build cache | `caches` and `wrapper` only, never the Gradle user home itself: `.gradle`, or wherever `GRADLE_USER_HOME` points |
+| Coursier artefact cache | The downloads in `%LOCALAPPDATA%\Coursier\Cache\v1`, or wherever `COURSIER_CACHE` points; never the Java runtimes Coursier installed beside it in `arc` and `jvm`, its container image layers, or the applications `cs install` put on your path. Researched |
+| Ivy dependency cache | `.ivy2\cache` only; never `.ivy2\local`, which holds what `publishLocal` published from this computer, or your `.credentials`. Researched |
 | Cargo crate cache | Researched |
 | Go build and module caches | Researched |
 | Zig build cache | Never the packages Zig fetched. What it built is removed only together with the records that point to it. Researched |
@@ -164,6 +166,8 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | sccache compiler cache | sccache's server is stopped first; never its settings. Researched |
 | Debugger symbol cache | The symbol files and programs that debuggers downloaded into a store that only Microsoft's public symbol servers fill, as `_NT_SYMBOL_PATH` names it; never the store's markers or anything else in it, a store that SymStore built, or anything while a debugger that writes to the store is running |
 | Conan package cache | Conan's own cache clean, limited to sources, build folders and unfinished builds; the packages you built or downloaded stay, with their metadata and your configuration. Researched |
+| restic local cache | Each repository's cache in `%LOCALAPPDATA%\restic`, or wherever `RESTIC_CACHE_DIR` points, cleared with `restic cache --cleanup` sent to that folder, or by path where restic is not installed or the cache holds something restic does not write; only `data`, `index` and `snapshots` in each, never the repository itself, and nothing while restic is running. Researched |
+| Kopia local cache | The folders Kopia caches into, in each cache folder its connection files name and each one in `%LOCALAPPDATA%\kopia`, removed by path because Kopia's own `cache clear` needs the repository's password; never the connections and credentials in `%APPDATA%\kopia`, Kopia's logs, or anything while Kopia or KopiaUI is running. Researched |
 | Pulumi plugin cache | One item per plugin in `.pulumi\plugins`, or wherever `PULUMI_HOME` points, removed with Pulumi's own `pulumi plugin rm`, or by path where Pulumi is not installed; never your access tokens, a stack's state, a plugin a running program is using, or anything while Pulumi is running. Researched |
 | pip package cache | |
 | uv package cache | |

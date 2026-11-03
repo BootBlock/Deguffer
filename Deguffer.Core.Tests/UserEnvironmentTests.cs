@@ -139,6 +139,35 @@ public sealed class UserEnvironmentTests : IDisposable
     }
 
     /// <summary>
+    /// The same route the other way: a tool uninstalled while Deguffer is open is no longer found once
+    /// the pass that follows invalidates. Each pass composes from the environment Deguffer started
+    /// with, so a directory one pass added cannot linger into the next after the machine drops it.
+    /// </summary>
+    [Fact]
+    public void AToolUninstalledAfterAnInstallIsNotFoundOnceTheNextPassInvalidates()
+    {
+        var installed = _temp.CreateDirectory("tool-bin");
+        File.WriteAllBytes(Path.Combine(installed, "deguffer-fixture-tool.exe"), new byte[64]);
+
+        var user = Expandable();
+        var environment = new UserEnvironment(
+            () => Expandable(("PATHEXT", ".EXE")),
+            () => user,
+            EnvironmentBlock.Startup(Values(), Expandable(), Expandable()));
+
+        user["Path"] = new EnvironmentValue(installed, Expandable: true);
+        environment.Invalidate();
+
+        Assert.NotNull(environment.FindExecutable("deguffer-fixture-tool"));
+
+        // The uninstaller's write. The executable stays on disk, so only the PATH can stop it being found.
+        user.Remove("Path");
+        environment.Invalidate();
+
+        Assert.Null(environment.FindExecutable("deguffer-fixture-tool"));
+    }
+
+    /// <summary>
     /// A variable set on the machine after start-up reaches a tool the user starts now and not one
     /// Deguffer starts, so the environment a caller must start a query with to ask about the first is
     /// handed over, and only once a pass has read the machine again.

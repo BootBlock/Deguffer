@@ -509,6 +509,115 @@ the distribution server a project already names.
 
 ---
 
+## Coursier artefact cache
+
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\Coursier\Cache\v1`, or wherever `COURSIER_CACHE` points |
+| **Method** | Delete `https` and `http` inside it |
+| **Typical size** | Several GB on a machine with Scala or Java projects on it |
+
+### What it is
+
+Coursier fetches the dependencies of sbt, Scala CLI, Mill and Metals, and every one of those tools on
+the machine shares its cache. It files each download under its address, so the cache holds one folder
+per scheme, `https` and `http`, with the repository's host and path below each. Nothing prunes it.
+
+### What Deguffer does
+
+It removes `https` and `http`, and never the cache folder that holds them. Coursier has no command
+that clears its cache, so this is the path-based case. Anything else in the cache stays in Tier 4.
+
+It reads `COURSIER_CACHE` before it falls back to the default, and that variable names the cache
+folder itself. It offers nothing if the variable holds a relative path, or names the root of a drive,
+your profile, one of your own folders, or a folder that holds a temporary folder or a Windows folder.
+If the cache is a link to somewhere else, Deguffer says so and leaves it alone. Coursier also reads
+a `coursier.cache` Java property, which is set on one command's line and recorded nowhere Deguffer
+can read. A cache moved only by that is not found, so the failure is a smaller reclaim, never a
+wrong target.
+
+### What is protected
+
+The cache folder sits beside folders that are not downloads, and each is asserted to have survived
+the run:
+
+- **`arc`** is Coursier's archive cache. Since Coursier 2.1, `cs java` and `cs setup` extract every
+  Java runtime they install into it, and `JAVA_HOME` then points there. Deleting it uninstalls Java.
+- **`jvm`** is where older Coursier releases installed those runtimes.
+- **`digest`** holds container image layers, and the ones `cs docker build` made exist nowhere else.
+- **`priv`** holds image layers unpacked with elevated rights, which a running container is built on.
+
+Each of these has its own variable (`COURSIER_ARCHIVE_CACHE`, `COURSIER_JVM_CACHE`,
+`COURSIER_DIGEST_BASED_CACHE` and `COURSIER_PRIVILEDGED_ARCHIVE_CACHE`), and Deguffer protects each
+wherever its variable puts it. Where a variable puts one of them inside `https` or `http`, or puts the
+cache inside one of them, Deguffer offers nothing in the overlap. It compares the folders at every
+path they are reachable at, so a `subst` letter or a second mount does not hide an overlap.
+
+In Explore, Deguffer refuses everything in `%LOCALAPPDATA%\Coursier` except the downloads, which
+includes the applications `cs install` put on your path in `data`, and it refuses a download folder
+that overlaps a kept folder, as the plan does. It also refuses a kept folder that a variable moved.
+Where that is a folder Deguffer would not treat as Coursier's, such as your Documents, it refuses only
+the `https` and `http` folders Coursier extracts into there, and leaves the rest of the folder to you.
+A duplicate search treats only the download folders the plan would remove as cleaned.
+
+### What it costs you
+
+The next build downloads the dependencies it needs again. That build is slower once, and cannot run
+offline. The Java runtimes and the installed applications keep working.
+
+### Why Tier 1
+
+Everything removed was downloaded from a repository a build names, and Coursier reads a `file:`
+repository where it is rather than copying it, so nothing in the cache was built on this machine.
+It is researched rather than observed, so it is not pre-selected.
+
+---
+
+## Ivy dependency cache
+
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+
+| | |
+| --- | --- |
+| **Location** | `%USERPROFILE%\.ivy2\cache` |
+| **Method** | Delete `cache` |
+| **Typical size** | Hundreds of MB to a few GB where sbt before 1.3 or Ant builds were used |
+
+### What it is
+
+Apache Ivy resolves dependencies for sbt before 1.3, Ant builds and older Scala tools, and keeps a
+copy of each in a cache every project shares. sbt 1.3 and later resolve through Coursier instead, so
+on a current machine this folder is often what an older toolchain left behind.
+
+### What Deguffer does
+
+It removes `cache`, and never `.ivy2` itself. Ivy has no command that clears its cache. Only Java
+properties (`sbt.ivy.home`, `ivy.home`) move the folder, and those are set per command, so Deguffer
+reads the default only. If `.ivy2` is a link to somewhere else, Deguffer says so and leaves it alone.
+
+### What is protected
+
+**`local`** is where `publishLocal` publishes what you built on this computer, and it exists on no
+remote. It sits beside the cache, and Deguffer names it Tier 4 and asserts it survived. So is
+**`.credentials`**, the repository login sbt's documentation puts in the same folder, and the folder
+itself. Every other folder in `.ivy2` stays in Tier 4. In Explore, Deguffer refuses everything in
+`.ivy2` except `cache`.
+
+### What it costs you
+
+The next build that resolves through Ivy downloads its dependencies again. What you published
+locally keeps resolving.
+
+### Why Tier 1
+
+This is Maven's finding laid out differently. Maven's local repository mixes downloads and local
+installs in one tree, so it is Tier 2. Ivy keeps the two in separate folders, so the cache alone
+can be offered at Tier 1.
+
+---
+
 ## Go build and module caches
 
 **Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
@@ -6458,6 +6567,142 @@ from it. Machines already created are untouched.
 ### Why Tier 2, not Tier 1
 
 Getting a version back is a download of a whole disk image.
+
+---
+
+## restic local cache
+
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\restic\<repository-id>\{data, index, snapshots}`, unless `RESTIC_CACHE_DIR` moves the folder |
+| **Method** | `restic --cache-dir <folder> cache --cleanup --max-age 0`; a path deletion where restic cannot be found or the folder holds something restic does not write |
+| **Typical size** | restic publishes no figure, so Deguffer measures rather than predicts |
+
+### What it is
+
+restic is a backup program. For each repository it opens, it keeps a local copy of the repository's
+index files, snapshot records and the packs that hold its folder listings, in a folder named by the
+repository's 64-digit identifier. restic's documentation: "The cache is ephemeral: When a file cannot
+be read from the cache, it is loaded from the repository."
+
+restic takes the folder from `RESTIC_CACHE_DIR`, and otherwise from Go's user cache folder, which on
+Windows is `%LOCALAPPDATA%`. It has no configuration file that moves it. A `--cache-dir` given on one
+command line is invisible to everything else.
+
+### What Deguffer does
+
+It reads `RESTIC_CACHE_DIR`, and cleans the folder it names and the default folder too, which still
+holds what restic cached before the variable moved it.
+
+- **With restic installed,** it runs `restic cache --cleanup --max-age 0` with `--cache-dir` naming
+  each folder. restic removes every repository's cache it finds there, whole, and reads no
+  repository to do it.
+- **Otherwise,** it removes `data`, `index` and `snapshots` in each repository's cache by path.
+
+restic's cleanup removes each repository's cache whole, so it is used only where everything it would
+take is a repository's cache holding nothing but those three folders and restic's `version` file.
+A folder or file restic does not write, a cache that `restic check` made for itself, or a link sends
+the plan to the path route, and the clean looks again immediately before the command runs.
+
+### What is protected
+
+The cache folder itself, its `CACHEDIR.TAG`, each repository's cache folder and the `version` file
+in it, any `restic-check-cache-<n>` folder, and anything else Deguffer does not recognise. A link is
+left alone. A `RESTIC_CACHE_DIR` that names a drive root, a folder of your own or a temporary folder
+is not treated as restic's at all.
+
+**The repository is never touched.** It may be a folder on the same disk, and it is never inside the
+cache folder. Deguffer does not read or name it.
+
+Nothing is removed while restic is running. A backup, check or prune that is running reads and
+writes its cache.
+
+### What it costs you
+
+The next restic run re-downloads this metadata from the repository, which for a repository in the
+cloud takes longer and may cost transfer. **Nothing in your backups changes.**
+
+### Why Tier 1
+
+Every byte is a copy of something in the repository, and restic says it reads anything missing from
+the repository again.
+
+---
+
+## Kopia local cache
+
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\kopia\<unique-id>`, unless a connection records another folder or `KOPIA_CACHE_DIRECTORY` moves it |
+| **Method** | A path deletion of the folders Kopia caches into |
+| **Typical size** | Up to the limits each connection sets, 5,000 MB of contents and 5,000 MB of metadata by default (soft limits) |
+
+### What it is
+
+Kopia is a backup program, with KopiaUI as its desktop application. For each repository it is
+connected to, it keeps a cache of the repository's indexes, folder listings and recently read file
+contents. Kopia's documentation: "It is always safe to remove files from cache."
+
+**Two folders, and the difference between them is your connection to your backups.**
+
+- **`%APPDATA%\kopia`** holds the connections: one `.config` file each repository, holding where
+  the repository is and the credentials to reach it, and the repository's password where Windows'
+  credential store was not used.
+- **`%LOCALAPPDATA%\kopia`** holds the caches, one folder each connection, and Kopia's logs.
+
+Each connection file records its own cache folder as `caching.cacheDirectory`, usually relative to
+the file. KopiaUI connects to every `.config` file in the folder, and the command line to the one
+`KOPIA_CONFIG_PATH` names.
+
+### What Deguffer does
+
+It reads each connection file for the cache folder it records, uses `KOPIA_CACHE_DIRECTORY` where
+that names a full path, and also finds each cache folder in `%LOCALAPPDATA%\kopia` by its name, so a
+cache whose connection has gone is still found. In each one it removes these folders by path:
+
+- **`contents`** and **`server-contents`** — file contents read from the repository, or sent by a
+  Kopia repository server.
+- **`metadata`** — folder listings and snapshot records.
+- **`indexes`** and **`index-blobs`** — the repository's indexes.
+- **`own-writes`** and **`blob-list`** — Kopia's record of what it wrote lately, and a copy of the
+  list of files in the repository.
+
+`kopia cache clear` is not used, and neither is `kopia cache info --path`. Both open the repository
+before they act, which needs its password and a connection to wherever the backups are stored. What
+`cache info --path` prints is what the connection file records, which Deguffer reads directly.
+`cache clear` itself only removes the cache folder and makes it again.
+
+### What is protected
+
+`%APPDATA%\kopia`, every connection file wherever `KOPIA_CONFIG_PATH` puts it, and the
+`.kopia-password` file Kopia may keep beside each, none of which is ever searched for anything to
+remove.
+`%LOCALAPPDATA%\kopia` and the logs in it, each cache folder, the format records and the
+`CACHEDIR.TAG` Kopia keeps as files in it, and anything else Deguffer does not recognise. A link is
+left alone. A cache folder a connection records that is a drive root, a folder of your own or a
+temporary folder is not treated as Kopia's at all.
+
+Nothing is removed while Kopia or KopiaUI is running. KopiaUI keeps a Kopia server running for as
+long as it is open, and Kopia closes a repository before it clears that repository's cache.
+
+### What it costs you
+
+The next Kopia run re-downloads this metadata from the repository, which for a repository in the
+cloud takes longer and may cost transfer. **Nothing in your backups changes.**
+
+### Why Tier 1
+
+Every byte is a copy of something in the repository, and Kopia says it is always safe to remove.
+
+### Why only restic and Kopia
+
+"Cache" in a backup program's own vocabulary usually does not mean regenerable. Veeam's backup cache
+holds restore points that may be the only copy, and the folder Duplicati calls its cache holds the
+job configuration. restic and Kopia use the word to mean what a cleaner needs, and both say so.
 
 ---
 
