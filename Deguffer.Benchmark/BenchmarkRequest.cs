@@ -27,6 +27,12 @@ namespace Deguffer.Benchmark;
 /// Every folder the folders route scans, fully qualified, in the order given. For any other route,
 /// <paramref name="Path"/> alone.
 /// </param>
+/// <param name="Tree">
+/// For <see cref="Route.Remove"/>, the tree it builds and removes. For <see cref="Route.Clean"/>, each
+/// of the <paramref name="Trees"/> build folders it builds and removes as one plan. No other route
+/// builds any.
+/// </param>
+/// <param name="Trees">How many trees the clean route builds. One for every other route.</param>
 internal sealed record BenchmarkRequest(
     Route Route,
     string Path,
@@ -35,16 +41,34 @@ internal sealed record BenchmarkRequest(
     TableTuning Table,
     bool Snapshots,
     LinkRead ReadBy,
-    IReadOnlyList<string> Folders)
+    IReadOnlyList<string> Folders,
+    TreeShape Tree,
+    int Trees)
 {
     public const int DefaultRuns = 5;
 
     public const int MaximumRuns = 1000;
 
+    public const int MaximumTrees = 100_000;
+
+    /// <summary>
+    /// The clean route's trees when told nothing about them: a clean of the <c>obj</c> row across a few
+    /// hundred projects.
+    /// </summary>
+    public const int DefaultTrees = 500;
+
+    public const int DefaultFilesPerTree = 100;
+
+    public const int MaximumFilesPerTree = 100_000;
+
+    /// <summary>The tree the remove route builds when told nothing about it: a large cache, five folders deep.</summary>
+    public static TreeShape DefaultTree { get; } = new(100_000, Depth: 5, Fanout: 4);
+
     public const string Usage =
         """
         Usage: Deguffer.Benchmark <route> <target> [--runs N] [options]
                Deguffer.Benchmark folders <folder> [<folder>...] [--runs N]
+               Deguffer.Benchmark remove|clean <new folder> [--runs N] [options]
 
         Routes:
           table <drive>     Read the volume's file table end to end, parse only. Elevated.
@@ -67,6 +91,14 @@ internal sealed record BenchmarkRequest(
                             table read once where it can be, the walk where it cannot, and
                             the volumes on separate disks at the same time. Timed against
                             each folder alone, the difference is what that saves.
+          remove <new folder>
+                            Create the folder, build a tree in it before each run, and
+                            remove the tree as a clean does: the walk, the file pass and
+                            the folder pass, timed apart.
+          clean <new folder>
+                            Create the folder, build many small build folders in it before
+                            each run, and remove them as one plan, as a clean of the obj
+                            row does: what each step costs around its removal.
 
         --runs N               How many times to run the route, 1 to 1000. The default is 5. The
                                first run is reported apart from the others.
@@ -80,6 +112,18 @@ internal sealed record BenchmarkRequest(
                                on it. The default is name.
         --snapshots on|off     Explore walk only. Whether it assembles the pictures of the tree
                                so far that Explore draws while it walks. The default is on.
+        --files N              Remove only. How many empty files the tree holds, 0 to 10000000.
+                               The default is 100000.
+        --depth N              Remove only. How many levels of folders the tree has below its
+                               root, 0 to 200. The default is 5.
+        --fanout N             Remove only. How many folders each folder above the deepest
+                               holds, 1 to 1000, for at most 1000000 folders. The default is 4.
+        --read-only            Remove only. Mark every file read-only.
+        --trees N              Clean only. How many build folders the plan removes, 1 to
+                               100000. The default is 500.
+        --files-per-tree N     Clean only. How many empty files each build folder holds, in
+                               seven folders, 0 to 100000, for at most 10000000 files in all.
+                               The default is 100.
         --read-size KiB        Table routes only. How many KiB of records each read asks for, 4
                                to 16384.
         --reads-in-flight N    Table routes only. How many reads are outstanding at once, 1 to 32.
@@ -91,7 +135,9 @@ internal sealed record BenchmarkRequest(
         A table route's defaults are what a scan uses on a drive of unknown kind. The Explore
         routes also report what the finished tree keeps on the managed heap.
 
-        It only reads. Nothing on the drive is written, moved or deleted.
+        Every route but remove and clean only reads: nothing on the drive is written, moved or
+        deleted. Those two refuse a folder that already exists, create it, write and delete only
+        inside it, and remove it when they finish.
         """;
 
     /// <summary>The volume's drive letter. Meaningful only for a route that reads the table.</summary>
@@ -120,7 +166,7 @@ internal sealed record BenchmarkRequest(
 
         if (named is not { } route)
         {
-            error = "The route must be table, index, explore, explorefolder, walk, measure, explorewalk, sources, links or folders.";
+            error = "The route must be table, index, explore, explorefolder, walk, measure, explorewalk, sources, links, folders, remove or clean.";
             return null;
         }
 
@@ -133,6 +179,12 @@ internal sealed record BenchmarkRequest(
         var listReadsInFlight = UnknownDrive.ListReadsInFlight;
         var snapshots = true;
         var readBy = LinkRead.Name;
+        var files = DefaultTree.Files;
+        var depth = DefaultTree.Depth;
+        var fanout = DefaultTree.Fanout;
+        var readOnly = false;
+        var trees = route is Route.Clean ? DefaultTrees : 1;
+        var filesPerTree = DefaultFilesPerTree;
 
         // Only the folders route takes more than one target, so for it the options start at the
         // first argument that is one.
@@ -140,6 +192,14 @@ internal sealed record BenchmarkRequest(
 
         for (var i = options; i < args.Count; i += 2)
         {
+            // The one option that takes no value, so the next argument is the next option.
+            if (args[i] is "--read-only" && route is Route.Remove)
+            {
+                readOnly = true;
+                i--;
+                continue;
+            }
+
             var value = i + 1 < args.Count ? args[i + 1] : null;
 
             var accepted = args[i] switch
@@ -159,6 +219,11 @@ internal sealed record BenchmarkRequest(
                     value, TableTuning.MinimumListReadsInFlight, TableTuning.MaximumListReadsInFlight, out listReadsInFlight),
                 "--snapshots" when route is Route.ExploreWalk => TryOnOff(value, out snapshots),
                 "--read-by" when route is Route.Links => TryReadBy(value, out readBy),
+                "--files" when route is Route.Remove => TryNumber(value, 0, TreeShape.MaximumFiles, out files),
+                "--depth" when route is Route.Remove => TryNumber(value, 0, TreeShape.MaximumDepth, out depth),
+                "--fanout" when route is Route.Remove => TryNumber(value, 1, TreeShape.MaximumFanout, out fanout),
+                "--trees" when route is Route.Clean => TryNumber(value, 1, MaximumTrees, out trees),
+                "--files-per-tree" when route is Route.Clean => TryNumber(value, 0, MaximumFilesPerTree, out filesPerTree),
                 _ => false,
             };
 
@@ -175,6 +240,9 @@ internal sealed record BenchmarkRequest(
                     $"{TableTuning.MinimumParseThreads} to {TableTuning.MaximumParseThreads} and --list-reads-in-flight from " +
                     $"{TableTuning.MinimumListReadsInFlight} to {TableTuning.MaximumListReadsInFlight}. " +
                     "For the Explore walk, --snapshots takes on or off. For links, --read-by takes name or handle. " +
+                    $"For remove, --files takes a number from 0 to {TreeShape.MaximumFiles}, --depth from 0 to " +
+                    $"{TreeShape.MaximumDepth} and --fanout from 1 to {TreeShape.MaximumFanout}, and --read-only takes nothing. " +
+                    $"For clean, --trees takes a number from 1 to {MaximumTrees} and --files-per-tree from 0 to {MaximumFilesPerTree}. " +
                     "Nothing else is accepted after the target.";
                 return null;
             }
@@ -183,6 +251,18 @@ internal sealed record BenchmarkRequest(
         if (options < 2)
         {
             error = "Name a folder before the options.";
+            return null;
+        }
+
+        if (TreeShape.FoldersBelowRoot(depth, fanout) is null)
+        {
+            error = $"A tree of that depth and fanout would have more than {TreeShape.MaximumFolders} folders.";
+            return null;
+        }
+
+        if ((long)trees * filesPerTree > TreeShape.MaximumFiles)
+        {
+            error = $"The trees would hold more than {TreeShape.MaximumFiles} files in all.";
             return null;
         }
 
@@ -204,7 +284,9 @@ internal sealed record BenchmarkRequest(
             new TableTuning(readKiB * 1024, readsInFlight, parseThreads, listReadsInFlight),
             snapshots,
             readBy,
-            [.. folders.Select(folder => folder!)]);
+            [.. folders.Select(folder => folder!)],
+            route is Route.Clean ? CleanRoute.Shape(filesPerTree) : new TreeShape(files, depth, fanout, readOnly),
+            trees);
     }
 
     /// <summary>The index of the first argument after the route that is an option, or the count where none is.</summary>
@@ -231,6 +313,11 @@ internal sealed record BenchmarkRequest(
 
     private static bool TryNumber(string? text, int minimum, int maximum, out int number) =>
         int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out number)
+        && number >= minimum
+        && number <= maximum;
+
+    private static bool TryNumber(string? text, long minimum, long maximum, out long number) =>
+        long.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out number)
         && number >= minimum
         && number <= maximum;
 
