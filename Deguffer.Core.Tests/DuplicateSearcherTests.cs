@@ -289,13 +289,54 @@ public sealed class DuplicateSearcherTests : IDisposable
         }
     }
 
-    /// <summary>Progress names each content stage it reaches, with the files it reads.</summary>
+    /// <summary>
+    /// Comparing content is measured in bytes: two copies of three blocks are each read by their ends,
+    /// two blocks, and then in full, so the search reads ten blocks, and says so from its first report.
+    /// </summary>
     [Fact]
-    public async Task ProgressNamesEachStage()
+    public async Task ProgressMeasuresTheBytesReadAgainstTheMostToRead()
     {
         var content = Random(3 * Block, 6);
         _tree.File(content, "Data", "a.bin");
         _tree.File(content, "Data", "b.bin");
+
+        var reports = await ContentReports();
+
+        Assert.Equal(new DuplicateSearchProgress(DuplicateSearchStage.ComparingContent, 0, 10 * Block), reports[0]);
+        Assert.Equal(new DuplicateSearchProgress(DuplicateSearchStage.ComparingContent, 10 * Block, 10 * Block), reports[^1]);
+        AssertTheShareReadOnlyGrows(reports);
+    }
+
+    /// <summary>
+    /// A file whose ends match no other's is never read in full, so its full read comes off the most
+    /// still to read, and the search ends with the total at what it read: the four blocks of the ends.
+    /// </summary>
+    [Fact]
+    public async Task AFileThatStopsMatchingTakesItsFullReadOffTheTotal()
+    {
+        _tree.File(Random(3 * Block, 1), "Data", "a.bin");
+        _tree.File(Random(3 * Block, 2), "Data", "b.bin");
+
+        var reports = await ContentReports();
+
+        Assert.Equal(new DuplicateSearchProgress(DuplicateSearchStage.ComparingContent, 0, 10 * Block), reports[0]);
+        Assert.Equal(new DuplicateSearchProgress(DuplicateSearchStage.ComparingContent, 4 * Block, 4 * Block), reports[^1]);
+        AssertTheShareReadOnlyGrows(reports);
+    }
+
+    /// <summary>The share read never falls between two reports, and the bytes read never go back.</summary>
+    private static void AssertTheShareReadOnlyGrows(IReadOnlyList<DuplicateSearchProgress> reports)
+    {
+        foreach (var (before, after) in reports.Zip(reports.Skip(1)))
+        {
+            Assert.True(after.Done >= before.Done, $"{after.Done} bytes read came after {before.Done}.");
+            Assert.True(after.Total <= before.Total, $"A total of {after.Total} came after {before.Total}.");
+        }
+    }
+
+    /// <summary>The reports a content search of the files under Data makes while it compares content, in the order they were made.</summary>
+    private async Task<IReadOnlyList<DuplicateSearchProgress>> ContentReports()
+    {
         List<DuplicateSearchProgress> reports = [];
 
         await _tree.Searcher().SearchAsync(
@@ -309,8 +350,7 @@ public sealed class DuplicateSearcherTests : IDisposable
                 }
             }));
 
-        Assert.Contains(new DuplicateSearchProgress(DuplicateSearchStage.FirstAndLastBlocks, 2, 2), reports);
-        Assert.Contains(new DuplicateSearchProgress(DuplicateSearchStage.FullContent, 2, 2), reports);
+        return [.. reports.Where(report => report.Stage is DuplicateSearchStage.ComparingContent)];
     }
 
     /// <summary>

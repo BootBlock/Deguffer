@@ -15,6 +15,11 @@ public sealed class ContentMatchingTests
     private const byte Sata = 0x0B;
     private const byte Nvme = 0x11;
 
+    /// <summary>Longer than a file's first and last blocks, so its blocks matching leaves it to be read in full.</summary>
+    private const long Large = 3L * ContentReader.BlockBytes;
+
+    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(10);
+
     /// <summary>
     /// Two volumes on one spinning disk share its heads, so reading both at once makes each seek
     /// past the other. However many files each holds, one is read at a time.
@@ -117,6 +122,109 @@ public sealed class ContentMatchingTests
             [Group(@"X:\", 1000, 6)], MatchCriteria.Content, ChecksumAlgorithm.XxHash128, _ => { }, null, default);
 
         Assert.Equal(1, reads.Peak);
+    }
+
+    /// <summary>
+    /// A fast disk reads its full content while a slow one is still reading blocks. The spinning
+    /// disk's reads of its ends are held until a file on the solid-state disk is read in full, which
+    /// can only happen where the full reads start before every disk has read every file's ends.
+    /// </summary>
+    [Fact]
+    public async Task AFastDiskReadsInFullWhileASlowOneIsStillReadingBlocks()
+    {
+        var queries = new FakeStorageQueries()
+            .Volume(@"X:", 1).Disk(1, Nvme, seekPenalty: false)
+            .Volume(@"Y:", 2).Disk(2, Sata, seekPenalty: true);
+        using var readInFull = new ManualResetEventSlim(initialState: false);
+        var heldUntilAFullRead = true;
+
+        ContentReading Read(DuplicateCandidate file, ContentPart part, Checksum checksum, CancellationToken ct)
+        {
+            if (file.Path.StartsWith(@"Y:\", StringComparison.Ordinal))
+            {
+                if (!readInFull.Wait(Patience, ct))
+                {
+                    Volatile.Write(ref heldUntilAFullRead, false);
+                    readInFull.Set();
+                }
+            }
+            else if (part is ContentPart.Whole)
+            {
+                readInFull.Set();
+            }
+
+            return Same(checksum);
+        }
+
+        await Matching(queries, Read).MatchAsync(
+            [Group(@"X:\", Large, 2), Group(@"Y:\", 1000, 2)], MatchCriteria.Content, ChecksumAlgorithm.XxHash128, _ => { }, null, default);
+
+        Assert.True(Volatile.Read(ref heldUntilAFullRead), $"No file on the fast disk was read in full within {Patience.TotalSeconds} s of the slow disk's first read.");
+    }
+
+    /// <summary>
+    /// Within a disk, a group's full reads overtake the blocks of the smaller groups still waiting,
+    /// so the group that could free the most is confirmed first. One reader, so the order is exact.
+    /// </summary>
+    [Fact]
+    public async Task AGroupsFullReadsOvertakeTheBlocksOfSmallerGroups()
+    {
+        List<(string Name, ContentPart Part)> order = [];
+
+        ContentReading Read(DuplicateCandidate file, ContentPart part, Checksum checksum, CancellationToken ct)
+        {
+            lock (order)
+            {
+                order.Add((file.Name, part));
+            }
+
+            return Same(checksum);
+        }
+
+        await Matching(new FakeStorageQueries(), Read).MatchAsync(
+            [Group(@"X:\", 1000, 2), Group(@"X:\", 2000, 2), Group(@"X:\", Large, 2)],
+            MatchCriteria.Content, ChecksumAlgorithm.XxHash128, _ => { }, null, default);
+
+        Assert.Equal(
+            [($"{Large}-0.bin", ContentPart.Ends), ($"{Large}-1.bin", ContentPart.Ends), ($"{Large}-0.bin", ContentPart.Whole), ($"{Large}-1.bin", ContentPart.Whole)],
+            order.Take(4));
+        Assert.Equal(8, order.Count);
+    }
+
+    /// <summary>
+    /// A spinning disk is read by one at a time in both stages, however its full reads are queued:
+    /// each group here is settled by whichever disk reads its last file, and two of its three files
+    /// are on the solid-state disk, so most of the spinning disk's full reads are queued from there.
+    /// </summary>
+    [Fact]
+    public async Task ASpinningDiskIsReadByOneInBothStages()
+    {
+        var queries = new FakeStorageQueries()
+            .Volume(@"X:\", 0).Disk(0, Sata, seekPenalty: true)
+            .Volume(@"Y:\", 1).Disk(1, Nvme, seekPenalty: false);
+        using var spinning = new HeldReads(hold: TimeSpan.FromMilliseconds(5));
+        var parts = new int[2];
+
+        ContentReading Read(DuplicateCandidate file, ContentPart part, Checksum checksum, CancellationToken ct)
+        {
+            if (!file.Path.StartsWith(@"X:\", StringComparison.Ordinal))
+            {
+                return Same(checksum);
+            }
+
+            Interlocked.Increment(ref parts[(int)part]);
+            return spinning.Read(file, part, checksum, ct);
+        }
+
+        var confirmed = 0;
+        await Matching(queries, Read).MatchAsync(
+            [.. Enumerable.Range(1, 6).Select(i => new CandidateGroup(
+                Large * i, null, null, [File($@"X:\{i}.bin", Large * i), File($@"Y:\{i}-a.bin", Large * i), File($@"Y:\{i}-b.bin", Large * i)]))],
+            MatchCriteria.Content, ChecksumAlgorithm.XxHash128, _ => Interlocked.Increment(ref confirmed), null, default);
+
+        Assert.Equal([6, 6], parts);
+        Assert.Equal(1, spinning.Peak);
+        Assert.Equal(6, confirmed);
     }
 
     private static ContentMatching Matching(FakeStorageQueries queries, ReadContent read) =>
