@@ -82,7 +82,8 @@ public interface ICleanupProvider
 
     /// <summary>
     /// Keep what this provider builds for a planning pass until the hold ends: the volume indexes
-    /// its scanner reads, which nothing reads once the pass is over. Taken by the planner after
+    /// its scanner reads, and any listing it shares with other rows, which nothing reads once the pass
+    /// is over. Taken by the planner after
     /// <see cref="InvalidateCaches"/> and ended when the pass finishes, fails or is cancelled.
     ///
     /// The provider's for the reason <see cref="InvalidateCaches"/> is: it owns the collaborators.

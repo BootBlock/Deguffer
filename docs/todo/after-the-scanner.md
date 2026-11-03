@@ -489,6 +489,9 @@ usually answered first there, and the search cost about what waiting for the tab
 6.0 seconds warm against 1.8 to 2.5 walking alone. Why the two slow each other on one volume was not
 investigated. Not measured: a spinning disk, a removable drive, a network share and a virtual disk.
 
+> **Since this was written:** #477 states the two candidate causes and the experiment that separates
+> them, as part of [scan-speed.md](scan-speed.md).
+
 ## 8. Let a root probe tell "not there" from "I was refused" ✅ done
 
 **Outcome: the probe answers in three states, and the decision the item was waiting on went the

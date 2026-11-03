@@ -91,8 +91,9 @@ public sealed partial class TempToolLogProvider : TempMarkerProviderBase
         IDirectoryScanner? scanner = null,
         ISystemDirectories? system = null,
         ILiveTreeInspector? liveTrees = null,
-        IVolumeInventory? volumes = null)
-        : base(environment, runner, inspector, scanner, system, liveTrees, volumes)
+        IVolumeInventory? volumes = null,
+        TempFolderListings? listings = null)
+        : base(environment, runner, inspector, scanner, system, liveTrees, volumes, listings)
     {
     }
 

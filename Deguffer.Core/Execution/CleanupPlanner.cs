@@ -220,14 +220,22 @@ public sealed class CleanupPlanner
     {
         // Every row that offers an entry of a temporary folder under the name of the tool that wrote
         // it, built first so the "Temporary files" row can leave those entries to them.
+        // They share one listing of each folder they examine, on the reasoning of the shared discoveries
+        // CreateDefault builds: the caches, installer downloads and logs rows each start from the
+        // temporary folders themselves, which hold tens of thousands of entries on a developer's machine,
+        // and unshared listings would read them in full once per row per pass. The Claude Code row reads
+        // only a folder inside them, and shares the listing so that every row of this kind reads alike.
+        var tempListings = new TempFolderListings();
         var nuget = new NuGetCacheProvider(environment, scanner: scanner);
-        var toolCaches = new TempToolCacheProvider(environment, liveTrees: liveTrees, scanner: scanner);
-        var installerDownloads = new TempInstallerDownloadProvider(environment, liveTrees: liveTrees, scanner: scanner);
-        var toolLogs = new TempToolLogProvider(environment, liveTrees: liveTrees, scanner: scanner);
+        var toolCaches = new TempToolCacheProvider(
+            environment, liveTrees: liveTrees, scanner: scanner, listings: tempListings);
+        var installerDownloads = new TempInstallerDownloadProvider(
+            environment, liveTrees: liveTrees, scanner: scanner, listings: tempListings);
+        var toolLogs = new TempToolLogProvider(environment, liveTrees: liveTrees, scanner: scanner, listings: tempListings);
         var testBrowsers = new TestBrowserProfileProvider(environment, liveTrees: liveTrees, preferences: preferences, scanner: scanner);
         var afterEffects = new AfterEffectsDiskCacheProvider(environment, scanner: scanner);
         var claudeSnapshots = new ClaudeCodeCommandSnapshotProvider(
-            environment, liveTrees: liveTrees, sessions: claudeSessions, scanner: scanner);
+            environment, liveTrees: liveTrees, sessions: claudeSessions, scanner: scanner, listings: tempListings);
 
         // One finding for the two symbol rows, so a store two settings name is put on exactly one of them.
         var symbolStores = new SymbolStoreDiscovery(environment);
