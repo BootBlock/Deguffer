@@ -2761,10 +2761,82 @@ Every one of the five is derived content with an authoritative source elsewhere:
 still has, lists Mozilla still publishes, and compiled output of code that is still on your disk.
 Firefox refills all of it without being asked.
 
-### Not reached: Thunderbird
+---
 
-Thunderbird keeps the identical layout — its own `profiles.ini`, the same two roots, the same
-`cache2`. Deguffer does not reach it yet, because nothing here has been measured against it.
+## Thunderbird caches
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\Thunderbird\Profiles\<profile>`, for each profile `profiles.ini` names |
+| **Method** | Delete three recognised cache directories, per profile |
+| **Typical size** | 126 KB in a new profile on Thunderbird 159, most of it the startup cache. A profile in use grows with the web content Thunderbird has fetched |
+
+### What it is
+
+Thunderbird is built on Firefox's engine and keeps its profiles the same way, in two halves, under
+its own folders rather than below a `Mozilla` folder:
+
+| Half | Where | What is in it |
+| --- | --- | --- |
+| **Roaming** | `%APPDATA%\Thunderbird\Profiles\<profile>` | Your mail, address books, calendars, saved passwords, OpenPGP keys and every setting, your accounts among them |
+| **Local** | `%LOCALAPPDATA%\Thunderbird\Profiles\<profile>` | The disk cache and the other files Thunderbird refills by itself |
+
+A new profile on Thunderbird 159 held these three in its local half, and nothing else:
+
+| Directory | What it holds |
+| --- | --- |
+| `cache2` | Content Thunderbird downloaded and kept so it would not fetch the same thing twice |
+| `startupCache` | Interface and script data Thunderbird precompiles for its own start-up |
+| `safebrowsing` | Where the engine keeps its Safe Browsing lists |
+
+### What Deguffer does
+
+The same as for Firefox. It reads `%APPDATA%\Thunderbird\profiles.ini` to learn which directories
+are profiles, deletes only the three directories above by exact name from each profile's local
+half, reports a profile kept somewhere else instead of examining it, and refuses to delete through
+a link anywhere on the way.
+
+Firefox's other caches, `thumbnails` and `jumpListCache`, were not in the measured profile, so in a
+Thunderbird profile they are not recognised and are left alone.
+
+### What is protected
+
+**The whole roaming half, and everything in the local half that is not one of the three.**
+Deguffer asserts afterwards that these survived:
+
+| Neighbour | What it really is |
+| --- | --- |
+| `Mail`, `ImapMail`, `News` | Your mail and newsgroups |
+| `calendar-data` | Your local calendars |
+| `abook.sqlite`, `history.sqlite` | Your address book, and the addresses collected from mail you sent |
+| `key4.db`, `logins.json`, `logins.db` | Your saved account passwords and the key that decrypts them |
+| `secring.gpg`, `pubring.gpg`, `openpgp.sqlite` | Your OpenPGP keys, and which of them you have accepted |
+| `cert9.db` | The certificates and exceptions you have accepted |
+| `prefs.js` | Every setting you have changed, your accounts among them |
+| `global-messages-db.sqlite` | The search index of your mail |
+| `profiles.ini` | The register itself. Losing it loses every profile |
+
+**The search index is not offered.** Thunderbird rebuilds `global-messages-db.sqlite` when it is
+missing, so nothing is lost, but it re-reads every message to do so, and that can take a long time.
+
+### What it costs you
+
+Thunderbird fetches web content from the network rather than from disk for a while, and rebuilds
+its startup cache the first time it opens, so one start is slower.
+
+**Mail, address books, calendars, saved passwords and settings are untouched.** They are all in the
+other half of the profile, which Deguffer never removes anything from.
+
+Close Thunderbird first if you can. It keeps its cache files open while it runs, and anything held
+open is left in place rather than removed.
+
+### Why Tier 1
+
+Each of the three is derived content that Thunderbird refills without being asked: content the
+server still has, lists Mozilla still publishes, and compiled output of code that is still on your
+disk.
 
 ---
 
