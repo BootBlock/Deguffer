@@ -19,6 +19,7 @@ namespace Deguffer.Core.Tests;
 /// an ordinary file, that describing one downloads nothing, and that a release changes the one pin it
 /// was asked to and no other. Nothing here touches a real sync app's root.</para>
 /// </summary>
+[Collection(ScratchSyncRootTests.Collection)]
 public sealed class CloudFilesTests : IDisposable
 {
     private const int Megabyte = 1024 * 1024;

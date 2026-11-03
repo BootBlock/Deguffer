@@ -11,6 +11,7 @@ namespace Deguffer.Core.Tests;
 /// A file's content is read only where it is on this device and is still the file the search
 /// identified, and a read that fails leaves the file out in the right count (§7.4).
 /// </summary>
+[Collection(ScratchSyncRootTests.Collection)]
 public sealed class ContentReaderTests : IDisposable
 {
     /// <summary><c>ERROR_NOT_SUPPORTED</c>.</summary>

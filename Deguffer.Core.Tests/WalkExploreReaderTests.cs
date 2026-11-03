@@ -13,6 +13,7 @@ namespace Deguffer.Core.Tests;
 /// does not, and a file whose length has to be asked for. None of those can be modelled by
 /// something that answers the way the test expects.</para>
 /// </summary>
+[Collection(ScratchSyncRootTests.Collection)]
 public sealed class WalkExploreReaderTests : IDisposable
 {
     private readonly TempDirectory _temp = new();
