@@ -96,6 +96,8 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
         + "it runs, and stutters the first time each scene appears. Your games, your saves, your "
         + "Workshop content and any download in progress are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Games,

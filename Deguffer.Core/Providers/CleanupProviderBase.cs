@@ -158,6 +158,8 @@ public abstract class CleanupProviderBase : ICleanupProvider
 
     public abstract ProviderDescription Description { get; }
 
+    public abstract ProviderBasis Basis { get; }
+
     /// <summary>
     /// Processes that, if running, mean this tool's state may be live (§5.3). Their presence is a
     /// warning on the plan, not a refusal.

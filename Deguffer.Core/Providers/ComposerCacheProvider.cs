@@ -73,6 +73,8 @@ public sealed class ComposerCacheProvider : CleanupProviderBase
         "The next composer install or update downloads its packages again. Every project's vendor folder, "
         + "your global packages and your Composer credentials are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.PackageCaches,

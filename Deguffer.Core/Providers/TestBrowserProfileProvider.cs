@@ -117,6 +117,8 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
             : "No age limit is set for temporary files, but ")
         + "a profile a running browser is using is left where it is, wherever Deguffer can see the browser.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.TemporaryFiles,

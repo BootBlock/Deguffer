@@ -98,7 +98,7 @@ public sealed class SelectionStoreTests : IDisposable
 
         Assert.Empty(loaded["npm"].Steps);
         Assert.False(new SelectionMemory(loaded)
-            .RowStartsSelected("npm", SafetyTier.RegenerableCache, byDefault: true));
+            .RowStartsSelected(new FakeCleanupProvider("npm", SafetyTier.RegenerableCache), byDefault: true));
     }
 
     /// <summary>
@@ -120,6 +120,6 @@ public sealed class SelectionStoreTests : IDisposable
         // The half that matters: the memory is built from this at startup, and a null here took the
         // whole app down rather than one row's answer.
         Assert.True(new SelectionMemory(loaded)
-            .RowStartsSelected("maven", SafetyTier.RegenerableWithCost, byDefault: false));
+            .RowStartsSelected(new FakeCleanupProvider("maven", SafetyTier.RegenerableWithCost), byDefault: false));
     }
 }

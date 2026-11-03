@@ -33,6 +33,12 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
     /// <summary>The kind of location it stands in for, which the list of what to scan groups by.</summary>
     public ProviderCategory Category { get; init; } = ProviderCategory.TemporaryFiles;
 
+    /// <summary>
+    /// Observed unless a test says otherwise, so a fake stands in for the providers whose rows may
+    /// start ticked. A test of the researched rule sets it.
+    /// </summary>
+    public ProviderBasis Basis { get; init; } = ProviderBasis.Observed;
+
     public ProviderDescription Description => field ??= new()
     {
         Category = Category,

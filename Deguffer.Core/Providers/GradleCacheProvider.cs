@@ -98,6 +98,8 @@ public sealed class GradleCacheProvider : CleanupProviderBase
     public override string WhatHappensOnNextUse =>
         "The next Gradle build re-downloads its dependencies and the wrapper distribution, then runs normally.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.PackageCaches,

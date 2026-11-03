@@ -83,6 +83,8 @@ public sealed class WindowsUpdateLeftoverProvider : CleanupProviderBase
         + "folders again the next time it needs them. Microsoft documents neither folder, so offering "
         + "them is Deguffer's judgement rather than Microsoft's.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Windows,

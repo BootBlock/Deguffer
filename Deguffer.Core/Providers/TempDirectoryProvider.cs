@@ -158,6 +158,8 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
         + "stored in a temporary folder and still expects to find there — which installers and "
         + "crash reporters occasionally do.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     /// <summary>
     /// Computed rather than fixed at construction, for the reason
     /// <see cref="WhatHappensOnNextUse"/> gives: the recommendation states the same cut-off, and a

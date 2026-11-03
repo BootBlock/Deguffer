@@ -59,6 +59,8 @@ public sealed class NodeModulesProvider : BuildDirectoryProvider
         "your package manager's cache where that still holds it, and from the network where it does " +
         "not.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.ProjectBuildOutput,

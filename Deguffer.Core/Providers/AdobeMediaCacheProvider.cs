@@ -76,6 +76,8 @@ public sealed class AdobeMediaCacheProvider : CleanupProviderBase
         + "converted once the drive is back. Your projects, footage, LUTs, templates and Team Projects are "
         + "untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.MediaAndCreative,

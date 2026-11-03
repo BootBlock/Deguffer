@@ -153,6 +153,8 @@ public sealed class VsCodeCacheProvider : CleanupProviderBase
         "again, so it opens more slowly once. Your settings, extensions, workspace state and local " +
         "history are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.DeveloperTools,

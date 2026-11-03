@@ -89,7 +89,7 @@ public sealed partial class FindingViewModel : ObservableObject
         Finding = WithKeepList(finding, keepList);
 
         var provider = finding.Provider;
-        var startsSelected = memory.RowStartsSelected(provider.Id, provider.Tier, Finding.IsPreSelectedByDefault);
+        var startsSelected = memory.RowStartsSelected(provider, Finding.IsPreSelectedByDefault);
 
         // Materialised once per plan. These are bound per row, and rebuilding a list inside a
         // property getter puts an allocation on every binding evaluation.
@@ -117,7 +117,7 @@ public sealed partial class FindingViewModel : ObservableObject
             // plan the keep list produced, so the matching rule stays in Core.
             .. finding.Plan?.Steps.Select(s => new StepViewModel(
                 s,
-                memory.StepStartsSelected(provider.Id, provider.Tier, s.SelectionKey, startsSelected),
+                memory.StepStartsSelected(provider, s.SelectionKey, startsSelected),
                 isKept: !offered.Contains(s),
                 _isElevated)
             {
@@ -214,6 +214,16 @@ public sealed partial class FindingViewModel : ObservableObject
     /// classification is the product, and a two-word chip states it without explaining it.
     /// </summary>
     public string TierExplanation => Finding.Provider.Tier.ToExplanation();
+
+    /// <summary>
+    /// Whether this row's rules come from research rather than an installation anybody looked at,
+    /// which the row says on a chip of its own. See <see cref="ProviderBasis"/>.
+    /// </summary>
+    public bool IsResearched => !Finding.Provider.Basis.PermitsPreSelection();
+
+    public string BasisLabel => Finding.Provider.Basis.ToDisplayName();
+
+    public string BasisExplanation => Finding.Provider.Basis.ToExplanation();
 
     public string WhatHappensOnNextUse => Finding.Provider.WhatHappensOnNextUse;
 

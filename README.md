@@ -87,6 +87,10 @@ offers anything.
 | **3. User data** | Logs, histories and saved sessions that *look* like a cache | It is gone for good | Offered, never pre-selected |
 | **4. Do not touch** | Settings, credentials and live state | Things stop working | Never shown |
 
+A few rows cover a tool nobody working on Deguffer has installed, and were written from its
+publisher's documentation and its users' reports. Each carries a **Researched** chip and is never
+pre-selected, whatever its tier.
+
 Anything Deguffer does not positively recognise is treated as Tier 4, so it is left alone by
 default instead of depending on someone having remembered to exclude it. Outlook's `.ost` and
 `.pst` files are also protected by name, because they can be saved anywhere, and Deguffer will never
@@ -207,6 +211,7 @@ you would lose by deleting it. By default, only Tier 1 rows start out selected:
 | DaVinci Resolve render cache | Each project's render files in a `CacheClip` folder at the root of a drive or in your Videos folder; never optimised media, proxies, backups or recordings, and nothing while Resolve is running. Resolve renders them again only while your media is connected |
 | After Effects disk cache | Each version's cache named for this computer, only in the folder that After Effects' own preferences name; never anything next to it or above it, and nothing while After Effects is running. After Effects renders the frames again as you preview |
 | Adobe media cache | The converted audio, waveforms and database shared by Premiere Pro, After Effects, Audition and Media Encoder, wherever Adobe's settings put them; never your LUTs, templates or Team Projects' auto-saves, and nothing while an Adobe application is running. Each project opens slowly once while Adobe converts its audio again |
+| CapCut editing cache | Thumbnails, waveforms and the audio extracted for subtitles in CapCut's and Jianying Pro's `User Data\Cache`, and nothing while either is running; never your drafts, settings, downloaded effects or imported media. Researched |
 | Capture One previews and thumbnails | The `Cache` in each catalog and session that Capture One lists, wherever it is; never the photographs or the adjustments next to it. A catalog whose originals are offline cannot be browsed until they are reconnected |
 | Playwright browsers | |
 | Puppeteer browsers | The builds in `.cache\puppeteer`, never the rest of `.cache`; never a build that a running browser is using, or the metadata Puppeteer uses to find its builds |
@@ -231,6 +236,7 @@ you would lose by deleting it. By default, only Tier 1 rows start out selected:
 | Unreal project intermediate files | `Intermediate` next to a `.uproject` under your own source folders; never `Saved` or `Binaries` |
 | Unreal project derived data cache | A project's own `DerivedDataCache` under your own source folders |
 | Superseded application versions | Older versions that a Squirrel-updated app still keeps |
+| CapCut superseded builds | Older builds of CapCut and Jianying Pro in `Apps`, never the build its launcher starts or the newest, and nothing while it is running. Researched |
 | Temporary files | Emptied in place, taking only what nothing has touched for seven days; anything a tool's own row offers is left to that row |
 | Installer downloads in temporary folders | Updates that VS Code, Docker Desktop and the Visual Studio Installer downloaded, and Blender's crashed sessions, only while the application is closed; never Blender's recovery files |
 | Previous Windows installation | `Windows.old` and Setup's leftovers, removed by Windows' own Disk Cleanup handlers once the upgrade can no longer be undone and no update is unfinished |

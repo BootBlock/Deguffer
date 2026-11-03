@@ -1,3 +1,4 @@
+using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Configuration;
@@ -33,32 +34,35 @@ public sealed class SelectionMemory
     /// <summary>Everything remembered, for whoever writes it to disk.</summary>
     public IReadOnlyDictionary<string, RememberedSelection> Entries => _byProvider;
 
-    /// <summary>Whether the row for <paramref name="providerId"/> starts ticked.</summary>
+    /// <summary>Whether the row for <paramref name="provider"/> starts ticked.</summary>
     /// <param name="byDefault">
     /// §3's "Default" column for this finding, which is the answer whenever nothing is remembered.
     /// </param>
-    public bool RowStartsSelected(string providerId, SafetyTier tier, bool byDefault) =>
-        Permitted(tier, _byProvider.TryGetValue(providerId, out var remembered) ? remembered.IsSelected : byDefault);
+    public bool RowStartsSelected(ICleanupProvider provider, bool byDefault) =>
+        Permitted(
+            provider.Tier,
+            _byProvider.TryGetValue(provider.Id, out var remembered) ? remembered.IsSelected : byDefault);
 
     /// <summary>Whether one step of that row starts ticked.</summary>
     /// <param name="rowStartsSelected">
     /// What <see cref="RowStartsSelected"/> answered for the row this step belongs to. A step this
-    /// memory has not seen follows the row, but only as far as §3's default for the tier allows.
+    /// memory has not seen follows the row, but only as far as §3's default for the provider allows.
     ///
     /// Both halves are needed, and each catches a case the other misses. Without the row, a
     /// workspace cloned since the last scan would arrive ticked inside a row the user had cleared.
-    /// Without the tier, it would arrive ticked inside a Tier 2 row the user had ticked — and §3
+    /// Without the default, it would arrive ticked inside a Tier 2 row the user had ticked — and §3
     /// offers Tier 2 without pre-selecting it, which applies to a directory nobody has seen yet
-    /// exactly as it does on a first run. Ticking the row is an answer about the workspaces that
+    /// exactly as it does on a first run. A researched provider's folder is held back for the same
+    /// reason (<see cref="ProviderBasis"/>). Ticking the row is an answer about the workspaces that
     /// were in it, not a standing instruction about every one that appears later.
     /// </param>
-    public bool StepStartsSelected(string providerId, SafetyTier tier, string stepKey, bool rowStartsSelected) =>
+    public bool StepStartsSelected(ICleanupProvider provider, string stepKey, bool rowStartsSelected) =>
         Permitted(
-            tier,
-            _byProvider.TryGetValue(providerId, out var remembered)
+            provider.Tier,
+            _byProvider.TryGetValue(provider.Id, out var remembered)
             && remembered.Steps.TryGetValue(stepKey, out var selected)
                 ? selected
-                : rowStartsSelected && tier.IsPreSelectedByDefault());
+                : rowStartsSelected && provider.IsPreSelectedByDefault());
 
     /// <summary>
     /// Record what one row is ticked as now, replacing whatever was remembered about it.

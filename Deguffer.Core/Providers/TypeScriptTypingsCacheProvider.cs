@@ -73,6 +73,8 @@ public sealed partial class TypeScriptTypingsCacheProvider : CleanupProviderBase
         + "downloads the type declarations that project needs again, so completions for its libraries "
         + "take a moment longer to appear once.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.PackageCaches,

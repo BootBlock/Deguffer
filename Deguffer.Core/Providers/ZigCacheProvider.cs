@@ -120,6 +120,8 @@ public sealed class ZigCacheProvider : CleanupProviderBase
         + "re-parses the source it uses, so it takes longer once. Fetched packages, your projects and "
         + "the Zig compiler itself are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.PackageCaches,

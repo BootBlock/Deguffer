@@ -138,6 +138,8 @@ public sealed class RecycleBinProvider : CleanupProviderBase
         "Every file waiting in these Recycle Bins is destroyed, so nothing you deleted can be "
         + "restored any more. Deleting a file afterwards works exactly as it did before.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Windows,

@@ -195,6 +195,8 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
         + "each session that starts writes its own handshake files, keys and shell captures exactly as "
         + "before. What goes was left behind by sessions and editors that have already ended.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.DeveloperTools,
