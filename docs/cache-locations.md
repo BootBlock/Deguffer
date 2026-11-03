@@ -2771,7 +2771,7 @@ Firefox refills all of it without being asked.
 | --- | --- |
 | **Location** | `%LOCALAPPDATA%\Thunderbird\Profiles\<profile>`, for each profile `profiles.ini` names |
 | **Method** | Delete three recognised cache directories, per profile |
-| **Typical size** | 126 KB in a new profile on Thunderbird 159, most of it the startup cache. A profile in use grows with the web content Thunderbird has fetched |
+| **Typical size** | 124 KB in a new profile on Thunderbird 159, nearly all of it the startup cache. A profile in use grows with the web content Thunderbird has fetched |
 
 ### What it is
 

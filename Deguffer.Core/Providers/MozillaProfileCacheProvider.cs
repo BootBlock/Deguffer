@@ -29,26 +29,24 @@ namespace Deguffer.Core.Providers;
 /// file plus two constants, and relocating <c>%LOCALAPPDATA%\Mozilla</c> onto another volume with a
 /// junction is a thing people do. A link anywhere along it would put the deletion on the far side
 /// while every §5.6 survivor named below resolved through the same link and passed — the vacuous
-/// negative. <see cref="DerivedPath.FirstLinkBetween"/> is what stops that.</para>
+/// negative. <see cref="DerivedPath.FirstObstacleBetween"/> is what stops that.</para>
 ///
 /// <para>§5.1 does not apply. Neither application clears its cache from outside itself, and
 /// Mozilla's own published advice for reclaiming the space is to delete <c>cache2</c>.</para>
+///
+/// <para>What Explore must refuse is <see cref="MozillaToolRoots"/>'s. What is left here is one
+/// pass over the profiles, and its length is the cases it must report rather than skip: a register
+/// nobody could read, a profile kept elsewhere, a link or a refusal on the derived path, and the
+/// kept directory's size.</para>
 /// </summary>
 public abstract class MozillaProfileCacheProvider : CleanupProviderBase
 {
-    /// <summary>
-    /// Nothing is disposable in the roaming half. It is a <see cref="ToolRoot"/> so that §7.1's
-    /// second deletion route refuses it too: Explore draws every directory on the drive and lets the
-    /// user act on one, and "never the roaming profile at all" is not a rule that can hold on the
-    /// Storage page alone.
-    /// </summary>
-    private static readonly DisposableChildSet NothingIsDisposable = new([]);
-
     private const string LinkReason =
         "A link rather than a directory, so what it points at was never classified.";
 
     private readonly MozillaApplication _application;
     private readonly MozillaProfileDiscovery _discovery;
+    private readonly MozillaToolRoots _toolRootDeclarations;
     private readonly PassMemo<IReadOnlyList<MozillaProfile>> _profiles = new();
     private readonly PassMemo<IReadOnlyList<ToolRoot>> _toolRoots = new();
 
@@ -78,6 +76,7 @@ public abstract class MozillaProfileCacheProvider : CleanupProviderBase
     {
         _application = application;
         _discovery = new MozillaProfileDiscovery(Environment, application.Directory);
+        _toolRootDeclarations = new MozillaToolRoots(application, _discovery);
         _declaredNames = application.Kept is { } kept
             ? [.. application.Children.DisposableNames, kept.Name]
             : [.. application.Children.DisposableNames];
@@ -99,86 +98,17 @@ public abstract class MozillaProfileCacheProvider : CleanupProviderBase
         _profiles.Get(() => _discovery.Discover(ct));
 
     /// <summary>
-    /// §5.2 as §7.1 needs it read from outside: the application's own folder under each
-    /// application-data root, then both halves of every profile — the local half declaring the
-    /// caches, and everything else declaring nothing at all.
-    ///
-    /// <para>The roaming side is declared even though this provider never plans against it, and that
-    /// is the point. Explore's refusals come from these declarations, so without them a user could
-    /// delete <c>logins.json</c> from the size picture while the Storage page was carefully leaving
-    /// it alone.</para>
-    ///
-    /// <para><b>The folders above a profile are declared too, and refusing the profile alone is
-    /// worth nothing without them.</b> <c>%APPDATA%\Mozilla\Firefox</c> and the <c>Profiles</c>
-    /// directory under it hold every profile's password database between them, so a refusal that
-    /// stopped at the profile would refuse a directory and permit its parent. They are declared
-    /// unconditionally rather than from what discovery found, because a register that would not be
-    /// read leaves no profiles and the files are on disk regardless — and a declaration naming a
-    /// directory that is not there refuses nothing.</para>
-    ///
-    /// <para><b>A profile kept outside the application's folder is declared too</b>, whole, because
-    /// nothing above it is the application's and so nothing else refuses it: <c>D:\Firefox\work</c>
-    /// holds the same <c>logins.json</c> the declared profiles do. A profile at the top of a drive or
-    /// share is declared in <see cref="DiscoverToolRootsAsync"/> instead.</para>
+    /// §5.2 as §7.1 needs it read from outside, memoised with the profiles it is built from. See
+    /// <see cref="MozillaToolRoots.Declared"/>.
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
-        _toolRoots.Get(() =>
-        [
-            ToolRoot.Of(
-                _discovery.RoamingRoot,
-                $"This is {App}'s own folder. Your profiles are inside it, with your "
-                + $"{_application.UserDataSummary}, and Deguffer removes nothing from any of them.",
-                NothingIsDisposable),
-            ToolRoot.Of(
-                _discovery.LocalRoot,
-                $"This is where {App} keeps the caches for each of your profiles. Deguffer removes "
-                + "them from the Storage page, where it knows which of them are caches.",
-                NothingIsDisposable),
-            .. from profile in Profiles()
-               from root in new[]
-               {
-                   ToolRoot.Of(
-                       profile.LocalPath,
-                       $"This is the cache folder for your '{profile.Name}' {App} profile. Deguffer "
-                       + "removes the caches inside it from the Storage page, where it knows which of "
-                       + "them are caches.",
-                       _application.Children),
-                   ToolRoot.Of(
-                       profile.RoamingPath,
-                       $"This is your '{profile.Name}' {App} profile — {_application.UserDataSummary}. "
-                       + "Nothing in here is a cache, and Deguffer removes nothing from it.",
-                       NothingIsDisposable),
-               }
-               select root,
-            .. from profile in LocatedElsewhere()
-               where Path.GetDirectoryName(profile.Path) is not null
-               select ToolRoot.Of(
-                   profile.Path,
-                   $"This is your '{profile.Name}' {App} profile, which {App} keeps outside its own "
-                   + $"folder. Your {_application.UserDataSummary} are in it, and Deguffer removes "
-                   + "nothing from it.",
-                   NothingIsDisposable),
-        ]);
+        _toolRoots.Get(() => _toolRootDeclarations.Declared(Profiles(), LocatedElsewhere()));
 
     /// <summary>
-    /// A profile at the top of a drive or share, which <see cref="ToolRoots"/> leaves out: refusing
-    /// every child of a drive would take the whole drive away from Explore, and a volume root is
-    /// never itself removable there. The user data the plan protects by name is refused instead,
-    /// and everything else on a local drive stays the user's (Explore refuses everything on a
-    /// share). Declared here rather than in <see cref="ToolRoots"/> because a declaration made here
-    /// only ever adds a refusal. See <see cref="ToolRoot.Sparing"/>.
+    /// A profile at the top of a drive or share. See <see cref="MozillaToolRoots.AtTheTopOfADrive"/>.
     /// </summary>
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<ToolRoot>>(
-        [
-            .. from profile in LocatedElsewhere(ct)
-               where Path.GetDirectoryName(profile.Path) is null
-               select ToolRoot.Sparing(
-                   profile.Path,
-                   $"Your '{profile.Name}' {App} profile is kept at the top of this drive, so its "
-                   + $"{_application.UserDataSummary} are here. Deguffer removes none of them.",
-                   _application.UserData.Select(data => data.Name)),
-        ]);
+        Task.FromResult(_toolRootDeclarations.AtTheTopOfADrive(LocatedElsewhere(ct)));
 
     /// <summary>
     /// Each profile kept outside the application's folder that names a directory, with that
