@@ -154,6 +154,8 @@ public sealed class AffinityModelCacheProvider : CleanupProviderBase
         + "hundred megabytes over an internet connection, and on Affinity 3 through the account you "
         + "are signed in with. Your documents, brushes, assets, licences and settings are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.MediaAndCreative,

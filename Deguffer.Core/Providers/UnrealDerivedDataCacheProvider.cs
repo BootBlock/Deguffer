@@ -91,6 +91,8 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
         + "again. On a large project that can take tens of minutes. Your projects, your engine "
         + "settings and your installed engines are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.DeveloperTools,

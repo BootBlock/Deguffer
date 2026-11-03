@@ -96,6 +96,8 @@ public sealed class SteamCacheProvider : CleanupProviderBase
         + "some of what it shows loads more slowly the first time. Your installed games, any "
         + "download in progress, your cloud saves, your settings and your sign-in are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Games,

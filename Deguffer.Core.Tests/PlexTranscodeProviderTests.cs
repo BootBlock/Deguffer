@@ -102,7 +102,10 @@ public sealed class PlexTranscodeProviderTests : IDisposable
 
         Assert.Equal(SafetyTier.RegenerableCache, plan.Tier);
         Assert.Equal([Sessions, PhotoTranscoder], plan.TargetedPaths);
-        Assert.True(new Finding(provider, IsPresent: true, plan).IsPreSelectedByDefault);
+        // Tier 1, and still offered unticked: no media server was installed where this was written,
+        // so the row is researched (ProviderBasis).
+        Assert.Equal(ProviderBasis.Researched, provider.Basis);
+        Assert.False(new Finding(provider, IsPresent: true, plan).IsPreSelectedByDefault);
 
         foreach (var path in new[]
         {

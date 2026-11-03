@@ -98,6 +98,8 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
         + "untouched, and so are Cemu's and the 3DS emulators' transferable caches and the Switch "
         + "emulators' guest shader caches.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Games,

@@ -92,6 +92,8 @@ public sealed class ThunderbirdCacheProvider : MozillaProfileCacheProvider
         "rebuilds its startup cache the first time it opens, so one start is slower. Mail, address " +
         "books, calendars, saved passwords and settings are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Browsers,

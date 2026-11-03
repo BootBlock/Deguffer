@@ -55,6 +55,8 @@ public sealed class PytestCacheProvider : BuildDirectoryProvider
         "have no record of which tests failed, so they run everything, and values a test stored " +
         "through the cache fixture are computed again.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.ProjectBuildOutput,

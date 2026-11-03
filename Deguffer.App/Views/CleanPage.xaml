@@ -118,14 +118,26 @@
                      Two words name the tier and do not explain it, so the explanation the About
                      page gives is on the chip itself. The chip is not a tab stop, so a tooltip
                      alone would leave a screen reader with the two words: the same sentence is
-                     its help text. -->
-                <ContentControl Grid.Column="4"
-                                HorizontalAlignment="Right"
-                                Content="{x:Bind TierLabel}"
-                                Style="{x:Bind Tier, Converter={StaticResource TierChipStyle}}"
-                                ToolTipService.ToolTip="{x:Bind TierExplanation}"
-                                AutomationProperties.Name="{x:Bind TierLabel}"
-                                AutomationProperties.HelpText="{x:Bind TierExplanation}" />
+                     its help text.
+
+                     A researched row's chip goes to the tier's left, so the tier chips stay in one
+                     straight column against the figures. -->
+                <StackPanel Grid.Column="4"
+                            Orientation="Horizontal"
+                            Spacing="6"
+                            HorizontalAlignment="Right">
+                    <ContentControl Content="{x:Bind BasisLabel}"
+                                    Visibility="{x:Bind IsResearched}"
+                                    Style="{StaticResource BasisChip}"
+                                    ToolTipService.ToolTip="{x:Bind BasisExplanation}"
+                                    AutomationProperties.Name="{x:Bind BasisLabel}"
+                                    AutomationProperties.HelpText="{x:Bind BasisExplanation}" />
+                    <ContentControl Content="{x:Bind TierLabel}"
+                                    Style="{x:Bind Tier, Converter={StaticResource TierChipStyle}}"
+                                    ToolTipService.ToolTip="{x:Bind TierExplanation}"
+                                    AutomationProperties.Name="{x:Bind TierLabel}"
+                                    AutomationProperties.HelpText="{x:Bind TierExplanation}" />
+                </StackPanel>
 
                 <!-- The group is on the cell rather than the figure, so a row whose figure is
                      hidden still keeps the column's width and its chip stays in line. -->
@@ -200,14 +212,27 @@
 
                                  Right-aligned against the link after it, whose text is the same on
                                  every row, so the chips form one straight column down the list
-                                 instead of starting wherever each row's name happens to end. -->
-                            <ContentControl Grid.Column="2"
-                                            HorizontalAlignment="Right"
-                                            Content="{x:Bind TierLabel}"
-                                            Style="{x:Bind Tier, Converter={StaticResource TierChipStyle}}"
-                                            ToolTipService.ToolTip="{x:Bind TierExplanation}"
-                                            AutomationProperties.Name="{x:Bind TierLabel}"
-                                            AutomationProperties.HelpText="{x:Bind TierExplanation}" />
+                                 instead of starting wherever each row's name happens to end.
+
+                                 A researched row's chip sits to the tier's left for the same reason,
+                                 and in the star column, so it is what gives up letters first. -->
+                            <Grid Grid.Column="2"
+                                  HorizontalAlignment="Right"
+                                  ColumnSpacing="6"
+                                  ColumnDefinitions="*,Auto">
+                                <ContentControl Content="{x:Bind BasisLabel}"
+                                                Visibility="{x:Bind IsResearched}"
+                                                Style="{StaticResource BasisChip}"
+                                                ToolTipService.ToolTip="{x:Bind BasisExplanation}"
+                                                AutomationProperties.Name="{x:Bind BasisLabel}"
+                                                AutomationProperties.HelpText="{x:Bind BasisExplanation}" />
+                                <ContentControl Grid.Column="1"
+                                                Content="{x:Bind TierLabel}"
+                                                Style="{x:Bind Tier, Converter={StaticResource TierChipStyle}}"
+                                                ToolTipService.ToolTip="{x:Bind TierExplanation}"
+                                                AutomationProperties.Name="{x:Bind TierLabel}"
+                                                AutomationProperties.HelpText="{x:Bind TierExplanation}" />
+                            </Grid>
 
                             <!-- Whose folder this is, what it is for, and the plan that says what
                                  would happen to it. One dialog holds both, because they are one

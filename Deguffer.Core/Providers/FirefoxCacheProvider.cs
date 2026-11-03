@@ -109,6 +109,8 @@ public sealed class FirefoxCacheProvider : MozillaProfileCacheProvider
         "startup cache the first time it opens, so one start is slower. Bookmarks, history, saved " +
         "passwords, open tabs and settings are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Browsers,

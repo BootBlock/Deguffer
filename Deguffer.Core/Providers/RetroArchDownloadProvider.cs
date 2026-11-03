@@ -67,6 +67,8 @@ public sealed class RetroArchDownloadProvider : RetroArchProviderBase
         + "games finds none. Your saves, save states, playlists, cores, BIOS files, settings and the shader "
         + "presets you saved are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Games,

@@ -40,6 +40,17 @@ public interface ICleanupProvider
     /// </summary>
     ProviderDescription Description { get; }
 
+    /// <summary>
+    /// Whether this provider's rules were checked against a real installation or assembled from
+    /// research. See <see cref="ProviderBasis"/>.
+    ///
+    /// Required of every provider rather than defaulted, and for a sharper reason than
+    /// <see cref="Description"/>: the only safe default would be <see cref="ProviderBasis.Researched"/>,
+    /// which would mislabel every provider nobody revisited, and the convenient one would claim an
+    /// observation nobody made.
+    /// </summary>
+    ProviderBasis Basis { get; }
+
     /// <summary>Whether this toolchain is installed at all on this machine.</summary>
     Task<bool> IsPresentAsync(CancellationToken ct = default);
 

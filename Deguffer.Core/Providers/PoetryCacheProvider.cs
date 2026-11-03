@@ -121,6 +121,8 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
         + "resolves against, and rebuilds any wheel Poetry had built from a source distribution. "
         + "Your virtual environments, and everything installed into them, are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.PackageCaches,

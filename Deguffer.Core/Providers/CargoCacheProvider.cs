@@ -165,6 +165,8 @@ public sealed class CargoCacheProvider : CleanupProviderBase
         + "spends longer fetching before it compiles. Registry metadata, the clones of git "
         + "dependencies, your configuration and anything installed with 'cargo install' are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.PackageCaches,

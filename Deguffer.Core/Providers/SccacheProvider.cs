@@ -101,6 +101,8 @@ public sealed class SccacheProvider : CleanupProviderBase
         + "If sccache's background server is running, the clean stops it first, and the next compile "
         + "starts it again. Your projects and sccache's settings are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.DeveloperTools,

@@ -85,6 +85,8 @@ public sealed class ChromiumServiceWorkerStorageProvider : ChromiumUserDataProvi
         "opened online once, when it fetches what it had stored. Anything a site kept only in this " +
         "storage is gone. Sign-ins, saved passwords and the sites' service workers are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Browsers,

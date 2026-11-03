@@ -66,6 +66,8 @@ public sealed class UpgradeDiscardedFilesProvider : SetupCleanupProviderBase
         "Every file a Windows upgrade set aside instead of moving is gone for good, including any of "
         + "your own among them. Windows itself keeps working exactly as it is now.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Windows,

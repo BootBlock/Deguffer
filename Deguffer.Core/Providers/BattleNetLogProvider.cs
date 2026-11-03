@@ -57,6 +57,8 @@ public sealed class BattleNetLogProvider : CleanupProviderBase
         + "be attached to a support ticket afterwards. The launcher writes a fresh log the next time "
         + "it starts, and nothing about how it runs changes.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Games,

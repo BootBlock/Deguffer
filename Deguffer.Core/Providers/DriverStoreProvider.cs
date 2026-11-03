@@ -91,6 +91,8 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         + "using, stays. A device that needs an older driver again gets it from the manufacturer or "
         + "Windows Update.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Windows,

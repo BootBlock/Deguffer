@@ -76,6 +76,8 @@ public sealed class AfterEffectsDiskCacheProvider : CleanupProviderBase, ITempor
         + "until it has, which for a heavy composition takes a long time. Your projects, media, "
         + "auto-saves and settings are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.MediaAndCreative,

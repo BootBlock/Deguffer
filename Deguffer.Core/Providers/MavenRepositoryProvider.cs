@@ -105,6 +105,8 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
         + "never on a remote, so a build depending on one of those fails until you rebuild the "
         + "project that produced it. Your settings, stored server passwords and toolchains are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.PackageCaches,

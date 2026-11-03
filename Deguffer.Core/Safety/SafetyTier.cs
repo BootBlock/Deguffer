@@ -71,7 +71,8 @@ public static class SafetyTierExtensions
     {
         SafetyTier.RegenerableCache =>
             "Whatever made it re-creates it on demand. Deleting costs a slower next use and " +
-            "nothing else, so these are selected for you by default.",
+            "nothing else, so these are selected for you by default, unless the row is marked " +
+            "Researched.",
         SafetyTier.RegenerableWithCost =>
             "Re-created only by re-downloading gigabytes or re-indexing for minutes. Offered, but " +
             "never selected for you.",

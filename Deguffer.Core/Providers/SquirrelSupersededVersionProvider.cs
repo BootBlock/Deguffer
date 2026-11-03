@@ -84,6 +84,8 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
         + "updater would have run at the next update, does not run. Your settings, your sign-ins "
         + "and anything the application saved are somewhere else entirely and are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.InstallersAndUpdates,

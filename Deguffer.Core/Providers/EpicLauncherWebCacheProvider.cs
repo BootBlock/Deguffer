@@ -156,6 +156,8 @@ public sealed class EpicLauncherWebCacheProvider : CleanupProviderBase
         + "time the launcher is opened again, and recompiles the scripts behind them, so the store "
         + "fills in more slowly once. You stay signed in, and nothing in your library changes.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Games,
