@@ -577,6 +577,9 @@ public sealed class SquirrelStagingProviderTests : IDisposable
         /// <summary>An application folder whose updater Windows will not describe.</summary>
         UndescribedUpdater,
 
+        /// <summary>An application folder moved to another place, with a junction left behind.</summary>
+        LinkedApplicationFolder,
+
         /// <summary>A profile whose <c>%LOCALAPPDATA%</c> refuses to be listed, with the staging folder moved out.</summary>
         UnlistedLocalAppData,
 
@@ -595,6 +598,7 @@ public sealed class SquirrelStagingProviderTests : IDisposable
     [InlineData(WriterPlace.UnreadableVersion)]
     [InlineData(WriterPlace.UnlistedApplicationFolder)]
     [InlineData(WriterPlace.UndescribedUpdater)]
+    [InlineData(WriterPlace.LinkedApplicationFolder)]
     [InlineData(WriterPlace.UnlistedLocalAppData)]
     [InlineData(WriterPlace.StagingFolder)]
     public async Task AWriterDiscoveryCannotEstablishStillHoldsWhatItWrote(WriterPlace place)
@@ -610,7 +614,9 @@ public sealed class SquirrelStagingProviderTests : IDisposable
 
         var busy = Populate(Path.Combine(staging, "tempb"));
         var idle = Populate(Path.Combine(staging, "tempc"));
-        var application = Path.Combine(_environment.LocalAppData, "Chatterbox");
+        var application = place is WriterPlace.LinkedApplicationFolder
+            ? Path.Combine(_temp.Path, "moved", "Chatterbox")
+            : Path.Combine(_environment.LocalAppData, "Chatterbox");
         var program = Path.Combine(application, SquirrelDiscovery.UpdaterName);
 
         Directory.CreateDirectory(application);
@@ -624,6 +630,12 @@ public sealed class SquirrelStagingProviderTests : IDisposable
 
             case WriterPlace.StagingFolder:
                 program = Path.Combine(Populate(Path.Combine(staging, "tempa")), SquirrelDiscovery.UpdaterName);
+                break;
+
+            // The program reports the folder it really runs from, which is the far side of the link.
+            case WriterPlace.LinkedApplicationFolder:
+                Populate(Path.Combine(application, "app-1.0.9254"));
+                Junction.ToDirectory(Path.Combine(_environment.LocalAppData, "Chatterbox"), application);
                 break;
         }
 

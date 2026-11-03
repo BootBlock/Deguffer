@@ -161,10 +161,12 @@ public sealed partial class SquirrelDiscovery
     /// machine. An application found that way costs one more probe per build and one read of its
     /// index, which is what <see cref="SquirrelInstallation.Doubt"/> is decided from.
     ///
-    /// <para>A link one level under <c>%LOCALAPPDATA%</c> is neither followed nor reported, on
+    /// <para>A link one level under <c>%LOCALAPPDATA%</c> is never looked inside or reported, on
     /// <see cref="ChromiumUserDataDiscovery"/>'s reasoning: this walk is choosing which applications
     /// to look at rather than classifying the children of a tool root, so a link to some unrelated
-    /// folder is not something a plan would ever have mentioned.</para>
+    /// folder is not something a plan would ever have mentioned. It is asked only whether the updater
+    /// is there, for <see cref="SquirrelSweep.UpdaterFolders"/>, which holds back rather than
+    /// offers.</para>
     /// </summary>
     private SquirrelSweep Find(CancellationToken ct)
     {
@@ -178,6 +180,28 @@ public sealed partial class SquirrelDiscovery
         var found = new List<SquirrelInstallation>();
         var refused = new List<string>();
         var updaters = new List<string>();
+
+        // An application folder somebody moved to another drive and left a link behind for is never
+        // looked inside, as above, and its updater still writes the staging folder. A program started
+        // through the link may report either side of it, so both are writer folders.
+        foreach (var link in scan.Links)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var root = LongPath.Display(link.FullName);
+
+            if (LongPath.ProbeFile(Path.Combine(root, UpdaterName)) is PathPresence.Absent)
+            {
+                continue;
+            }
+
+            updaters.Add(root);
+
+            if (FileInformation.Default.FinalPath(root) is { } target)
+            {
+                updaters.Add(LongPath.Display(target));
+            }
+        }
 
         foreach (var child in scan.Directories)
         {
