@@ -179,6 +179,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | VS Code extension browsers | The Chromium build that an extension such as Cline downloaded and will download again by itself; never the extension's conversations, checkpoints or settings, or a build that a running browser is using |
 | Chromium application caches | Chrome, Edge, Brave, Vivaldi and Opera, the built-in browsers in the Steam client and the Battle.net launcher, and every application that embeds the same engine, including WebView2 and packaged applications. Never their sign-ins, saved passwords or payment cards |
 | Firefox caches | |
+| Thunderbird caches | The cache, startup cache and Safe Browsing lists in each profile's local half; never your mail, address books, calendars, saved passwords or OpenPGP keys |
 | Steam HTTP cache | The client's own cache next to the program; never your games, your cloud saves, or the sign-in kept by its built-in browser |
 | Spotify streaming cache | Never the music and podcasts you downloaded, wherever Spotify's settings put them. Researched |
 | Plex Media Server transcoder files | `Transcode\Sessions` and the resized pictures; never anything written in the last 24 hours, the sync queue next to it, or the downloads folder. Researched |
