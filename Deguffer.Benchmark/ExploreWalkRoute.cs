@@ -25,7 +25,7 @@ internal static class ExploreWalkRoute
             new Discarded(),
             TimeProvider.System,
             ct,
-            assembleSnapshot: snapshots ? WalkSnapshots.InBackground : null);
+            assembleSnapshot: snapshots ? ScanSnapshots.InBackground : null);
 
         // A folder the walk was refused, or a file it could not measure, leaves the root's size
         // unknown, and the run timed less than the folder holds.

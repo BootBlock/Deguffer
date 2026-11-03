@@ -1,21 +1,26 @@
 namespace Deguffer.Core.Exploring;
 
 /// <summary>
-/// When a walk still in progress hands over a tree to draw, and the assembling of each one away
-/// from the walk's workers.
+/// When a scan still in progress hands over a tree to draw, and the assembling of each one away
+/// from the scan's own threads.
 ///
-/// <para>A snapshot is a pass over every node found so far, so its cost grows with the walk. Taken
-/// on a worker, under the lock every worker needs, it stopped the whole walk; started on a fixed
-/// cadence, a snapshot that took longer than the interval was followed by the next at once, and a
-/// large walk did little else. Here only a capture is taken on the walk, under the lock (see
-/// <see cref="ExploreTreeBuilder.Capture"/>), one snapshot is assembled at a time somewhere else,
-/// and the next is not started until a multiple of the last one's time has passed since it
-/// ended.</para>
+/// <para>A snapshot is a pass over every node found so far, so its cost grows with the scan. Taken
+/// on a walk worker, under the lock every worker needs, it stopped the whole walk; started on a
+/// fixed cadence, a snapshot that took longer than the interval was followed by the next at once,
+/// and a large walk did little else. Here the report only takes what a snapshot is assembled from,
+/// one snapshot is assembled at a time somewhere else, and the next is not started until a multiple
+/// of the last one's time has passed since it ended.</para>
 ///
-/// <para>Driven by the walk's progress reports, which are never made beside each other, so nothing
+/// <para>One cadence for both routes. What each route hands over differs: the walk captures its
+/// builder under the lock (<see cref="ExploreTreeBuilder.Capture"/>), and the file table's read
+/// copies its columns while the parse threads go on writing them
+/// (<see cref="MftExploreColumns.CopyPresent"/>). Either way a snapshot is ordered by
+/// <see cref="ExploreChildOrder.ByName"/>.</para>
+///
+/// <para>Driven by the scan's progress reports, which are never made beside each other, so nothing
 /// here is called from two threads at once except the assembling.</para>
 /// </summary>
-internal sealed class WalkSnapshots
+internal sealed class ScanSnapshots
 {
     /// <summary>
     /// The least time from the end of one snapshot to the start of the next.
@@ -38,14 +43,14 @@ internal sealed class WalkSnapshots
     /// <summary>
     /// How many times its own assembling time a snapshot waits, from its end, before the next
     /// starts, where that is longer than <see cref="Interval"/>. Four keeps snapshots to a fifth of
-    /// one processor however large the tree grows, so the walk keeps the rest.
+    /// one processor however large the tree grows, so the scan keeps the rest.
     /// </summary>
     public const int AssemblingTimes = 4;
 
-    /// <summary>How a scan assembles a snapshot: on the thread pool, apart from the walk's workers.</summary>
+    /// <summary>How a scan assembles a snapshot: on the thread pool, apart from the scan's own threads.</summary>
     public static Func<Action, Task> InBackground { get; } = static assemble => Task.Run(assemble);
 
-    private readonly ExploreTreeBuilder _builder;
+    private readonly Func<Func<CancellationToken, ExploreTree?>> _capture;
     private readonly TimeProvider _clock;
     private readonly Func<Action, Task> _start;
     private readonly long _intervalTicks;
@@ -61,12 +66,17 @@ internal sealed class WalkSnapshots
 
     private ExploreTree? _ready;
 
+    /// <param name="capture">
+    /// Called on the reporting thread when a snapshot is due. Takes whatever has to be taken there,
+    /// and returns the assembling, which runs elsewhere and gives the tree in name order, or null
+    /// where there is nothing to draw yet. The assembling stops for the token it is given.
+    /// </param>
     /// <param name="start">
     /// Runs one assembling and says when it has finished. <see cref="InBackground"/> outside tests.
     /// </param>
-    public WalkSnapshots(ExploreTreeBuilder builder, TimeProvider clock, Func<Action, Task> start)
+    public ScanSnapshots(Func<Func<CancellationToken, ExploreTree?>> capture, TimeProvider clock, Func<Action, Task> start)
     {
-        _builder = builder;
+        _capture = capture;
         _clock = clock;
         _start = start;
         _intervalTicks = (long)(Interval.TotalSeconds * clock.TimestampFrequency);
@@ -76,11 +86,11 @@ internal sealed class WalkSnapshots
 
     /// <summary>
     /// The snapshot finished since the last call, if there is one, and the next one started if it
-    /// is due and none is being assembled. Called from the walk's progress report.
+    /// is due and none is being assembled. Called from the scan's progress report.
     ///
     /// <para>A finished snapshot waits for the next report rather than making one of its own, so
-    /// every report still comes from the walk, one at a time and with its counts in order, and none
-    /// can come after the walk has returned.</para>
+    /// every report still comes from the scan, one at a time and with its counts in order, and none
+    /// can come after the scan has returned.</para>
     /// </summary>
     public ExploreTree? Take()
     {
@@ -93,7 +103,7 @@ internal sealed class WalkSnapshots
                 return ready;
             }
 
-            // A snapshot that failed is a defect, and it fails the walk rather than leaving every
+            // A snapshot that failed is a defect, and it fails the scan rather than leaving every
             // snapshot after it silently missing.
             assembling.GetAwaiter().GetResult();
             _assembling = null;
@@ -105,16 +115,16 @@ internal sealed class WalkSnapshots
             return ready;
         }
 
-        var capture = _builder.Capture();
+        var assemble = _capture();
         _started = now;
-        _assembling = _start(() => Assemble(capture));
+        _assembling = _start(() => Assemble(assemble));
 
         return ready;
     }
 
     /// <summary>
     /// Start no more, stop the snapshot being assembled, if any, and return once it has stopped.
-    /// The walk has ended or been cancelled, so nothing will draw it: the finished tree replaces it,
+    /// The scan has ended or been cancelled, so nothing will draw it: the finished tree replaces it,
     /// or nothing does.
     /// </summary>
     public void Stop()
@@ -131,23 +141,24 @@ internal sealed class WalkSnapshots
         }
     }
 
-    private void Assemble(ExploreTreeCapture capture)
+    private void Assemble(Func<CancellationToken, ExploreTree?> assemble)
     {
-        ExploreTree tree;
+        ExploreTree? tree;
 
         try
         {
-            tree = capture.Build(ExploreChildOrder.ByName, _stopped);
+            tree = assemble(_stopped);
         }
         catch (OperationCanceledException) when (_stopped.IsCancellationRequested)
         {
-            // Stopped by Stop, which is waiting for exactly this, and not a failure of the walk.
+            // Stopped by Stop, which is waiting for exactly this, and not a failure of the scan.
             return;
         }
 
         var ended = _clock.GetTimestamp();
 
-        // Read by the walk only once it has seen this finish, so the task's completion publishes it.
+        // Read by the scan only once it has seen this finish, so the task's completion publishes it.
+        // An assembling with nothing to draw is spaced like any other, because it cost the same pass.
         _due = ended + Math.Max(_intervalTicks, (ended - _started) * AssemblingTimes);
         Volatile.Write(ref _ready, tree);
     }

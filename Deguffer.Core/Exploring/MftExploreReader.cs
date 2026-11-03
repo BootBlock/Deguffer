@@ -67,56 +67,38 @@ internal static class MftExploreReader
     /// record was caught mid-change, a lost size is marked unknown and a lost name makes the file
     /// one this could not read.</para>
     /// </summary>
-    /// <param name="onProgress">
-    /// Called with how many records have been dealt with, as <see cref="MftRecordStream.TryReadAll"/>
-    /// describes.
+    /// <param name="progress">
+    /// Told how many records have been dealt with, as <see cref="MftRecordStream.TryReadAll"/>
+    /// describes, out of the table's record count, and now and then the tree so far.
     /// </param>
+    /// <param name="assembleSnapshot">
+    /// How a snapshot is assembled (<see cref="ScanSnapshots.InBackground"/> for a scan), or null to
+    /// take none, as for a caller that draws nothing until the read ends. See
+    /// <see cref="ScanSnapshots"/> for when one is taken, and <see cref="Snapshot"/> for what it holds.
+    /// </param>
+    /// <param name="clock">What the snapshots' cadence is measured by. The system's where null.</param>
     public static MftExploreRead Read(
         IMftSource source,
         string rootPath,
         IReadOnlyList<string> components,
         TableTuning tuning,
-        Action<long>? onProgress,
-        CancellationToken ct)
+        IProgress<ExploreProgress>? progress,
+        CancellationToken ct,
+        Func<Action, Task>? assembleSnapshot = null,
+        TimeProvider? clock = null)
     {
-        var records = (int)Math.Min(source.RecordCount, int.MaxValue);
-        var volumeRoot = (int)MftRecord.RootRecordNumber;
+        var total = source.RecordCount;
+        var records = (int)Math.Min(total, int.MaxValue);
 
         // Never smaller than the reserved block, whatever the source claims to hold. The root is at
         // a fixed record number and is written below whether or not it parsed, so a table reporting
-        // fewer records than that would otherwise index past the end of every array here. Slots
+        // fewer records than that would otherwise index past the end of every column here. Slots
         // past the real count are simply absent, and an absent slot contributes nothing.
         var count = Math.Max(records, (int)MftRecord.ReservedRecordCount);
 
-        // A number per record into one pool of names, rather than a string per record. See NamePool.
-        // A slot no record fills keeps zero, which is the empty name.
-        var nameNumbers = new int[count];
+        var columns = new MftExploreColumns(count);
         var names = new NamePool();
         var namesGate = new Lock();
-        var parents = new int[count];
-        var sizes = new long[count];
-
-        // Nine bytes a record more, and kept on purpose. The picture draws space on disk, and a
-        // length beside it is what explains a file the cloud holds — 200 GB long and nothing here —
-        // to a reader who would otherwise take the gap for a fault in the scan.
-        var lengths = new long[count];
-        var storage = new FileStorage[count];
-
-        // One byte a record for every flag, set in one store per record below. Each record is
-        // handed on once, to one thread, and those held back for their extension records one at a
-        // time after the parse threads have finished, so no two threads ever write one byte.
-        var flags = new ExploreNodeFlags[count];
-
-        // Four bytes per node each, not eight. This route sizes every array to the whole record
-        // count before it reads one — 2.4M on an ordinary system volume — so a pair of DateTime
-        // arrays here would be 38 MB allocated up front and mostly into slots no record ever fills.
-        // See ExploreTimestamp for what the minute of precision buys.
-        var created = new ExploreTimestamp[count];
-        var modified = new ExploreTimestamp[count];
-
-        // A byte a record, which is the whole cost: the attributes come from the
-        // $STANDARD_INFORMATION the dates are already read from.
-        var visibility = new FileVisibility[count];
 
         // Written from several parse threads at once, and only ever to true, so no write can undo
         // another. The stream has finished with every thread before it returns, which is when this
@@ -128,71 +110,99 @@ internal static class MftExploreReader
         // that names it, as the walk draws it. See MftLink.
         var linksMet = new ConcurrentQueue<(int Record, MftRecord Described, MftLink Link)>();
 
-        var couldNotReadWholeTable = !MftRecordStream.TryReadAll(
-            source,
-            records,
-            tuning,
-            (number, outcome, in record, name) =>
-            {
-                if (outcome != MftParseOutcome.Parsed)
+        // Nothing is taken on the reporting thread, which is a parse thread holding its slot: the
+        // copy of the columns is the assembling's, away from the read.
+        var snapshots = progress is not null && assembleSnapshot is not null
+            ? new ScanSnapshots(
+                () => stopped => Snapshot(columns, names, namesGate, rootPath, components, count, stopped),
+                clock ?? TimeProvider.System,
+                assembleSnapshot)
+            : null;
+
+        bool couldNotReadWholeTable;
+
+        try
+        {
+            couldNotReadWholeTable = !MftRecordStream.TryReadAll(
+                source,
+                records,
+                tuning,
+                (number, outcome, in record, name) =>
                 {
-                    // Every other outcome leaves a slot empty, and only one of them leaves nothing
-                    // missing. A free record genuinely holds nothing. An unreadable one holds a real
-                    // file this cannot place — and there is no parent to attribute the loss to, so
-                    // it is declared once, on the scan's root, rather than guessed at somewhere in
-                    // the middle of the tree. That includes a file whose names are in extension
-                    // records caught mid-change, which the stream has already tried to follow.
-                    //
-                    // Except across records 12 to 15, which are not damage but the format. NTFS
-                    // holds those four back for future metadata, marks them in use, and gives them
-                    // neither a $FILE_NAME nor an $ATTRIBUTE_LIST — precisely the shape the parser
-                    // has every reason to call unreadable, and precisely what it reports on every
-                    // NTFS volume ever formatted. Without this carve-out the tree would say "some
-                    // of this drive could not be read" about every drive, always, which is a
-                    // caveat carrying no information at all.
-                    //
-                    // This is the same fact that took MftVolumeIndexBuilder's whole fast path out
-                    // for six weeks. The bound is both-ended there for a reason and it is
-                    // both-ended here for the same one: records 0 to 11 are the named metadata
-                    // files, and an unreadable one of those is real damage.
-                    if (outcome == MftParseOutcome.Unreadable
-                        && (number < MftRecord.FirstUnnamedReservedRecord || number >= MftRecord.ReservedRecordCount))
+                    if (outcome != MftParseOutcome.Parsed)
                     {
-                        sawUnreadableRecord = true;
+                        // Every other outcome leaves a slot empty, and only one of them leaves
+                        // nothing missing. A free record genuinely holds nothing. An unreadable one
+                        // holds a real file this cannot place — and there is no parent to attribute
+                        // the loss to, so it is declared once, on the scan's root, rather than
+                        // guessed at somewhere in the middle of the tree. That includes a file whose
+                        // names are in extension records caught mid-change, which the stream has
+                        // already tried to follow.
+                        //
+                        // Except across records 12 to 15, which are not damage but the format. NTFS
+                        // holds those four back for future metadata, marks them in use, and gives
+                        // them neither a $FILE_NAME nor an $ATTRIBUTE_LIST — precisely the shape the
+                        // parser has every reason to call unreadable, and precisely what it reports
+                        // on every NTFS volume ever formatted. Without this carve-out the tree would
+                        // say "some of this drive could not be read" about every drive, always, which
+                        // is a caveat carrying no information at all.
+                        //
+                        // This is the same fact that took MftVolumeIndexBuilder's whole fast path
+                        // out for six weeks. The bound is both-ended there for a reason and it is
+                        // both-ended here for the same one: records 0 to 11 are the named metadata
+                        // files, and an unreadable one of those is real damage.
+                        if (outcome == MftParseOutcome.Unreadable
+                            && (number < MftRecord.FirstUnnamedReservedRecord || number >= MftRecord.ReservedRecordCount))
+                        {
+                            sawUnreadableRecord = true;
+                        }
+
+                        return true;
                     }
 
-                    return true;
-                }
-
-                // A parent outside the table is ordinary on a live volume: a directory removed
-                // mid-read, or a table that grew after its size was measured. Such a name cannot
-                // be reached from the root, so it draws nothing and dropping it costs nothing. The
-                // file's other names are judged one by one.
-                foreach (var link in record.OtherLinks ?? [])
-                {
-                    if (link.ParentRecordNumber < (uint)count)
+                    // A parent outside the table is ordinary on a live volume: a directory removed
+                    // mid-read, or a table that grew after its size was measured. Such a name cannot
+                    // be reached from the root, so it draws nothing and dropping it costs nothing.
+                    // The file's other names are judged one by one.
+                    foreach (var link in record.OtherLinks ?? [])
                     {
-                        linksMet.Enqueue(((int)number, record, link));
+                        if (link.ParentRecordNumber < (uint)count)
+                        {
+                            linksMet.Enqueue(((int)number, record, link));
+                        }
                     }
-                }
 
-                if (record.ParentRecordNumber >= (uint)count)
-                {
+                    if (record.ParentRecordNumber >= (uint)count)
+                    {
+                        return true;
+                    }
+
+                    // The pool is shared by every parse thread and by a snapshot. What the lock
+                    // covers is a lookup and, for a name not met before, a copy, against a record
+                    // parsed outside it.
+                    lock (namesGate)
+                    {
+                        columns.NameNumbers[number] = names.Intern(name);
+                    }
+
+                    columns.Describe((int)number, record, (int)record.ParentRecordNumber);
                     return true;
-                }
-
-                // The pool is shared by every parse thread. What the lock covers is a lookup and, for
-                // a name not met before, a copy, against a record parsed outside it.
-                lock (namesGate)
-                {
-                    nameNumbers[number] = names.Intern(name);
-                }
-
-                Describe((int)number, record, (int)record.ParentRecordNumber);
-                return true;
-            },
-            onProgress,
-            ct);
+                },
+                done => progress?.Report(new ExploreProgress(
+                    done,
+                    total,
+                    BytesSeen: 0,
+                    // None from the report that the whole table has been dealt with: the finished
+                    // tree is assembled next, and replaces it.
+                    done < total ? snapshots?.Take() : null)),
+                ct);
+        }
+        finally
+        {
+            // Before anything below writes to the columns. A snapshot copies them beside the parse
+            // threads by the rule MftExploreColumns states, and nothing after this keeps that rule.
+            snapshots?.Stop();
+        }
 
         // In record order, then by folder and name, so one table always numbers its links alike
         // whatever order the parse threads met them in. Grown once, and only where a link was met.
@@ -204,39 +214,136 @@ internal static class MftExploreReader
 
         if (links.Length > 0)
         {
-            var nodes = count + links.Length;
-
-            Array.Resize(ref nameNumbers, nodes);
-            Array.Resize(ref parents, nodes);
-            Array.Resize(ref sizes, nodes);
-            Array.Resize(ref lengths, nodes);
-            Array.Resize(ref storage, nodes);
-            Array.Resize(ref flags, nodes);
-            Array.Resize(ref created, nodes);
-            Array.Resize(ref modified, nodes);
-            Array.Resize(ref visibility, nodes);
+            columns.Grow(count + links.Length);
 
             for (var i = 0; i < links.Length; i++)
             {
                 var (_, described, link) = links[i];
 
-                nameNumbers[count + i] = names.Intern(link.Name);
-                Describe(count + i, described, (int)link.ParentRecordNumber);
+                columns.NameNumbers[count + i] = names.Intern(link.Name);
+                columns.Describe(count + i, described, (int)link.ParentRecordNumber);
             }
         }
+
+        // A record the pass could not place might have been anywhere, this folder included, so the
+        // caveat lands on whatever the scan is rooted at. Attributing it only to the volume's root
+        // would let a scoped scan report a total as exact on the strength of a record it never read.
+        //
+        // By size, and there is no choice to make here: this is the whole table, and nothing will
+        // grow it to rearrange.
+        var rootName = names.Intern(rootPath);
+        var (tree, reason) = Assemble(
+            columns,
+            names.Freeze(),
+            rootName,
+            rootPath,
+            components,
+            count,
+            new AssembledAs(ExploreChildOrder.BySize, LowerBound: couldNotReadWholeTable || sawUnreadableRecord, MatchCaseOnly: false),
+            ct);
+
+        return new MftExploreRead(tree, reason, !couldNotReadWholeTable, !couldNotReadWholeTable && !sawUnreadableRecord);
+    }
+
+    /// <summary>
+    /// The tree as the read stands, while the parse threads go on: a copy of every slot described so
+    /// far (<see cref="MftExploreColumns.CopyPresent"/>), assembled as the finished read is, or null
+    /// where the read has not yet reached the folder the scan is rooted at.
+    ///
+    /// <para><b>Only what is reachable.</b> A record whose chain of parents has not all been read
+    /// hangs from nothing yet and is left out, as the finished tree leaves out a record no folder
+    /// reaches. So how much a snapshot holds depends on the order of the records on disk, not on how
+    /// far the read has got: a folder and everything below it appear together once its last ancestor
+    /// is read. Measured on one system volume upgraded in place, <c>Users</c>, <c>Windows</c> and both
+    /// <c>Program Files</c> folders sat about 1.7 million records in, so their contents arrived late
+    /// in the read and all at once.</para>
+    ///
+    /// <para><b>Every total a lower bound.</b> The root is marked
+    /// <see cref="ExploreNodeFlags.SizeUnknown"/>, which every total above an unread record reads as
+    /// "at least". A hard link's other names are placed only once the read ends, so a snapshot draws
+    /// a file under the name its record was placed by and no other.</para>
+    ///
+    /// <para><b>Ordered by name</b>, as the walk's snapshots are, so a folder that grows widens where
+    /// it is rather than overtaking its siblings (<see cref="ScanSnapshots.Interval"/>). Nothing that
+    /// decides a removal reads one: <see cref="ExploreGate"/> holds the page's actions while a scan
+    /// runs, and the finished tree replaces the last snapshot.</para>
+    /// </summary>
+    private static ExploreTree? Snapshot(
+        MftExploreColumns columns,
+        NamePool names,
+        Lock namesGate,
+        string rootPath,
+        IReadOnlyList<string> components,
+        int records,
+        CancellationToken stopped)
+    {
+        var copy = columns.CopyPresent(stopped);
+
+        // Frozen after the copy, not before. A slot's name was numbered before its flags were
+        // released, so every number the copy holds is in a pool frozen once the copy has ended.
+        int rootName;
+        NamePool.Frozen frozen;
+
+        lock (namesGate)
+        {
+            rootName = names.Intern(rootPath);
+            frozen = names.Freeze();
+        }
+
+        return Assemble(
+            copy,
+            frozen,
+            rootName,
+            rootPath,
+            components,
+            records,
+            new AssembledAs(ExploreChildOrder.ByName, LowerBound: true, MatchCaseOnly: true),
+            stopped).Tree;
+    }
+
+    /// <summary>
+    /// What separates a snapshot's tree from the finished read's in <see cref="Assemble"/>.
+    /// </summary>
+    /// <param name="ChildOrder">How each folder's children are ordered.</param>
+    /// <param name="LowerBound">Whether the root says its totals are lower bounds.</param>
+    /// <param name="MatchCaseOnly">
+    /// Whether each folder on the way to the scan's root is found only by its exact name. A snapshot
+    /// is, because the folder named exactly may not have been read yet when one differing only in
+    /// case has: rooted there, the snapshot would draw one folder's content under the other's name,
+    /// and a pick made in it would carry by path into the finished tree. A path typed in another
+    /// case is drawn when the read ends instead.
+    /// </param>
+    private readonly record struct AssembledAs(ExploreChildOrder ChildOrder, bool LowerBound, bool MatchCaseOnly);
+
+    /// <summary>
+    /// Root a tree at the folder <paramref name="components"/> name, or say why the table cannot
+    /// answer for it. Writes to <paramref name="columns"/>, which <see cref="ExploreTree.Create"/>
+    /// then takes.
+    /// </summary>
+    /// <param name="records">How many slots are records, rather than a hard link's other names.</param>
+    private static (ExploreTree? Tree, FallbackReason Reason) Assemble(
+        MftExploreColumns columns,
+        NamePool.Frozen names,
+        int rootName,
+        string rootPath,
+        IReadOnlyList<string> components,
+        int records,
+        AssembledAs assembled,
+        CancellationToken ct)
+    {
+        var volumeRoot = (int)MftRecord.RootRecordNumber;
 
         // The volume's root is forced present whether or not record 5 parsed. Resolution starts
         // here and every directory on the volume hangs off it, so a table whose root record declined
         // would otherwise leave the whole disk unreachable — a full drive drawn as empty, from one
         // record.
-        parents[volumeRoot] = volumeRoot;
-        flags[volumeRoot] |= ExploreNodeFlags.Directory | ExploreNodeFlags.Present;
+        columns.Parents[volumeRoot] = volumeRoot;
+        columns.Flags[volumeRoot] |= ExploreNodeFlags.Directory | ExploreNodeFlags.Present;
 
-        var resolved = Resolve(components, nameNumbers, names.Freeze(), parents, flags, count);
+        var resolved = Resolve(components, columns, names, records, assembled.MatchCaseOnly);
         if (resolved.Node is not { } root)
         {
-            return new MftExploreRead(
-                Tree: null, resolved.Reason, !couldNotReadWholeTable, !couldNotReadWholeTable && !sawUnreadableRecord);
+            return (null, resolved.Reason);
         }
 
         // The scan's root carries the path the user chose rather than the name NTFS holds for it —
@@ -245,46 +352,22 @@ internal static class MftExploreReader
         //
         // Its dates are deliberately not forced along with them. The record holding this folder
         // carries them like any other, and where it did not parse there is nothing to put here but
-        // the unknown the array already holds — a date for a folder nothing could read is not one
+        // the unknown the column already holds — a date for a folder nothing could read is not one
         // to invent.
-        nameNumbers[root] = names.Intern(rootPath);
-        parents[root] = root;
+        columns.NameNumbers[root] = rootName;
+        columns.Parents[root] = root;
 
-        // A record the pass could not place might have been anywhere, this folder included, so the
-        // caveat lands on whatever the scan is rooted at. Attributing it only to the volume's root
-        // would let a scoped scan report a total as exact on the strength of a record it never read.
-        if (couldNotReadWholeTable || sawUnreadableRecord)
+        if (assembled.LowerBound)
         {
-            flags[root] |= ExploreNodeFlags.SizeUnknown;
+            columns.Flags[root] |= ExploreNodeFlags.SizeUnknown;
         }
 
-        // By size, and there is no choice to make here: this route inverts the parent links once,
-        // after the whole table has been read, so it never publishes a partial tree that a growing
-        // size could rearrange.
-        return new MftExploreRead(
-            ExploreTree.Create(
-                rootPath, root, nameNumbers, names.Freeze(), parents, sizes, lengths, storage, flags,
-                created, modified, visibility, ExploreChildOrder.BySize, ct: ct),
-            FallbackReason.None,
-            !couldNotReadWholeTable,
-            !couldNotReadWholeTable && !sawUnreadableRecord);
+        var tree = ExploreTree.Create(
+            rootPath, root, columns.NameNumbers, names, columns.Parents, columns.Sizes, columns.Lengths,
+            columns.Storage, columns.Flags, columns.Created, columns.Modified, columns.Visibility,
+            assembled.ChildOrder, ct: ct);
 
-        // One node: a record under the name it was placed by, or one of a file's other names, which
-        // reads its record's size, dates and flags. Each node is written by one thread.
-        void Describe(int node, in MftRecord record, int parent)
-        {
-            parents[node] = parent;
-            sizes[node] = record.Size?.Allocated ?? 0;
-            lengths[node] = record.Size?.Logical ?? 0;
-            storage[node] = record.Storage;
-            flags[node] = ExploreNodeFlags.Present
-                | (record.IsDirectory ? ExploreNodeFlags.Directory : ExploreNodeFlags.None)
-                | (record.IsReparsePoint ? ExploreNodeFlags.Link : ExploreNodeFlags.None)
-                | (record.Size is null ? ExploreNodeFlags.SizeUnknown : ExploreNodeFlags.None);
-            created[node] = ExploreTimestamp.FromFileTime(record.CreatedFileTime);
-            modified[node] = ExploreTimestamp.FromFileTime(record.LastWrittenFileTime);
-            visibility[node] = record.Visibility;
-        }
+        return (tree, FallbackReason.None);
     }
 
     /// <summary>
@@ -300,17 +383,16 @@ internal static class MftExploreReader
     /// </summary>
     private static (int? Node, FallbackReason Reason) Resolve(
         IReadOnlyList<string> components,
-        int[] nameNumbers,
+        MftExploreColumns columns,
         NamePool.Frozen names,
-        int[] parents,
-        ExploreNodeFlags[] flags,
-        int count) =>
+        int records,
+        bool matchCaseOnly) =>
         Descend(
             components,
             (int)MftRecord.RootRecordNumber,
-            node => (flags[node] & ExploreNodeFlags.Link) != 0,
-            node => (flags[node] & ExploreNodeFlags.Directory) != 0,
-            (directory, name) => FindChild(directory, name, nameNumbers, names, parents, flags, count));
+            node => (columns.Flags[node] & ExploreNodeFlags.Link) != 0,
+            node => (columns.Flags[node] & ExploreNodeFlags.Directory) != 0,
+            (directory, name) => FindChild(directory, name, columns, names, records, matchCaseOnly));
 
     /// <summary>
     /// The node of <paramref name="tree"/>, a tree rooted at its volume's top, that holds the folder
@@ -394,7 +476,7 @@ internal static class MftExploreReader
     ///
     /// <para>Deliberately not <see cref="MftVolumeIndex"/>'s shape, which walks one directory's
     /// child links. Those links are what <see cref="ExploreTree.Create"/> builds, and it cannot run
-    /// until the root is known, so at this point the only thing to scan is the flat parent array. A
+    /// until the root is known, so at this point the only thing to scan is the flat parent column. A
     /// path has a handful of components, and the comparison is an <c>int</c> per record with a name
     /// compared only where the parent matches — a few million of those against a table read that
     /// has already cost millions of disk records (G4).</para>
@@ -405,18 +487,21 @@ internal static class MftExploreReader
     /// hold <c>Cache</c> and <c>cache</c> at once — the same shape
     /// <see cref="ExploreTree.ChildrenOf"/>'s comparer breaks ties for. Taking the first
     /// case-insensitive match there would draw the wrong folder under the right folder's name,
-    /// which is the plausible wrong answer this whole class is written to avoid.</para>
+    /// which is the plausible wrong answer this whole class is written to avoid.
+    /// <paramref name="matchCaseOnly"/> turns the fallback off, for <see cref="AssembledAs.MatchCaseOnly"/>'s
+    /// reason.</para>
     ///
     /// <para>A record naming itself as its parent is no directory's child, which is the rule
     /// <see cref="ExploreTree.Create"/> builds its child lists by. Resolving through one would pick
     /// a node the tree then declines to link.</para>
     /// </summary>
     private static int? FindChild(
-        int directory, string name, int[] nameNumbers, NamePool.Frozen names, int[] parents, ExploreNodeFlags[] flags, int count)
+        int directory, string name, MftExploreColumns columns, NamePool.Frozen names, int records, bool matchCaseOnly)
     {
+        var (nameNumbers, parents, flags) = (columns.NameNumbers, columns.Parents, columns.Flags);
         int? differingInCase = null;
 
-        for (var i = 0; i < count; i++)
+        for (var i = 0; i < records; i++)
         {
             if ((flags[i] & ExploreNodeFlags.Present) == 0 || parents[i] != directory || i == directory)
             {
@@ -430,7 +515,7 @@ internal static class MftExploreReader
                 return i;
             }
 
-            if (differingInCase is null && held.Equals(name, StringComparison.OrdinalIgnoreCase))
+            if (!matchCaseOnly && differingInCase is null && held.Equals(name, StringComparison.OrdinalIgnoreCase))
             {
                 differingInCase = i;
             }

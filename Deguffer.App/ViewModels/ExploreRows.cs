@@ -20,8 +20,8 @@ public sealed class ExploreRows
 {
     /// <summary>
     /// What the folder holds and what the trail names, per rewrite. Filled again each time and never
-    /// replaced: a walked scan publishes a snapshot every few hundred milliseconds, and building two
-    /// lists for each of those is work to say what was already said (G5).
+    /// replaced: a scan in progress publishes a snapshot as often as every few hundred milliseconds,
+    /// and building two lists for each of those is work to say what was already said (G5).
     /// </summary>
     private readonly List<int> _arriving = [];
 
