@@ -120,6 +120,97 @@ public sealed class VagrantSupersededBoxProviderTests : IDisposable
     }
 
     /// <summary>
+    /// Prune acts on the home its own environment names, so a home Deguffer started with and the machine
+    /// has since dropped is the one examined, measured and asserted as surviving (§5.6), never the default.
+    /// </summary>
+    [Fact]
+    public async Task ExaminesTheHomeThePruneWillActOn()
+    {
+        var home = Path.Combine(_temp.Path, "elsewhere", "vagrant-home");
+        _environment.WithToolEnvironmentVariable(VagrantSupersededBoxProvider.HomeVariable, home);
+        var (kept, removed) = InstallBionic(home);
+        InstallBionic(DefaultHome);
+        var provider = CreateProvider(Reporting(BionicReport));
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(removed.Order(StringComparer.OrdinalIgnoreCase), TheStep(plan).MeasuredPaths.Order(StringComparer.OrdinalIgnoreCase));
+        foreach (var survivor in new[] { home, BoxesIn(home), kept })
+        {
+            Assert.Contains(plan.ProtectedPaths, p =>
+                p.Path.Equals(survivor, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
+        }
+
+        Assert.Contains(provider.ToolRoots, root => root.Path.Equals(home, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(await provider.CleanedPlacesAsync(), place => place.Path.Equals(BoxesIn(home), StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>A home declined as prune would read it is declined, though the machine's own value is unset.</summary>
+    [Fact]
+    public async Task RunsNothingWhereThePruneWouldReadTheProfileAsVagrantsHome()
+    {
+        _environment.WithToolEnvironmentVariable(VagrantSupersededBoxProvider.HomeVariable, _environment.UserProfile);
+        InstallBionic(_environment.UserProfile);
+        InstallBionic(DefaultHome);
+        var runner = Reporting(BionicReport);
+        var provider = CreateProvider(runner);
+
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.WasNotExamined);
+        Assert.Empty(runner.Invocations);
+        Assert.Equal(_environment.UserProfile, Assert.Single(await provider.DiscoverToolRootsAsync()).Path);
+    }
+
+    /// <summary>
+    /// A home set on the machine after Deguffer started is where a Vagrant started now keeps its boxes and
+    /// machine index, so Explore and a duplicate search refuse it, though prune is never sent there until
+    /// Deguffer is started again.
+    /// </summary>
+    [Fact]
+    public async Task RefusesTheHomeAVagrantStartedNowWouldUse()
+    {
+        var started = Path.Combine(_temp.Path, "elsewhere", "vagrant-home");
+        var moved = Path.Combine(_temp.Path, "moved", "vagrant-home");
+        _environment.WithEnvironmentVariable(VagrantSupersededBoxProvider.HomeVariable, moved);
+        _environment.WithToolEnvironmentVariable(VagrantSupersededBoxProvider.HomeVariable, started);
+        var (_, startedRemoved) = InstallBionic(started);
+        var (movedKept, movedRemoved) = InstallBionic(moved);
+        var provider = CreateProvider(Reporting(BionicReport));
+
+        Assert.Equal(
+            new[] { started, moved, DefaultHome }.Order(StringComparer.OrdinalIgnoreCase),
+            provider.ToolRoots.Select(root => root.Path).Order(StringComparer.OrdinalIgnoreCase),
+            StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(await provider.CleanedPlacesAsync(), place => place.Path.Equals(BoxesIn(moved), StringComparison.OrdinalIgnoreCase));
+
+        var policy = await ExploreActionPolicy.ForAsync(_system, _environment, new FakeVolumeInventory(), [provider]);
+        foreach (var path in new[] { moved, movedKept, movedRemoved[0] })
+        {
+            Assert.False(policy.MayRemove(path).IsAllowed, path);
+        }
+
+        Assert.Equal(
+            startedRemoved.Order(StringComparer.OrdinalIgnoreCase),
+            TheStep(await provider.PlanAsync()).MeasuredPaths.Order(StringComparer.OrdinalIgnoreCase));
+    }
+
+    /// <summary>A home declined as the machine now reads the variable still refuses what Vagrant keeps there.</summary>
+    [Fact]
+    public async Task ADeclinedHomeTheMachineNowNamesStillRefusesWhatVagrantKeepsThere()
+    {
+        var started = Path.Combine(_temp.Path, "elsewhere", "vagrant-home");
+        _environment.WithEnvironmentVariable(VagrantSupersededBoxProvider.HomeVariable, _environment.UserProfile);
+        _environment.WithToolEnvironmentVariable(VagrantSupersededBoxProvider.HomeVariable, started);
+
+        var declined = Assert.Single(await CreateProvider(new FakeProcessRunner()).DiscoverToolRootsAsync());
+
+        Assert.Equal(_environment.UserProfile, declined.Path);
+        Assert.False(declined.Recognises(new ToolRootChild("boxes", ChildKind.Folder)));
+        Assert.True(declined.Recognises(new ToolRootChild("Projects", ChildKind.Folder)));
+    }
+
+    /// <summary>
     /// Vagrant expands a relative value against its own working directory, which is Deguffer's tool
     /// folder rather than anything the user chose, so there is no reading of it to act on.
     /// </summary>
