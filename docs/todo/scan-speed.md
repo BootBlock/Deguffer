@@ -1,9 +1,11 @@
 # Scan speed — audited backlog
 
 > **Status:** 🟢 ACTIVE — an audit of where a Clean preview and an Explore scan spend their time,
-> verified against the code and filed as #441 to #492. Work it in the order below: the measurements
-> in stage 0 decide stages 2, 4 and 6. Flip to ✅ COMPLETE and `git mv` into `done/` when every
-> issue below is closed or rejected, or supersede it with a newer plan.
+> verified against the code and filed as #441 to #492, and a second audit of the clean, the
+> duplicate search, start-up and file I/O, filed as #494 to #537. Work each in its own order below:
+> the measurements in each stage 0 decide the larger items after them. Flip to ✅ COMPLETE and
+> `git mv` into `done/` when every issue below is closed or rejected, or supersede it with a newer
+> plan.
 
 This audit asked whether a preview and an Explore scan can finish sooner, especially on solid state.
 Every finding was checked against the code at the time of writing and against the closed
@@ -139,3 +141,128 @@ Each of these changes a recorded design choice or what Deguffer finds, so each i
 | Shared counters touched per directory | About a tenth as often as the per-file writes #371 removed with no measurable gain. |
 | Walk helpers end and restart | Since #354 a restart reuses a parked thread. Keeping helpers alive needs a G3 knob. |
 | Resolving a scoped folder passes over the table per component | About 10-30 ms against a 3-5 s read, and `MftExploreReader.FindChild` records the trade. |
+
+## Second audit: the clean, duplicates, start-up and file I/O
+
+A second audit read what the first did not: the clean itself (`Execution`), the safety probes and
+inspectors (`Safety`), the duplicate search, the stores and the start-up path, the App, every
+provider not named above, and the file I/O primitives across the codebase. It was checked against
+every open and closed issue, including #441 to #492, and filed as #494 to #537. Some costs were
+timed with throwaway programs against temporary files, outside Deguffer: a Restart Manager session,
+`GetVolumePathNameW`, the final-path query, a store's parse and write, and buffered against
+unbuffered reads. Each issue says which of its figures were timed that way, and no change was
+measured inside Deguffer.
+
+### What it found, in one paragraph
+
+**Per-entry I/O is already lean; the time goes to questions asked again and to work done one item
+at a time.** A removal costs one delete per file and one per folder. What a clean and a preview wait
+on is a Restart Manager session started per candidate (about 20-45 ms each, whatever it holds), a
+mount-point lookup per path (up to about a millisecond), use checks that rebuild the same question
+for every step, a folder pass that waits for every file in the tree, and serial loops over files
+that do not depend on each other. The duplicate search asks Windows for a path it never uses three
+times per file, and identifies its candidates on one thread. Start-up parses its stores through
+reflection on the UI thread.
+
+### Order of work
+
+#### 0. Measure first
+
+| Issue | What it adds |
+| --- | --- |
+| #516 | Counts and times of the volume, Restart Manager and final-path calls in a planning pass. |
+| #502 | A benchmark route that times a removal pass by pass, and a clean of many small trees. |
+| #503 | How long each step of a clean took, and where a removal spent it. |
+| #511 | A benchmark route that times each stage of a duplicate search, per disk. |
+| #525 | UI-thread milestones: time to first frame, to first map, and to apply a snapshot or a group. |
+
+#### 1. The checks before a deletion
+
+Each keeps what it proves and proves it more cheaply. All are `safety`.
+
+| Issue | Note |
+| --- | --- |
+| #514 | One Restart Manager session for all candidates, and one per candidate only where something holds a file. The largest single gain. |
+| #512 | The mount point under a path, from its folders' attributes where no level is a link. |
+| #498 | The `obj` use check lists folders and parses solutions again for every step. |
+| #515 | Every candidate matched against every process, with lookups repeated per pair. |
+
+#### 2. The clean
+
+| Issue | Note |
+| --- | --- |
+| #495 | Remove each folder once its own files and child folders are done, not after the whole tree. `safety`. |
+| #497 | A whole-or-nothing step is walked to look and walked again to remove. `safety`. |
+| #500 | Releasing local copies, and proving them standing, one file at a time. `safety`. |
+| #527, #528 | The Recycle Bin: its room asked per item, and its folder walked twice on one thread. `safety`. |
+| #499 | After a clean, the UI thread follows every row's locations and compares every pair. |
+| #501 | Delete each file relative to its folder's handle. Measure with #502 first. Related to #468. |
+
+#### 3. The duplicate search
+
+| Issue | Note |
+| --- | --- |
+| #504 | Three final-path queries per file read, never used. Measured at about half of a describe. |
+| #505 | Candidates identified one at a time on one thread. Measured at 52-63 µs a file on one thread. |
+| #508 | The first stage uses the chosen checksum where XXH128 gives the same order. |
+| #507 | One dispatcher post per confirmed group, each copy judged three or four times there. |
+| #537 | The result waits for the whole checksum store to be sorted and written. |
+| #510 | Measure a solid-state disk's reader bound for the first stage, which waits on opens. |
+
+#### 4. Providers
+
+| Issue | Note |
+| --- | --- |
+| #526 | Every dated target listed once more for its age, one target after another. |
+| #532 | The Visual Studio row lists each `.vs` cache up to four times. `safety`. |
+| #533 | The symbol-cache rows list each entry three times before measuring it. `safety`. |
+| #534 | Steam looks for every game's manifest in every library with a probe each, in two rows. |
+| #535 | Both Yarn rows ask Yarn's version, and two independent queries run in turn. |
+| #536 | Mod Organizer `.meta` files read one at a time, after the measurement. |
+
+#### 5. Start-up and the App
+
+| Issue | Note |
+| --- | --- |
+| #518 | Seven stores parsed by reflection on the UI thread before the first frame. |
+| #517 | Every tick on the Storage page rewrites the whole selection memory on the UI thread. |
+| #519 | Every Startup reading parses every package's whole manifest. |
+| #520 | Registry backups read and parsed on the UI thread, and never pruned. |
+| #521 | Explore rebuilds the hidden folder list on every snapshot. |
+| #522 | A rebuilt folder list is filled one insertion at a time. Measure with #525 first. |
+| #523, #524 | The map's shaders compiled, and a tool window rebuilt, before the first frame. |
+
+### Waiting on a decision
+
+| Issue | The decision |
+| --- | --- |
+| #494 | Run a row's steps several at a time. `RunResidue` is recorded as not safe for concurrent use. |
+| #496 | Delete while the removal walk is still gathering, against the recorded walk-first design. |
+| #531 | Share Claude Code's session reading for the `ReadingLimit`, against its recorded "read afresh". |
+| #513 | Keep a drive's mount points for an operation, where `IVolumeInventory` documents a live answer. |
+| #506 | Let each disk read files in full as soon as it has finished the first stage. Progress is recorded stage by stage. |
+| #509 | Read a spinning disk's files in disk order, against "worth most first". Relates to #256. |
+| #529 | Take a target's age from the measurement that walks it. Needs a scanner seam, as #465 does. |
+| #530 | Move a removal's items to the Recycle Bin in one shell operation. Holding many copies open at once is the decision. |
+
+### Checked and not filed
+
+| Finding | Why no issue |
+| --- | --- |
+| Unbuffered reads for the duplicate search | Timed on a cold 1 GiB file: buffered 1 MiB reads at 1.54 GB/s against 1.05-1.29 GB/s unbuffered. |
+| Size grouping, partial hashes, XXH128, a checksum cache, one reader per spinning disk | Already done (#297, #369). A file with several hard links is already read once. |
+| Compare a pair of copies by bytes rather than hashes | The same bytes are read, and the checksum cache would be lost. Removal already compares bytes. |
+| A process-table read per deletion step | Fixed by #163. |
+| A walk per path in the after-command reading | Fixed by #383. |
+| Probing each protected path before and after a run | That is the §5.6 evidence itself. |
+| The refusal record and the scan estimates written or read at close | A few writes per clean, or one parse after the window has gone. |
+| The sibling check's serial listings | Small beside the per-copy hold and comparison of the removals it guards. |
+| The placeholder walk's open per placeholder | #355. The listing's attributes cannot show a partly downloaded file's local bytes. |
+| Memory's refresh, the installed-app keys, scan and size history | Off the UI thread, bounded, or once per visit. #142 fixed the list rebuild. |
+| The item guide, list virtualisation, blocking waits, ReadyToRun | A recorded choice, already virtualised, none found, and already set. |
+| Storage rows recomputed per arrival | Quadratic, but over about 150 rows. |
+| Header reads through a 4 KB buffer, probe then open, `FileSystemInfo` listings | Once per provider per pass and microseconds each, or filed as #463, #464 or #526. |
+| Regexes, comparers and sets per call; process, volume and registry reads | None built per call; the reads are already cached between readings. |
+| Provider reads (Claude Code transcripts and session folders, Conan, Arduino, Dart, Chromium roots, Maven, restore points, temporary roots, Steam, Squirrel, RetroArch and Mozilla discovery) | Once per pass on small files or few folders, already memoised, or covered by #455, #460, #461 or #462. |
+| The Visual Studio and Nx rows recognise candidates one at a time | The same loop as #462, whose fix should cover them. |
+| Two process listings, and four small `Safety` micro-costs | Milliseconds per pass, or the cheaper form would not prove the same thing. |
