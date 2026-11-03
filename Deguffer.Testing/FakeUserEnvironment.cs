@@ -13,7 +13,8 @@ public sealed class FakeUserEnvironment : IUserEnvironment
 {
     private readonly Dictionary<string, string> _executables = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _variables = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, string> _toolVariables = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>What a started tool reads in place of <see cref="_variables"/>, where null is unset.</summary>
+    private readonly Dictionary<string, string?> _toolVariables = new(StringComparer.OrdinalIgnoreCase);
     // Holds a string, an int or bytes, as the registry holds REG_SZ, REG_DWORD and REG_BINARY, so a
     // read of the wrong type is told nothing, as it would be on a real machine.
     private readonly Dictionary<string, object> _registry = new(StringComparer.OrdinalIgnoreCase);
@@ -339,6 +340,21 @@ public sealed class FakeUserEnvironment : IUserEnvironment
         _toolVariables[name] = value;
         return this;
     }
+
+    /// <summary>Pretend the machine set <paramref name="name"/> after Deguffer started, so only a tool the user starts now sees it.</summary>
+    public FakeUserEnvironment WithEnvironmentVariableSetSinceStart(string name, string value)
+    {
+        _variables[name] = value;
+        _toolVariables[name] = null;
+        return this;
+    }
+
+    /// <summary>
+    /// The variables <see cref="GetEnvironmentVariable"/> reads, wherever a started tool reads one of
+    /// them differently, as it does on a machine changed since Deguffer started.
+    /// </summary>
+    public IReadOnlyDictionary<string, string>? ChangedEnvironment =>
+        _toolVariables.Count == 0 ? null : new Dictionary<string, string>(_variables, StringComparer.OrdinalIgnoreCase);
 
     public int InvalidateCount { get; private set; }
 

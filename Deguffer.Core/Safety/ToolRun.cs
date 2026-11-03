@@ -21,9 +21,9 @@ public enum CancelledCommand
 }
 
 /// <summary>
-/// How long a started tool may run, and what a cancellation does to it. Every
-/// <see cref="IProcessRunner.RunAsync"/> names one, because a tool's lifetime is a decision about
-/// that tool rather than a property of the runner.
+/// How long a started tool may run, what a cancellation does to it, and which environment it starts
+/// with. Every <see cref="IProcessRunner.RunAsync"/> names one, because each is a decision about that
+/// tool rather than a property of the runner.
 ///
 /// <para>A tool that may be ended runs in a job object Deguffer holds open for its whole life and
 /// closes only by exiting, so neither it nor anything it starts outlives Deguffer. One that
@@ -51,6 +51,12 @@ public sealed record ToolRun
     public CancelledCommand WhenCancelled { get; }
 
     /// <summary>
+    /// Every variable the tool starts with, or null for this process's own, which is what a tool
+    /// Deguffer starts is given unless a caller has a reason to ask otherwise.
+    /// </summary>
+    public IReadOnlyDictionary<string, string>? Environment { get; private init; }
+
+    /// <summary>
     /// How long the tool may run before it is ended and the run fails, or null for no limit. Only a
     /// tool that is <see cref="CancelledCommand.Ended"/> has one: a limit on one that
     /// <see cref="CancelledCommand.Finishes"/> could not be enforced without the harm it exists to avoid.
@@ -69,4 +75,15 @@ public sealed record ToolRun
     /// it takes, and the user's Cancel is what bounds it.
     /// </summary>
     public static ToolRun Command(CancelledCommand whenCancelled) => new(whenCancelled, limit: null);
+
+    /// <summary>
+    /// This run, started with <paramref name="environment"/> in place of this process's own variables:
+    /// the environment a tool the user starts now would have (<see cref="IUserEnvironment.ChangedEnvironment"/>),
+    /// for a query of where that tool keeps its folders.
+    /// </summary>
+    public ToolRun StartedWith(IReadOnlyDictionary<string, string> environment)
+    {
+        ArgumentNullException.ThrowIfNull(environment);
+        return this with { Environment = environment };
+    }
 }

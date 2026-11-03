@@ -139,6 +139,32 @@ public sealed class UserEnvironmentTests : IDisposable
     }
 
     /// <summary>
+    /// A variable set on the machine after start-up reaches a tool the user starts now and not one
+    /// Deguffer starts, so the environment a caller must start a query with to ask about the first is
+    /// handed over, and only once a pass has read the machine again.
+    /// </summary>
+    [Fact]
+    public void AVariableSetAfterStartUpHandsOverTheEnvironmentAToolStartedNowHas()
+    {
+        var user = Expandable();
+        var environment = new UserEnvironment(
+            () => Expandable(("SystemRoot", @"C:\Windows")),
+            () => user,
+            EnvironmentBlock.Startup(Values(("SystemRoot", @"C:\Windows")), Expandable(("SystemRoot", @"C:\Windows")), Expandable()));
+
+        Assert.Null(environment.ChangedEnvironment);
+
+        user["ARDUINO_DIRECTORIES_DATA"] = new EnvironmentValue(@"D:\arduino", Expandable: false);
+        environment.Invalidate();
+
+        var changed = environment.ChangedEnvironment;
+
+        Assert.NotNull(changed);
+        Assert.Equal(@"D:\arduino", changed["ARDUINO_DIRECTORIES_DATA"]);
+        Assert.Equal(@"C:\Windows", changed["SystemRoot"]);
+    }
+
+    /// <summary>
     /// A candidate Windows will not describe stops the search. It may be the executable the shell
     /// would run, so the same-named one further along <c>PATH</c> is not an answer, and nothing
     /// further along would report an installed tool as missing.

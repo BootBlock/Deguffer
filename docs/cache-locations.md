@@ -1326,6 +1326,14 @@ once for the CLI's own configuration, and once with `--config-file` naming
 configuration's downloads folder is cleared through the same file. The CLI is found on the `PATH`,
 or inside Arduino IDE 2's install folder.
 
+A CLI Deguffer starts has the environment variables Deguffer started with. Where a variable has
+changed on the machine since then, Deguffer asks each configuration again, starting the CLI with
+the variables a CLI you start yourself now would have. The clean still runs as the first answer
+says, and its folders are the ones measured. The folders the second answer names are protected in
+Explore and by the run in the same way, and a clean that would reach one of them is not run. If
+that CLI does not answer, Deguffer clears neither the downloads nor the build cache until it is
+started again.
+
 `arduino-cli cache clean` removes the downloads folder outright, with no prompt and no dry run
 (`commands/service_cache_clean.go`). So Deguffer runs it only where:
 

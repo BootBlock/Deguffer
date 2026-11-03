@@ -51,13 +51,17 @@ internal sealed record ArduinoSettings(
     /// Ask the CLI for every setting, or null where any answer is missing: a plan that knew only some
     /// of the folders could not say what <c>cache clean</c> removes, or what must survive it.
     /// </summary>
+    /// <param name="run">
+    /// A query, started with the environment of the CLI whose folders are wanted: the one Deguffer hands
+    /// the clean, or the one a CLI the user starts now has.
+    /// </param>
     public static async Task<ArduinoSettings?> AskAsync(
-        IProcessRunner runner, string cli, string? configFile, CancellationToken ct)
+        IProcessRunner runner, string cli, string? configFile, ToolRun run, CancellationToken ct)
     {
-        var data = await AskAsync(runner, cli, configFile, "directories.data", ct).ConfigureAwait(false);
-        var downloads = await AskAsync(runner, cli, configFile, "directories.downloads", ct).ConfigureAwait(false);
-        var buildCache = await AskAsync(runner, cli, configFile, "build_cache.path", ct).ConfigureAwait(false);
-        var sketchbook = await AskAsync(runner, cli, configFile, "directories.user", ct).ConfigureAwait(false);
+        var data = await AskAsync(runner, cli, configFile, "directories.data", run, ct).ConfigureAwait(false);
+        var downloads = await AskAsync(runner, cli, configFile, "directories.downloads", run, ct).ConfigureAwait(false);
+        var buildCache = await AskAsync(runner, cli, configFile, "build_cache.path", run, ct).ConfigureAwait(false);
+        var sketchbook = await AskAsync(runner, cli, configFile, "directories.user", run, ct).ConfigureAwait(false);
 
         if (data is not { Length: > 0 } || downloads is null || buildCache is not { Length: > 0 } || sketchbook is not { Length: > 0 })
         {
@@ -95,9 +99,9 @@ internal sealed record ArduinoSettings(
     /// (<c>internal/cli/config/get.go</c>).
     /// </summary>
     private static async Task<string?> AskAsync(
-        IProcessRunner runner, string cli, string? configFile, string setting, CancellationToken ct)
+        IProcessRunner runner, string cli, string? configFile, string setting, ToolRun run, CancellationToken ct)
     {
-        var outcome = await runner.RunAsync(cli, QueryArguments(configFile, setting), ToolRun.Query, ct)
+        var outcome = await runner.RunAsync(cli, QueryArguments(configFile, setting), run, ct)
             .ConfigureAwait(false);
 
         if (!outcome.Succeeded)

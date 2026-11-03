@@ -64,10 +64,14 @@ internal sealed class ArduinoConfiguration
     };
 
     /// <summary>What the CLI would read now, started with <paramref name="configFile"/> as its <c>--config-file</c>.</summary>
+    /// <param name="reading">
+    /// Which environment the CLI starts with: the one Deguffer hands it, or the one a CLI the user starts now has.
+    /// </param>
     /// <param name="defaultData">The data folder where nothing moves it.</param>
-    public static ArduinoConfiguration Read(IUserEnvironment environment, string? configFile, string defaultData)
+    public static ArduinoConfiguration Read(
+        VariableReading reading, IUserEnvironment environment, string? configFile, string defaultData)
     {
-        var values = Variables.Select(environment.GetToolEnvironmentVariable).ToArray();
+        var values = Variables.Select(variable => ConfiguredFolder.Read(reading, variable, environment)).ToArray();
 
         // The CLI asks whether each variable is set, not whether it holds anything, so an empty one
         // still decides, and names no full path.

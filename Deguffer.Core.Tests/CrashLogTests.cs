@@ -193,6 +193,8 @@ public class CrashLogTests
 
         public string? GetToolEnvironmentVariable(string name) => null;
 
+        public IReadOnlyDictionary<string, string>? ChangedEnvironment => null;
+
         public string? ReadCurrentUserRegistryValue(string keyPath, string valueName) => null;
 
         public int? ReadCurrentUserRegistryNumber(string keyPath, string valueName) => null;
