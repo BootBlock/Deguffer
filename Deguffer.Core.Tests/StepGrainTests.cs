@@ -48,6 +48,7 @@ public class StepGrainTests
             "electron",
             "git-lfs-objects",
             "graphics-driver-installers",
+            "huggingface-hub",
             "jetbrains-superseded-system",
             "lmstudio-runtimes",
             "mypy-cache",

@@ -316,6 +316,7 @@ public sealed class CleanupPlanner
             new PuppeteerBrowsersProvider(environment, liveTrees: liveTrees, scanner: scanner),
             new VsCodeExtensionBrowsersProvider(environment, liveTrees: liveTrees, scanner: scanner),
             new LmStudioRuntimeProvider(environment, scanner: scanner),
+            new HuggingFaceHubProvider(environment, scanner: scanner, liveTrees: liveTrees),
             new VagrantSupersededBoxProvider(environment, scanner: scanner),
             testBrowsers,
             new SquirrelSupersededVersionProvider(environment, discovery: squirrel, liveTrees: liveTrees, scanner: scanner),
