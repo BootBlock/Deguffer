@@ -721,8 +721,8 @@ public sealed class GitLfsObjectProviderTests : IDisposable
     /// asked about several at once: every store's settings are read, and every dry run started, before
     /// git has answered any of them. Asked one store after another, the first held run waits for a
     /// second that cannot start until it ends. §5.6 for a plan built this way: every repository's
-    /// checkout, git directory and store, and a folder named <c>.git</c> that is not a git directory
-    /// (§5.2), all survive.
+    /// checkout, git directory and store, a store reached through a link, and a folder named
+    /// <c>.git</c> that is not a git directory (§5.2), all survive.
     /// </summary>
     [Fact]
     public async Task AsksGitAboutSeveralStoresAtOnceAndStillProtectsEachOne()
@@ -732,6 +732,11 @@ public sealed class GitLfsObjectProviderTests : IDisposable
         repositories.ForEach(repository => DryRunReports(Path.Combine(repository, ".git"), Report(1, Oid(Path.GetFileName(repository)))));
         var impostor = Path.Combine(_root, "notes", ".git");
         Directory.CreateDirectory(impostor);
+        var linked = Path.Combine(CreateRepository(_root, "delta"), ".git", "lfs");
+        var shared = Path.Combine(_temp.Path, "shared-lfs");
+        Directory.Delete(linked, recursive: true);
+        Directory.CreateDirectory(Path.Combine(shared, "objects"));
+        Junction.ToDirectory(linked, shared);
         var settings = new HeldRuns(together: names.Length);
         var dryRuns = new HeldRuns(together: names.Length);
         var runner = Runner().Holding(Git, " config -z --get-regexp ", settings).Holding(Git, " lfs prune --dry-run ", dryRuns);
@@ -753,6 +758,7 @@ public sealed class GitLfsObjectProviderTests : IDisposable
                 Path.Combine(repository, ".git", "lfs", "objects"),
             }),
             impostor,
+            linked,
         ];
 
         foreach (var survivor in survivors)
@@ -765,6 +771,12 @@ public sealed class GitLfsObjectProviderTests : IDisposable
     /// <summary>
     /// G4: however many stores there are, git is asked about no more than the bound at once, in either
     /// phase, and about more than one.
+    ///
+    /// <para>The lower bound is proven by order. The upper bound is not: a run that starts after the
+    /// held set is released replies at once, so a lost bound shows only where a further run starts
+    /// before the set has replied. That needs a machine with more logical processors than the bound,
+    /// because with no bound given <see cref="Parallel.ForEachAsync{TSource}(IEnumerable{TSource}, ParallelOptions, Func{TSource, CancellationToken, ValueTask})"/>
+    /// runs one body per processor, and it rests on scheduling rather than on order.</para>
     /// </summary>
     [Fact]
     public async Task AsksGitAboutNoMoreStoresAtOnceThanItsBound()
