@@ -116,6 +116,7 @@ public sealed class YarnBerryCacheProviderTests : IDisposable
         Assert.Equal(5120, step.EstimatedBytes);
         Assert.Equal(SafetyTier.RegenerableWithCost, plan.Tier);
         Assert.Equal(["-v"], runner.Invocations.Select(call => call.Arguments));
+        Assert.Contains(plan.Notes, n => n.Message.Contains("Yarn 1.22.22", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -156,7 +157,7 @@ public sealed class YarnBerryCacheProviderTests : IDisposable
     [InlineData("notes.txt", false)]
     [InlineData(".gitignore", false)]
     [InlineData("offline-mirror", true)]
-    [InlineData(Archive + ".d", true)]
+    [InlineData("left-pad-npm-1.3.0-0a1b2c3d4e-10c0.zip", true)]
     public async Task LeavesTheCacheAloneWhereItHoldsSomethingYarnDoesNotWrite(string name, bool isFolder)
     {
         PopulateCache();
@@ -190,6 +191,53 @@ public sealed class YarnBerryCacheProviderTests : IDisposable
         Assert.Empty(plan.Steps);
         Assert.Contains(plan.Notes, n => n.Message.Contains("link", StringComparison.Ordinal));
         Assert.True(File.Exists(Path.Combine(elsewhere, Archive)));
+    }
+
+    /// <summary>A link named like an archive is still a link, and the removal would go through it.</summary>
+    [Fact]
+    public async Task LeavesTheCacheAloneWhereAnArchiveIsALink()
+    {
+        PopulateCache();
+        var elsewhere = _temp.CreateDirectory("elsewhere");
+        File.WriteAllText(Path.Combine(elsewhere, "mine.txt"), "mine");
+        Junction.ToDirectory(Path.Combine(Cache, "left-pad-npm-1.3.0-0a1b2c3d4e-10c0.zip"), elsewhere);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(File.Exists(Path.Combine(elsewhere, "mine.txt")));
+    }
+
+    /// <summary>A file link is a file to a listing, so only its attributes say it is not Yarn's archive.</summary>
+    [Fact]
+    public async Task LeavesTheCacheAloneWhereAnArchiveIsAFileLink()
+    {
+        PopulateCache();
+        var outside = Path.Combine(_temp.CreateDirectory("elsewhere"), "mine.zip");
+        File.WriteAllText(outside, "mine");
+        SymbolicLink.ToFile(Path.Combine(Cache, "left-pad-npm-1.3.0-0a1b2c3d4e-10c0.zip"), outside);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("left-pad-npm", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A global folder that will not be listed hides what is beside the cache, so §5.6 could assert
+    /// none of it: the cache is left, and the row says Windows refused.
+    /// </summary>
+    [Fact]
+    public async Task LeavesTheCacheAloneWhereTheGlobalFolderWillNotBeListed()
+    {
+        PopulateNeighbours();
+        PopulateCache();
+        using var denied = new DeniedDirectory(GlobalFolder);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.HasUnreadableRoot);
     }
 
     [Fact]
@@ -234,6 +282,30 @@ public sealed class YarnBerryCacheProviderTests : IDisposable
         Assert.False(Directory.Exists(Cache));
         Assert.True(Directory.Exists(GlobalFolder));
         Assert.All(neighbours, file => Assert.True(File.Exists(file), file));
+    }
+
+    /// <summary>
+    /// The cache goes whole, so something put into it between the preview and the clean holds the
+    /// step back rather than going with it.
+    /// </summary>
+    [Fact]
+    public async Task HoldsTheCleanBackWhereTheCacheGainedAStrangerAfterThePreview()
+    {
+        PopulateCache();
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+        Assert.Single(plan.Steps);
+
+        var stranger = Path.Combine(Cache, "offline-mirror", "mine.txt");
+        Directory.CreateDirectory(Path.GetDirectoryName(stranger)!);
+        File.WriteAllText(stranger, "mine");
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(stranger));
+        Assert.True(File.Exists(Path.Combine(Cache, Archive)));
+        Assert.Equal(0, result.BytesReclaimed);
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
     /// <summary>
@@ -358,6 +430,11 @@ public sealed class YarnBerryCacheProviderTests : IDisposable
         Assert.False(policy.MayRemove(Path.Combine(GlobalFolder, "metadata")).IsAllowed);
         Assert.False(policy.MayRemove(Path.Combine(Cache, "notes.txt")).IsAllowed);
         Assert.False(policy.MayRemove(Path.Combine(Cache, "offline-mirror")).IsAllowed);
+
+        // A folder named like an archive is not one: Berry writes files there and nothing else.
+        var archiveNamedFolder = Path.Combine(Cache, "left-pad-npm-1.3.0-0a1b2c3d4e-10c0.zip");
+        Directory.CreateDirectory(archiveNamedFolder);
+        Assert.False(policy.MayRemove(archiveNamedFolder).IsAllowed);
 
         // The cache is a declared root, and a root is never Explore's target: its archives go one by one.
         Assert.False(policy.MayRemove(Cache).IsAllowed);

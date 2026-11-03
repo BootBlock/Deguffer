@@ -144,6 +144,14 @@ public sealed class YarnBerryCacheProvider : CleanupProviderBase
             notes.Add(new PlanNote(PlanNoteSeverity.Information,
                 "Yarn did not say which version it is, so Deguffer looked only in the default folder of Yarn 2 and later."));
         }
+        else if (answer is { IsBerry: false })
+        {
+            // The usual Corepack machine: Yarn 1 outside any project, Yarn 4 inside them. Only Berry can
+            // say where its global folder was moved to.
+            notes.Add(new PlanNote(PlanNoteSeverity.Information,
+                $"The yarn on your PATH runs Yarn {answer.Version}, which cannot say where Yarn 2 and later keep "
+                + "their global folder, so Deguffer looked only in the default one."));
+        }
 
         var reported = await ReportedFolderAsync(ct).ConfigureAwait(false);
 
@@ -168,7 +176,8 @@ public sealed class YarnBerryCacheProvider : CleanupProviderBase
             .Where(folder => folder.State is YarnBerryCacheState.Recognised)
             .Select(folder => new DeletionTarget(
                 folder.Cache,
-                "The global cache of Yarn 2 and later: package archives Yarn downloads again when a project needs them."))
+                "The global cache of Yarn 2 and later: package archives Yarn downloads again when a project needs them.",
+                UseCheck: new YarnBerryCacheCheck(folder.GlobalFolder)))
             .ToList();
 
         var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
@@ -212,15 +221,15 @@ public sealed class YarnBerryCacheProvider : CleanupProviderBase
             : new[] { (folder.Cache, "The global cache of Yarn 2 and later, which Deguffer left alone.") },
     ];
 
-    private static PlanNote? NoteFor(YarnBerryFolder folder) => folder.State switch
+    private static PlanNote? NoteFor(YarnBerryFolder folder) => folder switch
     {
-        YarnBerryCacheState.Refused => UnreadableRoot.Note(folder.Cache),
-        YarnBerryCacheState.Link => new PlanNote(PlanNoteSeverity.Information,
-            $"Leaving '{folder.Stranger}' alone: it is a link to somewhere else, and Deguffer does not look through a link."),
-        YarnBerryCacheState.Stranger => new PlanNote(PlanNoteSeverity.Information,
-            $"Yarn's cache folder {folder.Cache} holds '{folder.Stranger}', which Yarn does not write there, and the "
+        { State: YarnBerryCacheState.Refused, Cause: { } refused } => UnreadableRoot.Note(refused),
+        { State: YarnBerryCacheState.Link } => new PlanNote(PlanNoteSeverity.Information,
+            $"Leaving '{folder.Cause}' alone: it is a link to somewhere else, and Deguffer does not look through a link."),
+        { State: YarnBerryCacheState.Stranger } => new PlanNote(PlanNoteSeverity.Information,
+            $"Yarn's cache folder {folder.Cache} holds '{folder.Cause}', which Yarn does not write there, and the "
             + "cache goes whole. Deguffer is leaving the cache alone."),
-        YarnBerryCacheState.Empty => new PlanNote(PlanNoteSeverity.Information,
+        { State: YarnBerryCacheState.Empty } => new PlanNote(PlanNoteSeverity.Information,
             $"The global cache of Yarn 2 and later in {folder.Cache} is empty."),
         _ => null,
     };

@@ -870,7 +870,8 @@ Items 3 and 4 changed shipped text, and were made with the run-wide refusal of r
   command; it does not prefer one that deletes Tier 3 data. Each is recorded above with the narrower
   route.
 - **Some caches are live stores.** Yarn Berry's Plug'n'Play cache, Bun's `links`, PDM's `packages`
-  and Cabal's store are what projects run from. They need pnpm's reference-aware treatment or none.
+  and Cabal's store are what projects run from. They need pnpm's reference-aware treatment, or a
+  higher tier where no reference record exists: Berry's ships as Tier 2 for that reason.
 - **A vendor's automatic rule is the best tier evidence.** JetBrains' 180-day rule, Gradle's 7-day
   rule, ReSharper's 30 days and Composer's cap each say what the vendor already deletes without
   asking. Where the vendor already deletes it, an offer is either redundant or Tier 1.

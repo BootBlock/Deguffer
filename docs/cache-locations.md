@@ -1344,7 +1344,10 @@ looked at.
 The cache is removed **whole, by path**, and only where every entry in it is a file Yarn writes
 there: a package archive named `<package>-<10 hex>-<cache key>.zip`, an archive being written
 (`.tmp`) or an archive's lock (`.flock`). A folder, a link, or any other file in it, such as a
-`.gitignore`, means Deguffer leaves the whole cache alone and says what it found.
+`.gitignore`, means Deguffer leaves the whole cache alone and says what it found. So does a global
+folder Windows will not list, because what is beside the cache could then not be checked afterwards.
+The cache is read again immediately before the clean, and anything that has appeared in it since
+the preview holds the clean back.
 
 **It does not use `yarn cache clean`**, and this is a recorded exception to the rule of using a
 tool's own command. Yarn 2 and 3 fail on every form of that command outside a project. Yarn 4's

@@ -275,11 +275,7 @@ public sealed class CcacheProvider : CleanupProviderBase
     {
         var outcome = await Runner.RunAsync(ccache, "--get-config cache_dir", ToolRun.Query, ct).ConfigureAwait(false);
 
-        var answer = outcome.Succeeded
-            ? outcome.StandardOutput
-                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .LastOrDefault()
-            : null;
+        var answer = outcome.LastLine;
 
         if (answer is null)
         {

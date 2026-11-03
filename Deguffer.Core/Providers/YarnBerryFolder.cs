@@ -35,16 +35,17 @@ internal enum YarnBerryCacheState
 /// <param name="GlobalFolder">The global folder, in display form.</param>
 /// <param name="Cache">Its <c>cache</c> folder, in display form.</param>
 /// <param name="State">What the cache is.</param>
-/// <param name="Stranger">
-/// The entry that stopped the cache: a name for <see cref="YarnBerryCacheState.Stranger"/>, or the
-/// path that is a link for <see cref="YarnBerryCacheState.Link"/>. Null otherwise.
+/// <param name="Cause">
+/// What stopped the cache: a name for <see cref="YarnBerryCacheState.Stranger"/>, the path that is a
+/// link for <see cref="YarnBerryCacheState.Link"/>, or the path Windows would not list or describe
+/// for <see cref="YarnBerryCacheState.Refused"/>. Null otherwise.
 /// </param>
 /// <param name="Siblings">Every other entry in the global folder, in display form.</param>
 internal sealed record YarnBerryFolder(
     string GlobalFolder,
     string Cache,
     YarnBerryCacheState State,
-    string? Stranger,
+    string? Cause,
     IReadOnlyList<string> Siblings)
 {
     /// <summary>
@@ -62,20 +63,27 @@ internal sealed record YarnBerryFolder(
             return new(globalFolder, cache, YarnBerryCacheState.Link, globalFolder, []);
         }
 
-        var siblings = (FolderEntries.Of(globalFolder) ?? [])
+        // A global folder that will not be listed hides what is beside the cache, and §5.6 could then
+        // assert none of it. That is not the same as nothing being there, so the cache is left.
+        if (FolderEntries.Of(globalFolder) is not { } entries)
+        {
+            return new(globalFolder, cache, YarnBerryCacheState.Refused, globalFolder, []);
+        }
+
+        var siblings = entries
             .Where(entry => !entry.Name.Equals("cache", StringComparison.OrdinalIgnoreCase))
             .Select(entry => LongPath.Display(entry.FullName))
             .ToList();
 
-        YarnBerryFolder Found(YarnBerryCacheState state, string? stranger = null) =>
-            new(globalFolder, cache, state, stranger, siblings);
+        YarnBerryFolder Found(YarnBerryCacheState state, string? cause = null) =>
+            new(globalFolder, cache, state, cause, siblings);
 
         switch (LongPath.ProbeDirectory(cache))
         {
             case PathPresence.Absent:
                 return Found(YarnBerryCacheState.Absent);
             case PathPresence.Refused:
-                return Found(YarnBerryCacheState.Refused);
+                return Found(YarnBerryCacheState.Refused, cache);
         }
 
         if (LongPath.IsReparsePoint(cache))
@@ -100,7 +108,7 @@ internal sealed record YarnBerryFolder(
             any = true;
         }
 
-        return listing.Outcome is not PathPresence.Present ? Found(YarnBerryCacheState.Refused)
+        return listing.Outcome is not PathPresence.Present ? Found(YarnBerryCacheState.Refused, cache)
             : any ? Found(YarnBerryCacheState.Recognised)
             : Found(YarnBerryCacheState.Empty);
     }
