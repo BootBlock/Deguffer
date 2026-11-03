@@ -49,7 +49,7 @@ public sealed class CleanupPlanner
 
     /// <summary>
     /// The sources verified by hand in §4.1 and §4.2, plus pip, pipenv, Poetry, pre-commit's hook environments, Cargo, Go, Zig, Deno, Electron's downloads, TypeScript's typings, the task caches Nx keeps in the profile and in each workspace, ccache, sccache,
-    /// Maven, vcpkg, pnpm, Yarn 1, Bun, Composer, Arduino's downloads and build cache, conda, Playwright, Puppeteer, the browsers VS Code extensions download for themselves, the browser profiles test runners leave in the
+    /// Maven, vcpkg, pnpm, Yarn 1, Bun, Composer, Arduino's downloads and build cache, the tool archives ESP-IDF's installers keep, conda, Playwright, Puppeteer, the browsers VS Code extensions download for themselves, the browser profiles test runners leave in the
     /// temporary folders, the GPU shader caches, the Chromium application caches and the offline storage sites keep beside them, the Firefox
     /// profile caches, the Epic Games launcher's store cache and its own logs, the Battle.net
     /// launcher's cache and its logs, the Steam client's
@@ -262,6 +262,7 @@ public sealed class CleanupPlanner
             new BunInstallCacheProvider(environment, scanner: hardLinks),
             new ComposerCacheProvider(environment, scanner: scanner),
             new ArduinoCacheProvider(environment, scanner: scanner),
+            new EspIdfArchiveProvider(environment, scanner: scanner),
             new ScoopCacheProvider(environment, scanner: scanner),
             new VsCodeCppToolsCacheProvider(environment, scanner: scanner),
             new DartAnalysisServerProvider(environment, declarations: declarations, scanner: scanner),
