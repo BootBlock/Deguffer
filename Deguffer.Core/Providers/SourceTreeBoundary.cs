@@ -56,9 +56,13 @@ internal static class SourceTreeBoundary
     /// rather than for the tree beneath it — the same cost this boundary exists to avoid — while a
     /// search for <c>obj</c> still refuses to go in.</para>
     ///
-    /// <para><c>.git</c> is here for a different reason and is never sought: a repository's object
-    /// store holds directories of every conceivable name, none of which is build output, and the
-    /// cost of a rule reaching inside one is not measured in disk space.</para>
+    /// <para><c>.git</c> is here for a different reason: a repository's object store holds
+    /// directories of every conceivable name, none of which is build output, and the cost of a rule
+    /// reaching inside one is not measured in disk space. It is sought, by
+    /// <see cref="GitLfsObjectProvider"/>, and that changes nothing below it. A sought name is found
+    /// and never entered, so no search reaches inside a repository's git directory whether or not
+    /// <c>.git</c> is sought, and the directory itself is never a target: the provider sends
+    /// <c>git lfs prune</c> to the repository and deletes no path (§5.1, §5.2).</para>
     /// </summary>
     private static readonly FrozenSet<string> NeverEntered =
         FrozenSet.Create(StringComparer.OrdinalIgnoreCase, ".git", "node_modules");

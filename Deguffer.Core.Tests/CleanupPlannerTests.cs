@@ -465,7 +465,7 @@ public sealed class CleanupPlannerTests
         Assert.Equal(
             [
                 "dotnet-obj", "visual-studio-solution-cache", "unity-library", "unreal-intermediate", "unreal-project-ddc", "cargo-target", "node-modules", "python-venv",
-                "pytest-cache", "mypy-cache", "ruff-cache", "tox-environments", "nox-environments", "dart-tool",
+                "pytest-cache", "mypy-cache", "ruff-cache", "tox-environments", "nox-environments", "dart-tool", "git-lfs-objects",
                 "nuget", "gradle", "npm", "pnpm", "yarn", "bun", "composer", "arduino", "scoop-cache", "vscode-cpptools", "dart-analysis-server", "roslyn-cache", "jetbrains-superseded-system", "temp-tool-caches",
                 "uv", "pip", "poetry", "conda", "pre-commit", "cargo", "go", "zig", "deno", "electron", "typescript-typings", "ccache", "sccache", "debugger-symbols", "debugger-symbols-other-servers", "maven", "vcpkg", "conan", "gpu-shader-cache",
                 "chromium-app-cache", "chromium-service-worker-storage", "vscode-cache", "firefox", "thunderbird", "epic-launcher-webcache",
@@ -484,7 +484,7 @@ public sealed class CleanupPlannerTests
         Assert.Equal(
             [
                 "unity-library", "unreal-intermediate", "unreal-project-ddc", "cargo-target", "node-modules", "python-venv",
-                "tox-environments", "nox-environments", "dart-tool",
+                "tox-environments", "nox-environments", "dart-tool", "git-lfs-objects",
                 "conda", "debugger-symbols-other-servers", "maven", "vcpkg", "chromium-service-worker-storage", "steam-library-artwork", "steam-shader-cache", "emulator-shader-cache", "retroarch-downloads", "unreal-ddc", "unity-gi-cache", "affinity-model-cache", "capture-one-cache", "davinci-resolve-render-cache", "after-effects-disk-cache", "adobe-media-cache", "platformio", "playwright", "puppeteer", "lmstudio-runtimes", "vagrant-boxes",
                 "squirrel-superseded-versions", "capcut-superseded-builds", "azure-functions-tools", "graphics-driver-installers", "autodesk-installers",
                 "cloud-local-copies", "temp-directories", "temp-installer-downloads", "previous-windows-installation",
