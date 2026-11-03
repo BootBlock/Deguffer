@@ -102,7 +102,7 @@ public sealed class RunResidue
 
         var residue = new RunResidue();
 
-        foreach (var path in plans.SelectMany(PlanVerifier.PathsHeldStanding))
+        foreach (var path in plans.SelectMany(PathsHeldStanding))
         {
             if (LongPath.ProbeEntry(path) is PathPresence.Absent)
             {
@@ -118,6 +118,17 @@ public sealed class RunResidue
     /// have removed it. False for a path <see cref="Begin"/> was not asked about.
     /// </summary>
     public bool WasGoneBeforeRun(string path) => _goneBeforeRun.Contains(Normalised(path));
+
+    /// <summary>
+    /// Every path whose absence <see cref="PlanVerifier.Verify"/> judges in <paramref name="plan"/>: each
+    /// protected path that was there to preserve, and each file a <see cref="ReleaseLocalCopiesStep"/>
+    /// named. A path the verifier asks about that is missing here is one whose loss stays the alarm.
+    /// </summary>
+    private static IEnumerable<string> PathsHeldStanding(CleanupPlan plan) =>
+        plan.ProtectedPaths
+            .Where(protectedPath => protectedPath.PresenceBefore is not PathPresence.Absent)
+            .Select(protectedPath => protectedPath.Path)
+            .Concat(plan.Steps.OfType<ReleaseLocalCopiesStep>().SelectMany(release => release.Files).Select(file => file.Path));
 
     /// <param name="root">The path the removal was handed, as its step named it.</param>
     /// <param name="leftStanding">

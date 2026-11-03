@@ -84,17 +84,6 @@ public static class PlanVerifier
     }
 
     /// <summary>
-    /// Every path whose absence <see cref="Verify"/> judges in <paramref name="plan"/>: each protected
-    /// path that was there to preserve, and each file a <see cref="ReleaseLocalCopiesStep"/> named.
-    /// What a run reads before its first deletion, through <see cref="RunResidue.Begin"/>.
-    /// </summary>
-    internal static IEnumerable<string> PathsHeldStanding(CleanupPlan plan) =>
-        plan.ProtectedPaths
-            .Where(protectedPath => protectedPath.PresenceBefore is not PathPresence.Absent)
-            .Select(protectedPath => protectedPath.Path)
-            .Concat(plan.Steps.OfType<ReleaseLocalCopiesStep>().SelectMany(release => release.Files).Select(file => file.Path));
-
-    /// <summary>
     /// §5.6 for a file whose local copy was to be released: it must still be there, and still be a file
     /// the sync app can hand back.
     ///
