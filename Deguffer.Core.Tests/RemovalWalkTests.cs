@@ -17,12 +17,12 @@ public sealed class RemovalWalkTests : IDisposable
     public void Dispose() => _temp.Dispose();
 
     /// <summary>
-    /// The inventory is the same however many workers gathered it, in the same order. The deletion pass
-    /// reads it in reverse to record the folders left standing, so an order that followed how the
+    /// What the walk gathers is the same however many workers gathered it, in the same order. A removal
+    /// reads its folders in reverse to record the ones left standing, so an order that followed how the
     /// workers interleaved would report the same removal differently from one run to the next.
     /// </summary>
     [Fact]
-    public void GathersTheSameInventoryWithOneWorkerAsWithMany()
+    public void GathersTheSameTreeWithOneWorkerAsWithMany()
     {
         var root = BuildTree();
         var refused = _temp.CreateDirectory("cache", "branch-1", "refused");
@@ -52,7 +52,6 @@ public sealed class RemovalWalkTests : IDisposable
             var many = Describe(Gather(root, keep, bounds, tuning));
 
             Assert.Equal(one.Directories, many.Directories);
-            Assert.Equal(one.Parents, many.Parents);
             Assert.Equal(one.Files, many.Files);
             Assert.Equal(one.Links, many.Links);
             Assert.Equal(one.Spared, many.Spared);
@@ -62,8 +61,8 @@ public sealed class RemovalWalkTests : IDisposable
     }
 
     /// <summary>
-    /// A folder and every file gathered from it share one path, the listing's own. A removal holds its
-    /// inventory until the last file goes, so a second copy of each folder's path is held that long.
+    /// A folder and every file gathered from it share one path, the listing's own. A removal holds a
+    /// folder's files until the last of them goes, so a second copy of its path would be held that long.
     /// The bounds are set so the walk builds each entry's path to compare, as it does where a bound is.
     /// </summary>
     [Fact]
@@ -72,32 +71,32 @@ public sealed class RemovalWalkTests : IDisposable
         var root = BuildTree();
         var bounds = new RemovalBounds(KeepRoot: false, [Path.Combine(root, "branch-0", "spared")]);
 
-        var inventory = Gather(root, MinimumAge.Off, bounds, new WalkTuning(1, WalkTuning.MinimumListingBuffer));
+        var folders = Gather(root, MinimumAge.Off, bounds, new WalkTuning(1, WalkTuning.MinimumListingBuffer)).InWalkOrder();
 
-        Assert.NotEmpty(inventory.Files);
-        Assert.All(inventory.Files, file => Assert.Contains(inventory.Directories, folder => ReferenceEquals(folder.Path, file.Directory)));
+        Assert.NotEmpty(folders.SelectMany(folder => folder.Files));
+        Assert.All(folders, folder => Assert.All(folder.Files, file => Assert.Same(folder.Path, file.Directory)));
     }
 
     /// <summary>
-    /// Every directory comes after the one it was found in, which is what lets the deletion pass try
-    /// children before their parent by reading the list backwards.
+    /// Every directory comes after the one it was found in, which is what lets a removal record children
+    /// before their parent by reading the list backwards.
     /// </summary>
     [Fact]
     public void ListsEachDirectoryAfterTheOneItWasFoundIn()
     {
         var root = BuildTree();
 
-        var inventory = Gather(
-            root, MinimumAge.Off, RemovalBounds.None, new WalkTuning(WalkTuning.MaximumThreads, WalkTuning.MinimumListingBuffer));
+        var paths = Gather(
+                root, MinimumAge.Off, RemovalBounds.None, new WalkTuning(WalkTuning.MaximumThreads, WalkTuning.MinimumListingBuffer))
+            .InWalkOrder()
+            .Select(folder => folder.Path)
+            .ToList();
 
-        Assert.Equal(new GatheredDirectory(LongPath.Extended(root), GatheredDirectory.NoParent), inventory.Directories[0]);
+        Assert.Equal(LongPath.Extended(root), paths[0]);
 
-        for (var index = 1; index < inventory.Directories.Count; index++)
+        for (var index = 1; index < paths.Count; index++)
         {
-            var directory = inventory.Directories[index];
-
-            Assert.InRange(directory.Parent, 0, index - 1);
-            Assert.Equal(inventory.Directories[directory.Parent].Path, Path.GetDirectoryName(directory.Path));
+            Assert.InRange(paths.IndexOf(Path.GetDirectoryName(paths[index])!), 0, index - 1);
         }
     }
 
@@ -118,13 +117,13 @@ public sealed class RemovalWalkTests : IDisposable
 
         // One worker, which is the calling thread: an exception on a helper would not be seen here,
         // because the walk starts its helpers without the context that records what is thrown.
-        RemovalInventory? inventory = null;
+        Described? gathered = null;
         var thrown = ThrownExceptions.During(
-            () => inventory = Gather(root, MinimumAge.Off, RemovalBounds.None, new WalkTuning(1, WalkTuning.MinimumListingBuffer)));
+            () => gathered = Describe(Gather(root, MinimumAge.Off, RemovalBounds.None, new WalkTuning(1, WalkTuning.MinimumListingBuffer))));
 
         Assert.Empty(thrown);
-        Assert.Contains(inventory!.Directories, directory => directory.Path == LongPath.Extended(refused));
-        Assert.Equal([LongPath.Extended(kept)], inventory.Files.Select(file => file.FullName));
+        Assert.Contains(LongPath.Extended(refused), gathered!.Directories);
+        Assert.Equal([LongPath.Extended(kept)], gathered.Files);
     }
 
     /// <summary>
@@ -175,19 +174,21 @@ public sealed class RemovalWalkTests : IDisposable
         Directory.CreateDirectory(LongPath.Extended(deepest));
         File.WriteAllBytes(LongPath.Extended(Path.Combine(deepest, "leaf.bin")), new byte[8]);
 
-        RemovalInventory? inventory = null;
+        RemovalWalk.Folder? gathered = null;
 
         // A small stack, so the claim does not rest on how large a frame this build happens to make.
         var walker = new Thread(
-            () => inventory = RemovalWalk.Gather(
+            () => gathered = RemovalWalk.Gather(
                 LongPath.Extended(root), MinimumAge.Off, RemovalBounds.None, WindowsFileSystem.Default, default),
             maxStackSize: 256 * 1024);
 
         walker.Start();
         walker.Join();
 
-        Assert.Equal(Depth + 1, inventory!.Directories.Count);
-        Assert.Equal(LongPath.Extended(Path.Combine(deepest, "leaf.bin")), Assert.Single(inventory.Files).FullName);
+        var described = Describe(gathered!);
+
+        Assert.Equal(Depth + 1, described.Directories.Count);
+        Assert.Equal(LongPath.Extended(Path.Combine(deepest, "leaf.bin")), Assert.Single(described.Files));
     }
 
     /// <summary>
@@ -211,14 +212,14 @@ public sealed class RemovalWalkTests : IDisposable
         Gather(root, MinimumAge.Off, RemovalBounds.None, oneWorker);
 
         var before = GC.GetAllocatedBytesForCurrentThread();
-        var inventory = Gather(root, MinimumAge.Off, RemovalBounds.None, oneWorker);
+        var gathered = Gather(root, MinimumAge.Off, RemovalBounds.None, oneWorker);
         var perFile = (GC.GetAllocatedBytesForCurrentThread() - before) / Files;
 
-        Assert.Equal(Files, inventory.Files.Count);
+        Assert.Equal(Files, gathered.InWalkOrder().Sum(folder => folder.Files.Count));
 
-        // The entry in the walk's listing and in the inventory, and its name: about 430 bytes in a
+        // The entry in the walk's listing and in the folder, and its name: about 430 bytes in a
         // Debug build, some of it the runtime's own. Listing through a FileSystemInfo per entry, as the
-        // removal once did, measured about 880 here before the inventory kept a full path as well.
+        // removal once did, measured about 880 here before the walk kept a full path as well.
         Assert.InRange(perFile, 1, 600);
     }
 
@@ -271,21 +272,25 @@ public sealed class RemovalWalkTests : IDisposable
         return root;
     }
 
-    private static RemovalInventory Gather(string root, MinimumAge keep, RemovalBounds bounds, WalkTuning tuning) =>
+    private static RemovalWalk.Folder Gather(string root, MinimumAge keep, RemovalBounds bounds, WalkTuning tuning) =>
         RemovalWalk.Gather(LongPath.Extended(root), keep, bounds, WindowsFileSystem.Default, tuning, default);
 
-    private static Described Describe(RemovalInventory inventory) => new(
-        [.. inventory.Directories.Select(directory => directory.Path)],
-        [.. inventory.Directories.Select(directory => directory.Parent)],
-        [.. inventory.Files.Select(file => file.FullName)],
-        [.. inventory.Links.Select(link => link.FullName)],
-        inventory.Spared,
-        inventory.MailStores,
-        inventory.Kept);
+    /// <summary>Everything gathered at and below <paramref name="root"/>, folder by folder in walk order.</summary>
+    private static Described Describe(RemovalWalk.Folder root)
+    {
+        var folders = root.InWalkOrder();
+
+        return new(
+            [.. folders.Select(folder => folder.Path)],
+            [.. folders.SelectMany(folder => folder.Files).Select(file => file.FullName)],
+            [.. folders.SelectMany(folder => folder.Links).Select(link => link.FullName)],
+            [.. folders.SelectMany(folder => folder.Spared)],
+            [.. folders.SelectMany(folder => folder.MailStores)],
+            folders.Sum(folder => folder.Kept));
+    }
 
     private sealed record Described(
         IReadOnlyList<string> Directories,
-        IReadOnlyList<int> Parents,
         IReadOnlyList<string> Files,
         IReadOnlyList<string> Links,
         IReadOnlyList<string> Spared,

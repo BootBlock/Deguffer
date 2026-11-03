@@ -86,6 +86,10 @@ internal sealed class TreeRemoval
     /// </param>
     /// <param name="planned">How many entries the plan measured, for progress until the walk is over.</param>
     /// <param name="time">The clock <see cref="RemovalOutcome.Passes"/> is measured on.</param>
+    /// <param name="gathered">
+    /// The walk that gathered a tree handed over from what it gathered, which is the removal's walk
+    /// pass. Null where <paramref name="walk"/> lists the tree, which is then timed as the walk.
+    /// </param>
     public static RemovalOutcome Run(
         RemovalFolder root,
         RemovalBounds bounds,
@@ -94,13 +98,14 @@ internal sealed class TreeRemoval
         long planned,
         IFileSystem fs,
         TimeProvider time,
+        PassTiming? gathered,
         CancellationToken ct)
     {
         var removal = new TreeRemoval(root.FoundAs, bounds, new RemovalProgress(progress, planned), fs, time, ct);
 
         try
         {
-            return removal.Run(root, walk);
+            return removal.Run(root, walk, gathered);
         }
         finally
         {
@@ -108,7 +113,7 @@ internal sealed class TreeRemoval
         }
     }
 
-    private RemovalOutcome Run(RemovalFolder root, Action<Action<RemovalFolder>, CancellationToken> walk)
+    private RemovalOutcome Run(RemovalFolder root, Action<Action<RemovalFolder>, CancellationToken> walk, PassTiming? gathered)
     {
         using var wake = _crew.WakeOn(_ct);
 
@@ -132,7 +137,7 @@ internal sealed class TreeRemoval
             _crew.Fail(ex);
         }
 
-        var walkTook = new PassTiming(_time.GetElapsedTime(walkStarted), Interlocked.Read(ref _walked));
+        var walkTook = gathered ?? new PassTiming(_time.GetElapsedTime(walkStarted), Interlocked.Read(ref _walked));
 
         // The walk is over, so this thread joins the crew until the last of the work is done.
         while (walked && !Stopping)

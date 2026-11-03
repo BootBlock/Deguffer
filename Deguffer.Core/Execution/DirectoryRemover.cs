@@ -120,6 +120,7 @@ public static class DirectoryRemover
             plannedEntries,
             fs,
             time,
+            gathered: null,
             ct);
     }
 
@@ -142,12 +143,12 @@ public static class DirectoryRemover
             // Handed over folder by folder from what the walk gathered, which lists nothing again. The
             // walk that gathered it is the removal's walk.
             case GatheredRemoval.Tree tree:
-                var removal = TreeRemoval.Run(
+                return TreeRemoval.Run(
                     tree.Root,
                     bounds,
                     (listed, stop) =>
                     {
-                        foreach (var (folder, _) in tree.Root.InWalkOrder())
+                        foreach (var folder in tree.Root.InWalkOrder())
                         {
                             stop.ThrowIfCancellationRequested();
                             listed((RemovalFolder)folder);
@@ -157,9 +158,8 @@ public static class DirectoryRemover
                     planned: 0,
                     fs,
                     time,
+                    tree.Walk,
                     ct);
-
-                return removal with { Passes = removal.Passes! with { Walk = tree.Walk } };
 
             case GatheredRemoval.NotAFolder:
                 progress?.Report(1.0);

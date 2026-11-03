@@ -62,7 +62,7 @@ internal sealed class RemovalTally(string root)
 
         for (var index = folders.Count - 1; index >= 0; index--)
         {
-            var folder = (RemovalFolder)folders[index].Folder;
+            var folder = (RemovalFolder)folders[index];
 
             // A root the caller keeps is never tried, so it is neither removed nor left standing.
             if (bounds.KeepRoot && folder.Parent is null)
@@ -101,7 +101,7 @@ internal sealed class RemovalTally(string root)
         }
 
         // In the order the walk met them, as the reader would list them.
-        foreach (var (folder, _) in folders)
+        foreach (var folder in folders)
         {
             kept += folder.Kept;
             spared.AddRange(folder.Spared);

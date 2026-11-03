@@ -77,7 +77,7 @@ internal abstract record GatheredRemoval(string Extended, RemovalBounds Bounds)
         RemovalWalk.Visit(root, keep, bounds, fs, WalkTuning.Default, static _ => { }, ct);
 
         var took = time.GetElapsedTime(started);
-        var entries = root.InWalkOrder().Sum(gathered => 1L + gathered.Folder.Files.Count + gathered.Folder.Links.Count);
+        var entries = root.InWalkOrder().Sum(folder => 1L + folder.Files.Count + folder.Links.Count);
 
         return new Tree(extended, bounds, root, new PassTiming(took, entries));
     }
@@ -185,7 +185,7 @@ internal abstract record GatheredRemoval(string Extended, RemovalBounds Bounds)
             var unlisted = new List<string>();
             var notFolders = new List<string>();
 
-            foreach (var (folder, _) in root.InWalkOrder())
+            foreach (var folder in root.InWalkOrder())
             {
                 mailStores.AddRange(folder.MailStores);
                 HoldsRecent |= folder.Kept > 0 || folder.RecentFolders > 0;
