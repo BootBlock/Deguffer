@@ -14,6 +14,9 @@ namespace Deguffer.Core.Tests;
 /// </summary>
 public sealed class ArduinoCacheProviderTests : IDisposable
 {
+    /// <summary>The variable that moves the CLI's data folder, and with it the staging folder inside.</summary>
+    private const string DataVariable = "ARDUINO_DIRECTORIES_DATA";
+
     private readonly TempDirectory _temp = new();
     private readonly FakeUserEnvironment _environment;
     private readonly FakeSystemDirectories _system;
@@ -45,6 +48,10 @@ public sealed class ArduinoCacheProviderTests : IDisposable
     /// The CLI installed, answering each setting as <paramref name="overrides"/> says and otherwise as
     /// its defaults do, and removing the downloads folder of the configuration it was given on
     /// <c>cache clean</c>. <paramref name="ide"/> answers for <c>--config-file</c> naming the IDE's file.
+    ///
+    /// <para>The data folder follows <c>ARDUINO_DIRECTORIES_DATA</c> in the environment the CLI starts
+    /// with, as the CLI's binding of its <c>ARDUINO_</c> variables does: Deguffer's own where the run
+    /// names none, and the one it was handed where it names one.</para>
     /// </summary>
     private FakeProcessRunner CliAnswering(
         Dictionary<string, string?>? overrides = null,
@@ -53,33 +60,16 @@ public sealed class ArduinoCacheProviderTests : IDisposable
     {
         _environment.WithExecutable("arduino-cli");
 
-        Dictionary<string, string?> Settings(Dictionary<string, string?>? changes)
-        {
-            var settings = new Dictionary<string, string?>
-            {
-                ["directories.data"] = Data,
-                ["directories.downloads"] = string.Empty,
-                ["build_cache.path"] = BuildCache,
-                ["directories.user"] = Sketchbook,
-            };
-
-            foreach (var (key, value) in changes ?? [])
-            {
-                settings[key] = value;
-            }
-
-            return settings;
-        }
-
-        var own = Settings(overrides);
-        var ides = Settings(ide);
         var ideArgument = $" --config-file \"{IdeConfig}\"";
 
-        return new FakeProcessRunner().Replying(Cli, arguments =>
+        return new FakeProcessRunner().Replying(Cli, (arguments, run) =>
         {
             ran?.Add(arguments);
 
-            var settings = arguments.EndsWith(ideArgument, StringComparison.Ordinal) ? ides : own;
+            var variable = run.Environment is { } started
+                ? started.GetValueOrDefault(DataVariable)
+                : _environment.GetToolEnvironmentVariable(DataVariable);
+            var settings = Settings(arguments.EndsWith(ideArgument, StringComparison.Ordinal) ? ide : overrides, variable ?? Data);
             var bare = arguments.EndsWith(ideArgument, StringComparison.Ordinal) ? arguments[..^ideArgument.Length] : arguments;
 
             if (bare == "cache clean")
@@ -105,6 +95,24 @@ public sealed class ArduinoCacheProviderTests : IDisposable
                 ? new CommandOutcome(0, JsonSerializer.Serialize(value) + "\n", string.Empty)
                 : new CommandOutcome(1, string.Empty, $"Cannot get the configuration key {key}");
         });
+
+        Dictionary<string, string?> Settings(Dictionary<string, string?>? changes, string data)
+        {
+            var settings = new Dictionary<string, string?>
+            {
+                ["directories.data"] = data,
+                ["directories.downloads"] = string.Empty,
+                ["build_cache.path"] = BuildCache,
+                ["directories.user"] = Sketchbook,
+            };
+
+            foreach (var (key, value) in changes ?? [])
+            {
+                settings[key] = value;
+            }
+
+            return settings;
+        }
     }
 
     /// <summary>A data folder in the shape the CLI leaves it, with archives staged in both parts.</summary>
@@ -352,6 +360,142 @@ public sealed class ArduinoCacheProviderTests : IDisposable
         Assert.Contains(result.Steps, s => s.Message?.Contains("changed since the preview", StringComparison.Ordinal) == true);
     }
 
+    /// <summary>
+    /// A variable set on the machine after the preview can make the downloads folder one a CLI the user
+    /// starts now uses, here as its sketchbook, where a library it installs lands in <c>libraries</c>
+    /// beside the archives. Deguffer's own environment cannot show that, so the machine's is read again
+    /// before the clean, which is held back, and the folder survives with everything in it.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DoesNotRunTheCommandWhenAnArduinoVariableOnTheMachineChangedSinceThePreview(bool changedBefore)
+    {
+        InstalledData();
+
+        if (changedBefore)
+        {
+            InstalledMovedData();
+            _environment.WithEnvironmentVariableSetSinceStart(DataVariable, MovedData);
+        }
+
+        var ran = new List<string>();
+        var provider = CreateProvider(CliAnswering(ran: ran));
+        var plan = await provider.PlanAsync();
+
+        Assert.Single(plan.Steps.OfType<RunCommandStep>());
+
+        _environment.WithEnvironmentVariableSetSinceStart("ARDUINO_DIRECTORIES_USER", Staging);
+        var installed = _temp.CreateFile(100, "profile", "AppData", "Local", "Arduino15", "staging", "libraries", "Servo", "library.properties");
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.DoesNotContain(ran, a => a.StartsWith("cache clean", StringComparison.Ordinal));
+        Exists(installed);
+        Exists(Path.Combine(Staging, "packages", "avr-gcc-7.3.0.tar.bz2"));
+        Assert.Contains(result.Steps, s => s.Message?.Contains("changed on this machine since the preview", StringComparison.Ordinal) == true);
+    }
+
+    /// <summary>
+    /// Only an <c>ARDUINO_</c> variable moves the CLI's folders, so a variable of another tool set on
+    /// the machine after the preview leaves the clean to run, whether or not the machine had already
+    /// changed when the plan was made.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunsTheCommandWhenOnlyAnotherToolsVariableChangedSinceThePreview(bool changedBefore)
+    {
+        InstalledData();
+
+        if (changedBefore)
+        {
+            InstalledMovedData();
+            _environment.WithEnvironmentVariableSetSinceStart(DataVariable, MovedData);
+        }
+
+        var provider = CreateProvider(CliAnswering());
+        var plan = await provider.PlanAsync();
+
+        _environment.WithEnvironmentVariableSetSinceStart("JAVA_HOME", Path.Combine(_temp.Path, "jdk"));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+        Assert.False(Directory.Exists(Staging));
+    }
+
+    /// <summary>
+    /// A CLI the user starts now reads the configuration file the machine's variables name, and that
+    /// file can be edited after the preview to put one of its folders in the downloads folder. Deguffer's
+    /// own configuration is unchanged, so only reading that file again holds the clean back.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotRunTheCommandWhenTheConfigurationACliStartedNowReadsChangedSinceThePreview()
+    {
+        InstalledData();
+        var config = _temp.CreateFile(10, "profile", "ArduinoConfig", "arduino-cli.yaml");
+        _environment.WithEnvironmentVariableSetSinceStart("ARDUINO_CONFIG_FILE", config);
+
+        var ran = new List<string>();
+        var provider = CreateProvider(CliAnswering(ran: ran));
+        var plan = await provider.PlanAsync();
+
+        Assert.Single(plan.Steps.OfType<RunCommandStep>());
+
+        File.WriteAllText(config, $"directories:\n  user: {Staging}\n");
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.DoesNotContain(ran, a => a.StartsWith("cache clean", StringComparison.Ordinal));
+        Exists(Path.Combine(Staging, "packages", "avr-gcc-7.3.0.tar.bz2"));
+        Assert.Contains(result.Steps, s => s.Message?.Contains("Arduino CLI you start yourself reads has changed", StringComparison.Ordinal) == true);
+    }
+
+    /// <summary>
+    /// The plan held each configuration's clean clear of the folders the other names, so an edit to
+    /// Arduino IDE 2's configuration after the preview holds back the CLI's own clean as well as the
+    /// IDE's: the IDE's sketchbook may now be the CLI's downloads folder.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotRunEitherCommandWhenTheOtherConfigurationChangedSinceThePreview()
+    {
+        InstalledData();
+        var ideDownloads = Path.Combine(_environment.LocalAppData, "ArduinoIdeDownloads");
+        _temp.CreateFile(100, "profile", "AppData", "Local", "ArduinoIdeDownloads", "packages", "esp32-3.0.0.zip");
+        _temp.CreateFile(10, "profile", ".arduinoIDE", "arduino-cli.yaml");
+
+        var ran = new List<string>();
+        var provider = CreateProvider(CliAnswering(ide: new() { ["directories.downloads"] = ideDownloads }, ran: ran));
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(2, plan.Steps.OfType<RunCommandStep>().Count());
+
+        File.WriteAllText(IdeConfig, $"directories:\n  user: {Staging}\n");
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.DoesNotContain(ran, a => a.StartsWith("cache clean", StringComparison.Ordinal));
+        Exists(Path.Combine(Staging, "packages", "avr-gcc-7.3.0.tar.bz2"));
+        Assert.Contains(result.Steps, s => s.Message?.Contains("another Arduino configuration has changed", StringComparison.Ordinal) == true);
+    }
+
+    /// <summary>
+    /// A CLI the user starts now that is pointed at a configuration file by a path that is not a full
+    /// one reads a file nobody can name, so no clean can be held to what it said, and none is offered.
+    /// </summary>
+    [Fact]
+    public async Task OffersNoCleanWhenACliStartedNowReadsAConfigurationThatCannotBeNamed()
+    {
+        InstalledData();
+        _environment.WithEnvironmentVariableSetSinceStart("ARDUINO_CONFIG_FILE", "arduino-cli.yaml");
+
+        var plan = await CreateProvider(CliAnswering()).PlanAsync();
+
+        Assert.Empty(plan.Steps.OfType<RunCommandStep>());
+        Assert.Contains(plan.Notes, n => n.Severity is PlanNoteSeverity.Warning && n.Message.Contains("cannot check", StringComparison.Ordinal));
+    }
+
     /// <summary>A file saved into the downloads folder after the preview would go with the archives, so the command is held back.</summary>
     [Fact]
     public async Task DoesNotRunTheCommandWhenTheDownloadsGainedSomethingSinceThePreview()
@@ -501,5 +645,131 @@ public sealed class ArduinoCacheProviderTests : IDisposable
         Assert.Empty(plan.Steps.OfType<RunCommandStep>());
         Assert.Contains(plan.Notes, n => n.Message.Contains("changed while it was asked", StringComparison.Ordinal));
     }
-}
 
+    /// <summary>The data folder a CLI the user starts now uses, once a variable set since start-up moves it.</summary>
+    private string MovedData => Path.Combine(_environment.LocalAppData, "ArduinoMoved");
+
+    /// <summary>A data folder in the shape the CLI leaves it, where the variable moved it to.</summary>
+    private void InstalledMovedData()
+    {
+        _temp.CreateFile(4096, "profile", "AppData", "Local", "ArduinoMoved", "staging", "packages", "esp32-3.0.0.zip");
+        _temp.CreateFile(100, "profile", "AppData", "Local", "ArduinoMoved", "packages", "esp32", "hardware", "boards.txt");
+        _temp.CreateFile(100, "profile", "AppData", "Local", "ArduinoMoved", "inventory.yaml");
+    }
+
+    /// <summary>
+    /// A variable set on the machine after Deguffer started moves the data folder of a CLI the user
+    /// starts now and not that of the clean, which still starts with Deguffer's environment. Explore and a
+    /// duplicate search hear the moved folder as the CLI's, and §5.6 asserts it and its installed boards
+    /// survive, while the clean removes only the staging folder it was always sent to.
+    /// </summary>
+    [Fact]
+    public async Task DeclaresTheDataFolderACliStartedNowUsesAndCleansOnlyTheOneTheCleanUses()
+    {
+        InstalledData();
+        InstalledMovedData();
+        _environment.WithEnvironmentVariableSetSinceStart(DataVariable, MovedData);
+
+        var runner = CliAnswering();
+        var provider = CreateProvider(runner);
+        var policy = await ExploreActionPolicy.ForAsync(_system, _environment, new FakeVolumeInventory(), [provider]);
+
+        Assert.True(policy.MayRemove(Path.Combine(MovedData, "staging")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(MovedData, "packages")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(MovedData, "inventory.yaml")).IsAllowed);
+        Assert.Contains(
+            await provider.CleanedPlacesAsync(),
+            place => string.Equals(place.Path, Path.Combine(MovedData, "staging"), StringComparison.OrdinalIgnoreCase));
+
+        provider.InvalidateCaches();
+        var plan = await provider.PlanAsync();
+
+        var step = Assert.Single(plan.Steps.OfType<RunCommandStep>());
+        Assert.Equal([Staging], step.MeasuredPaths);
+        Assert.Contains(runner.Invocations, i => i.Run.Environment is not null);
+        Assert.Contains(plan.ProtectedPaths, p => string.Equals(p.Path, MovedData, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.ProtectedPaths, p => string.Equals(p.Path, Path.Combine(MovedData, "packages"), StringComparison.OrdinalIgnoreCase));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+        Assert.Null(runner.Invocations.Single(i => i.Arguments == "cache clean").Run.Environment);
+        Assert.False(Directory.Exists(Staging));
+        Exists(Path.Combine(MovedData, "staging", "packages", "esp32-3.0.0.zip"));
+        Exists(Path.Combine(MovedData, "packages", "esp32", "hardware", "boards.txt"));
+        Exists(Path.Combine(Data, "packages", "arduino", "hardware", "avr", "boards.txt"));
+    }
+
+    /// <summary>
+    /// The clean removes its downloads folder outright, so it is declined where a CLI the user starts
+    /// now keeps its data folder there, and the folder is left standing with everything in it.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotRunTheCommandWhereACliStartedNowKeepsItsDataInTheDownloads()
+    {
+        InstalledData();
+        _environment.WithEnvironmentVariableSetSinceStart(DataVariable, Staging);
+
+        var plan = await CreateProvider(CliAnswering()).PlanAsync();
+
+        Assert.Empty(plan.Steps.OfType<RunCommandStep>());
+        Assert.Contains(plan.Notes, n => n.Message.Contains("started now", StringComparison.Ordinal));
+        Assert.Contains(plan.ProtectedPaths, p => string.Equals(p.Path, Staging, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// The build cache is read only where the CLI's builds cannot be confused with anything else, so a
+    /// CLI the user starts now that keeps its data folder there leaves it unread.
+    /// </summary>
+    [Fact]
+    public async Task LeavesTheBuildCacheWhereACliStartedNowKeepsItsDataThere()
+    {
+        _temp.CreateFile(100, "profile", "AppData", "Local", "arduino", "sketches", "ABC", ".last-used");
+        _environment.WithEnvironmentVariableSetSinceStart(DataVariable, BuildCache);
+
+        var plan = await CreateProvider(CliAnswering()).PlanAsync();
+
+        Assert.Empty(plan.Steps.OfType<DeleteDirectoryStep>());
+        Assert.Contains(plan.Notes, n => n.Message.Contains("build cache", StringComparison.Ordinal)
+            && n.Message.Contains("started now", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Where a CLI started with the changed environment does not say where its folders are, nothing can
+    /// be held against them, so neither the clean nor a build is offered, and the plan says why.
+    /// </summary>
+    [Fact]
+    public async Task OffersNoCleanWhenACliStartedNowDoesNotAnswer()
+    {
+        InstalledData();
+        _temp.CreateFile(100, "profile", "AppData", "Local", "arduino", "sketches", "ABC", ".last-used");
+        _environment.WithEnvironmentVariableSetSinceStart(DataVariable, MovedData);
+
+        var answer = CliAnswering();
+        var provider = CreateProvider(new FakeProcessRunner().Replying(Cli, (arguments, run) =>
+            run.Environment is null
+                ? answer.RunAsync(Cli, arguments, run, CancellationToken.None).GetAwaiter().GetResult()
+                : new CommandOutcome(1, string.Empty, "unreadable configuration")));
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.Notes, n => n.Severity is PlanNoteSeverity.Warning && n.Message.Contains("after Deguffer started", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// On a machine nobody changed since Deguffer started, a CLI started now would answer as the one
+    /// Deguffer starts, so each configuration is asked once.
+    /// </summary>
+    [Fact]
+    public async Task AsksEachConfigurationOnceWhereNothingChangedSinceStartUp()
+    {
+        InstalledData();
+        var runner = CliAnswering();
+
+        await CreateProvider(runner).PlanAsync();
+
+        Assert.Equal(4, runner.Invocations.Count);
+        Assert.All(runner.Invocations, i => Assert.Null(i.Run.Environment));
+    }
+}

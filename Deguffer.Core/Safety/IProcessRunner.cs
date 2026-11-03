@@ -135,6 +135,17 @@ public sealed class ProcessRunner : IProcessRunner
                 + "variable and could hand the tool a different path.");
         }
 
+        string? environment = null;
+
+        if (run.Environment is { } variables && (environment = ToolEnvironmentText.Encode(variables, out var refused)) is null)
+        {
+            return new CommandOutcome(
+                -1,
+                string.Empty,
+                $"Not run, because the environment it was to start with holds the variable '{refused}', which Windows "
+                + "cannot hand a program whole.");
+        }
+
         var (application, commandLine) = CommandLineFor(fileName, arguments);
 
         ToolJob? job = null;
@@ -150,7 +161,7 @@ public sealed class ProcessRunner : IProcessRunner
 
             // The plain form of the folder, because cmd.exe refuses an extended-length current
             // directory, and the .cmd shims run through it. The folder is a short child of LocalAppData.
-            tool = ToolProcess.Start(application, commandLine, _workingDirectory, jobs);
+            tool = ToolProcess.Start(application, commandLine, _workingDirectory, jobs, environment);
         }
         catch (Win32Exception ex)
         {

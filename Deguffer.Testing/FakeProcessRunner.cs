@@ -23,7 +23,15 @@ public sealed class FakeProcessRunner : IProcessRunner
     /// carried rather than on the call being made at all — a command split across several
     /// invocations, for instance.
     /// </summary>
-    public FakeProcessRunner Replying(string fileName, Func<string, CommandOutcome?> reply)
+    public FakeProcessRunner Replying(string fileName, Func<string, CommandOutcome?> reply) =>
+        Replying(fileName, (arguments, _) => reply(arguments));
+
+    /// <summary>
+    /// Reply per invocation as <see cref="Replying(string, Func{string, CommandOutcome?})"/> does, seeing
+    /// how the run was asked for too, so a program can answer from the environment it was started with
+    /// (<see cref="ToolRun.Environment"/>).
+    /// </summary>
+    public FakeProcessRunner Replying(string fileName, Func<string, ToolRun, CommandOutcome?> reply)
     {
         For(fileName).Reply = reply;
         return this;
@@ -71,7 +79,7 @@ public sealed class FakeProcessRunner : IProcessRunner
                 + $"Replies are set for: {(_programs.Count == 0 ? "no program" : string.Join(", ", _programs.Keys.Select(k => $"'{k}'")))}.");
         }
 
-        if (program.Reply?.Invoke(arguments) is { } replied)
+        if (program.Reply?.Invoke(arguments, run) is { } replied)
         {
             return replied;
         }
@@ -101,7 +109,7 @@ public sealed class FakeProcessRunner : IProcessRunner
     {
         public Dictionary<string, CommandOutcome> Responses { get; } = new(StringComparer.OrdinalIgnoreCase);
 
-        public Func<string, CommandOutcome?>? Reply { get; set; }
+        public Func<string, ToolRun, CommandOutcome?>? Reply { get; set; }
     }
 }
 

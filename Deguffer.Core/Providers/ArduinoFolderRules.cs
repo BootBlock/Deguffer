@@ -44,23 +44,23 @@ internal sealed class ArduinoFolderRules(
                 + $"clean there: {notOwned} It is leaving it alone.";
         }
 
-        // cache clean removes the folder itself, so it must be none of the folders that matter and hold
-        // none of them.
-        var folder = reach(downloads);
-
-        foreach (var (name, other) in Others(settings, settings.Downloads))
-        {
-            var reached = reach(other);
-
-            if (folder.IsSameAs(reached) || folder.Holds(reached) || (reached.Holds(folder) && !IsStagingOf(downloads, settings)))
-            {
-                return $"The Arduino CLI is set to keep its downloads in '{downloads}', which is or holds its {name}, "
-                    + "and its cache clean removes that folder outright. Deguffer is leaving it alone.";
-            }
-        }
-
-        return null;
+        return Overlapped(downloads, settings, settings.Downloads, stagingInData: true) is { } name
+            ? $"The Arduino CLI is set to keep its downloads in '{downloads}', which is or holds its {name}, "
+                + "and its cache clean removes that folder outright. Deguffer is leaving it alone."
+            : null;
     }
+
+    /// <summary>
+    /// Why <c>cache clean</c>, sent to <paramref name="downloads"/>, must not run beside the folders
+    /// <paramref name="startedNow"/> names, as a sentence, or null where it may. Those are the folders an
+    /// Arduino CLI the user starts now uses, and the clean would remove whichever of them its folder is
+    /// or holds.
+    /// </summary>
+    public string? WhyNotClearedBeside(string downloads, ArduinoSettings startedNow) =>
+        Overlapped(downloads, startedNow, startedNow.Downloads, stagingInData: true) is { } name
+            ? $"An Arduino CLI started now, with the settings changed since Deguffer started, keeps its {name} in or "
+                + $"around '{downloads}', which the cache clean removes outright. Deguffer is leaving the downloads alone."
+            : null;
 
     /// <summary>
     /// Why the build cache these settings name must not be read as the CLI's, as a sentence, or null
@@ -81,16 +81,43 @@ internal sealed class ArduinoFolderRules(
                 + $"the CLI's: {notOwned} It is leaving it alone.";
         }
 
-        var folder = reach(cache);
+        return Overlapped(cache, settings, settings.BuildCache, stagingInData: false) is { } name
+            ? $"The Arduino CLI is set to keep its build cache in '{cache}', which overlaps its {name}. "
+                + "Deguffer cannot tell the CLI's builds from the rest, so it is leaving it alone."
+            : null;
+    }
 
-        foreach (var (name, other) in Others(settings, settings.BuildCache))
+    /// <summary>
+    /// Why the build cache at <paramref name="cache"/> must not be read as the CLI's beside the folders
+    /// <paramref name="startedNow"/> names, as a sentence, or null where it may.
+    /// </summary>
+    public string? WhyNotReadBeside(string cache, ArduinoSettings startedNow) =>
+        Overlapped(cache, startedNow, startedNow.BuildCache, stagingInData: false) is { } name
+            ? $"An Arduino CLI started now, with the settings changed since Deguffer started, keeps its {name} in or "
+                + $"around the build cache '{cache}'. Deguffer cannot tell the CLI's builds from the rest, so it is leaving it alone."
+            : null;
+
+    /// <summary>
+    /// Which folder <paramref name="settings"/> names, beside <paramref name="except"/>, that
+    /// <paramref name="folder"/> is, holds or lies inside, or null where none.
+    /// </summary>
+    /// <param name="stagingInData">
+    /// Whether <paramref name="folder"/> may lie inside the data folder as its own staging folder, which
+    /// is where the CLI keeps its downloads by default.
+    /// </param>
+    private string? Overlapped(string folder, ArduinoSettings settings, ArduinoFolder except, bool stagingInData)
+    {
+        var reachedFolder = reach(folder);
+
+        foreach (var (name, other) in Others(settings, except))
         {
             var reached = reach(other);
 
-            if (folder.IsSameAs(reached) || folder.Holds(reached) || reached.Holds(folder))
+            if (reachedFolder.IsSameAs(reached)
+                || reachedFolder.Holds(reached)
+                || (reached.Holds(reachedFolder) && !(stagingInData && IsStagingOf(folder, settings))))
             {
-                return $"The Arduino CLI is set to keep its build cache in '{cache}', which overlaps its {name}. "
-                    + "Deguffer cannot tell the CLI's builds from the rest, so it is leaving it alone.";
+                return name;
             }
         }
 

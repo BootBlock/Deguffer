@@ -206,6 +206,24 @@ internal sealed class EnvironmentBlock
     /// <summary>The value of a variable, or null when nothing names it.</summary>
     public string? Value(string name) => Value(_variables, name);
 
+    /// <summary>Every variable this block names, as a program started with it would be given them.</summary>
+    public IReadOnlyDictionary<string, string> Variables => _variables;
+
+    /// <summary>
+    /// Whether a program started with this block would read any variable differently from one started
+    /// with <paramref name="other"/>, set, unset or changed, apart from the command search.
+    ///
+    /// <para>The search is left out because a refresh always rewrites it from the directories it
+    /// searches, so the two would differ on almost every machine, and where a tool finds its own
+    /// helpers is not where it keeps its folders.</para>
+    /// </summary>
+    public bool ReadsDifferentlyFrom(EnvironmentBlock other) =>
+        HasAnyNotIn(_variables, other._variables) || HasAnyNotIn(other._variables, _variables);
+
+    private static bool HasAnyNotIn(IReadOnlyDictionary<string, string> these, IReadOnlyDictionary<string, string> those) =>
+        these.Any(pair => !Searched.Contains(pair.Key)
+            && (!those.TryGetValue(pair.Key, out var value) || !string.Equals(value, pair.Value, StringComparison.Ordinal)));
+
     /// <summary>
     /// The machine and user values, each resolved by its own kind and joined as Windows joins them.
     /// </summary>
