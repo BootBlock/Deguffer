@@ -612,6 +612,7 @@ Cargo did, and `CargoTargetProvider` correctly declined both.
 | Candidate | Verdict | Tier | Measured |
 | --- | --- | --- | --- |
 | Lightroom Classic `Previews.lrdata` | Build later, with a lost-original guard | 2 | Absent |
+| ON1 Photo RAW `PerfectBrowseCache` | Build later, on a real installation | 2 or 3 | Absent |
 | Packaged (MSIX) Electron apps | **Build**, as a general rule | 1 | — |
 | Classic Teams leftover `%APPDATA%\Microsoft\Teams` | Build later | 1 | Absent |
 | iOS firmware `.ipsw` downloads | Build later | 2 | Absent |
@@ -645,6 +646,33 @@ original is present. **Survivors:** the `.lrcat` and its `-wal` and `-journal`, 
 `Smart Previews.lrdata`, which is the only editable copy of an offline original (rejected below).
 **In use:** a `<name>.lrcat.lock` beside the catalog, and a running Lightroom process, since a crash
 can leave the lock behind.
+
+### ON1 Photo RAW browse cache — Build later, on a real installation
+
+Proposed in [#79](https://github.com/BootBlock/Deguffer/issues/79) as Tier 1. Forum reports put
+`%APPDATA%\ON1\ON1 Photo RAW <year>\PerfectBrowseCache` at many gigabytes, one at about 335 GB. The
+location is a preference, and the same preference empties the cache, which is the §5.1 route. ON1's
+[2026 user guide](https://on1.clickhelp.co/resources/Storage/photo-raw-2026-user-guide.pdf) (read in
+full) says the System tab's *Browse Cache* setting lets the user "empty the cache, move it to another
+location, or reset it". Two gaps stop it being built:
+
+- **§3: the cache is not only derived.** The same guide's *Persistent Thumbnail Cache* says it "also
+  stores user-added or adjusted metadata such as ratings, labels, keywords, captions, rotation, and
+  GPS data". The guide's *Embedding metadata* puts a raw file's metadata in an XMP sidecar, but a
+  JPG's, TIFF's or PSD's reaches the file only through *Embed Metadata* or the *Automatically Embed
+  Metadata* option, and AI keywords are not embedded by default. Whether the cache or the `NDService`
+  database keeps the copy that is not yet embedded is unverified. Until it is, the folder is not
+  Tier 1, and may be Tier 3.
+- **Where the moved location is recorded was not found.** No public source names the preference file
+  or its key. A sweep of the default folder alone misses a moved cache, and §5.2 forbids guessing at a
+  folder by its name.
+
+**Survivors**, whatever the tier: `%APPDATA%\ON1` and each version folder are roots. Beside the cache
+sit `NDService`, which users' reports call the database of every edit and say ON1 does not support
+moving or backing up, and `PhotoSettingsCache`, which despite its name holds per-photo settings. The `.on1` sidecars beside the
+photographs are the edits themselves. A version folder for an uninstalled version is not orphaned
+cache either: its presets and database may be the only copy. **In use:** a running
+`ON1 Photo RAW <year>.exe`, installed as `C:\Program Files\ON1\ON1 Photo RAW <year>`.
 
 ### Packaged Electron apps — Build, as a general rule
 
