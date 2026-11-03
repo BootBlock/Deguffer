@@ -422,8 +422,8 @@ public sealed class DuplicateCandidateTests : IDisposable
             .AddFileWithDataInAnExtensionRecord(
                 unsized, directory, "unsized.bin", allocated: 4096, logical: 4096, extension: directory + 3, ListMismatch.ItsOwnSequence);
 
-        var tree = MftExploreReader.Read(fixture.Build(), @"X:\", [], TableTuning.Default, onProgress: null, default).Tree!;
-        var data = MftExploreReader.Locate(tree, ["Data"]).Node!.Value;
+        var tree = MftExploreReader.Read(fixture.Build(), @"X:\", [], TableTuning.Default, progress: null, default).Tree!;
+        var data = MftExploreRooting.Locate(tree, ["Data"]).Node!.Value;
         var file = ExploreTreePaths.NodeAt(tree, @"X:\Data\unsized.bin");
 
         // The fixture gives the file no length, and says so, which is the case under test.
@@ -468,8 +468,8 @@ public sealed class DuplicateCandidateTests : IDisposable
                 directory + 4, directory, "deduplicated.bin", 4096, FileAttributes.Archive | FileAttributes.ReparsePoint, DeduplicationTag)
             .AddFileLink(directory + 5, directory, "link.bin", logical: 4096);
 
-        var tree = MftExploreReader.Read(fixture.Build(), @"X:\", [], TableTuning.Default, onProgress: null, default).Tree!;
-        var data = MftExploreReader.Locate(tree, ["Data"]).Node!.Value;
+        var tree = MftExploreReader.Read(fixture.Build(), @"X:\", [], TableTuning.Default, progress: null, default).Tree!;
+        var data = MftExploreRooting.Locate(tree, ["Data"]).Node!.Value;
 
         Assert.Equal(
             ["cloud.bin", "compressed.bin", "deduplicated.bin", "plain.bin"],
@@ -489,7 +489,7 @@ public sealed class DuplicateCandidateTests : IDisposable
             .AddFileWithAttributes(MftRecord.ReservedRecordCount + 1, MftRecord.RootRecordNumber, "system.bin", 10, FileAttributes.System)
             .AddFileWithAttributes(MftRecord.ReservedRecordCount + 2, MftRecord.RootRecordNumber, "plain.bin", 10, FileAttributes.Archive);
 
-        var tree = MftExploreReader.Read(fixture.Build(), @"X:\", [], TableTuning.Default, onProgress: null, default).Tree!;
+        var tree = MftExploreReader.Read(fixture.Build(), @"X:\", [], TableTuning.Default, progress: null, default).Tree!;
 
         FileVisibility Of(string name) =>
             tree.VisibilityOf(tree.ChildrenOf(tree.RootNode).ToArray().Single(node => tree.NameOf(node) == name));

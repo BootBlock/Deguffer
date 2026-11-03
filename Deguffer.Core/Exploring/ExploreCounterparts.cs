@@ -11,8 +11,9 @@ namespace Deguffer.Core.Exploring;
 ///
 /// <para>The common case costs nothing: within one walked scan a node keeps its number from one
 /// snapshot to the next, so a node standing under its parent's counterpart with exactly the same
-/// name is taken as it is. Exactly, because the number is a guess: two file-table scans number only
-/// what each reaches, so a number can move to a sibling, and in a directory with case sensitivity
+/// name is taken as it is. Exactly, because the number is a guess: every tree drawn from the file
+/// table, each of one read's snapshots included, numbers only what it reaches, so a number can move
+/// to a sibling, and in a directory with case sensitivity
 /// turned on that sibling can be <c>cache</c> beside the <c>Cache</c> being looked for. Otherwise
 /// the parent's children are indexed by name once, and every later lookup in that folder is a
 /// dictionary read, because a folder of a hundred thousand files would make a search per node the

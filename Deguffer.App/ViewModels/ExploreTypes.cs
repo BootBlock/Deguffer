@@ -111,8 +111,8 @@ public sealed partial class ExploreTypes : ObservableObject
 
     /// <summary>
     /// Whether the map is coloured by type, which is when the panel is on screen. Nothing is measured
-    /// while it is not: each measurement is a pass over the folder or the tree, and a walked scan
-    /// publishes a tree every few hundred milliseconds.
+    /// while it is not: each measurement is a pass over the folder or the tree, and a scan in progress
+    /// publishes a tree as often as every few hundred milliseconds.
     /// </summary>
     [ObservableProperty]
     public partial bool IsActive { get; set; }

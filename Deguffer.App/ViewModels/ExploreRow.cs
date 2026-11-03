@@ -180,9 +180,9 @@ public sealed partial class ExploreRow : ObservableObject, IExploreListed
     /// already on screen.
     ///
     /// <para>By name and kind, not by node number. Through the snapshots of one walk the number
-    /// would do, because they come from one builder whose lists only grow, but a rescan can number an
-    /// entry afresh: the file table's tree numbers only what it reaches, so a file made before this
-    /// one moves it. A row matched by number would show one entry's size under another's name, and a
+    /// would do, because they come from one builder whose lists only grow, but a tree drawn from the
+    /// file table numbers only what it reaches, so a file read or made before this one moves it, from
+    /// one snapshot of a read to the next as from one scan to another. A row matched by number would show one entry's size under another's name, and a
     /// row matched by nothing would be rebuilt, losing the reader's place in the list. The name
     /// settles it: the parent is the same directory in both trees, or the page would not keep the
     /// rows, and a directory holds one entry of each exact name.</para>

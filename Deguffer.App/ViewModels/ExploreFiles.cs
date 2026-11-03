@@ -124,8 +124,8 @@ public sealed partial class ExploreFiles : ObservableObject
 
     /// <summary>
     /// Whether the layout is on screen. Nothing is searched while it is not: the pass is over every
-    /// file below the folder on screen, and a walked scan publishes a tree every few hundred
-    /// milliseconds.
+    /// file below the folder on screen, and a scan in progress publishes a tree as often as every
+    /// few hundred milliseconds.
     /// </summary>
     [ObservableProperty]
     public partial bool IsActive { get; set; }

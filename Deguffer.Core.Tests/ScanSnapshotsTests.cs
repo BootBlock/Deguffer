@@ -5,7 +5,7 @@ using Deguffer.Testing;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// When a walk in progress starts a snapshot, and how many it can start however long each one
+/// When a scan in progress starts a snapshot, and how many it can start however long each one
 /// takes to assemble.
 ///
 /// <para>Each snapshot is assembled when the test says, on the test's own thread, and the clock
@@ -13,7 +13,7 @@ namespace Deguffer.Core.Tests;
 /// for. A snapshot is a pass over every node found so far, and on a full drive it can take longer
 /// than the interval between them; that is the case under test.</para>
 /// </summary>
-public sealed class WalkSnapshotsTests
+public sealed class ScanSnapshotsTests
 {
     private const string Root = @"C:\Users\testuser";
 
@@ -24,7 +24,7 @@ public sealed class WalkSnapshotsTests
     private int _started;
     private long _startedAt;
 
-    public WalkSnapshotsTests() =>
+    public ScanSnapshotsTests() =>
         _builder.AddChildren(ExploreTreeBuilder.RootNode, [
             new ExploreChild("a.bin", IsDirectory: false, IsLink: false, Size: 10),
         ]);
@@ -39,13 +39,13 @@ public sealed class WalkSnapshotsTests
     {
         var snapshots = Snapshots();
 
-        _clock.Advance(WalkSnapshots.Interval);
+        _clock.Advance(ScanSnapshots.Interval);
         Assert.Null(snapshots.Take());
         Assert.Equal(1, _started);
 
         for (var report = 0; report < 20; report++)
         {
-            _clock.Advance(WalkSnapshots.Interval);
+            _clock.Advance(ScanSnapshots.Interval);
             Assert.Null(snapshots.Take());
         }
 
@@ -69,19 +69,19 @@ public sealed class WalkSnapshotsTests
     public void SpacesTheNextSnapshotFromTheEndOfTheLastByAMultipleOfItsTime()
     {
         var snapshots = Snapshots();
-        var took = WalkSnapshots.Interval * 2;
+        var took = ScanSnapshots.Interval * 2;
 
-        _clock.Advance(WalkSnapshots.Interval);
+        _clock.Advance(ScanSnapshots.Interval);
         snapshots.Take();
         _clock.Advance(took);
         FinishAssembling();
 
         // The ended snapshot is handed over, and one interval from its end is not yet enough.
-        _clock.Advance(WalkSnapshots.Interval);
+        _clock.Advance(ScanSnapshots.Interval);
         Assert.NotNull(snapshots.Take());
         Assert.Equal(1, _started);
 
-        _clock.Advance((took * WalkSnapshots.AssemblingTimes) - WalkSnapshots.Interval - TimeSpan.FromTicks(1));
+        _clock.Advance((took * ScanSnapshots.AssemblingTimes) - ScanSnapshots.Interval - TimeSpan.FromTicks(1));
         snapshots.Take();
         Assert.Equal(1, _started);
 
@@ -98,11 +98,11 @@ public sealed class WalkSnapshotsTests
     {
         var snapshots = Snapshots();
 
-        _clock.Advance(WalkSnapshots.Interval);
+        _clock.Advance(ScanSnapshots.Interval);
         snapshots.Take();
         FinishAssembling();
 
-        _clock.Advance(WalkSnapshots.Interval - TimeSpan.FromTicks(1));
+        _clock.Advance(ScanSnapshots.Interval - TimeSpan.FromTicks(1));
         snapshots.Take();
         Assert.Equal(1, _started);
 
@@ -113,7 +113,7 @@ public sealed class WalkSnapshotsTests
 
     /// <summary>
     /// However long a snapshot takes, snapshots take no more than their share of the walk's time:
-    /// with each one followed by a wait of <see cref="WalkSnapshots.AssemblingTimes"/> times its
+    /// with each one followed by a wait of <see cref="ScanSnapshots.AssemblingTimes"/> times its
     /// own length, there can be no more of them than that many and one fit into the time elapsed.
     ///
     /// <para>Ten minutes of reports, one each walk interval, with every snapshot taking more than
@@ -140,7 +140,7 @@ public sealed class WalkSnapshotsTests
             snapshots.Take();
         }
 
-        var most = (int)(elapsed / (took * (WalkSnapshots.AssemblingTimes + 1))) + 1;
+        var most = (int)(elapsed / (took * (ScanSnapshots.AssemblingTimes + 1))) + 1;
 
         Assert.InRange(_started, 2, most);
     }
@@ -156,13 +156,13 @@ public sealed class WalkSnapshotsTests
     public void StopsTheSnapshotBeingAssembledWhenTheWalkStops()
     {
         Action? assemble = null;
-        var snapshots = new WalkSnapshots(_builder, _clock, work =>
+        var snapshots = new ScanSnapshots(Capture, _clock, work =>
         {
             assemble = work;
             return Task.CompletedTask;
         });
 
-        _clock.Advance(WalkSnapshots.Interval);
+        _clock.Advance(ScanSnapshots.Interval);
         snapshots.Take();
         Assert.NotNull(assemble);
 
@@ -173,16 +173,57 @@ public sealed class WalkSnapshotsTests
     }
 
     /// <summary>
+    /// An assembling with nothing to draw yet, as a read of the file table has before it reaches the
+    /// folder a scan is rooted at, hands over nothing and is spaced like any other. It cost the same
+    /// pass, so the next one waiting only the interval from its start would let a scan that never
+    /// draws anything spend more on snapshots than one that does.
+    /// </summary>
+    [Fact]
+    public void SpacesAnAssemblingThatHadNothingToDrawLikeAnyOther()
+    {
+        var started = 0;
+        var snapshots = new ScanSnapshots(
+            () =>
+            {
+                started++;
+                return _ =>
+                {
+                    _clock.Advance(ScanSnapshots.Interval);
+                    return null;
+                };
+            },
+            _clock,
+            assemble =>
+            {
+                assemble();
+                return Task.CompletedTask;
+            });
+
+        _clock.Advance(ScanSnapshots.Interval);
+        Assert.Null(snapshots.Take());
+        Assert.Equal(1, started);
+
+        // Its time was one interval, so the next waits four from its end, not one.
+        _clock.Advance(ScanSnapshots.Interval);
+        Assert.Null(snapshots.Take());
+        Assert.Equal(1, started);
+
+        _clock.Advance((ScanSnapshots.Interval * ScanSnapshots.AssemblingTimes) - ScanSnapshots.Interval);
+        Assert.Null(snapshots.Take());
+        Assert.Equal(2, started);
+    }
+
+    /// <summary>
     /// A snapshot that fails to assemble fails the walk, at the next report. Dropped instead, the
     /// fault would leave every later picture silently missing.
     /// </summary>
     [Fact]
     public void FailsTheWalkWhereASnapshotFailed()
     {
-        var snapshots = new WalkSnapshots(
-            _builder, _clock, _ => Task.FromException(new InvalidOperationException("assembling failed")));
+        var snapshots = new ScanSnapshots(
+            Capture, _clock, _ => Task.FromException(new InvalidOperationException("assembling failed")));
 
-        _clock.Advance(WalkSnapshots.Interval);
+        _clock.Advance(ScanSnapshots.Interval);
         snapshots.Take();
 
         _clock.Advance(BoundedFileWalk.ProgressInterval);
@@ -191,7 +232,9 @@ public sealed class WalkSnapshotsTests
         Assert.Equal("assembling failed", thrown.Message);
     }
 
-    private WalkSnapshots Snapshots() => new(_builder, _clock, Start);
+    private ScanSnapshots Snapshots() => new(Capture, _clock, Start);
+
+    private Func<CancellationToken, ExploreTree?> Capture() => _builder.Capture().Snapshot;
 
     private Task Start(Action assemble)
     {

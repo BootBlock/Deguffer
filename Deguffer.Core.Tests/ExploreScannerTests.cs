@@ -326,7 +326,7 @@ public class ExploreScannerTests
         // snapshot that the fourth hands over. The last report is the walk's own, once at the end.
         var walkStep = BoundedFileWalk.ProgressInterval;
         var steps = new Queue<TimeSpan>(
-            [WalkSnapshots.Interval - walkStep, walkStep, walkStep]);
+            [ScanSnapshots.Interval - walkStep, walkStep, walkStep]);
 
         var progress = new CallbackProgress<ExploreProgress>(report =>
         {
@@ -377,7 +377,7 @@ public class ExploreScannerTests
         var progress = new CallbackProgress<ExploreProgress>(report =>
         {
             reports.Add(report);
-            clock.Advance(WalkSnapshots.Interval);
+            clock.Advance(ScanSnapshots.Interval);
         });
 
         var scanner = new ExploreScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated), clock)
@@ -415,7 +415,7 @@ public class ExploreScannerTests
         var progress = new CallbackProgress<ExploreProgress>(report =>
         {
             reports.Add(report);
-            clock.Advance(WalkSnapshots.Interval);
+            clock.Advance(ScanSnapshots.Interval);
         });
 
         var scanner = new ExploreScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated), clock)
@@ -427,6 +427,94 @@ public class ExploreScannerTests
 
         Assert.True(reports.Count >= 4, $"The walk made {reports.Count} reports, not one for each of its three folders and one at the end.");
         Assert.All(reports, report => Assert.Null(report.Snapshot));
+    }
+
+    /// <summary>
+    /// The file table's read hands over snapshots as the walk does (#492): each ordered by name and
+    /// saying its totals are lower bounds, and replaced by the finished tree, which is ordered by
+    /// size and exact.
+    ///
+    /// <para>The table is long enough for the read to report three times before it ends, however the
+    /// shipped tuning reads it, and the
+    /// clock moves a whole snapshot interval on every report, as for the walk above.</para>
+    /// </summary>
+    [Fact]
+    public async Task PublishesSnapshotsWhileTheTableIsRead()
+    {
+        const char letter = DriveLetters.Faked;
+        var (scanner, progress, reports) = Timed(FakeMftSourceFactory.Serving(letter, LongVolume()));
+
+        var scan = await scanner.ScanAsync($@"{letter}:\", progress);
+
+        Assert.Equal(ScanStrategy.MasterFileTable, scan.Strategy);
+
+        var published = reports.Select(report => report.Snapshot).OfType<ExploreTree>().ToList();
+
+        Assert.NotEmpty(published);
+        Assert.All(published, tree =>
+        {
+            Assert.Equal(ExploreChildOrder.ByName, tree.ChildOrder);
+            Assert.True(tree.HasUnknownSizes, "A snapshot gave its totals as exact.");
+        });
+        Assert.Equal(ExploreChildOrder.BySize, scan.Tree.ChildOrder);
+        Assert.False(scan.Tree.HasUnknownSizes);
+    }
+
+    /// <summary>
+    /// A search across folders on the file table takes no snapshot, for the reason the walk's
+    /// takes none: nothing draws its folders until every one is read. Counted where a snapshot would
+    /// be assembled, because the search's own progress reports carry none whatever is assembled.
+    /// </summary>
+    [Fact]
+    public async Task ASearchAcrossFoldersOnTheTableIsToldCountsAndNoSnapshot()
+    {
+        const char letter = DriveLetters.Faked;
+        var assembled = 0;
+        var (scanner, progress, reports) = Timed(
+            FakeMftSourceFactory.Serving(letter, LongVolume()),
+            assemble =>
+            {
+                assembled++;
+                return OnTheSpot(assemble);
+            });
+
+        var scans = await scanner.ScanFoldersAsync([$@"{letter}:\Users"], progress);
+
+        Assert.Equal(ScanStrategy.MasterFileTable, Assert.Single(scans).Strategy);
+        Assert.True(reports.Count >= 3, $"The read made {reports.Count} reports, not one at nought, one at each interval and one at the end.");
+        Assert.Equal(0, assembled);
+    }
+
+    /// <summary>
+    /// <see cref="Volume"/>, with free records after it that the read counts through, so it reports
+    /// at nought, at each <see cref="MftPassProgress.Interval"/> records and at the end. Three intervals
+    /// rather than two: a read of larger blocks makes its last report at the end of the table rather
+    /// than at the second interval, and that report carries no snapshot.
+    /// </summary>
+    private static MftFixture LongVolume() => Volume().AddUnused((3 * MftPassProgress.Interval) + 10).WithoutBitmap();
+
+    /// <summary>
+    /// A scanner that assembles each snapshot by <paramref name="assemble"/>, on the spot where it is
+    /// null, and a progress that moves its clock a whole snapshot interval on every report it records.
+    /// </summary>
+    private static (ExploreScanner Scanner, IProgress<ExploreProgress> Progress, List<ExploreProgress> Reports) Timed(
+        IMftSourceFactory sources, Func<Action, Task>? assemble = null)
+    {
+        var clock = new ManualTimeProvider();
+        var reports = new List<ExploreProgress>();
+        var progress = new CallbackProgress<ExploreProgress>(report =>
+        {
+            reports.Add(report);
+            clock.Advance(ScanSnapshots.Interval);
+        });
+
+        var scanner = new ExploreScanner(sources, clock)
+        {
+            AssembleSnapshot = assemble ?? OnTheSpot,
+            Walker = new WalkRecorder().Walk,
+        };
+
+        return (scanner, progress, reports);
     }
 
     /// <summary>
