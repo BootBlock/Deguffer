@@ -87,18 +87,19 @@ public sealed class CandidateIdentificationLaneTests : IDisposable
 
     /// <summary>
     /// The stage says how far it has got, from none of the files that may match to all of them, so
-    /// the page never stands on the last count of the scan. A file that shares nothing is not one of
-    /// them, and is never opened.
+    /// the page never stands on the last count of the scan. Several readers count at once on a
+    /// solid-state disk, and no count reaches the page after a later one. A file that shares nothing
+    /// is not one of them, and is never opened.
     /// </summary>
     [Fact]
     public async Task IdentifyingSaysHowFarItHasGotOverTheFilesThatMayMatch()
     {
-        var candidates = Candidates(5);
+        var candidates = Candidates(40 * ReadingLanes.SolidStateReaders);
         var alone = _tree.File(Length + 1, "Data", "alone.bin");
-        using var opens = new HeldOpens([.. candidates, alone], hold: TimeSpan.Zero);
+        using var opens = new HeldOpens([.. candidates, alone], hold: TimeSpan.FromMilliseconds(5));
         ConcurrentQueue<DuplicateSearchProgress> reports = [];
 
-        await _tree.Finder(files: opens.Files, storage: new FakeStorageQueries()).FindAsync(
+        await _tree.Finder(files: opens.Files, storage: new FakeStorageQueries().Volume(_tree.Root, 1).Disk(1, Nvme, seekPenalty: false)).FindAsync(
             new DuplicateSearch(MatchCriteria.Size, [new SearchLocation(Path.Combine(_tree.Top, "Data"))]),
             _tree.Policy(),
             new CallbackProgress<DuplicateSearchProgress>(reports.Enqueue));
@@ -106,6 +107,7 @@ public sealed class CandidateIdentificationLaneTests : IDisposable
         IReadOnlyList<DuplicateSearchProgress> identifying = [.. reports.Where(report => report.Stage is DuplicateSearchStage.Identifying)];
         Assert.Equal(new DuplicateSearchProgress(DuplicateSearchStage.Identifying, 0, candidates.Count), identifying[0]);
         Assert.Equal(new DuplicateSearchProgress(DuplicateSearchStage.Identifying, candidates.Count, candidates.Count), identifying[^1]);
+        Assert.All(identifying.Zip(identifying.Skip(1)), pair => Assert.True(pair.First.Done <= pair.Second.Done, $"{pair.Second.Done} reached the page after {pair.First.Done}."));
         Assert.Equal(candidates.Count, opens.Count);
     }
 
