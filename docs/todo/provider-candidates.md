@@ -664,8 +664,8 @@ location, or reset it". Two gaps stop it being built:
   database keeps the copy that is not yet embedded is unverified. Until it is, the folder is not
   Tier 1, and may be Tier 3.
 - **Where the moved location is recorded was not found.** No public source names the preference file
-  or its key. A sweep of the default folder alone misses a moved cache, and §5.2 forbids guessing at a
-  folder by its name.
+  or its key. A sweep of the default folder alone misses a moved cache, and a folder found elsewhere
+  by its name alone is unrecognised, so §5.2 makes it Tier 4.
 
 **Survivors**, whatever the tier: `%APPDATA%\ON1` and each version folder are roots. Beside the cache
 sit `NDService`, which users' reports call the database of every edit and say ON1 does not support
