@@ -20,8 +20,9 @@ namespace Deguffer.Core.Scanning;
 /// never worked by two at once however many items arrive in it from elsewhere.</para>
 ///
 /// <para><b>Stops every lane</b> once <c>ct</c> is cancelled or any item has failed. An item already
-/// under way finishes, and nothing is thrown until every thread of every lane has: the first failure,
-/// unchanged, or else <see cref="OperationCanceledException"/>.</para>
+/// under way finishes, and nothing is thrown until every thread of every lane has: a lane's failure,
+/// unchanged, the first lane's where two failed at once, or else
+/// <see cref="OperationCanceledException"/>.</para>
 /// </summary>
 internal sealed class LaneWorkers<T>
 {
