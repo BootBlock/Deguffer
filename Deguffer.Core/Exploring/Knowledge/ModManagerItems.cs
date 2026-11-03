@@ -18,7 +18,7 @@ internal static class ModManagerItems
 
         return
         [
-            .. inventory.VortexFound.Select(folder => new KnownItem(
+            .. inventory.Vortex.Select(folder => new KnownItem(
                 KnownPlace.Discovered,
                 folder.Folder,
                 ModManagerRoutes.VortexSummary(folder),

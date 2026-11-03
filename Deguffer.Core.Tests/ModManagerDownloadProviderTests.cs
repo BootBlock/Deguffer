@@ -129,19 +129,22 @@ public sealed class ModManagerDownloadProviderTests : IDisposable
 
     /// <summary>
     /// A global instance's downloads, at their default, split as Mod Organizer 2's own list splits them:
-    /// <c>uninstalled</c> wins over <c>installed</c>, a paused download is neither, and an archive with no
-    /// record or one not finished is neither. The <c>.meta</c> records are not archives. Nothing survives
+    /// a hidden download is left out of the list whatever else it says, <c>uninstalled</c> wins over
+    /// <c>installed</c>, a paused download is neither, and an archive with no record or one not finished is
+    /// neither. A <c>.meta</c> record is not an archive, even beside a record of its own. Nothing survives
     /// less than it was (§5.6).
     /// </summary>
     [Fact]
     public async Task AnInstancesDownloadsAreSplitByWhatItsRecordsMark()
     {
         var downloads = Path.Combine(Instance("Skyrim"), "downloads");
-        var installed = Archive(downloads, "SkyUI.7z", 3000, "installed=true\r\nuninstalled=false");
+        var installed = Archive(downloads, "SkyUI.7z", 300, "installed=true\r\nuninstalled=false");
         var uninstalled = Archive(downloads, "Old.zip", 5000, "installed=true\r\nuninstalled=true");
         Archive(downloads, "Paused.rar", 7000, "installed=true\r\npaused=true");
         Archive(downloads, "Unrecorded.7z", 11000, meta: null);
         Archive(downloads, "Partial.7z" + ModOrganizerArchives.UnfinishedExtension, 13000, "installed=true");
+        Archive(downloads, "Hidden.7z", 17000, "installed=true\r\nremoved=true");
+        Write(installed + ModOrganizerArchives.MetaExtension + ModOrganizerArchives.MetaExtension, text: "[General]\r\ninstalled=true\r\n");
 
         var provider = Provider();
         var plan = await provider.PlanAsync();
@@ -150,8 +153,9 @@ public sealed class ModManagerDownloadProviderTests : IDisposable
         Assert.Empty(plan.Steps);
         Assert.Contains($"The Mod Organizer 2 instance 'Skyrim': its downloads, '{downloads}', take", text, StringComparison.Ordinal);
         Assert.Contains(
-            $"Of that, {FreeSpace.Format(3000L)} is archives Mod Organizer 2 marks as installed, and "
-            + $"{FreeSpace.Format(5000L)} archives it marks as uninstalled.",
+            $"Of that, {FreeSpace.Format(300L)} is archives Mod Organizer 2 lists as installed, and "
+            + $"{FreeSpace.Format(5000L)} archives it lists as uninstalled. {FreeSpace.Format(17000L)} is archives it "
+            + "hides from its download list, which its deletions reach only while the list shows hidden downloads.",
             text,
             StringComparison.Ordinal);
         Assert.Contains(ModManagerRoutes.ModOrganizerRoute, text, StringComparison.Ordinal);
@@ -276,6 +280,22 @@ public sealed class ModManagerDownloadProviderTests : IDisposable
 
         Assert.Contains("in 1 folder.", text, StringComparison.Ordinal);
         Assert.Contains($"keeps its downloads in '{shared}' too, which is counted once.", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An instance that downloads into one of Vortex's game folders has that folder counted once in the
+    /// total, inside Vortex's.
+    /// </summary>
+    [Fact]
+    public async Task ADownloadFolderInsideAnotherIsCountedOnceInTheTotal()
+    {
+        var skyrim = Path.Combine(VortexDownloads, "skyrimse");
+        Write(Path.Combine(skyrim, "SkyUI.7z"), 4096);
+        Instance("Skyrim", $"download_directory={QtEscaped(skyrim)}");
+
+        var text = Messages(await Provider().PlanAsync());
+
+        Assert.Contains($"Mod managers keep {FreeSpace.Format(4096L)} of downloaded mod archives in 1 folder.", text, StringComparison.Ordinal);
     }
 
     /// <summary>

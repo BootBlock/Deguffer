@@ -8908,7 +8908,10 @@ It finds the folders from the managers' own defaults and records, never by searc
   a drive root or a temporary folder, is named and not measured as the instance's.
 - For each Mod Organizer 2 download folder, the row also gives how much is archives whose `.meta`
   record marks them installed, and how much uninstalled, as Mod Organizer 2's own download list reads
-  them: a paused download is neither, and *uninstalled* wins over *installed*
+  them: a paused download is neither, and *uninstalled* wins over *installed*. An archive hidden from
+  the list (`removed`, as its *Hide* commands and its setting to hide a download once installed leave
+  it) is given separately, because the two deletions reach it only while the list shows hidden
+  downloads
   ([`downloadmanager.cpp`](https://github.com/ModOrganizer2/modorganizer/blob/master/src/downloadmanager.cpp)).
 
 The routes, in order (§5.1):

@@ -106,7 +106,7 @@ public sealed class ModManagerDownloadProvider : CleanupProviderBase
         var inventory = Inventory();
 
         return Task.FromResult(
-            inventory.VortexFound.Any()
+            inventory.Vortex.Any()
             || inventory.ModOrganizer.Instances.Count > 0
             || inventory.ModOrganizer.Problems.Count > 0);
     }
@@ -122,7 +122,7 @@ public sealed class ModManagerDownloadProvider : CleanupProviderBase
         // Each Vortex folder with its games, read off one walk, and each instance's folder once.
         List<string> paths =
         [
-            .. inventory.VortexFound
+            .. inventory.Vortex
                 .Where(folder => folder.Presence == PathPresence.Present)
                 .SelectMany(folder => folder.Games.Prepend(folder.Folder)),
         ];

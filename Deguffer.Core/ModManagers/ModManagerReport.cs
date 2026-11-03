@@ -33,10 +33,15 @@ internal static class ModManagerReport
 
         var notes = new List<PlanNote>();
 
-        // Each folder once: two instances can share one download folder.
-        var reached = inventory.VortexFound.Select(folder => folder.Folder)
+        // Each folder once, and none inside another: two instances can share one download folder, and an
+        // instance can download into one of Vortex's game folders.
+        var named = inventory.Vortex.Select(folder => folder.Folder)
             .Concat(inventory.ModOrganizerDownloads.Select(entry => entry.Downloads))
             .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var reached = named
+            .Where(folder => !named.Any(other => !other.Equals(folder, StringComparison.OrdinalIgnoreCase)
+                && LongPath.Contains(other, folder)))
             .Where(folder => measured.TryGetValue(folder, out var size) && size.Reached)
             .ToList();
 
@@ -50,7 +55,7 @@ internal static class ModManagerReport
                 + $"{(reached.Count == 1 ? "1 folder" : $"{reached.Count} folders")}."));
         }
 
-        foreach (var folder in inventory.VortexFound)
+        foreach (var folder in inventory.Vortex)
         {
             notes.Add(Vortex(folder, measured));
         }
@@ -69,7 +74,7 @@ internal static class ModManagerReport
             notes.Add(new PlanNote(PlanNoteSeverity.Information, ModManagerRoutes.ModOrganizerRoute));
         }
 
-        if (inventory.VortexFound.Any())
+        if (inventory.Vortex.Any())
         {
             notes.Add(new PlanNote(PlanNoteSeverity.Information, ModManagerRoutes.VortexRoute));
         }
@@ -142,8 +147,12 @@ internal static class ModManagerReport
         }
 
         var split = archives.TryGetValue(downloads, out var state) && state.Listed
-            ? $" Of that, {FreeSpace.Format(state.Installed)} is archives Mod Organizer 2 marks as installed, and "
-                + $"{FreeSpace.Format(state.Uninstalled)} archives it marks as uninstalled."
+            ? $" Of that, {FreeSpace.Format(state.Installed)} is archives Mod Organizer 2 lists as installed, and "
+                + $"{FreeSpace.Format(state.Uninstalled)} archives it lists as uninstalled."
+                + (state.Hidden > 0
+                    ? $" {FreeSpace.Format(state.Hidden)} is archives it hides from its download list, which its "
+                        + "deletions reach only while the list shows hidden downloads."
+                    : string.Empty)
             : " Windows would not list the folder, so how much of it is installed is not known.";
 
         return new PlanNote(
