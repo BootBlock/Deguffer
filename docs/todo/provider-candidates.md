@@ -612,6 +612,7 @@ Cargo did, and `CargoTargetProvider` correctly declined both.
 | Candidate | Verdict | Tier | Measured |
 | --- | --- | --- | --- |
 | Lightroom Classic `Previews.lrdata` | Build later, with a lost-original guard | 2 | Absent |
+| ON1 Photo RAW `PerfectBrowseCache` | Build later, on a real installation | 3 until shown otherwise | Absent |
 | Packaged (MSIX) Electron apps | **Build**, as a general rule | 1 | — |
 | Classic Teams leftover `%APPDATA%\Microsoft\Teams` | Build later | 1 | Absent |
 | iOS firmware `.ipsw` downloads | Build later | 2 | Absent |
@@ -645,6 +646,45 @@ original is present. **Survivors:** the `.lrcat` and its `-wal` and `-journal`, 
 `Smart Previews.lrdata`, which is the only editable copy of an offline original (rejected below).
 **In use:** a `<name>.lrcat.lock` beside the catalog, and a running Lightroom process, since a crash
 can leave the lock behind.
+
+### ON1 Photo RAW browse cache — Build later, on a real installation
+
+Proposed in [#79](https://github.com/BootBlock/Deguffer/issues/79) as Tier 1. Forum reports put
+`%APPDATA%\ON1\ON1 Photo RAW <year>\PerfectBrowseCache` at many gigabytes, and one put its
+`WatchedContent` folder at about 335 GB. ON1's
+[2026 user guide](https://on1.clickhelp.co/resources/Storage/photo-raw-2026-user-guide.pdf) says the
+System tab's *Browse Cache* setting lets the user "empty the cache, move it to another location, or
+reset it". Three gaps stop it being built:
+
+- **§3: the cache is not only derived, so it is Tier 3 until shown otherwise.** The guide's
+  *Persistent Thumbnail Cache* says it "also stores user-added or adjusted metadata such as ratings,
+  labels, keywords, captions, rotation, and GPS data". Its *Embedding metadata* puts a raw file's
+  metadata in an XMP sidecar. A JPG's, TIFF's or PSD's is embedded when the image is edited, copied
+  for editing or sent to another program, through *Embed Metadata*, or as it is scanned where the
+  *Automatically Embed Metadata* option is on, and otherwise is not. A PNG cannot take embedded
+  metadata at all, and AI keywords are not embedded by default. So for some
+  photographs ON1's own store may hold the only copy of the user's ratings and keywords. Tier 2 needs
+  an installation to show that the `NDService` database, not the cache, holds that copy.
+- **§5.1: what *empty* keeps is unverified.** The preference's *empty* control is ON1's own eviction,
+  but nothing shows it keeps the metadata above. Name it to the user only once that is known.
+- **Where a moved cache is recorded was not found.** No source found names the preference file or
+  its key. A sweep of the default folder alone misses a moved cache, and a folder found elsewhere by
+  its name alone is unrecognised, so §5.2 makes it Tier 4. Issue #79 also warns that a user may move
+  the cache *into* a photo folder. Whether ON1 writes into the chosen folder itself or makes its own
+  folder inside it is unverified, so the configured location is a root: only children an
+  installation shows to be ON1's are ever targets, and everything else in it is Tier 4.
+
+**Survivors**, whatever the tier: `%APPDATA%\ON1` and each version folder are roots. Beside the cache
+sit `NDService`, which users' reports call the database of every edit and say ON1 does not support
+moving or backing up, and `PhotoSettingsCache`, which despite its name holds per-photo settings. The
+`.on1` sidecars, which issue #79 places beside the photographs, carry ON1's edits and metadata. The
+guide names `.on1` for metadata and `.on1meta` for edit information, though only as files its
+Lightroom migration exports. Neither is ever a target. A version folder for an uninstalled version
+is not orphaned cache either: its presets and database may be the only copy. **In use:** the guide installs each edition as
+`\Program Files\ON1\ON1 (app name)`, for example `ON1 Photo RAW 2025` and `ON1 Photo RAW MAX 2026`.
+A public project's launcher finds `ON1 Photo RAW 2026.exe` in its folder, and the MAX edition's
+executable and version folder names are unverified. MAX also runs as a plugin inside Photoshop,
+Lightroom and Affinity Photo, so a running host may be using the cache too.
 
 ### Packaged Electron apps — Build, as a general rule
 
@@ -890,7 +930,9 @@ Not a schedule: cost against value, given the machinery that exists.
 5. **Superseded JetBrains system directories** and **Vagrant `prune`**.
 6. **Electron, electron-builder, TypeScript, Yarn 1, Scoop, Conan, Bun, Deno** — one class each.
 7. **The `CACHEDIR.TAG` table** and **`.dart_tool`**.
-8. **Lightroom previews**, once its Adobe pages are read and a catalog is available to test against.
+8. **Lightroom previews**, once its Adobe pages are read and a catalog is available to test against,
+   and **the ON1 browse cache**, once an installation shows where a moved cache is recorded, what
+   ON1 writes inside it, and whether the cache or *empty* touches metadata kept nowhere else.
 9. **The Search index**, once `Reset` is measured.
 
 ## Open questions this survey raises
