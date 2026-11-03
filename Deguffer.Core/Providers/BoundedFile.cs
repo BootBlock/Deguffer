@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text;
 using Deguffer.Core.Safety;
 
@@ -54,24 +55,16 @@ internal static class BoundedFile
     {
         try
         {
+            // Unbuffered, because every read below goes straight into the buffer it returns, and a
+            // FileStream's own buffer would be a second allocation for each file.
             using var stream = new FileStream(
                 LongPath.Extended(path),
                 FileMode.Open,
                 FileAccess.Read,
-                FileShare.ReadWrite | FileShare.Delete);
+                FileShare.ReadWrite | FileShare.Delete,
+                bufferSize: 0);
 
-            // One byte past the limit is read so that a file of exactly the limit is accepted and one
-            // byte longer is not. The length Windows reports is not used, because the owning program
-            // may be writing the file while it is read.
-            var buffer = new byte[maximumBytes + 1];
-            var read = stream.ReadAtLeast(buffer, buffer.Length, throwOnEndOfStream: false);
-
-            if (read > maximumBytes)
-            {
-                return null;
-            }
-
-            return buffer.AsMemory(0, read);
+            return ReadVerbatim(stream, maximumBytes);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -80,4 +73,68 @@ internal static class BoundedFile
             return null;
         }
     }
+
+    /// <summary>
+    /// What remains of <paramref name="stream"/>, or null where that is more than
+    /// <paramref name="maximumBytes"/>. Separate from the path so that a test can hand it a stream
+    /// whose reported length is not what it holds.
+    /// </summary>
+    internal static ReadOnlyMemory<byte>? ReadVerbatim(Stream stream, int maximumBytes)
+    {
+        // One byte past the limit is read so that a file of exactly the limit is accepted and one
+        // byte longer is not.
+        var limit = maximumBytes + 1;
+
+        // The length Windows reports sizes the first buffer, but never bounds the read: the owning
+        // program may be writing the file while it is read, so the loop reads to the end or to the
+        // limit, whichever comes first, and what it read is what is judged. One byte over the
+        // reported length lets the read that finds the end land without growing the buffer. Sizing
+        // by the limit instead would zero up to 16 MB, on the large object heap, for a file of a few
+        // kilobytes.
+        var reported = stream.CanSeek ? Math.Max(stream.Length - stream.Position, 0) : 0;
+        var buffer = new byte[(int)Math.Min(reported + 1, limit)];
+        var read = 0;
+
+        while (true)
+        {
+            if (read == buffer.Length)
+            {
+                if (read == limit)
+                {
+                    break;
+                }
+
+                // Not pooled: some of these files hold a secret, which a rented array would carry
+                // to its next renter.
+                Array.Resize(ref buffer, (int)Math.Min(2L * buffer.Length, limit));
+            }
+
+            var count = stream.Read(buffer, read, buffer.Length - read);
+
+            if (count == 0)
+            {
+                break;
+            }
+
+            read += count;
+        }
+
+        // Statements, for the reason Read gives: a conditional expression would return an empty
+        // buffer for a file past the limit.
+        if (read > maximumBytes)
+        {
+            return null;
+        }
+
+        return buffer.AsMemory(0, read);
+    }
+
+    /// <summary>
+    /// A read-only stream over <paramref name="content"/>, for a parser that reads from a stream,
+    /// without copying what was read here a second time.
+    /// </summary>
+    public static MemoryStream AsStream(ReadOnlyMemory<byte> content) =>
+        MemoryMarshal.TryGetArray(content, out var segment)
+            ? new MemoryStream(segment.Array!, segment.Offset, segment.Count, writable: false)
+            : new MemoryStream(content.ToArray(), writable: false);
 }

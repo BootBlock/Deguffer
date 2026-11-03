@@ -191,7 +191,7 @@ public static partial class CaptureOneDocuments
 
         try
         {
-            using var stream = new MemoryStream(content.ToArray(), writable: false);
+            using var stream = BoundedFile.AsStream(content);
             using var reader = XmlReader.Create(stream, ReaderSettings);
 
             while (reader.Read())
