@@ -13,8 +13,10 @@ namespace Deguffer.Core.Providers;
 /// profile also keeps the one it had, which nothing reads unless the profile becomes unusable.
 ///
 /// <para><b>Tier 1, under the same rule as the shared cache.</b> The index is in
-/// <c>.nx\workspace-data</c>, and <see cref="NxCacheIndex"/> says why a cache an older Nx indexes is
-/// left alone: Nx 19 to 23.2 would report its tasks as restored and restore nothing.</para>
+/// <c>.nx\workspace-data</c> unless a variable moves it (<see cref="NxWorkspaceFolder.IndexIn"/>), and
+/// <see cref="NxCacheIndex"/> says why a cache an older Nx indexes is left alone: Nx 19 to 23.2 would
+/// report its tasks as restored and restore nothing. So is a cache whose index is not where it should
+/// be, because a variable set only in a shell can have moved it.</para>
 ///
 /// <para><b>The cache, never the folder.</b> <c>.nx</c> also holds the index and the daemon's logs, and
 /// the Nx wrapper's files, which a workspace commits (<see cref="NxWorkspaceFolder"/>). So this is its
@@ -174,32 +176,33 @@ public sealed class NxWorkspaceCacheProvider : CleanupProviderBase
         // each reason has its own sentence, as DotNetObjProvider counts them.
         var unrecognised = declined.Count;
 
-        var caches = new Dictionary<string, NxCacheFolder>(StringComparer.OrdinalIgnoreCase);
+        var cached = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var refused = new List<(string Path, string Reason)>();
 
         foreach (var folder in recognised)
         {
-            var verdict = NxCacheFolder.Examine(folder.Cache, folder.Index);
+            // A missing index is not read as no index here: see NxCacheIndex.AllowsRemoval.
+            var verdict = NxCacheFolder.Examine(folder.Cache, folder.IndexIn(Environment), absentIsEmpty: false);
 
             if (verdict.Declined is { } reason)
             {
                 refused.Add(reason);
             }
 
-            if (verdict.Folder is { } cache)
+            if (verdict.Cache is not null)
             {
-                caches[folder.Path] = cache;
+                cached.Add(folder.Path);
             }
         }
 
-        recognised.RemoveAll(folder => !caches.ContainsKey(folder.Path));
+        recognised.RemoveAll(folder => !cached.Contains(folder.Path));
 
         // Nx ignores its cache in every workspace it creates, so a cache git tracks a file in is
         // somebody's fixture. Asked of the cache, never the folder: the Nx wrapper's files beside it are
         // committed on purpose.
-        var git = await _tracked.FindTrackedAsync([.. caches.Values.Select(cache => cache.Path)], ct).ConfigureAwait(false);
+        var git = await _tracked.FindTrackedAsync([.. recognised.Select(folder => folder.Cache)], ct).ConfigureAwait(false);
 
-        foreach (var overruled in recognised.Where(folder => git.Tracked.Contains(caches[folder.Path].Path) || git.Unanswered.Contains(caches[folder.Path].Path)).ToList())
+        foreach (var overruled in recognised.Where(folder => git.Tracked.Contains(folder.Cache) || git.Unanswered.Contains(folder.Cache)).ToList())
         {
             recognised.Remove(overruled);
             declined.Add(overruled.Cache);
@@ -222,7 +225,7 @@ public sealed class NxWorkspaceCacheProvider : CleanupProviderBase
                     DirectoryAge.Of(folder.Cache, ct),
                     Facets: [new ItemFacet(WorkspaceFacet, folder.Name)],
                     Group: ApprovedRootHeading.For(ApprovedRoots, folder.Cache),
-                    UseCheck: cleared[folder.Path].StillUnused)),
+                    UseCheck: new NxIndexCheck(folder.IndexIn(Environment), absentIsEmpty: false, cleared[folder.Path].StillUnused))),
             ],
             keep,
             ct).ConfigureAwait(false);
@@ -243,6 +246,7 @@ public sealed class NxWorkspaceCacheProvider : CleanupProviderBase
                     (folder.Workspace, $"The Nx workspace {folder.Name}. Only the task cache in its .nx folder is removed."),
                     (Path.Combine(folder.Workspace, NxWorkspaceFolder.Manifest), "The workspace's Nx configuration, not a cache."),
                     (folder.Path, "Holds the task cache that is removed. The folder itself, and everything in it that is not the cache, stays."),
+                    (folder.IndexIn(Environment), "The workspace's Nx index, which holds its task history as well. The Nx that reads it treats a removed entry as a miss."),
                 }),
                 .. siblings.SelectMany(sibling => sibling.Kept),
                 .. refused,
@@ -277,9 +281,9 @@ public sealed class NxWorkspaceCacheProvider : CleanupProviderBase
     /// What the veto asks about a <c>.nx</c> folder in one reading of the machine: its workspace, and
     /// the databases of its index, read from the disk as they are now.
     /// </summary>
-    private static LiveTreeQuestion Questions(CancellationToken ct) =>
+    private LiveTreeQuestion Questions(CancellationToken ct) =>
         LiveTreeQuestion.ForLockFiles(candidate =>
-            NxCacheIndex.Read(Path.Combine(candidate.Path, NxWorkspaceFolder.IndexName)).Files);
+            NxCacheIndex.Read(new NxWorkspaceFolder(candidate.Path, candidate.Project).IndexIn(Environment)).Files);
 
     /// <summary>
     /// Everything in the <c>.nx</c> folder beside the cache, which §5.6 asserts survived: the index, the

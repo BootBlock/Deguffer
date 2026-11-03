@@ -217,6 +217,27 @@ public sealed class NxSharedCacheProviderTests : IDisposable
         Assert.False(Directory.Exists(idle.Cache));
     }
 
+    /// <summary>
+    /// An Nx 23.2 checkout of the same workspace can write a <c>-v3</c> index between the preview and
+    /// the clean and hold nothing open after, so the clean asks the version question again.
+    /// </summary>
+    [Fact]
+    public async Task AnOlderIndexWrittenAfterThePreviewKeepsTheCache()
+    {
+        var nx = Create(Workspace);
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([nx.Cache], plan.TargetedPaths);
+
+        NxCacheFixture.Write(Path.Combine(nx.Index, "4d1c7e0b-machine-v3.db"), "SQLite format 3 ");
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(nx.Entry), "the cache was removed under an older Nx's index");
+        Assert.Contains(result.Steps, step => step.Message.Contains("an older Nx reads", StringComparison.Ordinal));
+    }
+
     /// <summary>"Could not tell" is not "nothing is using it", so an answer that is not whole offers nothing.</summary>
     [Fact]
     public async Task NothingIsOfferedWhenWhetherAnythingIsUsingItCannotBeTold()

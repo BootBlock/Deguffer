@@ -125,7 +125,7 @@ remove one by any route.
 
 ## Storage
 
-Each of the 115 sources has its own provider, which knows what that location is and what sits next
+Each of the 117 sources has its own provider, which knows what that location is and what sits next
 to it. Rows for tools you do not have are hidden unless you ask the Storage page to show them. Build
 output and project caches, such as `node_modules`, `obj`, Rust's `target`, Python's `.tox` and
 `.pytest_cache` folders, and the caches in Visual Studio's `.vs` folders, are only looked for

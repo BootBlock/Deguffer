@@ -3,7 +3,7 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Providers;
 
 /// <summary>
-/// One folder Nx keeps a workspace's task cache in, recognised, with the index beside it.
+/// Whether a folder is one Nx keeps a workspace's task cache in, and may go.
 ///
 /// <para><b>The cache folder goes whole, as Nx's own reset removes it.</b> <c>nx reset --onlyCache</c>
 /// is <c>rmSync(cacheDir, { recursive: true, force: true })</c>, and the next Nx run makes the folder
@@ -18,10 +18,7 @@ namespace Deguffer.Core.Providers;
 /// <c>cache</c> without it was not opened by Nx. A name is not evidence here: <c>cache</c> is the most
 /// ordinary folder name there is.</para>
 /// </summary>
-/// <param name="Path">The cache folder, the one path removed.</param>
-/// <param name="Index">The folder holding the databases that index it, which must survive.</param>
-/// <param name="Databases">The database files in <paramref name="Index"/>, for the in-use check.</param>
-internal sealed record NxCacheFolder(string Path, string Index, IReadOnlyList<string> Databases)
+internal static class NxCacheFolder
 {
     /// <summary>The name Nx gives the cache folder, under <c>.nx</c> and under <c>~\.nx\&lt;id&gt;</c>.</summary>
     public const string Name = "cache";
@@ -32,9 +29,10 @@ internal sealed record NxCacheFolder(string Path, string Index, IReadOnlyList<st
     /// <summary>
     /// <paramref name="path"/> as an Nx cache whose index is in <paramref name="index"/>, or why it is
     /// not one. Neither where nothing is at <paramref name="path"/>, which is nothing to offer and
-    /// nothing to explain.
+    /// nothing to explain. <paramref name="absentIsEmpty"/> is
+    /// <see cref="NxCacheIndex.AllowsRemoval"/>'s.
     /// </summary>
-    public static NxCacheVerdict Examine(string path, string index)
+    public static NxCacheVerdict Examine(string path, string index, bool absentIsEmpty)
     {
         switch (LongPath.ProbeDirectory(path))
         {
@@ -62,27 +60,37 @@ internal sealed record NxCacheFolder(string Path, string Index, IReadOnlyList<st
 
         var databases = NxCacheIndex.Read(index);
 
+        if (databases.AllowsRemoval(absentIsEmpty))
+        {
+            return new NxCacheVerdict(path, null);
+        }
+
         return databases.Reading switch
         {
+            NxIndexReading.Absent => NxCacheVerdict.Declining(
+                path,
+                $"Its index is not in '{index}', so it may be somewhere Deguffer cannot see, kept by a version "
+                + "of Nx that would report a removed task as restored and restore nothing. It is left alone. "
+                + "Run 'nx reset' in the workspace to clear the cache and its index together."),
+
             NxIndexReading.Unknown => NxCacheVerdict.Declining(
                 path,
                 $"Deguffer could not read '{index}' to see which version of Nx keeps its index, so it is left alone."),
 
-            NxIndexReading.Older => NxCacheVerdict.Declining(
+            // Older, the one reading left once the gate has refused.
+            _ => NxCacheVerdict.Declining(
                 path,
                 $"'{index}' holds an index written by Nx 23.2 or earlier, which would report a removed task "
                 + "as restored from the cache and restore nothing, so it is left alone. Run 'nx reset' in "
                 + "the workspace to clear the cache and its index together."),
-
-            _ => new NxCacheVerdict(new NxCacheFolder(path, index, databases.Files), null),
         };
     }
 }
 
 /// <summary>What <see cref="NxCacheFolder.Examine"/> found: the cache, or why it is left alone.</summary>
-/// <param name="Folder">The recognised cache, or null.</param>
+/// <param name="Cache">The recognised cache folder, which may go, or null.</param>
 /// <param name="Declined">The folder left alone and why, or null where there was nothing to decline.</param>
-internal readonly record struct NxCacheVerdict(NxCacheFolder? Folder, (string Path, string Reason)? Declined)
+internal readonly record struct NxCacheVerdict(string? Cache, (string Path, string Reason)? Declined)
 {
     public static NxCacheVerdict Declining(string path, string reason) => new(null, (path, reason));
 }

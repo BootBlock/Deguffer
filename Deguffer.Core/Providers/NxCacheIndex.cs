@@ -6,7 +6,13 @@ namespace Deguffer.Core.Providers;
 /// <summary>What the folder beside an Nx cache says about which Nx reads the cache's index.</summary>
 internal enum NxIndexReading
 {
-    /// <summary>No database at all, so nothing names an entry in the cache by its hash.</summary>
+    /// <summary>
+    /// The folder is not there. Whether that means no index depends on whether anything can move the
+    /// index somewhere else: see <see cref="NxCacheIndex.AllowsRemoval"/>.
+    /// </summary>
+    Absent,
+
+    /// <summary>The folder holds no database, so nothing names an entry in the cache by its hash.</summary>
     None,
 
     /// <summary>Only databases an Nx that treats a missing entry as a miss reads.</summary>
@@ -58,7 +64,14 @@ internal sealed partial record NxCacheIndex(NxIndexReading Reading, IReadOnlyLis
     /// Whether every Nx that reads this index answers a removed entry as a miss, which is when the
     /// cache it indexes may go.
     /// </summary>
-    public bool AllowsRemoval => Reading is NxIndexReading.None or NxIndexReading.Current;
+    /// <param name="absentIsEmpty">
+    /// Whether a folder that is not there means no index. True only where nothing moves the index:
+    /// a workspace's index follows <c>NX_WORKSPACE_DATA_DIRECTORY</c>, which a shell can set where
+    /// Deguffer cannot see it, so a missing <c>workspace-data</c> may mean an index elsewhere.
+    /// </param>
+    public bool AllowsRemoval(bool absentIsEmpty) =>
+        Reading is NxIndexReading.None or NxIndexReading.Current
+        || (absentIsEmpty && Reading == NxIndexReading.Absent);
 
     /// <summary>Read the databases in <paramref name="folder"/>.</summary>
     public static NxCacheIndex Read(string folder)
@@ -66,7 +79,7 @@ internal sealed partial record NxCacheIndex(NxIndexReading Reading, IReadOnlyLis
         switch (LongPath.ProbeDirectory(folder))
         {
             case PathPresence.Absent:
-                return new NxCacheIndex(NxIndexReading.None, []);
+                return new NxCacheIndex(NxIndexReading.Absent, []);
 
             case PathPresence.Refused:
                 return new NxCacheIndex(NxIndexReading.Unknown, []);

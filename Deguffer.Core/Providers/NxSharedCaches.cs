@@ -27,6 +27,9 @@ internal static partial class NxSharedCaches
     /// <summary>Nx's per-user folder, <c>NX_HOME_TMP_DIR</c>.</summary>
     public static string Root(IUserEnvironment environment) => Path.Combine(environment.UserProfile, ".nx");
 
+    /// <summary>The folder holding the index of the cache in one workspace's folder.</summary>
+    public static string IndexOf(string workspaceFolder) => Path.Combine(workspaceFolder, IndexName);
+
     /// <summary>The workspace id a cache folder in <c>~\.nx</c> belongs to.</summary>
     public static string WorkspaceOf(string cache) => Path.GetFileName(Path.GetDirectoryName(cache)!);
 
@@ -61,14 +64,15 @@ internal static partial class NxSharedCaches
                 continue;
             }
 
-            var verdict = NxCacheFolder.Examine(Path.Combine(folder, NxCacheFolder.Name), Path.Combine(folder, IndexName));
+            // Nothing moves a shared index away from its cache, so a missing one is no index at all.
+            var verdict = NxCacheFolder.Examine(Path.Combine(folder, NxCacheFolder.Name), IndexOf(folder), absentIsEmpty: true);
 
             if (verdict.Declined is { } declined)
             {
                 examination.Decline(declined.Path, declined.Reason);
             }
 
-            if (verdict.Folder is not { } cache)
+            if (verdict.Cache is not { } cache)
             {
                 continue;
             }
@@ -103,8 +107,8 @@ internal static partial class NxSharedCaches
 /// <summary>What <see cref="NxSharedCaches.Examine"/> found in <c>~\.nx</c>.</summary>
 internal sealed class NxSharedCacheExamination
 {
-    /// <summary>The caches recognised, before the in-use check.</summary>
-    public List<NxCacheFolder> Caches { get; } = [];
+    /// <summary>The cache folders recognised, before the in-use check.</summary>
+    public List<string> Caches { get; } = [];
 
     /// <summary>Folders that are Nx's or look it and are left alone, with why. Each is a note too.</summary>
     public List<(string Path, string Reason)> Declined { get; } = [];

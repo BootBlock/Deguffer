@@ -153,7 +153,7 @@ public sealed class NxSharedCacheProvider : CleanupProviderBase
                         $"Nx task cache for workspace {workspace}",
                         DirectoryAge.Of(cleared.Path, ct),
                         Facets: [new ItemFacet(WorkspaceFacet, workspace)],
-                        UseCheck: cleared.StillUnused);
+                        UseCheck: new NxIndexCheck(NxSharedCaches.IndexOf(cleared.Project), absentIsEmpty: true, cleared.StillUnused));
                 }),
             ],
             keep,
@@ -191,7 +191,7 @@ public sealed class NxSharedCacheProvider : CleanupProviderBase
             ProtectedPaths = Protect(
             [
                 (root, RootReason),
-                .. examination.Caches.Select(cache => (Path.GetDirectoryName(cache.Path)!, WorkspaceReason)),
+                .. examination.Caches.Select(cache => (Path.GetDirectoryName(cache)!, WorkspaceReason)),
                 .. examination.Kept,
                 .. examination.Declined,
                 .. live.Survivors,
@@ -218,8 +218,7 @@ public sealed class NxSharedCacheProvider : CleanupProviderBase
     private LiveTreeVetoResult Veto(NxSharedCacheExamination examination, CancellationToken ct) =>
         LiveTreeVeto.Apply(
             _liveTrees,
-            [.. examination.Caches.Select(cache => new RecognisedBuildDirectory(cache.Path, Path.GetDirectoryName(cache.Path)!))],
-            _ => LiveTreeQuestion.ForLockFiles(candidate =>
-                NxCacheIndex.Read(Path.Combine(candidate.Project, NxSharedCaches.IndexName)).Files),
+            [.. examination.Caches.Select(cache => new RecognisedBuildDirectory(cache, Path.GetDirectoryName(cache)!))],
+            _ => LiveTreeQuestion.ForLockFiles(candidate => NxCacheIndex.Read(NxSharedCaches.IndexOf(candidate.Project)).Files),
             ct);
 }

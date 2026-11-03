@@ -27,7 +27,32 @@ internal sealed record NxWorkspaceFolder(string Path, string Workspace)
 
     public string Cache => System.IO.Path.Combine(Path, NxCacheFolder.Name);
 
-    public string Index => System.IO.Path.Combine(Path, IndexName);
+    /// <summary>
+    /// Where Nx keeps this workspace's index: <c>NX_WORKSPACE_DATA_DIRECTORY</c>, else
+    /// <c>NX_PROJECT_GRAPH_CACHE_DIRECTORY</c>, resolved against the workspace when relative, else
+    /// <c>.nx\workspace-data</c>, as <c>workspaceDataDirectoryForWorkspace</c> in
+    /// <c>packages/nx/src/utils/cache-directory.ts</c> resolves it. Read from the user's environment,
+    /// which is what a shell Nx runs in starts with. A variable set only inside one shell is invisible
+    /// here, which is why a missing index is never read as no index (see
+    /// <see cref="NxCacheIndex.AllowsRemoval"/>).
+    /// </summary>
+    public string IndexIn(IUserEnvironment environment)
+    {
+        if ((environment.GetEnvironmentVariable(DataVariable) ?? environment.GetEnvironmentVariable(GraphVariable)) is not { } moved)
+        {
+            return System.IO.Path.Combine(Path, IndexName);
+        }
+
+        return System.IO.Path.IsPathFullyQualified(moved)
+            ? System.IO.Path.GetFullPath(moved)
+            : System.IO.Path.GetFullPath(moved, Workspace);
+    }
+
+    /// <summary>The variable Nx reads first for where a workspace's index goes.</summary>
+    public const string DataVariable = "NX_WORKSPACE_DATA_DIRECTORY";
+
+    /// <summary>The older name Nx still reads when <see cref="DataVariable"/> is unset.</summary>
+    public const string GraphVariable = "NX_PROJECT_GRAPH_CACHE_DIRECTORY";
 
     /// <summary>
     /// <paramref name="candidate"/> as a workspace's <c>.nx</c> folder, or null where it is not one: a
