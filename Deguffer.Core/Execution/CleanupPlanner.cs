@@ -220,9 +220,11 @@ public sealed class CleanupPlanner
     {
         // Every row that offers an entry of a temporary folder under the name of the tool that wrote
         // it, built first so the "Temporary files" row can leave those entries to them.
-        // They share one listing of each folder they examine, on the reasoning of the discoveries above:
-        // each starts from the temporary folders themselves, which hold tens of thousands of entries on
-        // a developer's machine, and unshared listings would read them in full once per row per pass.
+        // They share one listing of each folder they examine, on the reasoning of the shared discoveries
+        // CreateDefault builds: the caches, installer downloads and logs rows each start from the
+        // temporary folders themselves, which hold tens of thousands of entries on a developer's machine,
+        // and unshared listings would read them in full once per row per pass. The Claude Code row reads
+        // only a folder inside them, and shares the listing so that every row of this kind reads alike.
         var tempListings = new TempFolderListings();
         var nuget = new NuGetCacheProvider(environment, scanner: scanner);
         var toolCaches = new TempToolCacheProvider(

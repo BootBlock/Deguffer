@@ -23,10 +23,10 @@ public readonly record struct TempFolderEntry(
 /// One listing of each folder the temporary-folder rows examine, shared by every one of them for a
 /// planning pass.
 ///
-/// <para><b>Why shared.</b> Every <see cref="TempMarkerProviderBase"/> row starts from this account's
+/// <para><b>Why shared.</b> Three <see cref="TempMarkerProviderBase"/> rows start from this account's
 /// temporary folders themselves, and a developer's temporary folder holds tens of thousands of
-/// entries that build tools, installers and test runners left there. Unshared, each row lists it in
-/// full. Shared, the first row to ask lists it and the rest read that listing, so the rows also
+/// entries that build tools, installers and test runners left there. Unshared, each of the three lists
+/// it in full. Shared, the first row to ask lists it and the rest read that listing, so the rows also
 /// decide on one view of the folder rather than on readings taken moments apart. Each row keeps its
 /// own markers, owners and rules: only the listing is common.</para>
 ///
