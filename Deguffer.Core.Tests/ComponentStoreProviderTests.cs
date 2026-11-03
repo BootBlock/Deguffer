@@ -126,7 +126,7 @@ public sealed class ComponentStoreProviderTests : IDisposable
         Assert.Equal($"up to {FreeSpace.Format(3 * Gigabyte)}", FreeSpace.Format(step.Estimated));
         Assert.True(step.RequiresElevation);
         Assert.True(step.HeldWhileUpdating);
-        Assert.IsType<ComponentStoreAnalysis>(step.MeasuredBy);
+        Assert.IsType<ComponentStoreMeasurement>(step.MeasuredBy);
         Assert.Equal(SafetyTier.RegenerableWithCost, plan.Tier);
 
         // Only the analysis ran while planning, and it went to the same DISM.
@@ -364,7 +364,8 @@ public sealed class ComponentStoreProviderTests : IDisposable
     public async Task TheServicingStackTheCleanupWokeDoesNotHoldTheNextScan()
     {
         var inspector = FakeProcessInspector.NothingRunning;
-        Analyses(_ => inspector.WithRunning("TiWorker", DateTimeOffset.UtcNow), 21 * Gigabyte, 21 * Gigabyte, 19 * Gigabyte);
+        // The next scan finds the store changed since the clean, or the clean would have settled the row.
+        Analyses(_ => inspector.WithRunning("TiWorker", DateTimeOffset.UtcNow), 21 * Gigabyte, 21 * Gigabyte, 19 * Gigabyte, 20 * Gigabyte);
 
         var provider = Cleanup(inspector, new OwnServicingCalls());
         Assert.True(Assert.Single((await provider.ExecuteAsync(await provider.PlanAsync())).Steps).Succeeded);
@@ -549,6 +550,97 @@ public sealed class ComponentStoreProviderTests : IDisposable
         var step = Assert.Single(result.Steps);
         Assert.Equal(0, step.BytesReclaimed);
         Assert.Contains("before the command, so nothing is counted as reclaimed", step.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A cleanup Deguffer ran to its end on the store as it is now has nothing left to do. DISM goes on
+    /// recommending it on a Windows whose checkpoint update it counts as reclaimable, and the row offered
+    /// the same gigabytes at every scan while every clean freed nothing. The record outlives the
+    /// session, so a provider built afresh, as the next start of Deguffer builds one, reads it.
+    /// </summary>
+    [Fact]
+    public async Task ACleanupThatRanToItsEndOnTheStoreAsItIsNowIsNotOfferedAgain()
+    {
+        Analyses(null, 21 * Gigabyte);
+
+        var first = Cleanup();
+        var cleaned = Assert.Single((await first.ExecuteAsync(await first.PlanAsync())).Steps);
+        Assert.True(cleaned.Succeeded, cleaned.Message);
+        Assert.Equal(0, cleaned.BytesReclaimed);
+
+        var next = await Cleanup().PlanAsync();
+
+        Assert.Empty(next.Steps);
+        Assert.False(next.WasNotExamined);
+        var settled = Assert.Single(next.Notes, n => n.Message.Contains("already ran to its end", StringComparison.Ordinal)).Message;
+        Assert.Contains("Windows still counts 7 superseded packages it could remove, and its cleanup keeps them.", settled, StringComparison.Ordinal);
+        Assert.Contains(next.Notes, n => n.Message.StartsWith("Explorer counts", StringComparison.Ordinal));
+        Assert.Single(_runner.Invocations, call => IsCleanup(call.Arguments));
+    }
+
+    /// <summary>Anything that changes the store, such as an update installed, offers the cleanup again.</summary>
+    [Fact]
+    public async Task AStoreThatChangedSinceTheCleanupIsOfferedAgain()
+    {
+        Analyses(null, 21 * Gigabyte, 21 * Gigabyte, 21 * Gigabyte, 22 * Gigabyte);
+
+        var first = Cleanup();
+        Assert.True(Assert.Single((await first.ExecuteAsync(await first.PlanAsync())).Steps).Succeeded);
+
+        Assert.IsType<RunCommandStep>(Assert.Single((await Cleanup().PlanAsync()).Steps));
+    }
+
+    /// <summary>
+    /// A cleanup that failed, or that was cancelled before Windows was asked what it left, is no evidence
+    /// that the store has nothing left to give.
+    /// </summary>
+    [Fact]
+    public async Task ACleanupThatFailedOrWasCancelledSettlesNothing()
+    {
+        _runner.Replying(Dism, arguments => IsAnalysis(arguments)
+            ? new CommandOutcome(0, Report(21 * Gigabyte), string.Empty)
+            : new CommandOutcome(unchecked((int)0x800F0806), "Error: 0x800f0806", string.Empty));
+
+        var failing = Cleanup();
+        Assert.False(Assert.Single((await failing.ExecuteAsync(await failing.PlanAsync())).Steps).Succeeded);
+        Assert.Single((await Cleanup().PlanAsync()).Steps);
+
+        using var cts = new CancellationTokenSource();
+        Analyses(_ => cts.Cancel(), 21 * Gigabyte);
+
+        var cancelled = Cleanup();
+        await cancelled.ExecuteAsync(await cancelled.PlanAsync(), ct: cts.Token);
+        Assert.Single((await Cleanup().PlanAsync()).Steps);
+    }
+
+    /// <summary>
+    /// The reset removes everything the cleanup removes, so a reset that ran to its end settles the
+    /// cleanup's row as well as its own, although the cleanup itself never ran.
+    /// </summary>
+    [Fact]
+    public async Task AResetThatRanToItsEndSettlesTheCleanupToo()
+    {
+        Analyses(null, 21 * Gigabyte);
+
+        var reset = Reset();
+        await reset.ExecuteAsync(await reset.PlanAsync());
+
+        Assert.DoesNotContain(_runner.Invocations, call => call.Arguments.EndsWith("/StartComponentCleanup", StringComparison.Ordinal));
+        Assert.Empty((await Reset().PlanAsync()).Steps);
+        Assert.Empty((await Cleanup().PlanAsync()).Steps);
+    }
+
+    /// <summary>The cleanup removes less than the reset, so it settles only its own row.</summary>
+    [Fact]
+    public async Task ACleanupThatRanToItsEndLeavesTheResetOffered()
+    {
+        Analyses(null, 21 * Gigabyte);
+
+        var cleanup = Cleanup();
+        await cleanup.ExecuteAsync(await cleanup.PlanAsync());
+
+        Assert.Empty((await Cleanup().PlanAsync()).Steps);
+        Assert.Single((await Reset().PlanAsync()).Steps);
     }
 
     /// <summary>
