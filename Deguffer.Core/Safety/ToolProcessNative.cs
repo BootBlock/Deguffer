@@ -8,6 +8,7 @@ internal static partial class ToolProcessNative
 {
     internal const uint ExtendedStartupInfoPresent = 0x00080000;
     internal const uint CreateNoWindow = 0x08000000;
+    internal const uint CreateUnicodeEnvironment = 0x00000400;
     internal const int StartfUseStdHandles = 0x00000100;
 
     internal const int JobObjectBasicAccountingInformation = 1;

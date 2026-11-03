@@ -77,7 +77,7 @@ public sealed class CloudFiles : ICloudFiles
 
     /// <summary>
     /// <para><b>Placeholders are exposed for the listing and for nothing else.</b> Windows disguises a
-    /// placeholder as an ordinary file to every process but the sync app connected to its root, so
+    /// placeholder as an ordinary file to every process that is connected to no sync root, so
     /// the listing Deguffer is given carries neither the reparse attribute nor the tag, and every
     /// file in a OneDrive folder read as one that is no placeholder at all. The mode is the calling
     /// thread's, set around each call that lists and put back straight after, so no other file

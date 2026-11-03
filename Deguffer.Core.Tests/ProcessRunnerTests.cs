@@ -41,6 +41,59 @@ public sealed class ProcessRunnerTests : IDisposable
         Assert.Equal(folder, outcome.StandardOutput.Trim(), StringComparer.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// A query started with an environment reads that one and nothing of Deguffer's own, which is what
+    /// lets it stand for a tool the user starts now.
+    /// </summary>
+    [Fact]
+    public async Task AProgramStartedWithAnEnvironmentReadsThatOneAndNotDegufferOwn()
+    {
+        // One of Deguffer's own that cmd.exe does not make for itself, as it makes PROMPT.
+        const string own = "USERPROFILE";
+        Assert.NotNull(Environment.GetEnvironmentVariable(own));
+
+        var environment = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["SystemRoot"] = Environment.GetEnvironmentVariable("SystemRoot")!,
+            ["DEGUFFER_STARTED_WITH"] = "given",
+        };
+
+        var outcome = await new ProcessRunner(Path.Combine(_temp.Path, "tools"))
+            .RunAsync(Cmd, "/d /c set", ToolRun.Query.StartedWith(environment), CancellationToken.None);
+
+        Assert.True(outcome.Succeeded, outcome.Message);
+
+        var names = outcome.StandardOutput
+            .Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line[..line.IndexOf('=', 1)])
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        Assert.Contains("DEGUFFER_STARTED_WITH=given", outcome.StandardOutput, StringComparison.Ordinal);
+        Assert.DoesNotContain(own, names);
+    }
+
+    /// <summary>
+    /// An environment holding a variable Windows cannot hand on whole is not passed on in part: the
+    /// program is not started.
+    /// </summary>
+    [Fact]
+    public async Task AProgramIsNotStartedWithAnEnvironmentItCannotBeGivenWhole()
+    {
+        var marker = Path.Combine(_temp.Path, "ran");
+        var environment = new Dictionary<string, string>
+        {
+            ["SystemRoot"] = Environment.GetEnvironmentVariable("SystemRoot")!,
+            ["ARDUINO_DIRECTORIES_DOWNLOADS"] = "C:\\staging" + '\0' + "ARDUINO_DIRECTORIES_DATA=C:\\elsewhere",
+        };
+
+        var outcome = await new ProcessRunner(Path.Combine(_temp.Path, "tools"))
+            .RunAsync(Cmd, $"/d /c echo ran> \"{marker}\"", ToolRun.Query.StartedWith(environment), CancellationToken.None);
+
+        Assert.Equal(-1, outcome.ExitCode);
+        Assert.Contains("ARDUINO_DIRECTORIES_DOWNLOADS", outcome.Message, StringComparison.Ordinal);
+        Assert.False(File.Exists(marker), "The program ran with an environment it could not be given whole.");
+    }
+
     [Fact]
     public async Task ABatchShimRunsInTheRunnersFolderToo()
     {

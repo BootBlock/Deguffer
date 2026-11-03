@@ -480,4 +480,51 @@ public sealed class EnvironmentBlockTests
 
         Assert.Equal($@"{System32};C:\Users\testuser\bin;D:\extra", refreshed.Value("TOOLKIT"));
     }
+
+    /// <summary>
+    /// A refresh rewrites the command search from the directories it searches, so the search alone
+    /// differs on an unchanged machine. Read as a change, it would have every caller ask its tools twice
+    /// on every pass.
+    /// </summary>
+    [Fact]
+    public void AMachineThatChangedOnlyItsCommandSearchReadsTheSame()
+    {
+        var startup = Started(
+            process: Variables(("Path", System32 + ";"), ("PATHEXT", ".EXE"), ("ARDUINO_DIRECTORIES_DATA", @"D:\arduino")),
+            machine: Expandable(("Path", System32), ("ARDUINO_DIRECTORIES_DATA", @"D:\arduino")));
+
+        var refreshed = startup.Refresh(
+            Expandable(("Path", System32), ("ARDUINO_DIRECTORIES_DATA", @"D:\arduino")),
+            Expandable(("Path", @"C:\Users\testuser\bin"), ("PATHEXT", ".EXE;.CMD")));
+
+        Assert.False(refreshed.ReadsDifferentlyFrom(startup));
+    }
+
+    /// <summary>
+    /// A variable the machine set, changed or dropped after start-up reads differently, in either
+    /// direction of the comparison, and a dropped one too: a dropped setting sends a tool back to its
+    /// default folder.
+    /// </summary>
+    [Theory]
+    [InlineData("set")]
+    [InlineData("changed")]
+    [InlineData("dropped")]
+    public void AVariableTheMachineSetChangedOrDroppedReadsDifferently(string how)
+    {
+        var startup = Started(
+            process: Variables(("Path", System32), ("ARDUINO_DIRECTORIES_DATA", @"D:\arduino")),
+            machine: Expandable(("Path", System32), ("ARDUINO_DIRECTORIES_DATA", @"D:\arduino")));
+
+        var machine = how switch
+        {
+            "set" => Expandable(("Path", System32), ("ARDUINO_DIRECTORIES_DATA", @"D:\arduino"), ("ARDUINO_DIRECTORIES_USER", @"D:\sketches")),
+            "changed" => Expandable(("Path", System32), ("ARDUINO_DIRECTORIES_DATA", @"E:\arduino")),
+            _ => Expandable(("Path", System32)),
+        };
+
+        var refreshed = startup.Refresh(machine, Expandable());
+
+        Assert.True(refreshed.ReadsDifferentlyFrom(startup));
+        Assert.True(startup.ReadsDifferentlyFrom(refreshed));
+    }
 }

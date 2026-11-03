@@ -38,7 +38,7 @@ largest files inside it:
 
 Besides Settings and About, Deguffer has six pages:
 
-- [Storage](#storage) checks 116 sources of waste, from package-manager and browser caches to
+- [Storage](#storage) checks 120 sources of waste, from package-manager and browser caches to
   `Windows.old` and old restore points, and puts each one in a [safety tier](#safety-tiers). You
   choose what goes, and when the clean has finished Deguffer checks that everything it said it would
   leave alone is still there.
@@ -125,7 +125,7 @@ remove one by any route.
 
 ## Storage
 
-Each of the 116 sources has its own provider, which knows what that location is and what sits next
+Each of the 120 sources has its own provider, which knows what that location is and what sits next
 to it. Rows for tools you do not have are hidden unless you ask the Storage page to show them. Build
 output and project caches, such as `node_modules`, `obj`, Rust's `target`, Python's `.tox` and
 `.pytest_cache` folders, and the caches in Visual Studio's `.vs` folders, are only looked for
@@ -159,6 +159,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | Deno cache | By path, never with `deno clean`, which also deletes what Deno programs saved and your REPL history; left alone while Deno is running. Researched |
 | Electron downloads | The runtime zips Electron's installer keeps, one folder per version; never the layouts older installers left next to them |
 | TypeScript typings cache | One folder per TypeScript version; never one that a running program is working in |
+| Nx shared task caches | The `cache` folder in each workspace's folder in `%USERPROFILE%\.nx`, only where Nx's own `terminalOutputs` folder is inside and the Nx that reads its index is 23.3 or later; never the index, `.nx` itself, or a cache whose index Nx has open. Researched |
 | ccache compiler cache | Cleared with `ccache --clear`, which keeps its settings. Researched |
 | sccache compiler cache | sccache's server is stopped first; never its settings. Researched |
 | Debugger symbol cache | The symbol files and programs that debuggers downloaded into a store that only Microsoft's public symbol servers fill, as `_NT_SYMBOL_PATH` names it; never the store's markers or anything else in it, a store that SymStore built, or anything while a debugger that writes to the store is running |
@@ -166,10 +167,12 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | pip package cache | |
 | uv package cache | |
 | Poetry package cache | `poetry cache clear` for each repository; never its `virtualenvs`. Researched |
+| pipenv package cache | `pip cache purge` pointed at pipenv's own cache for the part in pip's format, and pipenv's resolver cache by path; never `pipenv --clear`, which also deletes pip's whole cache, or anything else in the folder. Researched |
 | pre-commit hook environments | Cleared with `pre-commit gc`, which keeps the hooks a project still uses; never `pre-commit clean`, which also deletes the unstaged changes pre-commit stashed during a commit. Researched |
 | pytest caches | `.pytest_cache` folders under your own source folders, only where pytest's own cache tag is inside and a pytest settings file is next to it. Researched |
 | mypy caches | `.mypy_cache` folders under your own source folders, only where mypy's own cache tag is inside and a mypy settings file is next to it. Researched |
 | ruff caches | `.ruff_cache` folders under your own source folders, only where ruff's own cache tag and `.gitignore` are inside and a ruff settings file is next to it. Researched |
+| Nx workspace task caches | `.nx\cache` beside an `nx.json` under your own source folders, only where Nx's own `terminalOutputs` folder is inside and the Nx that reads its index is 23.3 or later; never the rest of `.nx`, and nothing while Nx is running in the workspace. Researched |
 | .NET intermediate build output | `obj` folders under your own source folders |
 | Visual Studio solution caches | Inside the `.vs` folder beside a solution under your own source folders: the design-time build and project evaluation caches, the Find in Files index, and the C++ browsing database and precompiled headers, each only where the files inside it are the ones Visual Studio writes; never Copilot conversations or snapshots, solution options or window layouts, and nothing while the solution is open |
 | Dart analysis server cache | |
@@ -210,6 +213,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | Chromium offline site storage | What sites' service workers stored so that they work offline, in the same browsers and applications as the Chromium caches row; a web application that worked offline will not do so again until it is next opened online |
 | vcpkg build caches | Researched |
 | PlatformIO cache and unused packages | PlatformIO's own prune decides which installed packages are no longer needed |
+| STM32Cube firmware package downloads | The zip of each STM32 firmware package that STM32CubeMX or STM32CubeIDE has already unpacked beside it, in the default repository and the one STM32CubeMX's Updater Settings name, one zip at a time; never a package folder, `Packs`, a zip whose package is not there, a repository on another computer's disk, or anything while either tool is running. The next patch to that package needs the zip again, which is expected to mean downloading it. Researched |
 | Affinity machine-learning models | The `modelcache` next to your asset library, never the version folder that contains both |
 | DaVinci Resolve render cache | Each project's render files in a `CacheClip` folder at the root of a drive or in your Videos folder; never optimised media, proxies, backups or recordings, and nothing while Resolve is running. Resolve renders them again only while your media is connected. Researched |
 | After Effects disk cache | Each version's cache named for this computer, only in the folder that After Effects' own preferences name; never anything next to it or above it, and nothing while After Effects is running. After Effects renders the frames again as you preview. Researched |

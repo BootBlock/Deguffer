@@ -19,6 +19,11 @@ namespace Deguffer.Testing;
 /// <c>DegufferTests!</c>, which no real sync app uses, and <see cref="Dispose"/> disconnects before it
 /// unregisters, because Windows refuses to unregister a root that is still connected. A host killed
 /// before then leaves the registration for <see cref="ScratchSyncRoots"/> to collect.</para>
+///
+/// <para><b>One test at a time.</b> Windows shows every placeholder undisguised to a process connected
+/// to any sync root, not only to the one the placeholder is under, so a root another test has
+/// connected changes what this one sees after <see cref="Disconnect"/>. Every test class that makes
+/// one belongs to the <c>Scratch sync roots</c> test collection, which runs them one after another.</para>
 /// </summary>
 public sealed class ScratchSyncRoot : IDisposable
 {
@@ -34,6 +39,9 @@ public sealed class ScratchSyncRoot : IDisposable
     private const int CreateMarkInSync = 0x0002;
     private const uint CallbackTypeNone = 0xFFFF_FFFF;
     private const uint CallbackTypeFetchData = 0;
+
+    /// <summary>How many scratch roots this process is connected to as their sync app.</summary>
+    private static int _connected;
 
     private readonly CfCallback _onFetch;
     private long _connection;
@@ -173,25 +181,32 @@ public sealed class ScratchSyncRoot : IDisposable
     /// Stop being the sync app, as closing it would, and so see its placeholders as every other process
     /// does.
     ///
-    /// <para>Windows disguises a placeholder as an ordinary file to every process but the one connected
-    /// to its root, and a connected process sees it undisguised whatever its thread asks for, as a probe
+    /// <para>Windows disguises a placeholder as an ordinary file to every process connected to no sync
+    /// root, and a connected process sees it undisguised whatever its thread asks for, as a probe
     /// showed. Deguffer is never the sync app, so a test of what Deguffer's own calls see disconnects
     /// first. The placeholders keep every state they had.</para>
+    ///
+    /// <para>That view needs every other root of this process disconnected too, because Windows
+    /// exposes placeholders to a process connected to any root. Disconnecting while another is still
+    /// connected throws, rather than hand a test the sync app's view under Deguffer's name.</para>
     /// </summary>
+    /// <exception cref="InvalidOperationException">Another scratch root of this process is connected.</exception>
     public void Disconnect()
     {
-        if (_connection != 0)
+        if (_connection != 0 && Volatile.Read(ref _connected) > 1)
         {
-            Marshal.ThrowExceptionForHR(CfDisconnectSyncRoot(_connection));
-            _connection = 0;
+            throw new InvalidOperationException(
+                "Another scratch sync root of this process is still connected, so this process would go on seeing every placeholder undisguised.");
         }
+
+        Release();
     }
 
     public void Dispose()
     {
         try
         {
-            Disconnect();
+            Release();
         }
         finally
         {
@@ -207,6 +222,18 @@ public sealed class ScratchSyncRoot : IDisposable
             new CallbackRegistration { Type = CallbackTypeNone },
         };
         Marshal.ThrowExceptionForHR(CfConnectSyncRoot(Path, callbacks, 0, 0, out _connection));
+        Interlocked.Increment(ref _connected);
+    }
+
+    /// <summary>End the connection, if there is one, whatever else this process is connected to.</summary>
+    private void Release()
+    {
+        if (_connection != 0)
+        {
+            Marshal.ThrowExceptionForHR(CfDisconnectSyncRoot(_connection));
+            _connection = 0;
+            Interlocked.Decrement(ref _connected);
+        }
     }
 
     private static void Convert(string path)

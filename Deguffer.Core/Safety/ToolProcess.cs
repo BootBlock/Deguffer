@@ -63,8 +63,13 @@ internal sealed class ToolProcess : IDisposable
     /// </summary>
     /// <param name="applicationName">The program, by full path, so Windows searches nowhere for it.</param>
     /// <param name="commandLine">The whole command line, the program's own name first.</param>
+    /// <param name="environment">
+    /// The environment block as <see cref="ToolEnvironmentText.Encode"/> writes it, or null for this
+    /// process's own.
+    /// </param>
     /// <exception cref="Win32Exception">Windows would not start it.</exception>
-    public static ToolProcess Start(string applicationName, string commandLine, string workingDirectory, IReadOnlyList<ToolJob> jobs)
+    public static ToolProcess Start(
+        string applicationName, string commandLine, string workingDirectory, IReadOnlyList<ToolJob> jobs, string? environment)
     {
         var output = new AnonymousPipeServerStream(PipeDirection.In, HandleInheritability.Inheritable);
         var error = new AnonymousPipeServerStream(PipeDirection.In, HandleInheritability.Inheritable);
@@ -77,7 +82,8 @@ internal sealed class ToolProcess : IDisposable
             // than a path, so LongPath has nothing to do here.
             using var input = File.OpenHandle(@"\\.\NUL", FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Inheritable);
 
-            var process = Create(applicationName, commandLine, workingDirectory, jobs, input, output.ClientSafePipeHandle, error.ClientSafePipeHandle);
+            var process = Create(
+                applicationName, commandLine, workingDirectory, jobs, environment, input, output.ClientSafePipeHandle, error.ClientSafePipeHandle);
 
             // The child has its own copies now. Kept here, they would hold the outputs open after the
             // child had closed them, and reading them would never end.
@@ -126,6 +132,7 @@ internal sealed class ToolProcess : IDisposable
         string commandLine,
         string workingDirectory,
         IReadOnlyList<ToolJob> jobs,
+        string? environment,
         SafeFileHandle input,
         SafePipeHandle output,
         SafePipeHandle error)
@@ -178,6 +185,7 @@ internal sealed class ToolProcess : IDisposable
             var line = (commandLine + '\0').ToCharArray();
 
             fixed (char* writable = line)
+            fixed (char* variables = environment)
             {
                 ThrowIfFailed(ToolProcessNative.CreateProcess(
                     applicationName,
@@ -185,8 +193,9 @@ internal sealed class ToolProcess : IDisposable
                     0,
                     0,
                     inheritHandles: true,
-                    ToolProcessNative.ExtendedStartupInfoPresent | ToolProcessNative.CreateNoWindow,
-                    0,
+                    ToolProcessNative.ExtendedStartupInfoPresent | ToolProcessNative.CreateNoWindow
+                        | (environment is null ? 0 : ToolProcessNative.CreateUnicodeEnvironment),
+                    (nint)variables,
                     workingDirectory,
                     startup,
                     out var started));

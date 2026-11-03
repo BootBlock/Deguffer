@@ -15,6 +15,7 @@ namespace Deguffer.Core.Tests;
 /// test process running beside this one may have a root it has disconnected, and only the margin
 /// keeps that one out of a sweep's reach.</para>
 /// </summary>
+[Collection(ScratchSyncRootTests.Collection)]
 public sealed class ScratchSyncRootsTests : IDisposable
 {
     private static readonly TimeSpan OlderThan = TimeSpan.FromHours(1);

@@ -165,6 +165,35 @@ public interface IUserEnvironment
     string? GetToolEnvironmentVariable(string name);
 
     /// <summary>
+    /// Every variable a tool the user starts now is given, as <see cref="GetEnvironmentVariable"/>
+    /// reads them, or null where a tool Deguffer starts reads every variable the same way
+    /// (<see cref="GetToolEnvironmentVariable"/>), apart from the command search.
+    ///
+    /// <para>Exists because some tools work out their folders from rules nobody here should copy, so
+    /// the only way to learn where one the user starts now keeps them is to start it with the
+    /// environment that tool would have (<see cref="ToolRun.StartedWith"/>). Null in the ordinary case,
+    /// so a caller asks a second time only where the answer can differ.</para>
+    /// </summary>
+    IReadOnlyDictionary<string, string>? ChangedEnvironment { get; }
+
+    /// <summary>
+    /// Every variable a tool the user starts now is given, as <see cref="GetEnvironmentVariable"/>
+    /// reads them, changed since Deguffer started or not: what a later look at the machine is compared
+    /// with (<see cref="ReadEnvironmentNow"/>).
+    /// </summary>
+    IReadOnlyDictionary<string, string> CurrentEnvironment { get; }
+
+    /// <summary>
+    /// <see cref="CurrentEnvironment"/> as the machine stands at this moment, read afresh and kept
+    /// nowhere, so what the planning pass read is left as it was.
+    ///
+    /// <para>Exists for a check made after the preview, immediately before a command runs. Nothing
+    /// reads the machine again between planning and the clean, so <see cref="CurrentEnvironment"/>
+    /// still describes the machine as it was when the plan was made.</para>
+    /// </summary>
+    IReadOnlyDictionary<string, string> ReadEnvironmentNow();
+
+    /// <summary>
     /// Read a string value from under <c>HKEY_CURRENT_USER</c>, or null when the key, the value or
     /// the permission to read it is missing.
     ///
@@ -432,6 +461,17 @@ public sealed partial class UserEnvironment : IUserEnvironment
 
         return System.Environment.GetEnvironmentVariable(name);
     }
+
+    /// <summary>
+    /// Compared with the start-up block, which holds this process's own variables: those are what
+    /// <see cref="GetToolEnvironmentVariable"/> reads and what <see cref="ProcessRunner"/> hands on.
+    /// </summary>
+    public IReadOnlyDictionary<string, string>? ChangedEnvironment =>
+        Block is var current && current.ReadsDifferentlyFrom(_startup) ? current.Variables : null;
+
+    public IReadOnlyDictionary<string, string> CurrentEnvironment => Block.Variables;
+
+    public IReadOnlyDictionary<string, string> ReadEnvironmentNow() => _startup.Refresh(_readMachine(), _readUser()).Variables;
 
     /// <summary>
     /// Not memoised, so no answer here can outlive <see cref="Invalidate"/>. A caller that needs one
