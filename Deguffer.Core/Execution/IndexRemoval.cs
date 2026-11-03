@@ -15,7 +15,8 @@ namespace Deguffer.Core.Execution;
 /// <param name="RefusedFolders">The index's folders Windows refused for a reason of their own.</param>
 /// <param name="EntriesRemoved">How many of the index's entries went.</param>
 /// <param name="Kept">
-/// Files the guard on recently changed files kept, which arrived after the look the run takes first.
+/// Files the guard on recently changed files kept. None where the run judged the step on what was
+/// gathered first, because one it would keep stops the step there.
 /// </param>
 /// <param name="MailStores">How many Outlook data files the removal stepped over, and left.</param>
 /// <param name="Interrupted">
@@ -46,18 +47,32 @@ internal sealed record IndexRemoval(
     /// <para>Without progress of its own. An index is small beside what it indexes, and the step's bar
     /// belongs to the removal that follows.</para>
     /// </summary>
+    /// <param name="indexes">
+    /// What the removal of each of <see cref="DeleteDirectoryStep.IndexedBy"/> gathered, in the same
+    /// order, which is what the run judged the step on. Nothing is listed again.
+    /// </param>
     public static async Task<IndexRemoval> RemoveAsync(
         DeleteDirectoryStep step,
-        MinimumAge keep,
+        IReadOnlyList<GatheredRemoval> indexes,
         RefusalRecord refusals,
         RunResidue leftStanding,
+        IFileSystem fs,
         CancellationToken ct)
     {
+        // Zip would stop at the shorter list, and an index left out is one the directory it indexes
+        // would be removed from under.
+        if (indexes.Count != step.IndexedBy.Count)
+        {
+            throw new ArgumentException(
+                $"{indexes.Count} gathered removals were handed over for {step.IndexedBy.Count} index directories.",
+                nameof(indexes));
+        }
+
         var total = new IndexRemoval(Complete: true, 0, Refusals.None, default, 0, 0, 0);
 
-        foreach (var index in step.IndexedBy)
+        foreach (var (index, gathered) in step.IndexedBy.Zip(indexes))
         {
-            var removal = await DirectoryRemover.RemoveAsync(index, keep, progress: null, ct).ConfigureAwait(false);
+            var removal = await DirectoryRemover.DeleteAsync(gathered, progress: null, fs, ct).ConfigureAwait(false);
 
             refusals.Record(index, removal);
             leftStanding.Record(index, removal.LeftStanding);

@@ -447,8 +447,8 @@ public sealed record DeleteDirectoryStep(string Path, string What) : DeleteStep(
     /// <para>Stronger than <see cref="IsIndivisible"/>, which is about Outlook data files alone. The
     /// ordinary removal keeps what the guard protects and what Windows refuses and takes the rest,
     /// which is right for a cache and wrong for a folder such as <c>$WinREAgent</c>, where a rollback
-    /// manifest means nothing without the image it restores. Looked at on the disk immediately before
-    /// the removal, through <see cref="WholeTreeLook"/>.</para>
+    /// manifest means nothing without the image it restores. Judged from what the removal gathers on
+    /// the disk before it deletes anything, through <see cref="WholeTreeLook.Of"/>.</para>
     /// </summary>
     public bool IsAllOrNothing { get; init; }
 

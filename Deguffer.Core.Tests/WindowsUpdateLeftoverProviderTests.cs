@@ -258,16 +258,27 @@ public sealed class WindowsUpdateLeftoverProviderTests : IDisposable
     /// it standing and take the rest does not run.
     /// </summary>
     [Fact]
-    public void AFolderThatWillNotBeListedStopsTheWholeFolder()
+    public async Task AFolderThatWillNotBeListedStopsTheWholeFolder()
     {
         var agent = Agent(Quiet);
         var scratch = Path.Combine(agent, "Scratch");
+        var backup = Path.Combine(agent, "Backup", "winre.wim");
+        var plan = await CreateProvider().PlanAsync();
+        var step = Assert.IsType<DeleteDirectoryStep>(Assert.Single(plan.Steps));
 
-        var look = WholeTreeLook.Take(
-            [agent], MinimumAge.Off, new UnlistableFileSystem(WindowsFileSystem.Default, scratch), CancellationToken.None);
+        var outcome = await WholeDirectoryRemoval.RemoveAsync(
+            step,
+            MinimumAge.Off,
+            RefusalRecord.For(_environment),
+            new RunResidue(),
+            progress: null,
+            new UnlistableFileSystem(WindowsFileSystem.Default, scratch),
+            CancellationToken.None);
 
-        Assert.Equal([scratch], look.Unlisted);
-        Assert.Contains(scratch, look.WhyNot("Nothing was removed", "It goes whole", MinimumAge.Off), StringComparison.Ordinal);
+        Assert.False(outcome.Succeeded);
+        Assert.StartsWith($"Nothing was removed: Windows would not let Deguffer look inside {scratch},", outcome.Message, StringComparison.Ordinal);
+        Assert.True(Directory.Exists(scratch));
+        Assert.True(File.Exists(backup));
     }
 
     /// <summary>

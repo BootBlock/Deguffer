@@ -328,10 +328,12 @@ public sealed class PlanExecutorCancellationTests : IDisposable
         var output = _temp.CreateDirectory("project", "out");
         var step = new DeleteDirectoryStep(output, "Output") { IndexedBy = [index] };
 
+        var gathered = await DirectoryRemover.GatherAsync(step.IndexedBy, MinimumAge.Off, WindowsFileSystem.Default, default);
+
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        var removal = await IndexRemoval.RemoveAsync(step, MinimumAge.Off, RefusalLog, new RunResidue(), cts.Token);
+        var removal = await IndexRemoval.RemoveAsync(step, gathered, RefusalLog, new RunResidue(), WindowsFileSystem.Default, cts.Token);
 
         Assert.True(removal.Interrupted);
         Assert.False(removal.Complete);

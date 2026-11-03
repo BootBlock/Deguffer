@@ -63,6 +63,11 @@ namespace Deguffer.Core.Execution;
 /// How a <see cref="RemoveProfileStep"/> is carried out. Null, and never defaulted, for the reasons
 /// <paramref name="emptier"/> is: the real one removes the machine's profiles.
 /// </param>
+/// <param name="fileSystem">
+/// What the removals Deguffer performs itself list and delete through: a directory step's, a clear's
+/// and a file step's. Defaulted to the machine's own, and injected so a test can see every listing and
+/// every path a removal hands to Windows.
+/// </param>
 public sealed class PlanExecutor(
     IProcessRunner runner,
     IDirectoryScanner scanner,
@@ -77,7 +82,8 @@ public sealed class PlanExecutor(
     ISystemDirectories? system = null,
     ISystemProtection? protection = null,
     IVolumeInventory? volumes = null,
-    IUserProfiles? profiles = null)
+    IUserProfiles? profiles = null,
+    IFileSystem? fileSystem = null)
 {
     /// <summary>
     /// How long a command's tool is given to mark the item it will remove later. LM Studio answers
@@ -100,6 +106,7 @@ public sealed class PlanExecutor(
     private readonly IUserEnvironment _environment = environment ?? UserEnvironment.Current;
     private readonly ISystemDirectories _system = system ?? SystemDirectories.Current;
     private readonly IVolumeInventory _volumes = volumes ?? VolumeInventory.Current;
+    private readonly IFileSystem _fileSystem = fileSystem ?? WindowsFileSystem.Default;
 
     /// <param name="runReach">
     /// What the whole run may destroy. §5.6's negative is answered against it rather than against
@@ -731,55 +738,18 @@ public sealed class PlanExecutor(
         IProgress<double>? progress,
         CancellationToken ct)
     {
-        // A directory whose parts only mean something together is looked at first, on the disk: anything
-        // the guard would keep, or a folder that would not be listed, and the removal below would leave a
-        // part of it standing. A directory that goes with its index is one of these by construction. See
-        // DeleteDirectoryStep.IsAllOrNothing and DeleteDirectoryStep.IndexedBy.
-        //
-        // §9 alone for an indivisible directory: the walk below would step over a store that arrived
-        // since the preview, or one inside a folder it cannot list, and take what belongs with it. The
-        // guard is not asked, because what it keeps can stay. See DeleteDirectoryStep.IsIndivisible.
-        if (step.GoesWholeOrNotAtAll || step.IsIndivisible)
+        if (WholeDirectoryRemoval.Applies(step))
         {
-            var (guard, how) = step.GoesWholeOrNotAtAll
-                ? (keep, "Its parts only mean something together, so it goes whole or not at all")
-                : (MinimumAge.Off, "What is inside it goes whole or not at all");
-
-            var look = await WholeTreeLook.TakeAsync(step.Destroys, guard, ct).ConfigureAwait(false);
-
-            if (look.WhyNot("Nothing was removed", how, guard) is { } partial)
-            {
-                return new StepOutcome(
-                    step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, partial, MailStores: look.Stores.Count);
-            }
+            return await WholeDirectoryRemoval.RemoveAsync(step, keep, refusals, runResidue, progress, _fileSystem, ct)
+                .ConfigureAwait(false);
         }
 
-        // The index first, and the directory it indexes only once all of it is gone. See
-        // DeleteDirectoryStep.IndexedBy.
-        var index = await IndexRemoval.RemoveAsync(step, keep, refusals, runResidue, ct).ConfigureAwait(false);
-
-        if (!index.Complete)
-        {
-            return index.Stopped(step);
-        }
-
-        var removal = await DirectoryRemover.RemoveAsync(step.Path, keep, progress, ct).ConfigureAwait(false);
+        var removal = await DirectoryRemover.RemoveAsync(step.Path, keep, progress, ct, _fileSystem).ConfigureAwait(false);
 
         refusals.Record(step.Path, removal);
         runResidue.Record(step.Path, removal.LeftStanding);
 
-        // The index went with it, so what the step reports is both. Nothing is added where there is none.
-        // A removal stopped part-way adds its index too, because the index went before it began.
-        removal = removal with
-        {
-            BytesReclaimed = removal.BytesReclaimed + index.BytesReclaimed,
-            Refused = removal.Refused + index.Refused,
-            RefusedFolders = removal.RefusedFolders + index.RefusedFolders,
-            EntriesRemoved = removal.EntriesRemoved + index.EntriesRemoved,
-            Kept = removal.Kept + index.Kept,
-        };
-
-        var stores = removal.MailStores.Count + index.MailStores;
+        var stores = removal.MailStores.Count;
 
         return removal.Interrupted ? Stopped(step, removal, stores) : Deleted(step, removal, stores);
     }
@@ -869,7 +839,7 @@ public sealed class PlanExecutor(
             keep,
             progress,
             ct,
-            fileSystem: null,
+            _fileSystem,
             new RemovalBounds(KeepRoot: true, step.Spared, step.OwnedElsewhere, step.UserWork)).ConfigureAwait(false);
 
         refusals.Record(step.Path, removal);
@@ -933,7 +903,7 @@ public sealed class PlanExecutor(
     /// A removal the clean was cancelled in the middle of, with what it did before it stopped. Never a
     /// success, because the step did not do what it named.
     /// </summary>
-    private static StepOutcome Stopped(CleanupStep step, RemovalOutcome removal, int stores) => new(
+    internal static StepOutcome Stopped(CleanupStep step, RemovalOutcome removal, int stores) => new(
         step.Description,
         Succeeded: false,
         removal.BytesReclaimed,
@@ -956,7 +926,7 @@ public sealed class PlanExecutor(
         IProgress<double>? progress,
         CancellationToken ct)
     {
-        var removal = await FileRemover.RemoveAsync(step.Path, keep, ct).ConfigureAwait(false);
+        var removal = await FileRemover.RemoveAsync(step.Path, keep, ct, _fileSystem).ConfigureAwait(false);
 
         // One file, so there is no fraction to report along the way — only the end of it.
         progress?.Report(1.0);
