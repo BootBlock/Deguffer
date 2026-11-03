@@ -78,6 +78,42 @@ public sealed class WholeTreeLookTests : IDisposable
         Assert.Equal([link], Stores(root));
     }
 
+    /// <summary>
+    /// A link at any depth is named, and still not followed, because a tool's own command may follow
+    /// it where Deguffer would not. Only a command asks, so the reason is apart from the one every
+    /// removal asks.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public void NamesALinkAtAnyDepthForACommandAndNoOtherRemoval(DirectoryLinkKind kind)
+    {
+        var root = _temp.CreateDirectory("cache");
+        _temp.CreateFile(16, "cache", "a", "blob.bin");
+        var elsewhere = _temp.CreateDirectory("elsewhere");
+        _temp.CreateFile(16, "elsewhere", "precious.txt");
+        var link = Path.Combine(root, "a", "b", "linked");
+        Directory.CreateDirectory(Path.GetDirectoryName(link)!);
+        DirectoryLink.Create(kind, link, elsewhere);
+
+        var look = WholeTreeLook.Take([root], MinimumAge.Off, WindowsFileSystem.Default, default);
+
+        Assert.Equal([link], look.Links);
+        Assert.Null(look.WhyNot("Not run", "The tool cannot be told to leave anything", MinimumAge.Off));
+        Assert.Contains(link, look.WhyNotThroughLinks("Not run"), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ATreeWithNoLinkGivesACommandNoReasonToStop()
+    {
+        var root = _temp.CreateDirectory("cache");
+        _temp.CreateFile(16, "cache", "a", "blob.bin");
+
+        var look = WholeTreeLook.Take([root], MinimumAge.Off, WindowsFileSystem.Default, default);
+
+        Assert.Empty(look.Links);
+        Assert.Null(look.WhyNotThroughLinks("Not run"));
+    }
+
     /// <summary>§6.3: every path it hands the filesystem is in extended-length form.</summary>
     [Fact]
     public void HandsTheFilesystemExtendedPaths()

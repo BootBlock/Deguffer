@@ -147,6 +147,10 @@ It asks `pip cache dir` where the cache is rather than assuming, because `PIP_CA
 `--cache-dir` and the `cache-dir` key in `pip.ini` can all move it. It then runs `pip cache purge`.
 Deguffer never deletes the path itself.
 
+pip's purge follows a junction it finds inside the cache, and deletes the files
+on the far side. So Deguffer looks through the cache again immediately before the command, and does
+not run it while anything inside is a link. That holds for every tool's own command, not only pip's.
+
 ### What is protected
 
 `%LOCALAPPDATA%\pip` — the folder *containing* the cache — and `pip.ini` inside it. That file holds
@@ -242,6 +246,67 @@ Everything removed is a copy of something obtainable from a package repository, 
 a source distribution, with no input from you. The rebuild cost is real for a package with C
 extensions, but it is time rather than data — and the one thing in the folder that *is* data is
 never removed.
+
+---
+
+## pipenv package cache
+
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\pipenv\pipenv\Cache`, unless `PIPENV_CACHE_DIR` moves it |
+| **Method** | `pip --cache-dir <cache> cache purge` for the part in pip's format; a path deletion for `pipenv-manifests` |
+| **Typical size** | Tens of MB to several GB, depending on how many projects you lock and install |
+
+### What it is
+
+pipenv is a dependency manager for Python projects. It keeps its own cache, apart from pip's, and
+hands it to pip as pip's cache directory whenever it installs or locks. So the folder holds pip's
+layout and pipenv's own:
+
+- **`http` / `http-v2`** — the package archives and index pages pip downloaded for pipenv.
+- **`wheels`** — wheels pip built for pipenv from packages that ship only as source.
+- **`pipenv-manifests`** — the package index pages and package metadata pipenv's resolver has read.
+
+The folder is `pipenv\pipenv\Cache` rather than the `pipenv\Cache` pipenv's documentation names:
+pipenv asks platformdirs for it, and on Windows platformdirs puts the application's name in twice.
+
+### What Deguffer does
+
+It reads `PIPENV_CACHE_DIR`, and uses the default only where that is unset. It then clears the
+folder by two routes:
+
+- **pip's layout** goes through `pip --cache-dir <cache> cache purge`. pip reads the directory from
+  the option and empties its own three folders in it, and nothing else in the folder.
+- **`pipenv-manifests`** is removed by path. No command clears it on its own.
+
+Where pip cannot be found, or one of pip's folders is a link to somewhere else, pip's folders are
+removed by path too, and the link is left alone. A link deeper inside pip's folders stops the purge
+when the clean runs, because pip would follow it, and `pipenv-manifests` is still removed.
+
+`pipenv --clear` is never used. It deletes the whole of this folder and then the whole of pip's own
+cache, which is a different row.
+
+### What is protected
+
+The cache folder itself, and `%LOCALAPPDATA%\pipenv` above it. Anything else inside the cache folder
+that Deguffer does not recognise, such as the `pkgs` folder pipenv names to pip for downloads, is left
+alone, named, and asserted to have survived the run. A `PIPENV_CACHE_DIR` that names a drive root, a
+folder of your own or a temporary folder is not treated as pipenv's at all.
+
+### What it costs you
+
+The next `pipenv install` or `pipenv lock` re-downloads packages and index pages, and rebuilds any
+wheel pip had built from source, which for a package with C extensions means compiling it again.
+
+**Your virtual environments, Pipfiles and lock files are untouched.** pipenv keeps its environments
+elsewhere, in `~\.virtualenvs` or in each project's `.venv`.
+
+### Why Tier 1
+
+Everything removed is a copy of something obtainable from a package index, or rebuildable from a
+source distribution, with no input from you.
 
 ---
 
