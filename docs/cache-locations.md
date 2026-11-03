@@ -6368,6 +6368,72 @@ Getting a version back is a download of a whole disk image.
 
 ---
 
+## Pulumi plugin cache
+
+**Tier 1 — regenerable cache, researched.** Not pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `plugins` in `%USERPROFILE%\.pulumi`, unless `PULUMI_HOME` moves Pulumi's folder |
+| **Method** | `pulumi plugin rm <kind> <name> <version> --yes --non-interactive` for each plugin you choose; by path where Pulumi is not installed |
+| **Typical size** | A cloud provider's plugin is often hundreds of MB a version; three versions of the Kubernetes provider have been reported at 661 MB |
+
+### What it is
+
+Pulumi downloads a plugin for every provider and version a stack uses: resource providers such as
+AWS, Azure and Kubernetes, and language hosts, policy analyzers, converters and tools. Each is a
+folder named `<kind>-<name>-v<version>`, and Pulumi keeps every one, so each provider upgrade adds
+another beside the last.
+
+### What Deguffer does
+
+It lists each plugin as its own item, grouped by name, with its version and when Pulumi last
+started it. Each plugin you choose is removed by Pulumi's own `pulumi plugin rm`, told the plugin's
+exact kind, name and version, so a plugin you leave out is one no command names. `--yes` is part of
+the command, because Pulumi asks before it removes and Deguffer gives a tool nothing to answer with.
+Pulumi removes the folder and the `.lock` and `.lastused` files it keeps beside it.
+
+Where Pulumi is not installed, which is the commonest way to be left with this cache, Deguffer
+removes each plugin by path instead: its folder, whole or not at all, and then the two files beside
+it, which is all Pulumi's own remove does. A plugin whose folder or `.lastused` file changed within
+the guard on recently changed files is left alone whole, because a plugin missing some of its files
+is one Pulumi still lists and then fails to start.
+
+A folder is recognised only where its name is written exactly as Pulumi writes the plugins it
+installs. Pulumi reads a version leniently, so `v6.0` and `v6.0.0` are the same plugin to it, and
+its remove would take both. A plugin whose remove would also take another folder is left alone and
+named.
+
+Nothing is offered while `pulumi` is running, because a deployment may be about to start or install
+a plugin, and a plugin a program is running from is held back. Immediately before each remove runs,
+Deguffer asks both questions again, lists the cache again, and does not run the command if the
+cache has become a link or if another folder Pulumi reads as the same plugin has appeared.
+
+A `PULUMI_HOME` that puts Pulumi's folder at your profile, a drive's root or another folder Deguffer
+never treats as one tool's is left alone, and nothing in it is offered. Deguffer reads
+`PULUMI_HOME` as the command it starts sees it, and as a Pulumi you start next sees it where it
+removes by path. Running Pulumi may ask whether a newer version exists. A cancelled remove is left
+to finish.
+
+### What is protected
+
+Pulumi's folder and everything in it beside the plugin cache: `credentials.json`, the workspaces,
+templates, policy packs, the CLI in `bin`, and, for a stack kept in the local backend, its `stacks`,
+`history` and `backups`. In the cache, the cache itself, every plugin not chosen, a plugin Pulumi has
+not finished installing, an older Pulumi's `.tmp` extraction folders, and anything not named as
+Pulumi names its plugins. Explore refuses all of these, and the whole cache while Pulumi is running.
+
+### What it costs you
+
+The next Pulumi command that needs a removed plugin downloads and installs it again.
+
+### Why Tier 1
+
+Pulumi's documentation for its own remove: "If a deleted plugin is subsequently required to execute
+a Pulumi program, the Pulumi CLI will attempt to download and install it automatically."
+
+---
+
 ## Test browser profiles
 
 **Tier 1 — regenerable cache.** Pre-selected.

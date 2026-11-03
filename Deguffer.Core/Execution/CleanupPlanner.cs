@@ -328,6 +328,7 @@ public sealed class CleanupPlanner
             new LmStudioRuntimeProvider(environment, scanner: scanner),
             new HuggingFaceHubProvider(environment, scanner: scanner, liveTrees: liveTrees),
             new VagrantSupersededBoxProvider(environment, scanner: scanner),
+            new PulumiPluginProvider(environment, scanner: scanner, liveTrees: liveTrees),
             testBrowsers,
             new SquirrelSupersededVersionProvider(environment, discovery: squirrel, liveTrees: liveTrees, scanner: scanner),
             new CapCutSupersededBuildProvider(environment, liveTrees: liveTrees, scanner: scanner),

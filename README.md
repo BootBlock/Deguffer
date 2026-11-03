@@ -164,6 +164,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | sccache compiler cache | sccache's server is stopped first; never its settings. Researched |
 | Debugger symbol cache | The symbol files and programs that debuggers downloaded into a store that only Microsoft's public symbol servers fill, as `_NT_SYMBOL_PATH` names it; never the store's markers or anything else in it, a store that SymStore built, or anything while a debugger that writes to the store is running |
 | Conan package cache | Conan's own cache clean, limited to sources, build folders and unfinished builds; the packages you built or downloaded stay, with their metadata and your configuration. Researched |
+| Pulumi plugin cache | One item per plugin in `.pulumi\plugins`, or wherever `PULUMI_HOME` points, removed with Pulumi's own `pulumi plugin rm`, or by path where Pulumi is not installed; never your access tokens, a stack's state, a plugin a running program is using, or anything while Pulumi is running. Researched |
 | pip package cache | |
 | uv package cache | |
 | Poetry package cache | `poetry cache clear` for each repository; never its `virtualenvs`. Researched |
