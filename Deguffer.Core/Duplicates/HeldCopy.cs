@@ -46,13 +46,17 @@ internal sealed class HeldCopy : IDisposable
     {
         var described = files.Hold(copy.Path, copy.Route);
 
-        if (ContentReader.Judge(described.Reading, copy, attributes: null) is { } before)
+        // Located before it is judged, because the removal checks the copy is still at its path: one
+        // whose path Windows will not give is not identified.
+        var reading = files.Locate(described);
+
+        if (ContentReader.Judge(reading, copy, attributes: null) is { } before)
         {
             described.Dispose();
             return (null, Check(before), Sentence(before));
         }
 
-        var description = described.Reading.Description!;
+        var description = reading.Description!;
 
         if (!string.Equals(description.Path, copy.Path, StringComparison.Ordinal) || description.Attributes != copy.Attributes)
         {

@@ -17,7 +17,7 @@ internal readonly record struct ChecksumKey(
     ChecksumAlgorithm Algorithm,
     ContentPart Part)
 {
-    public static ChecksumKey Of(FileDescription file, ContentPart part, ChecksumAlgorithm algorithm) => new(
+    public static ChecksumKey Of(FileState file, ContentPart part, ChecksumAlgorithm algorithm) => new(
         file.Identity,
         file.Length,
         file.Modified.Ticks,
@@ -109,7 +109,7 @@ public sealed class ChecksumCache
     /// The checksum of <paramref name="part"/> of the file as <paramref name="file"/> describes it
     /// now, by <paramref name="algorithm"/>, or null where none is remembered.
     /// </summary>
-    internal ContentChecksum? Find(FileDescription file, ContentPart part, ChecksumAlgorithm algorithm)
+    internal ContentChecksum? Find(FileState file, ContentPart part, ChecksumAlgorithm algorithm)
     {
         var key = ChecksumKey.Of(file, part, algorithm);
         var remembered = _remembered.Value;
@@ -134,7 +134,7 @@ public sealed class ChecksumCache
     /// Remember <paramref name="value"/> as the checksum of <paramref name="part"/> of the file as
     /// <paramref name="file"/> described it before its content was read.
     /// </summary>
-    internal void Remember(FileDescription file, ContentPart part, ContentChecksum value)
+    internal void Remember(FileState file, ContentPart part, ContentChecksum value)
     {
         _remembered.Value[ChecksumKey.Of(file, part, value.Algorithm)] = new RememberedChecksum(value, Today);
         Volatile.Write(ref _changed, 1);

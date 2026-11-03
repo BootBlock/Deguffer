@@ -302,6 +302,32 @@ public sealed class DuplicateRemovalCheckTests : DuplicateRemovalScene
     }
 
     /// <summary>
+    /// A content read no longer asks where a file is, but a removal still does: it checks the copy is
+    /// still at its path, so a copy whose path Windows will not give stays as one it could not
+    /// identify.
+    /// </summary>
+    [Theory]
+    [InlineData(ExploreRemovalMode.RecycleBin)]
+    [InlineData(ExploreRemovalMode.Permanent)]
+    public void ACopyWhosePathWindowsWillNotGiveIsNotRemoved(ExploreRemovalMode mode)
+    {
+        var kept = Found(Write(Path.Combine(Documents, "a.bin"), Content()));
+        var copy = Found(Write(Path.Combine(Downloads, "a.bin"), Content()));
+        var marks = Marks([kept, copy]);
+        Mark(marks, copy);
+        var files = new FileInformation(
+            FileInformation.Open,
+            FileInformation.ReadIdentity,
+            finalPath: handle => FileInformation.FinalPathOf(handle) is { } final && LongPath.Display(final) != copy.Path ? final : null);
+
+        var outcome = Assert.Single(Remove(marks, mode, files: files).Copies);
+
+        Assert.Equal(RemovalCheck.Unreadable, outcome.Check);
+        Assert.True(File.Exists(copy.Path));
+        Assert.True(File.Exists(kept.Path));
+    }
+
+    /// <summary>
     /// A stale group naming one file twice, by two of its names: the copy marked and a copy the group
     /// would keep are one file. Each name is its own final path, so only the choice of the copy kept
     /// by identity, never by path, keeps the file from being held as kept while it goes. Nothing
