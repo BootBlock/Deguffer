@@ -39,7 +39,8 @@ internal sealed class GitLfsPruneTarget(ILiveTreeInspector inspector, GitLfsChec
         // build directory's check drops it.
         inspector.DiscardOlderThan(IUseCheck.ReadingLimit);
 
-        var asked = GitLfsObjectProvider.InUseQuery(checkout.Store.GitDirectory, checkout.WorkTree);
+        // The question the preview asked: a program working in the work tree or the git directory.
+        var asked = new LiveTreeQuery(checkout.Store.GitDirectory, checkout.WorkTree);
         var findings = inspector.FindLive([asked], ct);
 
         if (findings.Live.FirstOrDefault(tree => tree.Directory.Equals(asked.Directory, StringComparison.OrdinalIgnoreCase)) is { } live)

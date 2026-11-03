@@ -18,33 +18,27 @@ namespace Deguffer.Core.Providers;
 /// <para>Paths are given with forward slashes, which git and git-lfs read as Windows paths, so a
 /// path that ends in a separator, such as a drive's root, cannot escape its closing quote.</para>
 /// </summary>
-internal sealed record GitLfsCheckout(GitLfsStore Store, string WorkTree)
+/// <param name="Remotes">The names of the repository's remotes, as git reads them from <c>remote.&lt;name&gt;.url</c>.</param>
+internal sealed record GitLfsCheckout(GitLfsStore Store, string WorkTree, IReadOnlyList<string> Remotes)
 {
     /// <summary>
-    /// The preview: prune's dry run, listing every object it would remove. Forced progress is what
-    /// makes it list them all (<see cref="GitLfsPruneReport"/>). A dry run never asks the remote, and
-    /// removes nothing from the store.
+    /// What Git LFS reports about the repository, its endpoints and the remote prune checks among
+    /// them, read with the pins every other command has (<see cref="GitLfsRemote"/>).
     /// </summary>
-    public string DryRunArguments => Arguments("-c lfs.forceprogress=true lfs prune --dry-run --verbose");
-
-    /// <summary>
-    /// The clean. <c>--verify-remote</c> asks the remote for every object before any is removed, and
-    /// prune removes none if one is missing there or the remote does not answer. Signing in is never
-    /// asked for: Git Credential Manager would open a window in the middle of a clean, so it is told
-    /// not to, and a remote that needs it leaves the store as it was.
-    /// </summary>
-    public string PruneArguments => Arguments("-c credential.interactive=never lfs prune --verify-remote");
+    public string EnvironmentArguments => Arguments("lfs env");
 
     /// <summary>The argument that sends git to <paramref name="store"/>'s git directory, for this and for every query about it.</summary>
     public static string GitDirectoryArgument(GitLfsStore store) => Quoted("--git-dir=" + Forward(store.GitDirectory));
 
-    private string Arguments(string command) =>
+    /// <summary><paramref name="command"/>, sent to this git directory, work tree and store.</summary>
+    public string Arguments(string command) =>
         $"{GitDirectoryArgument(Store)} {Quoted("--work-tree=" + Forward(WorkTree))} "
         + $"-c {Quoted("lfs.storage=" + Forward(Store.Storage))} {command}";
 
-    private static string Forward(string path) => LongPath.Display(path).Replace('\\', '/');
+    /// <summary>One argument, quoted whole, so a path or a remote's name with spaces in it stays one.</summary>
+    public static string Quoted(string argument) => $"\"{argument}\"";
 
-    private static string Quoted(string argument) => $"\"{argument}\"";
+    private static string Forward(string path) => LongPath.Display(path).Replace('\\', '/');
 }
 
 /// <summary>A store's checkout, or why it is not offered.</summary>
@@ -56,8 +50,8 @@ internal sealed record GitLfsCheckout(GitLfsStore Store, string WorkTree)
 internal sealed record GitLfsCheckoutReading(GitLfsCheckout? Checkout, string WhyNot, bool Unanswered);
 
 /// <summary>
-/// What git's configuration says about a store: where it is checked out, and whether git-lfs keeps
-/// its objects somewhere else. One <c>git config</c> per store.
+/// What git's configuration says about a store: where it is checked out, whether git-lfs keeps its
+/// objects somewhere else, and which remotes the repository has. One <c>git config</c> per store.
 /// </summary>
 internal static class GitLfsSettings
 {
@@ -65,11 +59,16 @@ internal static class GitLfsSettings
 
     private const string StorageKey = "lfs.storage";
 
+    private const string RemotePrefix = "remote.";
+
+    private const string RemoteSuffix = ".url";
+
     /// <summary>
-    /// Both keys at once, each separated from its value by a line feed and from the next by a null
-    /// character, so a value with spaces or line ends in it is read whole. git lower-cases the keys.
+    /// Every key at once, each separated from its value by a line feed and from the next by a null
+    /// character, so a value with spaces or line ends in it is read whole. git lower-cases a key's
+    /// section and name, and keeps a remote's name as written.
     /// </summary>
-    private const string Query = $"config -z --get-regexp \"^(core\\.worktree|lfs\\.storage)$\"";
+    private const string Query = $"config -z --get-regexp \"^(core\\.worktree|lfs\\.storage|remote\\..*\\.url)$\"";
 
     public static async Task<GitLfsCheckoutReading> ReadAsync(
         IProcessRunner runner,
@@ -91,6 +90,7 @@ internal static class GitLfsSettings
 
         string? workTree = null;
         string? storage = null;
+        var remotes = new List<string>();
 
         foreach (var entry in outcome.StandardOutput.Split('\0', StringSplitOptions.RemoveEmptyEntries))
         {
@@ -109,6 +109,12 @@ internal static class GitLfsSettings
 
                 case StorageKey:
                     storage = value;
+                    break;
+
+                case var remote when remote.Length > RemotePrefix.Length + RemoteSuffix.Length
+                    && remote.StartsWith(RemotePrefix, StringComparison.Ordinal)
+                    && remote.EndsWith(RemoteSuffix, StringComparison.Ordinal):
+                    remotes.Add(remote[RemotePrefix.Length..^RemoteSuffix.Length]);
                     break;
             }
         }
@@ -129,7 +135,7 @@ internal static class GitLfsSettings
 
         return LongPath.ProbeDirectory(checkout) switch
         {
-            PathPresence.Present => new GitLfsCheckoutReading(new GitLfsCheckout(store, checkout), string.Empty, Unanswered: false),
+            PathPresence.Present => new GitLfsCheckoutReading(new GitLfsCheckout(store, checkout, remotes), string.Empty, Unanswered: false),
             PathPresence.Refused => Unanswered(UnreadableRoot.WhyItCouldNotBeReached(checkout)),
             _ => Refused(
                 $"{store.GitDirectory} is checked out in {checkout}, which is not there, so Git LFS cannot tell which of "

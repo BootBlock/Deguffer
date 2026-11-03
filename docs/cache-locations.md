@@ -6443,9 +6443,8 @@ settings say how recent. Deguffer does not decide which versions go. Git LFS doe
 The clean runs prune with `--verify-remote`. Before Git LFS removes anything, it asks the
 repository's server whether it still has every file it would remove. If one is missing there, or the
 server does not answer, nothing is removed from that repository. Git LFS is told never to ask you to
-sign in, so a server that needs you to sign in leaves the repository as it was. For a repository
-whose remote is a folder rather than a server, Git LFS does not check. Prune also removes Git LFS's
-own unfinished downloads that are more than an hour old, at the preview and at the clean.
+sign in, so a server that needs you to sign in leaves the repository as it was. Prune also removes
+Git LFS's own unfinished downloads that are more than an hour old, at the preview and at the clean.
 
 Git is told which repository, which checkout and which store to act on, by full path, so nothing is
 left for it to work out when it runs. A cancelled prune is stopped: it removes one file at a time,
@@ -6458,6 +6457,9 @@ so stopping it leaves fewer old versions and no damaged store.
   through a link. Several repositories can share one store that way, and Git LFS's own manual says
   not to prune a shared store.
 - A submodule whose configuration does not say where it is checked out, or whose checkout is gone.
+- A repository whose remote is a folder or a drive rather than a server, or that has no remote. Git
+  LFS does not ask a folder whether it still holds a file, so a version that was never pushed, such
+  as one a commit you amended before pushing held, could be removed with no copy anywhere else.
 - A repository that a program is working in, such as an editor, a terminal or Git itself. Prune
   takes no lock, and a file Git is adding at that moment could be removed. Deguffer asks again
   immediately before prune runs.

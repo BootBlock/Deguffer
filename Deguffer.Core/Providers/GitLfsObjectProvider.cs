@@ -15,7 +15,8 @@ namespace Deguffer.Core.Providers;
 /// inside its recent window (<c>lfs.fetchrecentrefsdays</c> and the rest, configured per
 /// repository). Its dry run names each object it would remove, and Deguffer measures those files. The
 /// clean is <c>git lfs prune --verify-remote</c>, which asks the remote for every object first and
-/// removes nothing if one is missing there.</para>
+/// removes nothing if one is missing there. Git LFS trusts a remote that is a folder without asking
+/// it, so a store whose remote is not a server is not offered (<see cref="GitLfsRemote"/>).</para>
 ///
 /// <para><b>§5.2: nothing in a git directory is a path target.</b> The source search seeks
 /// <c>.git</c> and never enters it (<see cref="SourceTreeBoundary"/>). What is read inside one is
@@ -88,7 +89,8 @@ public sealed class GitLfsObjectProvider : CleanupProviderBase
             + "files can take more space than the files you have checked out.",
         Recommendation = "Deguffer runs Git LFS's own prune, which keeps what your checkout and your "
             + "unpushed and recent commits use, and removes an old version only after the repository's "
-            + "server confirms it still has it.",
+            + "server confirms it still has it. A repository whose remote is a folder rather than a server is "
+            + "not offered, because Git LFS cannot check one.",
     };
 
     /// <summary>The roots the user approved. Empty means this provider does nothing.</summary>
@@ -118,11 +120,25 @@ public sealed class GitLfsObjectProvider : CleanupProviderBase
             [.. ApprovedRoots.Select(root => CleanedPlace.FoldersNamed(root.Path, DirectoryNames))]);
 
     /// <summary>
-    /// What the in-use check asks about a store: whether a program is working in its work tree or its
-    /// git directory. No lock file is named, because git holds none for longer than one command.
-    /// Shared with <see cref="GitLfsPruneTarget"/>, so the clean asks what the preview asked.
+    /// Every repository the plan holds back because something is working in it, or because whether
+    /// anything is could not be asked, so that Explore refuses its git directory and its checkout
+    /// (§7.1), as it refuses a build directory in use. A repository is a candidate where it keeps a
+    /// store of its own, as the plan's are.
+    ///
+    /// <para>The repository's in-use question covers its submodules, whose checkouts are inside its
+    /// own, and refusing its whole git directory covers their stores.</para>
     /// </summary>
-    internal static LiveTreeQuery InUseQuery(string gitDirectory, string workTree) => new(gitDirectory, workTree);
+    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
+        InUseBuildDirectories.DeclareAsync(
+            _liveTrees,
+            _discovery,
+            ApprovedRoots,
+            DirectoryNames,
+            candidate => GitLfsStores.In(candidate, ct) is { Recognised: true, Stores.Count: > 0 }
+                ? Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(candidate))
+                : null,
+            InUse,
+            ct);
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
@@ -165,16 +181,16 @@ public sealed class GitLfsObjectProvider : CleanupProviderBase
 
         found.Notes.AddRange(unreachable.Select(UnreadableRoot.UnreachedNote));
 
-        var checkouts = stores.Count == 0 ? [] : await ExamineAsync(git, stores, found, ct).ConfigureAwait(false);
+        var (checkouts, prunes) = stores.Count == 0 ? ([], []) : await ExamineAsync(git, stores, found, ct).ConfigureAwait(false);
 
         var live = LiveTreeVeto.Apply(
             _liveTrees,
-            [.. checkouts.Select(checkout => new RecognisedBuildDirectory(checkout.Store.GitDirectory, checkout.WorkTree))],
+            [.. prunes.Select(prune => new RecognisedBuildDirectory(prune.Checkout.Store.GitDirectory, prune.Checkout.WorkTree))],
             InUse,
             ct);
 
         var clear = live.Cleared.Select(cleared => cleared.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var offered = await PreviewAsync(git, [.. checkouts.Where(checkout => clear.Contains(checkout.Store.GitDirectory))], found, ct)
+        var offered = await PreviewAsync(git, [.. prunes.Where(prune => clear.Contains(prune.Checkout.Store.GitDirectory))], found, ct)
             .ConfigureAwait(false);
         var (steps, measured) = await PlanStepsAsync(git, offered, ct).ConfigureAwait(false);
 
@@ -233,16 +249,30 @@ public sealed class GitLfsObjectProvider : CleanupProviderBase
             Decline(store, note, GitLfsPlanNotes.NotPrunedReason);
             Unexamined++;
         }
+
+        /// <summary>A store not offered: a warning where git could not answer, and information where it answered no.</summary>
+        public void Refuse(GitLfsStore store, string why, bool unanswered)
+        {
+            if (unanswered)
+            {
+                Unanswered(store, new PlanNote(PlanNoteSeverity.Warning, why));
+            }
+            else
+            {
+                Decline(store, new PlanNote(PlanNoteSeverity.Information, why), GitLfsPlanNotes.NotPrunedReason);
+            }
+        }
     }
 
     /// <summary>A store whose dry run named at least one object to remove.</summary>
-    private sealed record OfferedStore(GitLfsCheckout Checkout, IReadOnlyList<string> ObjectFiles);
+    private sealed record OfferedStore(GitLfsPrune Prune, IReadOnlyList<string> ObjectFiles);
 
     /// <summary>
-    /// Where each store is checked out, for those Git LFS can prune. Git LFS is asked once whether it
-    /// is installed, and nothing is offered without it.
+    /// Where each store is checked out, and the prune of each one Git LFS can check against a server.
+    /// Git LFS is asked once whether it is installed, and nothing is offered without it.
     /// </summary>
-    private async Task<IReadOnlyList<GitLfsCheckout>> ExamineAsync(
+    /// <returns>Every store whose checkout git named, which the plan protects, and those of them it may prune.</returns>
+    private async Task<(IReadOnlyList<GitLfsCheckout> Checkouts, IReadOnlyList<GitLfsPrune> Prunes)> ExamineAsync(
         string git,
         IReadOnlyList<GitLfsStore> stores,
         Findings found,
@@ -259,44 +289,52 @@ public sealed class GitLfsObjectProvider : CleanupProviderBase
                 found.Unanswered(store, note: null);
             }
 
-            return [];
+            return ([], []);
         }
 
         var checkouts = new List<GitLfsCheckout>();
+        var prunes = new List<GitLfsPrune>();
 
         foreach (var store in stores)
         {
-            switch (await GitLfsSettings.ReadAsync(Runner, git, store, ct).ConfigureAwait(false))
+            var reading = await GitLfsSettings.ReadAsync(Runner, git, store, ct).ConfigureAwait(false);
+
+            if (reading.Checkout is not { } checkout)
             {
-                case { Checkout: { } checkout }:
-                    checkouts.Add(checkout);
+                found.Refuse(store, reading.WhyNot, reading.Unanswered);
+                continue;
+            }
+
+            checkouts.Add(checkout);
+
+            switch (await GitLfsRemote.ReadAsync(Runner, git, checkout, ct).ConfigureAwait(false))
+            {
+                case { Prune: { } prune }:
+                    prunes.Add(prune);
                     break;
 
-                case { Unanswered: true, WhyNot: var why }:
-                    found.Unanswered(store, new PlanNote(PlanNoteSeverity.Warning, why));
-                    break;
-
-                case { WhyNot: var why }:
-                    found.Decline(store, new PlanNote(PlanNoteSeverity.Information, why), GitLfsPlanNotes.NotPrunedReason);
+                case var refused:
+                    found.Refuse(store, refused.WhyNot, refused.Unanswered);
                     break;
             }
         }
 
-        return checkouts;
+        return (checkouts, prunes);
     }
 
     /// <summary>Each store's dry run, and the object files it names.</summary>
     private async Task<IReadOnlyList<OfferedStore>> PreviewAsync(
         string git,
-        IReadOnlyList<GitLfsCheckout> checkouts,
+        IReadOnlyList<GitLfsPrune> prunes,
         Findings found,
         CancellationToken ct)
     {
         var offered = new List<OfferedStore>();
 
-        foreach (var checkout in checkouts)
+        foreach (var prune in prunes)
         {
-            var outcome = await Runner.RunAsync(git, checkout.DryRunArguments, ToolRun.Query, ct).ConfigureAwait(false);
+            var checkout = prune.Checkout;
+            var outcome = await Runner.RunAsync(git, prune.DryRunArguments, ToolRun.Query, ct).ConfigureAwait(false);
 
             if (!outcome.Succeeded)
             {
@@ -308,7 +346,7 @@ public sealed class GitLfsObjectProvider : CleanupProviderBase
             }
             else if (preview.Objects.Count > 0)
             {
-                offered.Add(new OfferedStore(checkout, [.. preview.Objects.Select(oid => ObjectFile(checkout.Store, oid))]));
+                offered.Add(new OfferedStore(prune, [.. preview.Objects.Select(oid => ObjectFile(checkout.Store, oid))]));
             }
         }
 
@@ -330,17 +368,18 @@ public sealed class GitLfsObjectProvider : CleanupProviderBase
         }
 
         var measured = await MeasureAllAsync(
-            [.. offered.SelectMany(store => store.ObjectFiles.Prepend(store.Checkout.Store.Objects))],
+            [.. offered.SelectMany(store => store.ObjectFiles.Prepend(store.Prune.Checkout.Store.Objects))],
             ct).ConfigureAwait(false);
 
         var steps = new List<CleanupStep>(offered.Count);
         var start = 0;
 
-        foreach (var (checkout, objectFiles) in offered)
+        foreach (var (prune, objectFiles) in offered)
         {
+            var checkout = prune.Checkout;
             var repository = GitLfsPlanNotes.Describe(checkout);
 
-            steps.Add(new RunCommandStep(git, checkout.PruneArguments, $"Remove old Git LFS files from {repository} using Git LFS's own prune")
+            steps.Add(new RunCommandStep(git, prune.PruneArguments, $"Remove old Git LFS files from {repository} using Git LFS's own prune")
             {
                 // Prune removes one file at a time and nothing else, so ended part-way it leaves fewer
                 // old versions and no damaged store.
@@ -380,7 +419,11 @@ public sealed class GitLfsObjectProvider : CleanupProviderBase
     private static string ObjectFile(GitLfsStore store, string oid) =>
         Path.Combine(store.Objects, oid[..2], oid[2..4], oid);
 
-    /// <summary>The preview's in-use question, which is <see cref="InUseQuery"/>.</summary>
+    /// <summary>
+    /// What the in-use check asks about a store: whether a program is working in its work tree or its
+    /// git directory. No lock file is named, because git holds none for longer than one command.
+    /// <see cref="GitLfsPruneTarget"/> asks the same at the clean.
+    /// </summary>
     private static LiveTreeQuestion InUse(CancellationToken ct) =>
-        new(candidate => InUseQuery(candidate.Path, candidate.Project));
+        new(candidate => new LiveTreeQuery(candidate.Path, candidate.Project));
 }

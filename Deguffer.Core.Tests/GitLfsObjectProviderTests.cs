@@ -12,9 +12,11 @@ namespace Deguffer.Core.Tests;
 /// <summary>
 /// Old Git LFS objects, removed by Git LFS's own prune (§5.1) from repositories found in the approved
 /// source folders. git is never run: each test answers for it as git-lfs 3.8.1 was observed to. The
-/// negative assertions carry the weight, because the repository, its git directory and every object
-/// the dry run did not name must all outlive the prune, and nothing in a git directory is ever a path
-/// target (§5.2).
+/// negative assertions carry the weight: the repository, its git directory and its store are protected
+/// and must outlive the prune, nothing in a git directory is ever a path target (§5.2), and a store
+/// Git LFS could not check against a server is never offered, because there its prune can remove the
+/// only copy of a file. Which objects go is prune's to decide (§5.1), so the figure counts only those
+/// its dry run names.
 /// </summary>
 public sealed class GitLfsObjectProviderTests : IDisposable
 {
@@ -102,6 +104,19 @@ public sealed class GitLfsObjectProviderTests : IDisposable
     private void DryRunReports(string gitDirectory, string report, int exitCode = 0) =>
         _dryRuns[Forward(gitDirectory)] = new CommandOutcome(exitCode, exitCode == 0 ? report : string.Empty, exitCode == 0 ? string.Empty : report);
 
+    /// <summary>The remote every repository has unless a test says otherwise.</summary>
+    private static readonly (string Key, string Value) Origin = ("remote.origin.url", "https://example.com/studio/game.git");
+
+    /// <summary>What <c>git lfs env</c> prints of a repository whose one remote is a server, as git-lfs 3.8.1 prints it.</summary>
+    private const string ServerEnvironment =
+        "git-lfs/3.8.1 (GitHub; windows amd64; go 1.27.3; git a662a6db)\ngit version 2.55.0.windows.5\n\n"
+        + "Endpoint=https://example.com/studio/game.git/info/lfs (auth=none)\n"
+        + "LocalMediaDir=C:\\Users\\testuser\\src\\game\\.git\\lfs\\objects\n"
+        + "PruneRemoteName=origin\n";
+
+    /// <summary>What each git directory's <c>git lfs env</c> answers, by the forward-slash form git is given.</summary>
+    private readonly Dictionary<string, CommandOutcome> _environments = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     /// git's answer to the configuration query, as <c>config -z --get-regexp</c> prints it and as the
     /// runner hands it over: line by line, each line ended with <see cref="Environment.NewLine"/>, so
@@ -112,9 +127,14 @@ public sealed class GitLfsObjectProviderTests : IDisposable
         _configuration[Forward(gitDirectory)] =
             string.Concat(entries.Select(entry => $"{entry.Key}\n{entry.Value}\0")).ReplaceLineEndings() + Environment.NewLine;
 
+    private void Described(string gitDirectory, string environment, int exitCode = 0) =>
+        _environments[Forward(gitDirectory)] = new CommandOutcome(exitCode, environment.ReplaceLineEndings(), string.Empty);
+
     /// <summary>
     /// git as the plan meets it: Git LFS installed, every configuration query answered from
-    /// <see cref="_configuration"/> or with nothing set, and every dry run from <see cref="_dryRuns"/>.
+    /// <see cref="_configuration"/> or with the <see cref="Origin"/> remote alone, every
+    /// <c>git lfs env</c> from <see cref="_environments"/> or with <see cref="ServerEnvironment"/>, and
+    /// every dry run from <see cref="_dryRuns"/>.
     /// </summary>
     private FakeProcessRunner Runner(bool lfsInstalled = true) =>
         new FakeProcessRunner().Replying(Git, arguments =>
@@ -130,9 +150,17 @@ public sealed class GitLfsObjectProviderTests : IDisposable
 
             if (arguments.Contains(" config -z --get-regexp ", StringComparison.Ordinal))
             {
-                return _configuration.TryGetValue(gitDirectory, out var set)
-                    ? new CommandOutcome(0, set, string.Empty)
-                    : new CommandOutcome(1, string.Empty, string.Empty);
+                return new CommandOutcome(
+                    0,
+                    _configuration.TryGetValue(gitDirectory, out var set) ? set : $"{Origin.Key}\r\n{Origin.Value}\0\r\n",
+                    string.Empty);
+            }
+
+            if (arguments.EndsWith(" lfs env", StringComparison.Ordinal))
+            {
+                return _environments.TryGetValue(gitDirectory, out var described)
+                    ? described
+                    : new CommandOutcome(0, ServerEnvironment.ReplaceLineEndings(), string.Empty);
             }
 
             if (arguments.Contains(" lfs prune --dry-run --verbose", StringComparison.Ordinal))
@@ -225,7 +253,7 @@ public sealed class GitLfsObjectProviderTests : IDisposable
         Assert.Equal(
             $"\"--git-dir={Forward(gitDirectory)}\" \"--work-tree={Forward(game)}\" "
             + $"-c \"lfs.storage={Forward(Path.Combine(gitDirectory, "lfs"))}\" "
-            + "-c credential.interactive=never lfs prune --verify-remote",
+            + "-c \"lfs.pruneremotetocheck=origin\" -c credential.interactive=never lfs prune --verify-remote",
             step.Arguments);
         Assert.Equal(CancelledCommand.Ended, step.WhenCancelled);
     }
@@ -246,7 +274,7 @@ public sealed class GitLfsObjectProviderTests : IDisposable
         Assert.Equal(
             $"\"--git-dir={Forward(gitDirectory)}\" \"--work-tree={Forward(game)}\" "
             + $"-c \"lfs.storage={Forward(Path.Combine(gitDirectory, "lfs"))}\" "
-            + "-c lfs.forceprogress=true lfs prune --dry-run --verbose",
+            + "-c \"lfs.pruneremotetocheck=origin\" -c lfs.forceprogress=true lfs prune --dry-run --verbose",
             dryRun.Arguments);
         Assert.Equal(ToolRun.Query, dryRun.Run);
     }
@@ -393,7 +421,7 @@ public sealed class GitLfsObjectProviderTests : IDisposable
         var old = Oid("old");
         var game = CreateRepository(_root, "game", (old, 3_000));
         var gitDirectory = Path.Combine(game, ".git");
-        Configured(gitDirectory, ("lfs.storage", "lfs"));
+        Configured(gitDirectory, ("lfs.storage", "lfs"), Origin);
         DryRunReports(gitDirectory, Report(1, old));
 
         Assert.Equal(3_000, TheStep(await CreateProvider(Runner()).PlanAsync()).EstimatedBytes);
@@ -431,7 +459,7 @@ public sealed class GitLfsObjectProviderTests : IDisposable
         var module = CreateGitDirectory(Path.Combine(gitDirectory, "modules", "libs", "art"), (art, 4_000));
         var checkout = Path.Combine(game, "libs", "art");
         Directory.CreateDirectory(checkout);
-        Configured(module, ("core.worktree", "../../../../libs/art"));
+        Configured(module, ("core.worktree", "../../../../libs/art"), Origin);
         DryRunReports(gitDirectory, Report(1, top));
         DryRunReports(module, Report(1, art));
 
@@ -557,7 +585,117 @@ public sealed class GitLfsObjectProviderTests : IDisposable
     }
 
     private static GitLfsCheckout CheckoutOf(string workTree) =>
-        new(new GitLfsStore(Path.Combine(workTree, ".git"), Submodule: null), workTree);
+        new(new GitLfsStore(Path.Combine(workTree, ".git"), Submodule: null), workTree, ["origin"]);
+
+    /// <summary>
+    /// Git LFS checks nothing before it removes a file when the remote is a folder, so an object only
+    /// the reflog names, never pushed, would go with no copy anywhere. Such a repository is not offered,
+    /// and its dry run is never run.
+    /// </summary>
+    [Theory]
+    [InlineData("file:///D:/Backups/game.git")]
+    [InlineData("file:////nas/repos/game.git")]
+    [InlineData("")]
+    public async Task LeavesARepositoryWhoseRemoteIsNotAServerAlone(string endpoint)
+    {
+        var game = CreateRepository(_root, "game", (Oid("old"), 3_000));
+        var gitDirectory = Path.Combine(game, ".git");
+        Described(gitDirectory, $"Endpoint={endpoint} (auth=none)\nPruneRemoteName=origin\n");
+        var runner = Runner();
+
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.True(plan.IsEmpty);
+        Assert.False(plan.WasNotExamined);
+        Assert.Empty(DryRunsOf(runner));
+        Assert.Contains(plan.Notes, n => n.Message.Contains("which is not a server", StringComparison.Ordinal));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(Path.Combine(gitDirectory, "lfs"), StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>With no remote of the name prune checks, nothing counts as pushed and nothing is there to ask.</summary>
+    [Fact]
+    public async Task LeavesARepositoryWithoutTheRemotePruneChecksAlone()
+    {
+        var game = CreateRepository(_root, "game", (Oid("old"), 3_000));
+        Configured(Path.Combine(game, ".git"));
+        var runner = Runner();
+
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.True(plan.IsEmpty);
+        Assert.Empty(DryRunsOf(runner));
+        Assert.Contains(plan.Notes, n => n.Message.Contains("has no remote called 'origin'", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The endpoint judged is the one prune checks, named or the default, never another remote's; and
+    /// the remote is pinned on both commands, so the clean checks the one the plan judged.
+    /// </summary>
+    [Theory]
+    [InlineData("backup", "https://example.com/studio/game.git/info/lfs", "file:///D:/Backups/game.git", false)]
+    [InlineData("backup", "file:///D:/Backups/game.git", "https://example.com/studio/game.git/info/lfs", true)]
+    [InlineData("origin", "https://example.com/studio/game.git/info/lfs", "file:///D:/Backups/game.git", true)]
+    public async Task JudgesTheEndpointOfTheRemotePruneChecks(string checkedRemote, string defaultEndpoint, string backupEndpoint, bool offered)
+    {
+        var old = Oid("old");
+        var game = CreateRepository(_root, "game", (old, 3_000));
+        var gitDirectory = Path.Combine(game, ".git");
+        Configured(gitDirectory, Origin, ("remote.backup.url", "D:/Backups/game.git"));
+        Described(
+            gitDirectory,
+            $"Endpoint={defaultEndpoint} (auth=none)\nEndpoint (backup)={backupEndpoint} (auth=none)\nPruneRemoteName={checkedRemote}\n");
+        DryRunReports(gitDirectory, Report(1, old));
+        var runner = Runner();
+
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.Equal(offered, !plan.IsEmpty);
+
+        if (offered)
+        {
+            var pin = $"-c \"lfs.pruneremotetocheck={checkedRemote}\"";
+            Assert.Contains(pin, TheStep(plan).Arguments, StringComparison.Ordinal);
+            Assert.Contains(pin, Assert.Single(runner.Invocations, i => i.Arguments.Contains("--dry-run", StringComparison.Ordinal)).Arguments, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task OffersNothingAndSaysSoWhereGitLfsCannotDescribeTheRepository()
+    {
+        var game = CreateRepository(_root, "game", (Oid("old"), 3_000));
+        Described(Path.Combine(game, ".git"), "Error: not a git repository", exitCode: 2);
+
+        var plan = await CreateProvider(Runner()).PlanAsync();
+
+        Assert.True(plan.IsEmpty);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("Git LFS could not describe game", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// §7.1: a repository the plan holds back because a program works in it is declared, so Explore
+    /// refuses its store and its git directory too; one nothing works in is not.
+    /// </summary>
+    [Fact]
+    public async Task DeclaresARepositoryInUseSoExploreRefusesIt()
+    {
+        var busy = CreateRepository(_root, "busy", (Oid("old"), 3_000));
+        var idle = CreateRepository(_root, "idle", (Oid("older"), 3_000));
+        var liveTrees = new FakeLiveTreeInspector().WithProgram("Code", workingDirectory: busy);
+
+        var roots = await CreateProvider(Runner(), liveTrees).DiscoverToolRootsAsync();
+
+        var declared = Assert.Single(roots);
+        Assert.Equal(Path.Combine(busy, ".git"), declared.Path, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain(roots, root => root.Path.StartsWith(idle, StringComparison.OrdinalIgnoreCase));
+
+        var system = new FakeSystemDirectories(Path.Combine(_temp.Path, "system"));
+        var policy = await Deguffer.Core.Exploring.Acting.ExploreActionPolicy.ForAsync(
+            system, _environment, new FakeVolumeInventory(), [CreateProvider(Runner(), liveTrees)]);
+
+        Assert.False(policy.MayRemove(Path.Combine(busy, ".git", "lfs", "objects")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(busy, ".git")).IsAllowed);
+    }
 
     [Fact]
     public async Task IsNotPresentWithoutGit()

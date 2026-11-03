@@ -28,14 +28,15 @@ internal static class GitLfsPlanNotes
 
     /// <summary>
     /// How the clean runs, said because it is not what the preview did: the preview never asks the
-    /// remote, and the clean asks it about every object, and stops where it cannot.
+    /// remote, and the clean asks it about every object, and stops where it cannot. And what every run
+    /// of Git LFS does besides, the preview's included: it removes its own stale downloads
+    /// (<c>fs/cleanup.go</c>).
     /// </summary>
     public static PlanNote HowItRuns { get; } = Information(
         "Before Git LFS removes anything, it asks each repository's server whether it still has every "
         + "file it would remove. If one is missing there, or the server does not answer or needs you to "
-        + "sign in, it removes nothing from that repository. For a repository whose remote is a folder "
-        + "rather than a server, Git LFS does not check. Running it also removes Git LFS's own unfinished "
-        + "downloads that are more than an hour old.");
+        + "sign in, it removes nothing from that repository. Every time Git LFS runs, for this preview as well "
+        + "as for the clean, it also removes its own unfinished downloads that are more than an hour old.");
 
     public static PlanNote Linked(GitLfsStore store) => Information(
         $"Left the Git LFS files in {store.Storage} alone: the folder is reached through a link, so other "
