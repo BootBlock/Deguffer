@@ -467,7 +467,7 @@ public sealed class CleanupPlannerTests
                 "dotnet-obj", "visual-studio-solution-cache", "unity-library", "unreal-intermediate", "unreal-project-ddc", "cargo-target", "node-modules", "python-venv",
                 "pytest-cache", "mypy-cache", "ruff-cache", "tox-environments", "nox-environments", "dart-tool", "git-lfs-objects",
                 "nuget", "gradle", "npm", "pnpm", "yarn", "bun", "composer", "arduino", "scoop-cache", "vscode-cpptools", "dart-analysis-server", "roslyn-cache", "jetbrains-superseded-system", "temp-tool-caches",
-                "uv", "pip", "poetry", "conda", "pre-commit", "cargo", "go", "zig", "deno", "electron", "typescript-typings", "ccache", "sccache", "debugger-symbols", "debugger-symbols-other-servers", "maven", "vcpkg", "conan", "gpu-shader-cache",
+                "uv", "pip", "poetry", "pipenv", "conda", "pre-commit", "cargo", "go", "zig", "deno", "electron", "typescript-typings", "ccache", "sccache", "debugger-symbols", "debugger-symbols-other-servers", "maven", "vcpkg", "conan", "gpu-shader-cache",
                 "chromium-app-cache", "chromium-service-worker-storage", "vscode-cache", "firefox", "thunderbird", "epic-launcher-webcache",
                 "epic-launcher-content-cache", "battle-net-cache", "steam", "steam-library-artwork", "steam-shader-cache", "emulator-shader-cache", "retroarch-downloads", "retroarch-thumbnails", "unreal-ddc", "unity-gi-cache", "spotify",
                 "plex-transcode", "jellyfin-transcode", "emby-transcode", "affinity-model-cache", "capture-one-cache", "davinci-resolve-render-cache", "after-effects-disk-cache", "adobe-media-cache", "redshift-cache", "capcut-cache",

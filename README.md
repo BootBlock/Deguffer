@@ -38,7 +38,7 @@ largest files inside it:
 
 Besides Settings and About, Deguffer has six pages:
 
-- [Storage](#storage) checks 115 sources of waste, from package-manager and browser caches to
+- [Storage](#storage) checks 116 sources of waste, from package-manager and browser caches to
   `Windows.old` and old restore points, and puts each one in a [safety tier](#safety-tiers). You
   choose what goes, and when the clean has finished Deguffer checks that everything it said it would
   leave alone is still there.
@@ -125,7 +125,7 @@ remove one by any route.
 
 ## Storage
 
-Each of the 115 sources has its own provider, which knows what that location is and what sits next
+Each of the 116 sources has its own provider, which knows what that location is and what sits next
 to it. Rows for tools you do not have are hidden unless you ask the Storage page to show them. Build
 output and project caches, such as `node_modules`, `obj`, Rust's `target`, Python's `.tox` and
 `.pytest_cache` folders, and the caches in Visual Studio's `.vs` folders, are only looked for
@@ -165,6 +165,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | pip package cache | |
 | uv package cache | |
 | Poetry package cache | `poetry cache clear` for each repository; never its `virtualenvs`. Researched |
+| pipenv package cache | `pip cache purge` pointed at pipenv's own cache for the part in pip's format, and pipenv's resolver cache by path; never `pipenv --clear`, which also deletes pip's whole cache, or anything else in the folder. Researched |
 | pre-commit hook environments | Cleared with `pre-commit gc`, which keeps the hooks a project still uses; never `pre-commit clean`, which also deletes the unstaged changes pre-commit stashed during a commit. Researched |
 | pytest caches | `.pytest_cache` folders under your own source folders, only where pytest's own cache tag is inside and a pytest settings file is next to it. Researched |
 | mypy caches | `.mypy_cache` folders under your own source folders, only where mypy's own cache tag is inside and a mypy settings file is next to it. Researched |
