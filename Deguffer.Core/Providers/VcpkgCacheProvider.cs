@@ -115,6 +115,8 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
         + "archives again as it goes. Libraries already installed stay installed, and the ports, "
         + "triplets and registries are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.PackageCaches,

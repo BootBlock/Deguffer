@@ -43,6 +43,8 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
     public override string WhatHappensOnNextUse =>
         "The next restore re-downloads packages from your configured feeds. Projects and their configuration are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.PackageCaches,

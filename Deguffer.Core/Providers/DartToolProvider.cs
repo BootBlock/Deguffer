@@ -84,6 +84,8 @@ public sealed class DartToolProvider : BuildDirectoryProvider
         "still holds them and from the network where it does not. The pubspec.lock pins the versions, " +
         "so what comes back is what was there. Flutter's next build then compiles from the start.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.ProjectBuildOutput,

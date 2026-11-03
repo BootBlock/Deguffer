@@ -230,6 +230,8 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
         "The driver recompiles each shader the first time it is wanted again, so a game or 3D " +
         "application stutters briefly on its next run and then behaves exactly as before.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Windows,

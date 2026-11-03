@@ -87,6 +87,10 @@ offers anything.
 | **3. User data** | Logs, histories and saved sessions that *look* like a cache | It is gone for good | Offered, never pre-selected |
 | **4. Do not touch** | Settings, credentials and live state | Things stop working | Never shown |
 
+Some rows were written from a tool's documentation, its source code and its users' reports,
+because nobody working on Deguffer had seen its folders on a real installation. Each of those rows
+carries a **Researched** chip and is never pre-selected, whatever its tier.
+
 Anything Deguffer does not positively recognise is treated as Tier 4, so it is left alone by
 default instead of depending on someone having remembered to exclude it. Outlook's `.ost` and
 `.pst` files are also protected by name, because they can be saved anywhere, and Deguffer will never
@@ -130,7 +134,7 @@ inside the source folders you add in Settings.
 sources in more detail.
 
 After a scan, each row on the Storage page gives the location's size and safety tier, and says what
-you would lose by deleting it. By default, only Tier 1 rows start out selected:
+you would lose by deleting it. By default, only Tier 1 rows that are not marked Researched start out selected:
 
 ![The Storage page after a scan, listing rows such as the NuGet package cache and GPU shader caches with their sizes, tiers and what deleting each one costs](assets/screenshots/storage.png)
 
@@ -141,30 +145,30 @@ you would lose by deleting it. By default, only Tier 1 rows start out selected:
 | --- | --- |
 | NuGet package cache | Cleared with `dotnet nuget locals all --clear`, not by path |
 | npm package cache | Cleared with `npm cache clean --force` |
-| pnpm store | |
-| Yarn 1 package cache | Cleared with `yarn cache clean`, only where the `yarn` on your PATH is Yarn 1, never Yarn 2 or later |
-| Bun install cache | Cleared with `bun pm cache prune`, which keeps Bun's global store; needs Bun 1.4.4 or later |
+| pnpm store | Researched |
+| Yarn 1 package cache | Cleared with `yarn cache clean`, only where the `yarn` on your PATH is Yarn 1, never Yarn 2 or later. Researched |
+| Bun install cache | Cleared with `bun pm cache prune`, which keeps Bun's global store; needs Bun 1.4.4 or later. Researched |
 | Composer package cache | Cleared with `composer clear-cache`, only where every folder it empties is Composer's own |
-| Arduino downloads and build cache | Downloaded archives cleared with `arduino-cli cache clean`, only where the downloads folder holds nothing but the archives the CLI stages there; build-cache entries only where the CLI's `.last-used` marker is inside; never the data folder with your installed boards, or your sketchbook |
-| Scoop download cache | Cleared with Scoop's own cache command, only where everything in the cache is a download Scoop made; installed apps are not touched |
+| Arduino downloads and build cache | Downloaded archives cleared with `arduino-cli cache clean`, only where the downloads folder holds nothing but the archives the CLI stages there; build-cache entries only where the CLI's `.last-used` marker is inside; never the data folder with your installed boards, or your sketchbook. Researched |
+| Scoop download cache | Cleared with Scoop's own cache command, only where everything in the cache is a download Scoop made; installed apps are not touched. Researched |
 | Gradle build cache | `caches` and `wrapper` only, never the Gradle user home itself: `.gradle`, or wherever `GRADLE_USER_HOME` points |
-| Cargo crate cache | |
-| Go build and module caches | |
-| Zig build cache | Never the packages Zig fetched. What it built is removed only together with the records that point to it |
-| Deno cache | By path, never with `deno clean`, which also deletes what Deno programs saved and your REPL history; left alone while Deno is running |
+| Cargo crate cache | Researched |
+| Go build and module caches | Researched |
+| Zig build cache | Never the packages Zig fetched. What it built is removed only together with the records that point to it. Researched |
+| Deno cache | By path, never with `deno clean`, which also deletes what Deno programs saved and your REPL history; left alone while Deno is running. Researched |
 | Electron downloads | The runtime zips Electron's installer keeps, one folder per version; never the layouts older installers left next to them |
 | TypeScript typings cache | One folder per TypeScript version; never one that a running program is working in |
-| ccache compiler cache | Cleared with `ccache --clear`, which keeps its settings |
-| sccache compiler cache | sccache's server is stopped first; never its settings |
+| ccache compiler cache | Cleared with `ccache --clear`, which keeps its settings. Researched |
+| sccache compiler cache | sccache's server is stopped first; never its settings. Researched |
 | Debugger symbol cache | The symbol files and programs that debuggers downloaded into a store that only Microsoft's public symbol servers fill, as `_NT_SYMBOL_PATH` names it; never the store's markers or anything else in it, a store that SymStore built, or anything while a debugger that writes to the store is running |
-| Conan package cache | Conan's own cache clean, limited to sources, build folders and unfinished builds; the packages you built or downloaded stay, with their metadata and your configuration |
+| Conan package cache | Conan's own cache clean, limited to sources, build folders and unfinished builds; the packages you built or downloaded stay, with their metadata and your configuration. Researched |
 | pip package cache | |
 | uv package cache | |
-| Poetry package cache | `poetry cache clear` for each repository; never its `virtualenvs` |
-| pre-commit hook environments | Cleared with `pre-commit gc`, which keeps the hooks a project still uses; never `pre-commit clean`, which also deletes the unstaged changes pre-commit stashed during a commit |
-| pytest caches | `.pytest_cache` folders under your own source folders, only where pytest's own cache tag is inside and a pytest settings file is next to it |
-| mypy caches | `.mypy_cache` folders under your own source folders, only where mypy's own cache tag is inside and a mypy settings file is next to it |
-| ruff caches | `.ruff_cache` folders under your own source folders, only where ruff's own cache tag and `.gitignore` are inside and a ruff settings file is next to it |
+| Poetry package cache | `poetry cache clear` for each repository; never its `virtualenvs`. Researched |
+| pre-commit hook environments | Cleared with `pre-commit gc`, which keeps the hooks a project still uses; never `pre-commit clean`, which also deletes the unstaged changes pre-commit stashed during a commit. Researched |
+| pytest caches | `.pytest_cache` folders under your own source folders, only where pytest's own cache tag is inside and a pytest settings file is next to it. Researched |
+| mypy caches | `.mypy_cache` folders under your own source folders, only where mypy's own cache tag is inside and a mypy settings file is next to it. Researched |
+| ruff caches | `.ruff_cache` folders under your own source folders, only where ruff's own cache tag and `.gitignore` are inside and a ruff settings file is next to it. Researched |
 | .NET intermediate build output | `obj` folders under your own source folders |
 | Visual Studio solution caches | Inside the `.vs` folder beside a solution under your own source folders: the design-time build and project evaluation caches, the Find in Files index, and the C++ browsing database and precompiled headers, each only where the files inside it are the ones Visual Studio writes; never Copilot conversations or snapshots, solution options or window layouts, and nothing while the solution is open |
 | Dart analysis server cache | |
@@ -175,11 +179,12 @@ you would lose by deleting it. By default, only Tier 1 rows start out selected:
 | VS Code extension browsers | The Chromium build that an extension such as Cline downloaded and will download again by itself; never the extension's conversations, checkpoints or settings, or a build that a running browser is using |
 | Chromium application caches | Chrome, Edge, Brave, Vivaldi and Opera, the built-in browsers in the Steam client and the Battle.net launcher, and every application that embeds the same engine, including WebView2 and packaged applications. Never their sign-ins, saved passwords or payment cards |
 | Firefox caches | |
+| Thunderbird caches | The cache, startup cache and Safe Browsing lists in each profile's local half; never your mail, address books, calendars, saved passwords or OpenPGP keys |
 | Steam HTTP cache | The client's own cache next to the program; never your games, your cloud saves, or the sign-in kept by its built-in browser |
-| Spotify streaming cache | Never the music and podcasts you downloaded, wherever Spotify's settings put them |
-| Plex Media Server transcoder files | `Transcode\Sessions` and the resized pictures; never anything written in the last 24 hours, the sync queue next to it, or the downloads folder |
-| Jellyfin transcoder files | Only a folder that carries Jellyfin's own marker; never anything written in the last 24 hours |
-| Emby Server transcoder files | Only a `transcoding-temp` folder that Emby made; never anything written in the last 24 hours |
+| Spotify streaming cache | Never the music and podcasts you downloaded, wherever Spotify's settings put them. Researched |
+| Plex Media Server transcoder files | `Transcode\Sessions` and the resized pictures; never anything written in the last 24 hours, the sync queue next to it, or the downloads folder. Researched |
+| Jellyfin transcoder files | Only a folder that carries Jellyfin's own marker; never anything written in the last 24 hours. Researched |
+| Emby Server transcoder files | Only a `transcoding-temp` folder that Emby made; never anything written in the last 24 hours. Researched |
 | Epic Games launcher web cache | |
 | Epic Games launcher store artwork | Machine-wide, under `%PROGRAMDATA%`, and shared by every account |
 | Battle.net launcher cache | Never the launcher's account data, its database, or anything under `%PROGRAMDATA%` |
@@ -197,40 +202,42 @@ you would lose by deleting it. By default, only Tier 1 rows start out selected:
 
 | Source | Notes |
 | --- | --- |
-| Maven local repository | |
-| Conda package cache | |
+| Maven local repository | Researched |
+| Conda package cache | Researched |
 | Debugger symbol cache, other servers | The same, in WinDbg's own store, Visual Studio's symbol cache, and any store that another server fills. A private server may no longer keep an old build's symbols, so the copy here may be the last one |
 | Chromium offline site storage | What sites' service workers stored so that they work offline, in the same browsers and applications as the Chromium caches row; a web application that worked offline will not do so again until it is next opened online |
-| vcpkg build caches | |
+| vcpkg build caches | Researched |
 | PlatformIO cache and unused packages | PlatformIO's own prune decides which installed packages are no longer needed |
 | Affinity machine-learning models | The `modelcache` next to your asset library, never the version folder that contains both |
-| DaVinci Resolve render cache | Each project's render files in a `CacheClip` folder at the root of a drive or in your Videos folder; never optimised media, proxies, backups or recordings, and nothing while Resolve is running. Resolve renders them again only while your media is connected |
-| After Effects disk cache | Each version's cache named for this computer, only in the folder that After Effects' own preferences name; never anything next to it or above it, and nothing while After Effects is running. After Effects renders the frames again as you preview |
-| Adobe media cache | The converted audio, waveforms and database shared by Premiere Pro, After Effects, Audition and Media Encoder, wherever Adobe's settings put them; never your LUTs, templates or Team Projects' auto-saves, and nothing while an Adobe application is running. Each project opens slowly once while Adobe converts its audio again |
-| Capture One previews and thumbnails | The `Cache` in each catalog and session that Capture One lists, wherever it is; never the photographs or the adjustments next to it. A catalog whose originals are offline cannot be browsed until they are reconnected |
+| DaVinci Resolve render cache | Each project's render files in a `CacheClip` folder at the root of a drive or in your Videos folder; never optimised media, proxies, backups or recordings, and nothing while Resolve is running. Resolve renders them again only while your media is connected. Researched |
+| After Effects disk cache | Each version's cache named for this computer, only in the folder that After Effects' own preferences name; never anything next to it or above it, and nothing while After Effects is running. After Effects renders the frames again as you preview. Researched |
+| Adobe media cache | The converted audio, waveforms and database shared by Premiere Pro, After Effects, Audition and Media Encoder, wherever Adobe's settings put them; never your LUTs, templates or Team Projects' auto-saves, and nothing while an Adobe application is running. Each project opens slowly once while Adobe converts its audio again. Researched |
+| CapCut editing cache | Thumbnails, waveforms and the audio extracted for subtitles in CapCut's and Jianying Pro's `User Data\Cache`, and nothing while either is running; never your drafts, settings, downloaded effects or imported media. Researched |
+| Capture One previews and thumbnails | The `Cache` in each catalog and session that Capture One lists, wherever it is; never the photographs or the adjustments next to it. A catalog whose originals are offline cannot be browsed until they are reconnected. Researched |
 | Playwright browsers | |
-| Puppeteer browsers | The builds in `.cache\puppeteer`, never the rest of `.cache`; never a build that a running browser is using, or the metadata Puppeteer uses to find its builds |
+| Puppeteer browsers | The builds in `.cache\puppeteer`, never the rest of `.cache`; never a build that a running browser is using, or the metadata Puppeteer uses to find its builds. Researched |
 | LM Studio superseded runtimes | Every llama.cpp build LM Studio has downloaded except the one it uses and the newest for each kind of hardware, removed by LM Studio's own command. LM Studio must be open, and it frees the space the next time it starts |
 | Azure Functions Core Tools releases | |
-| Vagrant superseded box versions | Vagrant's own prune, which keeps the newest version of every box; nothing while a machine Vagrant knows about was made from a version the prune would remove |
-| Graphics driver installer files | What NVIDIA's and AMD's installers unpacked or downloaded and left behind; never AMD's chipset install source or the NVIDIA app's update store |
-| Autodesk installer files | What Autodesk's installers extracted into `C:\Autodesk` and left behind; never the network licence server, an administrator's deployment images or Autodesk Access's updates. A repair or an update then downloads the product again |
+| Vagrant superseded box versions | Vagrant's own prune, which keeps the newest version of every box; nothing while a machine Vagrant knows about was made from a version the prune would remove. Researched |
+| Graphics driver installer files | What NVIDIA's and AMD's installers unpacked or downloaded and left behind; never AMD's chipset install source or the NVIDIA app's update store. Researched |
+| Autodesk installer files | What Autodesk's installers extracted into `C:\Autodesk` and left behind; never the network licence server, an administrator's deployment images or Autodesk Access's updates. A repair or an update then downloads the product again. Researched |
 | Steam library artwork | One item per game, fetched again when Steam next shows it; never Steam's index of it. A picture you replaced by hand is lost, so keep that game |
 | Steam shader pre-cache | One item per game, in every library listed by Steam itself; never the games next to it |
-| Emulator shader caches | What Cemu, RPCS3, Dolphin, PCSX2, Ryujinx, Eden, Citron and yuzu compile for your GPU, and Ryujinx's translated code, found where each one keeps its data and in the emulator folders you add in Settings; never Cemu's transferable cache or a Switch emulator's guest shader cache, saves, memory cards, firmware or Dolphin's own `Shaders`, and nothing while the emulator is running |
-| RetroArch shaders and game databases | The shader sets and `.rdb` databases its Online Updater downloaded, found through Steam's records and the emulator folders you add in Settings, in the folders named by its own `retroarch.cfg`; never the presets you saved, `system`, cores, cheats, overlays or saves, and nothing while RetroArch is running |
-| Unreal Engine derived data cache | The cache that every project shares, in both the older folder and each Zen store; a store is left alone while its server is running |
-| Unity GI cache | The lighting cache that every project shares, in `%LOCALAPPDATA%\Unity\Caches\GiCache`, and nothing while a Unity Editor is running; never the build cache next to it. A cache moved in Unity's preferences is named, never removed |
+| Emulator shader caches | What Cemu, RPCS3, Dolphin, PCSX2, Ryujinx, Eden, Citron and yuzu compile for your GPU, and Ryujinx's translated code, found where each one keeps its data and in the emulator folders you add in Settings; never Cemu's transferable cache or a Switch emulator's guest shader cache, saves, memory cards, firmware or Dolphin's own `Shaders`, and nothing while the emulator is running. Researched |
+| RetroArch shaders and game databases | The shader sets and `.rdb` databases its Online Updater downloaded, found through Steam's records and the emulator folders you add in Settings, in the folders named by its own `retroarch.cfg`; never the presets you saved, `system`, cores, cheats, overlays or saves, and nothing while RetroArch is running. Researched |
+| Unreal Engine derived data cache | The cache that every project shares, in both the older folder and each Zen store; a store is left alone while its server is running. Researched |
+| Unity GI cache | The lighting cache that every project shares, in `%LOCALAPPDATA%\Unity\Caches\GiCache`, and nothing while a Unity Editor is running; never the build cache next to it. A cache moved in Unity's preferences is named, never removed. Researched |
 | Node.js project dependencies | `node_modules` under your own source folders |
 | Python virtual environments | |
-| tox environments | `.tox` folders under your own source folders, only where tox's own cache tag is inside and a tox configuration is next to it |
-| nox environments | `.nox` folders under your own source folders, only where nox's cache tag and `.gitignore` are inside and a `noxfile.py` is next to it |
+| tox environments | `.tox` folders under your own source folders, only where tox's own cache tag is inside and a tox configuration is next to it. Researched |
+| nox environments | `.nox` folders under your own source folders, only where nox's cache tag and `.gitignore` are inside and a `noxfile.py` is next to it. Researched |
 | Dart and Flutter tool folders | `.dart_tool` folders under your own source folders, only where pub's own package configuration is inside, `pubspec.yaml` and `pubspec.lock` are next to it, and git tracks nothing inside it |
 | Rust build output | `target` folders under your own source folders |
 | Unity project library | |
-| Unreal project intermediate files | `Intermediate` next to a `.uproject` under your own source folders; never `Saved` or `Binaries` |
-| Unreal project derived data cache | A project's own `DerivedDataCache` under your own source folders |
+| Unreal project intermediate files | `Intermediate` next to a `.uproject` under your own source folders; never `Saved` or `Binaries`. Researched |
+| Unreal project derived data cache | A project's own `DerivedDataCache` under your own source folders. Researched |
 | Superseded application versions | Older versions that a Squirrel-updated app still keeps |
+| CapCut superseded builds | Older builds of CapCut and Jianying Pro in `Apps`, never the build its launcher starts or the newest, and nothing while it is running. Researched |
 | Temporary files | Emptied in place, taking only what nothing has touched for seven days; anything a tool's own row offers is left to that row |
 | Installer downloads in temporary folders | Updates that VS Code, Docker Desktop and the Visual Studio Installer downloaded, and Blender's crashed sessions, only while the application is closed; never Blender's recovery files |
 | Previous Windows installation | `Windows.old` and Setup's leftovers, removed by Windows' own Disk Cleanup handlers once the upgrade can no longer be undone and no update is unfinished |
@@ -249,14 +256,14 @@ you would lose by deleting it. By default, only Tier 1 rows start out selected:
 | Windows update uninstall data | `DISM /StartComponentCleanup /ResetBase`, as a separate row because afterwards no update installed so far can be uninstalled |
 | Older restore points | Every restore point except the newest, removed one at a time by System Restore itself as administrator; never the newest, a shadow copy that cannot belong to a restore point, or System Protection's limit |
 | Other accounts' profiles | Every other account's profile is listed with its size, last use, and whether its account exists and is in use. Only a local account Windows says no longer exists is offered, removed by Windows' own profile removal as administrator, one profile at a time; never a profile in use, the account Deguffer runs as, a domain or work account, or a folder by path |
-| Windows File History | Windows' own command removes saved versions older than an age you set; the backup drive itself is never touched |
+| Windows File History | Windows' own command removes saved versions older than an age you set; the backup drive itself is never touched. Researched |
 | Files discarded by a Windows upgrade | What an upgrade set aside instead of moving, which can include your own files. Removed by Windows' own Disk Cleanup handler, and only once the upgrade can no longer be undone |
 | Crash dumps and error reports | |
 | Windows servicing logs | The logs that a reset of this PC leaves behind, cleared by Windows' own cleanup for them, never by path |
 | VS Code editor logs and crash reports | |
 | Epic Games launcher logs and crash reports | |
 | Battle.net launcher logs | |
-| RetroArch thumbnails | Each system's box art, snapshots, title screens and logos, grouped by system. Most will download again, but a picture you added yourself cannot be told apart from the rest and will be lost |
+| RetroArch thumbnails | Each system's box art, snapshots, title screens and logos, grouped by system. Most will download again, but a picture you added yourself cannot be told apart from the rest and will be lost. Researched |
 | Hugging Face models and datasets | One item per repository in the hub cache that Transformers, Diffusers and other Python tools download into, removed by Hugging Face's own `hf cache rm`, version 1.32 or later; never a repository a running program has open, the store of files that repositories share, or your access tokens. A model that has been withdrawn or made private cannot be downloaded again |
 | Claude Code MCP server logs | |
 | Tool logs in temporary folders | The Remote Desktop client's traces, the Windows App's and ServiceHub's logs, and VS Code's updater logs; the folders they are written to stay |

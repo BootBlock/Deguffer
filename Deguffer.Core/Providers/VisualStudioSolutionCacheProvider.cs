@@ -80,6 +80,8 @@ public sealed class VisualStudioSolutionCacheProvider : CleanupProviderBase
         "Files and IntelliSense may be incomplete until it finishes. Your open documents, breakpoints, " +
         "window layout and Copilot conversations stay.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.ProjectBuildOutput,

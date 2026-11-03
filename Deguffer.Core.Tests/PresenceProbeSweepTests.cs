@@ -29,7 +29,7 @@ public sealed partial class PresenceProbeSweepTests
     /// root markers, the editor's identifying files, and the build-directory and <c>obj</c>
     /// signatures.</item>
     /// <item>Behind a refusal check: an earlier probe or obstacle walk stops on a refusal, so only
-    /// absence reaches the call. The Claude Code providers, Epic's <c>Saved</c> folder, a Firefox
+    /// absence reaches the call. The Claude Code providers, Epic's <c>Saved</c> folder, a Mozilla
     /// profile's local half, Steam's shader container and the NVIDIA folder in a packaged app's
     /// container.</item>
     /// <item>A refusal costs a recomputation: Deguffer's own scan estimate and refusal record
@@ -45,7 +45,7 @@ public sealed partial class PresenceProbeSweepTests
         ["Deguffer.Core/Providers/ClaudeCodeFileHistoryProvider.cs"] = 1,
         ["Deguffer.Core/Providers/ClaudeCodeMcpLogProvider.cs"] = 1,
         ["Deguffer.Core/Providers/EpicLauncherSaved.cs"] = 1,
-        ["Deguffer.Core/Providers/FirefoxCacheProvider.cs"] = 1,
+        ["Deguffer.Core/Providers/MozillaProfileCacheProvider.cs"] = 1,
         ["Deguffer.Core/Providers/JellyfinServerLayout.cs"] = 1,
         ["Deguffer.Core/Providers/LmStudioRuntimeProvider.cs"] = 3,
         ["Deguffer.Core/Providers/PackageContainers.cs"] = 1,

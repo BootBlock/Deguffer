@@ -112,6 +112,8 @@ public sealed class FileHistoryProvider : CleanupProviderBase
         + "back to how a file was on a date before it. Windows will not remove the newest copy of a "
         + "file it is still protecting, and it keeps backing up exactly as it did.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Windows,

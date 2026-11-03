@@ -112,6 +112,8 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
         + "now, your conversations and your settings are untouched, and every session takes its own snapshots "
         + "exactly as before.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.DeveloperTools,

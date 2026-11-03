@@ -69,6 +69,8 @@ public sealed class RestorePointProvider : CleanupProviderBase
         + "System Restore can still undo whatever changed since it was made, and Windows goes on making new ones "
         + "as before. Earlier versions of files kept with a removed restore point go with it.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Windows,

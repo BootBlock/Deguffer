@@ -94,6 +94,8 @@ public sealed class CrashDumpProvider : CleanupProviderBase
         + "attached to a bug report or opened in a debugger afterwards. Windows keeps writing new "
         + "dumps exactly as before, and nothing that is running is affected.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Windows,

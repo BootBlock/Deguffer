@@ -73,6 +73,8 @@ public sealed class DeliveryOptimizationProvider : CleanupProviderBase
         + "other PCs on your network download it themselves instead of from this one. Anything Windows "
         + "was told to keep stays.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Windows,

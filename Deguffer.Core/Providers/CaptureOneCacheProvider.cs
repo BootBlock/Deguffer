@@ -75,6 +75,8 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
         + "adjust those images offline. Your photographs, your adjustments and the catalogs themselves "
         + "are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.MediaAndCreative,

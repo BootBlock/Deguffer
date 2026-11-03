@@ -1000,6 +1000,42 @@ public sealed class ExploreActionPolicyTests : IDisposable
     }
 
     /// <summary>
+    /// A Thunderbird profile is split the way a Firefox one is, under Thunderbird's own folders, and
+    /// its roaming half is the user's mail. Only the three measured caches in the local half may go.
+    /// </summary>
+    [Theory]
+    [InlineData(true, "", false)]                  // the cache folder itself
+    [InlineData(true, "cache2", true)]             // a recognised cache
+    [InlineData(true, "safebrowsing", true)]
+    [InlineData(true, "thumbnails", false)]        // Firefox's, and not measured in Thunderbird
+    [InlineData(false, "", false)]                 // the profile itself
+    [InlineData(false, "Mail", false)]             // local folders and POP mail
+    [InlineData(false, "ImapMail", false)]
+    [InlineData(false, "abook.sqlite", false)]     // the address book
+    [InlineData(false, "cache2", false)]           // a cache name in the half that is never touched
+    public void AThunderbirdProfileIsClassifiedByWhichHalfItIsIn(bool local, string relative, bool allowed)
+    {
+        File.WriteAllText(
+            _temp.CreateFile(0, "profile", "AppData", "Roaming", "Thunderbird", "profiles.ini"),
+            """
+            [Profile0]
+            Name=default-release
+            IsRelative=1
+            Path=Profiles/default-release
+            """);
+
+        var provider = new ThunderbirdCacheProvider(_environment);
+        var policy = new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory());
+        var profile = Assert.Single(provider.Profiles());
+        var root = local ? profile.LocalPath : profile.RoamingPath;
+
+        Assert.Equal(
+            allowed,
+            policy.MayRemove(relative.Length == 0 ? root : Path.Combine(root, relative)).IsAllowed);
+        Assert.False(policy.MayRemove(Path.GetDirectoryName(Path.GetDirectoryName(root))!).IsAllowed);
+    }
+
+    /// <summary>
     /// A profile <c>profiles.ini</c> keeps outside Firefox's folder holds the same passwords as one
     /// inside it, and nothing above it is Firefox's to refuse. It is declared whole, so the profile
     /// and everything in it is refused, while the folder it sits in stays the user's.

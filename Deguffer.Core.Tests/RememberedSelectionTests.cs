@@ -1,5 +1,6 @@
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Safety;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -56,10 +57,10 @@ public class RememberedSelectionTests
                 [(Caches, true, true), (Native, false, false)]),
         });
 
-        var row = memory.RowStartsSelected("gradle", SafetyTier.RegenerableCache, byDefault: true);
+        var row = memory.RowStartsSelected(new FakeCleanupProvider("gradle", SafetyTier.RegenerableCache), byDefault: true);
 
         Assert.True(row);
-        Assert.True(memory.StepStartsSelected("gradle", SafetyTier.RegenerableCache, Native, row));
+        Assert.True(memory.StepStartsSelected(new FakeCleanupProvider("gradle", SafetyTier.RegenerableCache), Native, row));
     }
 
     [Fact]

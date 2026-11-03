@@ -39,6 +39,8 @@ public sealed class ComponentStoreCleanupProvider(
         + "30 days after each update, so it can no longer roll those components back. Every installed update "
         + "can still be uninstalled. The cleanup can take many minutes.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Windows,

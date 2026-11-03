@@ -38,7 +38,7 @@ public class StepGrainTests
         [
             "affinity-model-cache",
             "autodesk-installers",
-            "azure-functions-tools",
+            "azure-functions-tools", "capcut-superseded-builds",
             "capture-one-cache",
             "cargo-target",
             "claude-code-conversations",

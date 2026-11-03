@@ -85,6 +85,13 @@
                 <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
             </Style>
 
+            <!-- A researched provider's chip (ProviderBasis). Neutral, because it qualifies the row
+                 rather than warning about it, and caution's amber is Tier 2's. -->
+            <Style x:Key="BasisChip" TargetType="ContentControl" BasedOn="{StaticResource TierChipBase}">
+                <Setter Property="Background" Value="{ThemeResource ControlAltFillColorSecondaryBrush}" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Style>
+
             <Style x:Key="StandingChipUnproven" TargetType="ContentControl" BasedOn="{StaticResource TierChipBase}">
                 <Setter Property="Background" Value="{ThemeResource SystemFillColorCautionBackgroundBrush}" />
                 <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCautionBrush}" />

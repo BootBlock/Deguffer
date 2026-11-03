@@ -66,6 +66,8 @@ public sealed class AutodeskInstallerProvider : InstallerPayloadProvider
         + "a network resource is unavailable, until the product's installation source is cleared "
         + "from the registry as Autodesk describes.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.InstallersAndUpdates,

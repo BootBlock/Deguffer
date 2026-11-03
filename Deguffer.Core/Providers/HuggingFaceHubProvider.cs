@@ -112,6 +112,12 @@ public sealed class HuggingFaceHubProvider : CleanupProviderBase
         + "offers it. One that was gated, private, withdrawn or replaced under the same name may not come "
         + "back. Your access tokens and every repository you keep are untouched.";
 
+    /// <summary>
+    /// The layout, the shared store included, and every command's output were seen on a cache that
+    /// <c>huggingface_hub</c> 1.31, 1.32 and 2.4 had filled.
+    /// </summary>
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.DeveloperTools,

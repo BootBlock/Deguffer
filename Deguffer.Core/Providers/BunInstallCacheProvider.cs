@@ -72,6 +72,8 @@ public sealed class BunInstallCacheProvider : CleanupProviderBase
         "The next bun install downloads the packages it needs again. Installed node_modules, your global "
         + "packages and Bun's global store of linked packages are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.PackageCaches,

@@ -39,6 +39,8 @@ public sealed class ComponentStoreResetBaseProvider(
         + "that turns out to cause a problem can only be undone by resetting or reinstalling Windows. Updates "
         + "installed later can still be uninstalled. The cleanup can take many minutes.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Windows,

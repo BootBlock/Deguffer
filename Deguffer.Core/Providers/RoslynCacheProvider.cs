@@ -67,6 +67,8 @@ public sealed class RoslynCacheProvider : CleanupProviderBase
         + "it. Searching and navigating that code is slower until it finishes, and nothing you have "
         + "written is affected.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.DeveloperTools,

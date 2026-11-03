@@ -133,6 +133,8 @@ public sealed class ChromiumCacheProvider : ChromiumUserDataProvider
         "first time it is opened again, so it starts more slowly once. Sign-ins, saved passwords " +
         "and settings are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Browsers,

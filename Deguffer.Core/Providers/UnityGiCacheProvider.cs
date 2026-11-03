@@ -63,6 +63,8 @@ public sealed class UnityGiCacheProvider : CleanupProviderBase
         + "that can take hours. Your projects, your baked lightmaps, your licence and the build cache every "
         + "project shares are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.DeveloperTools,

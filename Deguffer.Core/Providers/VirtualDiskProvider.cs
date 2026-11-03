@@ -66,6 +66,8 @@ public sealed class VirtualDiskProvider : CleanupProviderBase, IRegistersVirtual
         "Nothing changes: Deguffer only reports these disks. Making one smaller is done with the commands the "
         + "report names, inside the tool that owns the disk.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.DeveloperTools,

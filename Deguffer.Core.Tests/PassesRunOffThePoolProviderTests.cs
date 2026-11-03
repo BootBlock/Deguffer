@@ -209,6 +209,8 @@ public sealed class PassesRunOffThePoolProviderTests : IDisposable
 
         public override string WhatHappensOnNextUse => "Nothing a test cares about.";
 
+        public override ProviderBasis Basis => ProviderBasis.Observed;
+
         public override ProviderDescription Description { get; } = new()
         {
             Category = ProviderCategory.TemporaryFiles,

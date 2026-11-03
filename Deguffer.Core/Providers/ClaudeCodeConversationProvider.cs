@@ -108,6 +108,8 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
         + "of them itself once its retention period ran out, so what you gain is that time, not space for good. Your other "
         + "conversations, each project's memory, your settings and your sign-in are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.DeveloperTools,
