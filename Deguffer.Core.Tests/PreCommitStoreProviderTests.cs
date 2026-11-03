@@ -1,4 +1,5 @@
 using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Testing;
@@ -312,6 +313,53 @@ public sealed class PreCommitStoreProviderTests : IDisposable
         var step = Assert.Single(plan.Steps.OfType<RunCommandStep>());
         Assert.All(step.MeasuredPaths, path => Assert.StartsWith(moved, path, StringComparison.OrdinalIgnoreCase));
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(Path.Combine(moved, "db.db"), StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// A store set on the machine after Deguffer started is where a pre-commit started now keeps its
+    /// hooks and stashed changes, so Explore and a duplicate search refuse it, though <c>gc</c> is never
+    /// sent there until Deguffer is started again.
+    /// </summary>
+    [Fact]
+    public async Task RefusesTheStoreAPreCommitStartedNowWouldUse()
+    {
+        _environment.WithExecutable("pre-commit");
+        var started = Path.Combine(_temp.Path, "hooks");
+        var moved = Path.Combine(_temp.Path, "moved-hooks");
+        CreateLayout(started);
+        var (repositories, _) = CreateLayout(moved);
+        _environment.WithEnvironmentVariable(PreCommitStoreProvider.HomeVariable, moved);
+        _environment.WithToolEnvironmentVariable(PreCommitStoreProvider.HomeVariable, started);
+        var provider = CreateProvider();
+
+        Assert.Equal(
+            new[] { started, moved }.Order(StringComparer.OrdinalIgnoreCase),
+            provider.ToolRoots.Select(root => root.Path).Order(StringComparer.OrdinalIgnoreCase),
+            StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(await provider.CleanedPlacesAsync(), place => place.Path.Equals(moved, StringComparison.OrdinalIgnoreCase));
+
+        var policy = await ExploreActionPolicy.ForAsync(_system, _environment, new FakeVolumeInventory(), [provider]);
+        Assert.False(policy.MayRemove(repositories[0]).IsAllowed);
+
+        var step = Assert.Single((await provider.PlanAsync()).Steps.OfType<RunCommandStep>());
+        Assert.All(step.MeasuredPaths, path => Assert.StartsWith(started, path, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>A folder declined as the machine now reads the variable still refuses what pre-commit keeps there.</summary>
+    [Fact]
+    public async Task ADeclinedFolderTheMachineNowNamesStillRefusesWhatPreCommitKeepsThere()
+    {
+        _environment.WithExecutable("pre-commit");
+        var started = Path.Combine(_temp.Path, "hooks");
+        CreateLayout(started);
+        _environment.WithEnvironmentVariable(PreCommitStoreProvider.HomeVariable, _environment.UserProfile);
+        _environment.WithToolEnvironmentVariable(PreCommitStoreProvider.HomeVariable, started);
+
+        var root = Assert.Single(await CreateProvider().DiscoverToolRootsAsync());
+
+        Assert.Equal(_environment.UserProfile, root.Path, StringComparer.OrdinalIgnoreCase);
+        Assert.False(root.Recognises(new ToolRootChild("db.db", ChildKind.File)));
+        Assert.True(root.RecognisesFolder("Documents"));
     }
 
     /// <summary>pre-commit makes a relative value absolute against its own working directory, which Deguffer does not share.</summary>
