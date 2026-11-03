@@ -344,6 +344,32 @@ public sealed class EspIdfArchiveProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A recorded <c>tools</c> folder directly on a drive puts the Installation Manager's downloads in the drive
+    /// root, which is declined and said. Nothing there is reached, and Explore refuses the dist it would write.
+    /// </summary>
+    [Fact]
+    public async Task DeclinesTheDriveRootBesideARecordedToolsFolder()
+    {
+        var mine = Write(Path.Combine(_system.SystemDrive, "dist", Toolchain));
+        var recorded = Write(Path.Combine(_system.SystemDrive, "tools", "dist", Debugger));
+        WriteRecord(Path.Combine(_system.SystemDrive, "tools"));
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([recorded], plan.TargetedPaths);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("downloads would be beside", StringComparison.Ordinal));
+
+        var policy = new ExploreActionPolicy([], [], new FakeVolumeInventory(), probedRoots: await provider.DiscoverToolRootsAsync());
+
+        Assert.False(policy.MayRemove(Path.Combine(_system.SystemDrive, "dist")).IsAllowed);
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(mine));
+    }
+
+    /// <summary>
     /// A tools folder inside another opens the way down to its archives in Explore, and nothing else: the
     /// Installation Manager's record and its installed tools stay refused.
     /// </summary>

@@ -199,6 +199,7 @@ public sealed record EspIdfLayout(
                 if (ConfiguredFolder.WhyNotOwned(holder, environment, machine, volumes, temporary) is { } held)
                 {
                     withheld = true;
+                    declinedFolders.Add(holder);
                     notes.Add(new PlanNote(
                         PlanNoteSeverity.Information,
                         $"The ESP-IDF Installation Manager's downloads would be beside '{LongPath.Display(named)}', "
