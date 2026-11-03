@@ -18,7 +18,7 @@ namespace Deguffer.Core.Providers;
 /// <param name="Id">The repository, as the command names it.</param>
 internal sealed record HuggingFaceRepositorySize(IProcessRunner Runner, string Hf, string HubCache, string Id) : IToolMeasurement
 {
-    public async Task<long?> MeasureAsync(CancellationToken ct)
+    public async Task<long?> MeasureAsync(MeasuredWhen when, CancellationToken ct)
     {
         var listed = await Runner.RunAsync(Hf, HuggingFaceCommands.List(HubCache), ToolRun.Query, ct).ConfigureAwait(false);
 
