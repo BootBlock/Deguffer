@@ -74,6 +74,12 @@ public sealed class GitLfsObjectProvider : CleanupProviderBase
 
     public override StepGrain Grain => StepGrain.Items;
 
+    /// <summary>
+    /// Observed: the stores, the dry run's report, <c>git lfs env</c> and the prune itself were seen
+    /// with git-lfs 3.8.1, on repositories and a submodule made for the purpose.
+    /// </summary>
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override string WhatHappensOnNextUse =>
         "Checking out an older commit downloads the large files it needs from the repository's server "
         + "again. The files your checkout uses, every file in a commit you have not pushed, and those of "
