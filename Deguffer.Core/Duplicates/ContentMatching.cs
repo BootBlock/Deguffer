@@ -77,7 +77,7 @@ internal sealed class ContentMatching
         var run = new Run(
             this,
             ReadingLanes.Of(groups.SelectMany(group => group.Files).Select(file => file.Volume), _media),
-            new ContentProgress(groups.SelectMany(group => group.Files).Sum(file => ContentProgress.MostToRead(file.Length)), progress, _clock),
+            new StageMeasure(DuplicateSearchStage.ComparingContent, groups.SelectMany(group => group.Files).Sum(file => ContentReader.MostToRead(file.Length)), progress, _clock),
             criteria,
             algorithm,
             confirmed,
@@ -154,7 +154,7 @@ internal sealed class ContentMatching
     private sealed class Run(
         ContentMatching matching,
         ReadingLanes lanes,
-        ContentProgress measure,
+        StageMeasure measure,
         MatchCriteria criteria,
         ChecksumAlgorithm algorithm,
         Action<DuplicateGroup> confirmed,
@@ -199,7 +199,7 @@ internal sealed class ContentMatching
             var candidate = group.Files[file];
 
             group.Checksums[file] = matching.Read(candidate, group.Part, algorithm, _idle, ct);
-            measure.Read(ContentReader.BytesOf(group.Part, candidate.Length));
+            measure.Done(ContentReader.BytesOf(group.Part, candidate.Length));
 
             if (Interlocked.Decrement(ref group.Unread) == 0)
             {

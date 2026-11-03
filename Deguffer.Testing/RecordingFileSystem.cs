@@ -16,6 +16,7 @@ public sealed class RecordingFileSystem(IFileSystem inner) : IFileSystem
     private readonly ConcurrentQueue<string> _paths = new();
     private readonly ConcurrentQueue<string> _probed = new();
     private readonly ConcurrentQueue<string> _resolved = new();
+    private readonly ConcurrentQueue<string> _listed = new();
 
     public IReadOnlyCollection<string> Paths => _paths;
 
@@ -31,6 +32,12 @@ public sealed class RecordingFileSystem(IFileSystem inner) : IFileSystem
     /// test counting how often an entry is described is not counting the question of where it is.
     /// </summary>
     public IReadOnlyCollection<string> Resolved => _resolved;
+
+    /// <summary>
+    /// The directories listed, once for each listing, which <see cref="Paths"/> holds too. Kept apart
+    /// so a test can count how many times a tree was walked.
+    /// </summary>
+    public IReadOnlyCollection<string> Listed => _listed;
 
     public bool DirectoryExists(string path)
     {
@@ -59,6 +66,7 @@ public sealed class RecordingFileSystem(IFileSystem inner) : IFileSystem
     public ListingEnd ListEntries(string directory, ListingRequest request, List<WalkEntry> into)
     {
         _paths.Enqueue(directory);
+        _listed.Enqueue(directory);
         return inner.ListEntries(directory, request, into);
     }
 

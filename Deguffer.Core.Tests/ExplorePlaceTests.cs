@@ -285,7 +285,7 @@ public class ExplorePlaceTests
         .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4096);
 
     private static ExploreTree WholeVolume(IMftSource source) =>
-        MftExploreReader.Read(source, @"C:\", [], TableTuning.Default, onProgress: null, default).Tree!;
+        MftExploreReader.Read(source, @"C:\", [], TableTuning.Default, progress: null, default).Tree!;
 
     /// <summary>A whole small tree, built the way the walk builds one.</summary>
     private static ExploreTree ProfileTree(string root)

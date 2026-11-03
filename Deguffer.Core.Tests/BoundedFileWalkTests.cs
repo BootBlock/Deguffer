@@ -318,7 +318,7 @@ public sealed class BoundedFileWalkTests : IDisposable
     }
 
     /// <summary>
-    /// A caller's progress closure keeps its own state without a lock, as <see cref="Exploring.WalkSnapshots"/>
+    /// A caller's progress closure keeps its own state without a lock, as <see cref="Exploring.ScanSnapshots"/>
     /// does with its snapshot clock, because progress once came between levels on one thread. With
     /// many workers, two of them due at once must still report one after the other.
     /// </summary>

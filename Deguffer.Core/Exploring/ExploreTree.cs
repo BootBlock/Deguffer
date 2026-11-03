@@ -401,10 +401,11 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
     /// rare against the millions of nodes a column would spend a slot on each.
     ///
     /// <paramref name="nameRanks"/> is each node's place by name among its siblings, which the walk
-    /// knows as soon as a folder's children arrive, and a tree ordered
-    /// <see cref="ExploreChildOrder.ByName"/> needs it. Each child is placed in name order as it is
-    /// linked, so that tree is not sorted at all — the sort that, done again on every snapshot of a
-    /// scan in progress, was most of its cost.
+    /// knows as soon as a folder's children arrive. Given it, a tree ordered
+    /// <see cref="ExploreChildOrder.ByName"/> places each child in name order as it is linked and is
+    /// not sorted at all — the sort that, done again on every snapshot of a walk in progress, was most
+    /// of its cost. The file table reads a folder's children in record order, scattered through the
+    /// table, so it has no ranks to give, and its snapshots are sorted by name here instead.
     ///
     /// <paramref name="ct"/> is asked between the passes and by the sort, so a snapshot of a walk that
     /// has ended, or a table read whose scan was cancelled, stops within one pass rather than holding
@@ -428,11 +429,6 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
         int[]? nameRanks = null,
         CancellationToken ct = default)
     {
-        if (childOrder is ExploreChildOrder.ByName && nameRanks is null)
-        {
-            throw new ArgumentNullException(nameof(nameRanks), "A tree in name order is placed by its name ranks.");
-        }
-
         var (childStart, children) = InvertParentLinks(parents, flags, nameRanks);
         ct.ThrowIfCancellationRequested();
 
@@ -463,9 +459,9 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
         RollUp(order, parents, sizes, lengths, storage, flags, modified, rootNode);
         ct.ThrowIfCancellationRequested();
 
-        if (childOrder is ExploreChildOrder.BySize)
+        if (childOrder is ExploreChildOrder.BySize || nameRanks is null)
         {
-            SortChildren(childStart, children, sizes, nameNumbers, names, ct);
+            SortChildren(childStart, children, childOrder, sizes, nameNumbers, names, ct);
         }
 
         return new ExploreTree(
@@ -644,9 +640,9 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
     private const int NodesPerShare = 4096;
 
     /// <summary>
-    /// Order each node's children by size, in place, once. See <see cref="ChildrenOf"/> for why the
-    /// order belongs here rather than in each consumer. Name order needs no sort: see
-    /// <see cref="Create"/>.
+    /// Order each node's children by <paramref name="childOrder"/>, in place, once. See
+    /// <see cref="ChildrenOf"/> for why the order belongs here rather than in each consumer. Name
+    /// order needs no sort where the reader ranked the names: see <see cref="Create"/>.
     ///
     /// <para>Each node here is one the root reaches (<see cref="ReachedNodes"/>), so a scan of one
     /// folder sorts that folder's tree and not the volume around it. Each folder's children are
@@ -654,18 +650,27 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
     /// <see cref="SortWorkers"/> threads.</para>
     /// </summary>
     private static void SortChildren(
-        int[] childStart, int[] children, long[] sizes, int[] nameNumbers, NamePool.Frozen names, CancellationToken ct)
+        int[] childStart,
+        int[] children,
+        ExploreChildOrder childOrder,
+        long[] sizes,
+        int[] nameNumbers,
+        NamePool.Frozen names,
+        CancellationToken ct)
     {
+        var bySize = childOrder is ExploreChildOrder.BySize;
+
         // One delegate each for the whole tree rather than one per directory. A volume has hundreds
         // of thousands of directories (G5).
         var byName = ByName(nameNumbers, names);
         Func<int, long> sizeOf = node => sizes[node];
 
         // One key buffer for each thread, sized to the largest folder, rather than one per folder.
+        // Only sizes are keyed: names are compared where they are.
         var most = 0;
         var nodeCount = childStart.Length - 1;
 
-        for (var node = 0; node < nodeCount; node++)
+        for (var node = 0; bySize && node < nodeCount; node++)
         {
             most = Math.Max(most, childStart[node + 1] - childStart[node]);
         }
@@ -681,9 +686,20 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
                     var from = childStart[node];
                     var length = childStart[node + 1] - from;
 
-                    if (length > 1)
+                    if (length <= 1)
                     {
-                        OrderBySize(children.AsSpan(from, length), keys, sizeOf, byName);
+                        continue;
+                    }
+
+                    var siblings = children.AsSpan(from, length);
+
+                    if (bySize)
+                    {
+                        OrderBySize(siblings, keys, sizeOf, byName);
+                    }
+                    else
+                    {
+                        siblings.Sort(byName);
                     }
                 }
 

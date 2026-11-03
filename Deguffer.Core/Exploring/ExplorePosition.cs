@@ -100,8 +100,8 @@ public readonly record struct ExplorePosition(int Node, bool OnVolume)
     /// here, in order: the volume where there is one, then the root and each folder down to this node
     /// where the views are inside it.
     ///
-    /// <para>Into the caller's list rather than a new one, because a walked scan redraws the trail
-    /// with every snapshot it publishes (G5).</para>
+    /// <para>Into the caller's list rather than a new one, because a scan in progress redraws the
+    /// trail with every snapshot it publishes (G5).</para>
     /// </summary>
     public void Trail(ExploreTree tree, VolumeSpace volume, List<ExplorePosition> steps)
     {

@@ -100,7 +100,7 @@ public sealed class DuplicateSearcher
             throw new ArgumentException("Windows on this computer does not provide that checksum.", nameof(search));
         }
 
-        var finding = await _finder.FindAsync(search, policy, progress is null ? null : new FindingProgress(progress), ct, located)
+        var finding = await _finder.FindAsync(search, policy, progress, ct, located)
             .ConfigureAwait(false);
 
         if (candidatesFound is not null)
@@ -149,12 +149,5 @@ public sealed class DuplicateSearcher
         }
 
         return new DuplicateSearchResult(finding, confirmed, finding.LeftOut + matching.LeftOut, stopped);
-    }
-
-    /// <summary>The scan's progress, as the first stage of the search's.</summary>
-    private sealed class FindingProgress(IProgress<DuplicateSearchProgress> progress) : IProgress<ExploreProgress>
-    {
-        public void Report(ExploreProgress value) =>
-            progress.Report(new DuplicateSearchProgress(DuplicateSearchStage.Finding, 0, Total: null, value));
     }
 }

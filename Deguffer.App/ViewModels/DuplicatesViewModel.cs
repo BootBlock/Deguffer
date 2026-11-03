@@ -319,6 +319,8 @@ public sealed partial class DuplicatesViewModel : ObservableObject
             { Stage: DuplicateSearchStage.Finding, Scan: { } scan } =>
                 ($"Reading the locations: {scan.Done:N0} entries so far", scan.Fraction),
             { Stage: DuplicateSearchStage.Finding } => ("Reading the locations", null),
+            { Stage: DuplicateSearchStage.Identifying } =>
+                ($"Identifying the files that may match: {progress.Done:N0} of {progress.Total:N0}", Fraction(progress)),
             { Total: { } total } =>
                 ($"Comparing the files' content: {FreeSpace.Format(progress.Done)} read, at most {FreeSpace.Format(total - progress.Done)} left", Fraction(progress)),
             _ => ("Comparing the files' content", null),

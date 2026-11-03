@@ -591,9 +591,9 @@ public sealed class PlanExecutorTests : IDisposable
     }
 
     /// <summary>
-    /// The same file at the path of a step that goes whole or not at all meets the look before the
-    /// removal, which used to say Windows would not let Deguffer look inside it, though nothing was
-    /// refused. The step says what stands there, and the file and what is beside it stay (§5.6).
+    /// The same file at the path of a step that goes whole or not at all is met before anything is
+    /// deleted, and the run used to say Windows would not let Deguffer look inside it, though nothing
+    /// was refused. The step says what stands there, and the file and what is beside it stay (§5.6).
     /// </summary>
     [Theory]
     [InlineData(false)]
@@ -642,8 +642,8 @@ public sealed class PlanExecutorTests : IDisposable
     /// <summary>
     /// A file standing where an index was is no evidence the index went, so the removal of the index
     /// is not complete and the directory it indexes is not touched. The removal read the file as the
-    /// index gone. Asked of the index removal itself, because in a run the look before an all-or-nothing
-    /// step meets the file first: this is the file arriving between that look and the removal.
+    /// index gone. Asked of the index removal itself, because in a run the judgement made on what the
+    /// step gathered meets the file first and stops the step before the index removal.
     /// </summary>
     [Fact]
     public async Task AFileWhereAnIndexWasLeavesTheIndexRemovalIncomplete()
@@ -652,7 +652,8 @@ public sealed class PlanExecutorTests : IDisposable
         var output = _temp.CreateDirectory("project", "out");
         var step = new DeleteDirectoryStep(output, "Output") { IndexedBy = [index] };
 
-        var removal = await IndexRemoval.RemoveAsync(step, MinimumAge.Off, RefusalLog, new RunResidue(), TimeProvider.System, default);
+        var gathered = await GatheredRemoval.TakeAsync(step.IndexedBy, MinimumAge.Off, WindowsFileSystem.Default, TimeProvider.System, default);
+        var removal = await IndexRemoval.RemoveAsync(step, gathered, RefusalLog, new RunResidue(), WindowsFileSystem.Default, TimeProvider.System, default);
 
         Assert.False(removal.Complete);
         Assert.True(removal.NotADirectory);
@@ -694,7 +695,7 @@ public sealed class PlanExecutorTests : IDisposable
     /// <summary>
     /// An index that went whole, and a file where the folder it indexes was: what came out was the
     /// index, and the sentence says so rather than calling the folder removed. Asked of the outcome
-    /// directly, because in a run the look before the step meets the file first.
+    /// directly, because in a run the judgement made on what the step gathered meets the file first.
     /// </summary>
     [Fact]
     public void AnIndexRemovedBeforeAFileWasFoundAtTheFolderIsNotCalledTheFolderRemoved()

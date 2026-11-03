@@ -79,7 +79,7 @@ internal static class TableRoutes
     private static RunTally Explore(
         CountingMftSource source, string rootPath, IReadOnlyList<string> components, TableTuning tuning, CancellationToken ct)
     {
-        var read = MftExploreReader.Read(source, rootPath, components, tuning, onProgress: null, ct);
+        var read = MftExploreReader.Read(source, rootPath, components, tuning, progress: null, ct);
 
         return Tally(source, read is { Tree: not null, WholeTable: true }) with
         {
