@@ -46,18 +46,17 @@ public sealed partial class TopazInstallations
     public static readonly IReadOnlyList<string> ModelVariables =
         ["TVAI_MODEL_DIR", "TVAI_MODEL_DATA_DIR", "VEAI_MODEL_DIR", "VEAI_MODEL_DATA_DIR", "PAI_MODEL_DIR"];
 
-    private readonly IReadOnlyList<string> _programFolders;
     private readonly IReadOnlyList<string> _variableFolders;
     private readonly IReadOnlyList<UninstallValues> _entries;
     private readonly bool _registryIncomplete;
 
     private TopazInstallations(
-        IReadOnlyList<string> programFolders,
+        IReadOnlyList<string> vendorFolders,
         IReadOnlyList<string> variableFolders,
         IReadOnlyList<UninstallValues> entries,
         bool registryIncomplete)
     {
-        _programFolders = programFolders;
+        VendorFolders = vendorFolders;
         _variableFolders = variableFolders;
         _entries = entries;
         _registryIncomplete = registryIncomplete;
@@ -90,13 +89,34 @@ public sealed partial class TopazInstallations
             [
                 .. ModelVariables
                     .Select(environment.GetEnvironmentVariable)
-                    .Select(value => value?.Trim().Trim('"'))
-                    .OfType<string>()
-                    .Where(Path.IsPathFullyQualified),
+                    .Select(value => LongPath.Configured(value?.Trim().Trim('"')))
+                    .OfType<string>(),
             ],
             entries,
             incomplete);
     }
+
+    /// <summary>
+    /// <c>Topaz Labs LLC</c> in each program directory, where Topaz installs every product, in
+    /// display form. Present or not.
+    /// </summary>
+    public IReadOnlyList<string> VendorFolders { get; }
+
+    /// <summary>
+    /// Every folder a Topaz program may run from: <see cref="VendorFolders"/>, and the install folder of
+    /// each <c>Uninstall</c> entry for a product installed somewhere else.
+    /// </summary>
+    public IReadOnlyList<string> ProgramFolders =>
+    [
+        .. VendorFolders,
+        .. _entries
+            .Select(InstallLocation.Of)
+            .Where(location => location.Kind is InstallLocationKind.Path
+                && TopazLayout.IsProductName(Path.GetFileName(location.Text))
+                && !VendorFolders.Any(vendor => LongPath.Contains(vendor, location.Text)))
+            .Select(location => location.Text)
+            .Distinct(StringComparer.OrdinalIgnoreCase),
+    ];
 
     /// <summary>What is known about the product whose data folder is <paramref name="productFolder"/>.</summary>
     public TopazInstallStanding Of(string productFolder)
@@ -110,7 +130,7 @@ public sealed partial class TopazInstallations
 
         var unknown = _registryIncomplete;
 
-        foreach (var programs in _programFolders)
+        foreach (var programs in VendorFolders)
         {
             switch (LongPath.ProbeDirectory(Path.Combine(programs, product)))
             {

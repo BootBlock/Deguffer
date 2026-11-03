@@ -4735,9 +4735,8 @@ those first, under **No longer installed**.
 
 Inside `Topaz Labs LLC`, Deguffer looks only in folders whose name starts with `Topaz `. Anything
 else stays in Tier 4, and Deguffer tells you it is leaving it alone. Inside a product's folder,
-**`models` is the only child Deguffer will ever remove**. A single model file is never removed:
-Topaz support reports that a part-removed set fails with "Error Loading Model" rather than
-downloading again.
+**`models` is the only child Deguffer will ever remove**. A single model file is never removed: a
+part-removed set is reported to fail with "Error Loading Model" rather than download again.
 
 A product counts as **no longer installed** only when all of these hold, and every place Deguffer
 read answered:
@@ -4752,20 +4751,25 @@ A folder or a registry key Windows would not read could be the installation, so 
 treated as installed.
 
 For a product that is no longer installed, the whole `models` folder goes. For one that is, or may
-be, installed, Deguffer first looks at the top of `models`. Topaz Video AI was reported keeping
-`auth.tz`, the product's sign-in record, and `tvai.tz` there beside the model files. If either is
-there, the folder is never removed whole: only a `models` folder inside it that holds neither may
-go, which is Topaz Video's layout, and otherwise the folder is named and left alone.
+be, installed, Deguffer first looks at the top of `models`, and at the top of the `models` folder
+inside it, which Topaz Video has. A user report has Topaz Video AI keeping `auth.tz`, the product's
+sign-in record, and `tvai.tz`, whose role nobody has established, beside its model files. If either
+is in the outer folder, only an inner `models` folder holding neither may go. If either is in the
+inner folder, or there is no inner folder, nothing goes, and the folder is named and left alone.
+Which of Topaz Video's files sit at which level is not documented, so Deguffer asks the files
+rather than assuming.
 
-While a Topaz application is running, or Photoshop or Lightroom, which Topaz's plugins run inside,
-an installed product's models are held back and Explore refuses them. The clean asks again just
-before it removes each one.
+While a program runs from a Topaz program folder, an installed product's models are held back and
+Explore refuses them. That covers Topaz Video's renders through the `ffmpeg.exe` it installs beside
+itself, which open no window. So does a Topaz application running from anywhere, or Photoshop or
+Lightroom, which Topaz's plugins were reported running inside. The clean asks again just before it
+removes each one, and if Deguffer cannot tell what is running, the models are held back too.
 
 ### What is protected
 
 The `Topaz Labs LLC` folder and every product folder, which are never removed; everything beside
-`models` in a product folder, such as `Logs`; the sign-in record and the model descriptions beside
-an inner `models` folder; and the applications in `Program Files`, which Deguffer never reaches.
+`models` in a product folder, such as `Logs`; the sign-in record and every other file beside an
+inner `models` folder; and the applications in `Program Files`, which Deguffer never reaches.
 Each entry Deguffer leaves standing is named, and checked afterwards to be still there.
 
 **Not reached at all:** a models folder moved with Topaz Video's Resource Folder setting, Photo
@@ -4780,8 +4784,8 @@ with your `.tvai` projects.
 **A download, for one that is installed.** The application fetches each model again the next time
 a filter needs it, which needs an internet connection and a signed-in, licensed Topaz account.
 Gigapixel does this only while **Enable in-app model downloads** is on in its preferences. If a
-model will not load afterwards, run the product's installer again and choose **Repair**, which
-installs only the missing models.
+model will not load afterwards, run the product's installer again and choose **Repair**, which Topaz
+staff say downloads missing or damaged models again.
 
 Your projects, presets and settings are untouched.
 
@@ -4794,9 +4798,10 @@ account. On a metered connection, or a computer kept offline, that is close to p
 and Photo's and Gigapixel's installers choose which models to install, but none of them removes
 one. They are the way back, and the row names them.
 
-**No administrator rights are declared.** The applications download their models into these
-folders as the signed-in user, so that user can write there. If an installer set rights that refuse
-the removal, it is refused and reported.
+**No administrator rights are declared, and nobody has measured the folder's rights.** The
+applications download models on demand into these folders as the signed-in user, so that user can
+write there. A model an installer placed may carry rights that refuse an ordinary account. Then
+Deguffer reports the refusal, and Repair is the way back from a part-removed set.
 
 Sources:
 

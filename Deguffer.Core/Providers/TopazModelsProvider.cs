@@ -29,14 +29,17 @@ namespace Deguffer.Core.Providers;
 /// installers choose which models to install. None of them removes one, so there is no route to
 /// prefer, and the row names them as the way back.</para>
 ///
-/// <para><b>§5.3.</b> While a Topaz application, or a host its plugins run in, is running, a product
-/// that may be installed keeps its models: a model loaded during the removal would leave a part-removed
-/// set. The clean asks again before each removal.</para>
+/// <para><b>§5.3.</b> While a program runs from a Topaz program folder, or a Topaz application or an
+/// image editor its plugins run inside is running, a product that may be installed keeps its models: a
+/// model loaded during the removal would leave a part-removed set. See <see cref="TopazModelsUse"/>.
+/// The clean asks again before each removal.</para>
 ///
-/// <para><b>No administrator rights are declared.</b> The applications download their models into
-/// these folders as the signed-in user, so that user can write there. If an installer set rights that
-/// refuse the removal, it is refused and reported, which is the direction
-/// <see cref="EpicLauncherContentCacheProvider"/> explains is the right one to be wrong in.</para>
+/// <para><b>No administrator rights are declared, and that is unmeasured.</b> The applications
+/// download models on demand into these folders as the signed-in user, so that user can write there.
+/// A model an installer placed may carry rights that refuse an ordinary account. Then the removal is
+/// refused and reported, which is the direction <see cref="EpicLauncherContentCacheProvider"/> explains
+/// is the right one to be wrong in, and the row's cost names the installer's Repair as the way back
+/// from a part-removed set.</para>
 /// </summary>
 public sealed class TopazModelsProvider : CleanupProviderBase
 {
@@ -44,16 +47,12 @@ public sealed class TopazModelsProvider : CleanupProviderBase
 
     private const string InstalledGroup = "Installed";
 
-    private const string HeldReason =
-        "A Topaz application, or an application its plugins run in, is running, and removing models it "
-        + "may have loaded would leave a part-removed set. Close it, then scan again.";
-
     private const string UnlistedReason =
         "Deguffer could not list this folder, so nothing in it was examined and it is left alone.";
 
     private readonly ISystemDirectories _system;
     private readonly IUninstallRegistry _registry;
-    private readonly RunningProcessCheck _stillClosed;
+    private readonly ILiveTreeInspector _liveTrees;
     private readonly PassMemo<TopazSurvey> _survey = new();
 
     public TopazModelsProvider(
@@ -62,7 +61,8 @@ public sealed class TopazModelsProvider : CleanupProviderBase
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
         ISystemDirectories? system = null,
-        IUninstallRegistry? registry = null)
+        IUninstallRegistry? registry = null,
+        ILiveTreeInspector? liveTrees = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
@@ -71,7 +71,7 @@ public sealed class TopazModelsProvider : CleanupProviderBase
     {
         _system = system ?? SystemDirectories.Current;
         _registry = registry ?? WindowsUninstallRegistry.Default;
-        _stillClosed = new RunningProcessCheck(Inspector, TopazLayout.ProcessNames);
+        _liveTrees = liveTrees ?? LiveTreeInspector.Default;
     }
 
     public override string Id => "topaz-models";
@@ -113,6 +113,7 @@ public sealed class TopazModelsProvider : CleanupProviderBase
     public override void InvalidateCaches()
     {
         base.InvalidateCaches();
+        _liveTrees.Invalidate();
         _survey.Forget();
     }
 
@@ -120,7 +121,14 @@ public sealed class TopazModelsProvider : CleanupProviderBase
 
     /// <summary>One look at the vendor folder for a planning pass (G4), shared by §5.2's declaration and the plan.</summary>
     private TopazSurvey Survey(CancellationToken ct = default) =>
-        _survey.Get(() => TopazLayout.Survey(Root, TopazInstallations.Read(_system, _registry, Environment), ct));
+        _survey.Get(() =>
+        {
+            var installations = TopazInstallations.Read(_system, _registry, Environment);
+
+            return TopazLayout.Survey(Root, installations, ct) with { ProgramFolders = installations.ProgramFolders };
+        });
+
+    private TopazModelsUse Use(TopazSurvey survey) => new(Inspector, _liveTrees, survey.ProgramFolders);
 
     /// <summary>
     /// §5.2 as §7.1 reads it. The vendor folder recognises nothing, so no product folder is removed
@@ -167,23 +175,30 @@ public sealed class TopazModelsProvider : CleanupProviderBase
         }
     }
 
-    /// <summary>§7.1: while a Topaz application runs, Explore refuses what the plan holds back, with its reason.</summary>
-    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<ToolRoot>>(
+    /// <summary>§7.1: while a Topaz program runs, Explore refuses what the plan holds back, with its reason.</summary>
+    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
+    {
+        var survey = Survey(ct);
+        var (held, reason) = Held(survey, ct);
+
+        return Task.FromResult<IReadOnlyList<ToolRoot>>(
         [
-            .. Held(Survey(ct)).Select(product => new ToolRoot(product.Target!, HeldReason, static _ => false)),
+            .. held.Select(product => new ToolRoot(product.Target!, reason, static _ => false)),
         ]);
+    }
 
     /// <summary>
-    /// A models folder that may hold something, or a vendor folder Deguffer could not read. A folder
-    /// holding no models is no row.
+    /// A models folder that may hold something, a vendor folder Deguffer could not read, or a link
+    /// where Topaz's folders are, whose plan says it was not followed. A folder holding no models is no
+    /// row.
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default)
     {
         var survey = Survey(ct);
 
         return Task.FromResult(
-            survey.Reach is TopazRootReach.Refused or TopazRootReach.Unlisted
+            survey.Reach is TopazRootReach.Refused or TopazRootReach.Unlisted or TopazRootReach.Link
+            || survey.Links.Count > 0
             || survey.Products.Any(product =>
                 product.Unreadable
                 || product.Declined is not null
@@ -247,11 +262,12 @@ public sealed class TopazModelsProvider : CleanupProviderBase
             protect.Add((stranger, $"It is {Why}"));
         }
 
-        var held = Held(survey);
+        var use = Use(survey);
+        var (held, heldReason) = Held(survey, use, ct);
 
         if (held.Count > 0)
         {
-            notes.Add(new PlanNote(PlanNoteSeverity.Warning, $"Left the models of products that may be installed alone: {HeldReason}"));
+            notes.Add(new PlanNote(PlanNoteSeverity.Warning, $"Left the models of products that may be installed alone. {heldReason}"));
         }
 
         List<DeletionTarget> targets = [];
@@ -287,11 +303,11 @@ public sealed class TopazModelsProvider : CleanupProviderBase
             if (held.Contains(product))
             {
                 declined++;
-                protect.Add((target, HeldReason));
+                protect.Add((target, heldReason));
                 continue;
             }
 
-            targets.Add(Target(product, target, ct));
+            targets.Add(Target(product, target, use, ct));
         }
 
         if (targets.Count == 0 && declined == 0)
@@ -318,7 +334,8 @@ public sealed class TopazModelsProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect([.. Deduplicate(protect)]),
+            // One entry per path, keeping the first reason given for it.
+            ProtectedPaths = Protect([.. protect.DistinctBy(p => p.Path, StringComparer.OrdinalIgnoreCase)]),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = unreadable,
@@ -326,16 +343,30 @@ public sealed class TopazModelsProvider : CleanupProviderBase
         };
     }
 
-    /// <summary>
-    /// The products whose models are held back while a Topaz application runs: every one that may be
-    /// installed. Nothing loads the models of a product that is gone.
-    /// </summary>
-    private List<TopazProduct> Held(TopazSurvey survey) =>
-        Inspector.FindRunning(TopazLayout.ProcessNames).Count == 0
-            ? []
-            : [.. survey.Products.Where(p => p.Target is not null && p.Standing is not TopazInstallStanding.NotInstalled)];
+    private (List<TopazProduct> Held, string Reason) Held(TopazSurvey survey, CancellationToken ct) =>
+        Held(survey, Use(survey), ct);
 
-    private DeletionTarget Target(TopazProduct product, string target, CancellationToken ct)
+    /// <summary>
+    /// The products whose models are held back while something may be loading them, and why: every
+    /// one that may be installed. Nothing loads the models of a product that is gone.
+    /// </summary>
+    private static (List<TopazProduct> Held, string Reason) Held(TopazSurvey survey, TopazModelsUse use, CancellationToken ct)
+    {
+        List<TopazProduct> installed =
+            [.. survey.Products.Where(p => p.Target is not null && p.Standing is not TopazInstallStanding.NotInstalled)];
+
+        if (installed.Count == 0 || use.WhyInUse(ct) is not { } why)
+        {
+            return ([], string.Empty);
+        }
+
+        return (
+            installed,
+            $"Because {why}, and removing models a running program may have loaded would leave a part-removed set, they are "
+            + "left alone. Close it, then scan again.");
+    }
+
+    private DeletionTarget Target(TopazProduct product, string target, TopazModelsUse use, CancellationToken ct)
     {
         var gone = product.Standing is TopazInstallStanding.NotInstalled;
 
@@ -366,18 +397,10 @@ public sealed class TopazModelsProvider : CleanupProviderBase
             Group: gone ? NotInstalledGroup : InstalledGroup,
 
             // A product that is gone has nothing running to wait for.
-            UseCheck: gone ? null : _stillClosed);
+            UseCheck: gone ? null : use);
     }
 
     private static PlanNote LinkNote(string path) => new(
         PlanNoteSeverity.Information,
         $"Leaving '{path}' alone: it is a link to somewhere else, and Deguffer does not look through a link.");
-
-    /// <summary>One entry per path, keeping the first reason given for it.</summary>
-    private static IEnumerable<(string Path, string Reason)> Deduplicate(IEnumerable<(string Path, string Reason)> paths)
-    {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        return paths.Where(p => seen.Add(p.Path));
-    }
 }

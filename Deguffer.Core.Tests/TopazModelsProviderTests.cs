@@ -34,13 +34,16 @@ public sealed class TopazModelsProviderTests : IDisposable
 
     private string Models(string name) => Path.Combine(Product(name), "models");
 
-    private TopazModelsProvider CreateProvider(FakeProcessInspector? inspector = null) =>
+    private string ProgramFolder => Path.Combine(_system.ProgramFiles, "Topaz Labs LLC");
+
+    private TopazModelsProvider CreateProvider(FakeProcessInspector? inspector = null, FakeLiveTreeInspector? liveTrees = null) =>
         new(
             _environment,
             new FakeProcessRunner(),
             inspector ?? FakeProcessInspector.NothingRunning,
             system: _system,
-            registry: _registry);
+            registry: _registry,
+            liveTrees: liveTrees ?? FakeLiveTreeInspector.NothingLive);
 
     private static string Write(string path, int bytes = 4096)
     {
@@ -171,6 +174,43 @@ public sealed class TopazModelsProviderTests : IDisposable
     }
 
     /// <summary>
+    /// Every file a product keeps beside its models holds the folder back on its own, not only the
+    /// sign-in record the other tests use.
+    /// </summary>
+    [Theory]
+    [InlineData("auth.tpz")]
+    [InlineData("tvai.tz")]
+    public async Task EachKeptFileHoldsAnInstalledProductsModelsFolder(string kept)
+    {
+        var models = CreateProduct("Topaz Video AI");
+        var file = Write(Path.Combine(models, kept), 64);
+        Install("Topaz Video AI");
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == file);
+    }
+
+    /// <summary>
+    /// A sign-in record one level down holds the outer folder back as well: removing the outer folder
+    /// takes everything inside it.
+    /// </summary>
+    [Fact]
+    public async Task ASignInRecordInTheInnerModelsFolderHoldsTheOuterOneBack()
+    {
+        var models = CreateProduct("Topaz Video");
+        var auth = Write(Path.Combine(models, "models", "auth.tz"), 64);
+        Write(Path.Combine(models, "models", "prob-v4-fp16-ov.tz"));
+        Install("Topaz Video");
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == auth);
+    }
+
+    /// <summary>
     /// The sign-in record Topaz Video AI keeps at the top of <c>models</c>. While the product may be
     /// installed the folder holding it is never removed whole, and the record is asserted to survive.
     /// </summary>
@@ -193,8 +233,8 @@ public sealed class TopazModelsProviderTests : IDisposable
     }
 
     /// <summary>
-    /// Topaz Video's documented layout: the model data in <c>models\models</c>, the sign-in record and
-    /// the model descriptions above it. Only the inner folder goes.
+    /// A sign-in record above an inner <c>models</c> folder, which is where the reported files would put
+    /// it in Topaz Video's <c>models\models</c>. Only the inner folder goes.
     /// </summary>
     [Fact]
     public async Task TakesOnlyTheInnerModelsFolderBesideAnInstalledProductsSignInRecord()
@@ -251,11 +291,13 @@ public sealed class TopazModelsProviderTests : IDisposable
     }
 
     /// <summary>The rename is why this matters: an installed Photo AI is not an installed Photo, and the reverse.</summary>
-    [Fact]
-    public async Task AnEntryForARenamedProductDoesNotCountForTheOther()
+    [Theory]
+    [InlineData("Topaz Photo", "Topaz Photo AI 3.1.2")]
+    [InlineData("Topaz Photo AI", "Topaz Photo 1.4.0")]
+    public async Task AnEntryForARenamedProductDoesNotCountForTheOther(string product, string entry)
     {
-        CreateProduct("Topaz Photo");
-        _registry.With(UninstallScope.Machine64, "{5B1C9E2A}_is1", ("DisplayName", "Topaz Photo AI 3.1.2"));
+        CreateProduct(product);
+        _registry.With(UninstallScope.Machine64, "{5B1C9E2A}_is1", ("DisplayName", entry));
 
         var step = Assert.Single((await CreateProvider().PlanAsync()).Steps.OfType<DeleteStep>());
 
@@ -302,15 +344,30 @@ public sealed class TopazModelsProviderTests : IDisposable
         Assert.Equal("Installed", step.Group);
     }
 
-    /// <summary>A folder Topaz's model variables name is in use, whatever the uninstall keys say.</summary>
+    /// <summary>
+    /// A folder Topaz's model variables name is in use, whatever the uninstall keys say, however the
+    /// value is written: these are set by hand.
+    /// </summary>
     [Theory]
-    [InlineData("TVAI_MODEL_DIR")]
-    [InlineData("TVAI_MODEL_DATA_DIR")]
-    [InlineData("PAI_MODEL_DIR")]
-    public async Task AFolderAModelVariableNamesIsInUse(string variable)
+    [InlineData("TVAI_MODEL_DIR", "")]
+    [InlineData("TVAI_MODEL_DATA_DIR", "")]
+    [InlineData("PAI_MODEL_DIR", "")]
+    [InlineData("TVAI_MODEL_DIR", "slashes")]
+    [InlineData("TVAI_MODEL_DIR", "device")]
+    [InlineData("TVAI_MODEL_DIR", "dots")]
+    [InlineData("TVAI_MODEL_DIR", "quoted")]
+    public async Task AFolderAModelVariableNamesIsInUse(string variable, string form)
     {
         var models = CreateProduct("Topaz Video AI", withSignIn: true);
-        _environment.WithEnvironmentVariable(variable, models);
+        var value = form switch
+        {
+            "slashes" => models.Replace('\\', '/') + "/",
+            "device" => @"\\?\" + models,
+            "dots" => Path.Combine(models, "..", "models"),
+            "quoted" => $"\"{models}\"",
+            _ => models,
+        };
+        _environment.WithEnvironmentVariable(variable, value);
 
         Assert.Empty((await CreateProvider().PlanAsync()).TargetedPaths);
     }
@@ -339,6 +396,60 @@ public sealed class TopazModelsProviderTests : IDisposable
         Assert.True(policy.MayRemove(gone).IsAllowed);
     }
 
+    /// <summary>
+    /// Topaz Video renders through the ffmpeg it installs beside itself, with no window open and under
+    /// a name any other program can have. A program running from a Topaz program folder holds an
+    /// installed product's models back.
+    /// </summary>
+    [Fact]
+    public async Task HoldsAnInstalledProductsModelsWhileAProgramRunsFromTopazsProgramFolder()
+    {
+        var installed = CreateProduct("Topaz Video AI");
+        var gone = CreateProduct("Topaz Sharpen AI");
+        Install("Topaz Video AI");
+
+        var liveTrees = new FakeLiveTreeInspector().WithProgram(
+            "ffmpeg", executable: Path.Combine(ProgramFolder, "Topaz Video AI", "ffmpeg.exe"));
+
+        var plan = await CreateProvider(liveTrees: liveTrees).PlanAsync();
+
+        Assert.Equal([gone], plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == installed);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("ffmpeg", StringComparison.Ordinal));
+    }
+
+    /// <summary>The same question is asked again at the clean, for a render started after the preview.</summary>
+    [Fact]
+    public async Task ARenderStartedAfterThePreviewKeepsTheModelsAtTheClean()
+    {
+        var installed = CreateProduct("Topaz Video AI");
+        Install("Topaz Video AI");
+
+        var liveTrees = new FakeLiveTreeInspector();
+        var provider = CreateProvider(liveTrees: liveTrees);
+        var plan = await provider.PlanAsync();
+        Assert.Equal([installed], plan.TargetedPaths);
+
+        liveTrees.WithProgram("ffmpeg", executable: Path.Combine(ProgramFolder, "Topaz Video AI", "ffmpeg.exe"));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(installed), "The models were removed while a render was running.");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    [Fact]
+    public async Task HoldsAnInstalledProductsModelsWhereDegufferCannotTellWhatIsRunning()
+    {
+        CreateProduct("Topaz Video AI");
+        Install("Topaz Video AI");
+
+        var plan = await CreateProvider(liveTrees: FakeLiveTreeInspector.CannotTell).PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(plan.WasNotExamined);
+    }
+
     [Fact]
     public async Task ListsProductsThatAreNoLongerInstalledFirst()
     {
@@ -360,11 +471,38 @@ public sealed class TopazModelsProviderTests : IDisposable
         Directory.CreateDirectory(Product("Topaz DeNoise AI"));
         DirectoryLink.Create(kind, Models("Topaz DeNoise AI"), outside);
 
-        var plan = await CreateProvider().PlanAsync();
+        var provider = CreateProvider();
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
 
         Assert.Empty(plan.TargetedPaths);
         Assert.True(File.Exists(model));
         Assert.True(plan.WasNotExamined);
+    }
+
+    /// <summary>
+    /// A product folder moved onto another drive behind a link is a row that says so: the plan is never
+    /// asked for a row that is not there, so its note could not be read.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task AProductFolderThatIsALinkIsARowThatSaysSo(DirectoryLinkKind kind)
+    {
+        var outside = _temp.CreateDirectory("elsewhere");
+        var model = Write(Path.Combine(outside, "models", "model.tz"));
+        Directory.CreateDirectory(Root);
+        DirectoryLink.Create(kind, Product("Topaz DeNoise AI"), outside);
+
+        var provider = CreateProvider();
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(File.Exists(model));
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("link to somewhere else", StringComparison.Ordinal));
     }
 
     [Theory]
@@ -375,7 +513,10 @@ public sealed class TopazModelsProviderTests : IDisposable
         var model = Write(Path.Combine(outside, "Topaz DeNoise AI", "models", "model.tz"));
         DirectoryLink.Create(kind, Root, outside);
 
-        var plan = await CreateProvider().PlanAsync();
+        var provider = CreateProvider();
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
 
         Assert.Empty(plan.TargetedPaths);
         Assert.True(File.Exists(model));

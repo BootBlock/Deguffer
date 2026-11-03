@@ -49,26 +49,31 @@ public sealed record TopazSurvey(
     TopazRootReach Reach,
     IReadOnlyList<string> Links,
     IReadOnlyList<string> Strangers,
-    IReadOnlyList<TopazProduct> Products);
+    IReadOnlyList<TopazProduct> Products)
+{
+    /// <summary>Every folder a Topaz program may run from. See <see cref="TopazInstallations.ProgramFolders"/>.</summary>
+    public IReadOnlyList<string> ProgramFolders { get; init; } = [];
+}
 
 /// <summary>
 /// Where Topaz Labs keeps the machine-learning models its applications download, and the rules that
 /// say which folder in there may go.
 ///
 /// <para><b>The layout.</b> Each product has a folder in <c>%PROGRAMDATA%\Topaz Labs LLC</c> named for
-/// the product, and its models are in <c>models</c> inside it. Topaz Video puts the model data one
-/// level further down, in <c>models\models</c>, which Topaz's own troubleshooting page names. The
-/// vendor folder holds nothing but product folders, so a child whose name does not start with
+/// the product, and its models are in <c>models</c> inside it. Topaz's own troubleshooting page names
+/// a second <c>models</c> inside Topaz Video's. Which of Topaz Video's files sit at which level is not
+/// documented, so the rule below asks the files rather than assuming the split. The vendor folder holds nothing but product folders, so a child whose name does not start with
 /// <c>Topaz </c> is not recognised.</para>
 ///
-/// <para><b>What is beside the models decides how much may go.</b> Topaz Video AI was reported keeping
-/// <c>auth.tz</c>, the product's sign-in record, and <c>tvai.tz</c> at the top of <c>models</c>, beside
-/// the model files. For a product that is no longer installed nothing reads either, and the whole
-/// <c>models</c> folder goes. For one that may still be installed, a <c>models</c> folder holding one of
-/// them is never removed whole: only an inner <c>models</c> folder holding none of them may go, which is
-/// Topaz Video's layout, and otherwise the folder is named and left alone. A single model file is never
-/// a target, because Topaz support reports a part-removed set failing with "Error Loading Model" rather
-/// than downloading again.</para>
+/// <para><b>What is beside the models decides how much may go.</b> A user report has Topaz Video AI
+/// keeping <c>auth.tz</c>, the product's sign-in record, and <c>tvai.tz</c>, whose role nobody has
+/// established, at the top of <c>models</c> beside the model files. For a product that is no longer
+/// installed nothing reads either, and the whole <c>models</c> folder goes. For one that may still be
+/// installed, a <c>models</c> folder holding one of them, at its top or at the top of the
+/// <c>models</c> inside it, is never removed whole: only an inner <c>models</c> folder holding none of
+/// them may go, and otherwise the folder is named and left alone. A single model file is never a
+/// target: a part-removed set is reported to fail with "Error Loading Model" rather than download
+/// again.</para>
 /// </summary>
 public static class TopazLayout
 {
@@ -89,12 +94,14 @@ public static class TopazLayout
         {
             ["auth.tz"] = "The product's sign-in record, kept beside its models. Removing it signs the product out.",
             ["auth.tpz"] = "The product's sign-in record, kept beside its models. Removing it signs the product out.",
-            ["tvai.tz"] = "A file Topaz Video keeps beside its models that a model download may not bring back.",
+            ["tvai.tz"] = "A file Topaz Video keeps beside its models whose role is not known, so it is kept.",
         };
 
     /// <summary>
-    /// §5.3: the applications that load these models, current and discontinued, and the hosts Topaz's
-    /// plugins run inside. A model loaded while a folder is removed is a part-removed set.
+    /// §5.3: the applications that load these models, current and discontinued, and the image editors
+    /// Topaz's plugins were reported running inside. A model loaded while a folder is removed is a
+    /// part-removed set. A program run from a Topaz program folder is held by
+    /// <see cref="TopazModelsUse"/> whatever its name.
     /// </summary>
     public static readonly IReadOnlyList<string> ProcessNames =
     [
@@ -225,8 +232,10 @@ public static class TopazLayout
     }
 
     /// <summary>
-    /// For a product that may be installed: the models folder if nothing at its top is a file the
-    /// product keeps, otherwise the inner models folder on the same test, otherwise nothing.
+    /// For a product that may be installed: the models folder where neither its top nor the top of an
+    /// inner models folder holds a file the product keeps; the inner folder alone where only the outer
+    /// one does; otherwise nothing. A folder that will not be listed could hold one, so it decides
+    /// nothing.
     /// </summary>
     private static (string? Target, List<(string Path, string Reason)> Kept, (string Path, string Reason)? Declined) WhatMayGo(string models)
     {
@@ -235,42 +244,48 @@ public static class TopazLayout
             return (null, [], (models, UnlistedReason));
         }
 
-        if (!entries.Any(IsKeptFile))
+        var inner = entries.FirstOrDefault(entry =>
+            entry is DirectoryInfo
+            && !entry.Attributes.HasFlag(FileAttributes.ReparsePoint)
+            && entry.Name.Equals(ModelsName, StringComparison.OrdinalIgnoreCase)) is { } found
+                ? LongPath.Display(found.FullName)
+                : null;
+
+        IReadOnlyList<FileSystemInfo> innerEntries = [];
+
+        if (inner is not null)
+        {
+            if (FolderEntries.Of(inner) is not { } listed)
+            {
+                return (null, [], (inner, UnlistedReason));
+            }
+
+            innerEntries = listed;
+        }
+
+        var outerKeeps = entries.Any(IsKeptFile);
+        var innerKeeps = innerEntries.Any(IsKeptFile);
+
+        if (!outerKeeps && !innerKeeps)
         {
             return (models, [], null);
         }
 
-        List<(string Path, string Reason)> kept = [(models, "The product's models folder itself, which holds its sign-in record.")];
-        string? inner = null;
+        List<(string Path, string Reason)> kept =
+        [
+            (models, "The product's models folder itself, which holds its sign-in record."),
+            .. entries
+                .Where(entry => !LongPath.Display(entry.FullName).Equals(inner, StringComparison.OrdinalIgnoreCase))
+                .Select(entry => (LongPath.Display(entry.FullName), KeptFiles.TryGetValue(entry.Name, out var why) ? why : BesideReason)),
+        ];
 
-        foreach (var entry in entries)
+        if (innerKeeps)
         {
-            var path = LongPath.Display(entry.FullName);
-
-            if (entry is DirectoryInfo
-                && !entry.Attributes.HasFlag(FileAttributes.ReparsePoint)
-                && entry.Name.Equals(ModelsName, StringComparison.OrdinalIgnoreCase))
-            {
-                inner = path;
-            }
-            else
-            {
-                kept.Add((path, KeptFiles.TryGetValue(entry.Name, out var why) ? why : BesideReason));
-            }
+            kept.AddRange(innerEntries.Where(IsKeptFile).Select(entry => (LongPath.Display(entry.FullName), KeptFiles[entry.Name])));
         }
 
-        if (inner is null)
-        {
-            return (null, kept, (models, SignInReason));
-        }
-
-        if (FolderEntries.Of(inner) is not { } innerEntries)
-        {
-            return (null, kept, (inner, UnlistedReason));
-        }
-
-        return innerEntries.Any(IsKeptFile)
-            ? (null, kept, (inner, SignInReason))
+        return inner is null || innerKeeps
+            ? (null, kept, (inner ?? models, SignInReason))
             : (inner, kept, null);
     }
 

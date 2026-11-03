@@ -313,7 +313,7 @@ public sealed class CleanupPlanner
             new JellyfinTranscodeProvider(environment, scanner: scanner),
             new EmbyTranscodeProvider(environment, scanner: scanner),
             new AffinityModelCacheProvider(environment, scanner: scanner),
-            new TopazModelsProvider(environment, scanner: scanner),
+            new TopazModelsProvider(environment, scanner: scanner, liveTrees: liveTrees),
             new CaptureOneCacheProvider(environment, liveTrees: liveTrees, scanner: scanner),
             new ResolveRenderCacheProvider(environment, scanner: scanner),
             afterEffects,
