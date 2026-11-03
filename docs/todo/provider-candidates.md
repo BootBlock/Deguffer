@@ -246,7 +246,7 @@ report.
 | Composer | ✅ **Built**, low value | 1 | 30.1 MB |
 | Cypress binaries | Build later | 2 | Absent |
 | Yarn Berry global cache | Build later | 2 | Absent |
-| PDM, Bazelisk, Coursier, opam, Julia, node-gyp, Chocolatey, Terraform plugin cache, RubyGems, Cabal, Stack, Hex | Build later | 1–2 | Absent |
+| PDM, Bazelisk, Coursier (✅ done), opam, Julia, node-gyp, Chocolatey, Terraform plugin cache, RubyGems, Cabal, Stack, Hex | Build later | 1–2 | Absent |
 | winget portable packages, rustup toolchains, pipx, Hatch, Volta, nvm-windows, fnm, `scoop cleanup` | Reject | — | — |
 
 ### Electron download cache — Build, Tier 1, measured at 150.9 MB
@@ -412,7 +412,7 @@ are expired only by `clear-cache --gc`.
 | Yarn Berry | `%LOCALAPPDATA%\Yarn\Berry\cache` on Windows ([folderUtils.ts](https://raw.githubusercontent.com/yarnpkg/berry/master/packages/yarnpkg-core/sources/folderUtils.ts)); the docs' `~/.yarn/berry` is wrong there | Plug'n'Play reads packages straight from these zips ([offline cache](https://v3.yarnpkg.com/features/offline-cache)), so deleting it breaks every PnP project until `yarn install`. Needs a reference-aware answer, as pnpm did |
 | PDM | `pdm cache clear`, which keeps a package any environment still refers to ([caches.py](https://raw.githubusercontent.com/pdm-project/pdm/main/src/pdm/models/caches.py)) | Windows location inferred from platformdirs, not observed. Never delete `packages` by path |
 | Bazelisk | Downloaded Bazel versions; its FAQ says to "delete this directory at any time" ([bazelisk](https://github.com/bazelbuild/bazelisk)) | Windows location inferred, not observed. Bazel's own output bases are per workspace with a server, and are rejected for now |
-| Coursier | `%LOCALAPPDATA%\Coursier\Cache\v1` ([cache](https://get-coursier.io/docs/cache)) | No clean command. Siblings (`data` holds installed apps) unverified. sbt's `~/.ivy2/local` is locally published, Tier 4 |
+| Coursier | `%LOCALAPPDATA%\Coursier\Cache\v1` ([cache](https://get-coursier.io/docs/cache)) | No clean command. Siblings (`data` holds installed apps) unverified. sbt's `~/.ivy2/local` is locally published, Tier 4. ✅ done: `CoursierCacheProvider` and `IvyCacheProvider` ([#88](https://github.com/BootBlock/Deguffer/issues/88)). **Correction:** since Coursier 2.1 the Java runtimes are in `Cache\arc`, not `Cache\jvm`, so `arc` is Tier 4 too, as is `digest`, which holds layers `cs docker build` made |
 | opam | `opam clean -c -r` only ([opam-clean](https://opam.ocaml.org/doc/man/opam-clean.html)) | Its defaults include `--logs`, Tier 3. Windows `OPAMROOT` default unverified |
 | Julia | `Pkg.gc()`, which removes what has been orphaned for 30 days ([managing packages](https://pkgdocs.julialang.org/v1/managing-packages/)) | Depot holds REPL history and environments; §5.2 in full |
 | node-gyp | `%LOCALAPPDATA%\node-gyp\Cache`, `node-gyp remove <version>` ([node-gyp.js](https://raw.githubusercontent.com/nodejs/node-gyp/main/lib/node-gyp.js)) | Tens of MB per Node version |

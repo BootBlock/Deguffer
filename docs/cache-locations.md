@@ -509,6 +509,115 @@ the distribution server a project already names.
 
 ---
 
+## Coursier artefact cache
+
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\Coursier\Cache\v1`, or wherever `COURSIER_CACHE` points |
+| **Method** | Delete `https` and `http` inside it |
+| **Typical size** | Several GB on a machine with Scala or Java projects on it |
+
+### What it is
+
+Coursier fetches the dependencies of sbt, Scala CLI, Mill and Metals, and every one of those tools on
+the machine shares its cache. It files each download under its address, so the cache holds one folder
+per scheme, `https` and `http`, with the repository's host and path below each. Nothing prunes it.
+
+### What Deguffer does
+
+It removes `https` and `http`, and never the cache folder that holds them. Coursier has no command
+that clears its cache, so this is the path-based case. Anything else in the cache stays in Tier 4.
+
+It reads `COURSIER_CACHE` before it falls back to the default, and that variable names the cache
+folder itself. It offers nothing if the variable holds a relative path, or names the root of a drive,
+your profile, one of your own folders, or a folder that holds a temporary folder or a Windows folder.
+If the cache is a link to somewhere else, Deguffer says so and leaves it alone. Coursier also reads
+a `coursier.cache` Java property, which is set on one command's line and recorded nowhere Deguffer
+can read. A cache moved only by that is not found, so the failure is a smaller reclaim, never a
+wrong target.
+
+### What is protected
+
+The cache folder sits beside folders that are not downloads, and each is asserted to have survived
+the run:
+
+- **`arc`** is Coursier's archive cache. Since Coursier 2.1, `cs java` and `cs setup` extract every
+  Java runtime they install into it, and `JAVA_HOME` then points there. Deleting it uninstalls Java.
+- **`jvm`** is where older Coursier releases installed those runtimes.
+- **`digest`** holds container image layers, and the ones `cs docker build` made exist nowhere else.
+- **`priv`** holds image layers unpacked with elevated rights, which a running container is built on.
+
+Each of these has its own variable (`COURSIER_ARCHIVE_CACHE`, `COURSIER_JVM_CACHE`,
+`COURSIER_DIGEST_BASED_CACHE` and `COURSIER_PRIVILEDGED_ARCHIVE_CACHE`), and Deguffer protects each
+wherever its variable puts it. Where a variable puts one of them inside `https` or `http`, or puts the
+cache inside one of them, Deguffer offers nothing in the overlap. It compares the folders at every
+path they are reachable at, so a `subst` letter or a second mount does not hide an overlap.
+
+In Explore, Deguffer refuses everything in `%LOCALAPPDATA%\Coursier` except the downloads, which
+includes the applications `cs install` put on your path in `data`, and it refuses a download folder
+that overlaps a kept folder, as the plan does. It also refuses a kept folder that a variable moved.
+Where that is a folder Deguffer would not treat as Coursier's, such as your Documents, it refuses only
+the `https` and `http` folders Coursier extracts into there, and leaves the rest of the folder to you.
+A duplicate search treats only the download folders the plan would remove as cleaned.
+
+### What it costs you
+
+The next build downloads the dependencies it needs again. That build is slower once, and cannot run
+offline. The Java runtimes and the installed applications keep working.
+
+### Why Tier 1
+
+Everything removed was downloaded from a repository a build names, and Coursier reads a `file:`
+repository where it is rather than copying it, so nothing in the cache was built on this machine.
+It is researched rather than observed, so it is not pre-selected.
+
+---
+
+## Ivy dependency cache
+
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+
+| | |
+| --- | --- |
+| **Location** | `%USERPROFILE%\.ivy2\cache` |
+| **Method** | Delete `cache` |
+| **Typical size** | Hundreds of MB to a few GB where sbt before 1.3 or Ant builds were used |
+
+### What it is
+
+Apache Ivy resolves dependencies for sbt before 1.3, Ant builds and older Scala tools, and keeps a
+copy of each in a cache every project shares. sbt 1.3 and later resolve through Coursier instead, so
+on a current machine this folder is often what an older toolchain left behind.
+
+### What Deguffer does
+
+It removes `cache`, and never `.ivy2` itself. Ivy has no command that clears its cache. Only Java
+properties (`sbt.ivy.home`, `ivy.home`) move the folder, and those are set per command, so Deguffer
+reads the default only. If `.ivy2` is a link to somewhere else, Deguffer says so and leaves it alone.
+
+### What is protected
+
+**`local`** is where `publishLocal` publishes what you built on this computer, and it exists on no
+remote. It sits beside the cache, and Deguffer names it Tier 4 and asserts it survived. So is
+**`.credentials`**, the repository login sbt's documentation puts in the same folder, and the folder
+itself. Every other folder in `.ivy2` stays in Tier 4. In Explore, Deguffer refuses everything in
+`.ivy2` except `cache`.
+
+### What it costs you
+
+The next build that resolves through Ivy downloads its dependencies again. What you published
+locally keeps resolving.
+
+### Why Tier 1
+
+This is Maven's finding laid out differently. Maven's local repository mixes downloads and local
+installs in one tree, so it is Tier 2. Ivy keeps the two in separate folders, so the cache alone
+can be offered at Tier 1.
+
+---
+
 ## Go build and module caches
 
 **Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
