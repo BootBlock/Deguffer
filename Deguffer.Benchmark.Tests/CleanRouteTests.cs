@@ -45,8 +45,8 @@ public sealed class CleanRouteTests : IDisposable
     }
 
     /// <summary>
-    /// The steps' own times and the removals' passes, summed over the plan: what a step costs around
-    /// its removal is the difference.
+    /// The steps' own times and the removals' passes, summed over the plan. Each removal runs its passes
+    /// beside each other, so it is each pass and not their sum that the steps' acting time bounds.
     /// </summary>
     [Fact]
     public void EachStepsTimeAndEachRemovalsPassesAreReported()
@@ -64,7 +64,9 @@ public sealed class CleanRouteTests : IDisposable
 
         Assert.Equal(Trees * EachTree.Files, tally.Passes!.Files.Entries);
         Assert.Equal(Trees * (EachTree.Folders + 1), tally.Passes.Folders.Entries);
-        Assert.True(tally.Passes.Walk.Elapsed + tally.Passes.Files.Elapsed + tally.Passes.Folders.Elapsed <= steps.Acting);
+        Assert.All(
+            new[] { tally.Passes.Walk, tally.Passes.Files, tally.Passes.Folders },
+            pass => Assert.True(pass.Elapsed <= steps.Acting, $"a pass took {pass.Elapsed}, longer than the steps' {steps.Acting}"));
     }
 
     /// <summary>A project file gone after a run is a defect to stop on, even where the clean's own verification passed.</summary>
