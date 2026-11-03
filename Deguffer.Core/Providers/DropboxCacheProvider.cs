@@ -14,10 +14,11 @@ namespace Deguffer.Core.Providers;
 /// <see cref="DropboxFolders"/>.</para>
 ///
 /// <para><b>Tier 2, emptied in place.</b> Dropbox's own route is manual: quit the app fully, then move
-/// the files in the folder to the Recycle Bin. That is what this does, so the folder itself and
-/// everything beside it stay (§5.2), and §5.6 asserts each. Dropbox stages uploads here as well as
-/// downloads, and nothing published says that a staged upload is never the only copy of a change, so
-/// the row is never ticked.</para>
+/// the files in the folder to the Recycle Bin. This empties the same folder with the app closed, but
+/// deletes what is in it rather than moving it to the Recycle Bin. The folder itself and everything
+/// beside it stay (§5.2), and §5.6 asserts each. Dropbox stages uploads here as well as downloads, and
+/// nothing published says that a staged upload is never the only copy of a change, so the row is never
+/// ticked.</para>
 ///
 /// <para><b>Nothing while Dropbox runs (§5.3).</b> The vendor's steps start with quitting it, so while
 /// <c>Dropbox</c> is in the process table each cache is left alone, named as a survivor and refused in
@@ -94,9 +95,10 @@ public sealed class DropboxCacheProvider : CleanupProviderBase
         Purpose = "Every Dropbox folder holds a hidden .dropbox.cache folder, where Dropbox stages the files "
             + "it downloads and uploads. Dropbox clears it every three days, but it can grow large while the "
             + "app cannot finish syncing.",
-        Recommendation = "Dropbox's own advice is to quit the app and delete what is in this folder. Deguffer "
-            + "empties it and keeps the folder itself, and removes nothing while Dropbox is running. It is not "
-            + "selected by default, because Dropbox stages uploads here as well as downloads.",
+        Recommendation = "Dropbox's own advice is to quit the app and move what is in this folder to the "
+            + "Recycle Bin. Deguffer deletes what is in it instead, keeps the folder itself, and removes nothing "
+            + "while Dropbox is running. It is not selected by default, because Dropbox stages uploads here as "
+            + "well as downloads.",
     };
 
     private DropboxFolders Folders => _folders.Get(() => DropboxFolders.Find(Environment, _system, Volumes));
@@ -174,6 +176,25 @@ public sealed class DropboxCacheProvider : CleanupProviderBase
         }
 
         var offered = held.Count > 0 ? [] : found;
+        var beside = new List<(string Path, string Reason)>();
+        var unlisted = false;
+
+        foreach (var target in offered)
+        {
+            var folder = Path.GetDirectoryName(target.Path)!;
+
+            // The Dropbox folder itself is already a survivor. A listing that fails leaves the entries
+            // beside the cache unasserted, so the plan says so.
+            if (Beside(folder) is { } entries)
+            {
+                beside.AddRange(entries);
+            }
+            else
+            {
+                unlisted = true;
+                notes.Add(UnreadableRoot.Note(LongPath.Display(folder)));
+            }
+        }
 
         var (steps, measured) = await PlanDeletionsAsync(
             [.. offered.Select(target => target with { UseCheck = _stillClosed })],
@@ -203,7 +224,7 @@ public sealed class DropboxCacheProvider : CleanupProviderBase
             [
                 .. held.Select(path => (Path: path, Reason: HeldReason)),
                 .. scan.Protected,
-                .. offered.SelectMany(target => Beside(target.Path)),
+                .. beside,
                 .. folders.Records.Select(record => (Path: record, Reason: RecordReason)),
             ]),
             Notes = notes,
@@ -211,23 +232,24 @@ public sealed class DropboxCacheProvider : CleanupProviderBase
             // A cache held back while Dropbox runs, or one behind a link, unread or declined, is something
             // real left unexamined, so a row with no steps must not read as clear.
             WasNotExamined = steps.Count == 0 && (held.Count > 0 || scan.Declined.Count > 0 || folders.LeftSomethingUnexamined),
-            HasUnreadableRoot = scan.CouldNotBeReached,
+            HasUnreadableRoot = scan.CouldNotBeReached || unlisted,
         };
     }
 
     /// <summary>
-    /// §5.6's unrecognised siblings: every entry at the top of the Dropbox folder holding
-    /// <paramref name="cache"/>, other than the cache. The emptied check on the Dropbox folder itself
-    /// cannot stand in for them, because a target inside it exempts it.
+    /// §5.6's unrecognised siblings: every entry at the top of <paramref name="folder"/> other than the
+    /// cache, or null where the folder refused to be listed. The emptied check on the Dropbox folder
+    /// itself cannot stand in for them, because a target inside it exempts it.
     /// </summary>
-    private static IEnumerable<(string Path, string Reason)> Beside(string cache)
-    {
-        var folder = Path.GetDirectoryName(cache)!;
-
-        return (FolderEntries.Of(folder) ?? [])
-            .Where(entry => !entry.Name.Equals(DropboxFolders.CacheFolder, StringComparison.OrdinalIgnoreCase))
-            .Select(entry => (Path.Combine(folder, entry.Name), BesideReason));
-    }
+    private static IReadOnlyList<(string Path, string Reason)>? Beside(string folder) =>
+        FolderEntries.Of(folder) is { } entries
+            ?
+            [
+                .. entries
+                    .Where(entry => !entry.Name.Equals(DropboxFolders.CacheFolder, StringComparison.OrdinalIgnoreCase))
+                    .Select(entry => (Path.Combine(folder, entry.Name), BesideReason)),
+            ]
+            : null;
 
     private bool IsRunning() => Inspector.FindRunning(ProcessNames).Count > 0;
 }

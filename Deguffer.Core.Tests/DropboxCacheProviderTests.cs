@@ -341,6 +341,26 @@ public sealed class DropboxCacheProviderTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// A Dropbox folder that will not be listed leaves the entries beside the cache unasserted, so the
+    /// plan says so rather than reading the folder as holding nothing else.
+    /// </summary>
+    [Fact]
+    public async Task ADropboxFolderThatWillNotBeListedIsSaid()
+    {
+        CreateDropboxFolder(Personal);
+        WriteRecord(RoamingRecord, personal: Personal);
+
+        using (new DeniedDirectory(Personal))
+        {
+            var plan = await CreateProvider().PlanAsync();
+
+            Assert.Equal([PersonalCache], plan.TargetedPaths);
+            Assert.True(plan.HasUnreadableRoot);
+            Assert.Contains(plan.Notes, n => n.Message.Contains(Personal, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
     /// <summary>A linked cache is never looked through, so §5.6 is not asked of a tree reached through a link.</summary>
     [Fact]
     public async Task ALinkedCacheIsLeftAlone()

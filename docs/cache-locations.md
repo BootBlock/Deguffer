@@ -6855,7 +6855,8 @@ entries, and documents the file in both `%APPDATA%\Dropbox` and `%LOCALAPPDATA%\
 
 Deguffer reads both records and empties the cache of each Dropbox folder they name, once each
 however it is named. Dropbox has no command for this. Its own instructions are to quit the app
-fully, open the folder, and move the files in it to the Recycle Bin, so Deguffer does the same.
+fully, open the folder, and move the files in it to the Recycle Bin. Deguffer empties the same
+folder with the app closed, but it deletes the files rather than moving them to the Recycle Bin.
 
 A recorded folder is followed only where it may be a Dropbox folder: never the profile, a drive
 root, Documents or a folder holding a temporary folder, and never a value that is not a full path.
