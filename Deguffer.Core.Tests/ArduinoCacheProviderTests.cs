@@ -453,6 +453,34 @@ public sealed class ArduinoCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The plan held each configuration's clean clear of the folders the other names, so an edit to
+    /// Arduino IDE 2's configuration after the preview holds back the CLI's own clean as well as the
+    /// IDE's: the IDE's sketchbook may now be the CLI's downloads folder.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotRunEitherCommandWhenTheOtherConfigurationChangedSinceThePreview()
+    {
+        InstalledData();
+        var ideDownloads = Path.Combine(_environment.LocalAppData, "ArduinoIdeDownloads");
+        _temp.CreateFile(100, "profile", "AppData", "Local", "ArduinoIdeDownloads", "packages", "esp32-3.0.0.zip");
+        _temp.CreateFile(10, "profile", ".arduinoIDE", "arduino-cli.yaml");
+
+        var ran = new List<string>();
+        var provider = CreateProvider(CliAnswering(ide: new() { ["directories.downloads"] = ideDownloads }, ran: ran));
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(2, plan.Steps.OfType<RunCommandStep>().Count());
+
+        File.WriteAllText(IdeConfig, $"directories:\n  user: {Staging}\n");
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.DoesNotContain(ran, a => a.StartsWith("cache clean", StringComparison.Ordinal));
+        Exists(Path.Combine(Staging, "packages", "avr-gcc-7.3.0.tar.bz2"));
+        Assert.Contains(result.Steps, s => s.Message?.Contains("another Arduino configuration has changed", StringComparison.Ordinal) == true);
+    }
+
+    /// <summary>
     /// A CLI the user starts now that is pointed at a configuration file by a path that is not a full
     /// one reads a file nobody can name, so no clean can be held to what it said, and none is offered.
     /// </summary>

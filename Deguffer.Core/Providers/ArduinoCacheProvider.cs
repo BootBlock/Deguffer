@@ -393,7 +393,11 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
                 TargetCheck = new ArduinoCleanTarget(
                     () => _installations.ReadConfiguration(VariableReading.Tool, installation.Settings.ConfigFile),
                     installation.Configuration,
-                    new ArduinoStartedNowCheck(Environment.ReadEnvironmentNow, answers, _installations.ReadConfiguration),
+                    new ArduinoAnswersCheck(
+                        Environment.ReadEnvironmentNow,
+                        answers,
+                        configFile => _installations.ReadConfiguration(VariableReading.Tool, configFile),
+                        _installations.ReadConfiguration),
                     installation.Settings.Downloads.Folder!),
             }),
         ];

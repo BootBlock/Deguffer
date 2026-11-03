@@ -17,18 +17,18 @@ namespace Deguffer.Core.Providers;
 /// plan's own rule, is not a link and holds only the CLI's <c>packages</c> and <c>libraries</c>. This
 /// asks no subprocess.</para>
 ///
-/// <para>And only while a CLI the user starts now would still read what it read when the plan was made
-/// (see <see cref="ArduinoStartedNowCheck"/>), because the plan declined a clean that would reach one
-/// of its folders.</para>
+/// <para>And only while every other CLI the plan heard from, a CLI the user starts now among them,
+/// would still read what it read when the plan was made (see <see cref="ArduinoAnswersCheck"/>),
+/// because the plan declined a clean that would reach one of their folders.</para>
 /// </summary>
 /// <param name="readAgain">Reads the configuration afresh, as the plan first did.</param>
 /// <param name="planned">What the CLI read when it answered for the plan.</param>
-/// <param name="startedNow">Whether a CLI the user starts now still reads what it read then.</param>
+/// <param name="answers">Whether every CLI the plan heard from still reads what it read then.</param>
 /// <param name="downloads">The downloads folder the plan examined.</param>
 internal sealed class ArduinoCleanTarget(
     Func<ArduinoConfiguration> readAgain,
     ArduinoConfiguration planned,
-    ArduinoStartedNowCheck startedNow,
+    ArduinoAnswersCheck answers,
     string downloads) : ICommandTargetCheck
 {
     public string? WhyNot(RunCommandStep step, CancellationToken ct)
@@ -39,7 +39,7 @@ internal sealed class ArduinoCleanTarget(
                 + $"preview, so its cache clean could remove a folder other than {downloads}";
         }
 
-        if (startedNow.WhyNot(downloads) is { } moved)
+        if (answers.WhyNot(downloads) is { } moved)
         {
             return moved;
         }

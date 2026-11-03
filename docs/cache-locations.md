@@ -1332,8 +1332,9 @@ the variables a CLI you start yourself now would have. The clean still runs as t
 says, and its folders are the ones measured. The folders the second answer names are protected in
 Explore and by the run in the same way, and a clean that would reach one of them is not run. If
 that CLI does not answer, or reads a configuration file Deguffer cannot check, Deguffer clears
-neither the downloads nor the build cache while that is so. A clean is also not run if, between the preview and the clean, any `ARDUINO_` variable on the
-machine changed, or the configuration file a CLI you start yourself reads changed.
+neither the downloads nor the build cache while that is so. A clean is also not run if, between
+the preview and the clean, any `ARDUINO_` variable on the machine changed, or any configuration
+file the preview was made from changed, including one a CLI you start yourself reads.
 
 `arduino-cli cache clean` removes the downloads folder outright, with no prompt and no dry run
 (`commands/service_cache_clean.go`). So Deguffer runs it only where:
