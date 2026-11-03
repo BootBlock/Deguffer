@@ -472,7 +472,7 @@ public sealed class CleanupPlannerTests
                 "epic-launcher-content-cache", "battle-net-cache", "steam", "steam-library-artwork", "steam-shader-cache", "emulator-shader-cache", "retroarch-downloads", "retroarch-thumbnails", "unreal-ddc", "unity-gi-cache", "spotify",
                 "plex-transcode", "jellyfin-transcode", "emby-transcode", "affinity-model-cache", "capture-one-cache", "davinci-resolve-render-cache", "after-effects-disk-cache", "adobe-media-cache", "redshift-cache", "capcut-cache",
                 "squirrel-staging",
-                "platformio", "stm32cube-firmware-zips", "playwright", "puppeteer", "vscode-extension-browsers", "lmstudio-runtimes", "huggingface-hub", "vagrant-boxes", "test-browser-profiles", "squirrel-superseded-versions", "capcut-superseded-builds", "azure-functions-tools",
+                "platformio", "stm32cube-firmware-zips", "playwright", "puppeteer", "vscode-extension-browsers", "lmstudio-runtimes", "huggingface-hub", "vagrant-boxes", "pulumi-plugins", "test-browser-profiles", "squirrel-superseded-versions", "capcut-superseded-builds", "azure-functions-tools",
                 "graphics-driver-installers", "autodesk-installers", "claude-code-leftovers", "claude-code-command-snapshots", "recycle-bin", "file-history", "cloud-local-copies", "dropbox-cache", "temp-directories",
                 "temp-installer-downloads", "delivery-optimization", "previous-windows-installation", "upgrade-discarded-files", "windows-update-leftovers",
                 "driver-store", "component-store", "component-store-reset-base", "restore-points", "other-account-profiles", "crash-dumps",
