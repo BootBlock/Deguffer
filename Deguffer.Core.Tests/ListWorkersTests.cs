@@ -3,9 +3,9 @@ using Deguffer.Core.Scanning;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// The bounded crew a removal, a refusal check, a transcript read and a duplicate search's reads
-/// work through their lists on. Each item blocks its thread on the disk, so the list is worked by
-/// its bound from the first item and on no thread of the pool's.
+/// The bounded crew a removal, a refusal check and a transcript read work through their lists on.
+/// Each item blocks its thread on the disk, so the list is worked by its bound from the first item
+/// and on no thread of the pool's.
 /// </summary>
 public sealed class ListWorkersTests
 {

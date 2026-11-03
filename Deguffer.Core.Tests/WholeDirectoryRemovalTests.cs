@@ -279,6 +279,7 @@ public sealed class WholeDirectoryRemovalTests : IDisposable
             new RunResidue(),
             progress: null,
             fs,
+            TimeProvider.System,
             cts.Token);
 
         Assert.True(outcome.Interrupted);

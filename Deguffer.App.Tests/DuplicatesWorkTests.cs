@@ -20,7 +20,7 @@ public sealed class DuplicatesWorkTests : DuplicatesPageScene
         {
             var candidates = DuplicateScene.Finding();
             marksMade(_scene.Marks(candidates));
-            progress.Report(new DuplicateSearchProgress(DuplicateSearchStage.FirstAndLastBlocks, 1, Total: 4));
+            progress.Report(new DuplicateSearchProgress(DuplicateSearchStage.ComparingContent, 1, Total: 4));
             reported.SetResult();
             await release.Task;
 

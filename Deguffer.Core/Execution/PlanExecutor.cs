@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Deguffer.Core.Cloud;
 using Deguffer.Core.Profiles;
 using Deguffer.Core.Providers;
@@ -42,9 +41,10 @@ namespace Deguffer.Core.Execution;
 /// it only reads.
 /// </param>
 /// <param name="time">
-/// The clock a command waits on while its tool marks what it will remove later. See
-/// <see cref="ScheduledRemoval"/>. Defaulted to the system clock, and injected so a test of a tool
-/// that never marks anything does not wait out the real interval.
+/// The clock a command waits on while its tool marks what it will remove later (see
+/// <see cref="ScheduledRemoval"/>), and the one the plan, each step and each removal's passes are
+/// timed on. Defaulted to the system clock, and injected so a test of a tool that never marks anything
+/// does not wait out the real interval, and so a test can say how long a step took.
 /// </param>
 /// <param name="environment">
 /// The account whose own folders no step may destroy. See <see cref="StandingFolders"/>. Defaulted
@@ -144,7 +144,7 @@ public sealed class PlanExecutor(
         }
 
         var runResidue = residue ?? RunResidue.Begin([plan]);
-        var stopwatch = Stopwatch.StartNew();
+        var started = _time.GetTimestamp();
         var outcomes = new List<StepOutcome>(plan.Steps.Count);
         var heldAtClean = new List<ProtectedPath>();
 
@@ -172,10 +172,11 @@ public sealed class PlanExecutor(
             var stepProgress = ScaledProgress.Within(progress, done / total, weights[i] / total);
 
             StepOutcome outcome;
+            var clock = new StepClock(_time);
 
             try
             {
-                outcome = await RunStepAsync(plan, plan.Steps[i], heldAtClean, runResidue, stepProgress, underway, ct)
+                outcome = await RunStepAsync(plan, plan.Steps[i], heldAtClean, runResidue, clock, stepProgress, underway, ct)
                     .ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -191,6 +192,7 @@ public sealed class PlanExecutor(
                     Interrupted: true);
             }
 
+            outcome = outcome with { Timing = clock.Read() };
             outcomes.Add(outcome);
 
             if (outcome.Interrupted)
@@ -206,14 +208,14 @@ public sealed class PlanExecutor(
             progress?.Report(done / total);
         }
 
-        stopwatch.Stop();
+        var duration = _time.GetElapsedTime(started);
 
         return new CleanupResult
         {
             ProviderId = plan.ProviderId,
             ProviderName = plan.ProviderName,
             Steps = outcomes,
-            Duration = stopwatch.Elapsed,
+            Duration = duration,
             Interrupted = interrupted,
 
             // §5.6 is not a separate user action: acting and proving what survived are one step. What a
@@ -235,13 +237,15 @@ public sealed class PlanExecutor(
 
     /// <summary>
     /// Carry out one step, or say why it did not run. What a use check holds back is added to
-    /// <paramref name="heldAtClean"/>, because it is proved standing afterwards.
+    /// <paramref name="heldAtClean"/>, because it is proved standing afterwards. The use check and any
+    /// look are timed on <paramref name="clock"/>.
     /// </summary>
     private async Task<StepOutcome> RunStepAsync(
         CleanupPlan plan,
         CleanupStep step,
         List<ProtectedPath> heldAtClean,
         RunResidue runResidue,
+        StepClock clock,
         IProgress<double>? progress,
         IProgress<CommandUnderway?>? underway,
         CancellationToken ct)
@@ -260,12 +264,25 @@ public sealed class PlanExecutor(
         // can ask its programs to let go does so first, and is then asked like any other.
         if (step is DeleteStep deletion)
         {
-            if (deletion.UseCheck is ReleasingProcessCheck releasing)
+            var asked = clock.Mark();
+            UseRecheck recheck;
+
+            // Timed in a finally, because a release cancelled while it waits for a program to exit
+            // throws, and that wait is the time a cancelled step most needs to account for.
+            try
             {
-                await releasing.ReleaseAsync(ct).ConfigureAwait(false);
+                if (deletion.UseCheck is ReleasingProcessCheck releasing)
+                {
+                    await releasing.ReleaseAsync(ct).ConfigureAwait(false);
+                }
+
+                recheck = UseRecheck.Of(deletion, ct);
+            }
+            finally
+            {
+                clock.UseCheckSince(asked);
             }
 
-            var recheck = UseRecheck.Of(deletion, ct);
             heldAtClean.AddRange(recheck.Survivors);
 
             if (recheck.Step is null)
@@ -279,15 +296,15 @@ public sealed class PlanExecutor(
 
         return step switch
         {
-            RunCommandStep command => await RunCommandAsync(command, underway, ct).ConfigureAwait(false),
+            RunCommandStep command => await RunCommandAsync(command, clock, underway, ct).ConfigureAwait(false),
             ClearDirectoryStep clear => await ClearAsync(clear, plan.Keep, runResidue, progress, ct).ConfigureAwait(false),
             DeleteDirectoryStep delete => await DeleteAsync(delete, plan.Keep, runResidue, progress, ct).ConfigureAwait(false),
             DeleteFileStep delete => await DeleteAsync(delete, plan.Keep, progress, ct).ConfigureAwait(false),
-            EmptyRecycleBinStep empty => await EmptyAsync(empty, plan.Keep, progress, ct).ConfigureAwait(false),
-            DiskCleanupStep handler => await DiskCleanupRun.RunAsync(_handlers!, scanner, handler, plan.Keep, progress, ct).ConfigureAwait(false),
+            EmptyRecycleBinStep empty => await EmptyAsync(empty, plan.Keep, clock, progress, ct).ConfigureAwait(false),
+            DiskCleanupStep handler => await DiskCleanupRun.RunAsync(_handlers!, scanner, handler, plan.Keep, clock, progress, ct).ConfigureAwait(false),
             ReleaseLocalCopiesStep release => await LocalCopyRelease.RunAsync(_cloud!, release, plan.Keep, progress, ct).ConfigureAwait(false),
             RemoveRestorePointsStep removal => await RestorePointRun.RunAsync(_protection!, removal, progress, ct).ConfigureAwait(false),
-            RemoveProfileStep profile => await ProfileRemovalRun.RunAsync(_profiles!, _environment, scanner, profile, ct).ConfigureAwait(false),
+            RemoveProfileStep profile => await ProfileRemovalRun.RunAsync(_profiles!, _environment, scanner, profile, clock, ct).ConfigureAwait(false),
             _ => throw new NotSupportedException($"Unknown step type {step.GetType().Name}."),
         };
     }
@@ -335,7 +352,11 @@ public sealed class PlanExecutor(
                 ? $"Nothing was removed: '{LongPath.Display(found.Path)}' is never removed, because {why}"
                 : null;
 
-    private async Task<StepOutcome> RunCommandAsync(RunCommandStep step, IProgress<CommandUnderway?>? underway, CancellationToken ct)
+    private async Task<StepOutcome> RunCommandAsync(
+        RunCommandStep step,
+        StepClock clock,
+        IProgress<CommandUnderway?>? underway,
+        CancellationToken ct)
     {
         // The "before" size was measured when the plan was built; re-walking a multi-gigabyte
         // tree to learn it again would double the cost of the operation.
@@ -386,7 +407,7 @@ public sealed class PlanExecutor(
         // told to leave one file and a store can arrive between the preview and the clean. A folder
         // Windows will not list could hold one. See WholeTreeLook for what the look costs and why it is
         // paid here.
-        var look = await WholeTreeLook.TakeAsync(step.MeasuredPaths, MinimumAge.Off, ct).ConfigureAwait(false);
+        var look = await clock.LookAsync(step.MeasuredPaths, MinimumAge.Off, ct).ConfigureAwait(false);
 
         if (look.WhyNot("Not run", "The tool cannot be told to leave anything", MinimumAge.Off) is { } held)
         {
@@ -620,6 +641,7 @@ public sealed class PlanExecutor(
     private async Task<StepOutcome> EmptyAsync(
         EmptyRecycleBinStep step,
         MinimumAge keep,
+        StepClock clock,
         IProgress<double>? progress,
         CancellationToken ct)
     {
@@ -654,7 +676,7 @@ public sealed class PlanExecutor(
         // §9, for the reason the guard is refused above: Windows empties the bin whole, and a store
         // deleted into it since the preview, or inside a folder Windows will not list, would go with
         // everything else. Looked for on the disk, because the plan was made before it arrived.
-        var look = await WholeTreeLook.TakeAsync([step.Path], MinimumAge.Off, ct).ConfigureAwait(false);
+        var look = await clock.LookAsync([step.Path], MinimumAge.Off, ct).ConfigureAwait(false);
 
         if (look.WhyNot("Nothing was removed", "Windows empties a Recycle Bin whole", MinimumAge.Off) is { } held)
         {
@@ -740,11 +762,13 @@ public sealed class PlanExecutor(
     {
         if (WholeDirectoryRemoval.Applies(step))
         {
-            return await WholeDirectoryRemoval.RemoveAsync(step, keep, refusals, runResidue, progress, _fileSystem, ct)
+            return await WholeDirectoryRemoval.RemoveAsync(
+                    step, keep, refusals, runResidue, progress, _fileSystem, _time, ct)
                 .ConfigureAwait(false);
         }
 
-        var removal = await DirectoryRemover.RemoveAsync(step.Path, keep, progress, ct, _fileSystem).ConfigureAwait(false);
+        var removal = await DirectoryRemover.RemoveAsync(step.Path, keep, progress, ct, _fileSystem, time: _time)
+            .ConfigureAwait(false);
 
         refusals.Record(step.Path, removal);
         runResidue.Record(step.Path, removal.LeftStanding);
@@ -810,7 +834,10 @@ public sealed class PlanExecutor(
             removal.Kept,
             EntriesRemoved: removal.EntriesRemoved,
             RefusedFolders: removal.RefusedFolders,
-            MailStores: stores);
+            MailStores: stores)
+        {
+            Passes = removal.Passes,
+        };
     }
 
     /// <summary>
@@ -840,7 +867,8 @@ public sealed class PlanExecutor(
             progress,
             ct,
             _fileSystem,
-            new RemovalBounds(KeepRoot: true, step.Spared, step.OwnedElsewhere, step.UserWork)).ConfigureAwait(false);
+            new RemovalBounds(KeepRoot: true, step.Spared, step.OwnedElsewhere, step.UserWork),
+            _time).ConfigureAwait(false);
 
         refusals.Record(step.Path, removal);
         runResidue.Record(step.Path, removal.LeftStanding);
@@ -892,7 +920,10 @@ public sealed class PlanExecutor(
             removal.EntriesRemoved,
             removal.RefusedFolders,
             stores,
-            UserWork: removal.UserWork);
+            UserWork: removal.UserWork)
+        {
+            Passes = removal.Passes,
+        };
     }
 
     /// <summary>A command not run because its <see cref="RunCommandStep.TargetCheck"/> said why not.</summary>
@@ -918,7 +949,10 @@ public sealed class PlanExecutor(
         removal.RefusedFolders,
         stores,
         Interrupted: true,
-        UserWork: removal.UserWork);
+        UserWork: removal.UserWork)
+    {
+        Passes = removal.Passes,
+    };
 
     private async Task<StepOutcome> DeleteAsync(
         DeleteFileStep step,

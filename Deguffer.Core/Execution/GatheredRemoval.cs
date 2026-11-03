@@ -43,21 +43,24 @@ internal abstract record GatheredRemoval(string Extended, RemovalBounds Bounds)
         IReadOnlyList<string> paths,
         MinimumAge keep,
         IFileSystem fs,
+        TimeProvider time,
         CancellationToken ct) =>
         WorkerThreads.Shared.RunAsync<IReadOnlyList<GatheredRemoval>>(
-            () => [.. paths.Select(path => Take(path, keep, RemovalBounds.None, fs, ct))],
+            () => [.. paths.Select(path => Take(path, keep, RemovalBounds.None, fs, time, ct))],
             ct);
 
     /// <summary>
     /// What stands at <paramref name="path"/>, and for a directory, everything its removal would act
     /// on. Nothing is deleted.
     /// </summary>
+    /// <param name="time">The clock the walk of a directory is timed on. See <see cref="Tree.Walk"/>.</param>
     /// <exception cref="OperationCanceledException">The walk was cancelled.</exception>
     public static GatheredRemoval Take(
         string path,
         MinimumAge keep,
         RemovalBounds bounds,
         IFileSystem fs,
+        TimeProvider time,
         CancellationToken ct)
     {
         var extended = LongPath.Extended(path);
@@ -109,7 +112,13 @@ internal abstract record GatheredRemoval(string Extended, RemovalBounds Bounds)
         // Two passes: gather the tree first so progress is a real fraction rather than a guess,
         // then delete depth-first. Gathering also means a mid-run enumeration failure cannot
         // leave us deleting a partially-understood tree.
-        return new Tree(extended, bounds, RemovalWalk.Gather(extended, keep, bounds, fs, ct));
+        var started = time.GetTimestamp();
+        var inventory = RemovalWalk.Gather(extended, keep, bounds, fs, ct);
+        var walk = new PassTiming(
+            time.GetElapsedTime(started),
+            inventory.Files.Count + inventory.Directories.Count + inventory.Links.Count);
+
+        return new Tree(extended, bounds, inventory, walk);
     }
 
     /// <summary>Nothing stands at the path, so nothing inside it can be lost.</summary>
@@ -140,7 +149,11 @@ internal abstract record GatheredRemoval(string Extended, RemovalBounds Bounds)
     }
 
     /// <summary>A directory, and everything its walk gathered.</summary>
-    public sealed record Tree(string Extended, RemovalBounds Bounds, RemovalInventory Inventory)
+    /// <param name="Walk">
+    /// How long the walk took and how many entries it gathered, the first of the removal's passes. See
+    /// <see cref="RemovalPasses"/>.
+    /// </param>
+    public sealed record Tree(string Extended, RemovalBounds Bounds, RemovalInventory Inventory, PassTiming Walk)
         : GatheredRemoval(Extended, Bounds)
     {
         public override IReadOnlyList<string> MailStores => Inventory.MailStores;
