@@ -41,22 +41,32 @@ internal static class ConfiguredFolder
         ISystemDirectories machine,
         IVolumeInventory volumes,
         string? within = null) =>
-        FromValue(environment.GetEnvironmentVariable(variable), defaultFolder, environment, machine, volumes, within);
+        FromVariable(VariableReading.Current, variable, defaultFolder, environment, machine, volumes, within);
 
     /// <summary>
-    /// <see cref="FromVariable"/> for the value a tool Deguffer starts reads
-    /// (<see cref="IUserEnvironment.GetToolEnvironmentVariable"/>), for a provider whose step is that
-    /// tool's own command: the command acts on the folder its own environment names, which is not the
-    /// machine's current one where a variable changed after Deguffer started.
+    /// <see cref="FromVariable(string, string, IUserEnvironment, ISystemDirectories, IVolumeInventory, string?)"/>
+    /// as <paramref name="reading"/> reads the variable. A provider whose step is the tool's own command
+    /// plans from <see cref="VariableReading.Tool"/>, because the command acts on the folder its own
+    /// environment names. It declares what Explore and a duplicate search refuse from both readings,
+    /// because a tool the user starts next acts on <see cref="VariableReading.Current"/>.
     /// </summary>
-    public static Setting FromToolVariable(
+    public static Setting FromVariable(
+        VariableReading reading,
         string variable,
         string defaultFolder,
         IUserEnvironment environment,
         ISystemDirectories machine,
         IVolumeInventory volumes,
         string? within = null) =>
-        FromValue(environment.GetToolEnvironmentVariable(variable), defaultFolder, environment, machine, volumes, within);
+        FromValue(Read(reading, variable, environment), defaultFolder, environment, machine, volumes, within);
+
+    /// <summary>The value of <paramref name="variable"/> as <paramref name="reading"/> reads it, or null where it is unset there.</summary>
+    public static string? Read(VariableReading reading, string variable, IUserEnvironment environment) => reading switch
+    {
+        VariableReading.Current => environment.GetEnvironmentVariable(variable),
+        VariableReading.Tool => environment.GetToolEnvironmentVariable(variable),
+        _ => throw new ArgumentOutOfRangeException(nameof(reading), reading, null),
+    };
 
     private static Setting FromValue(
         string? raw,

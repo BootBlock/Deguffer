@@ -145,10 +145,7 @@ public sealed class VagrantSupersededBoxProvider : CleanupProviderBase
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
     [
-        .. new[] { Resolve().Folder, DefaultHome }
-            .OfType<string>()
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Select(home => new ToolRoot(
+        .. DeclaredHomes.Select(home => new ToolRoot(
                 home,
                 "This is Vagrant's own folder. Deguffer removes a box version only by running Vagrant's "
                 + "own prune, because a box is removed whole by the tool that knows which version is newest.",
@@ -156,24 +153,23 @@ public sealed class VagrantSupersededBoxProvider : CleanupProviderBase
     ];
 
     /// <summary>
-    /// A home the variable names but this declines is still where Vagrant writes, so Explore refuses
-    /// what Vagrant keeps there and nothing else (<see cref="ToolRoot.Sparing"/>).
+    /// A home either reading of the variable names but this declines is still where Vagrant writes, so
+    /// Explore refuses what Vagrant keeps there and nothing else (<see cref="ToolRoot.Sparing"/>).
     /// </summary>
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<ToolRoot>>(
-            Resolve().DeclinedFolder is { } declined
-                ? [ToolRoot.Sparing(declined, DeclinedRootReason, NamesInTheHome)]
-                : []);
-
-    /// <summary>The boxes of the home in use and of the default home, whichever the variable says when prune runs.</summary>
-    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<CleanedPlace>>(
         [
-            .. new[] { Resolve().Folder, DefaultHome }
+            .. Readings()
+                .Select(setting => setting.DeclinedFolder)
                 .OfType<string>()
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Select(home => CleanedPlace.Whole(VagrantBoxLayout.BoxesIn(home))),
+                .Select(declined => ToolRoot.Sparing(declined, DeclinedRootReason, NamesInTheHome)),
         ]);
+
+    /// <summary>The boxes of every home <see cref="DeclaredHomes"/> names, whichever the variable says when a prune runs.</summary>
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+            [.. DeclaredHomes.Select(home => CleanedPlace.Whole(VagrantBoxLayout.BoxesIn(home)))]);
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(Environment.FindExecutable("vagrant") is not null);
@@ -185,7 +181,7 @@ public sealed class VagrantSupersededBoxProvider : CleanupProviderBase
             return EmptyPlan("Vagrant is not installed on this machine.");
         }
 
-        var setting = Resolve();
+        var setting = Resolve(VariableReading.Tool);
 
         if (setting.Folder is not { } home)
         {
@@ -335,9 +331,24 @@ public sealed class VagrantSupersededBoxProvider : CleanupProviderBase
     private static bool MayBeThere(PathPresence presence) => presence is not PathPresence.Absent;
 
     /// <summary>
-    /// The home as prune reads it, from the environment Deguffer hands Vagrant rather than the machine's
-    /// current one, so the roots, the cleaned places and the §5.6 survivors describe the home prune acts on.
+    /// Every home Vagrant may use: the one the prune Deguffer starts reads, the one a Vagrant the user
+    /// starts next reads, and the default. A declaration only narrows what Explore and a duplicate search
+    /// may remove, so both readings are declared.
     /// </summary>
-    private ConfiguredFolder.Setting Resolve() =>
-        ConfiguredFolder.FromToolVariable(HomeVariable, DefaultHome, Environment, _system, Volumes);
+    private IEnumerable<string> DeclaredHomes =>
+        Readings()
+            .Select(setting => setting.Folder)
+            .Append(DefaultHome)
+            .OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
+    private IReadOnlyList<ConfiguredFolder.Setting> Readings() =>
+        [Resolve(VariableReading.Tool), Resolve(VariableReading.Current)];
+
+    /// <summary>
+    /// The home as <paramref name="reading"/> reads the variable. The plan reads it as the prune does,
+    /// from the environment Deguffer hands Vagrant, so its §5.6 survivors describe the home prune acts on.
+    /// </summary>
+    private ConfiguredFolder.Setting Resolve(VariableReading reading) =>
+        ConfiguredFolder.FromVariable(reading, HomeVariable, DefaultHome, Environment, _system, Volumes);
 }

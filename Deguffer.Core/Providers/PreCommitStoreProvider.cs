@@ -108,54 +108,61 @@ public sealed partial class PreCommitStoreProvider : CleanupProviderBase
     /// The store <c>pre-commit gc</c> acts on, or null where the setting it resolves from names nothing
     /// this can examine as pre-commit's.
     /// </summary>
-    public string? ResolveStore() => Resolve().Folder;
+    public string? ResolveStore() => Resolve(VariableReading.Tool).Folder;
 
     /// <summary>
     /// The whole store, recognising nothing: a repository folder removed by path leaves its row in
-    /// <c>db.db</c>, and every other entry is pre-commit's record or the user's stashed work.
+    /// <c>db.db</c>, and every other entry is pre-commit's record or the user's stashed work. Every store
+    /// either reading of the variables names, because a pre-commit the user starts next reads the
+    /// machine as it now stands.
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
-        ResolveStore() is { } store
-            ?
-            [
-                new ToolRoot(
-                    store,
-                    "This is pre-commit's store. Deguffer clears it only with 'pre-commit gc', because a hook "
-                    + "folder removed by hand breaks every project that uses it, and the store also holds "
-                    + "unstaged changes pre-commit stashed during a commit.",
-                    static _ => false),
-            ]
-            : [];
+    [
+        .. Readings()
+            .Select(setting => setting.Folder)
+            .OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(store => new ToolRoot(
+                store,
+                "This is pre-commit's store. Deguffer clears it only with 'pre-commit gc', because a hook "
+                + "folder removed by hand breaks every project that uses it, and the store also holds "
+                + "unstaged changes pre-commit stashed during a commit.",
+                static _ => false)),
+    ];
 
     /// <summary>
-    /// A folder a variable names but this declines is still where pre-commit keeps its record, its hook
-    /// repositories and the changes it stashed, so Explore refuses those there and nothing else. Built
-    /// as <see cref="ToolRoot.Sparing"/> builds its root, with a predicate rather than a list, because a
-    /// hook folder and a stashed change are known by their pattern, never by a name given in advance.
+    /// A folder either reading of a variable names but this declines is still where pre-commit keeps its
+    /// record, its hook repositories and the changes it stashed, so Explore refuses those there and
+    /// nothing else. Built as <see cref="ToolRoot.Sparing"/> builds its root, with a predicate rather than
+    /// a list, because a hook folder and a stashed change are known by their pattern, never by a name
+    /// given in advance.
     /// </summary>
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<ToolRoot>>(
-            Resolve().DeclinedFolder is { } declined
-                ?
-                [
-                    new ToolRoot(
-                        declined,
-                        "pre-commit keeps its hook repositories, its record of them and the unstaged changes it "
-                        + "stashed during a commit here, so Deguffer leaves those alone.",
-                        static child => !IsStoreEntry(child.Name),
-                        ToolRootClaim.NamedEntries),
-                ]
-                : []);
+        [
+            .. Readings()
+                .Select(setting => setting.DeclinedFolder)
+                .OfType<string>()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(declined => new ToolRoot(
+                    declined,
+                    "pre-commit keeps its hook repositories, its record of them and the unstaged changes it "
+                    + "stashed during a commit here, so Deguffer leaves those alone.",
+                    static child => !IsStoreEntry(child.Name),
+                    ToolRootClaim.NamedEntries)),
+        ]);
 
     /// <summary>
-    /// The store <c>gc</c> is sent to and the default one, because a variable can change after a
-    /// duplicate search has read it. Whole, because <c>gc</c> removes whichever repository folders
+    /// The store either reading of the variables names and the default one, because a variable can change
+    /// after a duplicate search has read it. Whole, because <c>gc</c> removes whichever repository folders
     /// <c>db.db</c> names, and Python's random suffix gives them no name to list.
     /// </summary>
     public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<CleanedPlace>>(
         [
-            .. new[] { ResolveStore(), DefaultStore }
+            .. Readings()
+                .Select(setting => setting.Folder)
+                .Append(DefaultStore)
                 .OfType<string>()
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Select(CleanedPlace.Whole),
@@ -177,12 +184,12 @@ public sealed partial class PreCommitStoreProvider : CleanupProviderBase
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
-        var setting = Resolve();
+        var setting = Resolve(VariableReading.Tool);
 
         if (setting.Folder is not { } store)
         {
             return EmptyPlan(
-                $"{SettingVariable} is set to '{setting.Value}', and Deguffer will not treat the folder it names "
+                $"{SettingVariable(VariableReading.Tool)} is set to '{setting.Value}', and Deguffer will not treat the folder it names "
                 + $"as pre-commit's store: {setting.Declined} It is leaving it alone.");
         }
 
@@ -297,34 +304,42 @@ public sealed partial class PreCommitStoreProvider : CleanupProviderBase
             : "Not something 'pre-commit gc' removes, so it must survive.";
 
     /// <summary>
-    /// The store as <c>_get_default_directory</c> resolves it: <see cref="HomeVariable"/>, then
-    /// <see cref="XdgCacheVariable"/> joined with <c>pre-commit</c>, then <see cref="DefaultStore"/>.
-    /// For the second, the <c>pre-commit</c> folder inside is what <see cref="ConfiguredFolder"/> judges,
-    /// because a cache home is shared by many tools.
+    /// The store as <c>_get_default_directory</c> resolves it from the variables as <paramref name="reading"/>
+    /// reads them: <see cref="HomeVariable"/>, then <see cref="XdgCacheVariable"/> joined with
+    /// <c>pre-commit</c>, then <see cref="DefaultStore"/>. For the second, the <c>pre-commit</c> folder
+    /// inside is what <see cref="ConfiguredFolder"/> judges, because a cache home is shared by many tools.
+    /// The plan reads them as <c>gc</c> does, from the environment Deguffer hands it.
     /// </summary>
-    private ConfiguredFolder.Setting Resolve()
+    private ConfiguredFolder.Setting Resolve(VariableReading reading)
     {
-        var variable = SettingVariable;
+        var variable = SettingVariable(reading);
 
         // Python's "or" keeps a value of spaces, and pre-commit resolves it against its own working
         // directory, so it is a relative value rather than an unset one, which ConfiguredFolder's trim
         // would read it as.
-        if (Environment.GetToolEnvironmentVariable(variable) is { Length: > 0 } value && string.IsNullOrWhiteSpace(value))
+        if (ConfiguredFolder.Read(reading, variable, Environment) is { Length: > 0 } value && string.IsNullOrWhiteSpace(value))
         {
             return new ConfiguredFolder.Setting(value, null, null, ConfiguredFolder.NotAFullPath);
         }
 
         return variable == HomeVariable
-            ? ConfiguredFolder.FromToolVariable(HomeVariable, DefaultStore, Environment, _system, Volumes)
-            : ConfiguredFolder.FromToolVariable(XdgCacheVariable, DefaultStore, Environment, _system, Volumes, within: StoreFolder);
+            ? ConfiguredFolder.FromVariable(reading, HomeVariable, DefaultStore, Environment, _system, Volumes)
+            : ConfiguredFolder.FromVariable(reading, XdgCacheVariable, DefaultStore, Environment, _system, Volumes, within: StoreFolder);
     }
+
+    /// <summary>
+    /// The store as both readings resolve it, for what Explore and a duplicate search refuse: <c>gc</c>
+    /// acts on the first, and a pre-commit the user starts next acts on the second.
+    /// </summary>
+    private IReadOnlyList<ConfiguredFolder.Setting> Readings() =>
+        [Resolve(VariableReading.Tool), Resolve(VariableReading.Current)];
 
     /// <summary>
     /// The variable pre-commit reads its store from: <see cref="HomeVariable"/> wherever it holds anything,
     /// spaces included, as Python's <c>or</c> decides.
     /// </summary>
-    private string SettingVariable =>
-        string.IsNullOrEmpty(Environment.GetToolEnvironmentVariable(HomeVariable)) ? XdgCacheVariable : HomeVariable;
+    private string SettingVariable(VariableReading reading) =>
+        string.IsNullOrEmpty(ConfiguredFolder.Read(reading, HomeVariable, Environment)) ? XdgCacheVariable : HomeVariable;
 
     /// <summary>
     /// A name pre-commit gives something in its store: its own files, a hook repository folder or a

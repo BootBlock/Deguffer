@@ -1757,7 +1757,8 @@ for the same reason.
 "up to": `gc` keeps those a project still uses. The size reported after the run is measured.
 
 The store is read from the variables as the `pre-commit` Deguffer starts sees them, because that is
-the store `gc` acts on. Deguffer offers nothing if a variable holds a relative path, or names a folder
+the store `gc` acts on. Explore also refuses the store the variables name now, which a `pre-commit`
+you start yourself would use. Deguffer offers nothing if a variable holds a relative path, or names a folder
 such as your profile, and Explore still refuses pre-commit's files, hook folders and stashed changes
 there. If the store is a link to somewhere else, Deguffer says so and leaves it alone.
 If no `pre-commit` command is on the PATH, the row says how many hook repositories the store holds and
@@ -5555,7 +5556,8 @@ the prune would remove now.
 A `VAGRANT_HOME` that puts the home at your profile, a drive's root or another folder Deguffer never
 treats as one tool's is left alone: Vagrant is not run, and nothing in it is offered. Deguffer
 reads `VAGRANT_HOME` as the prune it starts sees it, which is its value when Deguffer started, so a
-change made since applies once Deguffer is started again. Vagrant is
+change made since applies to the prune once Deguffer is started again. Explore refuses everything in
+the home the variable names now as well, because a Vagrant you start yourself would use it. Vagrant is
 never started for a home with no `boxes` folder, because every Vagrant command creates its home.
 Running Vagrant loads the Vagrantfile in its home and any Vagrantfile in the folder Deguffer runs
 tools in or above it, such as your profile. It also contacts HashiCorp unless
