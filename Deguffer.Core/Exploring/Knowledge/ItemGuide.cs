@@ -1,4 +1,5 @@
 using Deguffer.Core.Safety;
+using Deguffer.Core.ModManagers;
 using Deguffer.Core.VirtualDisks;
 
 namespace Deguffer.Core.Exploring.Knowledge;
@@ -117,7 +118,8 @@ public sealed class ItemGuide
     ///
     /// <para>With it, the virtual disks WSL and Docker Desktop record for this account, read once here
     /// rather than on hover: each is a file the size picture draws as one of the largest on the drive,
-    /// and only those tools' records say whose it is.</para>
+    /// and only those tools' records say whose it is. And the download folders of Vortex and of each Mod
+    /// Organizer 2 instance, which only the manager's defaults and records say are its.</para>
     /// </summary>
     public static ItemGuide For(ISystemDirectories system, IUserEnvironment environment, IVolumeInventory volumes)
     {
@@ -125,7 +127,11 @@ public sealed class ItemGuide
         ArgumentNullException.ThrowIfNull(environment);
 
         return new ItemGuide(
-            [.. KnownItems.All, .. VirtualDiskItems.For(VirtualDiskInventory.Read(environment, system))],
+            [
+                .. KnownItems.All,
+                .. VirtualDiskItems.For(VirtualDiskInventory.Read(environment, system)),
+                .. ModManagerItems.For(ModManagerInventory.Read(environment, system, volumes)),
+            ],
             Anchors(system, environment),
             volumes);
     }

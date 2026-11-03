@@ -278,6 +278,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | Tool logs in temporary folders | The Remote Desktop client's traces, the Windows App's and ServiceHub's logs, and VS Code's updater logs; the folders they are written to stay |
 | Claude Code rewind snapshots | One folder per session, dated by the folder and never by the snapshots in it; a running session's snapshots are never offered |
 | WSL and Docker virtual disks | Reported, never acted on: each disk's size on the drive, whether it is sparse, how much Docker says can be reclaimed inside it when Docker Desktop is already running, and the vendor's commands in the order to use them. Nothing is pruned, compacted or deleted |
+| Vortex and Mod Organizer 2 downloads | Reported, never acted on: the size of each manager's download folder, by game for Vortex and by what Mod Organizer 2 marks installed or uninstalled, with each manager's own way to remove downloads. A Vortex download folder moved from its default is not found. Researched |
 | Claude Code conversations | One item per session, by its title and project, for when you want one gone before Claude Code deletes it after 30 days; never one that is running, one in a project Claude Code is running in, or one used this week |
 </details>
 
