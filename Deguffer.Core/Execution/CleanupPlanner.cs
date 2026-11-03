@@ -287,6 +287,7 @@ public sealed class CleanupPlanner
                 scanner: scanner),
             new VsCodeCacheProvider(environment, declarations: declarations, scanner: scanner),
             new FirefoxCacheProvider(environment, scanner: scanner),
+            new ThunderbirdCacheProvider(environment, scanner: scanner),
             new EpicLauncherWebCacheProvider(environment, declarations: declarations, scanner: scanner),
             new EpicLauncherContentCacheProvider(environment, scanner: scanner),
             new BattleNetCacheProvider(environment, scanner: scanner),
