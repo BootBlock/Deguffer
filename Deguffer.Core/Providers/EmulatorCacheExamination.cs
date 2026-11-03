@@ -159,36 +159,15 @@ internal sealed class EmulatorCacheExamination
                 + "settings file and no RetroArch in it, so nothing in it was looked at."));
         }
 
-        var folders = examination.Roots.Select(root => reach(root.Path)).ToList();
+        EmulatorFolderIdentity.Settle(examination.Roots, reach);
 
-        // A folder an emulator knows by its program is not also read as the folder of one that nothing
-        // but a settings file of the same name proves. One proven by a file of its own stays an owner,
-        // so it is read, and its program holds the folder back while it runs.
-        for (var i = examination.Roots.Count - 1; i >= 0; i--)
-        {
-            var folder = folders[i];
-            var found = examination.Roots[i];
+        var collected = examination.Roots.Select(root => examination.Collect(root, whyNotOwned, reach, ct)).ToList();
 
-            if (!found.Layout.IsKnownByItsProgram
-                && examination.Roots.Where((other, j) =>
-                        other.Layout.IsKnownByItsProgram
-                        && folders[j].IsSameAs(folder)
-                        && found.Layout.IsProvenOnlyByMarkersOf(other.Layout, found.Path))
-                    .Any())
-            {
-                examination.Roots.RemoveAt(i);
-                folders.RemoveAt(i);
-            }
-        }
+        EmulatorFolderIdentity.NameEachFolderOnce(collected, reach);
 
         for (var i = 0; i < examination.Roots.Count; i++)
         {
-            IReadOnlyList<EmulatorLayout> owners =
-            [
-                .. examination.Roots.Where((_, j) => folders[j].IsSameAs(folders[i])).Select(root => root.Layout),
-            ];
-
-            examination.Roots[i] = examination.Read(examination.Roots[i] with { Owners = owners }, whyNotOwned, reach, ct);
+            examination.Roots[i] = examination.ReadAll(examination.Roots[i], collected[i], ct);
         }
 
         return examination;
@@ -245,7 +224,12 @@ internal sealed class EmulatorCacheExamination
         return true;
     }
 
-    private EmulatorRoot Read(
+    /// <summary>
+    /// Names what survives in <paramref name="found"/>, and lists the cache folders in it this pass
+    /// may read: none behind a link or something unread on the way, and none a setting moved onto a
+    /// folder no tool may answer for.
+    /// </summary>
+    private List<CollectedCacheFolder> Collect(
         EmulatorRoot found, Func<string, string?> whyNotOwned, Func<string, ReachedFolder> reach, CancellationToken ct)
     {
         var layout = found.Layout;
@@ -253,13 +237,14 @@ internal sealed class EmulatorCacheExamination
         Survivors.Add((found.Path, $"{layout.Name}'s own folder. Only the shader caches inside it are removed."));
         Survivors.AddRange(layout.ProtectedNames.Select(p => (Path.Combine(found.Path, p.Name), p.Reason)));
 
-        var toRead = new List<EmulatorCacheFolder>();
+        var toRead = new List<CollectedCacheFolder>();
 
         foreach (var listed in layout.CacheFoldersIn(found.Path).Concat(GameCacheFolders(layout, found.Path, ct)))
         {
             ct.ThrowIfCancellationRequested();
 
             var folder = listed;
+            var inside = false;
 
             // A path built from the root has had no level checked on the way, and a link at any of
             // them would put the deletion somewhere nothing classified, with every survivor named
@@ -278,6 +263,7 @@ internal sealed class EmulatorCacheExamination
             if (reach(found.Path).Naming(reach(listed.Path), found.Path) is { } named)
             {
                 folder = listed with { Path = named };
+                inside = true;
             }
             else if (whyNotOwned(folder.Path) is { } why)
             {
@@ -287,13 +273,19 @@ internal sealed class EmulatorCacheExamination
                 continue;
             }
 
-            toRead.Add(folder);
-            _cacheFolders.Add(folder.Path);
+            toRead.Add(new CollectedCacheFolder(folder, inside));
         }
+
+        return toRead;
+    }
+
+    private EmulatorRoot ReadAll(EmulatorRoot found, List<CollectedCacheFolder> collected, CancellationToken ct)
+    {
+        _cacheFolders.UnionWith(collected.Select(entry => entry.Folder.Path));
 
         var readings = new List<EmulatorCacheFolderReading>();
 
-        foreach (var folder in toRead)
+        foreach (var folder in collected.Select(entry => entry.Folder))
         {
             if (ReadFolder(found, folder, ct) is { } recognised)
             {

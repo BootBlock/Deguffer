@@ -35,13 +35,13 @@ public sealed class PlayStationEmulatorShaderCacheTests : IDisposable
 
     private string PpssppRoot => Path.Combine(_environment.Documents!, "PPSSPP");
 
-    private EmulatorShaderCacheProvider CreateProvider(FakeProcessInspector? inspector = null) =>
+    private EmulatorShaderCacheProvider CreateProvider(FakeProcessInspector? inspector = null, IVolumeInventory? volumes = null) =>
         new(
             _environment,
             new FakeProcessRunner(),
             inspector ?? FakeProcessInspector.NothingRunning,
             system: _system,
-            volumes: new FakeVolumeInventory());
+            volumes: volumes ?? new FakeVolumeInventory());
 
     private void Declare(params string[] folders) => Assert.True(new EmulatorFolderStore(_environment).Save(folders));
 
@@ -254,6 +254,36 @@ public sealed class PlayStationEmulatorShaderCacheTests : IDisposable
         await provider.ExecuteAsync(plan);
 
         Assert.True(File.Exists(pipelines));
+    }
+
+    /// <summary>
+    /// DuckStation's settings can name PCSX2's cache folder through a letter <c>subst</c> made for
+    /// PCSX2's folder. The folder is one folder whatever its name, so what both recognise in it is one
+    /// item, named as PCSX2's own folder names it, and held back while either emulator runs.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("pcsx2-qt")]
+    [InlineData("duckstation-qt-x64-ReleaseLTCG")]
+    public async Task ACacheFolderNamedThroughASubstitutedLetterIsOneItemHeldWhileEitherRuns(string? running)
+    {
+        var letter = UnmappedDriveLetter.Any();
+        var pcsx2 = Path.Combine(_environment.Documents!, "PCSX2");
+        WriteFile(Path.Combine(pcsx2, "inis", "PCSX2.ini"), 64);
+        var pipelines = WriteFile(Path.Combine(pcsx2, "cache", "vulkan_pipelines.bin"));
+        WriteFile(Path.Combine(DuckStationRoot, "settings.ini"), 0);
+        File.WriteAllText(Path.Combine(DuckStationRoot, "settings.ini"), $"[Folders]\nCache = {Path.Join(letter, "cache")}\n");
+
+        var volumes = new FakeVolumeInventory().Substituting(letter, pcsx2);
+        var provider = CreateProvider(running is null ? null : new FakeProcessInspector(running), volumes);
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(running is null ? [pipelines] : [], plan.TargetedPaths);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.Equal(running is not null, File.Exists(pipelines));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
     /// <summary>§5.3, by any of the names DuckStation's builds give the program.</summary>
