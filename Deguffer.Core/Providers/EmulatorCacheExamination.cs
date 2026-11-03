@@ -64,10 +64,12 @@ internal sealed class EmulatorCacheExamination
     private readonly HashSet<string> _reported = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Each game's folder entered for its caches. Eden's folder of games is a cache folder too, and a
-    /// game's folder met there is answered for by its own caches rather than named as left alone.
+    /// Every cache folder about to be read. One can sit inside another, as each game's folder does in
+    /// Eden's folder of games and Azahar's per-game pipeline folder does among its older global
+    /// pipeline caches, and the inner one met in the outer is answered for by its own reading rather
+    /// than named as left alone.
     /// </summary>
-    private readonly HashSet<string> _gameFolders = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _cacheFolders = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly HashSet<string> _targeted = new(StringComparer.OrdinalIgnoreCase);
 
@@ -154,6 +156,20 @@ internal sealed class EmulatorCacheExamination
 
         var folders = examination.Roots.Select(root => reach(root.Path)).ToList();
 
+        // A folder an emulator knows by its program is not also read as one whose settings file
+        // merely shares a name with that emulator's.
+        for (var i = examination.Roots.Count - 1; i >= 0; i--)
+        {
+            var folder = folders[i];
+
+            if (!examination.Roots[i].Layout.IsKnownByItsProgram
+                && examination.Roots.Where((other, j) => other.Layout.IsKnownByItsProgram && folders[j].IsSameAs(folder)).Any())
+            {
+                examination.Roots.RemoveAt(i);
+                folders.RemoveAt(i);
+            }
+        }
+
         for (var i = 0; i < examination.Roots.Count; i++)
         {
             IReadOnlyList<EmulatorLayout> owners =
@@ -226,7 +242,7 @@ internal sealed class EmulatorCacheExamination
         Survivors.Add((found.Path, $"{layout.Name}'s own folder. Only the shader caches inside it are removed."));
         Survivors.AddRange(layout.ProtectedNames.Select(p => (Path.Combine(found.Path, p.Name), p.Reason)));
 
-        var readings = new List<EmulatorCacheFolderReading>();
+        var toRead = new List<EmulatorCacheFolder>();
 
         foreach (var listed in layout.CacheFoldersIn(found.Path).Concat(GameCacheFolders(layout, found.Path, ct)))
         {
@@ -260,6 +276,14 @@ internal sealed class EmulatorCacheExamination
                 continue;
             }
 
+            toRead.Add(folder);
+            _cacheFolders.Add(folder.Path);
+        }
+
+        var readings = new List<EmulatorCacheFolderReading>();
+
+        foreach (var folder in toRead)
+        {
             if (ReadFolder(found, folder, ct) is { } recognised)
             {
                 readings.Add(new EmulatorCacheFolderReading(
@@ -310,7 +334,7 @@ internal sealed class EmulatorCacheExamination
 
             var path = LongPath.Display(entry.FullName);
 
-            if (_gameFolders.Contains(path))
+            if (_cacheFolders.Contains(path))
             {
                 continue;
             }
@@ -393,7 +417,6 @@ internal sealed class EmulatorCacheExamination
             {
                 var game = LongPath.Display(entry.FullName);
 
-                _gameFolders.Add(game);
                 Survivors.Add((game, $"One game's folder in {layout.Name}. Only caches inside it are removed."));
                 Survivors.AddRange(games.ProtectedNames.Select(p => (Path.Combine(game, p.Name), p.Reason)));
                 folders.AddRange(games.CacheFoldersIn(game));

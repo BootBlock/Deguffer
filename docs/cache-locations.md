@@ -3386,8 +3386,8 @@ acknowledgement.
 
 | | |
 | --- | --- |
-| **Location** | Cemu `shaderCache\precompiled` and `shaderCache\driver`; RPCS3 `cache\<serial>`; Dolphin `Cache\Shaders`; PCSX2's shader files in its cache folder; Ryujinx's host shader files in `games\<title id>\cache\shader`, and `cpu\0` and `cpu\1` in `games\<title id>\cache\cpu`; `vulkan_pipelines.bin` in each game's folder in Eden's `cache\shader` and in Citron's and yuzu's `shader`, and Eden's `cache\shader\vulkan_static_pipelines.bin`. Each inside that emulator's own folder, found as the table below describes |
-| **Method** | Delete the recognised folders, or for PCSX2 and the Switch emulators the recognised files, one item each |
+| **Location** | Cemu `shaderCache\precompiled` and `shaderCache\driver`; RPCS3 `cache\<serial>`; Dolphin `Cache\Shaders`; PCSX2's and DuckStation's shader files in their cache folders; PPSSPP's `.vkshadercache` and `.glshadercache` files and `vulkan_spirv.cache` in `PSP\SYSTEM\CACHE`; Vita3K `cache\shaders\<title id>`; Azahar's, Lime3DS's and Citra's `shaders\opengl\precompiled`, their Vulkan pipeline caches in `shaders\vulkan`, and Azahar's in `shaders\vulkan\pipeline`; Ryujinx's host shader files in `games\<title id>\cache\shader`, and `cpu\0` and `cpu\1` in `games\<title id>\cache\cpu`; `vulkan_pipelines.bin` in each game's folder in Eden's `cache\shader` and in Citron's and yuzu's `shader`, and Eden's `cache\shader\vulkan_static_pipelines.bin`. Each inside that emulator's own folder, found as the table below describes |
+| **Method** | Delete the recognised folders, or for PCSX2, DuckStation, PPSSPP and the Switch and 3DS emulators' Vulkan caches the recognised files, one item each |
 | **Typical size** | Nothing measured: the machine this was written on has no emulator that has compiled a shader. Community reports for a real library run to many gigabytes |
 
 ### What it is
@@ -3405,6 +3405,12 @@ shader the game has used. Only playing builds it, and players often share it. Th
 pipeline cache (`vulkan_pipelines.bin`) is compiled from it for this graphics card when the game
 boots. Deguffer offers the second and never the first, as it does for Cemu.
 
+The Nintendo 3DS emulators Azahar, Lime3DS and Citra do the same. Their `transferable` folders, for
+OpenGL and for Vulkan, record every shader each game has used, and only playing builds them. Azahar's
+Vulkan `.vkch` files in that folder hold the record and the shaders compiled from it together, so
+Deguffer keeps them whole. It offers only the OpenGL programs and Vulkan pipeline caches compiled for
+this graphics card.
+
 ### What Deguffer does
 
 **It looks where each emulator keeps its data, and nowhere else.**
@@ -3419,12 +3425,19 @@ boots. Deguffer offers the second and never the first, as it does for Cemu.
 | Eden | `%APPDATA%\eden`, and `user` inside each emulator folder you add that holds `eden.exe` or `eden-cli.exe`. You can also add that `user` folder itself | `config\qt-config.ini` |
 | Citron | `%APPDATA%\citron`, and the same as Eden for a folder that holds `citron.exe` or `citron-cmd.exe` | `config\qt-config.ini` |
 | yuzu | `%APPDATA%\yuzu`, and the same as Eden for a folder that holds `yuzu.exe` or `yuzu-cmd.exe` | `config\qt-config.ini` |
+| DuckStation | `Documents\DuckStation`, `%LOCALAPPDATA%\DuckStation`, and each emulator folder you add that holds a `duckstation-qt-*.exe` program | `settings.ini` |
+| PPSSPP | `Documents\PPSSPP`, and in each emulator folder you add: the folder `installed.txt` names, `memstick` inside it, or the folder itself | `PSP\SYSTEM\ppsspp.ini` |
+| Vita3K | Only each emulator folder you add that holds `Vita3K.exe`: `portable` inside it, or the folder itself. You can also add that `portable` folder itself | `config.yml` |
+| Azahar | `%APPDATA%\Azahar`, and `user` inside each emulator folder you add that holds `azahar.exe`. You can also add that `user` folder itself | `config\qt-config.ini`, or `config\sdl2-config.ini` |
+| Lime3DS | `%APPDATA%\Lime3DS`, and the same as Azahar for a folder that holds `lime3ds.exe`, `lime3ds-gui.exe` or `lime3ds-cli.exe` | The same as Azahar |
+| Citra | `%APPDATA%\Citra`, and the same as Azahar for a folder that holds `citra-qt.exe` or `citra.exe` | The same as Azahar |
 
-**Add an emulator folder in Settings for a portable install, and for every RPCS3 install.** RPCS3
-keeps everything beside `rpcs3.exe`, wherever you unpacked it, and a portable Cemu, Dolphin, PCSX2,
-Ryujinx, Eden, Citron or yuzu does the same. Windows records none of those places anywhere Deguffer can rely on, so Deguffer does
+**Add an emulator folder in Settings for a portable install, and for every RPCS3 and Vita3K
+install.** RPCS3 keeps everything beside `rpcs3.exe`, and Vita3K its settings and cache beside
+`Vita3K.exe`, wherever you unpacked them, and a portable Cemu, Dolphin, PCSX2, DuckStation, PPSSPP,
+Ryujinx, Eden, Citron, yuzu, Azahar, Lime3DS or Citra does the same. Windows records none of those places anywhere Deguffer can rely on, so Deguffer does
 not search your drives for them. A folder you add is looked in only for the settings file in the
-table, and for Eden, Citron and yuzu also for the program. A folder with none in it gets a note on the plan, and this row touches nothing in it. A
+table, and for DuckStation, Vita3K and the Switch and 3DS forks also for the program. A folder with none in it gets a note on the plan, and this row touches nothing in it. A
 folder that holds RetroArch gets no note, because the
 [RetroArch rows](#retroarchs-downloaded-shaders-databases-and-thumbnails) answer for it.
 
@@ -3432,23 +3445,37 @@ folder that holds RetroArch gets no note, because the
 a `cache` directory is not an emulator's. A folder that holds your whole profile, or a drive's root,
 is never treated as an emulator's folder, whatever file is in it.
 
-**Eden, Citron and yuzu are told apart by their program.** Each one's portable folder is called
-`user` and holds the same settings file, so Deguffer reads a `user` folder as a fork's only where
-that fork's program is beside it. The old `shader` folder that Eden's migration can leave in its
-folder is not Eden's cache, and is left alone.
+**Eden, Citron and yuzu are told apart by their program, and so are Azahar, Lime3DS and Citra.**
+Each one's portable folder is called `user` and holds the same settings file, so Deguffer reads a
+`user` folder as a fork's only where that fork's program is beside it. The old `shader` folder that
+Eden's migration can leave in its folder is not Eden's cache, and is left alone. In the same way,
+DuckStation's `settings.ini` is a name many programs use, and Vita3K's `config.yml` is the name an
+older RPCS3 used, so a folder you add is read as DuckStation's or Vita3K's only where its program is
+there, and a Vita3K folder is never also read as RPCS3's.
+
+**Azahar's migration copies, and never moves.** When Azahar first starts, it offers to copy your
+`%APPDATA%\Citra` or `%APPDATA%\Lime3DS` folder. The old folder stays, with its own caches, so
+Deguffer looks in all three and offers each under its own name.
 
 **Only the paths in the Location row are offered, found by their path from that folder.** This is
 what keeps Dolphin safe: `Shaders` in Dolphin's folder holds post-processing shaders you installed,
 and `Cache\Shaders` is the compiled cache. Only the second is offered. In RPCS3's `cache`, only a
 folder named by a game's serial, such as `BLUS30443`, is offered, which is the folder RPCS3's own
 **Remove All Caches** removes. In PCSX2's cache folder, only the shader and pipeline files each
-renderer writes are offered, as files, because the same folder holds other things. In the Switch
+renderer writes are offered, as files, because the same folder holds other things, and the same is
+true of DuckStation's cache folder, which also holds your achievement record. In PPSSPP's
+`PSP\SYSTEM\CACHE`, only the files with a shader cache's extension are offered, because a game's id
+is not always of one form. In Vita3K's `cache\shaders`, only a folder named by a game's title id,
+such as `PCSE00001`, is offered, which is the folder Vita3K's own **Delete Shader Caches** removes.
+In the 3DS emulators' `shaders` folder, which also holds your post-processing shaders, only the
+paths in the Location row are reached. In the Switch
 emulators, only a folder named by a game's title id, such as `0100f2c0115b6000`, is entered, so
 Citron's `shader\nvidia` is left alone, and so is everything beside the game folders except Eden's
 `vulkan_static_pipelines.bin`.
 
-**PCSX2's cache folder is where PCSX2's settings put it.** `[Folders] Cache` in `inis\PCSX2.ini` can
-move it anywhere, and Deguffer reads it rather than assuming the default.
+**PCSX2's and DuckStation's cache folders are where their settings put them.** `[Folders] Cache` in
+PCSX2's `inis\PCSX2.ini` and in DuckStation's `settings.ini` can move it anywhere, and Deguffer reads
+it rather than assuming the default.
 
 **One folder is one folder, however it is named.** A folder you add that is an emulator's default
 folder reached through a `subst` letter or a second mount of the volume is read once, and a cache
@@ -3457,13 +3484,13 @@ refuses each at both names.
 
 **Nothing of an emulator's while it runs.** An emulator writes its cache while you play, so while
 one is running its caches are not offered, the plan says why, and Explore refuses them. A folder that
-two forks of yuzu both use is held back while either one runs. The clean
+two forks of yuzu or of Citra both use is held back while either one runs. The clean
 asks again before it removes each item, so an emulator started while the preview is on screen holds
 its cache back too.
 
-No emulator here offers a command Deguffer could run to clear its own cache. RPCS3's and Cemu's are
-menu items inside the running program, and Cemu's also removes the transferable cache, which Deguffer
-keeps.
+No emulator here offers a command Deguffer could run to clear its own cache. RPCS3's, Cemu's,
+Vita3K's and Azahar's are menu items inside the running program, and Cemu's and Azahar's also remove
+the transferable caches, which Deguffer keeps.
 
 ### What is protected
 
@@ -3496,6 +3523,22 @@ are asserted by name after a clean:
 | Eden, Citron, yuzu | `keys`, `nand`, `sdmc` | Your keys, the emulated storage with your saves, firmware and games, and the SD card |
 | Eden, Citron, yuzu | `load`, `dump`, `amiibo`, `tas`, `screenshots`, `play_time`, `config` | What you installed, dumped, recorded and chose |
 | Eden | `lossless`, `post_shaders`, `post_presets` | What you added for scaling and post-processing |
+| DuckStation | `achievements.db` in the cache folder | Your achievement unlocks recorded on this machine. They cannot be downloaded again |
+| DuckStation | Everything else in the cache folder | The game list, the game database and downloaded images |
+| DuckStation | `shaders` | Post-processing shaders you installed. Not the compiled cache |
+| DuckStation | `bios`, `memcards`, `savestates` | The BIOS you dumped, your memory cards and save states |
+| DuckStation | `cheats`, `patches`, `textures`, `gamesettings`, `inputprofiles`, `covers`, `screenshots`, `settings.ini`, `playtime.dat` | What you set, added and took |
+| PPSSPP | Everything else in `PSP\SYSTEM\CACHE` | Copies of game images read from a slow drive, downloads and achievement icons |
+| PPSSPP | `PSP\SHADERS` | Post-processing shaders you installed. Not the compiled cache |
+| PPSSPP | `PSP\SAVEDATA`, `PSP\PPSSPP_STATE`, `PSP\GAME` | Your saves, save states, and the games and homebrew you installed |
+| PPSSPP | `PSP\TEXTURES`, `PSP\Cheats`, `PSP\PLUGINS`, `PSP\SCREENSHOT`, `PSP\NAND`, `PSP\SYSTEM\ppsspp.ini` | What you installed, added, took and set, and the firmware you supplied |
+| Vita3K | Everything in `cache` except `cache\shaders` | The compatibility list, decrypted programs you asked for, and install files |
+| Vita3K | `config.yml`, `config`, `gui-configs`, `textures`, `patch` | What you set, installed and added |
+| Vita3K | `fs` in a portable install | The emulated PS Vita storage: your saves, games, updates, DLC and firmware |
+| Azahar, Lime3DS, Citra | `shaders\opengl\transferable`, `shaders\vulkan\transferable` | The transferable caches. Built only by playing, and the compiled caches are built from them |
+| Azahar, Lime3DS, Citra | `shaders\*.glsl`, `shaders\anaglyph` | Post-processing and anaglyph shaders you installed |
+| Azahar, Lime3DS, Citra | `sdmc`, `nand`, `sysdata` | The emulated SD card and system storage with your games and saves, and your keys and console files |
+| Azahar, Lime3DS, Citra | `states`, `cheats`, `load`, `dump`, `config`, `log` | Your save states, and what you added, dumped and set |
 
 Explore enforces the same rule. In each emulator's folder it allows only the way to the cache, and
 in the cache folder only what the plan recognised.

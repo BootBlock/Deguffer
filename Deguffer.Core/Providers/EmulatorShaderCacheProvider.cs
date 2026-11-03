@@ -7,8 +7,9 @@ namespace Deguffer.Core.Providers;
 
 /// <summary>
 /// The shaders console emulators compile for this GPU and keep, which reach many gigabytes on a machine
-/// with a real library: Cemu's, RPCS3's, Dolphin's and PCSX2's, and those of the Nintendo Switch
-/// emulators Ryujinx, Eden, Citron and yuzu.
+/// with a real library: Cemu's, RPCS3's, Dolphin's, PCSX2's, DuckStation's, PPSSPP's and Vita3K's,
+/// those of the Nintendo Switch emulators Ryujinx, Eden, Citron and yuzu, and those of the Nintendo 3DS
+/// emulators Azahar, Lime3DS and Citra.
 ///
 /// <para><b>One provider over a table of layouts, as <see cref="GpuShaderCacheProvider"/> is.</b> The
 /// tier, the consequence and the reasoning are one fact for every emulator here, and what differs is
@@ -27,7 +28,7 @@ namespace Deguffer.Core.Providers;
 /// name is left alone at every level.</para>
 ///
 /// <para><b>Found where each emulator puts its data, and where the user says it is.</b> The fixed
-/// locations are looked at on every machine. A portable install, and every RPCS3 install, is beside
+/// locations are looked at on every machine. A portable install, and every RPCS3 and Vita3K install, is beside
 /// the program wherever it was unpacked, so it is reached only through a folder the user declares in
 /// Settings, see <see cref="EmulatorFolderStore"/>.</para>
 ///
@@ -44,10 +45,16 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
         new Rpcs3Layout(),
         new DolphinLayout(),
         new Pcsx2Layout(),
+        new DuckStationLayout(),
+        new PpssppLayout(),
+        new Vita3KLayout(),
         new RyujinxLayout(),
         YuzuFamilyLayout.Eden,
         YuzuFamilyLayout.Citron,
         YuzuFamilyLayout.Yuzu,
+        CitraFamilyLayout.Azahar,
+        CitraFamilyLayout.Lime3DS,
+        CitraFamilyLayout.Citra,
     ];
 
     private readonly EmulatorFolderStore _folders;
@@ -88,18 +95,20 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
         + "while, or waits longer before it starts. RPCS3 also compiles each game's code again the next "
         + "time it boots, which can take minutes, and Ryujinx translates it again over the next few boots. "
         + "Your saves, memory cards, save states, firmware, keys, installed games and settings are "
-        + "untouched, and so are Cemu's transferable cache and the Switch emulators' guest shader caches.";
+        + "untouched, and so are Cemu's and the 3DS emulators' transferable caches and the Switch "
+        + "emulators' guest shader caches.";
 
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Games,
-        Application = "Cemu, RPCS3, Dolphin, PCSX2, Ryujinx, Eden, Citron and yuzu, the console emulators",
+        Application = "Cemu, RPCS3, Dolphin, PCSX2, DuckStation, PPSSPP, Vita3K, Ryujinx, Eden, Citron, yuzu, "
+            + "Azahar, Lime3DS and Citra, the console emulators",
         Publisher = "each emulator's open-source project",
         Purpose = "An emulator translates each game's shaders for your graphics card as the game draws, "
             + "and keeps the result so the next session does not stutter while it translates them again.",
         Recommendation = "Remove these for a game you have finished with, or after a driver or emulator "
             + "update has made them stale. Deguffer finds each emulator where it keeps its data by "
-            + "default. For a portable install, and for every RPCS3 install, add its folder under "
+            + "default. For a portable install, and for every RPCS3 and Vita3K install, add its folder under "
             + "Emulator folders in Settings.",
     };
 
