@@ -164,11 +164,14 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
             var reason = $"This is {root.Layout.Name}'s folder, which holds your saves, firmware and settings "
                 + "beside its shader cache. Deguffer removes only the shader cache inside it.";
 
-            roots.AddRange(ToolRoot.WayDown(root.Path, root.CacheFolders.Select(folder => folder.Path), reason));
-            roots.AddRange(root.CacheFolders.Select(folder => new ToolRoot(
-                folder.Path,
-                $"This is {root.Layout.Name}'s cache folder. Deguffer removes only the shader caches in it.",
-                folder.Recognises)));
+            // A cache folder can sit inside another, as Eden's game folders and Azahar's pipeline
+            // folder do, and Explore asks each root on its own and refuses by the deepest that
+            // refuses. So the outer folder's one root recognises both its caches and the way into the
+            // inner folder, which still refuses itself, and the way down declares no second root there.
+            var cacheFolders = root.CacheFolders.Select(folder => folder.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            roots.AddRange(ToolRoot.WayDown(root.Path, cacheFolders, reason).Where(level => !cacheFolders.Contains(level.Path)));
+            roots.AddRange(root.CacheFolders.Select(folder => CacheFolderRoot(root, folder, cacheFolders)));
         }
 
         var declared = roots.Select(root => root.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -269,6 +272,23 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
             WasNotExamined = steps.Count == 0 && (held.Count > 0 || examination.Declined.Count > 0),
             HasUnreadableRoot = examination.Unreadable,
         };
+    }
+
+    /// <summary>
+    /// <paramref name="folder"/>'s root for Explore: what the plan recognised in it, and the first
+    /// folder on the way to each cache folder of <paramref name="root"/> inside it.
+    /// </summary>
+    private static ToolRoot CacheFolderRoot(EmulatorRoot root, EmulatorCacheFolderReading folder, IReadOnlySet<string> cacheFolders)
+    {
+        var wayIn = cacheFolders
+            .Where(inner => LongPath.Contains(folder.Path, inner) && !inner.Equals(folder.Path, StringComparison.OrdinalIgnoreCase))
+            .Select(inner => LongPath.Relative(folder.Path, inner).Split(Path.DirectorySeparatorChar)[0])
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return new ToolRoot(
+            folder.Path,
+            $"This is {root.Layout.Name}'s cache folder. Deguffer removes only the shader caches in it.",
+            child => folder.Recognises(child) || (child.Kind == ChildKind.Folder && wayIn.Contains(child.Name)));
     }
 
     private bool IsRunning(EmulatorLayout layout) => Inspector.FindRunning(layout.ProcessNames).Count > 0;

@@ -1,5 +1,6 @@
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Testing;
@@ -480,6 +481,18 @@ public sealed class SwitchEmulatorShaderCacheTests : IDisposable
         Assert.False(Allows(roots, edenShaders, "readme.txt", ChildKind.File));
         Assert.True(Allows(roots, Path.Combine(edenShaders, Game), "vulkan_pipelines.bin", ChildKind.File));
         Assert.False(Allows(roots, Path.Combine(edenShaders, Game), "vulkan.bin", ChildKind.File));
+
+        // Explore asks each root on its own and refuses by the deepest that refuses, so Eden's folder
+        // of games, a cache folder itself, must allow both its own pipeline cache and the way into a
+        // game's folder, which still refuses itself.
+        var explore = new ExploreActionPolicy([], [], new FakeVolumeInventory(), probedRoots: roots);
+
+        Assert.True(explore.MayRemove(Path.Combine(edenShaders, "vulkan_static_pipelines.bin")).IsAllowed);
+        Assert.False(explore.MayRemove(Path.Combine(edenShaders, "readme.txt")).IsAllowed);
+        Assert.True(explore.MayRemove(Path.Combine(edenShaders, Game, "vulkan_pipelines.bin")).IsAllowed);
+        Assert.False(explore.MayRemove(Path.Combine(edenShaders, Game, "vulkan.bin")).IsAllowed);
+        Assert.False(explore.MayRemove(Path.Combine(edenShaders, Game)).IsAllowed);
+        Assert.True(explore.MayRemove(Path.Combine(game, "cache", "shader", "vulkan_nvidia.toc")).IsAllowed);
     }
 
     /// <summary>§5.3: Ryujinx writes its caches while a game is played.</summary>
