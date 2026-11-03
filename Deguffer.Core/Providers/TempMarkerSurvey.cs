@@ -126,17 +126,23 @@ public sealed record TempMarkerFindings(
 /// </summary>
 public static class TempMarkerSurvey
 {
+    /// <param name="list">
+    /// Lists one place's entries, on the terms of <see cref="TempFolderListings.Read"/>: a pass's shared
+    /// listing for a plan, or a fresh one where the answer must not be the pass's.
+    /// </param>
     public static TempMarkerFindings Examine(
         IReadOnlyList<TempMarkerPlace> places,
+        Func<string, IReadOnlyList<TempFolderEntry>?> list,
         IProcessInspector inspector,
         ILiveTreeInspector liveTrees,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(places);
+        ArgumentNullException.ThrowIfNull(list);
         ArgumentNullException.ThrowIfNull(inspector);
         ArgumentNullException.ThrowIfNull(liveTrees);
 
-        var survey = new Survey(inspector);
+        var survey = new Survey(inspector, list);
 
         foreach (var place in places)
         {
@@ -148,7 +154,7 @@ public static class TempMarkerSurvey
     }
 
     /// <summary>One examination's running state, kept together because every visit adds to all of it.</summary>
-    private sealed class Survey(IProcessInspector inspector)
+    private sealed class Survey(IProcessInspector inspector, Func<string, IReadOnlyList<TempFolderEntry>?> list)
     {
         private readonly Dictionary<TempMarker, IReadOnlyList<IUseCheck>> _entryRules = [];
         private readonly List<(string Path, TempMarker Marker, DateTime? LastWritten, string Holder)> _candidates = [];
@@ -186,7 +192,7 @@ public static class TempMarkerSurvey
                     $"This is {owner}'s own folder, and it must survive — only what Deguffer recognises inside it is removed."));
             }
 
-            if (FolderEntries.Of(place.Directory) is not { } entries)
+            if (list(place.Directory) is not { } entries)
             {
                 _notes.Add(UnreadableRoot.Note(place.Directory));
                 _unreadable = true;
@@ -197,7 +203,7 @@ public static class TempMarkerSurvey
             {
                 ct.ThrowIfCancellationRequested();
 
-                var path = LongPath.Display(entry.FullName);
+                var path = entry.Path;
                 var isDirectory = entry.Attributes.HasFlag(FileAttributes.Directory);
                 var marker = place.Markers.FirstOrDefault(m => m.Recognises(entry.Name, isDirectory));
 
