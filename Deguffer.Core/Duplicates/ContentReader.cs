@@ -149,6 +149,9 @@ internal sealed class ContentReader
     /// </summary>
     public static bool IsWhole(ContentPart part, long length) => part is ContentPart.Whole || length <= 2L * BlockBytes;
 
+    /// <summary>How many bytes a read of <paramref name="part"/> of a file of <paramref name="length"/> bytes covers.</summary>
+    public static long BytesOf(ContentPart part, long length) => IsWhole(part, length) ? length : 2L * BlockBytes;
+
     /// <summary>
     /// The checksum of <paramref name="part"/> of <paramref name="file"/>'s content, or the reason it
     /// was left out.
