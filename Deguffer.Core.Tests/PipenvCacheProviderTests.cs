@@ -216,6 +216,32 @@ public sealed class PipenvCacheProviderTests : IDisposable
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
+    /// <summary>
+    /// pip's purge walks into a junction below the top of its folders and deletes what is behind it,
+    /// which the plan's one-level walk cannot see. The run looks again, does not send the purge, and
+    /// still removes the resolver cache by path.
+    /// </summary>
+    [Fact]
+    public async Task AClean_DoesNotPurgeThroughALinkDeepInsidePipsLayout()
+    {
+        CreateCache();
+        var outside = Populate(Path.Combine(_temp.Path, "elsewhere"));
+        Directory.CreateDirectory(Path.Combine(Child("http-v2"), "a"));
+        SymbolicLink.ToDirectory(Path.Combine(Child("http-v2"), "a", "linked"), outside);
+        PipThatPurges();
+
+        var provider = CreateProvider();
+        var result = await provider.ExecuteAsync(await provider.PlanAsync());
+
+        Assert.Empty(_runner.Invocations);
+        Assert.True(File.Exists(Path.Combine(outside, "payload.bin")));
+        Assert.True(Directory.Exists(Child("wheels")));
+        Assert.False(Directory.Exists(Child("pipenv-manifests")));
+        Assert.Contains(result.Steps, step =>
+            !step.Succeeded && step.Message!.Contains("never removes anything through a link", StringComparison.Ordinal));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
     [Fact]
     public async Task HonoursTheCacheVariableWhenItNamesAFolderOfItsOwn()
     {

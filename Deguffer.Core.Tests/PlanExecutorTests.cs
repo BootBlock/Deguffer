@@ -239,6 +239,43 @@ public sealed class PlanExecutorTests : IDisposable
     }
 
     /// <summary>
+    /// A tool's own command may follow a link inside what it clears: pip's purge walks into a junction
+    /// and deletes the files on the far side. So a command is not run over a tree that holds a link,
+    /// at any depth, and what the link points at is untouched.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task DoesNotRunAToolsCommandOverATreeHoldingALink(DirectoryLinkKind kind)
+    {
+        var cache = _temp.CreateDirectory("pip-cache");
+        _temp.CreateFile(4096, "pip-cache", "http-v2", "a", "blob");
+        var elsewhere = _temp.CreateDirectory("elsewhere");
+        var precious = _temp.CreateFile(16, "elsewhere", "precious.txt");
+        var link = Path.Combine(cache, "http-v2", "a", "linked");
+        DirectoryLink.Create(kind, link, elsewhere);
+
+        var command = new RunCommandStep("pip.exe", "cache purge", "Clear the pip cache")
+        {
+            WhenCancelled = CancelledCommand.Ended,
+            Estimated = new ScanSize(4096, 4096),
+            MeasuredPaths = [cache],
+        };
+
+        // The program answers, so a command that ran anyway fails the assertion rather than the fake.
+        var runner = new FakeProcessRunner().Responding(command.FileName, command.Arguments, string.Empty);
+        var executor = new PlanExecutor(runner, ParallelEnumerationScanner.Default, RefusalLog);
+        var result = await executor.ExecuteAsync(PlanDeleting(command), runReach: null, residue: null, progress: null, underway: null, default);
+
+        var step = Assert.Single(result.Steps);
+
+        Assert.Empty(runner.Invocations);
+        Assert.False(step.Succeeded);
+        Assert.Contains(link, step.Message!, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("never removes anything through a link", step.Message!, StringComparison.Ordinal);
+        Assert.True(File.Exists(precious));
+    }
+
+    /// <summary>
     /// The look on the disk before a command walks everything it clears and can take minutes, and a
     /// target check guards against what the machine does in that time: a build started, or a handle
     /// given to another item. So the check is asked again once the look is done, and a change it finds

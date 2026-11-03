@@ -147,6 +147,10 @@ It asks `pip cache dir` where the cache is rather than assuming, because `PIP_CA
 `--cache-dir` and the `cache-dir` key in `pip.ini` can all move it. It then runs `pip cache purge`.
 Deguffer never deletes the path itself.
 
+pip's purge follows a junction or a symbolic link it finds inside the cache, and deletes the files
+on the far side. So Deguffer looks through the cache again immediately before the command, and does
+not run it while anything inside is a link. That holds for every tool's own command, not only pip's.
+
 ### What is protected
 
 `%LOCALAPPDATA%\pip` — the folder *containing* the cache — and `pip.ini` inside it. That file holds
@@ -278,7 +282,8 @@ folder by two routes:
 - **`pipenv-manifests`** is removed by path. No command clears it on its own.
 
 Where pip cannot be found, or one of pip's folders is a link to somewhere else, pip's folders are
-removed by path too, and the link is left alone.
+removed by path too, and the link is left alone. A link deeper inside pip's folders stops the purge
+when the clean runs, because pip would follow it, and `pipenv-manifests` is still removed.
 
 `pipenv --clear` is never used. It deletes the whole of this folder and then the whole of pip's own
 cache, which is a different row.
