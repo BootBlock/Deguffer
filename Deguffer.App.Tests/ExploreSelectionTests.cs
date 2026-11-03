@@ -273,8 +273,7 @@ public sealed class ExploreSelectionTests : IDisposable
         // Released while this thread is held, and the pick made once the finished answer has been
         // posted to this thread to be shown. Calling the question off is then too late, and only
         // knowing which question is current keeps that answer off the note.
-        held.Set();
-        Assert.True(UiThread.WaitForPost(TimeSpan.FromSeconds(30)), "The first answer was never finished.");
+        Assert.True(UiThread.WaitForPostAfter(held.Set, TimeSpan.FromSeconds(30)), "The first answer was never finished.");
 
         // Until the folder's own answer, which is no note. The page may first say it is still asking,
         // because how long the folder takes to answer depends on how busy the machine is.

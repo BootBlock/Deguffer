@@ -35,14 +35,18 @@ public static class UiThread
     }
 
     /// <summary>
-    /// Hold this thread, without running anything posted to it, until something else posts to it, as
-    /// an answer finished on the thread pool does when the code awaiting it was on this thread. For a
-    /// test that has to act while such an answer is finished and still waiting to be told.
+    /// Call <paramref name="release"/>, then hold this thread, without running anything posted to it,
+    /// until something posts to it, as an answer finished on the thread pool does when the code
+    /// awaiting it was on this thread. For a test that has to act while such an answer is finished
+    /// and still waiting to be told.
+    ///
+    /// <para>The release is made here rather than before the call because only a post made after the
+    /// wait began ends it, and an answer released first can be posted before then.</para>
     /// </summary>
     /// <returns>False if nothing was posted within <paramref name="timeout"/>.</returns>
-    public static bool WaitForPost(TimeSpan timeout) =>
+    public static bool WaitForPostAfter(Action release, TimeSpan timeout) =>
         SynchronizationContext.Current is SingleThreadContext context
-            ? context.WaitForPost(timeout)
+            ? context.WaitForPostAfter(release, timeout)
             : throw new InvalidOperationException("Only a body running inside UiThread.Run has a thread to post to.");
 
     private sealed class SingleThreadContext : SynchronizationContext, IDisposable
@@ -73,12 +77,14 @@ public static class UiThread
             }
         }
 
-        public bool WaitForPost(TimeSpan timeout)
+        public bool WaitForPostAfter(Action release, TimeSpan timeout)
         {
             lock (_gate)
             {
                 _posted.Reset();
             }
+
+            release();
 
             return _posted.Wait(timeout);
         }

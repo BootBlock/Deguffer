@@ -65,15 +65,27 @@ public class UiThreadTests
             answered = true;
         }
 
-        release.Set();
-
-        Assert.True(UiThread.WaitForPost(TimeSpan.FromSeconds(30)));
+        Assert.True(UiThread.WaitForPostAfter(release.Set, TimeSpan.FromSeconds(30)));
         Assert.True(answering.IsCompleted);
         Assert.False(answered);
 
         await told;
 
         Assert.True(answered);
+    });
+
+    /// <summary>
+    /// What the release lets finish can post before the release has even returned, and that post is
+    /// the one waited for: the race a release made before the wait began loses.
+    /// </summary>
+    [Fact]
+    public void WaitingForAPostSeesOneMadeDuringTheRelease() => UiThread.Run(() =>
+    {
+        var context = SynchronizationContext.Current!;
+
+        Assert.True(UiThread.WaitForPostAfter(() => context.Post(_ => { }, null), TimeSpan.FromSeconds(30)));
+
+        return Task.CompletedTask;
     });
 
     /// <summary>
@@ -85,7 +97,7 @@ public class UiThreadTests
     {
         SynchronizationContext.Current!.Post(_ => { }, null);
 
-        Assert.False(UiThread.WaitForPost(TimeSpan.FromMilliseconds(100)));
+        Assert.False(UiThread.WaitForPostAfter(() => { }, TimeSpan.FromMilliseconds(100)));
 
         return Task.CompletedTask;
     });
