@@ -1078,6 +1078,11 @@ program linked from inside an AppContainer on an NVIDIA card wrote `AC\NVIDIA\GL
 same hashed layout the driver uses under `%LOCALAPPDATA%\NVIDIA\GLCache`, so the container's
 `NVIDIA` folder now recognises `DXCache` and `GLCache`. AMD's names are still open.
 
+AMD's names have since been settled from a published, excerpted listing of `%LOCALAPPDATA%\AMD` on
+a Windows machine with AMD graphics. It shows `DX9Cache`, `DxCache`, `DxcCache`, `OglCache` and
+`VkCache`, and every file it shows in them is a hash-named driver blob, so all five are recognised. `GLCache` appeared nowhere in it and stays Tier 4, and
+`CN`, where AMD Software keeps its settings and per-game profiles, is protected by name.
+
 The Steam shader cache has since shipped as a provider of its own, at Tier 2 rather than Tier 1:
 Valve distributes those pipelines, so removing them costs a download rather than a local rebuild. It
 reads every library from Steam's own `libraryfolders.vdf`, and `docs/cache-locations.md` records the
@@ -1091,6 +1096,8 @@ stutter the first time a scene renders, and nothing can be lost.
 - `%LOCALAPPDATA%\NVIDIA\GLCache` — 6 MB, same rule.
 - `%LOCALAPPDATA%\D3DSCache` — the Direct3D system cache, 1 MB.
 - AMD `%LOCALAPPDATA%\AMD\DxCache` and Intel `ShaderCache` — the same shape from the other vendors.
+  AMD's `DX9Cache`, `DxcCache`, `OglCache` and `VkCache` are recognised since — see the note above
+  this list.
 - Steam `steamapps\shadercache`, per game id — empty here, commonly several GB where pre-caching is
   enabled. Shipped since, at Tier 2 — see the note above this list.
 

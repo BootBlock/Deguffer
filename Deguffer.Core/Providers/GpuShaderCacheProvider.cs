@@ -66,17 +66,24 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
     /// What may be deleted under each vendor's directory. Anything not named here is Tier 4 by
     /// construction, which is the direction §5.2 requires the unknown case to fail in.
     ///
-    /// AMD is deliberately thin. <c>DxCache</c> is the child the survey documented, and no AMD
-    /// machine was available to establish what else that root holds — so the other names sometimes
-    /// attributed to it are absent rather than guessed at. The consequence is an incomplete reclaim
-    /// on an AMD machine, which is the safe direction to be wrong in. <c>VkCache</c>, <c>DxcCache</c>,
-    /// <c>GLCache</c> and <c>OglCache</c> are the names in question: AMD's AMDVLK documentation names
-    /// <c>VkCache</c> as the Vulkan pipeline cache on Linux only, and the rest come from third-party
-    /// guides. Each becomes a recognised name once it has been measured on an AMD machine.
+    /// AMD's names come from one published listing of <c>%LOCALAPPDATA%\AMD</c>, excerpted, from a
+    /// Windows machine with AMD graphics whose users play games on it
+    /// (https://gist.github.com/ccae7ef1d1446f4450005de139c601c4, October 2023). It shows five
+    /// folders, and every file it shows in them is a hash-named driver blob: <c>DX9Cache</c> as
+    /// <c>&lt;hash&gt;.bin</c>, and <c>DxCache</c>, <c>DxcCache</c>, <c>OglCache</c> and
+    /// <c>VkCache</c> as <c>&lt;hash&gt;.parc</c>, the <c>OglCache</c> ones stamped by AMD's shader
+    /// compiler. Its author reads the Direct3D names as Direct3D 9, 10 and 11, and 12. AMD's
+    /// AMDVLK documentation names <c>VkCache</c> as the Vulkan pipeline cache on Linux, which
+    /// agrees. <c>GLCache</c>, which third-party cleaners attribute to AMD too, appeared in no
+    /// listing and is Tier 4: it is NVIDIA's name, and borrowing it is the guess §5.2 forbids.
     ///
-    /// NVIDIA's LocalLow row is thin for the same reason. Only <c>DXCache</c> was measured there,
-    /// so <c>GLCache</c> is left out rather than assumed to exist in both tiers. A name that has
-    /// not been seen in a directory is Tier 4 in that directory. Intel's LocalLow row is thin for the
+    /// <c>CN</c> is named because it is the one thing beside the caches known to matter: AMD Software
+    /// keeps its settings and per-game profiles there (<c>gmdb.blb</c>). The same listing says the
+    /// root holds other files besides, unnamed, and a file in the root is never a candidate.
+    ///
+    /// A name that has not been seen in a directory is Tier 4 in that directory, so NVIDIA's
+    /// LocalLow row is deliberately thin. Only <c>DXCache</c> was measured there, so
+    /// <c>GLCache</c> is left out rather than assumed to exist in both tiers. Intel's LocalLow row is thin for the
     /// same reason: only <c>ShaderCache</c> was measured there.
     /// </summary>
     public static readonly IReadOnlyList<ShaderCacheRoot> Roots =
@@ -105,10 +112,27 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
         new ShaderCacheRoot(ProfileArea.LocalAppData, "AMD", new DisposableChildSet(
         [
             new ChildClassification(
+                "DX9Cache",
+                SafetyTier.RegenerableCache,
+                "Compiled Direct3D 9 shaders. The driver rebuilds each one the first time it is needed again."),
+            new ChildClassification(
                 "DxCache",
                 SafetyTier.RegenerableCache,
                 "Compiled Direct3D shader pipelines. The driver rebuilds each one the first time it is needed again."),
-        ]), []),
+            new ChildClassification(
+                "DxcCache",
+                SafetyTier.RegenerableCache,
+                "Compiled Direct3D 12 shader pipelines. The driver rebuilds each one the first time it is needed again."),
+            new ChildClassification(
+                "OglCache",
+                SafetyTier.RegenerableCache,
+                "Compiled OpenGL program binaries. The driver rebuilds them on demand."),
+            new ChildClassification(
+                "VkCache",
+                SafetyTier.RegenerableCache,
+                "Compiled Vulkan pipelines. The driver rebuilds them on demand."),
+        ]),
+        [("CN", "AMD Software's settings and per-game profiles. It sits beside the caches and is not one.")]),
         new ShaderCacheRoot(ProfileArea.LocalAppData, "Intel", new DisposableChildSet(
         [
             new ChildClassification(
