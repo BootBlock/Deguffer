@@ -140,7 +140,8 @@ public sealed class CapCutSupersededBuildProvider : CleanupProviderBase
         // Only an installation with more than one build is withheld by a doubt. One build is nothing to
         // offer whatever its state, and a sentence about leaving it alone would mark the row unexamined.
         var doubted = installations
-            .Where(i => i.Doubt is not CapCutBuildDoubt.None && (i.Builds.Count > 1 || i.Doubt is CapCutBuildDoubt.AppsUnreadable))
+            .Where(i => i.Doubt is not CapCutBuildDoubt.None
+                && (i.Builds.Count > 1 || i.Doubt is CapCutBuildDoubt.AppsUnreadable or CapCutBuildDoubt.LinkedFolder))
             .ToList();
 
         foreach (var installation in doubted)
@@ -289,8 +290,11 @@ public sealed class CapCutSupersededBuildProvider : CleanupProviderBase
                 $"Left every build of {name} alone: its launcher's record names build {installation.Record.Version}, "
                 + "which is not there, so Deguffer cannot tell which one starts.",
             CapCutBuildDoubt.UnorderableBuild =>
-                $"Left every build of {name} alone: one build's number is too large to order, so Deguffer "
-                + "cannot tell which build is newest.",
+                $"Left every build of {name} alone: a build's number is too large to order, or two build "
+                + "folders name the same number, so Deguffer cannot tell which build is newest.",
+            CapCutBuildDoubt.LinkedFolder =>
+                $"Left every build of {name} alone: '{installation.Apps}' is reached through a link, and "
+                + "Deguffer does not remove anything through a link.",
             _ => throw new ArgumentOutOfRangeException(nameof(installation), installation.Doubt, "An installation in no doubt has no sentence."),
         };
     }

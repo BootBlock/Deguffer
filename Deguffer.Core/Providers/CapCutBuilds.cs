@@ -24,8 +24,18 @@ public enum CapCutBuildDoubt
     /// <summary>The record names a build whose folder is not there, so the launcher's choice is not known.</summary>
     RecordNamesMissingBuild,
 
-    /// <summary>A build's number is too large to order, so which build is newest is not known.</summary>
+    /// <summary>
+    /// A build's number is too large to order, or two build folders name one number
+    /// (<c>6.6.0.2610</c> and <c>06.6.0.2610</c>), so which build is newest is not known.
+    /// </summary>
     UnorderableBuild,
+
+    /// <summary>
+    /// <c>Apps</c>, or the editor's folder above it, is a junction or a symbolic link. What it points
+    /// at was never classified, and every survivor §5.6 asserts would be checked through the same
+    /// link, so the check would prove nothing about the tree that changed.
+    /// </summary>
+    LinkedFolder,
 }
 
 /// <summary>
@@ -73,17 +83,23 @@ public sealed record CapCutBuilds(
         ? []
         : [.. Builds.Where(build => build != Current && build != Newest)];
 
-    /// <summary>
-    /// The edition's builds, or null where it has no <c>Apps</c> folder. Two folder names for one
-    /// version cannot arise on NTFS, so the numbers order the builds completely.
-    /// </summary>
+    /// <summary>The edition's builds, or null where it has no <c>Apps</c> folder.</summary>
     public static CapCutBuilds? Look(IUserEnvironment environment, CapCutEdition edition)
     {
         var apps = CapCutLayout.AppsIn(environment, edition);
 
-        if (LongPath.ProbeDirectory(apps) is PathPresence.Absent)
+        if (LongPath.ProbeDirectory(apps, out var appsIsLink) is PathPresence.Absent)
         {
             return null;
+        }
+
+        // A link is declined before anything below it is listed. An answer that could not say is
+        // not a link, and the listing that follows reports the folder it could not read.
+        LongPath.ProbeDirectory(CapCutLayout.FolderIn(environment, edition), out var folderIsLink);
+
+        if (appsIsLink is true || folderIsLink is true)
+        {
+            return new CapCutBuilds(edition, apps, [], new CapCutLaunchRecord(CapCutRecordState.Absent, null), CapCutBuildDoubt.LinkedFolder);
         }
 
         var children = ChildDirectories.Under(apps, static name => BuildName.IsMatch(name));
@@ -103,7 +119,8 @@ public sealed record CapCutBuilds(
         var installation = new CapCutBuilds(edition, apps, builds, record, CapCutBuildDoubt.None);
 
         var doubt = children.Unreadable ? CapCutBuildDoubt.AppsUnreadable
-            : named.Count != builds.Count ? CapCutBuildDoubt.UnorderableBuild
+            : named.Count != builds.Count || builds.DistinctBy(build => build.Number).Count() != builds.Count
+                ? CapCutBuildDoubt.UnorderableBuild
             : record.State is not CapCutRecordState.Named ? CapCutBuildDoubt.RecordNotRead
             : installation.Current is null ? CapCutBuildDoubt.RecordNamesMissingBuild
             : CapCutBuildDoubt.None;

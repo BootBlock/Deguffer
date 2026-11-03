@@ -190,6 +190,65 @@ public sealed class CapCutSupersededBuildProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task TwoFoldersNamingOneNumberLeaveEveryBuildAlone()
+    {
+        Install("6.6.0.2610", "3.8.0.1431", "6.6.0.2610", "06.6.0.2610");
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("name the same number", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// §5.2 and §5.6: a CapCut moved to another drive with a link is never removed through it. Every
+    /// survivor would be checked through the same link, so a run there would prove nothing.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(LinkedFolders))]
+    public async Task ALinkedAppsOrEditorFolderIsNeverRemovedThrough(DirectoryLinkKind kind, bool linkTheEditorFolder)
+    {
+        var outside = Path.Combine(_temp.Path, "elsewhere");
+        var outsideApps = linkTheEditorFolder ? Path.Combine(outside, "Apps") : outside;
+
+        foreach (var version in new[] { "3.8.0.1431", "6.6.0.2610" })
+        {
+            Directory.CreateDirectory(Path.Combine(outsideApps, version));
+            File.WriteAllBytes(Path.Combine(outsideApps, version, "CapCut.exe"), new byte[64]);
+        }
+
+        File.WriteAllText(Path.Combine(outsideApps, "configure.ini"), "[Configure]\r\nlast_version=6.6.0.2610\r\n");
+
+        var link = linkTheEditorFolder ? Path.GetDirectoryName(Apps)! : Apps;
+        Directory.CreateDirectory(Path.GetDirectoryName(link)!);
+        DirectoryLink.Create(kind, link, outside);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("through a link", StringComparison.Ordinal));
+        Assert.False(new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory()).MayRemove(Build("3.8.0.1431")).IsAllowed);
+
+        await provider.ExecuteAsync(plan);
+        Assert.True(Directory.Exists(Path.Combine(outsideApps, "3.8.0.1431")), "an old build was removed through a link.");
+    }
+
+    public static TheoryData<DirectoryLinkKind, bool> LinkedFolders()
+    {
+        var data = new TheoryData<DirectoryLinkKind, bool>();
+
+        foreach (var kind in DirectoryLink.Kinds.Select(row => (DirectoryLinkKind)row[0]))
+        {
+            data.Add(kind, false);
+            data.Add(kind, true);
+        }
+
+        return data;
+    }
+
+    [Fact]
     public async Task OneBuildIsNothingToOfferAndReadsAsClear()
     {
         Install("6.6.0.2610", "6.6.0.2610");

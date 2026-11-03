@@ -24,8 +24,9 @@ public enum ProviderBasis
     Observed,
 
     /// <summary>
-    /// Built from the vendor's documentation and reports from the tool's users, with no installation
-    /// seen. Offered, never pre-selected.
+    /// Built from the vendor's documentation, the tool's source code and reports from its users,
+    /// without the folders it acts on having been seen. The tool itself may have been installed with
+    /// nothing in them. Offered, never pre-selected.
     /// </summary>
     Researched,
 }
@@ -55,8 +56,8 @@ public static class ProviderBasisExtensions
             + "application.",
         ProviderBasis.Researched =>
             "Deguffer's rules for this location come from the publisher's documentation, the "
-            + "application's source code and reports by people who use it, not from an installation Deguffer's "
-            + "developers have seen. It removes only folders it recognises and leaves everything "
+            + "application's source code and reports by people who use it, not from folders "
+            + "Deguffer's developers have seen. It removes only folders it recognises and leaves everything "
             + "else alone, but it never ticks this row for you: look at what it lists before you "
             + "choose it.",
         _ => throw new ArgumentOutOfRangeException(nameof(basis), basis, null),

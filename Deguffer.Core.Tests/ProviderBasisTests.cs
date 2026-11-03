@@ -84,12 +84,14 @@ public class ProviderBasisTests
     public void OnlyAnObservedBasisPermitsPreSelection(ProviderBasis basis, bool expected) =>
         Assert.Equal(expected, basis.PermitsPreSelection());
 
-    /// <summary>The narrowing never widens: a researched provider at a tier §3 never ticks stays unticked.</summary>
+    /// <summary>The narrowing never widens: at a tier §3 never ticks, neither basis ticks the row.</summary>
     [Theory]
-    [InlineData(SafetyTier.RegenerableWithCost)]
-    [InlineData(SafetyTier.UserData)]
-    public void NeverTicksATierThatIsNotPreSelected(SafetyTier tier) =>
-        Assert.False(Provider(ProviderBasis.Observed, tier).IsPreSelectedByDefault());
+    [InlineData(SafetyTier.RegenerableWithCost, ProviderBasis.Observed)]
+    [InlineData(SafetyTier.RegenerableWithCost, ProviderBasis.Researched)]
+    [InlineData(SafetyTier.UserData, ProviderBasis.Observed)]
+    [InlineData(SafetyTier.UserData, ProviderBasis.Researched)]
+    public void NeverTicksATierThatIsNotPreSelected(SafetyTier tier, ProviderBasis basis) =>
+        Assert.False(Provider(basis, tier).IsPreSelectedByDefault());
 
     [Theory]
     [InlineData(ProviderBasis.Observed)]

@@ -26,9 +26,10 @@ four questions worth asking before deleting anything:
 anything it does not recognise stays in Tier 4 and is left alone. If Deguffer finds something
 unexpected next to a cache it tells you it is leaving it there rather than guessing.
 
-**Some rows are researched rather than observed.** Most rows were written against a real
-installation of the tool. A few cover a tool nobody working on Deguffer has installed, and were
-written from the publisher's documentation, the tool's source and reports from its users. Each of
+**Some rows are researched rather than observed.** Most rows were written against folders seen on
+a real installation of the tool. The others were written from the publisher's documentation, the
+tool's source and reports from its users, because nobody working on Deguffer had those folders: the
+tool was not installed, or was installed with nothing in them. Each of
 those rows carries a **Researched** chip, and its *What is this?* dialog says so. A researched row
 keeps every rule above, but it is **never pre-selected**, whatever its tier: look at what it lists
 before you tick it. A tick you gave it before is remembered.
@@ -1416,7 +1417,7 @@ Every archive is a copy of what the app's manifest URL still serves.
 
 ## Maven local repository
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -1492,7 +1493,7 @@ broken one".
 
 ## vcpkg build caches
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -1631,7 +1632,7 @@ in the store that can exist nowhere else, is never touched.
 
 ## Conda package cache
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -3388,7 +3389,7 @@ by definition.
 
 ## Emulator shader caches
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -3538,7 +3539,7 @@ Two rows, because they are two tiers.
 
 | | |
 | --- | --- |
-| **Rows** | **RetroArch shaders and game databases**, Tier 2. **RetroArch thumbnails**, Tier 3 |
+| **Rows** | **RetroArch shaders and game databases**, Tier 2. **RetroArch thumbnails**, Tier 3. Both researched: See *Some rows are researched rather than observed* at the top of this page |
 | **Location** | `shaders_slang`, `shaders_glsl` and `shaders_cg` in RetroArch's shader folder; the `.rdb` files in its database folder; `Named_Boxarts`, `Named_Snaps`, `Named_Titles` and `Named_Logos` in each system's folder in its thumbnails folder. Each folder is where RetroArch's settings put it, `shaders`, `database\rdb` and `thumbnails` beside the program by default |
 | **Method** | Delete the recognised folders, and the `.rdb` files one by one, one item each. Thumbnails are grouped by system |
 | **Typical size** | Nothing measured: the machine this was written on has no RetroArch. The libretro servers put the shader sets at about 15 to 54 MB compressed each, a few hundred megabytes extracted, and the databases at about 52 MB compressed. Thumbnails run to many gigabytes for a large library |
@@ -3637,7 +3638,7 @@ permanent loss.
 
 ## Unreal Engine derived data cache
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -3727,7 +3728,7 @@ but only by re-indexing for minutes.
 
 ## Unity GI cache
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -3929,7 +3930,7 @@ opposite case, which is why they are kept out entirely rather than offered at a 
 
 ## Plex Media Server transcoder files
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -4009,7 +4010,7 @@ one is making it again.
 
 ## Jellyfin transcoder files
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -4090,7 +4091,7 @@ Every segment is derived from media still on disk.
 
 ## Emby Server transcoder files
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -4235,7 +4236,7 @@ Sources:
 
 ## Capture One previews and thumbnails
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -4360,7 +4361,7 @@ Sources:
 
 ## DaVinci Resolve render cache
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -4472,7 +4473,7 @@ Sources:
 
 ## Adobe media cache
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -4666,7 +4667,7 @@ are researched rather than observed* at the top of this page.
 
 ## After Effects disk cache
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -5448,7 +5449,7 @@ rather than a global install.
 
 ## Puppeteer browsers
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -5665,7 +5666,7 @@ version that may not stay published, so it is offered and never ticked on your b
 
 ## Vagrant superseded box versions
 
-**Tier 2 — regenerable, with cost.** Not pre-selected.
+**Tier 2 — regenerable, with cost, researched.** Not pre-selected.
 
 | | |
 | --- | --- |
@@ -5903,7 +5904,7 @@ what is left.
 
 ## Graphics driver installer files
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -6012,7 +6013,7 @@ location nobody has measured out of the default selection.
 
 ## Autodesk installer files
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -6459,7 +6460,8 @@ and for pytest the record of which tests failed last.
 
 The three Python caches are researched, written from each tool's source on a machine where none of
 them had been run, so their rows are not pre-selected: see *Some rows are researched rather than
-observed* at the top of this page. `obj` and the `.vs` caches were observed, and are.
+observed* at the top of this page. `obj` and the `.vs` caches were observed, and are. Of the Tier 2
+rows, tox's and nox's environments and the two Unreal folders are researched too.
 
 The others cost more than a slower next use, and §3's definition of Tier 2 — "re-created, but
 only by re-downloading gigabytes or re-indexing for minutes" — is met by each of them differently:
@@ -6662,7 +6664,7 @@ type the name out as well.
 
 ## Windows File History
 
-**Tier 3 — user data.** Offered, **never pre-selected**, and confirmed by a dialog that says the
+**Tier 3 — user data, researched.** Offered, **never pre-selected**, and confirmed by a dialog that says the
 loss is permanent. Switch *Type a name to delete user data* on in Settings and that dialog asks you
 to type the words out.
 
