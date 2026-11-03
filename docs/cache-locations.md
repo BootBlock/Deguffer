@@ -746,6 +746,90 @@ project needs it.
 
 ---
 
+## Nx task caches
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%USERPROFILE%\.nx\<id>\cache`, one for each workspace, and `.nx\cache` in each Nx workspace inside your source folders |
+| **Method** | Delete the `cache` folder, by path, as `nx reset --onlyCache` does, only where every Nx that reads its index treats a missing entry as a miss |
+| **Typical size** | Up to a tenth of the disk for each workspace, which is the cap Nx sets unless `maxCacheSize` says otherwise. Not measured: no Nx workspace was on the surveyed machine |
+
+### What it is
+
+Nx, the JavaScript monorepo build system, keeps the outputs and terminal logs of every task it runs,
+so that a task whose inputs have not changed is restored rather than run again. Each entry is a
+folder named by the task's hash, beside a `terminalOutputs` folder holding each task's log. A
+SQLite database beside the cache, its index, names each entry.
+
+Everything here was read from Nx's source, at versions 18 to 24.0.3
+(`packages/nx/src/utils/cache-directory.ts`, `packages/nx/src/native/cache/cache.rs`,
+`packages/nx/src/native/db/mod.rs`, `packages/nx/src/command-line/reset/reset.ts`).
+
+- **Nx 17 to 23.1** keep the cache in `.nx\cache` in the workspace, and from Nx 19 the index in
+  `.nx\workspace-data`.
+- **From Nx 23.2** a workspace with a git remote or an Nx Cloud id keeps its cache in
+  `%USERPROFILE%\.nx\<id>\cache`, and its index in `<id>\databases`, shared by every checkout of
+  the workspace. `<id>` is the first 16 hexadecimal characters of a SHA-256 hash of that identity,
+  so it cannot be traced back to a workspace. A workspace without an identity, or one that sets
+  `cacheDirectory` or `NX_CACHE_DIRECTORY`, keeps using its own folder, and a workspace that moved
+  keeps the `.nx\cache` it had.
+
+Nx trims a cache to its cap only when that workspace runs. The cache of a workspace that has been
+deleted is never trimmed again, and that is most of what this row is for.
+
+### What Deguffer does
+
+**It deletes the `cache` folder, and nothing beside it.** That is the folder `nx reset --onlyCache`
+removes, and Nx makes it again at its next run. In the profile, `.nx` and each workspace's folder
+stay, and so do `databases` and anything else in them. In a workspace, `.nx` stays, with
+`workspace-data` and the Nx wrapper's `nxw.js` and `installation`, which a workspace commits.
+
+**A cache is recognised by what Nx makes in it, not by its name.** The folder must hold the
+`terminalOutputs` folder Nx creates in every cache it opens. In the profile, the workspace's folder
+must be named by 16 lower-case hexadecimal characters, as Nx names it. In a workspace, `.nx` must sit
+beside an `nx.json`. A cache that git tracks a file in is somebody's fixture and is left alone.
+
+**A cache that an older Nx indexes is left alone.** Nx 19 to 23.2 trust the index: when a task's
+entry folder is gone, they still report the task as restored from the cache, copy nothing back, and
+the build goes on without the task's outputs. Nx's own `nx reset --onlyCache` leaves that state in
+those versions too. Nx 23.3.0 added the check that treats such an entry as a miss. Each version
+names its database after its schema: Nx 19 to 22 write `<machine>.db`, 23.0 to 23.2 write
+`<machine>-v3.db`, and 23.3.0 onwards write `-v4.db` or later. So Deguffer offers a cache only where
+every database beside it is `-v4` or later, or where there is no database at all, and says
+otherwise to run `nx reset` in the workspace, which clears the cache and its index together.
+
+**§5.1 was asked, and the answer is the path.** `nx reset --onlyCache` runs only inside a workspace,
+with that workspace's Nx installed, and a cache in the profile names no workspace to run it in. Where
+it could run, under Nx 23.2 or earlier it leaves the broken state above.
+
+**A cache Nx is using is left alone.** Nx holds the index open while it runs a task, and its daemon
+holds it for as long as it runs. Deguffer asks Windows whether anything holds the database or its
+journal files, and for a workspace whether a program is working in the workspace. It asks again
+when you press Clean, and Explore refuses a cache that is held back.
+
+### What is protected
+
+`%USERPROFILE%\.nx`, each workspace's folder in it and everything in that folder except `cache`,
+and every folder in `.nx` not named as Nx names a workspace's. In a workspace: the workspace folder,
+`nx.json`, `.nx` and everything in it except `cache`. Every cache left alone, with the reason.
+Deguffer asserts that they survived.
+
+### What it costs you
+
+The next Nx run in each workspace runs its tasks again rather than restoring them, so it takes longer
+once. The task history in the index stays. A workspace that uses Nx Cloud's remote cache restores
+from there instead.
+
+### Why Tier 1
+
+Every entry is the output of a task Nx can run again from the workspace's source, and Nx 23.3 and
+later run it again by themselves when the entry is missing. Where that cannot be shown, the cache is
+not offered.
+
+---
+
 ## ccache compiler cache
 
 **Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
