@@ -151,7 +151,7 @@ public sealed class DuplicateUnlistedPlacesTests : IDisposable
         var found = await _tree.Finder().FindAsync(
             new DuplicateSearch(MatchCriteria.Size, [new SearchLocation(_tree.Top)]),
             _tree.Policy(),
-            new CallbackProgress<ExploreProgress>(progress => listed = Math.Max(listed, progress.Done)));
+            new CallbackProgress<DuplicateSearchProgress>(progress => listed = Math.Max(listed, progress.Scan?.Done ?? 0)));
 
         var places = found.PassedOver.Select(place => place.Path + Path.DirectorySeparatorChar).ToList();
         var outside = Directory.EnumerateFileSystemEntries(_tree.Top, "*", SearchOption.AllDirectories)

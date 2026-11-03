@@ -28,7 +28,8 @@ public sealed partial class DuplicatesPage : Page
             VolumeInventory.Current,
             WindowsUninstallRegistry.Default,
             UserEnvironment.Current,
-            SystemDirectories.Current);
+            SystemDirectories.Current,
+            App.Media);
 
         var run = new DuplicateSearchRun(
             new DuplicateSearcher(finder, App.Media, App.Checksums),
