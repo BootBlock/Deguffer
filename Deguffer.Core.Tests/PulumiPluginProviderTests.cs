@@ -488,6 +488,42 @@ public sealed class PulumiPluginProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A plugin Pulumi has not finished installing has a name like any other, and only the file beside
+    /// it tells it apart, so Explore refuses its folder and the files beside it from what is on the disk.
+    /// </summary>
+    [Fact]
+    public void ExploreRefusesAPluginStillInstalling()
+    {
+        Install(Aws, Kubernetes);
+        File.WriteAllText(Folder(Kubernetes) + ".partial", string.Empty);
+
+        var cache = Assert.Single(CreateProvider().ToolRoots, root => root.Path.Equals(Cache, StringComparison.OrdinalIgnoreCase));
+
+        Assert.False(cache.Recognises(new ToolRootChild(Kubernetes, ChildKind.Folder)));
+        Assert.False(cache.Recognises(new ToolRootChild(Kubernetes + ".lock", ChildKind.File)));
+        Assert.True(cache.Recognises(new ToolRootChild(Aws, ChildKind.Folder)));
+        Assert.True(cache.Recognises(new ToolRootChild(Aws + ".lock", ChildKind.File)));
+    }
+
+    /// <summary>
+    /// Where what runs from the cache cannot be read in full, the plan holds every plugin back, and so
+    /// Explore refuses the whole cache.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesTheCacheWhereUseCannotBeChecked()
+    {
+        Install(Aws);
+
+        var roots = await new PulumiPluginProvider(_environment, _runner, _processes, liveTrees: FakeLiveTreeInspector.CannotTell)
+            .DiscoverToolRootsAsync();
+
+        var refused = Assert.Single(roots, root => root.Path.Equals(Cache, StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(LiveTreeVeto.UncheckedReason, refused.Reason);
+        Assert.False(refused.Recognises(new ToolRootChild(Aws, ChildKind.Folder)));
+        Assert.DoesNotContain(await CreateProvider().DiscoverToolRootsAsync(), root => root.Path.Equals(Cache, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// Without Pulumi each plugin is removed by path, its folder whole or not at all and then the files
     /// beside it, all one item, and the run removes exactly those.
     /// </summary>

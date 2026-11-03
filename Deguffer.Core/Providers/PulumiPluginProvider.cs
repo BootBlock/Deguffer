@@ -64,6 +64,8 @@ public sealed class PulumiPluginProvider : CleanupProviderBase
     private const string CacheRootReason =
         "This is Pulumi's plugin cache. Deguffer removes the plugins inside it and never the folder itself.";
 
+    private const string InstallingReason = "A plugin Pulumi has not finished installing.";
+
     private const string DeclinedRootReason =
         "PULUMI_HOME names this folder, so Pulumi keeps its access tokens, its plugins and its stacks' state here.";
 
@@ -112,7 +114,7 @@ public sealed class PulumiPluginProvider : CleanupProviderBase
         Purpose = "Pulumi downloads a plugin for every cloud provider and version a stack uses, and keeps every "
             + "one of them. A cloud provider's plugin is often hundreds of megabytes, and each upgrade adds another.",
         Recommendation = "Deguffer lists each plugin and removes the ones you choose with Pulumi's own 'pulumi "
-            + "plugin rm', and offers nothing while Pulumi is running.",
+            + "plugin rm', or by path where Pulumi is no longer installed, and offers nothing while Pulumi is running.",
     };
 
     /// <summary>Pulumi's folder where <see cref="HomeVariable"/> is unset: <c>.pulumi</c> in the profile.</summary>
@@ -120,30 +122,32 @@ public sealed class PulumiPluginProvider : CleanupProviderBase
 
     /// <summary>
     /// §5.2 for Explore: each Pulumi folder opens only the way down to its plugin cache, and the cache
-    /// recognises only the plugins and their files.
+    /// recognises only the plugins that have finished installing and their files.
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
     [
         .. DeclaredHomes.SelectMany(home => ToolRoot.WayDown(home, [PluginsIn(home)], HomeRootReason)),
-        .. DeclaredHomes.Select(home => new ToolRoot(PluginsIn(home), CacheRootReason, IsRecognised)),
+        .. DeclaredHomes.Select(PluginsIn).Select(cache => new ToolRoot(cache, CacheRootReason, child => IsRecognised(cache, child))),
     ];
 
     /// <summary>
     /// What Explore must refuse that only the machine as it is now can say: the whole cache while Pulumi
-    /// runs, each plugin a program runs from, and what Pulumi keeps in a folder the variable names that
-    /// this declines.
+    /// runs or while what runs from it cannot be read in full, each plugin a program runs from, and what
+    /// Pulumi keeps in a folder the variable names that this declines.
     /// </summary>
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
         IReadOnlyList<string> caches = [.. DeclaredHomes.Select(PluginsIn)];
-        var running = PulumiIsRunning();
+        var findings = PulumiIsRunning() ? null : _liveTrees.FindLiveChildren(caches, ct);
 
         return Task.FromResult<IReadOnlyList<ToolRoot>>(
         [
-            .. running
+            .. findings is null
                 ? caches.Select(cache => new ToolRoot(cache, PulumiPluginUse.PulumiRunningReason, static _ => false))
-                : _liveTrees.FindLiveChildren(caches, ct).Live
-                    .Select(live => new ToolRoot(live.Directory, PulumiPluginUse.InUseReason, static _ => false)),
+                : findings.Live.Select(live => new ToolRoot(live.Directory, PulumiPluginUse.InUseReason, static _ => false)),
+            .. caches
+                .Where(cache => findings is not null && !findings.IsAnswered(cache))
+                .Select(cache => new ToolRoot(cache, LiveTreeVeto.UncheckedReason, static _ => false)),
             .. Readings()
                 .Select(setting => setting.DeclinedFolder)
                 .OfType<string>()
@@ -349,7 +353,7 @@ public sealed class PulumiPluginProvider : CleanupProviderBase
             (home, "Pulumi's own folder must survive. Only plugins in its plugin cache are removed."),
             (Path.Combine(home, CredentialsFile), "Your Pulumi access tokens."),
             (cache.Folder, "Pulumi's plugin cache must survive: only the plugins chosen are removed from it."),
-            .. cache.Installing.Select(plugin => (plugin.Folder, "A plugin Pulumi has not finished installing.")),
+            .. cache.Installing.Select(plugin => (plugin.Folder, InstallingReason)),
             .. cache.Entries
                 .Select(entry => LongPath.Display(entry.FullName))
                 .Where(path => !removed.Contains(path))
@@ -368,16 +372,28 @@ public sealed class PulumiPluginProvider : CleanupProviderBase
     /// <summary>One heading a plugin, so every version of the AWS provider is listed together.</summary>
     private static string GroupOf(PulumiPlugin plugin) => $"{plugin.Name} ({plugin.Kind})";
 
-    /// <summary>A plugin's folder, or one of the files Pulumi keeps beside it, as the plan would offer it.</summary>
-    private static bool IsRecognised(ToolRootChild child) => child.Kind switch
+    /// <summary>
+    /// A plugin's folder, or one of the files Pulumi keeps beside it, as the plan would offer it: a
+    /// recognised name whose plugin has finished installing. Only the <c>.partial</c> file beside the
+    /// folder says it has not, so the disk is asked as Explore asks, and a file Windows will not
+    /// describe counts as there.
+    /// </summary>
+    private static bool IsRecognised(string cache, ToolRootChild child)
     {
-        ChildKind.Folder => PulumiPlugin.Recognise(child.Name) is not null,
-        ChildKind.File => PulumiPlugin.SidecarSuffixes
-            .Where(suffix => suffix != PulumiPlugin.PartialSuffix)
-            .Any(suffix => child.Name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
-                && PulumiPlugin.Recognise(child.Name[..^suffix.Length]) is not null),
-        _ => false,
-    };
+        var plugin = child.Kind switch
+        {
+            ChildKind.Folder => child.Name,
+            ChildKind.File => PulumiPlugin.SidecarSuffixes
+                .Where(suffix => suffix != PulumiPlugin.PartialSuffix && child.Name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                .Select(suffix => child.Name[..^suffix.Length])
+                .FirstOrDefault(),
+            _ => null,
+        };
+
+        return plugin is not null
+            && PulumiPlugin.Recognise(plugin) is not null
+            && !LongPath.FileMayExist(Path.Combine(cache, plugin + PulumiPlugin.PartialSuffix));
+    }
 
     private static string PluginsIn(string home) => Path.Combine(home, PluginsFolder);
 
