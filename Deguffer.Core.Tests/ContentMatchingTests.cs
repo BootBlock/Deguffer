@@ -133,8 +133,8 @@ public sealed class ContentMatchingTests
     public async Task AFastDiskReadsInFullWhileASlowOneIsStillReadingBlocks()
     {
         var queries = new FakeStorageQueries()
-            .Volume(@"X:", 1).Disk(1, Nvme, seekPenalty: false)
-            .Volume(@"Y:", 2).Disk(2, Sata, seekPenalty: true);
+            .Volume(@"X:\", 1).Disk(1, Nvme, seekPenalty: false)
+            .Volume(@"Y:\", 2).Disk(2, Sata, seekPenalty: true);
         using var readInFull = new ManualResetEventSlim(initialState: false);
         var heldUntilAFullRead = true;
 
@@ -225,6 +225,60 @@ public sealed class ContentMatchingTests
         Assert.Equal([6, 6], parts);
         Assert.Equal(1, spinning.Peak);
         Assert.Equal(6, confirmed);
+    }
+
+    /// <summary>
+    /// The share read only grows, read after read, across both stages at once: the bytes read never
+    /// go back and the total never rises, and the search ends with the two equal. The clock moves a
+    /// second at every read, and both volumes are on one spinning disk, read one file at a time, so
+    /// every read is reported. One group matches to the end, one stops matching at its ends, and one
+    /// is small enough to be read whole at once.
+    /// </summary>
+    [Fact]
+    public async Task TheShareReadOnlyGrowsReadAfterRead()
+    {
+        var queries = new FakeStorageQueries().Volume(@"X:\", 0).Volume(@"Y:\", 0).Disk(0, Sata, seekPenalty: true);
+        var clock = new ManualTimeProvider();
+        List<DuplicateSearchProgress> reports = [];
+
+        ContentReading Read(DuplicateCandidate file, ContentPart part, Checksum checksum, CancellationToken ct)
+        {
+            clock.Advance(TimeSpan.FromSeconds(1));
+
+            // Every file of the second large group differs from the others at its ends.
+            checksum.Append(System.Text.Encoding.UTF8.GetBytes(file.Path.Contains("differs", StringComparison.Ordinal) ? file.Path : "same"));
+            return new ContentReading(ContentReadResult.Read, checksum.Finish());
+        }
+
+        CandidateGroup Spread(string name, long length) => new(
+            length, null, null, [File($@"X:\{name}-1.bin", length), File($@"Y:\{name}-2.bin", length), File($@"X:\{name}-3.bin", length)]);
+
+        await new ContentMatching(Read, new VolumeMediaCache(queries), clock).MatchAsync(
+            [Spread("matches", Large), Spread("differs", Large + 1), Spread("small", 1000)],
+            MatchCriteria.Content,
+            ChecksumAlgorithm.XxHash128,
+            _ => { },
+            new CallbackProgress<DuplicateSearchProgress>(report =>
+            {
+                lock (reports)
+                {
+                    reports.Add(report);
+                }
+            }),
+            default);
+
+        const long Ends = 2 * ContentReader.BlockBytes;
+        var read = (3 * (Ends + Large)) + (3 * Ends) + (3 * 1000);
+        Assert.Equal(read + (3 * (Large + 1)), reports[0].Total);
+        Assert.Equal((read, read), (reports[^1].Done, reports[^1].Total!.Value));
+        // The first, one at each of the twelve reads, and the last.
+        Assert.True(reports.Count >= 14, $"Only {reports.Count} reports were made, so not every read was seen.");
+
+        foreach (var (before, after) in reports.Zip(reports.Skip(1)))
+        {
+            Assert.True(after.Done >= before.Done, $"{after.Done} bytes read came after {before.Done}.");
+            Assert.True(after.Total <= before.Total, $"A total of {after.Total} came after {before.Total}.");
+        }
     }
 
     private static ContentMatching Matching(FakeStorageQueries queries, ReadContent read) =>

@@ -144,6 +144,84 @@ public sealed class LaneWorkersTests
         Assert.Equal(0, startedAfterTheStop);
     }
 
+    /// <summary>
+    /// A lane whose thread the system will not start fails the run rather than hanging it. Its item
+    /// is never taken, so a lane left waiting for every item to finish would wait for ever.
+    /// </summary>
+    [Fact]
+    public async Task ALaneWhoseThreadWillNotStartFailsTheRun()
+    {
+        var starts = 0;
+        var workers = new LaneWorkers<int>(
+            [1, 1],
+            work =>
+            {
+                if (Interlocked.Increment(ref starts) == 2)
+                {
+                    throw new OutOfMemoryException("no thread");
+                }
+
+                WorkerThreads.Shared.Run(work);
+            },
+            default);
+
+        var run = workers.RunAsync([(0, 0, 0), (1, 1, 0)], _ => { });
+
+        await Assert.ThrowsAsync<OutOfMemoryException>(() => run.WaitAsync(Patience));
+    }
+
+    /// <summary>
+    /// No helper works a lane before its own driving thread runs, because only that thread waits for
+    /// the lane's helpers. Lane 1's thread is held back until lane 0 has queued an item there and a
+    /// helper has had time to take it.
+    /// </summary>
+    [Fact]
+    public async Task NoHelperWorksALaneBeforeItsDrivingThreadRuns()
+    {
+        using var queued = new ManualResetEventSlim(initialState: false);
+        var driven = 0;
+        var workedBeforeItsLaneRan = 0;
+        var starts = 0;
+        LaneWorkers<int>? workers = null;
+
+        workers = new LaneWorkers<int>(
+            [1, 2],
+            work =>
+            {
+                if (Interlocked.Increment(ref starts) == 2)
+                {
+                    Assert.True(queued.Wait(Patience));
+                    Thread.Sleep(200);
+                    WorkerThreads.Shared.Run(() =>
+                    {
+                        Volatile.Write(ref driven, 1);
+                        work();
+                    });
+                    return;
+                }
+
+                WorkerThreads.Shared.Run(work);
+            },
+            default);
+
+        await workers.RunAsync(
+            [(0, 0, 0)],
+            item =>
+            {
+                if (item == 0)
+                {
+                    workers.Add(1, 1, 0);
+                    queued.Set();
+                }
+                else if (Volatile.Read(ref driven) == 0)
+                {
+                    Interlocked.Increment(ref workedBeforeItsLaneRan);
+                }
+            }).WaitAsync(Patience);
+
+        Assert.Equal(0, workedBeforeItsLaneRan);
+    }
+
     [Fact]
     public async Task ARunGivenNothingEndsAtOnce()
     {

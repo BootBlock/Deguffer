@@ -17,9 +17,10 @@ namespace Deguffer.Core.Duplicates;
 internal sealed class ContentProgress
 {
     /// <summary>How often the search says how far it has got, which is often enough to watch and rare enough not to flood the page.</summary>
-    private const long ReportEveryMilliseconds = 100;
+    private static readonly TimeSpan ReportEvery = TimeSpan.FromMilliseconds(100);
 
     private readonly IProgress<DuplicateSearchProgress>? _progress;
+    private readonly TimeProvider _clock;
     private readonly Lock _gate = new();
 
     // Guarded by _gate.
@@ -28,11 +29,13 @@ internal sealed class ContentProgress
     private long _reported;
 
     /// <param name="left">The most the search will read: every file's ends, and the rest of each larger one.</param>
-    public ContentProgress(long left, IProgress<DuplicateSearchProgress>? progress)
+    /// <param name="clock">What times the reports: the seam a test reports every change through.</param>
+    public ContentProgress(long left, IProgress<DuplicateSearchProgress>? progress, TimeProvider clock)
     {
         _left = left;
         _progress = progress;
-        _reported = Environment.TickCount64;
+        _clock = clock;
+        _reported = clock.GetTimestamp();
 
         _progress?.Report(new DuplicateSearchProgress(DuplicateSearchStage.ComparingContent, 0, left));
     }
@@ -63,8 +66,8 @@ internal sealed class ContentProgress
             _done += read;
             _left -= gone;
 
-            var now = Environment.TickCount64;
-            if (now - _reported >= ReportEveryMilliseconds)
+            var now = _clock.GetTimestamp();
+            if (_clock.GetElapsedTime(_reported, now) >= ReportEvery)
             {
                 _reported = now;
                 _progress?.Report(new DuplicateSearchProgress(DuplicateSearchStage.ComparingContent, _done, _done + _left));

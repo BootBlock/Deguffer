@@ -304,7 +304,6 @@ public sealed class DuplicateSearcherTests : IDisposable
 
         Assert.Equal(new DuplicateSearchProgress(DuplicateSearchStage.ComparingContent, 0, 10 * Block), reports[0]);
         Assert.Equal(new DuplicateSearchProgress(DuplicateSearchStage.ComparingContent, 10 * Block, 10 * Block), reports[^1]);
-        AssertTheShareReadOnlyGrows(reports);
     }
 
     /// <summary>
@@ -321,17 +320,6 @@ public sealed class DuplicateSearcherTests : IDisposable
 
         Assert.Equal(new DuplicateSearchProgress(DuplicateSearchStage.ComparingContent, 0, 10 * Block), reports[0]);
         Assert.Equal(new DuplicateSearchProgress(DuplicateSearchStage.ComparingContent, 4 * Block, 4 * Block), reports[^1]);
-        AssertTheShareReadOnlyGrows(reports);
-    }
-
-    /// <summary>The share read never falls between two reports, and the bytes read never go back.</summary>
-    private static void AssertTheShareReadOnlyGrows(IReadOnlyList<DuplicateSearchProgress> reports)
-    {
-        foreach (var (before, after) in reports.Zip(reports.Skip(1)))
-        {
-            Assert.True(after.Done >= before.Done, $"{after.Done} bytes read came after {before.Done}.");
-            Assert.True(after.Total <= before.Total, $"A total of {after.Total} came after {before.Total}.");
-        }
     }
 
     /// <summary>The reports a content search of the files under Data makes while it compares content, in the order they were made.</summary>

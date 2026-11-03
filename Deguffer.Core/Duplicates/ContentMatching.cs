@@ -37,6 +37,7 @@ internal sealed class ContentMatching
 {
     private readonly ReadContent _read;
     private readonly VolumeMediaCache _media;
+    private readonly TimeProvider _clock;
     private readonly Lock _confirming = new();
 
     private int _gone;
@@ -46,9 +47,16 @@ internal sealed class ContentMatching
     private int _changed;
 
     public ContentMatching(ReadContent read, VolumeMediaCache media)
+        : this(read, media, TimeProvider.System)
+    {
+    }
+
+    /// <param name="clock">What times the progress reports: the seam a test reports every change through.</param>
+    internal ContentMatching(ReadContent read, VolumeMediaCache media, TimeProvider clock)
     {
         _read = read;
         _media = media;
+        _clock = clock;
     }
 
     /// <summary>What reading left out, to add to what finding the candidates left out.</summary>
@@ -69,7 +77,7 @@ internal sealed class ContentMatching
         var run = new Run(
             this,
             ReadingLanes.Of(groups.SelectMany(group => group.Files).Select(file => file.Volume), _media),
-            new ContentProgress(groups.SelectMany(group => group.Files).Sum(file => ContentProgress.MostToRead(file.Length)), progress),
+            new ContentProgress(groups.SelectMany(group => group.Files).Sum(file => ContentProgress.MostToRead(file.Length)), progress, _clock),
             criteria,
             algorithm,
             confirmed,

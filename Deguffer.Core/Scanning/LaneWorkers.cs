@@ -26,6 +26,7 @@ namespace Deguffer.Core.Scanning;
 internal sealed class LaneWorkers<T>
 {
     private readonly Lane[] _lanes;
+    private readonly Action<Action> _runLane;
     private readonly CancellationToken _ct;
 
     private Action<T> _work = static _ => { };
@@ -35,8 +36,15 @@ internal sealed class LaneWorkers<T>
 
     /// <param name="threads">How many threads may work each lane at once, its calling thread included.</param>
     public LaneWorkers(IReadOnlyList<int> threads, CancellationToken ct)
+        : this(threads, WorkerThreads.Shared.Run, ct)
+    {
+    }
+
+    /// <param name="runLane">Runs a lane's driving thread: the seam a test fails a thread start through.</param>
+    internal LaneWorkers(IReadOnlyList<int> threads, Action<Action> runLane, CancellationToken ct)
     {
         _lanes = [.. threads.Select(count => new Lane(this, count))];
+        _runLane = runLane;
         _ct = ct;
     }
 
@@ -72,18 +80,43 @@ internal sealed class LaneWorkers<T>
             return;
         }
 
-        await Task.WhenAll(_lanes.Select(lane => WorkerThreads.Shared.RunAsync(
+        await Task.WhenAll(_lanes.Select(RunLaneAsync)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Run <paramref name="lane"/> on a driving thread of its own. A lane whose thread would not start
+    /// never takes its items, which stay counted, so every other lane is stopped rather than left
+    /// waiting for them for ever.
+    /// </summary>
+    private Task RunLaneAsync(Lane lane)
+    {
+        var running = WorkerThreads.RunAsync(
+            _runLane,
             () =>
             {
                 lane.Run();
                 return true;
             },
-            _ct))).ConfigureAwait(false);
+            _ct);
+
+        running.ContinueWith(
+            static (_, run) => ((LaneWorkers<T>)run!).StopEveryLane(),
+            this,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+
+        return running;
     }
 
     private void Stop(Lane failed, Exception ex)
     {
         failed.Crew.Fail(ex);
+        StopEveryLane();
+    }
+
+    private void StopEveryLane()
+    {
         Volatile.Write(ref _failed, 1);
         WakeEveryLane();
     }
@@ -110,13 +143,19 @@ internal sealed class LaneWorkers<T>
         // never below what the queue holds once the lock is let go.
         private int _waiting;
 
+        // Set as the driving thread starts. No helper starts before it, because only the driving
+        // thread waits for the helpers, and one started in a lane whose thread never ran would be
+        // waited for by nothing.
+        private int _driven;
+
         public Lane(LaneWorkers<T> run, int threads)
         {
             _run = run;
             _threads = threads;
 
             Action drain = Drain;
-            Crew = new WorkerCrew(threads, () => drain, () => !_run.Stopping && Volatile.Read(ref _waiting) > 0);
+            Crew = new WorkerCrew(
+                threads, () => drain, () => Volatile.Read(ref _driven) != 0 && !_run.Stopping && Volatile.Read(ref _waiting) > 0);
         }
 
         public WorkerCrew Crew { get; }
@@ -138,6 +177,7 @@ internal sealed class LaneWorkers<T>
         /// <summary>Work the lane on the calling thread, with its helpers, until the run is over or stopping.</summary>
         public void Run()
         {
+            Volatile.Write(ref _driven, 1);
             using var wake = Crew.WakeOn(_run._ct);
 
             var started = 0;
