@@ -47,6 +47,7 @@ public class StepGrainTests
             "dotnet-obj",
             "electron",
             "graphics-driver-installers",
+            "huggingface-hub",
             "jetbrains-superseded-system",
             "lmstudio-runtimes",
             "mypy-cache",
