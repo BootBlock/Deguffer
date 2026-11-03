@@ -5,8 +5,9 @@ using Deguffer.Testing;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// The pass that removes a tree's folders once its files are gone: in parallel, never a folder before
-/// the folders inside it, and with an exact record of every folder it did not take.
+/// How a removal takes a tree's folders: each as soon as everything inside it has been tried, beside
+/// the files still going elsewhere, in parallel, never a folder before what is inside it, and with an
+/// exact record of every folder it did not take.
 /// </summary>
 public sealed class DirectoryRemoverFolderPassTests : IDisposable
 {
@@ -56,6 +57,53 @@ public sealed class DirectoryRemoverFolderPassTests : IDisposable
 
         Assert.True(outcome.RootRemoved);
         Assert.True(watched.MostAtOnce > 1, $"at most {watched.MostAtOnce} folder removal ran at once");
+    }
+
+    /// <summary>
+    /// A folder whose own files are done is removed while a file in another folder is still waiting to
+    /// be deleted, rather than after every file in the tree.
+    /// </summary>
+    [Fact]
+    public async Task RemovesAFolderWhoseFilesAreDoneBeforeAFileElsewhereIsDeleted()
+    {
+        var root = _temp.CreateDirectory("cache");
+        var done = _temp.CreateDirectory("cache", "done");
+        _temp.CreateFile(16, "cache", "done", "f.bin");
+        var waiting = _temp.CreateFile(16, "cache", "waiting", "f.bin");
+        var goneFirst = false;
+
+        var fs = new DeletionHookFileSystem(
+            WindowsFileSystem.Default,
+            waiting,
+            () => goneFirst = SpinWait.SpinUntil(() => !Directory.Exists(done), TimeSpan.FromSeconds(10)));
+
+        var outcome = await DirectoryRemover.RemoveAsync(root, MinimumAge.Off, progress: null, default, fs);
+
+        Assert.True(goneFirst, "no folder was removed until every file in the tree had been tried");
+        Assert.True(outcome.RootRemoved);
+        Assert.Empty(outcome.LeftStanding);
+    }
+
+    /// <summary>
+    /// Files and folders are deleted by one crew, so together they never run more deletions at once than
+    /// the removal's bound, however many of each are ready.
+    /// </summary>
+    [Fact]
+    public async Task DeletesNoMoreFilesAndFoldersAtOnceThanItsBound()
+    {
+        var root = _temp.CreateDirectory("cache");
+        for (var folder = 0; folder < DirectoryRemover.MostAtOnce * 2; folder++)
+        {
+            _temp.CreateFile(16, "cache", $"d{folder}", "a.bin");
+            _temp.CreateFile(16, "cache", $"d{folder}", "b.bin");
+        }
+
+        var watched = new WatchedDeletions(WindowsFileSystem.Default, TimeSpan.FromMilliseconds(20));
+
+        var outcome = await DirectoryRemover.RemoveAsync(root, MinimumAge.Off, progress: null, default, watched);
+
+        Assert.True(outcome.RootRemoved);
+        Assert.InRange(watched.MostAtOnce, 2, DirectoryRemover.MostAtOnce);
     }
 
     /// <summary>
@@ -127,8 +175,11 @@ public sealed class DirectoryRemoverFolderPassTests : IDisposable
             standing.Order(StringComparer.OrdinalIgnoreCase),
             outcome.LeftStanding.Order(StringComparer.OrdinalIgnoreCase));
 
-        // Every file went before the folder pass began, and each folder taken is one entry more.
-        Assert.Equal(Branches * Leaves + (folders.Count - standing.Count), outcome.EntriesRemoved);
+        // Each file and each folder taken is one entry. A file can still be waiting for a deletion when
+        // the removal is stopped, because folders are removed beside the files rather than after them.
+        var filesTaken = folders.Count(folder =>
+            Path.GetFileName(folder).StartsWith('l') && !File.Exists(Path.Combine(folder, "f.bin")));
+        Assert.Equal(filesTaken + (folders.Count - standing.Count), outcome.EntriesRemoved);
         Assert.True(outcome.RefusedFolders.IsEmpty);
     }
 

@@ -1,4 +1,5 @@
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Execution;
 
@@ -55,16 +56,54 @@ internal abstract record GatheredRemoval(string Extended, RemovalBounds Bounds)
         public override int Kept => IsKept ? 1 : 0;
     }
 
-    /// <summary>A directory, and everything its walk gathered.</summary>
-    public sealed record Tree(string Extended, RemovalBounds Bounds, RemovalInventory Inventory)
-        : GatheredRemoval(Extended, Bounds)
+    /// <summary>
+    /// A directory, and everything its walk gathered, folder by folder. Deleted once, by
+    /// <see cref="DirectoryRemover.DeleteAsync"/>: each folder counts down what is left in it as the
+    /// deletion takes it.
+    /// </summary>
+    public sealed record Tree : GatheredRemoval
     {
-        public override IReadOnlyList<string> MailStores => Inventory.MailStores;
+        public Tree(string extended, RemovalBounds bounds, RemovalFolder root)
+            : base(extended, bounds)
+        {
+            Root = root;
 
-        public override IReadOnlyList<string> Unlisted => Inventory.Unlisted;
+            var mailStores = new List<string>();
+            var unlisted = new List<string>();
+            var notFolders = new List<string>();
 
-        public override IReadOnlyList<string> NotFolders => Inventory.NotFolders;
+            foreach (var (folder, _) in root.InWalkOrder())
+            {
+                mailStores.AddRange(folder.MailStores);
+                Kept += folder.Kept;
 
-        public override int Kept => Inventory.Kept;
+                switch (folder.Refusal)
+                {
+                    case ListingRefusal.None:
+                        break;
+
+                    case ListingRefusal.NotADirectory:
+                        notFolders.Add(folder.Path);
+                        break;
+
+                    default:
+                        unlisted.Add(folder.Path);
+                        break;
+                }
+            }
+
+            (MailStores, Unlisted, NotFolders) = (mailStores, unlisted, notFolders);
+        }
+
+        /// <summary>The directory's own folder, from which every folder below it is reached.</summary>
+        public RemovalFolder Root { get; }
+
+        public override IReadOnlyList<string> MailStores { get; }
+
+        public override IReadOnlyList<string> Unlisted { get; }
+
+        public override IReadOnlyList<string> NotFolders { get; }
+
+        public override int Kept { get; }
     }
 }

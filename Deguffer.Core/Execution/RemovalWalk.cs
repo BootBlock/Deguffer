@@ -100,25 +100,53 @@ internal static class RemovalWalk
         WalkTuning tuning,
         CancellationToken ct)
     {
-        var root = new Folder();
+        var root = new Folder(extendedRoot);
 
+        Visit(root, keep, bounds, fs, tuning, static _ => { }, ct);
+
+        return root.Inventory();
+    }
+
+    /// <summary>
+    /// Walk the tree at <paramref name="root"/>, telling <paramref name="listed"/> of each folder as soon
+    /// as its own listing has been read to the end and classified, while the rest of the tree is still
+    /// being listed. The folders below <paramref name="root"/> are made by
+    /// <see cref="Folder.NewChild"/>, so a caller that needs more of each folder hands a root of its own
+    /// kind.
+    ///
+    /// <para>A folder is reported once, by the worker that listed it, before any folder inside it is
+    /// listed. What it reports is final: nothing the walk does afterwards adds to it.</para>
+    /// </summary>
+    /// <exception cref="OperationCanceledException">The walk was cancelled.</exception>
+    internal static void Visit<TFolder>(
+        TFolder root,
+        MinimumAge keep,
+        RemovalBounds bounds,
+        IFileSystem fs,
+        WalkTuning tuning,
+        Action<TFolder> listed,
+        CancellationToken ct)
+        where TFolder : Folder
+    {
         // Most removals hold nothing back, and only a bound needs an entry's full path before the
         // removal acts on it. Building one per file to look up in an empty set would be most of what
         // gathering a large tree allocates.
         var bounded = bounds.IsBounded;
 
         BoundedFileWalk.Visit(
-            extendedRoot,
-            root,
+            root.FoundAs,
+            (Folder)root,
             tuning,
             FileNames.All,
             fs.ListEntries,
-            (folder, contents, descend) => folder.Gather(contents, descend, keep, bounds, bounded),
+            (folder, contents, descend) =>
+            {
+                folder.Gather(contents, descend, keep, bounds, bounded);
+                listed((TFolder)folder);
+            },
             static _ => { },
             TimeProvider.System,
             ct);
-
-        return root.Inventory();
     }
 
     /// <summary>
@@ -129,7 +157,11 @@ internal static class RemovalWalk
     /// found, so the folder and every file gathered from it share one string for the whole removal.
     /// </para>
     /// </summary>
-    private sealed class Folder
+    /// <param name="foundAs">
+    /// The path the folder was found at, in extended form. What it is called where a walk stopped before
+    /// it was listed.
+    /// </param>
+    internal class Folder(string foundAs)
     {
         private string? _path;
         private List<Folder>? _folders;
@@ -257,7 +289,7 @@ internal static class RemovalWalk
 
             if (entry.IsDirectory)
             {
-                var folder = new Folder();
+                var folder = NewChild(entry.FullName);
                 (_folders ??= []).Add(folder);
                 descend(entry, folder);
             }
@@ -272,9 +304,81 @@ internal static class RemovalWalk
         }
 
         /// <summary>
-        /// Everything gathered at and below this folder, each folder after the one it was found in.
-        /// Read once the walk is over, with an explicit stack for the reason the walk has one.
+        /// The path the folder was found at, in extended form, or the listing's own once it is listed.
         /// </summary>
+        public string Path => _path ?? foundAs;
+
+        /// <summary>The path the folder was found at, in extended form.</summary>
+        public string FoundAs => foundAs;
+
+        /// <summary>The files its listing leaves to the removal. See <see cref="RemovalInventory.Files"/>.</summary>
+        public IReadOnlyList<WalkEntry> Files => _files ?? [];
+
+        /// <summary>The links its listing found, which are removed as links.</summary>
+        public IReadOnlyList<WalkEntry> Links => _links ?? [];
+
+        /// <summary>The folders its listing found, in the order it met them.</summary>
+        public IReadOnlyList<Folder> Folders => _folders ?? [];
+
+        /// <summary>Files and links in it the guard on recently changed files held back.</summary>
+        public int Kept => _kept;
+
+        /// <summary>Entries in it the bounds held back because something is using them.</summary>
+        public IReadOnlyList<string> Spared => _spared ?? [];
+
+        /// <summary>Entries in it the bounds held back because they hold somebody's work.</summary>
+        public IReadOnlyList<string> UserWork => _userWork ?? [];
+
+        /// <summary>Outlook mail stores in it, which are never handed to a delete.</summary>
+        public IReadOnlyList<string> MailStores => _mailStores ?? [];
+
+        /// <summary>How Windows refused its listing, or <see cref="ListingRefusal.None"/>.</summary>
+        public ListingRefusal Refusal => _refused;
+
+        /// <summary>
+        /// Let go of the files and links its listing found, once nothing will read them again: a removal
+        /// of a large tree would otherwise hold every entry of it until the last folder had gone.
+        /// </summary>
+        public void ReleaseEntries()
+        {
+            _files = null;
+            _links = null;
+        }
+
+        /// <summary>
+        /// A folder found inside this one at <paramref name="path"/>, made as its listing finds it, and
+        /// so before the walk lists it.
+        /// </summary>
+        protected virtual Folder NewChild(string path) => new(path);
+
+        /// <summary>
+        /// This folder and every folder below it, each after the folder it was found in and with that
+        /// folder's place in the list, or <see cref="GatheredDirectory.NoParent"/> for this one. Read
+        /// once the walk is over, with an explicit stack for the reason the walk has one.
+        /// </summary>
+        public IReadOnlyList<(Folder Folder, int Parent)> InWalkOrder()
+        {
+            var order = new List<(Folder Folder, int Parent)>();
+
+            var pending = new Stack<(Folder Folder, int Parent)>();
+            pending.Push((this, GatheredDirectory.NoParent));
+
+            while (pending.TryPop(out var next))
+            {
+                var index = order.Count;
+                order.Add(next);
+
+                // Pushed last first, so the folders come out in the order the listing met them.
+                for (var child = (next.Folder._folders?.Count ?? 0) - 1; child >= 0; child--)
+                {
+                    pending.Push((next.Folder._folders![child], index));
+                }
+            }
+
+            return order;
+        }
+
+        /// <summary>Everything gathered at and below this folder, each folder after the one it was found in.</summary>
         public RemovalInventory Inventory()
         {
             var directories = new List<GatheredDirectory>();
@@ -287,20 +391,15 @@ internal static class RemovalWalk
             var notFolders = new List<string>();
             var kept = 0;
 
-            var pending = new Stack<(Folder Folder, int Parent)>();
-            pending.Push((this, GatheredDirectory.NoParent));
-
-            while (pending.TryPop(out var next))
+            foreach (var (folder, parent) in InWalkOrder())
             {
-                var folder = next.Folder;
-                var index = directories.Count;
-                directories.Add(new GatheredDirectory(folder.Path, next.Parent));
+                directories.Add(new GatheredDirectory(folder.ListedPath, parent));
 
-                files.AddRange(folder._files ?? []);
-                links.AddRange(folder._links ?? []);
-                spared.AddRange(folder._spared ?? []);
-                userWork.AddRange(folder._userWork ?? []);
-                mailStores.AddRange(folder._mailStores ?? []);
+                files.AddRange(folder.Files);
+                links.AddRange(folder.Links);
+                spared.AddRange(folder.Spared);
+                userWork.AddRange(folder.UserWork);
+                mailStores.AddRange(folder.MailStores);
                 kept += folder._kept;
 
                 switch (folder._refused)
@@ -309,26 +408,21 @@ internal static class RemovalWalk
                         break;
 
                     case ListingRefusal.NotADirectory:
-                        notFolders.Add(folder.Path);
+                        notFolders.Add(folder.ListedPath);
                         break;
 
                     default:
-                        unlisted.Add(folder.Path);
+                        unlisted.Add(folder.ListedPath);
                         break;
-                }
-
-                // Pushed last first, so the folders come out in the order the listing met them.
-                for (var child = (folder._folders?.Count ?? 0) - 1; child >= 0; child--)
-                {
-                    pending.Push((folder._folders![child], index));
                 }
             }
 
             return new RemovalInventory(directories, files, links, kept, spared, mailStores, userWork, unlisted, notFolders);
         }
 
-        // The walk lists every folder it is asked to descend into before it returns, so one never
-        // listed is a walk that broke that promise, and removing it by a guessed path is not an option.
-        private string Path => _path ?? throw new InvalidOperationException("A folder of the removal was never listed.");
+        // A walk run to its end lists every folder it is asked to descend into, so one never listed in
+        // an inventory is a walk that broke that promise, and removing it by a guessed path is not an
+        // option.
+        private string ListedPath => _path ?? throw new InvalidOperationException("A folder of the removal was never listed.");
     }
 }

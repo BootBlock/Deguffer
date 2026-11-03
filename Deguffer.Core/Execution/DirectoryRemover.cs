@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -36,6 +35,11 @@ public static class DirectoryRemover
     /// something is using. <see cref="RemovalBounds.None"/> by default, which is every ordinary
     /// deletion and is what a caller that says nothing gets.
     /// </param>
+    /// <param name="plannedEntries">
+    /// How many entries the plan measured the tree at (<see cref="ScanSize.Entries"/>), which
+    /// <paramref name="progress"/> is a fraction of until the walk has counted the tree. Zero where the
+    /// caller has no plan, or reports no progress.
+    /// </param>
     /// <param name="ct">
     /// Stops the removal where it is. <b>Never thrown:</b> a cancelled removal returns what it did,
     /// with <see cref="RemovalOutcome.Interrupted"/> set. What a removal stopped part-way has already
@@ -47,13 +51,20 @@ public static class DirectoryRemover
         IProgress<double>? progress = null,
         CancellationToken ct = default,
         IFileSystem? fileSystem = null,
-        RemovalBounds? bounds = null) =>
+        RemovalBounds? bounds = null,
+        long plannedEntries = 0) =>
         // Not handed the token: a task handed one is cancelled where the token is before the work
         // starts, which would break the contract above at its first step. On a thread of its own,
         // because the walk holds the thread that drives it for the whole removal.
         WorkerThreads.Shared.RunAsync(
             () => Remove(
-                path, keep, bounds ?? RemovalBounds.None, progress, fileSystem ?? WindowsFileSystem.Default, ct),
+                path,
+                keep,
+                bounds ?? RemovalBounds.None,
+                progress,
+                plannedEntries,
+                fileSystem ?? WindowsFileSystem.Default,
+                ct),
             CancellationToken.None);
 
     /// <summary>
@@ -87,6 +98,7 @@ public static class DirectoryRemover
         MinimumAge keep,
         RemovalBounds bounds,
         IProgress<double>? progress,
+        long plannedEntries,
         IFileSystem fs,
         CancellationToken ct)
     {
@@ -95,18 +107,23 @@ public static class DirectoryRemover
             return NothingDone;
         }
 
-        GatheredRemoval gathered;
+        var extended = LongPath.Extended(path);
 
-        try
+        if (Probe(extended, keep, bounds, fs) is { } notATree)
         {
-            gathered = Gather(path, keep, bounds, fs, ct);
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            return NothingDone;
+            return Delete(notATree, progress, fs, ct);
         }
 
-        return Delete(gathered, progress, fs, ct);
+        var root = new RemovalFolder(extended, parent: null);
+
+        return TreeRemoval.Run(
+            root,
+            bounds,
+            (listed, stop) => RemovalWalk.Visit(root, keep, bounds, fs, WalkTuning.Default, listed, stop),
+            progress,
+            plannedEntries,
+            fs,
+            ct);
     }
 
     /// <summary>
@@ -122,6 +139,26 @@ public static class DirectoryRemover
         CancellationToken ct)
     {
         var extended = LongPath.Extended(path);
+
+        if (Probe(extended, keep, bounds, fs) is { } notATree)
+        {
+            return notATree;
+        }
+
+        // Walked to its end before anything is deleted, so the removal can be judged on everything it
+        // would act on. Deleted from what it gathered: see DeleteAsync.
+        var root = new RemovalFolder(extended, parent: null);
+        RemovalWalk.Visit(root, keep, bounds, fs, WalkTuning.Default, static _ => { }, ct);
+
+        return new GatheredRemoval.Tree(extended, bounds, root);
+    }
+
+    /// <summary>
+    /// What stands at <paramref name="extended"/> where it is not a directory to walk: nothing, a path
+    /// Windows will not describe, a file, or a link. Null for a directory.
+    /// </summary>
+    private static GatheredRemoval? Probe(string extended, MinimumAge keep, RemovalBounds bounds, IFileSystem fs)
+    {
         var presence = fs.ProbeDirectory(extended);
 
         // The directory probe answers Absent for a file, so absence is decided by the entry probe. A
@@ -167,10 +204,7 @@ public static class DirectoryRemover
             return new GatheredRemoval.Link(extended, bounds, kept);
         }
 
-        // Two passes: gather the tree first so progress is a real fraction rather than a guess,
-        // then delete depth-first. Gathering also means a mid-run enumeration failure cannot
-        // leave us deleting a partially-understood tree.
-        return new GatheredRemoval.Tree(extended, bounds, RemovalWalk.Gather(extended, keep, bounds, fs, ct));
+        return null;
     }
 
     private static RemovalOutcome Delete(
@@ -188,8 +222,23 @@ public static class DirectoryRemover
 
         switch (gathered)
         {
+            // Handed over folder by folder from what the walk gathered, which lists nothing again.
             case GatheredRemoval.Tree tree:
-                return Delete(tree, progress, fs, ct);
+                return TreeRemoval.Run(
+                    tree.Root,
+                    bounds,
+                    (listed, stop) =>
+                    {
+                        foreach (var (folder, _) in tree.Root.InWalkOrder())
+                        {
+                            stop.ThrowIfCancellationRequested();
+                            listed((RemovalFolder)folder);
+                        }
+                    },
+                    progress,
+                    planned: 0,
+                    fs,
+                    ct);
 
             case GatheredRemoval.NotAFolder:
                 progress?.Report(1.0);
@@ -249,301 +298,6 @@ public static class DirectoryRemover
         }
     }
 
-    /// <summary>Delete a gathered tree: its links, then its files, then each folder after its children.</summary>
-    private static RemovalOutcome Delete(
-        GatheredRemoval.Tree tree,
-        IProgress<double>? progress,
-        IFileSystem fs,
-        CancellationToken ct)
-    {
-        var (extended, bounds, inventory) = (tree.Extended, tree.Bounds, tree.Inventory);
-
-        var leftStanding = new List<string>();
-
-        // Every entry this removal takes, so a tree of empty folders reports what went rather than
-        // nothing: files, links and folders alike.
-        long removed = 0;
-
-        // A link is removed as a link and holds no bytes of its own, so a refusal to remove one
-        // moves no figure and is not counted. A directory link that stays is still recorded as
-        // standing, because what §5.6 reads from it is where the removal went, not what it weighed.
-        foreach (var link in inventory.Links)
-        {
-            var linkPath = link.FullName;
-            var gone = link.IsDirectory
-                ? DirectoryDeletion.TryDelete(linkPath, fs) is null
-                : TryDeleteFile(linkPath, link.Attributes, fs) is null;
-
-            if (gone)
-            {
-                removed++;
-            }
-            else if (link.IsDirectory)
-            {
-                leftStanding.Add(linkPath);
-            }
-        }
-
-        long reclaimed = 0;
-        var done = 0;
-        var total = Math.Max(inventory.Files.Count, 1);
-        var refused = new RefusalCounter();
-        var refusedAt = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
-        var files = inventory.Files;
-        var directories = inventory.Directories;
-
-        // What became of each directory, by its place in the inventory, and null until it is tried. The
-        // pass runs on many threads, so where it stopped is a different place in every branch, and only
-        // a record per directory can say which folders a removal stopped part-way never tried.
-        var attempts = new Attempt?[directories.Count];
-        var interrupted = false;
-
-        try
-        {
-            // On threads of the removal's own, never the pool's, so it deletes MostAtOnce at a time from
-            // the first file. See ListWorkers.
-            ListWorkers.Run(files.Count, MostAtOnce, index =>
-            {
-                var file = files[index];
-                var filePath = file.FullName;
-
-                if (TryDeleteFile(filePath, file.Attributes, fs) is { } reason)
-                {
-                    refused.Add(reason, file.Length);
-                    refusedAt.TryAdd(EntryHolding(extended, filePath), 0);
-                }
-                else
-                {
-                    Interlocked.Add(ref reclaimed, file.Length);
-                    Interlocked.Increment(ref removed);
-                }
-
-                var completed = Interlocked.Increment(ref done);
-                if (completed % 256 == 0 || completed == files.Count)
-                {
-                    progress?.Report((double)completed / total);
-                }
-            }, ct);
-
-            RemoveDirectories(directories, bounds.KeepRoot, attempts, fs, ct);
-
-            progress?.Report(1.0);
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            interrupted = true;
-        }
-
-        var refusedFolders = FolderRefusals.None;
-
-        // Read in reverse of the walk, children before their parent, so the record comes out in one
-        // order however the threads interleaved.
-        for (var index = directories.Count - 1; index >= 0; index--)
-        {
-            var directory = directories[index];
-
-            // A root the caller keeps is never tried, so it is neither removed nor left standing.
-            if (bounds.KeepRoot && directory.Parent == GatheredDirectory.NoParent)
-            {
-                continue;
-            }
-
-            switch (attempts[index])
-            {
-                // A removal stopped part-way was inside every folder it had not yet tried: it gathered
-                // them, and any file in them may already be gone. Each is recorded as standing for that
-                // reason, so §5.6 reads a protected folder among them as one this removal went into. See
-                // RunResidue.
-                case null:
-                    leftStanding.Add(directory.Path);
-                    break;
-
-                case { Left: null }:
-                    removed++;
-                    break;
-
-                // A directory still holding something refused stays, and so does one Windows refuses
-                // for itself. Neither is an error (§5.3), and both are recorded: a folder left standing
-                // is where this removal went, and only the second is a refusal the reader has not
-                // already been told about.
-                case { Left: { } standing }:
-                    leftStanding.Add(directory.Path);
-
-                    if (standing.Refused is { } reason)
-                    {
-                        refusedFolders += FolderRefusals.One(reason);
-                    }
-
-                    break;
-            }
-        }
-
-        // The root is among the directories, so the pass above has already attempted it — unless
-        // the caller asked for it to stay, in which case it is still there and that is the success.
-        return new RemovalOutcome(
-            reclaimed,
-            refused.Total,
-            RootRemoved: !bounds.KeepRoot && fs.ProbeEntry(extended) is PathPresence.Absent,
-            inventory.Kept,
-            inventory.Spared.Count,
-            Interlocked.Read(ref removed))
-        {
-            RefusedAt = [.. refusedAt.Keys.Select(LongPath.Display).Order(StringComparer.OrdinalIgnoreCase)],
-            LeftStanding = [.. leftStanding.Select(LongPath.Display)],
-            RefusedFolders = refusedFolders,
-            MailStores = [.. inventory.MailStores.Select(LongPath.Display)],
-            LeftAlone = [.. inventory.Spared.Concat(inventory.UserWork).Select(LongPath.Display)],
-            UserWork = inventory.UserWork.Count,
-            Interrupted = interrupted,
-        };
-    }
-
-    /// <summary>
-    /// Try each directory once every directory inside it has been tried, and record in
-    /// <paramref name="attempts"/> what became of it.
-    ///
-    /// <para><b>In parallel, as the files are.</b> A tree of a million small files holds a hundred
-    /// thousand directories or more, and removing those one at a time on one thread can take longer
-    /// than the parallel pass that emptied them.</para>
-    ///
-    /// <para><b>Children before their parent, without a queue.</b> Each directory with no directory
-    /// inside it starts a climb, and the thread that tries a directory's last outstanding child goes on
-    /// to try the directory itself. The count of children still outstanding is all the threads share,
-    /// so no directory is tried early and none waits for a thread to notice it is ready. Trying a
-    /// parent whose child stayed is still right: Windows refuses it as not empty, which is how a folder
-    /// held up by what is inside it is recorded.</para>
-    /// </summary>
-    private static void RemoveDirectories(
-        IReadOnlyList<GatheredDirectory> directories,
-        bool keepRoot,
-        Attempt?[] attempts,
-        IFileSystem fs,
-        CancellationToken ct)
-    {
-        var outstanding = new int[directories.Count];
-        foreach (var directory in directories)
-        {
-            if (directory.Parent != GatheredDirectory.NoParent)
-            {
-                outstanding[directory.Parent]++;
-            }
-        }
-
-        var leaves = new List<int>();
-        for (var index = 0; index < directories.Count; index++)
-        {
-            if (outstanding[index] == 0)
-            {
-                leaves.Add(index);
-            }
-        }
-
-        // Each thread takes the next leaf as it finishes a climb, because a climb is as long as the chain
-        // of last children above its leaf, and a split made up front could leave one thread with every
-        // long climb.
-        ListWorkers.Run(leaves.Count, MostAtOnce, next =>
-        {
-            for (var index = leaves[next]; ; index = directories[index].Parent)
-            {
-                ct.ThrowIfCancellationRequested();
-
-                var directory = directories[index];
-
-                // The root is the last directory any climb reaches, so skipping it here cannot leave a
-                // child behind.
-                if (!(keepRoot && directory.Parent == GatheredDirectory.NoParent))
-                {
-                    attempts[index] = new Attempt(DirectoryDeletion.TryDelete(directory.Path, fs));
-                }
-
-                if (directory.Parent == GatheredDirectory.NoParent ||
-                    Interlocked.Decrement(ref outstanding[directory.Parent]) != 0)
-                {
-                    return;
-                }
-            }
-        }, ct);
-    }
-
     /// <summary>A removal stopped before it deleted anything.</summary>
     private static RemovalOutcome NothingDone => new(0, Refusals.None, RootRemoved: false) { Interrupted = true };
-
-    /// <summary>
-    /// The entry directly inside <paramref name="root"/> that <paramref name="path"/> is at or
-    /// below. Both arrive from the same walk in the same extended form, so the prefix is known to
-    /// match and only the separator after it has to be found.
-    /// </summary>
-    private static string EntryHolding(string root, string path)
-    {
-        // A volume root keeps its separator, and every other root has none after it.
-        var start = root.EndsWith(Path.DirectorySeparatorChar) ? root.Length : root.Length + 1;
-        var end = path.IndexOf(Path.DirectorySeparatorChar, start);
-
-        return end < 0 ? path : path[..end];
-    }
-
-    /// <summary>
-    /// Delete one file, and say why Windows would not let it go — or null where it went, or where it
-    /// had already gone.
-    /// </summary>
-    /// <param name="attributes">
-    /// The file's attributes as the walk's listing read them. A read-only bit there is cleared before
-    /// the delete rather than after Windows refuses it: package manager caches set the bit on every
-    /// file, and each refusal is a thrown exception and a second delete.
-    /// </param>
-    private static RefusalReason? TryDeleteFile(string extendedPath, FileAttributes attributes, IFileSystem fs)
-    {
-        try
-        {
-            if (attributes.HasFlag(FileAttributes.ReadOnly))
-            {
-                fs.ClearAttributes(extendedPath);
-            }
-
-            fs.DeleteFile(extendedPath);
-            return null;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            // The read-only bit, set since the walk listed the file, or a refusal of another kind
-            // that clearing it cannot change and the second attempt reports.
-            try
-            {
-                fs.ClearAttributes(extendedPath);
-                fs.DeleteFile(extendedPath);
-                return null;
-            }
-            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
-            {
-                // It went between the two attempts. Calling that a refusal would report a file
-                // Windows kept that is not on the disk at all.
-                return null;
-            }
-            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
-            {
-                // The second answer is the one that counts: a read-only file something holds open
-                // refuses first for the bit and then for the handle.
-                return RefusalReasons.Of(ex);
-            }
-        }
-        catch (FileNotFoundException)
-        {
-            return null;
-        }
-        catch (DirectoryNotFoundException)
-        {
-            return null;
-        }
-        catch (IOException ex)
-        {
-            // Held open by a live process, most often. §5.3: this is the OS protecting state; skip it.
-            return RefusalReasons.Of(ex);
-        }
-    }
-
-    /// <summary>
-    /// What became of a directory the removal tried: <paramref name="Left"/> says why it is still
-    /// there, and is null where it is gone.
-    /// </summary>
-    private readonly record struct Attempt(DirectoryDeletion.Standing? Left);
 }

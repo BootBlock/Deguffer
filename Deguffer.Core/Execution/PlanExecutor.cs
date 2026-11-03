@@ -744,7 +744,8 @@ public sealed class PlanExecutor(
                 .ConfigureAwait(false);
         }
 
-        var removal = await DirectoryRemover.RemoveAsync(step.Path, keep, progress, ct, _fileSystem).ConfigureAwait(false);
+        var removal = await DirectoryRemover.RemoveAsync(
+            step.Path, keep, progress, ct, _fileSystem, plannedEntries: step.Estimated.Entries).ConfigureAwait(false);
 
         refusals.Record(step.Path, removal);
         runResidue.Record(step.Path, removal.LeftStanding);
@@ -840,7 +841,8 @@ public sealed class PlanExecutor(
             progress,
             ct,
             _fileSystem,
-            new RemovalBounds(KeepRoot: true, step.Spared, step.OwnedElsewhere, step.UserWork)).ConfigureAwait(false);
+            new RemovalBounds(KeepRoot: true, step.Spared, step.OwnedElsewhere, step.UserWork),
+            plannedEntries: step.Estimated.Entries).ConfigureAwait(false);
 
         refusals.Record(step.Path, removal);
         runResidue.Record(step.Path, removal.LeftStanding);

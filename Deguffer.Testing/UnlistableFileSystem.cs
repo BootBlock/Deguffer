@@ -11,7 +11,11 @@ namespace Deguffer.Testing;
 /// combination is what leaves §5.6 with nothing to compare against, and building it by hand is the
 /// only way to reach that branch without an access rule on a real directory.</para>
 /// </summary>
-public sealed class UnlistableFileSystem(IFileSystem inner, string refused) : IFileSystem
+/// <param name="partWay">
+/// Refuse the listing only once it has been read, as Windows does when access goes part-way through a
+/// large folder: every entry is handed over, and the listing still ends in a refusal.
+/// </param>
+public sealed class UnlistableFileSystem(IFileSystem inner, string refused, bool partWay = false) : IFileSystem
 {
     public bool DirectoryExists(string path) => inner.DirectoryExists(path);
 
@@ -25,10 +29,20 @@ public sealed class UnlistableFileSystem(IFileSystem inner, string refused) : IF
     /// Refused as Windows refuses a folder the account may not read: an answer, never an exception,
     /// and one no smaller listing buffer changes.
     /// </summary>
-    public ListingEnd ListEntries(string directory, ListingRequest request, List<WalkEntry> into) =>
-        LongPath.Display(directory).Equals(refused, StringComparison.OrdinalIgnoreCase)
-            ? new ListingEnd(PathPresence.Refused, ListingRefusal.Denied, WhileReading: false)
-            : inner.ListEntries(directory, request, into);
+    public ListingEnd ListEntries(string directory, ListingRequest request, List<WalkEntry> into)
+    {
+        if (!LongPath.Display(directory).Equals(refused, StringComparison.OrdinalIgnoreCase))
+        {
+            return inner.ListEntries(directory, request, into);
+        }
+
+        if (partWay)
+        {
+            inner.ListEntries(directory, request, into);
+        }
+
+        return new ListingEnd(PathPresence.Refused, ListingRefusal.Denied, WhileReading: partWay);
+    }
 
     public long? TryGetFileLength(string path) => inner.TryGetFileLength(path);
 
