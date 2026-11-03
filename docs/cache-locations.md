@@ -8871,6 +8871,76 @@ container and volume, gone for good.
 
 ---
 
+## Vortex and Mod Organizer 2 downloads
+
+**Tier 3 — reported only.** Shown with a *Report only* status, and never offered: there is nothing
+to tick. Researched from the managers' source; neither was installed on a machine it was checked
+against.
+
+| | |
+| --- | --- |
+| **Location** | Vortex: `%APPDATA%\Vortex\downloads`, or `%PROGRAMDATA%\vortex\downloads` in its shared mode, with one folder per game named by Vortex's identifier for it (`skyrimse`). Mod Organizer 2: each instance's `download_directory`, which defaults to `%BASE_DIR%/downloads`, where `%BASE_DIR%` is `base_directory` and defaults to the instance's own folder |
+| **Method** | None. Deguffer reports each download folder's size and names each manager's own way to remove downloads |
+| **Typical size** | Tens of gigabytes for each heavily modded game |
+
+### What it is
+
+Both managers keep every mod archive they download after installing it. They use it again to
+reinstall the mod, and Vortex to install a collection. Nothing removes them unless you do.
+
+### What Deguffer does
+
+It finds the folders from the managers' own defaults and records, never by searching for archives:
+
+- **Vortex** downloads to `{USERDATA}\downloads`, with a folder per game inside it
+  ([`getDownloadPath.ts`](https://github.com/Nexus-Mods/Vortex/blob/master/src/renderer/src/extensions/download_management/util/getDownloadPath.ts)).
+  `{USERDATA}` is `%APPDATA%\Vortex` for one account and `%PROGRAMDATA%\vortex` in shared mode. The
+  row gives the folder's size and each game's, largest first.
+- **Mod Organizer 2** keeps its instances in `%LOCALAPPDATA%\ModOrganizer`, and a folder there is an
+  instance only where it holds `ModOrganizer.ini`, the test its own instance manager makes
+  ([`instancemanager.cpp`](https://github.com/ModOrganizer2/modorganizer/blob/master/src/instancemanager.cpp)).
+  A portable instance is a `ModOrganizer.ini` beside `ModOrganizer.exe`, and it is found through the
+  download handler's record, `%LOCALAPPDATA%\ModOrganizer\downloadhandler.ini`, which names the
+  executable of each installation set to handle Nexus Mods links. Each instance's download folder is
+  read from `[Settings]` in its `ModOrganizer.ini`
+  ([`settings.cpp`](https://github.com/ModOrganizer2/modorganizer/blob/master/src/settings.cpp)), in
+  the escaped form Qt writes. A folder that is not a full path, or that is one of your own folders,
+  a drive root or a temporary folder, is named and not measured as the instance's.
+- For each Mod Organizer 2 download folder, the row also gives how much is archives whose `.meta`
+  record marks them installed, and how much uninstalled, as Mod Organizer 2's own download list reads
+  them: a paused download is neither, and *uninstalled* wins over *installed*
+  ([`downloadmanager.cpp`](https://github.com/ModOrganizer2/modorganizer/blob/master/src/downloadmanager.cpp)).
+
+The routes, in order (§5.1):
+
+1. Mod Organizer 2's *Delete Installed Downloads...* and *Delete Uninstalled Downloads...*, on the
+   download list's right-click menu, which move each archive and its record to the Recycle Bin
+   ([`downloadlistview.cpp`](https://github.com/ModOrganizer2/modorganizer/blob/master/src/downloadlistview.cpp)).
+2. Vortex's *Delete* on its Downloads page, which works on a selection and deletes the archives for
+   good.
+
+Explore says the same thing when you hover a download folder, and refuses to delete one or anything
+in it.
+
+**Not looked for.** Vortex keeps a download folder moved from the default in its own database, which
+Deguffer does not read, so a moved folder is not found, and the row says so. A portable Mod
+Organizer 2 that was never set to handle Nexus Mods links is not found either.
+
+### What is never touched
+
+Nothing is removed by this row. It never reports or offers Vortex's staging folders
+(`{USERDATA}\{GAME}\mods`), which are the installed mods themselves, and with hard-link deployment
+removing them frees nothing. Nor Mod Organizer 2's `mods`, `profiles` or `overwrite`.
+
+### Why Tier 3
+
+An archive looks as if it downloads again, and often does not. Nexus Mods can mark a mod's older
+files as archived, which cannot then be downloaded directly, and a file its staff remove is gone.
+Deguffer cannot tell which archives are still available, so the folder is reported and the
+decision, and the deletion, stay with the manager.
+
+---
+
 ## Locations deliberately not offered
 
 Being large is not a reason to clean something. These were investigated and left out, and the

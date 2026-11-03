@@ -182,6 +182,13 @@ Observed on one workstation; sizes will vary, but the *shape* generalises. Paths
 | `%APPDATA%\Code\User\History` | 1.1 GB | Local file history (an undo record) |
 | Agent/assistant session directories | ~1.7 GB | Conversation history and persistent memory. Deleting loses context permanently |
 
+**Decided ([#430](https://github.com/BootBlock/Deguffer/issues/430)): the download folders of game
+mod managers are reported at Tier 3 and never offered.** Vortex and Mod Organizer 2 keep every mod
+archive after installing it, and an archive that looks re-downloadable often is not: Nexus Mods can
+archive a file so that it cannot be downloaded directly, and reinstalls and collections read the
+archives. The row names each manager's own deletion (§5.1), and Explore refuses each folder.
+Vortex's staging folders and Mod Organizer 2's `mods`, `profiles` and `overwrite` are never offered.
+
 ~~Per-workspace folders can be pruned individually, which makes a good UI: list workspaces by size
 and last-modified, let the user drop dormant ones and keep recent ones.~~ §8 question 2 showed a
 workspace folder is not a safe identity, so the workspace is not the unit.
