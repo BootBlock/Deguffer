@@ -328,6 +328,37 @@ public sealed class DuplicateRemovalCheckTests : DuplicateRemovalScene
     }
 
     /// <summary>
+    /// The removal compares where the copy is with where the search found it, so a copy Windows says
+    /// is now at another path stays, however unchanged the file itself is. Only the first description
+    /// of the copy compares its path: every check after it compares what the file is.
+    /// </summary>
+    [Theory]
+    [InlineData(ExploreRemovalMode.RecycleBin)]
+    [InlineData(ExploreRemovalMode.Permanent)]
+    public void ACopyWindowsSaysIsAtAnotherPathIsNotRemoved(ExploreRemovalMode mode)
+    {
+        var kept = Found(Write(Path.Combine(Documents, "a.bin"), Content()));
+        var copy = Found(Write(Path.Combine(Downloads, "a.bin"), Content()));
+        var marks = Marks([kept, copy]);
+        Mark(marks, copy);
+        var elsewhere = Path.Combine(Downloads, "b.bin");
+        var files = new FileInformation(
+            FileInformation.Open,
+            FileInformation.ReadIdentity,
+            finalPath: handle =>
+            {
+                var final = FileInformation.FinalPathOf(handle);
+                return final is not null && LongPath.Display(final) == copy.Path ? LongPath.Extended(elsewhere) : final;
+            });
+
+        var outcome = Assert.Single(Remove(marks, mode, files: files).Copies);
+
+        Assert.Equal(RemovalCheck.Changed, outcome.Check);
+        Assert.True(File.Exists(copy.Path));
+        Assert.True(File.Exists(kept.Path));
+    }
+
+    /// <summary>
     /// A stale group naming one file twice, by two of its names: the copy marked and a copy the group
     /// would keep are one file. Each name is its own final path, so only the choice of the copy kept
     /// by identity, never by path, keeps the file from being held as kept while it goes. Nothing
