@@ -1873,7 +1873,7 @@ connections where that is a real cost.
 
 | | |
 | --- | --- |
-| **Location** | `%LOCALAPPDATA%\NVIDIA\DXCache` and `GLCache`, `%USERPROFILE%\AppData\LocalLow\NVIDIA\DXCache`, `%LOCALAPPDATA%\Packages\<package>\AC\NVIDIA\DXCache` and `GLCache` in every packaged app, `%LOCALAPPDATA%\AMD\DxCache`, `%LOCALAPPDATA%\Intel\ShaderCache`, `%USERPROFILE%\AppData\LocalLow\Intel\ShaderCache`, `%LOCALAPPDATA%\D3DSCache` |
+| **Location** | `%LOCALAPPDATA%\NVIDIA\DXCache` and `GLCache`, `%USERPROFILE%\AppData\LocalLow\NVIDIA\DXCache`, `%LOCALAPPDATA%\Packages\<package>\AC\NVIDIA\DXCache` and `GLCache` in every packaged app, `%LOCALAPPDATA%\AMD\DX9Cache`, `DxCache`, `DxcCache`, `OglCache` and `VkCache`, `%LOCALAPPDATA%\Intel\ShaderCache`, `%USERPROFILE%\AppData\LocalLow\Intel\ShaderCache`, `%LOCALAPPDATA%\D3DSCache` |
 | **Method** | Delete the recognised cache directories |
 | **Typical size** | A few megabytes to several gigabytes. 3.2 GB was measured on one workstation, nearly all of it NVIDIA's `DXCache`. On another, the two NVIDIA folders held 163 MB and 161 MB |
 
@@ -1928,10 +1928,17 @@ them there, and anything else in it is left alone.
 The packaged apps' caches are listed under one heading, **NVIDIA, inside packaged apps**, one item
 for each app, named by its package.
 
-AMD's folder is recognised only for `DxCache`. AMD's Vulkan driver documentation names `VkCache` as
-its pipeline cache on Linux, and third-party guides add `DxcCache`, `GLCache` and `OglCache` on
-Windows, but none of them has been measured on an AMD machine yet. Until one is, Deguffer leaves
-them alone and says so.
+AMD's driver appears to keep one cache for each graphics interface: `DX9Cache` for Direct3D 9,
+`DxCache` for Direct3D 10 and 11, `DxcCache` for Direct3D 12, `OglCache` for OpenGL and `VkCache`
+for Vulkan. The five names come from a
+[published listing of the folder](https://gist.github.com/ccae7ef1d1446f4450005de139c601c4) on a
+Windows machine with AMD graphics, where every file shown in them is one of the driver's hash-named
+blobs, and AMD's own Vulkan driver documentation names `VkCache` too. Some cleaners also list a
+`GLCache` under `AMD`. That is NVIDIA's name, it was not in the listing, and Deguffer leaves a folder by that
+name alone and says so.
+
+AMD's *Reset Shader Cache* button lives inside AMD Software and has no command line, so Deguffer
+deletes the folders, as it does for the other vendors.
 
 `%LOCALAPPDATA%\D3DSCache` is the one entry removed whole rather than child by child. It has no
 configuration to sit beside: everything in it belongs to Direct3D, arriving as opaque per-application
@@ -1947,6 +1954,9 @@ NVIDIA caches and holds account and sign-in state, not shader blobs — and it i
 folder, so the rule that classifies folders never sees it at all. Deguffer names it explicitly and
 asserts it survived the run, the same treatment `gradle.properties` gets. The LocalLow `NVIDIA`
 folder is protected the same way, by name, whether or not it currently holds one.
+
+**`%LOCALAPPDATA%\AMD\CN` is AMD's equivalent.** AMD Software keeps its settings and per-game
+profiles there, beside the caches. Deguffer names it too and asserts it survived the run.
 
 Any other **folder** you find in there gets the same treatment: unrecognised means untouched, and
 Deguffer says so and asserts it survived. `%LOCALAPPDATA%\Intel` in particular is a shared Intel
