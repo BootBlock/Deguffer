@@ -36,7 +36,7 @@ internal sealed partial record BunInstall(Version Version, string? Reported, str
     /// </summary>
     public static async Task<BunInstall?> AskAsync(IProcessRunner runner, string bun, CancellationToken ct)
     {
-        if (LastLine(await runner.RunAsync(bun, "--version", ToolRun.Query, ct).ConfigureAwait(false)) is not { } printed
+        if ((await runner.RunAsync(bun, "--version", ToolRun.Query, ct).ConfigureAwait(false)).LastLine is not { } printed
             || PlainVersion().Match(printed) is not { Success: true } match)
         {
             return null;
@@ -52,7 +52,7 @@ internal sealed partial record BunInstall(Version Version, string? Reported, str
             return new BunInstall(version, Reported: null, Cache: null);
         }
 
-        var reported = LastLine(await runner.RunAsync(bun, "pm cache", ToolRun.Query, ct).ConfigureAwait(false));
+        var reported = (await runner.RunAsync(bun, "pm cache", ToolRun.Query, ct).ConfigureAwait(false)).LastLine;
 
         return new BunInstall(version, reported, LongPath.Configured(reported) is { } cache && Path.GetDirectoryName(cache) is not null ? cache : null);
     }
@@ -65,13 +65,6 @@ internal sealed partial record BunInstall(Version Version, string? Reported, str
     /// <c>links</c> store as well.
     /// </summary>
     public static string PruneArguments(string cache) => $"pm cache prune --max-age 0 --cache-dir \"{cache}\"";
-
-    private static string? LastLine(CommandOutcome outcome) =>
-        outcome.Succeeded
-            ? outcome.StandardOutput
-                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .LastOrDefault()
-            : null;
 
     /// <summary><c>bun --version</c> prints the version alone, and a canary build prints no suffix.</summary>
     [GeneratedRegex(@"^(\d{1,9})\.(\d{1,9})\.(\d{1,9})$", RegexOptions.CultureInvariant)]

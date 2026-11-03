@@ -14,7 +14,8 @@ namespace Deguffer.Core.Providers;
 /// (<a href="https://github.com/yarnpkg/yarn/blob/v1.22.22/src/cli/commands/cache.js#L119-L124">cache.js</a>).
 /// Yarn 2 and later answer to the same name, and their <c>yarn cache clean</c> deletes the global
 /// cache Plug'n'Play projects run from, so the plan asks the program which Yarn it is (see
-/// <see cref="YarnClassicCache"/>) and offers nothing for any other.</para>
+/// <see cref="YarnClassicCache"/>) and offers nothing for any other. That cache is
+/// <see cref="YarnBerryCacheProvider"/>'s row.</para>
 ///
 /// <para><b>Everything in the root goes, so the root is vetted first.</b> A <c>cache-folder</c>
 /// setting can name any folder, and the clean would delete the whole of it. The plan runs it only on
@@ -29,8 +30,8 @@ public sealed class YarnClassicCacheProvider : CleanupProviderBase
 {
     private const string ToolFolderReason =
         "This is Yarn's own folder. Its Data folder holds the packages you installed globally and the "
-        + "packages you linked, and Berry keeps the cache Plug'n'Play projects run from here too. Deguffer "
-        + "removes nothing here except Yarn 1's cache.";
+        + "packages you linked, and Yarn 2 and later keep their global folder here too. Deguffer removes "
+        + "nothing here except Yarn 1's cache and, in a row of its own, the global cache of Yarn 2 and later.";
 
     private const string CacheRootReason =
         "This is Yarn 1's cache. Deguffer clears it with Yarn's own cache clean, from the Storage page, "
@@ -81,7 +82,7 @@ public sealed class YarnClassicCacheProvider : CleanupProviderBase
         Purpose = "Yarn 1 keeps an unpacked copy of every package it downloads in one cache shared by all "
             + "your projects, so installing the same version again is served from disk.",
         Recommendation = "Deguffer runs Yarn's own cache clean, and only where the yarn on your PATH is "
-            + "Yarn 1. Yarn 2 and later keep a cache that projects run from, and Deguffer leaves it alone.",
+            + "Yarn 1. Yarn 2 and later keep a cache that projects run from, which Deguffer offers in a row of its own.",
     };
 
     protected override IReadOnlyList<string> ConflictingProcessNames => ["node", "yarn"];
@@ -99,8 +100,8 @@ public sealed class YarnClassicCacheProvider : CleanupProviderBase
     /// <summary>Where Yarn 1 keeps <c>yarn global</c> and <c>yarn link</c>: user state, never cache.</summary>
     public string DataFolder => Path.Combine(ToolFolder, "Data");
 
-    /// <summary>Where Yarn 2 and later keep their global cache, which Plug'n'Play projects run from.</summary>
-    public string BerryFolder => Path.Combine(ToolFolder, "Berry");
+    /// <summary>The global folder of Yarn 2 and later, whose cache Plug'n'Play projects run from.</summary>
+    public string BerryFolder => YarnBerryCache.DefaultGlobalFolder(Environment);
 
     /// <summary>
     /// §5.2 as §7.1 needs it read from outside. Yarn's folder recognises its cache root alone, the root
@@ -162,7 +163,7 @@ public sealed class YarnClassicCacheProvider : CleanupProviderBase
         {
             return EmptyPlan(
                 $"The yarn on your PATH runs Yarn {answer.Version}, not Yarn 1. Yarn 2 and later keep a cache "
-                + "Plug'n'Play projects run from, and Deguffer does not clear it.");
+                + "Plug'n'Play projects run from, which Deguffer offers in its Yarn global package cache row.");
         }
 
         if (answer.Root is not { } root)

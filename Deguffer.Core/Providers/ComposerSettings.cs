@@ -120,11 +120,7 @@ internal sealed partial record ComposerSettings(
         var outcome = await runner.RunAsync(composer, QueryArguments(workingDirectory, setting), ToolRun.Query, ct)
             .ConfigureAwait(false);
 
-        return outcome.Succeeded
-            ? outcome.StandardOutput
-                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .LastOrDefault() ?? string.Empty
-            : null;
+        return outcome.Succeeded ? outcome.LastLine ?? string.Empty : null;
     }
 
     /// <summary>

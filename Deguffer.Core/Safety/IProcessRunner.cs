@@ -10,6 +10,17 @@ public sealed record CommandOutcome(int ExitCode, string StandardOutput, string 
     public bool Succeeded => ExitCode == 0;
 
     /// <summary>
+    /// The last line a successful query printed, trimmed, or null where it failed or printed nothing.
+    /// A package manager prints its answer last, after any notice it writes to standard output first.
+    /// </summary>
+    public string? LastLine =>
+        Succeeded
+            ? StandardOutput
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .LastOrDefault()
+            : null;
+
+    /// <summary>
     /// Whatever the tool said, for surfacing in the result: stderr first where the command failed,
     /// and stdout first where it did not, each falling back to the other.
     ///

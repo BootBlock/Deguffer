@@ -475,7 +475,7 @@ One class each, on the shape npm and NuGet already use.
 | Tool | Location and method | Note |
 | --- | --- | --- |
 | Maven | `%USERPROFILE%\.m2\repository`, no official purge | `.m2\settings.xml` in the root can hold encrypted server passwords. §5.2 verbatim |
-| Yarn | `yarn cache dir`, then `yarn cache clean` | ✅ Yarn 1 shipped as `YarnClassicCacheProvider`, which asks `yarn -v` and never runs Berry's clean. The clean deletes the whole cache root, not `v6`. Berry stays *Build later* in [provider-candidates.md](provider-candidates.md) §2 |
+| Yarn | `yarn cache dir`, then `yarn cache clean` | ✅ Yarn 1 shipped as `YarnClassicCacheProvider`, which asks `yarn -v` and never runs Berry's clean. The clean deletes the whole cache root, not `v6`. ✅ Berry's global cache shipped as `YarnBerryCacheProvider`, Tier 2 and by path: see [provider-candidates.md](provider-candidates.md) §2 |
 | Bun | `%USERPROFILE%\.bun\install\cache`, `bun pm cache prune` | ✅ Shipped as `BunInstallCacheProvider`, through `prune` only. `prune` first shipped in Bun 1.4.4, and an earlier Bun is offered nothing, because its only eviction, `rm`, deletes the global store in `links` |
 | Composer | `composer clear-cache` | ✅ Shipped as `ComposerCacheProvider`. Measured at 30 MB |
 | vcpkg | `%LOCALAPPDATA%\vcpkg\archives`, plus `buildtrees`, `downloads`, `packages` under the vcpkg root | The cache root moves with `VCPKG_DEFAULT_BINARY_CACHE`, the same problem `PLAYWRIGHT_BROWSERS_PATH` already forced into `IUserEnvironment` |

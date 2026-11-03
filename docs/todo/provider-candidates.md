@@ -245,7 +245,7 @@ report.
 | Scoop download cache | **Build**. ✅ done: `ScoopCacheProvider` | 1 | Absent |
 | Composer | ✅ **Built**, low value | 1 | 30.1 MB |
 | Cypress binaries | Build later | 2 | Absent |
-| Yarn Berry global cache | Build later | 2 | Absent |
+| Yarn Berry global cache | ✅ **Built** as `YarnBerryCacheProvider` | 2 | Absent |
 | PDM, Bazelisk, Coursier (✅ done), opam, Julia, node-gyp, Chocolatey, Terraform plugin cache, RubyGems, Cabal, Stack, Hex | Build later | 1–2 | Absent |
 | winget portable packages, rustup toolchains, pipx, Hatch, Volta, nvm-windows, fnm, `scoop cleanup` | Reject | — | — |
 
@@ -409,7 +409,7 @@ are expired only by `clear-cache --gc`.
 | Tool | Route | Gap |
 | --- | --- | --- |
 | Cypress | `%LOCALAPPDATA%\Cypress\Cache`, per-version folders ([advanced installation](https://docs.cypress.io/app/references/advanced-installation)) | No global CLI to run, and "the version in use" is per project, so `prune` is undefined from a neutral folder. Tier 2: runs fail until `cypress install`, the Playwright shape |
-| Yarn Berry | `%LOCALAPPDATA%\Yarn\Berry\cache` on Windows ([folderUtils.ts](https://raw.githubusercontent.com/yarnpkg/berry/master/packages/yarnpkg-core/sources/folderUtils.ts)); the docs' `~/.yarn/berry` is wrong there | Plug'n'Play reads packages straight from these zips ([offline cache](https://v3.yarnpkg.com/features/offline-cache)), so deleting it breaks every PnP project until `yarn install`. Needs a reference-aware answer, as pnpm did |
+| Yarn Berry | `%LOCALAPPDATA%\Yarn\Berry\cache` on Windows ([folderUtils.ts](https://raw.githubusercontent.com/yarnpkg/berry/master/packages/yarnpkg-core/sources/folderUtils.ts)); the docs' `~/.yarn/berry` is wrong there | ✅ **Built** as `YarnBerryCacheProvider`, Tier 2. No reference-aware answer exists: Berry keeps no record of the projects that use the cache and never prunes it (yarnpkg/berry#2775). Removed whole by path, a recorded §5.1 exception: `yarn cache clean` fails outside a project in Yarn 2 and 3, and Yarn 1 ignores unknown options, so no command line makes the wrong Yarn refuse. `metadata` (Yarn 4's npm metadata cache) is a possible Tier 1 follow-up |
 | PDM | `pdm cache clear`, which keeps a package any environment still refers to ([caches.py](https://raw.githubusercontent.com/pdm-project/pdm/main/src/pdm/models/caches.py)) | Windows location inferred from platformdirs, not observed. Never delete `packages` by path |
 | Bazelisk | Downloaded Bazel versions; its FAQ says to "delete this directory at any time" ([bazelisk](https://github.com/bazelbuild/bazelisk)) | Windows location inferred, not observed. Bazel's own output bases are per workspace with a server, and are rejected for now |
 | Coursier | `%LOCALAPPDATA%\Coursier\Cache\v1` ([cache](https://get-coursier.io/docs/cache)) | No clean command. Siblings (`data` holds installed apps) unverified. sbt's `~/.ivy2/local` is locally published, Tier 4. ✅ done: `CoursierCacheProvider` and `IvyCacheProvider` ([#88](https://github.com/BootBlock/Deguffer/issues/88)). **Correction:** since Coursier 2.1 the Java runtimes are in `Cache\arc`, not `Cache\jvm`, so `arc` is Tier 4 too, as is `digest`, which holds layers `cs docker build` made |
@@ -910,7 +910,8 @@ Items 3 and 4 changed shipped text, and were made with the run-wide refusal of r
   command; it does not prefer one that deletes Tier 3 data. Each is recorded above with the narrower
   route.
 - **Some caches are live stores.** Yarn Berry's Plug'n'Play cache, Bun's `links`, PDM's `packages`
-  and Cabal's store are what projects run from. They need pnpm's reference-aware treatment or none.
+  and Cabal's store are what projects run from. They need pnpm's reference-aware treatment, or a
+  higher tier where no reference record exists: Berry's ships as Tier 2 for that reason.
 - **A vendor's automatic rule is the best tier evidence.** JetBrains' 180-day rule, Gradle's 7-day
   rule, ReSharper's 30 days and Composer's cap each say what the vendor already deletes without
   asking. Where the vendor already deletes it, an offer is either redundant or Tier 1.

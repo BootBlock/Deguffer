@@ -37,7 +37,7 @@ internal sealed partial record YarnClassicCache(string Version, bool IsClassic, 
     /// </summary>
     public static async Task<YarnClassicCache?> AskAsync(IProcessRunner runner, string yarn, CancellationToken ct)
     {
-        if (LastLine(await runner.RunAsync(yarn, "-v", ToolRun.Query, ct).ConfigureAwait(false)) is not { } version)
+        if ((await runner.RunAsync(yarn, "-v", ToolRun.Query, ct).ConfigureAwait(false)).LastLine is not { } version)
         {
             return null;
         }
@@ -47,7 +47,7 @@ internal sealed partial record YarnClassicCache(string Version, bool IsClassic, 
             return new YarnClassicCache(version, IsClassic: false, Reported: null, Root: null);
         }
 
-        var reported = LastLine(await runner.RunAsync(yarn, "cache dir", ToolRun.Query, ct).ConfigureAwait(false));
+        var reported = (await runner.RunAsync(yarn, "cache dir", ToolRun.Query, ct).ConfigureAwait(false)).LastLine;
 
         return new YarnClassicCache(version, IsClassic: true, reported, RootOf(reported));
     }
@@ -80,13 +80,6 @@ internal sealed partial record YarnClassicCache(string Version, bool IsClassic, 
         && Path.GetDirectoryName(folder) is { } root
         && Path.GetDirectoryName(root) is not null
             ? root
-            : null;
-
-    private static string? LastLine(CommandOutcome outcome) =>
-        outcome.Succeeded
-            ? outcome.StandardOutput
-                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .LastOrDefault()
             : null;
 
     [GeneratedRegex(@"^1\.\d+\.\d+$", RegexOptions.CultureInvariant)]
