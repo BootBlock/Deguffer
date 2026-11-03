@@ -38,7 +38,7 @@ largest files inside it:
 
 Besides Settings and About, Deguffer has six pages:
 
-- [Storage](#storage) checks 109 sources of waste, from package-manager and browser caches to
+- [Storage](#storage) checks 110 sources of waste, from package-manager and browser caches to
   `Windows.old` and old restore points, and puts each one in a [safety tier](#safety-tiers). You
   choose what goes, and when the clean has finished Deguffer checks that everything it said it would
   leave alone is still there.
@@ -121,7 +121,7 @@ remove one by any route.
 
 ## Storage
 
-Each of the 109 sources has its own provider, which knows what that location is and what sits next
+Each of the 110 sources has its own provider, which knows what that location is and what sits next
 to it. Rows for tools you do not have are hidden unless you ask the Storage page to show them. Build
 output and project caches, such as `node_modules`, `obj`, Rust's `target`, Python's `.tox` and
 `.pytest_cache` folders, and the caches in Visual Studio's `.vs` folders, are only looked for
@@ -180,6 +180,7 @@ you would lose by deleting it. By default, only Tier 1 rows start out selected:
 | Plex Media Server transcoder files | `Transcode\Sessions` and the resized pictures; never anything written in the last 24 hours, the sync queue next to it, or the downloads folder |
 | Jellyfin transcoder files | Only a folder that carries Jellyfin's own marker; never anything written in the last 24 hours |
 | Emby Server transcoder files | Only a `transcoding-temp` folder that Emby made; never anything written in the last 24 hours |
+| Redshift texture cache | The textures Redshift converted to its own format, in its standalone cache, in the cache inside each Maxon application's preferences such as Cinema 4D's, and wherever `REDSHIFT_CACHEPATH` points; never the mesh cache, preferences or logs next to them, a cache on another computer's disk, or anything while a program that renders with Redshift is running. Redshift converts each texture again at the next render |
 | Epic Games launcher web cache | |
 | Epic Games launcher store artwork | Machine-wide, under `%PROGRAMDATA%`, and shared by every account |
 | Battle.net launcher cache | Never the launcher's account data, its database, or anything under `%PROGRAMDATA%` |
