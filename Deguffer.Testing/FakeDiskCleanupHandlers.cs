@@ -17,7 +17,7 @@ public sealed class FakeDiskCleanupHandlers : IDiskCleanupHandlers
 {
     private readonly Func<string, string, DiskCleanupOutcome> _behaviour;
 
-    private Func<string, DiskCleanupSurvey> Answer { get; init; } = _ => new DiskCleanupSurvey(DiskCleanupAnswer.HasSomething);
+    private Func<string, CancellationToken, DiskCleanupSurvey> Answer { get; init; } = (_, _) => new DiskCleanupSurvey(DiskCleanupAnswer.HasSomething);
 
     /// <summary>
     /// Clears, for each handler, the directories its registration names under the volume it is given,
@@ -83,7 +83,7 @@ public sealed class FakeDiskCleanupHandlers : IDiskCleanupHandlers
     /// <summary>Handlers of which Windows registers none on this machine.</summary>
     public static FakeDiskCleanupHandlers NoneRegistered() => new(Windows()._behaviour)
     {
-        Answer = handler => new DiskCleanupSurvey(DiskCleanupAnswer.Unavailable, $"Windows no longer registers its '{handler}' cleanup."),
+        Answer = (handler, _) => new DiskCleanupSurvey(DiskCleanupAnswer.Unavailable, $"Windows no longer registers its '{handler}' cleanup."),
     };
 
     /// <summary>
@@ -92,22 +92,88 @@ public sealed class FakeDiskCleanupHandlers : IDiskCleanupHandlers
     /// </summary>
     public static FakeDiskCleanupHandlers FindingNothing() => new(Windows()._behaviour)
     {
-        Answer = _ => new DiskCleanupSurvey(DiskCleanupAnswer.NothingToClear),
+        Answer = (_, _) => new DiskCleanupSurvey(DiskCleanupAnswer.NothingToClear),
     };
 
     /// <summary>Handlers this process cannot ask, as Windows' setup handlers are to one that is not elevated.</summary>
     public static FakeDiskCleanupHandlers Unasked() => new(Windows()._behaviour)
     {
-        Answer = _ => new DiskCleanupSurvey(DiskCleanupAnswer.NeedsElevation),
+        Answer = (_, _) => new DiskCleanupSurvey(DiskCleanupAnswer.NeedsElevation),
     };
+
+    /// <summary>
+    /// Handlers whose measurement lasts until <paramref name="measured"/> completes, then answers
+    /// <paramref name="answer"/>. Told to stop first, one answers "has something", as the real ones do:
+    /// <c>E_ABORT</c> is a failure to measure, and a failure to measure is read as something to clear.
+    /// So a plan that read a stopped survey would offer what it should not.
+    /// </summary>
+    public static FakeDiskCleanupHandlers Measuring(Task measured, DiskCleanupAnswer answer = DiskCleanupAnswer.HasSomething) =>
+        new(Windows()._behaviour)
+        {
+            Answer = (_, ct) =>
+            {
+                try
+                {
+                    measured.Wait(ct);
+                    return new DiskCleanupSurvey(answer);
+                }
+                catch (OperationCanceledException)
+                {
+                    return new DiskCleanupSurvey(DiskCleanupAnswer.HasSomething);
+                }
+            },
+        };
+
+    /// <summary>
+    /// Handlers that measure until told to stop and then throw <paramref name="failure"/>, as the real
+    /// host rethrows what failed on the handler's thread: a class that is not the interface Windows
+    /// registers it as, or a COM call that fails.
+    /// </summary>
+    public static FakeDiskCleanupHandlers FailingOnceStopped(Exception failure) => new(Windows()._behaviour)
+    {
+        Answer = (_, ct) =>
+        {
+            ct.WaitHandle.WaitOne();
+            throw failure;
+        },
+    };
+
+    private readonly Lock _surveys = new();
+    private readonly TaskCompletionSource _surveyStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _surveyReturned = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     /// <summary>Every handler asked about before a plan offered it.</summary>
     public List<string> Surveyed { get; } = [];
 
+    /// <summary>
+    /// Every survey that has returned, and whether it had been told to stop by then. A plan runs its
+    /// survey on another thread, so a test reads this to know none was left running.
+    /// </summary>
+    public List<(string Handler, bool Stopped)> Returned { get; } = [];
+
+    /// <summary>Completes when the first survey starts, so a test can wait for a plan to ask.</summary>
+    public Task SurveyStarted => _surveyStarted.Task;
+
+    /// <summary>Completes when the first survey returns, for a caller that does not wait for it.</summary>
+    public Task SurveyReturned => _surveyReturned.Task;
+
     public DiskCleanupSurvey Survey(string handler, string volume, CancellationToken ct)
     {
-        Surveyed.Add(handler);
-        return Answer(handler);
+        lock (_surveys)
+        {
+            Surveyed.Add(handler);
+        }
+
+        _surveyStarted.TrySetResult();
+        var answer = Answer(handler, ct);
+
+        lock (_surveys)
+        {
+            Returned.Add((handler, ct.IsCancellationRequested));
+        }
+
+        _surveyReturned.TrySetResult();
+        return answer;
     }
 
     public DiskCleanupOutcome Run(string handler, string volume, CancellationToken ct)

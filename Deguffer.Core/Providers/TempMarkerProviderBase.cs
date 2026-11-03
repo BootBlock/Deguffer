@@ -30,10 +30,15 @@ public abstract class TempMarkerProviderBase : CleanupProviderBase, ITemporaryFo
 {
     private readonly ISystemDirectories _system;
     private readonly ILiveTreeInspector _liveTrees;
+    private readonly TempFolderListings _listings;
 
     private readonly PassMemo<TempRootSet> _roots = new();
     private readonly PassMemo<TempMarkerFindings> _findings = new();
 
+    /// <param name="listings">
+    /// The pass's listing of each folder these rows examine, shared with the other rows built on this
+    /// type so that a pass lists each temporary folder once rather than once per row.
+    /// </param>
     protected TempMarkerProviderBase(
         IUserEnvironment? environment,
         IProcessRunner? runner,
@@ -41,7 +46,8 @@ public abstract class TempMarkerProviderBase : CleanupProviderBase, ITemporaryFo
         IDirectoryScanner? scanner,
         ISystemDirectories? system,
         ILiveTreeInspector? liveTrees,
-        IVolumeInventory? volumes)
+        IVolumeInventory? volumes,
+        TempFolderListings? listings)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
@@ -51,6 +57,7 @@ public abstract class TempMarkerProviderBase : CleanupProviderBase, ITemporaryFo
     {
         _system = system ?? SystemDirectories.Current;
         _liveTrees = liveTrees ?? LiveTreeInspector.Default;
+        _listings = listings ?? new TempFolderListings();
     }
 
     public override StepGrain Grain => StepGrain.Parts;
@@ -80,9 +87,12 @@ public abstract class TempMarkerProviderBase : CleanupProviderBase, ITemporaryFo
     {
         _roots.Forget();
         _findings.Forget();
+        _listings.Invalidate();
         _liveTrees.Invalidate();
         base.InvalidateCaches();
     }
+
+    public override PassHold HoldCaches() => PassHold.Joined(base.HoldCaches(), _listings.Hold());
 
     /// <summary>
     /// Present where a tool this row knows has left anything in a temporary folder, or where a folder
@@ -105,11 +115,13 @@ public abstract class TempMarkerProviderBase : CleanupProviderBase, ITemporaryFo
     /// folder only what the plan would take is recognised.
     ///
     /// <para>Read again whenever Explore rebuilds its policy, because what is running changes and an
-    /// answer kept for the life of the process would say a finished build is still going on.</para>
+    /// answer kept for the life of the process would say a finished build is still going on. The
+    /// folders are listed afresh for the same reason, rather than read from a pass's listing.</para>
     /// </summary>
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
-        var findings = TempMarkerSurvey.Examine(PlacesIn(AccountFolders), Inspector, _liveTrees, ct);
+        var findings = TempMarkerSurvey.Examine(
+            PlacesIn(AccountFolders), TempFolderListings.Read, Inspector, _liveTrees, ct);
         var taken = new TargetedEntries(findings.Targets);
 
         return Task.FromResult<IReadOnlyList<ToolRoot>>(
@@ -187,5 +199,5 @@ public abstract class TempMarkerProviderBase : CleanupProviderBase, ITemporaryFo
 
     /// <summary>The examination for this planning pass, shared by the plan, the presence probe and the claim.</summary>
     private TempMarkerFindings Examine(CancellationToken ct) =>
-        _findings.Get(() => TempMarkerSurvey.Examine(PlacesIn(AccountFolders), Inspector, _liveTrees, ct));
+        _findings.Get(() => TempMarkerSurvey.Examine(PlacesIn(AccountFolders), _listings.Of, Inspector, _liveTrees, ct));
 }

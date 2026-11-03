@@ -54,6 +54,15 @@ public sealed class DriverStoreProvider : CleanupProviderBase
     /// </summary>
     private readonly PassMemo<Task<DriverStoreListing>> _listing = new();
 
+    /// <summary>
+    /// Windows' cleanup asked what it would clear, started with the listing and handed to the plan,
+    /// which takes it or discards it. See <see cref="ListingAsync"/>.
+    /// </summary>
+    private EarlyDiskCleanupSurvey? _early;
+
+    /// <summary>The system volume, in the display form the handler answers for.</summary>
+    private readonly string _volume;
+
     public DriverStoreProvider(
         IDiskCleanupHandlers handlers,
         IUserEnvironment? environment = null,
@@ -75,6 +84,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         _system = system ?? SystemDirectories.Current;
         _store = store ?? new DriverStore(Runner, _system);
         _repository = Path.Combine(_system.WindowsDirectory, "System32", "DriverStore", "FileRepository");
+        _volume = LongPath.Display(_system.SystemDrive);
     }
 
     public override string Id => "driver-store";
@@ -110,6 +120,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
     public override void InvalidateCaches()
     {
         _listing.Forget();
+        Interlocked.Exchange(ref _early, null)?.Abandon();
         base.InvalidateCaches();
     }
 
@@ -125,8 +136,15 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         }
 
         var listing = await ListingAsync(ct).ConfigureAwait(false);
+        var present = listing.Failure is not null || SupersededDrivers.Of(listing.Packages, _repository).Newest.Count > 0;
 
-        return listing.Failure is not null || SupersededDrivers.Of(listing.Packages, _repository).Newest.Count > 0;
+        // The planner plans only a row that is present, so nothing else would take the answer.
+        if (!present && TakeEarlySurvey() is { } unneeded)
+        {
+            await unneeded.DiscardAsync().ConfigureAwait(false);
+        }
+
+        return present;
     }
 
     /// <summary>
@@ -149,7 +167,33 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         }
 
         var listing = await ListingAsync(ct).ConfigureAwait(false);
+        var early = TakeEarlySurvey();
 
+        try
+        {
+            return await PlanOverAsync(listing, early, keep, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            // Every plan that returns before it needs Windows' answer leaves the survey unread, and
+            // one that took the answer has nothing left to stop.
+            if (early is not null)
+            {
+                await early.DiscardAsync().ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <param name="early">
+    /// The survey started with the listing, or null where none was: an update held it back, or this is
+    /// the pass's second plan over one listing. Read only once every gate has passed.
+    /// </param>
+    private async Task<CleanupPlan> PlanOverAsync(
+        DriverStoreListing listing,
+        EarlyDiskCleanupSurvey? early,
+        MinimumAge keep,
+        CancellationToken ct)
+    {
         if (listing.Failure is { } failure)
         {
             return UnexaminedPlan(
@@ -163,7 +207,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
             return EmptyPlan("No driver in Windows' driver store has an older version of itself beside it.");
         }
 
-        var notes = new List<PlanNote>(Considered(listing, drivers));
+        var notes = new List<PlanNote>(DriverPackageNotes.Considered(listing, drivers));
         var unlisted = Unlisted(listing, notes);
 
         // A third-party package that did not read, or whose folder Windows would not name, is also a
@@ -190,16 +234,14 @@ public sealed class DriverStoreProvider : CleanupProviderBase
             return Plan([], notes, [.. kept, .. folders.Select(UnfinishedUpdate.Held)]);
         }
 
-        // Asked last, for the reason PreviousWindowsInstallationProvider asks last: the handler works
-        // out what it would clear, and that is the one question here that can take a while.
-        var volume = LongPath.Display(_system.SystemDrive);
-        var survey = await Task.Run(() => _handlers.Survey(Handler, volume, ct), ct).ConfigureAwait(false);
+        // Read last: every gate above decides over the answer's use, never over whether it was asked.
+        var survey = await (early ?? new EarlyDiskCleanupSurvey(_handlers, Handler, _volume, ct)).TakeAsync().ConfigureAwait(false);
 
         return survey.Answer switch
         {
             DiskCleanupAnswer.Unavailable => await ByPackageAsync(
-                drivers, listing, survey, notes, [.. kept, .. matched ? [] : Protect([.. unlisted.Select(folder => (folder, NotAsked))])], ct).ConfigureAwait(false),
-            _ when survey.MayOffer => await ByHandlerAsync(folders, volume, keep, matched, notes, kept, ct).ConfigureAwait(false),
+                drivers, listing, survey, notes, [.. kept, .. matched ? [] : Protect([.. unlisted.Select(folder => (folder, DriverPackageNotes.NotAsked))])], ct).ConfigureAwait(false),
+            _ when survey.MayOffer => await ByHandlerAsync(folders, _volume, keep, matched, notes, kept, ct).ConfigureAwait(false),
             _ => Plan(
                 [],
                 [.. notes, new PlanNote(PlanNoteSeverity.Information, survey.WhyLeftAlone("Device driver packages", LongPath.Display(_repository))!)],
@@ -228,7 +270,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
     {
         if (!matched)
         {
-            notes.Add(Unmatched);
+            notes.Add(DriverPackageNotes.Unmatched);
         }
 
         var target = new DiskCleanupTarget(
@@ -247,7 +289,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
             PlanNoteSeverity.Information,
             "Windows' own cleanup decides which older driver packages to remove, and keeps the newest "
             + "version of each driver and every driver a device is using. The figure is the "
-            + $"{Count(folders.Count, "older package")} Deguffer found with a newer version beside them, so Windows may "
+            + $"{DriverPackageNotes.Count(folders.Count, "older package")} Deguffer found with a newer version beside them, so Windows may "
             + "remove a little more or less."));
 
         if (measured.Note is { } scanNote)
@@ -283,7 +325,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
             .. drivers.Superseded.Select((superseded, i) => new RunCommandStep(
                 pnpUtil,
                 $"/delete-driver {superseded.Package.PublishedName}",
-                $"Remove {Described(superseded.Package)}, which version {superseded.Newest.Version} of "
+                $"Remove {DriverPackageNotes.Described(superseded.Package)}, which version {superseded.Newest.Version} of "
                 + $"{superseded.Newest.Date:d MMMM yyyy} replaces, using Windows' own command")
             {
                 // The driver store is Windows' own, and nothing documents what a removal ended part-way
@@ -315,7 +357,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
             .Select(p => p.Folder)
             .OfType<string>()
             .Where(folder => accounted.Add(folder) && SupersededDrivers.IsChildOf(folder, _repository))
-            .Select(folder => (folder, NotAsked));
+            .Select(folder => (folder, DriverPackageNotes.NotAsked));
 
         return Plan(steps, notes, [.. kept, .. Protect([.. others])]) with { Fallback = measured.Fallback };
     }
@@ -347,25 +389,10 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         foreach (var package in kept)
         {
             yield return (package.Folder!, package.InUse
-                ? $"{Described(package)}, which a device is installed with."
-                : $"{Described(package)}, the newest version of that driver here.");
+                ? $"{DriverPackageNotes.Described(package)}, which a device is installed with."
+                : $"{DriverPackageNotes.Described(package)}, the newest version of that driver here.");
         }
     }
-
-    /// <summary>Why a folder stays where the plan names exactly what <c>pnputil</c> removes.</summary>
-    private const string NotAsked = "A driver package pnputil was not asked to remove.";
-
-    /// <summary>
-    /// Said where Windows' cleanup does the work and a listed package could not be matched to its
-    /// folder: that cleanup may rightly take the unmatched package, so no unlisted folder can be
-    /// asserted afterwards. Where <c>pnputil</c> does the work, Deguffer names exactly what goes and
-    /// every unlisted folder is asserted regardless.
-    /// </summary>
-    private static readonly PlanNote Unmatched = new(
-        PlanNoteSeverity.Information,
-        "Deguffer could not match every driver package Windows listed to its folder, so it cannot tell "
-        + "which folders in the store hold drivers that are part of Windows, and the clean cannot check "
-        + "afterwards that they are still there.");
 
     /// <summary>
     /// Every folder in the store that no listed package was matched to: where every package was
@@ -397,41 +424,6 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         ];
     }
 
-    /// <summary>What the plan tells the user about the packages it did not consider or will not offer.</summary>
-    private static IEnumerable<PlanNote> Considered(DriverStoreListing listing, SupersededDrivers drivers)
-    {
-        if (listing.Unread > 0)
-        {
-            yield return new PlanNote(
-                PlanNoteSeverity.Information,
-                $"Deguffer could not read what Windows listed about {Count(listing.Unread, "driver package")}, "
-                + "so none of them is offered.");
-        }
-
-        if (drivers.InUse.Count > 0)
-        {
-            yield return new PlanNote(
-                PlanNoteSeverity.Information,
-                $"Leaving {Count(drivers.InUse.Count, "older package")} alone although a newer version is "
-                + (drivers.InUse.Count == 1
-                    ? "here: a device is installed with it."
-                    : "here: a device is installed with each of them."));
-        }
-
-        if (drivers.Unplaced > 0)
-        {
-            yield return new PlanNote(
-                PlanNoteSeverity.Information,
-                $"Leaving {Count(drivers.Unplaced, "older package")} alone: Windows did not say where in its "
-                + "driver store they are.");
-        }
-    }
-
-    private static string Described(DriverPackage package) =>
-        $"{package.Provider}'s {package.OriginalName} version {package.Version} of {package.Date:d MMMM yyyy}";
-
-    private static string Count(int count, string what) => count == 1 ? $"1 {what}" : $"{count} {what}s";
-
     /// <summary>The newest write among <paramref name="folders"/>, or null where any could not be dated.</summary>
     private static DateTime? Newest(IReadOnlyList<string> folders, CancellationToken ct)
     {
@@ -440,5 +432,32 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         return dates.Any(d => d is null) ? null : dates.Max();
     }
 
-    private Task<DriverStoreListing> ListingAsync(CancellationToken ct) => _listing.Get(() => _store.ListAsync(ct));
+    /// <summary>
+    /// The pass's listing, and with it Windows' cleanup asked what it would clear, so the handler's
+    /// measurement runs beside pnputil's listing rather than after it.
+    ///
+    /// <para><b>Asked before the plan knows it needs the answer.</b> Elevated on Windows 11 24H2, the
+    /// listing took 1.2 to 2.1 s and the survey 3.5 to 4.1 s, and the two together took as long as
+    /// the survey alone. Where the listing shows nothing superseded, the survey is stopped, which the
+    /// handler obeyed within 110 ms. Unelevated, <see cref="DiskCleanupHandlers.Survey"/> answers
+    /// before it loads the handler, so the early start costs a registry read.</para>
+    ///
+    /// <para><b>Not asked while an update is unfinished</b>, which holds every package back in any
+    /// case: Windows Update installs drivers, and nothing documents what the handler's measurement
+    /// does beside it. The plan asks again before it reads the answer.</para>
+    /// </summary>
+    private Task<DriverStoreListing> ListingAsync(CancellationToken ct) => _listing.Get(() =>
+    {
+        var survey = UnfinishedUpdate.HoldsEverything(Servicing, Inspector) is null
+            ? new EarlyDiskCleanupSurvey(_handlers, Handler, _volume, ct)
+            : null;
+
+        // A listing that failed is asked again, and the survey started with it is replaced.
+        Interlocked.Exchange(ref _early, survey)?.Abandon();
+
+        return _store.ListAsync(ct);
+    });
+
+    /// <summary>The survey started with the listing, handed to exactly one caller.</summary>
+    private EarlyDiskCleanupSurvey? TakeEarlySurvey() => Interlocked.Exchange(ref _early, null);
 }

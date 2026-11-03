@@ -34,6 +34,16 @@ public sealed class GitLfsObjectProvider : CleanupProviderBase
 
     private static readonly IReadOnlyList<string> DirectoryNames = [GitDirectoryName];
 
+    /// <summary>
+    /// How many stores git is asked about at once (G4). Each store is a separate repository and no
+    /// store's answer feeds another's question, so the row is as long as its slowest few stores rather
+    /// than the sum of all of them. Each run is one short-lived git with its git-lfs child, and the
+    /// slowest, the prune dry run, walks the repository's refs and recent history on disk, so more than a
+    /// few at once would contend for that disk and for the processes the planner's other rows are
+    /// starting beside this one (<see cref="CleanupPlanner.ProvidersAtOnce"/>).
+    /// </summary>
+    internal const int StoresAtOnce = 4;
+
     private readonly SourceRootStore _roots;
     private readonly SourceDirectoryDiscovery _discovery;
     private readonly ILiveTreeInspector _liveTrees;
@@ -298,34 +308,53 @@ public sealed class GitLfsObjectProvider : CleanupProviderBase
             return ([], []);
         }
 
+        var readings = await EachStoreAsync(stores, (store, token) => ReadStoreAsync(git, store, token), ct).ConfigureAwait(false);
         var checkouts = new List<GitLfsCheckout>();
         var prunes = new List<GitLfsPrune>();
 
-        foreach (var store in stores)
+        // In the stores' order, whatever order git answered in, so the plan reads the same on every pass.
+        foreach (var (store, checkout, prune, refusal) in readings)
         {
-            var reading = await GitLfsSettings.ReadAsync(Runner, git, store, ct).ConfigureAwait(false);
-
-            if (reading.Checkout is not { } checkout)
+            if (checkout is not null)
             {
-                found.Refuse(store, reading.WhyNot, reading.Unanswered);
-                continue;
+                checkouts.Add(checkout);
             }
 
-            checkouts.Add(checkout);
-
-            switch (await GitLfsRemote.ReadAsync(Runner, git, checkout, ct).ConfigureAwait(false))
+            if (prune is not null)
             {
-                case { Prune: { } prune }:
-                    prunes.Add(prune);
-                    break;
-
-                case var refused:
-                    found.Refuse(store, refused.WhyNot, refused.Unanswered);
-                    break;
+                prunes.Add(prune);
+            }
+            else if (refusal is var (why, unanswered))
+            {
+                found.Refuse(store, why, unanswered);
             }
         }
 
         return (checkouts, prunes);
+    }
+
+    /// <summary>What git said of one store: where it is checked out, and its prune or why it has none.</summary>
+    private sealed record StoreReading(
+        GitLfsStore Store,
+        GitLfsCheckout? Checkout,
+        GitLfsPrune? Prune,
+        (string WhyNot, bool Unanswered)? Refusal);
+
+    /// <summary>One store's settings and then its remote, which needs the checkout the settings name.</summary>
+    private async Task<StoreReading> ReadStoreAsync(string git, GitLfsStore store, CancellationToken ct)
+    {
+        var reading = await GitLfsSettings.ReadAsync(Runner, git, store, ct).ConfigureAwait(false);
+
+        if (reading.Checkout is not { } checkout)
+        {
+            return new StoreReading(store, null, null, (reading.WhyNot, reading.Unanswered));
+        }
+
+        return await GitLfsRemote.ReadAsync(Runner, git, checkout, ct).ConfigureAwait(false) switch
+        {
+            { Prune: { } prune } => new StoreReading(store, checkout, prune, null),
+            var refused => new StoreReading(store, checkout, null, (refused.WhyNot, refused.Unanswered)),
+        };
     }
 
     /// <summary>Each store's dry run, and the object files it names.</summary>
@@ -335,12 +364,17 @@ public sealed class GitLfsObjectProvider : CleanupProviderBase
         Findings found,
         CancellationToken ct)
     {
+        var outcomes = await EachStoreAsync(
+            prunes,
+            (prune, token) => Runner.RunAsync(git, prune.DryRunArguments, ToolRun.Query, token),
+            ct).ConfigureAwait(false);
+
         var offered = new List<OfferedStore>();
 
-        foreach (var prune in prunes)
+        for (var index = 0; index < prunes.Count; index++)
         {
+            var (prune, outcome) = (prunes[index], outcomes[index]);
             var checkout = prune.Checkout;
-            var outcome = await Runner.RunAsync(git, prune.DryRunArguments, ToolRun.Query, ct).ConfigureAwait(false);
 
             if (!outcome.Succeeded)
             {
@@ -357,6 +391,24 @@ public sealed class GitLfsObjectProvider : CleanupProviderBase
         }
 
         return offered;
+    }
+
+    /// <summary>
+    /// <paramref name="ask"/> for every item, up to <see cref="StoresAtOnce"/> at a time, with the
+    /// answers in the items' order rather than the order they arrived in.
+    /// </summary>
+    private static async Task<IReadOnlyList<TAnswer>> EachStoreAsync<TItem, TAnswer>(
+        IReadOnlyList<TItem> items,
+        Func<TItem, CancellationToken, Task<TAnswer>> ask,
+        CancellationToken ct)
+    {
+        var answers = new TAnswer[items.Count];
+        var options = new ParallelOptions { MaxDegreeOfParallelism = StoresAtOnce, CancellationToken = ct };
+
+        await Parallel.ForEachAsync(Enumerable.Range(0, items.Count), options, async (index, token) =>
+            answers[index] = await ask(items[index], token).ConfigureAwait(false)).ConfigureAwait(false);
+
+        return answers;
     }
 
     /// <summary>

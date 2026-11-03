@@ -108,8 +108,9 @@ public sealed partial class ClaudeCodeCommandSnapshotProvider : TempMarkerProvid
         ISystemDirectories? system = null,
         ILiveTreeInspector? liveTrees = null,
         ClaudeCodeSessionRegistry? sessions = null,
-        IVolumeInventory? volumes = null)
-        : base(environment, runner, inspector, scanner, system, liveTrees, volumes)
+        IVolumeInventory? volumes = null,
+        TempFolderListings? listings = null)
+        : base(environment, runner, inspector, scanner, system, liveTrees, volumes, listings)
     {
         _sessions = sessions ?? new ClaudeCodeSessionRegistry(Environment, Inspector, Machine, Volumes);
     }

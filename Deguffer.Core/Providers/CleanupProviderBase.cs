@@ -182,7 +182,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         _reached.Clear();
     }
 
-    public PassHold HoldCaches() => Scanner.Hold();
+    public virtual PassHold HoldCaches() => Scanner.Hold();
 
     /// <summary>
     /// Nothing, for a provider that owns no directory whose unrecognised children must be
