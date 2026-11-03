@@ -66,6 +66,7 @@ public class StepGrainTests
             "squirrel-superseded-versions",
             "steam-library-artwork",
             "steam-shader-cache",
+            "stm32cube-firmware-zips",
             "tox-environments",
             "typescript-typings",
             "unity-library",

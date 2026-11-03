@@ -2032,6 +2032,116 @@ connections where that is a real cost.
 
 ---
 
+## STM32Cube firmware package downloads
+
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
+acknowledgement. Each zip is an item that can be kept.
+
+| | |
+| --- | --- |
+| **Location** | The zips in `%USERPROFILE%\STM32Cube\Repository`, and in the repository STM32CubeMX's **Help > Updater Settings** names |
+| **Method** | Delete each zip whose package is unpacked beside it, only while STM32CubeMX and STM32CubeIDE are closed |
+| **Typical size** | Not measured: neither tool was on the machine this was researched on. One user reported that removing the zips cut a repository of over 40 GB to about a third |
+
+### What it is
+
+STM32CubeMX and STM32CubeIDE download each STM32 firmware package as a zip into a local repository,
+unpack it into a folder beside the zip, and keep both:
+
+```
+%USERPROFILE%\STM32Cube\Repository\
+    stm32cube_fw_f4_v1270.zip          (the download)
+    STM32Cube_FW_F4_V1.27.0\           (the package your projects use)
+    Packs\                             (packs from ST and other vendors)
+```
+
+The updater names a download after its package: the folder's name in lower case, with its dots
+removed. STM32CubeIDE's log records it downloading and unpacking `stm32cube_fw_l4_v1180.zip` and then
+the patch `stm32cube_fw_l4_v1181.zip`. ST's staff tell users who download a package from ST's website
+to rename it the same way before they put it in the repository. The package's own `package.xml`, not
+the zip's name, says which package and version it is.
+
+### What Deguffer does
+
+**It deletes a zip only where three things agree.** The zip is named as the updater names a
+download, such as `stm32cube_fw_f4_v1270.zip`. The package folder with that name,
+`STM32Cube_FW_F4_V1.27.0`, is beside it with its `package.xml`. And the zip, read from its directory
+without unpacking it, holds that one folder and nothing else. Deguffer never turns the name back into
+a version, because `v1115` reads as 1.11.5 and as 1.1.15. A zip that fails any check stays, and the
+plan says why.
+
+**The repository STM32CubeMX names is followed.** Its Updater Settings are saved as the
+`RepositoryPath` line of `%USERPROFILE%\.stm32cubemx\plugins\updater\updater.ini`, as an open-source
+tool that reads the file parses it. No copy of the file has been seen, so a value written in Java's
+escaped form, `C\:\\Users\\...`, is read as well as a plain path, and a value in double quotes as well
+as a bare one. Deguffer refuses the folder
+if it is not a full path, a drive root, one of your own folders such as Documents, or a folder that
+holds a temporary folder. It leaves a repository that is not on a disk in this computer alone,
+because another computer may be installing a patch from it.
+
+**A repository only STM32CubeIDE was told to use is not found.** STM32CubeIDE keeps its own copy of
+the setting in each workspace, and nothing outside a workspace lists the workspaces. Such a
+repository is not reclaimed, and nothing in it is touched.
+
+**While STM32CubeMX or STM32CubeIDE is running, the zips are left alone.** Either can be downloading,
+unpacking or patching in the repository, and a patch reads its base zip. So the plan leaves them
+alone, Explore refuses them, and the question is asked again when you press Clean. Both process
+names are published names, not checked against an installation. STM32CubeMX started with
+`java -jar` runs as Java, and is not seen.
+
+**§5.1 has nothing to prefer.** Neither tool has a command that removes a download and keeps its
+package.
+
+### What is protected
+
+| Neighbour | What it really is |
+| --- | --- |
+| The repository | Never a target. Only the zips inside it go |
+| `STM32Cube_FW_*` package folders | The packages your projects use and build against. Tier 4 |
+| A zip with no package beside it | STM32CubeMX may still need it to install that package |
+| A zip that holds anything but its package, or that could not be read | Nothing shows that it is the package's download |
+| A zip from ST's website, such as `en.stm32cubef4_v1-27-0.zip` | Not named as the updater names a download, so it was put there by hand |
+| `Packs` | Packs from ST and other vendors, such as X-CUBE-AI |
+| Anything else in the repository | Not classified, so Tier 4 |
+
+Explore enforces the same rule: in the repository it allows only the zips the plan offers, and none
+of them while either tool runs. Deguffer also refuses to look through a link.
+
+### What it costs you
+
+**The next patch needs the base package's zip again.** Your projects and the packages they use are
+untouched. STM32CubeIDE was seen unpacking a package's zip again before it applied a patch to it, so
+after a clean the next patch needs that zip back. No source says outright that the tools then
+download it again, though that is the expected result. Installing a patch offline fails until you put the zip back in
+the repository, so keep the zip of any package you patch offline.
+
+### Why Tier 2
+
+The issue that proposed this row said Tier 1, on the strength of an answer on ST's community: "You
+should not need the ZIP files once they have been installed/unzipped". That is true of using a
+package, and not of patching one. STM32CubeIDE's log shows it unpacking a base zip it already held,
+with no download, before it applied the patch, and ST's staff describe the offline patch install as
+putting the base zip in the repository first. Getting the zip back costs a download, or an offline
+patch install that fails until the zip is put back, which is Tier 2's consequence.
+
+Sources:
+
+- Removing the zips, and the size it saved:
+  <https://community.st.com/t5/stm32cubemx-mcus/uncluttering-the-repository/m-p/634809>
+- The version in `package.xml`, and unpacking a package into the repository by hand:
+  <https://community.st.com/t5/stm32cubemx-mcus/how-to-install-stm32cube-fw-f4-v1-27-0/m-p/51004>
+- Renaming a download to `stm32cube_fw_f4_v1270.zip`, and installing a patch offline:
+  <https://community.st.com/t5/stm32cubemx-mcus/how-do-i-install-stm32cube-mcu-package-for-stm32f4-series-1-27-1/td-p/90365>
+  and <https://community.st.com/t5/stm32cubemx-mcus/how-to-install-a-patch-offline-in-the-stm32cube-ide/td-p/116004>
+- STM32CubeIDE unpacking a base zip again before a patch, in a log committed to a public project:
+  <https://github.com/jwachlin/Nanosleeper/blob/main/.metadata/.ide.log-2025-05-18.log>
+- The `RepositoryPath` line of `updater.ini`, as an open-source tool reads it:
+  <https://github.com/BakeSheep/EmberProbe-MCU-Flash-Debug/blob/5c982e622cafa92257acce41773cc9ff902e74f1/src/services/cubemxFirmware.js>
+- STM32CubeIDE's own repository setting, stored per workspace:
+  <https://github.com/kolod/st-link-loaders>
+
+---
+
 ## GPU shader caches
 
 **Tier 1 — regenerable cache.** Pre-selected.

@@ -38,7 +38,7 @@ largest files inside it:
 
 Besides Settings and About, Deguffer has six pages:
 
-- [Storage](#storage) checks 118 sources of waste, from package-manager and browser caches to
+- [Storage](#storage) checks 119 sources of waste, from package-manager and browser caches to
   `Windows.old` and old restore points, and puts each one in a [safety tier](#safety-tiers). You
   choose what goes, and when the clean has finished Deguffer checks that everything it said it would
   leave alone is still there.
@@ -125,7 +125,7 @@ remove one by any route.
 
 ## Storage
 
-Each of the 118 sources has its own provider, which knows what that location is and what sits next
+Each of the 119 sources has its own provider, which knows what that location is and what sits next
 to it. Rows for tools you do not have are hidden unless you ask the Storage page to show them. Build
 output and project caches, such as `node_modules`, `obj`, Rust's `target`, Python's `.tox` and
 `.pytest_cache` folders, and the caches in Visual Studio's `.vs` folders, are only looked for
@@ -212,6 +212,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | Chromium offline site storage | What sites' service workers stored so that they work offline, in the same browsers and applications as the Chromium caches row; a web application that worked offline will not do so again until it is next opened online |
 | vcpkg build caches | Researched |
 | PlatformIO cache and unused packages | PlatformIO's own prune decides which installed packages are no longer needed |
+| STM32Cube firmware package downloads | The zip of each STM32 firmware package that STM32CubeMX or STM32CubeIDE has already unpacked beside it, in the default repository and the one STM32CubeMX's Updater Settings name, one zip at a time; never a package folder, `Packs`, a zip whose package is not there, a repository on another computer's disk, or anything while either tool is running. The next patch to that package needs the zip again, which is expected to mean downloading it. Researched |
 | Affinity machine-learning models | The `modelcache` next to your asset library, never the version folder that contains both |
 | DaVinci Resolve render cache | Each project's render files in a `CacheClip` folder at the root of a drive or in your Videos folder; never optimised media, proxies, backups or recordings, and nothing while Resolve is running. Resolve renders them again only while your media is connected. Researched |
 | After Effects disk cache | Each version's cache named for this computer, only in the folder that After Effects' own preferences name; never anything next to it or above it, and nothing while After Effects is running. After Effects renders the frames again as you preview. Researched |
