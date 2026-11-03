@@ -144,8 +144,9 @@ public sealed partial class TempToolCacheProvider : TempMarkerProviderBase
         ISystemDirectories? system = null,
         ILiveTreeInspector? liveTrees = null,
         INamedMutexes? mutexes = null,
-        IVolumeInventory? volumes = null)
-        : base(environment, runner, inspector, scanner, system, liveTrees, volumes)
+        IVolumeInventory? volumes = null,
+        TempFolderListings? listings = null)
+        : base(environment, runner, inspector, scanner, system, liveTrees, volumes, listings)
     {
         _mutexes = mutexes ?? NamedMutexes.Default;
 

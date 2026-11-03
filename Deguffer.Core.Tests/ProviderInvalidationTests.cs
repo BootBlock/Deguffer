@@ -304,6 +304,7 @@ public sealed class ProviderInvalidationTests : IDisposable
             ? new SymbolStoreDiscovery(_environment, new FakeSystemDirectories(_temp.Path), _volumes)
         : parameter == typeof(ChromiumUserDataDiscovery) ? new ChromiumUserDataDiscovery(_environment)
         : parameter == typeof(RowDeclarations) ? new RowDeclarations()
+        : parameter == typeof(TempFolderListings) ? new TempFolderListings()
         : parameter == typeof(RetroArchDiscovery)
             ? new RetroArchDiscovery(_environment, system: new FakeSystemDirectories(_temp.Path), volumes: _volumes)
         : parameter == typeof(ClaudeCodeSessionRegistry)
