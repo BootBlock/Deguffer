@@ -5556,8 +5556,9 @@ the prune would remove now.
 A `VAGRANT_HOME` that puts the home at your profile, a drive's root or another folder Deguffer never
 treats as one tool's is left alone: Vagrant is not run, and nothing in it is offered. Deguffer
 reads `VAGRANT_HOME` as the prune it starts sees it, which is its value when Deguffer started, so a
-change made since applies to the prune once Deguffer is started again. Explore refuses everything in
-the home the variable names now as well, because a Vagrant you start yourself would use it. Vagrant is
+change made since applies to the prune once Deguffer is started again. Explore protects the home the
+variable names now in the same way as the one the prune uses, because a Vagrant you start yourself
+would use it. Vagrant is
 never started for a home with no `boxes` folder, because every Vagrant command creates its home.
 Running Vagrant loads the Vagrantfile in its home and any Vagrantfile in the folder Deguffer runs
 tools in or above it, such as your profile. It also contacts HashiCorp unless
