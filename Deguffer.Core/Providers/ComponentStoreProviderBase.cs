@@ -20,6 +20,11 @@ namespace Deguffer.Core.Providers;
 /// the shared files once and says what is overhead, and the run asks it again before and after the
 /// command, so the reclaim is Windows' own before-and-after pair.</para>
 ///
+/// <para><b>Not offered again where it has nothing left to do.</b> DISM's analysis goes on
+/// recommending a cleanup that keeps every byte, on a Windows whose checkpoint update it counts as
+/// reclaimable. A row whose command Deguffer ran to its end on the store as it is now is clear, from
+/// <see cref="ComponentStoreSettlement"/>, rather than offering the same gigabytes at every scan.</para>
+///
 /// <para><b>Held while Windows is updating</b>, at planning and again when the run reaches it: DISM
 /// servicing the store while the servicing stack is busy, or while a restart is owed, is the one time
 /// it can leave the store inconsistent.</para>
@@ -27,6 +32,7 @@ namespace Deguffer.Core.Providers;
 public abstract class ComponentStoreProviderBase : CleanupProviderBase
 {
     private readonly ComponentStoreAnalysis _analysis;
+    private readonly ComponentStoreSettlement _settlement;
     private readonly OwnServicingCalls _servicingCalls;
     private readonly string _store;
     private readonly string _packages;
@@ -40,7 +46,8 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
         IWindowsServicing? servicing,
         ComponentStoreAnalysis? analysis,
         IDirectoryScanner? scanner,
-        OwnServicingCalls? servicingCalls)
+        OwnServicingCalls? servicingCalls,
+        ComponentStoreSettlement? settlement)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
@@ -51,6 +58,7 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
         system ??= SystemDirectories.Current;
         _servicingCalls = servicingCalls ?? OwnServicingCalls.Current;
         _analysis = analysis ?? new ComponentStoreAnalysis(system, Runner, _servicingCalls);
+        _settlement = settlement ?? new ComponentStoreSettlement(Environment);
         _windows = system.WindowsDirectory;
         _store = Path.Combine(_windows, "WinSxS");
         _packages = Path.Combine(_windows, "servicing", "Packages");
@@ -63,6 +71,9 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
     public static readonly ReclaimPool Overhead = new("windows-component-store");
 
     public override StepGrain Grain => StepGrain.Parts;
+
+    /// <summary>Which of Windows' cleanups the row runs.</summary>
+    protected abstract ComponentStoreCommand Command { get; }
 
     /// <summary>What DISM is told to do, after <c>/Online /English</c>.</summary>
     protected abstract string CleanupArguments { get; }
@@ -126,6 +137,12 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
             return clear with { Notes = [.. clear.Notes, analysed] };
         }
 
+        if (_settlement.HasSettled(Command, report.State))
+        {
+            var settled = EmptyPlan(Settled(report));
+            return settled with { Notes = [.. settled.Notes, analysed] };
+        }
+
         return new CleanupPlan
         {
             ProviderId = Id,
@@ -142,7 +159,7 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
                     // counts switched-off features no cleanup removes. The reclaim is measured, not taken
                     // from this.
                     Estimated = ScanSize.Ceiling(report.Overhead),
-                    MeasuredBy = _analysis,
+                    MeasuredBy = new ComponentStoreMeasurement(_analysis, _settlement, Command),
                     SharesReclaim = Overhead,
                     RequiresElevation = true,
                     HeldWhileUpdating = true,
@@ -173,6 +190,21 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
             ],
         };
     }
+
+    /// <summary>
+    /// Why a store Windows still calls worth cleaning is clear: Deguffer ran this command to its end, and
+    /// DISM's figures have not moved since.
+    /// </summary>
+    private static string Settled(ComponentStoreReport report) =>
+        "Windows' cleanup already ran to its end on this component store, and the store is exactly as it "
+        + "left it, so running it again would free nothing. What is left is what Windows keeps: the "
+        + "components its later updates are built on, and the features it can switch on without a download."
+        + (report.ReclaimablePackages > 0
+            ? $" Windows still counts {report.ReclaimablePackages} superseded "
+              + $"{(report.ReclaimablePackages == 1 ? "package" : "packages")} it could remove, and its cleanup keeps "
+              + (report.ReclaimablePackages == 1 ? "it." : "them.")
+            : string.Empty)
+        + " It is offered again once the store changes, as it does when Windows installs an update.";
 
     /// <summary>
     /// Microsoft's own arithmetic, which is the answer to the question the store's size in Explorer

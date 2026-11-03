@@ -28,5 +28,24 @@ public interface IToolMeasurement
     /// machine at the moment of the call, never from anything the planning pass remembered, because the
     /// answer is subtracted from a figure taken before the command ran.
     /// </summary>
-    Task<long?> MeasureAsync(CancellationToken ct);
+    /// <param name="when">
+    /// Where the command is: about to run, or finished and how. Most tools answer alike either way.
+    /// The component store's measurement is the exception: what Windows' cleanup left is the evidence
+    /// that running it again on the same store frees nothing.
+    /// </param>
+    /// <param name="ct">Ends the measurement.</param>
+    Task<long?> MeasureAsync(MeasuredWhen when, CancellationToken ct);
+}
+
+/// <summary>Where a command is when the run asks its tool for a figure.</summary>
+public enum MeasuredWhen
+{
+    /// <summary>Immediately before the command runs.</summary>
+    BeforeCommand,
+
+    /// <summary>After the command ran to its end and reported success.</summary>
+    AfterCommandSucceeded,
+
+    /// <summary>After the command ran to its end and reported a failure.</summary>
+    AfterCommandFailed,
 }
