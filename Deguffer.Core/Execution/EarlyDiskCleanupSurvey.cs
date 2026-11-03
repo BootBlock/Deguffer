@@ -62,6 +62,11 @@ internal sealed class EarlyDiskCleanupSurvey
     /// <summary>
     /// Stops the handler where it is still measuring, and waits for it to return. Does nothing where
     /// the answer was already taken.
+    ///
+    /// <para><b>What the handler threw is not the plan's failure.</b> The plan discards the question
+    /// because it does not need the answer, and that plan never asked before the survey started
+    /// early, so a handler that fails to load or to measure must not replace it. The clean that runs
+    /// the handler meets the same failure, where it is the clean's to report.</para>
     /// </summary>
     public async Task DiscardAsync()
     {
@@ -74,11 +79,7 @@ internal sealed class EarlyDiskCleanupSurvey
 
         try
         {
-            await _answer.ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            // Cancelled before the handler was loaded, which is the quickest way to stop it.
+            await ((Task)_answer).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
         }
         finally
         {

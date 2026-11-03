@@ -124,6 +124,20 @@ public sealed class FakeDiskCleanupHandlers : IDiskCleanupHandlers
             },
         };
 
+    /// <summary>
+    /// Handlers that measure until told to stop and then throw <paramref name="failure"/>, as the real
+    /// host rethrows what failed on the handler's thread: a class that is not the interface Windows
+    /// registers it as, or a COM call that fails.
+    /// </summary>
+    public static FakeDiskCleanupHandlers FailingOnceStopped(Exception failure) => new(Windows()._behaviour)
+    {
+        Answer = (_, ct) =>
+        {
+            ct.WaitHandle.WaitOne();
+            throw failure;
+        },
+    };
+
     private readonly Lock _surveys = new();
     private readonly TaskCompletionSource _surveyStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _surveyReturned = new(TaskCreationOptions.RunContinuationsAsynchronously);

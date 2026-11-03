@@ -366,6 +366,44 @@ public sealed class DriverStoreProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A pass that found the row present and ended before planning it, as a cancelled preview does:
+    /// the next pass's invalidation stops the survey that pass started rather than leaving Windows'
+    /// cleanup measuring beside whatever runs next.
+    /// </summary>
+    [Fact]
+    public async Task InvalidationStopsASurveyNoPlanTook()
+    {
+        var handlers = StillMeasuring();
+        var provider = CreateProvider(
+            ListedWhileMeasuring(handlers, new DriverStoreListing([Staged("oem1.inf", "2022-01-01"), Staged("oem2.inf", "2024-01-01")])),
+            handlers);
+        Assert.True(await provider.IsPresentAsync().WaitAsync(Hung));
+
+        provider.InvalidateCaches();
+
+        await handlers.SurveyReturned.WaitAsync(Hung);
+        Assert.Equal([(DriverStoreProvider.Handler, true)], handlers.Returned);
+    }
+
+    /// <summary>
+    /// Windows' cleanup failing to load or to measure is no reason to lose a plan that did not need its
+    /// answer: before the survey started early, these plans never asked, and the failure would take
+    /// the whole preview with it.
+    /// </summary>
+    [Fact]
+    public async Task AHandlerThatFailsDoesNotFailAPlanThatDidNotNeedItsAnswer()
+    {
+        var older = Staged("oem1.inf", "2022-01-01", inUse: true);
+        var handlers = FakeDiskCleanupHandlers.FailingOnceStopped(new InvalidCastException("Not an IEmptyVolumeCache."));
+        var provider = CreateProvider(ListedWhileMeasuring(handlers, new DriverStoreListing([older, Staged("oem2.inf", "2024-01-01")])), handlers);
+
+        var plan = await provider.PlanAsync().WaitAsync(Hung);
+
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(older.Folder, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// An update that starts after the survey did still holds every package back, and the survey's
     /// answer is not read: the gate decides over the answer's use, not over whether it was asked.
     /// </summary>

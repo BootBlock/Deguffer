@@ -63,6 +63,29 @@ public sealed class EarlyDiskCleanupSurveyTests : IDisposable
     }
 
     [Fact]
+    public async Task DiscardingDoesNotThrowWhatTheHandlerThrew()
+    {
+        var handlers = FakeDiskCleanupHandlers.FailingOnceStopped(new InvalidCastException("Not an IEmptyVolumeCache."));
+        var survey = new EarlyDiskCleanupSurvey(handlers, Handler, Volume, CancellationToken.None);
+        await handlers.SurveyStarted.WaitAsync(Hung);
+
+        await survey.DiscardAsync().WaitAsync(Hung);
+    }
+
+    [Fact]
+    public async Task TakingThrowsWhatTheHandlerThrew()
+    {
+        var handlers = FakeDiskCleanupHandlers.FailingOnceStopped(new InvalidCastException("Not an IEmptyVolumeCache."));
+        using var pass = new CancellationTokenSource();
+        var survey = new EarlyDiskCleanupSurvey(handlers, Handler, Volume, pass.Token);
+        await handlers.SurveyStarted.WaitAsync(Hung);
+
+        await pass.CancelAsync();
+
+        await Assert.ThrowsAsync<InvalidCastException>(() => survey.TakeAsync().WaitAsync(Hung));
+    }
+
+    [Fact]
     public async Task DiscardingAnAnswerAlreadyTakenDoesNothing()
     {
         var handlers = FakeDiskCleanupHandlers.FindingNothing();
