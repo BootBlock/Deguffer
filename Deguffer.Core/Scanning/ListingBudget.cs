@@ -246,8 +246,8 @@ internal sealed class ListingBudget
         public static Waiter OfThisThread => s_ofThisThread ??= new Waiter();
 
         // No spin before blocking. A waiter is held back because the volume's slots are taken, and
-        // a dozen waiters spinning take the cores those listings run on: eight walks of one volume
-        // ran slower, and on more processor time, with the default spin.
+        // waiters spinning take the cores those listings run on: eight walks of sixteen threads on one
+        // volume ran slower, and on more processor time, with the default spin.
         public ManualResetEventSlim Handed { get; } = new(false, spinCount: 0);
 
         public int Limit { get; set; }
