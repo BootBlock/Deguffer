@@ -918,7 +918,9 @@ Not a schedule: cost against value, given the machinery that exists.
 5. **Superseded JetBrains system directories** and **Vagrant `prune`**.
 6. **Electron, electron-builder, TypeScript, Yarn 1, Scoop, Conan, Bun, Deno** — one class each.
 7. **The `CACHEDIR.TAG` table** and **`.dart_tool`**.
-8. **Lightroom previews**, once its Adobe pages are read and a catalog is available to test against.
+8. **Lightroom previews**, once its Adobe pages are read and a catalog is available to test against,
+   and **the ON1 browse cache**, once an installation shows where a moved cache is recorded and
+   whether the cache holds metadata kept nowhere else.
 9. **The Search index**, once `Reset` is measured.
 
 ## Open questions this survey raises
