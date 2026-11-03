@@ -25,8 +25,9 @@ public sealed class ComponentStoreCleanupProvider(
     IWindowsServicing? servicing = null,
     ComponentStoreAnalysis? analysis = null,
     IDirectoryScanner? scanner = null,
-    OwnServicingCalls? servicingCalls = null)
-    : ComponentStoreProviderBase(environment, runner, inspector, system, servicing, analysis, scanner, servicingCalls)
+    OwnServicingCalls? servicingCalls = null,
+    ComponentStoreSettlement? settlement = null)
+    : ComponentStoreProviderBase(environment, runner, inspector, system, servicing, analysis, scanner, servicingCalls, settlement)
 {
     public override string Id => "component-store";
 
@@ -53,6 +54,8 @@ public sealed class ComponentStoreCleanupProvider(
             + "no longer needed. Deguffer never deletes from the store, which Microsoft warns can stop Windows "
             + "starting or updating.",
     };
+
+    protected override ComponentStoreCommand Command => ComponentStoreCommand.Cleanup;
 
     protected override string CleanupArguments => "/StartComponentCleanup";
 

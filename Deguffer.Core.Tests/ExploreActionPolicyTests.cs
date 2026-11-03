@@ -1580,6 +1580,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData("uv", "tools")]                              // what 'uv tool install' put there
     [InlineData("pip", "pip.ini")]                           // private index URLs
     [InlineData("poetry", "virtualenvs")]                    // every environment on the machine
+    [InlineData("pipenv", "pkgs")]                           // the download destination pipenv names to pip
     [InlineData("go", "src")]                                // the user's own code
     [InlineData("zig", "p")]                                 // packages, some the only copy
     [InlineData("ccache", "ccache.conf")]                    // the size limit and compiler settings
@@ -1618,6 +1619,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         ["uv", "cache"],
         ["pip", "Cache"],
         ["poetry", "artifacts"],
+        ["pipenv", "pipenv-manifests"],
         ["go", @"pkg\mod"],
         ["zig", "h"],
         ["ccache", "0"],
@@ -1784,6 +1786,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         new UvCacheProvider(_environment),
         new PipCacheProvider(_environment),
         new PoetryCacheProvider(_environment),
+        new PipenvCacheProvider(_environment),
         new GoCacheProvider(_environment),
         new ZigCacheProvider(_environment),
         new CcacheProvider(_environment),

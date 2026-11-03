@@ -38,7 +38,7 @@ largest files inside it:
 
 Besides Settings and About, Deguffer has six pages:
 
-- [Storage](#storage) checks 116 sources of waste, from package-manager and browser caches to
+- [Storage](#storage) checks 119 sources of waste, from package-manager and browser caches to
   `Windows.old` and old restore points, and puts each one in a [safety tier](#safety-tiers). You
   choose what goes, and when the clean has finished Deguffer checks that everything it said it would
   leave alone is still there.
@@ -125,7 +125,7 @@ remove one by any route.
 
 ## Storage
 
-Each of the 116 sources has its own provider, which knows what that location is and what sits next
+Each of the 119 sources has its own provider, which knows what that location is and what sits next
 to it. Rows for tools you do not have are hidden unless you ask the Storage page to show them. Build
 output and project caches, such as `node_modules`, `obj`, Rust's `target`, Python's `.tox` and
 `.pytest_cache` folders, and the caches in Visual Studio's `.vs` folders, are only looked for
@@ -158,6 +158,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | Deno cache | By path, never with `deno clean`, which also deletes what Deno programs saved and your REPL history; left alone while Deno is running. Researched |
 | Electron downloads | The runtime zips Electron's installer keeps, one folder per version; never the layouts older installers left next to them |
 | TypeScript typings cache | One folder per TypeScript version; never one that a running program is working in |
+| Nx shared task caches | The `cache` folder in each workspace's folder in `%USERPROFILE%\.nx`, only where Nx's own `terminalOutputs` folder is inside and the Nx that reads its index is 23.3 or later; never the index, `.nx` itself, or a cache whose index Nx has open. Researched |
 | ccache compiler cache | Cleared with `ccache --clear`, which keeps its settings. Researched |
 | sccache compiler cache | sccache's server is stopped first; never its settings. Researched |
 | Debugger symbol cache | The symbol files and programs that debuggers downloaded into a store that only Microsoft's public symbol servers fill, as `_NT_SYMBOL_PATH` names it; never the store's markers or anything else in it, a store that SymStore built, or anything while a debugger that writes to the store is running |
@@ -165,10 +166,12 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | pip package cache | |
 | uv package cache | |
 | Poetry package cache | `poetry cache clear` for each repository; never its `virtualenvs`. Researched |
+| pipenv package cache | `pip cache purge` pointed at pipenv's own cache for the part in pip's format, and pipenv's resolver cache by path; never `pipenv --clear`, which also deletes pip's whole cache, or anything else in the folder. Researched |
 | pre-commit hook environments | Cleared with `pre-commit gc`, which keeps the hooks a project still uses; never `pre-commit clean`, which also deletes the unstaged changes pre-commit stashed during a commit. Researched |
 | pytest caches | `.pytest_cache` folders under your own source folders, only where pytest's own cache tag is inside and a pytest settings file is next to it. Researched |
 | mypy caches | `.mypy_cache` folders under your own source folders, only where mypy's own cache tag is inside and a mypy settings file is next to it. Researched |
 | ruff caches | `.ruff_cache` folders under your own source folders, only where ruff's own cache tag and `.gitignore` are inside and a ruff settings file is next to it. Researched |
+| Nx workspace task caches | `.nx\cache` beside an `nx.json` under your own source folders, only where Nx's own `terminalOutputs` folder is inside and the Nx that reads its index is 23.3 or later; never the rest of `.nx`, and nothing while Nx is running in the workspace. Researched |
 | .NET intermediate build output | `obj` folders under your own source folders |
 | Visual Studio solution caches | Inside the `.vs` folder beside a solution under your own source folders: the design-time build and project evaluation caches, the Find in Files index, and the C++ browsing database and precompiled headers, each only where the files inside it are the ones Visual Studio writes; never Copilot conversations or snapshots, solution options or window layouts, and nothing while the solution is open |
 | Dart analysis server cache | |
@@ -246,7 +249,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | Previous Windows installation | `Windows.old` and Setup's leftovers, removed by Windows' own Disk Cleanup handlers once the upgrade can no longer be undone and no update is unfinished |
 | Leftover Windows update folders | `$WinREAgent` and `$GetCurrent`, which Microsoft does not document. They are offered on Deguffer's own stated judgement, as a whole, once nothing inside has changed for 30 days |
 | Superseded driver packages | Older versions of drivers in Windows' driver store, removed by Windows' own Disk Cleanup handler; never the newest version of a driver, one that a device is using, or one that is part of Windows |
-| Superseded Windows components | The component store (`WinSxS`), reduced by `DISM /StartComponentCleanup` as administrator and sized by DISM's own analysis, which counts what the store shares with Windows only once; nothing is ever deleted from the store |
+| Superseded Windows components | The component store (`WinSxS`), reduced by `DISM /StartComponentCleanup` as administrator and sized by DISM's own analysis, which counts what the store shares with Windows only once; nothing is ever deleted from the store, and the row is clear once the cleanup has run to its end on the store as it is now |
 | Local copies of cloud files | OneDrive's own "free up space": every file stays listed and opens while you are online. Files you keep on this device, and files with changes not yet uploaded, stay as they are |
 </details>
 

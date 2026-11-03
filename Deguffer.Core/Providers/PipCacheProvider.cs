@@ -22,12 +22,6 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 public sealed class PipCacheProvider : CleanupProviderBase
 {
-    /// <summary>
-    /// The commands pip may be installed as. Order matters only in that the first one found wins;
-    /// both spellings drive the same pip, and asking either for its cache directory is equivalent.
-    /// </summary>
-    private static readonly string[] CommandNames = ["pip", "pip3"];
-
     private readonly PassMemo<Task<AskedLocation>> _resolvedCacheDirectory = new();
 
     public PipCacheProvider(
@@ -209,18 +203,7 @@ public sealed class PipCacheProvider : CleanupProviderBase
             (Path.Combine(Environment.RoamingAppData, "pip", "pip.ini"), "Roaming pip configuration, which may hold private index URLs and credentials."));
     }
 
-    private string? FindPip()
-    {
-        foreach (var name in CommandNames)
-        {
-            if (Environment.FindExecutable(name) is { } found)
-            {
-                return found;
-            }
-        }
-
-        return null;
-    }
+    private string? FindPip() => PipCommand.Find(Environment);
 
     private Task<AskedLocation> ResolveCacheDirectoryAsync(string pip, CancellationToken ct) =>
         _resolvedCacheDirectory.Get(() => AskCacheDirectoryAsync(pip, ct));

@@ -445,6 +445,7 @@ are expired only by `clear-cache --gc`.
 | Current-version JetBrains `caches`, `index`, `log`, `tmp` | Build later | 1 | About 160 MB per version |
 | Terraform `.terraform\providers` | Build later | 2 | Absent |
 | `.next\cache`, `.angular\cache`, `.turbo\cache`, `.parcel-cache` | Build later | 1 | Absent |
+| Nx `.nx\cache` and `~\.nx\<id>\cache` | ✅ **Built** ([#429](https://github.com/BootBlock/Deguffer/issues/429)), see [cache-locations.md](../cache-locations.md#nx-task-caches) | 1 | Absent |
 | Zig per-project `.zig-cache` | Build later | 1 | One |
 | CMake build trees | Build later | 2 | Absent |
 | `__pycache__`, Visual Studio `ComponentModelCache`, ReSharper caches, Gradle `build`, Maven `target`, Bazel `bazel-*`, `.idea` | Reject | — | — |

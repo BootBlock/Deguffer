@@ -34,16 +34,25 @@ namespace Deguffer.Core.Execution;
 /// followed through a link, for the reason the removal walk gives: what is on the far side belongs to
 /// wherever the link points. A file is asked about whatever mark it carries, as the removal walk asks
 /// it.</para>
+///
+/// <para><b>A link inside is named, because a tool may follow one.</b> Deguffer's own removals and
+/// Windows' take a link and nothing behind it. A tool's own command is not Deguffer's walk: pip's
+/// <c>cache purge</c> lists its folders with Python's <c>os.walk</c>, which enters a junction, and
+/// deletes the files on the far side. So a command is not run over a tree that holds a link
+/// (<see cref="WhyNotThroughLinks"/>), whatever the tool. The removals Deguffer or Windows carry out
+/// do not ask.</para>
 /// </summary>
 /// <param name="Stores">Every Outlook data file found, in display form.</param>
 /// <param name="Recent">Whether anything inside changed within the guard, where one is on.</param>
 /// <param name="Unlisted">Every folder Windows would not list, in display form.</param>
 /// <param name="NotFolders">Every path listed as a folder where something else now stands, in display form.</param>
+/// <param name="Links">Every link to a folder found inside the trees, in display form. None is followed.</param>
 public sealed record WholeTreeLook(
     IReadOnlyList<string> Stores,
     bool Recent,
     IReadOnlyList<string> Unlisted,
-    IReadOnlyList<string> NotFolders)
+    IReadOnlyList<string> NotFolders,
+    IReadOnlyList<string> Links)
 {
     /// <summary>
     /// Look inside every one of <paramref name="paths"/> now, off the calling thread: the trees can
@@ -72,6 +81,7 @@ public sealed record WholeTreeLook(
         var stores = new ConcurrentQueue<string>();
         var unlisted = new ConcurrentQueue<string>();
         var notFolders = new ConcurrentQueue<string>();
+        var links = new ConcurrentQueue<string>();
         var recent = 0;
 
         // On the walk every scan takes, which lists with several workers and never recurses: these are
@@ -110,6 +120,7 @@ public sealed record WholeTreeLook(
                 foreach (var link in contents.Links)
                 {
                     Notice(link);
+                    links.Enqueue(LongPath.Display(link.FullName));
                 }
 
                 foreach (var marked in contents.ReparseFiles)
@@ -133,7 +144,8 @@ public sealed record WholeTreeLook(
             InOneOrder(stores),
             Volatile.Read(ref recent) == 1,
             InOneOrder(unlisted),
-            InOneOrder(notFolders));
+            InOneOrder(notFolders),
+            InOneOrder(links));
 
         // Ordered before the duplicates go, so the spelling kept is the same however the work interleaved.
         static IReadOnlyList<string> InOneOrder(IEnumerable<string> paths) =>
@@ -181,4 +193,15 @@ public sealed record WholeTreeLook(
 
         _ => null,
     };
+
+    /// <summary>
+    /// Why a tool's own command must not run over these trees, written for the user, or null where
+    /// they hold no link. Apart from <see cref="WhyNot"/>, because only a command is in question: every
+    /// other removal this look stands in front of takes a link and nothing behind it.
+    /// </summary>
+    /// <param name="lead">What happened instead, which opens the sentence.</param>
+    public string? WhyNotThroughLinks(string lead) => Links.Count > 0
+        ? $"{lead}: {MailStorePlan.Name(Links)} inside is a link to somewhere else. The tool's own command "
+          + "may follow it and remove what is on the far side, and Deguffer never removes anything through a link."
+        : null;
 }

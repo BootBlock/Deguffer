@@ -64,8 +64,9 @@ public sealed class ContentMatchingTests
 
     /// <summary>
     /// A solid-state disk is read by several readers, up to the bound and no further. Each read is held
-    /// until the bound's worth are running, or long enough that they would have been, and then for a
-    /// while longer, in which a reader past the bound would have started too.
+    /// until the bound's worth are running, and then for a while longer, in which a reader past the
+    /// bound would have started too. A lane that never starts the bound's worth fails on its own
+    /// message, so a busy machine is never what decides how many readers are seen.
     /// </summary>
     [Fact]
     public async Task ASolidStateDiskIsReadByTheBoundAndNoMore()
@@ -76,6 +77,9 @@ public sealed class ContentMatchingTests
         await Matching(queries, reads.Read).MatchAsync(
             [Group(@"X:\", 1000, 3 * ReadingLanes.SolidStateReaders)], MatchCriteria.Content, ChecksumAlgorithm.XxHash128, _ => { }, null, default);
 
+        Assert.False(
+            reads.GatherTimedOut,
+            $"The lane had {reads.PeakAtGatherLimit} of its {ReadingLanes.SolidStateReaders} readers running at once after {HeldReads.GatherAtMost.TotalSeconds} s.");
         Assert.Equal(ReadingLanes.SolidStateReaders, reads.Peak);
     }
 
@@ -146,24 +150,35 @@ public sealed class ContentMatchingTests
     /// <summary>
     /// Reads that each take a while, counting how many ran at once at most. Where
     /// <paramref name="gather"/> is more than one, every read first waits until that many are
-    /// running, or long enough that they would have been, so how soon each reader's thread starts
-    /// never decides how many are seen at once.
+    /// running, or until <see cref="GatherAtMost"/> passes, which <see cref="GatherTimedOut"/> records
+    /// with the most seen at once by then, so how soon each reader's thread starts never decides how
+    /// many are seen at once.
     /// </summary>
     private sealed class HeldReads(TimeSpan hold, int gather = 1) : IDisposable
     {
-        private static readonly TimeSpan GatherAtMost = TimeSpan.FromSeconds(10);
+        public static readonly TimeSpan GatherAtMost = TimeSpan.FromSeconds(10);
 
         private readonly ManualResetEventSlim _gathered = new(initialState: false);
         private int _running;
         private int _peak;
         private int _count;
         private int _onThePool;
+        private bool _gatherTimedOut;
+        private int _peakAtGatherLimit;
 
         public int Peak => Volatile.Read(ref _peak);
 
         public int Count => Volatile.Read(ref _count);
 
         public int OnThePool => Volatile.Read(ref _onThePool);
+
+        public bool GatherTimedOut => Volatile.Read(ref _gatherTimedOut);
+
+        /// <summary>
+        /// The most reads running at once when the gather ran out of time. The reads it then lets go
+        /// can raise <see cref="Peak"/> after the limit, which a timed-out gather must not report.
+        /// </summary>
+        public int PeakAtGatherLimit => Volatile.Read(ref _peakAtGatherLimit);
 
         public void Dispose() => _gathered.Dispose();
 
@@ -184,8 +199,14 @@ public sealed class ContentMatchingTests
 
             // Once, for the first reads: the rest only need holding, and a lane read by fewer than
             // were asked for waits out the limit once rather than at every read.
-            if (running >= gather || !_gathered.Wait(GatherAtMost, ct))
+            if (running >= gather)
             {
+                _gathered.Set();
+            }
+            else if (!_gathered.Wait(GatherAtMost, ct))
+            {
+                Volatile.Write(ref _peakAtGatherLimit, Peak);
+                Volatile.Write(ref _gatherTimedOut, true);
                 _gathered.Set();
             }
 
