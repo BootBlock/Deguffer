@@ -58,6 +58,7 @@ public class StepGrainTests
             "nx-workspace-cache",
             "other-account-profiles",
             "playwright",
+            "pulumi-plugins",
             "puppeteer",
             "pytest-cache",
             "python-venv",

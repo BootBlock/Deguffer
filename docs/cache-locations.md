@@ -6368,6 +6368,72 @@ Getting a version back is a download of a whole disk image.
 
 ---
 
+## Pulumi plugin cache
+
+**Tier 1 — regenerable cache, researched.** Not pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `plugins` in `%USERPROFILE%\.pulumi`, unless `PULUMI_HOME` moves Pulumi's folder |
+| **Method** | `pulumi plugin rm <kind> <name> <version> --yes --non-interactive` for each plugin you choose; by path where Pulumi is not installed |
+| **Typical size** | A cloud provider's plugin is often hundreds of MB a version; three versions of the Kubernetes provider have been reported at 661 MB |
+
+### What it is
+
+Pulumi downloads a plugin for every provider and version a stack uses: resource providers such as
+AWS, Azure and Kubernetes, and language hosts, policy analyzers, converters and tools. Each is a
+folder named `<kind>-<name>-v<version>`, and Pulumi keeps every one, so each provider upgrade adds
+another beside the last.
+
+### What Deguffer does
+
+It lists each plugin as its own item, grouped by name, with its version and when Pulumi last
+started it. Each plugin you choose is removed by Pulumi's own `pulumi plugin rm`, told the plugin's
+exact kind, name and version, so a plugin you leave out is one no command names. `--yes` is part of
+the command, because Pulumi asks before it removes and Deguffer gives a tool nothing to answer with.
+Pulumi removes the folder and the `.lock` and `.lastused` files it keeps beside it.
+
+Where Pulumi is not installed, which is the commonest way to be left with this cache, Deguffer
+removes each plugin by path instead: its folder, whole or not at all, and then the two files beside
+it, which is all Pulumi's own remove does. A plugin whose folder or `.lastused` file changed within
+the guard on recently changed files is left alone whole, because a plugin missing some of its files
+is one Pulumi still lists and then fails to start.
+
+A folder is recognised only where its name is written exactly as Pulumi writes the plugins it
+installs. Pulumi reads a version leniently, so `v6.0` and `v6.0.0` are the same plugin to it, and
+its remove would take both. A plugin whose remove would also take another folder is left alone and
+named.
+
+Nothing is offered while `pulumi` is running, because a deployment may be about to start or install
+a plugin, and a plugin a program is running from is held back. Immediately before each remove runs,
+Deguffer asks both questions again, lists the cache again, and does not run the command if the
+cache has become a link or if another folder Pulumi reads as the same plugin has appeared.
+
+A `PULUMI_HOME` that puts Pulumi's folder at your profile, a drive's root or another folder Deguffer
+never treats as one tool's is left alone, and nothing in it is offered. Deguffer reads
+`PULUMI_HOME` as the command it starts sees it, and as a Pulumi you start next sees it where it
+removes by path. Running Pulumi may ask whether a newer version exists. A cancelled remove is left
+to finish.
+
+### What is protected
+
+Pulumi's folder and everything in it beside the plugin cache: `credentials.json`, the workspaces,
+templates, policy packs, the CLI in `bin`, and, for a stack kept in the local backend, its `stacks`,
+`history` and `backups`. In the cache, the cache itself, every plugin not chosen, a plugin Pulumi has
+not finished installing, an older Pulumi's `.tmp` extraction folders, and anything not named as
+Pulumi names its plugins. Explore refuses all of these, and the whole cache while Pulumi is running.
+
+### What it costs you
+
+The next Pulumi command that needs a removed plugin downloads and installs it again.
+
+### Why Tier 1
+
+Pulumi's documentation for its own remove: "If a deleted plugin is subsequently required to execute
+a Pulumi program, the Pulumi CLI will attempt to download and install it automatically."
+
+---
+
 ## Test browser profiles
 
 **Tier 1 — regenerable cache.** Pre-selected.
@@ -6825,6 +6891,70 @@ offline, a released file will not open until you reconnect.** Nothing is lost.
 §3's Tier 2 is "re-created only by re-downloading". That is exactly what opening a released file
 does, and offline it is a file you cannot open. So the row is not pre-selected, and is confirmed on
 its own.
+
+---
+
+## Dropbox cache
+
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+
+| | |
+| --- | --- |
+| **Location** | `.dropbox.cache` at the top of each Dropbox folder that `%APPDATA%\Dropbox\info.json` or `%LOCALAPPDATA%\Dropbox\info.json` records |
+| **Method** | Path deletion of everything inside the folder. The folder itself stays |
+| **Typical size** | Not measured: Dropbox was not installed on the machine this was written against. Normally small, and larger while the app cannot finish syncing |
+
+### What it is
+
+Dropbox describes `.dropbox.cache` as "a hidden folder that stores temporary files" and "a staging
+area for downloading and uploading files", and says "the cache folder is automatically cleared every
+three days". It is at the top of every Dropbox folder. A personal account and a business account
+connected on the same computer each have their own Dropbox folder, and each has its own cache.
+
+The three-day purge keeps the folder small. It grows when the app cannot finish syncing, and one
+user reports hundreds of gigabytes on a client in that state. That user report was not verified.
+
+Dropbox records each Dropbox folder in `info.json`, as the `path` of its `personal` and `business`
+entries, and documents the file in both `%APPDATA%\Dropbox` and `%LOCALAPPDATA%\Dropbox`.
+
+### What Deguffer does
+
+Deguffer reads both records and empties the cache of each Dropbox folder they name, once each
+however it is named. Dropbox has no command for this. Its own instructions are to quit the app
+fully, open the folder, and move the files in it to the Recycle Bin. Deguffer empties the same
+folder with the app closed, but it deletes the files rather than moving them to the Recycle Bin.
+
+A recorded folder is followed only where it may be a Dropbox folder: never the profile, a drive
+root, Documents or a folder holding a temporary folder, and never a value that is not a full path.
+Deguffer says which folder it left alone and why. A record that cannot be read is said, and is never
+read as Dropbox not being set up. A record that names a folder that is no longer there is passed
+over.
+
+While Dropbox (`Dropbox.exe`) is running, nothing is offered, because Dropbox stages its downloads
+and uploads in this folder and its own steps start with quitting it. The clean asks again before it
+empties each cache.
+
+### What is protected
+
+- **The `.dropbox.cache` folder itself.** Only what is inside it is removed.
+- **The Dropbox folder, and every entry beside the cache**: your files and folders, whatever
+  their names.
+- **Both `info.json` records.**
+- **A cache that is a link** to somewhere else, which is never looked through.
+
+After the clean, Deguffer checks that each of these is still there (§5.6). In Explore, what is
+inside a cache may be removed, and the cache itself may not.
+
+### What it costs you
+
+Dropbox downloads again anything it had staged here and still needs. Your files, your settings and
+your account are untouched.
+
+### Why Tier 2
+
+Dropbox calls the folder a staging area for uploads as well as downloads. With the app closed,
+emptying it should be safe, but nothing Dropbox publishes says that a staged upload is never the
+only copy of a change. So the row is not pre-selected, and is confirmed on its own.
 
 ---
 

@@ -160,7 +160,9 @@ meaningfully larger piece of UI than anything the shell does today.
 - **`workspaceStorage` must not be the first Tier 3 provider**, despite being the largest single
   number in the audit. §8's open question 2 — whether the `workspace.json` hash-to-path mapping is
   stable across editor versions — is unresolved, and the whole per-workspace UI depends on it.
-  Answer that before writing code. Android or PlatformIO are the safer first Tier 2 subjects.
+  Answer that before writing code. ~~Android or PlatformIO are the safer first Tier 2 subjects.~~
+  PlatformIO was the safer first Tier 2 subject. The Android SDK is declined
+  ([`_spec.md` §8 question 1](_spec.md#8-open-questions)).
 - **§3 exists because of this directory.** It looks like cache, sits in a path that suggests cache,
   and is mostly AI chat history. Nothing about its size or shape distinguishes it. Treat the tier
   model as the product, not the sizes.
@@ -191,6 +193,11 @@ meaningfully larger piece of UI than anything the shell does today.
   a coarser answer — so a provider still cannot say "this toolchain has been idle for two years" the
   way the map now shows it. Feeding the volume-wide dates back to the providers is the work that
   would close the question, and it needs the two pages to share a scan before it is worth doing.
+
+  **The Android SDK no longer needs that answer**
+  ([#237](https://github.com/BootBlock/Deguffer/issues/237)). It is declined, whether idle or not,
+  because its reclaim is almost all installed SDK components and its one true cache sits beside its
+  keys. `_spec.md` §8 question 1 records the decision.
 - **§8 question 4 — undo.** Still likely impossible at these sizes. If so, §7 should say so plainly
   rather than implying reversibility. ✅ **Answered** in §8 itself, in agreement with §7.1: a
   clean's confirmation says it cannot be undone, and only a removal from Explore sends anything to the
@@ -282,8 +289,9 @@ process, which Deguffer is not, so there is no correct interpretation available.
   keystore changes the debug signing identity and invalidates every API key registered against its
   fingerprint; losing `adbkey` revokes every device's trust; an AVD holds user data that cannot be
   re-downloaded at any price. A one-character slip in a name comparison there costs more than the
-  entire Android reclaim is worth, so the conservative shape is a standalone provider scoped to that
-  one path which never enumerates `.android` at all. `%LOCALAPPDATA%\Android`'s own regenerable
+  entire Android reclaim is worth, ~~so the conservative shape is a standalone provider scoped to that
+  one path which never enumerates `.android` at all~~ so no Android provider is built: `_spec.md`
+  §8 question 1 declines the Android SDK. `%LOCALAPPDATA%\Android`'s own regenerable
   children (`.temp`, `.downloadIntermediates`) were both empty at rest.
 - **The §6.3 long-path caveat below was confirmed, not merely suspected.** `LongPathsEnabled` is set
   on the machine that verified item 3, so the new long-path test in `PlatformIoCacheProviderTests`
