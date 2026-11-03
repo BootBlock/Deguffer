@@ -12,7 +12,7 @@ namespace Deguffer.Core.Tests;
 /// fewer processors took seconds to reach its count and every measurement of it was taken below the
 /// count it named.</para>
 ///
-/// <para>Neither test reads a clock. A deadline fails on a busy machine, whose threads can be runnable
+/// <para>No assertion depends on how soon the count is reached. A deadline fails on a busy machine, whose threads can be runnable
 /// and still not scheduled within it, and passes against a pool that other tests have already grown.
 /// The count is proven by holding every listing until the walk has its whole thread count in flight,
 /// and the threads by asking each listing where it runs. The only timeout guards against a hang.</para>
