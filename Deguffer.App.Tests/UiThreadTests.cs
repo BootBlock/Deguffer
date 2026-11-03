@@ -46,6 +46,50 @@ public class UiThreadTests
         Assert.Null(Record.Exception(() => captured!.Post(_ => { }, null)));
     }
 
+    /// <summary>
+    /// Waiting for a post ends on the continuation an answer finished elsewhere posts, and leaves it
+    /// unrun, so the test can act before that answer is told.
+    /// </summary>
+    [Fact]
+    public void WaitingForAPostEndsOnOneAndRunsNothing() => UiThread.Run(async () =>
+    {
+        using var release = new ManualResetEventSlim();
+        var answered = false;
+        var answering = Task.Run(() => release.Wait(TimeSpan.FromSeconds(30)));
+
+        var told = Told();
+
+        async Task Told()
+        {
+            await answering;
+            answered = true;
+        }
+
+        release.Set();
+
+        Assert.True(UiThread.WaitForPost(TimeSpan.FromSeconds(30)));
+        Assert.True(answering.IsCompleted);
+        Assert.False(answered);
+
+        await told;
+
+        Assert.True(answered);
+    });
+
+    /// <summary>
+    /// A post already waiting when the wait begins is not what it waits for, or a test would act
+    /// before the answer it means had been finished.
+    /// </summary>
+    [Fact]
+    public void WaitingForAPostIgnoresOneMadeBeforeIt() => UiThread.Run(() =>
+    {
+        SynchronizationContext.Current!.Post(_ => { }, null);
+
+        Assert.False(UiThread.WaitForPost(TimeSpan.FromMilliseconds(100)));
+
+        return Task.CompletedTask;
+    });
+
     [Fact]
     public void AFailureInTheBodyReachesTheTest()
     {

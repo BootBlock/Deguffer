@@ -34,10 +34,25 @@ public static class UiThread
         }
     }
 
+    /// <summary>
+    /// Hold this thread, without running anything posted to it, until something else posts to it, as
+    /// an answer finished on the thread pool does when the code awaiting it was on this thread. For a
+    /// test that has to act while such an answer is finished and still waiting to be told.
+    /// </summary>
+    /// <returns>False if nothing was posted within <paramref name="timeout"/>.</returns>
+    public static bool WaitForPost(TimeSpan timeout) =>
+        SynchronizationContext.Current is SingleThreadContext context
+            ? context.WaitForPost(timeout)
+            : throw new InvalidOperationException("Only a body running inside UiThread.Run has a thread to post to.");
+
     private sealed class SingleThreadContext : SynchronizationContext, IDisposable
     {
         private readonly BlockingCollection<(SendOrPostCallback Callback, object? State)> _queue = [];
         private readonly Lock _gate = new();
+
+        // Set by each post, and reset under the gate when a wait starts, so a wait is ended only by a
+        // post made after it began.
+        private readonly ManualResetEventSlim _posted = new();
         private bool _closed;
 
         /// <summary>
@@ -53,8 +68,19 @@ public static class UiThread
                 if (!_closed)
                 {
                     _queue.Add((d, state));
+                    _posted.Set();
                 }
             }
+        }
+
+        public bool WaitForPost(TimeSpan timeout)
+        {
+            lock (_gate)
+            {
+                _posted.Reset();
+            }
+
+            return _posted.Wait(timeout);
         }
 
         /// <summary>
@@ -87,6 +113,7 @@ public static class UiThread
             {
                 _closed = true;
                 _queue.Dispose();
+                _posted.Dispose();
             }
         }
     }

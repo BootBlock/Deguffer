@@ -250,24 +250,11 @@ public sealed class ExploreSelectionTests : IDisposable
     {
         var (tree, folder, file) = Scanned();
         using var held = new ManualResetEventSlim();
-        var released = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var notes = new List<string?>();
         _explore.Build = _ => Task.FromResult(_explore.Policy("Kept for a reason.", tree.PathOf(file)));
         var selection = Selection(tree);
 
-        var asking = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        _explore.Volumes.Asked = path =>
-        {
-            if (!path.EndsWith("keep.bin", StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            asking.TrySetResult();
-            Hold(held, path, "keep.bin");
-            released.TrySetResult();
-        };
+        _explore.Volumes.Asked = path => Hold(held, path, "keep.bin");
 
         selection.PropertyChanged += (_, e) =>
         {
@@ -277,21 +264,23 @@ public sealed class ExploreSelectionTests : IDisposable
             }
         };
 
+        // Held until the page says it is asking, which it says only once it has stopped waiting for
+        // the answer in silence and is waiting on the answer alone.
+        var asking = Noted(selection, note => note == ExploreRefusalNote.Asking(1));
         selection.Select([file]);
-        await asking.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        await asking;
 
-        // Released while this thread is held, so the first answer is finished, and waiting to be
-        // shown behind this thread, when the second pick is made. Calling the question off is then
-        // too late, and only knowing which question is current keeps that answer off the note.
+        // Released while this thread is held, and the pick made once the finished answer has been
+        // posted to this thread to be shown. Calling the question off is then too late, and only
+        // knowing which question is current keeps that answer off the note.
         held.Set();
-        Assert.True(released.Task.Wait(TimeSpan.FromSeconds(30)));
-        Thread.Sleep(TimeSpan.FromMilliseconds(500));
-
-        selection.Select([folder]);
+        Assert.True(UiThread.WaitForPost(TimeSpan.FromSeconds(30)), "The first answer was never finished.");
 
         // Until the folder's own answer, which is no note. The page may first say it is still asking,
         // because how long the folder takes to answer depends on how busy the machine is.
-        await Eventually.HoldsAsync(() => notes.Count > 0 && notes[^1] is null, "the folder answered");
+        var answered = Noted(selection, note => note is null);
+        selection.Select([folder]);
+        await answered;
 
         Assert.DoesNotContain("Kept for a reason.", notes);
         Assert.All(notes, note => Assert.True(note is null || note == ExploreRefusalNote.Asking(1), note));
@@ -611,6 +600,27 @@ public sealed class ExploreSelectionTests : IDisposable
     {
         removed.Add(from);
         selection.Carry(from.Left);
+    }
+
+    /// <summary>
+    /// The first note <paramref name="selection"/> is given from now on that <paramref name="answers"/>
+    /// accepts. Waited on as the change itself rather than polled for, so a note shown and replaced
+    /// between two looks is still seen, and bounded, so one never given fails the test rather than
+    /// hanging it.
+    /// </summary>
+    private static Task<string?> Noted(ExploreSelection selection, Func<string?, bool> answers)
+    {
+        var noted = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        selection.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ExploreSelection.Note) && answers(selection.Note))
+            {
+                noted.TrySetResult(selection.Note);
+            }
+        };
+
+        return noted.Task.WaitAsync(TimeSpan.FromSeconds(30));
     }
 
     /// <summary>
