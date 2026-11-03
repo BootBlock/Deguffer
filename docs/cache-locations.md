@@ -4716,6 +4716,108 @@ Sources:
 
 ---
 
+## Redshift texture cache
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | The numbered folders in `Cache\Textures`, in `%LOCALAPPDATA%\Redshift`, in the `Redshift` folder inside each Maxon application's preferences folder under `%APPDATA%\Maxon`, and in the folder `REDSHIFT_CACHEPATH` names |
+| **Method** | Delete those numbered folders, only while no program that renders with Redshift is running |
+| **Typical size** | 4.33 GB after one GPU run of Cinebench 2026, which renders with Redshift. Redshift trims the textures to its own **Texture Cache Max GB**, 32 GB unless you change it |
+
+### What it is
+
+Before Redshift renders, it converts every texture the scene uses into its own format, and keeps the
+converted `.rstexbin` files so that the next render can start at once. Maxon's Redshift runs inside
+Cinema 4D, Maya, Houdini, 3ds Max, Katana and Blender, and on its own from the command line. Redshift
+deletes the least recently used files itself when it starts and the cache is over its limit.
+
+The layout was observed on Cinebench 2026, which is Cinema 4D's engine with Redshift inside. A Maxon
+application keeps Redshift's folder inside its own preferences folder: Cinebench 2026 used
+`%APPDATA%\Maxon\cb2026_<id>\Redshift`, and Redshift's log named that folder as its local data path.
+It held `preferences.xml`, `Log` and `Cache`. `Cache` held `Textures` and `Meshes`. `Textures` held
+only numbered folders between 1 and 255, each holding numbered folders, each holding one converted
+texture. `Meshes` held one folder for each computer and one for each running program with a `lock`
+inside. A standalone install keeps its cache in `%LOCALAPPDATA%\Redshift\Cache`, the default that
+Maxon documents and that Redshift's own library holds. No standalone install has been observed, so
+the same rules apply to it unchanged.
+
+### What Deguffer does
+
+**It deletes the numbered folders in `Textures`, and nothing else.** Anything else in `Textures`, a
+file or a folder with any other name, is left alone, because `Textures` is a common name for a
+folder of source images. Nothing in Redshift's folder or in `Cache` is listed to find a target, and
+`Textures` itself stays. Deguffer lists `%APPDATA%\Maxon` only to find each application's `Redshift`
+folder. A cache with no numbered folder in it produces no row.
+
+**`REDSHIFT_CACHEPATH` is followed where the folder is Redshift's.** Maxon documents it as the
+variable that moves the cache. Deguffer refuses the folder if it is a drive root, one of your own
+folders such as Documents, or a folder that holds a temporary folder. It also leaves the folder
+alone if it holds `Textures` but no `Meshes`, which Redshift's log showed it making in the cache as
+it started. The plan says which and why.
+
+**The `CacheFolder` preference is not read.** In the observed run, `preferences.xml` named
+`%LOCALAPPDATA%\Redshift\Cache` as the cache, while Redshift's own log shows that it used the folder
+inside Cinebench's preferences. A setting seen to disagree with the cache in use does not say where
+the cache is.
+
+**While a program that renders with Redshift is running, the cache is left alone.** Maxon says "The
+caches must remain untouched only as long as a rendering of the corresponding project is still
+running", and nothing outside the application says whether a render is running. So while one of
+these programs runs, the plan leaves the cache alone, Explore refuses it, and the question is asked
+again when you press Clean. Cinebench was seen rendering with Redshift. The other names are those the
+programs of Cinema 4D and its Team Render client and server, Maya, Houdini, 3ds Max, Katana, Blender
+and Redshift's command-line renderer are published under, and were not checked against an
+installation.
+
+**A cache that is not on a disk in this computer is left alone.** A cache folder can be on a share
+that other computers render from, and a render on another computer may be using it. No check here
+can see such a render.
+
+**§5.1 has nothing to prefer.** Cinema 4D's **Clear Baked Textures** is a command inside the running
+application, and clears one project's textures. Deguffer found no command that clears the cache from
+outside an application.
+
+### What is protected
+
+| Neighbour | What it really is |
+| --- | --- |
+| Redshift's folder, `Cache` and `Textures` | Redshift's own folders. Only the numbered folders in `Textures` go |
+| Anything else in `Textures` | Not one of Redshift's numbered folders, so Tier 4. It may be your own images |
+| `Cache\Meshes` | Redshift's mesh cache, with a lock for each running program. Tier 4 |
+| `preferences.xml` | Redshift's preferences: the cache limit and the devices it renders on |
+| `Log` | Redshift's logs |
+| Anything else in `Cache` | Not classified, so Tier 4. A shader cache Redshift may keep here has not been seen |
+| A `.rstexbin` file outside the cache | You can convert textures yourself and keep them beside the images. Nothing outside the cache is reached |
+
+Explore enforces the same rule: it refuses Redshift's folder, `Cache` and everything in `Textures`
+except the numbered folders, and refuses those too while a program that renders with Redshift is
+running. Deguffer also refuses to look through a link.
+
+### What it costs you
+
+**The next render converts its textures again.** The first render of each scene after a clean starts
+more slowly. Your scenes, your images, Redshift's preferences and its logs are untouched.
+
+### Why Tier 1
+
+Every converted texture is made from an image the scene still names, and Maxon says missing cache
+files are recalculated, so the cost of losing one is converting it again.
+
+Sources:
+
+- What the cache holds, its default location and the 32 GB limit:
+  <https://support.maxon.net/hc/en-us/articles/25006553155484-Texture-Cache-Memory>
+- The preferences, including the cache folder:
+  <https://help.maxon.net/r3d/cinema/en-us/Content/html/Redshift+Preferences.html>
+- `REDSHIFT_CACHEPATH` and the other variables:
+  <https://help.maxon.net/r3d/houdini/en-us/Content/html/Redshift+Environment+Variables.html>
+- The local data path and custom install locations:
+  <https://help.maxon.net/r3d/cinema/en-us/Content/html/Custom+Install+Locations.html>
+
+---
+
 ## CapCut editing cache
 
 **Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**, because nobody working

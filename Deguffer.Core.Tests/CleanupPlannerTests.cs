@@ -470,7 +470,7 @@ public sealed class CleanupPlannerTests
                 "uv", "pip", "poetry", "conda", "pre-commit", "cargo", "go", "zig", "deno", "electron", "typescript-typings", "ccache", "sccache", "debugger-symbols", "debugger-symbols-other-servers", "maven", "vcpkg", "conan", "gpu-shader-cache",
                 "chromium-app-cache", "chromium-service-worker-storage", "vscode-cache", "firefox", "thunderbird", "epic-launcher-webcache",
                 "epic-launcher-content-cache", "battle-net-cache", "steam", "steam-library-artwork", "steam-shader-cache", "emulator-shader-cache", "retroarch-downloads", "retroarch-thumbnails", "unreal-ddc", "unity-gi-cache", "spotify",
-                "plex-transcode", "jellyfin-transcode", "emby-transcode", "affinity-model-cache", "capture-one-cache", "davinci-resolve-render-cache", "after-effects-disk-cache", "adobe-media-cache", "capcut-cache",
+                "plex-transcode", "jellyfin-transcode", "emby-transcode", "affinity-model-cache", "capture-one-cache", "davinci-resolve-render-cache", "after-effects-disk-cache", "adobe-media-cache", "redshift-cache", "capcut-cache",
                 "squirrel-staging",
                 "platformio", "playwright", "puppeteer", "vscode-extension-browsers", "lmstudio-runtimes", "huggingface-hub", "vagrant-boxes", "test-browser-profiles", "squirrel-superseded-versions", "capcut-superseded-builds", "azure-functions-tools",
                 "graphics-driver-installers", "autodesk-installers", "claude-code-leftovers", "claude-code-command-snapshots", "recycle-bin", "file-history", "cloud-local-copies", "temp-directories",
