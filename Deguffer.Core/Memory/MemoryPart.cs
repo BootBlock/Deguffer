@@ -56,10 +56,11 @@ public enum MemoryPart
     /// <para>What that leaves depends on which parts were drawn. Always: shared and shareable pages,
     /// page tables, kernel stacks and driver-locked memory. Where the memory lists were drawn: the
     /// system working set, which holds the part of the paged pool in memory. Where the system cache was
-    /// drawn instead: the free, zeroed and modified pages, because the system cache holds the system
-    /// working set itself. Where the per-process figures were off: every process's own memory as well,
-    /// the compression store's included. <see cref="MemoryPartGuide.Describe(MemoryTree, int)"/> says
-    /// which of these one tree holds.</para>
+    /// drawn instead: the free, zeroed and modified pages, and whatever of the standby list and the
+    /// system working set the system cache figure falls short of, which <see cref="SystemMemory.SystemCache"/>
+    /// says it can. Where the per-process figures were off: every process's own memory as well, the
+    /// compression store's included. Where the figures overlap: nothing, because it is drawn at zero.
+    /// <see cref="MemoryPartGuide.Describe(MemoryTree, int)"/> says which of these one tree holds.</para>
     /// </summary>
     Unattributed,
 }

@@ -31,31 +31,44 @@ public static class MemoryPartGuide
         var kind = tree.PartOf(node);
         var part = Describe(kind);
         var more = kind == MemoryPart.Unattributed
-            ? WhatThisReadLeaves(tree.Snapshot)
+            ? WhatThisTreeLeaves(tree)
             : ServiceHostText.Holds(tree.ServicesOf(node));
 
         return more.Length == 0 ? part : $"{part} {more}";
     }
 
     /// <summary>
-    /// What the memory no figure attributes holds beyond what it always holds, in the read
-    /// <see cref="MemoryTreeBuilder"/> drew it from (§7.2).
+    /// What the memory no figure attributes holds beyond what it always holds, in the tree
+    /// <see cref="MemoryTreeBuilder"/> drew (§7.2).
     ///
     /// <para>Said for every read, the lists' own included. Told that free memory is inside a shape it
     /// is not in, or left to find an unexplained remainder, a reader takes the rest for a leak, which
-    /// is the reading this part is drawn to prevent.</para>
+    /// is the reading this part is drawn to prevent. Decided by the parts the tree drew rather than by
+    /// the read that fed it, so the words cannot describe shapes the picture does not have.</para>
+    ///
+    /// <para>Where the system cache is drawn, the system working set is named as possibly here rather
+    /// than as inside the cache: Windows documents the cache as the standby list and the system working
+    /// set, but <see cref="SystemMemory.SystemCache"/> was measured below the standby list alone.</para>
     /// </summary>
-    private static string WhatThisReadLeaves(MemorySnapshot snapshot)
+    private static string WhatThisTreeLeaves(MemoryTree tree)
     {
-        var lists = snapshot.System.ListState == MemoryListState.Checked
+        // Where the figures overlap, this part is drawn at nothing and the notes say why, so a
+        // sentence about what it holds in this read would contradict them.
+        if (tree.Overcount > 0)
+        {
+            return "In this picture the figures overlap, so nothing is left over to be drawn here.";
+        }
+
+        var lists = tree.Find(MemoryNodeKey.Of(MemoryPart.Standby)) is not null
             ? "In this picture it also holds the system working set: the memory Windows keeps in use for "
                 + "its file cache, its own code and the part of the paged pool in memory, which no figure "
                 + "here separates out."
-            : "In this picture it also holds the free, zeroed and modified pages: the separate page lists "
-                + "could not be used, and the system cache drawn beside it stands in for the standby list "
-                + "alone.";
+            : "In this picture it also holds the free, zeroed and modified pages, because the separate "
+                + "page lists could not be used and the system cache drawn beside it takes the place of "
+                + "the standby list only. Windows reports that cache smaller than it documents, so part "
+                + "of the standby list and the system working set can be here as well.";
 
-        return snapshot.Processes.Figures == ProcessFigures.Checked
+        return tree.Snapshot.Processes.Figures == ProcessFigures.Checked
             ? lists
             : $"{lists} It holds every process's own memory as well, the compression store's included, "
                 + "because the per-process figures were not used.";
