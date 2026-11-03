@@ -244,6 +244,15 @@ public static class TopazLayout
             return (null, [], (models, UnlistedReason));
         }
 
+        // A link where the inner folder would be was never examined, so whether a sign-in record is
+        // behind it is not known, and removing the outer folder would take the link with it.
+        if (entries.FirstOrDefault(entry =>
+                entry.Attributes.HasFlag(FileAttributes.ReparsePoint)
+                && entry.Name.Equals(ModelsName, StringComparison.OrdinalIgnoreCase)) is { } link)
+        {
+            return (null, [], (LongPath.Display(link.FullName), CacheLevelWalk.LinkReason));
+        }
+
         var inner = entries.FirstOrDefault(entry =>
             entry is DirectoryInfo
             && !entry.Attributes.HasFlag(FileAttributes.ReparsePoint)

@@ -211,6 +211,27 @@ public sealed class TopazModelsProviderTests : IDisposable
     }
 
     /// <summary>
+    /// An inner <c>models</c> that is a link was never examined, so the outer folder that holds it
+    /// stays, and nothing behind the link is reached.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task AnInnerModelsFolderThatIsALinkHoldsTheOuterOneBack(DirectoryLinkKind kind)
+    {
+        var models = CreateProduct("Topaz Video");
+        var outside = _temp.CreateDirectory("elsewhere");
+        var auth = Write(Path.Combine(outside, "auth.tz"), 64);
+        DirectoryLink.Create(kind, Path.Combine(models, "models"), outside);
+        Install("Topaz Video");
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.True(File.Exists(auth));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == Path.Combine(models, "models"));
+    }
+
+    /// <summary>
     /// The sign-in record Topaz Video AI keeps at the top of <c>models</c>. While the product may be
     /// installed the folder holding it is never removed whole, and the record is asserted to survive.
     /// </summary>

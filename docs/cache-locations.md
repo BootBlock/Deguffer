@@ -4755,7 +4755,7 @@ be, installed, Deguffer first looks at the top of `models`, and at the top of th
 inside it, which Topaz Video has. A user report has Topaz Video AI keeping `auth.tz`, the product's
 sign-in record, and `tvai.tz`, whose role nobody has established, beside its model files. If either
 is in the outer folder, only an inner `models` folder holding neither may go. If either is in the
-inner folder, or there is no inner folder, nothing goes, and the folder is named and left alone.
+inner folder, or there is no inner folder, or it is a link Deguffer does not look through, nothing goes, and the folder is named and left alone.
 Which of Topaz Video's files sit at which level is not documented, so Deguffer asks the files
 rather than assuming.
 
