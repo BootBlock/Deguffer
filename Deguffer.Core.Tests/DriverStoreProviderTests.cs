@@ -133,7 +133,7 @@ public sealed class DriverStoreProviderTests : IDisposable
 
         var step = Assert.IsType<DiskCleanupStep>(Assert.Single(plan.Steps));
         Assert.Equal(DriverStoreProvider.Handler, step.Handler);
-        Assert.Equal([oldest.Folder, older.Folder], step.Destroys);
+        Assert.Equal([oldest.Folder!, older.Folder!], step.Destroys);
         Assert.DoesNotContain(plan.TargetedPaths, p => p.Equals(_store, StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(plan.TargetedPaths, p => p.Equals(newest.Folder, StringComparison.OrdinalIgnoreCase));
         Assert.True(step.RequiresElevation);
