@@ -468,7 +468,7 @@ public sealed class CleanupPlannerTests
                 "pytest-cache", "mypy-cache", "ruff-cache", "tox-environments", "nox-environments", "dart-tool",
                 "nuget", "gradle", "npm", "pnpm", "yarn", "bun", "composer", "arduino", "scoop-cache", "vscode-cpptools", "dart-analysis-server", "roslyn-cache", "jetbrains-superseded-system", "temp-tool-caches",
                 "uv", "pip", "poetry", "conda", "pre-commit", "cargo", "go", "zig", "deno", "electron", "typescript-typings", "ccache", "sccache", "debugger-symbols", "debugger-symbols-other-servers", "maven", "vcpkg", "conan", "gpu-shader-cache",
-                "chromium-app-cache", "chromium-service-worker-storage", "vscode-cache", "firefox", "epic-launcher-webcache",
+                "chromium-app-cache", "chromium-service-worker-storage", "vscode-cache", "firefox", "thunderbird", "epic-launcher-webcache",
                 "epic-launcher-content-cache", "battle-net-cache", "steam", "steam-library-artwork", "steam-shader-cache", "emulator-shader-cache", "retroarch-downloads", "retroarch-thumbnails", "unreal-ddc", "unity-gi-cache", "spotify",
                 "plex-transcode", "jellyfin-transcode", "emby-transcode", "affinity-model-cache", "capture-one-cache", "davinci-resolve-render-cache", "after-effects-disk-cache", "adobe-media-cache",
                 "squirrel-staging",
