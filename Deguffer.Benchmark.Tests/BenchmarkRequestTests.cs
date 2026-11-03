@@ -271,7 +271,7 @@ public sealed class BenchmarkRequestTests
         Assert.Equal(expected, request.Snapshots);
     }
 
-    /// <summary>Only the Explore walk draws as it goes, so no other route has snapshots to switch.</summary>
+    /// <summary>The benchmark draws as it goes only on the Explore walk, so no other route has snapshots to switch.</summary>
     [Theory]
     [InlineData("walk", @"C:\", "on")]
     [InlineData("explore", "C", "off")]

@@ -51,7 +51,7 @@ internal static class WalkExploreReader
     /// cadence §5.5 wants for a UI: coarse enough to be worth marshalling and frequent enough that a
     /// large scan does not look stalled. It is never told beside itself, and never after this
     /// returns. Some reports also carry a snapshot, where <paramref name="assembleSnapshot"/> says
-    /// how to assemble one: see <see cref="WalkSnapshots"/> for when.
+    /// how to assemble one: see <see cref="ScanSnapshots"/> for when.
     /// </summary>
     /// <param name="unlisted">
     /// The folders not to list, or null to list every one. A folder left unlisted is still in the
@@ -59,7 +59,7 @@ internal static class WalkExploreReader
     /// it is never marked as refused, because nothing asked Windows for its listing.
     /// </param>
     /// <param name="assembleSnapshot">
-    /// How a snapshot is assembled (<see cref="WalkSnapshots.InBackground"/> for a scan), or null to
+    /// How a snapshot is assembled (<see cref="ScanSnapshots.InBackground"/> for a scan), or null to
     /// take none, for a caller that draws nothing until the walk is over.
     /// </param>
     public static ExploreTree Read(
@@ -102,7 +102,7 @@ internal static class WalkExploreReader
         long bytes = 0;
 
         var snapshots = progress is not null && assembleSnapshot is not null
-            ? new WalkSnapshots(builder, clock, assembleSnapshot)
+            ? new ScanSnapshots(() => builder.Capture().Snapshot, clock, assembleSnapshot)
             : null;
 
         try

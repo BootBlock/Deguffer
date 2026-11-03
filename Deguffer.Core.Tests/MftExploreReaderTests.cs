@@ -147,7 +147,7 @@ public class MftExploreReaderTests
             .AddUnused(70_000)
             .Build();
 
-        var tree = MftExploreReader.Read(source, CachePath, CacheComponents, TableTuning.Default, onProgress: null, default).Tree!;
+        var tree = MftExploreReader.Read(source, CachePath, CacheComponents, TableTuning.Default, progress: null, default).Tree!;
 
         Assert.Equal(4, tree.NodeCount);
         Assert.Equal(5, tree.NamesHeld);
@@ -269,7 +269,7 @@ public class MftExploreReaderTests
             .Build();
         var reported = new List<long>();
 
-        var tree = MftExploreReader.Read(source, Root, [], new TableTuning(64 * 1024, 8, 4, 8), reported.Add, default).Tree!;
+        var tree = MftExploreReader.Read(source, Root, [], new TableTuning(64 * 1024, 8, 4, 8), Counting(reported), default).Tree!;
 
         Assert.Equal(7000, tree.TotalLength);
         Assert.Contains(reported, done => done >= 2 * Interval);
@@ -512,7 +512,7 @@ public class MftExploreReaderTests
 
         var reports = new List<long>();
 
-        MftExploreReader.Read(source, Root, [], TableTuning.Default, reports.Add, default);
+        MftExploreReader.Read(source, Root, [], TableTuning.Default, Counting(reports), default);
 
         // One read at a time, so the count is exact. Without the bitmap, the report comes as the
         // 64th read of 1,024 records lands. With it, the free records after the file are counted
@@ -539,16 +539,16 @@ public class MftExploreReaderTests
 
         using var cancel = new CancellationTokenSource();
 
-        void CancelOnceRead(long dealtWith)
+        var cancelOnceRead = new CallbackProgress<ExploreProgress>(report =>
         {
-            if (dealtWith == source.RecordCount)
+            if (report.Done == source.RecordCount)
             {
                 cancel.Cancel();
             }
-        }
+        });
 
         Assert.ThrowsAny<OperationCanceledException>(
-            () => MftExploreReader.Read(source, Root, [], TableTuning.Default, CancelOnceRead, cancel.Token));
+            () => MftExploreReader.Read(source, Root, [], TableTuning.Default, cancelOnceRead, cancel.Token));
         Assert.True(cancel.IsCancellationRequested);
     }
 
@@ -625,7 +625,7 @@ public class MftExploreReaderTests
             .AddFile(22, Sibling, "settings.json", allocated: 1024, logical: 1000)
             .Build();
 
-        var read = MftExploreReader.Read(source, CachePath, CacheComponents, TableTuning.Default, onProgress: null, default);
+        var read = MftExploreReader.Read(source, CachePath, CacheComponents, TableTuning.Default, progress: null, default);
         var tree = read.Tree!;
 
         Assert.Equal(FallbackReason.None, read.Reason);
@@ -653,7 +653,7 @@ public class MftExploreReaderTests
             .AddFile(22, Sibling, "settings.json", allocated: 1024, logical: 1000)
             .Build();
 
-        var tree = MftExploreReader.Read(source, CachePath, CacheComponents, TableTuning.Default, onProgress: null, default).Tree!;
+        var tree = MftExploreReader.Read(source, CachePath, CacheComponents, TableTuning.Default, progress: null, default).Tree!;
 
         // First, and bounded, for the reason the test above gives.
         Assert.Equal(Reachable(tree).Count, tree.NodeCount);
@@ -690,7 +690,7 @@ public class MftExploreReaderTests
 
         var itself = MftExploreReader.Read(
             source, @"C:\Users\testuser\linked-cache", ["Users", "testuser", "linked-cache"],
-            TableTuning.Default, onProgress: null, default);
+            TableTuning.Default, progress: null, default);
 
         Assert.Null(itself.Tree);
         Assert.Equal(FallbackReason.None, itself.Reason);
@@ -698,7 +698,7 @@ public class MftExploreReaderTests
         var below = MftExploreReader.Read(
             source, @"C:\Users\testuser\linked-cache\_cacache",
             ["Users", "testuser", "linked-cache", "_cacache"],
-            TableTuning.Default, onProgress: null, default);
+            TableTuning.Default, progress: null, default);
 
         Assert.Null(below.Tree);
         Assert.Equal(FallbackReason.None, below.Reason);
@@ -722,14 +722,14 @@ public class MftExploreReaderTests
 
         var missing = MftExploreReader.Read(
             source, @"C:\Users\testuser\.pnpm-store", ["Users", "testuser", ".pnpm-store"],
-            TableTuning.Default, onProgress: null, default);
+            TableTuning.Default, progress: null, default);
 
         Assert.Null(missing.Tree);
         Assert.Equal(FallbackReason.MasterFileTableIncomplete, missing.Reason);
 
         var file = MftExploreReader.Read(
             source, CachePath + @"\a.tgz", ["Users", "testuser", ".npm-cache", "a.tgz"],
-            TableTuning.Default, onProgress: null, default);
+            TableTuning.Default, progress: null, default);
 
         Assert.Null(file.Tree);
         Assert.Equal(FallbackReason.MasterFileTableIncomplete, file.Reason);
@@ -766,20 +766,20 @@ public class MftExploreReaderTests
 
         var lower = MftExploreReader.Read(
             source, @"C:\Users\testuser\cache", ["Users", "testuser", "cache"],
-            TableTuning.Default, onProgress: null, default).Tree!;
+            TableTuning.Default, progress: null, default).Tree!;
 
         Assert.Equal(1000, lower.TotalLength);
 
         var upper = MftExploreReader.Read(
             source, @"C:\Users\testuser\Cache", ["Users", "testuser", "Cache"],
-            TableTuning.Default, onProgress: null, default).Tree!;
+            TableTuning.Default, progress: null, default).Tree!;
 
         Assert.Equal(8000, upper.TotalLength);
 
         // No exact match, so the case-insensitive one still answers rather than the path failing.
         var neither = MftExploreReader.Read(
             source, @"C:\Users\testuser\CACHE", ["Users", "testuser", "CACHE"],
-            TableTuning.Default, onProgress: null, default).Tree!;
+            TableTuning.Default, progress: null, default).Tree!;
 
         Assert.Equal(8000, neither.TotalLength);
     }
@@ -801,7 +801,7 @@ public class MftExploreReaderTests
                 21, Cache, "linked.dll", allocated: 4096, logical: 3000, extension: 22, ListMismatch.OwnerNumber)
             .Build();
 
-        var tree = MftExploreReader.Read(source, CachePath, CacheComponents, TableTuning.Default, onProgress: null, default).Tree!;
+        var tree = MftExploreReader.Read(source, CachePath, CacheComponents, TableTuning.Default, progress: null, default).Tree!;
 
         Assert.Equal(4000, tree.TotalLength);
         Assert.True(tree.HasUnknownSizes, "a folder's total was called exact after a record went unplaced");
@@ -949,9 +949,11 @@ public class MftExploreReaderTests
     /// they can produce instead is the point of them.
     /// </summary>
     private static ExploreTree WholeVolume(IMftSource source) =>
-        MftExploreReader.Read(source, Root, [], TableTuning.Default, onProgress: null, default).Tree!;
+        MftExploreReader.Read(source, Root, [], TableTuning.Default, progress: null, default).Tree!;
 
     private static int At(ExploreTree tree, string path) => ExploreTreePaths.NodeAt(tree, path);
+
+    private static CallbackProgress<ExploreProgress> Counting(List<long> done) => new(report => done.Add(report.Done));
 
     private static List<int> Reachable(ExploreTree tree)
     {

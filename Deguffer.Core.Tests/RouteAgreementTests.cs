@@ -120,7 +120,7 @@ public class RouteAgreementTests
         using var source = fixture.Build();
 
         var walked = WalkExploreReader.Read(path, ScanTuner.Shipped, OccupancyProbe.Default, progress: null, TimeProvider.System, default);
-        var indexed = MftExploreReader.Read(source, path[..3], [], TableTuning.Default, onProgress: null, default).Tree!;
+        var indexed = MftExploreReader.Read(source, path[..3], [], TableTuning.Default, progress: null, default).Tree!;
 
         var walkedSizes = SizesByPath(walked, walked.RootNode);
         var indexedSizes = SizesByPath(indexed, ExploreTreePaths.NodeAt(indexed, path));
@@ -604,7 +604,7 @@ public class RouteAgreementTests
         // The whole volume, then descended to the tree — rather than a scoped read, which would
         // root the table at the same folder the walk was handed and hide any disagreement about
         // where that folder sits.
-        var indexed = MftExploreReader.Read(source, path[..3], [], TableTuning.Default, onProgress: null, default).Tree!;
+        var indexed = MftExploreReader.Read(source, path[..3], [], TableTuning.Default, progress: null, default).Tree!;
 
         var walkedDates = DatesByPath(walked, walked.RootNode);
         var indexedDates = DatesByPath(indexed, ExploreTreePaths.NodeAt(indexed, path));
@@ -683,7 +683,7 @@ public class RouteAgreementTests
             .Build();
 
         var indexed = MftExploreReader.Read(
-            source, @"C:\cache", ["cache"], TableTuning.Default, onProgress: null, default).Tree!;
+            source, @"C:\cache", ["cache"], TableTuning.Default, progress: null, default).Tree!;
 
         const FileAttributes Recall = (FileAttributes)0x0040_0000;
         const string Listed = @"\\?\C:\cache";
