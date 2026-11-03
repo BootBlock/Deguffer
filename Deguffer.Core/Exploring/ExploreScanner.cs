@@ -35,10 +35,10 @@ public sealed class ExploreScanner(
     private readonly IOccupancyProbe _occupancy = occupancy ?? OccupancyProbe.Default;
 
     /// <summary>
-    /// How a walk assembles a snapshot. A test sets one that runs it on the spot, so which report
-    /// carries the snapshot does not depend on the thread pool.
+    /// How a scan assembles a snapshot, on either route. A test sets one that runs it on the spot, so
+    /// which report carries the snapshot does not depend on the thread pool.
     /// </summary>
-    internal Func<Action, Task> AssembleSnapshot { get; init; } = WalkSnapshots.InBackground;
+    internal Func<Action, Task> AssembleSnapshot { get; init; } = ScanSnapshots.InBackground;
 
     /// <summary>
     /// How a folder the table does not answer for is walked. A test sets one that records the folder
@@ -233,7 +233,7 @@ public sealed class ExploreScanner(
                     continue;
                 }
 
-                var located = MftExploreReader.Locate(tree, folder.Volume!.Value.Components);
+                var located = MftExploreRooting.Locate(tree, folder.Volume!.Value.Components);
 
                 if (located.Node is { } node)
                 {
@@ -281,7 +281,8 @@ public sealed class ExploreScanner(
             try
             {
                 var top = new VolumePath(letter, [], $"{letter}:{Path.DirectorySeparatorChar}");
-                var read = Read(source, top, _tuning.ForVolume(letter).Table, progress, ct);
+                // No snapshots, for the reason the walks below take none.
+                var read = Read(source, top, _tuning.ForVolume(letter).Table, progress, assembleSnapshot: null, ct);
 
                 return (read.Tree, read.Reason, read.EveryRecordRead);
             }
@@ -320,7 +321,7 @@ public sealed class ExploreScanner(
         {
             try
             {
-                var read = Read(source, volume, _tuning.ForVolume(volume.DriveLetter).Table, progress, ct);
+                var read = Read(source, volume, _tuning.ForVolume(volume.DriveLetter).Table, progress, AssembleSnapshot, ct);
 
                 if (read.Tree is { } tree)
                 {
@@ -347,30 +348,20 @@ public sealed class ExploreScanner(
         return Walk(root, reason, progress, AssembleSnapshot, ct);
     }
 
-    private static MftExploreRead Read(
+    private MftExploreRead Read(
         IMftSource source,
         VolumePath volume,
         TableTuning tuning,
         IProgress<ExploreProgress>? progress,
-        CancellationToken ct)
-    {
-        var total = source.RecordCount;
-
+        Func<Action, Task>? assembleSnapshot,
+        CancellationToken ct) =>
         // Both halves come from the same parse. The tree names its root with the path the user
         // reads and locates that root by the components, so the two have to describe one location
         // in one form — see VolumePath.FullPath.
         //
-        // No snapshot from this route, and that is not a shortcut. The tree is assembled once,
-        // after every record has been read, so there is no partial tree to hand over — and the pass
-        // it would interrupt is the whole cost of the route.
-        return MftExploreReader.Read(
-            source,
-            volume.FullPath,
-            volume.Components,
-            tuning,
-            done => progress?.Report(new ExploreProgress(done, total, BytesSeen: 0)),
-            ct);
-    }
+        // The scan's own clock, so the walk and the table space their snapshots alike.
+        MftExploreReader.Read(
+            source, volume.FullPath, volume.Components, tuning, progress, ct, assembleSnapshot, _time);
 
     private ExploreScan Walk(
         string root,

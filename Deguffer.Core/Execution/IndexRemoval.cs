@@ -40,6 +40,12 @@ internal sealed record IndexRemoval(
     bool NotADirectory = false)
 {
     /// <summary>
+    /// Where the index's removals spent their time, pass by pass and summed over every index directory.
+    /// Null where none walked a tree. See <see cref="RemovalOutcome.Passes"/>.
+    /// </summary>
+    public RemovalPasses? Passes { get; init; }
+
+    /// <summary>
     /// Remove every index directory of <paramref name="step"/> in turn, recording what each left, and
     /// stop at the first that is not gone completely: the next would be removed for nothing, and the
     /// indexed directory must not be touched.
@@ -49,7 +55,7 @@ internal sealed record IndexRemoval(
     /// </summary>
     /// <param name="indexes">
     /// What the removal of each of <see cref="DeleteDirectoryStep.IndexedBy"/> gathered, in the same
-    /// order, which is what the run judged the step on. Nothing is listed again.
+    /// order, which is what the run judged the step on. No tree is walked again.
     /// </param>
     public static async Task<IndexRemoval> RemoveAsync(
         DeleteDirectoryStep step,
@@ -57,6 +63,7 @@ internal sealed record IndexRemoval(
         RefusalRecord refusals,
         RunResidue leftStanding,
         IFileSystem fs,
+        TimeProvider time,
         CancellationToken ct)
     {
         // Zip would stop at the shorter list, and an index left out is one the directory it indexes
@@ -72,7 +79,7 @@ internal sealed record IndexRemoval(
 
         foreach (var (index, gathered) in step.IndexedBy.Zip(indexes))
         {
-            var removal = await DirectoryRemover.DeleteAsync(gathered, progress: null, fs, ct).ConfigureAwait(false);
+            var removal = await DirectoryRemover.DeleteAsync(gathered, progress: null, fs, time, ct).ConfigureAwait(false);
 
             refusals.Record(index, removal);
             leftStanding.Record(index, removal.LeftStanding);
@@ -89,7 +96,10 @@ internal sealed record IndexRemoval(
                 total.Kept + removal.Kept,
                 total.MailStores + removal.MailStores.Count,
                 removal.Interrupted,
-                removal.NotADirectory);
+                removal.NotADirectory)
+            {
+                Passes = RemovalPasses.Combine(total.Passes, removal.Passes),
+            };
 
             if (!complete)
             {
@@ -130,5 +140,8 @@ internal sealed record IndexRemoval(
         EntriesRemoved: EntriesRemoved,
         RefusedFolders: RefusedFolders,
         MailStores: MailStores,
-        Interrupted: Interrupted);
+        Interrupted: Interrupted)
+    {
+        Passes = Passes,
+    };
 }

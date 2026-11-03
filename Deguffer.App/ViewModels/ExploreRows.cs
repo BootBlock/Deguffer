@@ -20,8 +20,8 @@ public sealed class ExploreRows
 {
     /// <summary>
     /// What the folder holds and what the trail names, per rewrite. Filled again each time and never
-    /// replaced: a walked scan publishes a snapshot every few hundred milliseconds, and building two
-    /// lists for each of those is work to say what was already said (G5).
+    /// replaced: a scan in progress publishes a snapshot as often as every few hundred milliseconds,
+    /// and building two lists for each of those is work to say what was already said (G5).
     /// </summary>
     private readonly List<int> _arriving = [];
 
@@ -72,7 +72,7 @@ public sealed class ExploreRows
     /// Whether the rows already there are about this same directory.
     ///
     /// <para>Clearing the collection is a Reset for the bound <c>ListView</c>, and a Reset throws
-    /// away the scroll position and the selection with it — which, on a walked scan publishing a
+    /// away the scroll position and the selection with it — which, on a scan publishing a
     /// snapshot every few hundred milliseconds, made reading a long list or picking a folder out of
     /// one impossible while the scan ran. So a list still about the same thing is brought up to
     /// date in place: the rows that stay are the same objects, and the <c>ListView</c> is told
@@ -138,8 +138,8 @@ public sealed class ExploreRows
 
     /// <summary>
     /// The path back to the top, brought up to date rather than rebuilt: a crumb is a button a
-    /// reader can put the keyboard on, and clearing the collection destroys it. A walked scan
-    /// publishes a snapshot every few hundred milliseconds, and every one of those redraws this.
+    /// reader can put the keyboard on, and clearing the collection destroys it. A scan in progress
+    /// publishes a snapshot as often as every few hundred milliseconds, and every one redraws this.
     ///
     /// <para>The steps are <see cref="ExplorePosition.Trail"/>'s. The volume's step is named for
     /// the whole drive rather than by the root's name, because the root is the step after it.</para>

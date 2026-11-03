@@ -3,6 +3,7 @@ using Deguffer.Core.Duplicates;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Scanning.Media;
 using Deguffer.Core.Scanning.Mft;
 using Deguffer.Testing;
 using Microsoft.Win32.SafeHandles;
@@ -74,7 +75,7 @@ public sealed class DuplicateIdentityTests : IDisposable
     /// asking Windows for the file's names finds it.
     /// </summary>
     [Fact]
-    public void AHardLinkedFileIsOneFileWithEveryNameOnTheFileTable()
+    public async Task AHardLinkedFileIsOneFileWithEveryNameOnTheFileTable()
     {
         var first = _tree.File(100, "Data", "a.bin");
         var second = HardLink.To(first, At("Data", "b.bin"));
@@ -85,7 +86,7 @@ public sealed class DuplicateIdentityTests : IDisposable
             .AddFile(directory + 1, directory, "a.bin", allocated: 4096, logical: 100)
             .AddFile(directory + 2, directory, "c.bin", allocated: 4096, logical: 100);
 
-        var groups = Identify(Walk(fixture, _tree.Top), MatchCriteria.Size);
+        var groups = await IdentifyAsync(Walk(fixture, _tree.Top), MatchCriteria.Size);
 
         var files = Assert.Single(groups).Files;
         Assert.Equal(2, files.Count);
@@ -99,7 +100,7 @@ public sealed class DuplicateIdentityTests : IDisposable
     /// path Windows says it is at.
     /// </summary>
     [Fact]
-    public void TwoPathsToOneFolderGiveEachFileOnce()
+    public async Task TwoPathsToOneFolderGiveEachFileOnce()
     {
         _tree.File(100, "Real", "Data", "x.bin");
         _tree.File(100, "Real", "Data", "y.bin");
@@ -109,7 +110,7 @@ public sealed class DuplicateIdentityTests : IDisposable
             .AddFile(MftRecord.ReservedRecordCount + 1, MftRecord.ReservedRecordCount, "x.bin", allocated: 4096, logical: 100)
             .AddFile(MftRecord.ReservedRecordCount + 2, MftRecord.ReservedRecordCount, "y.bin", allocated: 4096, logical: 100);
 
-        var groups = Identify([.. Walk(fixture, At("Real")), .. Walk(fixture, At("Alias"))], MatchCriteria.Size);
+        var groups = await IdentifyAsync([.. Walk(fixture, At("Real")), .. Walk(fixture, At("Alias"))], MatchCriteria.Size);
 
         Assert.Equal(
             [At("Real", "Data", "x.bin"), At("Real", "Data", "y.bin")],
@@ -121,7 +122,7 @@ public sealed class DuplicateIdentityTests : IDisposable
     /// is never offered for removal by the path that was searched.
     /// </summary>
     [Fact]
-    public void AFileReachedAsAReferenceIsAReference()
+    public async Task AFileReachedAsAReferenceIsAReference()
     {
         _tree.File(100, "Real", "Data", "x.bin");
         _tree.File(100, "Real", "Data", "y.bin");
@@ -131,7 +132,7 @@ public sealed class DuplicateIdentityTests : IDisposable
             .AddFile(MftRecord.ReservedRecordCount + 1, MftRecord.ReservedRecordCount, "x.bin", allocated: 4096, logical: 100)
             .AddFile(MftRecord.ReservedRecordCount + 2, MftRecord.ReservedRecordCount, "y.bin", allocated: 4096, logical: 100);
 
-        var groups = Identify(
+        var groups = await IdentifyAsync(
             [.. Walk(fixture, At("Real")), .. Walk(fixture, At("Alias"), LocationRole.Reference)],
             MatchCriteria.Size);
 
@@ -229,7 +230,7 @@ public sealed class DuplicateIdentityTests : IDisposable
     /// placed by the time Windows gives; it still matches a file the tree did date, to the tick.
     /// </summary>
     [Fact]
-    public void AFileTheTableHoldsNoTimeForIsStillMatchedToTheTick()
+    public async Task AFileTheTableHoldsNoTimeForIsStillMatchedToTheTick()
     {
         var instant = new DateTime(2026, 3, 14, 15, 9, 26, DateTimeKind.Utc).AddTicks(5_358_979);
         File.SetLastWriteTimeUtc(_tree.File(10, "Data", "a.bin"), instant);
@@ -242,7 +243,7 @@ public sealed class DuplicateIdentityTests : IDisposable
             .AddFile(directory + 2, directory, "b.bin", allocated: 4096, logical: 20, lastWritten: instant)
             .AddFile(directory + 3, directory, "c.bin", allocated: 4096, logical: 30, lastWritten: instant.AddTicks(1));
 
-        var group = Assert.Single(Identify(Walk(fixture, _tree.Top), MatchCriteria.Modified));
+        var group = Assert.Single(await IdentifyAsync(Walk(fixture, _tree.Top), MatchCriteria.Modified));
 
         Assert.Equal(instant, group.Modified);
         Assert.Equal(["a.bin", "b.bin"], group.Files.Select(file => file.Name).Order());
@@ -381,12 +382,14 @@ public sealed class DuplicateIdentityTests : IDisposable
             .AddFile(directory + 1, directory, "went.bin", allocated: 4096, logical: 100)
             .AddCloudFile(directory + 2, directory, "came.bin", logical: 100)
             .AddCompressedFile(directory + 3, directory, "packed.bin", logical: 100, onDisk: 50);
-        var tree = MftExploreReader.Read(fixture.Build(), @"X:\", [], TableTuning.Default, onProgress: null, default).Tree!;
-        var data = MftExploreReader.Locate(tree, ["Data"]).Node!.Value;
+        var tree = MftExploreReader.Read(fixture.Build(), @"X:\", [], TableTuning.Default, progress: null, default).Tree!;
+        var data = MftExploreRooting.Locate(tree, ["Data"]).Node!.Value;
 
         IdentifiedFile Identified(string name, FileAttributes attributes, int number) => new(
             new FoundFile(tree, tree.ChildrenOf(data).ToArray().Single(child => tree.NameOf(child) == name), LocationRole.Search, IdentityRoute.FileId, DriveX),
-            new FileDescription(new FileIdentity(1, (UInt128)number), Path.Combine(@"X:\Data", name), 100, 4096, 1, DateTime.UnixEpoch, DateTime.UnixEpoch, attributes, ReparseTag: 0));
+            new FileDescription(
+                new FileState(new FileIdentity(1, (UInt128)number), 100, 4096, 1, DateTime.UnixEpoch, DateTime.UnixEpoch, attributes, ReparseTag: 0),
+                Path.Combine(@"X:\Data", name)));
 
         var files = Assert.Single(CandidateGrouping.ByTheFiles(
             [
@@ -405,8 +408,8 @@ public sealed class DuplicateIdentityTests : IDisposable
     private IReadOnlyList<FoundFile> Walk(MftFixture fixture, string top, LocationRole role = LocationRole.Search)
     {
         var tree = MftExploreReader.Read(
-            fixture.Build(), top + Path.DirectorySeparatorChar, [], TableTuning.Default, onProgress: null, default).Tree!;
-        var node = MftExploreReader.Locate(tree, ["Data"]).Node!.Value;
+            fixture.Build(), top + Path.DirectorySeparatorChar, [], TableTuning.Default, progress: null, default).Tree!;
+        var node = MftExploreRooting.Locate(tree, ["Data"]).Node!.Value;
         var folder = Path.Combine(top, "Data");
         var volume = new LocalVolume(_tree.Top + Path.DirectorySeparatorChar, DriveType.Fixed, VolumeReadiness.Ready);
         var root = new ResolvedLocation(new(folder, role), folder, ReachedFolder.At(folder, _tree.Volumes), role, volume);
@@ -419,6 +422,6 @@ public sealed class DuplicateIdentityTests : IDisposable
         return walk.Found;
     }
 
-    private static IReadOnlyList<CandidateGroup> Identify(IReadOnlyList<FoundFile> found, MatchCriteria criteria) =>
-        new CandidateIdentification(FileInformation.Default, criteria).Group(found, default);
+    private static Task<IReadOnlyList<CandidateGroup>> IdentifyAsync(IReadOnlyList<FoundFile> found, MatchCriteria criteria) =>
+        new CandidateIdentification(FileInformation.Default, criteria, new VolumeMediaCache(new FakeStorageQueries())).GroupAsync(found, progress: null, default);
 }

@@ -6,7 +6,7 @@ using Deguffer.Testing;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// The walk a removal makes before it deletes anything, on the walk every scan takes: several workers,
+/// The walk a removal makes of its tree, gathered whole, on the walk every scan takes: several workers,
 /// no recursion, a listing that reports a refusal rather than throwing it, and the attributes the
 /// listing read kept for the deletion that follows.
 /// </summary>

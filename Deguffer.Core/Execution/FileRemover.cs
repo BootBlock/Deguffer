@@ -149,7 +149,7 @@ public static class FileRemover
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
         {
             // It went between the probe and the delete. The post-condition holds, so this is the
-            // same success DirectoryRemover.TryDeleteFile reports for the identical race — and
+            // same success FileDeletion.TryDelete reports for the identical race — and
             // DirectoryNotFoundException derives from IOException, so without this arm the catch
             // below would call a file that is gone "left in place".
             return new FileRemovalOutcome(0, Refusals.None, Removed: true);

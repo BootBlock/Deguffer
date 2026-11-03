@@ -19,13 +19,14 @@ internal static class DiskCleanupRun
         IDirectoryScanner scanner,
         DiskCleanupStep step,
         MinimumAge keep,
+        StepClock clock,
         IProgress<double>? progress,
         CancellationToken ct)
     {
         // Asked of the disk immediately before Windows is, because Windows clears these whole and the
         // plan's answers are minutes old: an Outlook data file, a file the guard would keep, or a folder
         // Deguffer cannot look inside, arrived since or missed then, stops it. See WholeTreeLook.
-        var look = await WholeTreeLook.TakeAsync(step.Destroys, keep, ct).ConfigureAwait(false);
+        var look = await clock.LookAsync(step.Destroys, keep, ct).ConfigureAwait(false);
 
         if (look.WhyNot("Nothing was removed", "Windows clears this whole and cannot be told to leave anything", keep) is { } stopped)
         {

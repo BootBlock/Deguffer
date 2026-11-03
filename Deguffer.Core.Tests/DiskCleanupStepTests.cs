@@ -121,6 +121,31 @@ public sealed class DiskCleanupStepTests : IDisposable
     /// doing less. The executor looks on the disk itself rather than trusting the plan to have
     /// withdrawn the step, and Windows is never asked.
     /// </summary>
+    /// <summary>
+    /// The look on the disk before Windows clears the directories whole is the step's look, so a slow
+    /// one is reported as a look rather than as Windows' cleanup.
+    /// </summary>
+    [Fact]
+    public async Task TheLookBeforeWindowsClearsIsTimedAsALook()
+    {
+        var handlers = FakeDiskCleanupHandlers.DoingNothing();
+        var executor = new PlanExecutor(
+            new FakeProcessRunner(),
+            ParallelEnumerationScanner.Default,
+            RefusalRecord.For(new FakeUserEnvironment(_temp.Path)),
+            handlers: handlers);
+
+        Directory.CreateDirectory(Download);
+        File.WriteAllBytes(Path.Combine(Download, "update.cab"), new byte[16]);
+
+        var result = await executor.ExecuteAsync(Planning(Installation()), runReach: null, residue: null, progress: null, underway: null, CancellationToken.None);
+        var timing = Assert.Single(result.Steps).Timing;
+
+        Assert.Single(handlers.Calls);
+        Assert.True(timing.Look > TimeSpan.Zero, "the look before Windows' cleanup was not timed");
+        Assert.True(timing.Look <= timing.Elapsed, "the look took longer than its step");
+    }
+
     [Fact]
     public async Task TheRunRefusesAStepWhoseRecentFilesTheGuardWouldKeep()
     {

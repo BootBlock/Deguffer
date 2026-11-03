@@ -273,6 +273,7 @@ public sealed class WindowsUpdateLeftoverProviderTests : IDisposable
             new RunResidue(),
             progress: null,
             new UnlistableFileSystem(WindowsFileSystem.Default, scratch),
+            TimeProvider.System,
             CancellationToken.None);
 
         Assert.False(outcome.Succeeded);

@@ -36,6 +36,11 @@ namespace Deguffer.Core.Execution;
 /// listed, a file most often, on the terms <paramref name="Unlisted"/> gives. Kept apart from it,
 /// because Windows refused nothing there.
 /// </param>
+/// <param name="RecentFolders">
+/// How many folders inside the root the guard would protect by their own timestamps. The removal takes
+/// each once it is empty all the same, so only a removal that goes whole or not at all reads it: a
+/// folder written in or taken from since the guard's moment may be one its owner is working in again.
+/// </param>
 internal sealed record RemovalInventory(
     IReadOnlyList<GatheredDirectory> Directories,
     IReadOnlyList<WalkEntry> Files,
@@ -45,7 +50,8 @@ internal sealed record RemovalInventory(
     IReadOnlyList<string> MailStores,
     IReadOnlyList<string> UserWork,
     IReadOnlyList<string> Unlisted,
-    IReadOnlyList<string> NotFolders);
+    IReadOnlyList<string> NotFolders,
+    int RecentFolders);
 
 /// <summary>A directory the walk reached, in the extended form it met it in.</summary>
 /// <param name="Parent">
@@ -59,15 +65,17 @@ internal readonly record struct GatheredDirectory(string Path, int Parent)
 }
 
 /// <summary>
-/// The walk a removal makes before it deletes anything, shared with the check that asks what Windows
-/// would still refuse.
+/// The walk a removal makes of its tree, shared with the check that asks what Windows would still
+/// refuse. A removal deletes inside each folder as soon as the walk reports the folder listed (see
+/// <see cref="TreeRemoval"/>), and the check and a removal that goes whole or not at all gather the
+/// whole tree first.
 ///
 /// <para><b>One walk for both, because the check has to measure what the removal would
 /// attempt.</b> The same guard, the same spared entries and the same refusal to follow a link decide
 /// both. Written twice, the rules would drift, and the check would then take bytes out of an
 /// estimate that the removal never meant to take — or leave in bytes it will.</para>
 ///
-/// <para>Both exclusions are applied here rather than in the deletion pass because this is where the
+/// <para>Both exclusions are applied here rather than in the deletion because this is where the
 /// evidence already is: the enumeration that classified the entry read its timestamp and its path,
 /// and gathering is also where a file the removal must not touch stops being a candidate at all. An
 /// entry filtered out here is never handed to a delete, so there is no second place holding the same
@@ -171,6 +179,7 @@ internal static class RemovalWalk
         private List<string>? _userWork;
         private List<string>? _mailStores;
         private int _kept;
+        private int _recentFolders;
 
         // How the listing of this folder was refused, which is the evidence a removal that goes whole
         // or not at all is judged on. See RemovalInventory.Unlisted.
@@ -289,6 +298,11 @@ internal static class RemovalWalk
 
             if (entry.IsDirectory)
             {
+                if (keep.Protects(entry.NewestFileTime))
+                {
+                    _recentFolders++;
+                }
+
                 var folder = NewChild(entry.FullName);
                 (_folders ??= []).Add(folder);
                 descend(entry, folder);
@@ -322,6 +336,9 @@ internal static class RemovalWalk
 
         /// <summary>Files and links in it the guard on recently changed files held back.</summary>
         public int Kept => _kept;
+
+        /// <summary>Folders in it the guard would protect by their own timestamps. See <see cref="RemovalInventory.RecentFolders"/>.</summary>
+        public int RecentFolders => _recentFolders;
 
         /// <summary>Entries in it the bounds held back because something is using them.</summary>
         public IReadOnlyList<string> Spared => _spared ?? [];
@@ -390,6 +407,7 @@ internal static class RemovalWalk
             var unlisted = new List<string>();
             var notFolders = new List<string>();
             var kept = 0;
+            var recentFolders = 0;
 
             foreach (var (folder, parent) in InWalkOrder())
             {
@@ -401,6 +419,7 @@ internal static class RemovalWalk
                 userWork.AddRange(folder.UserWork);
                 mailStores.AddRange(folder.MailStores);
                 kept += folder._kept;
+                recentFolders += folder._recentFolders;
 
                 switch (folder._refused)
                 {
@@ -417,7 +436,7 @@ internal static class RemovalWalk
                 }
             }
 
-            return new RemovalInventory(directories, files, links, kept, spared, mailStores, userWork, unlisted, notFolders);
+            return new RemovalInventory(directories, files, links, kept, spared, mailStores, userWork, unlisted, notFolders, recentFolders);
         }
 
         // A walk run to its end lists every folder it is asked to descend into, so one never listed in

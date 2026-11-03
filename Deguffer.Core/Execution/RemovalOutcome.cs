@@ -113,4 +113,10 @@ public sealed record RemovalOutcome(
     /// before the run arrived — and a file nobody planned for is not.</para>
     /// </summary>
     public bool NotADirectory { get; init; }
+
+    /// <summary>
+    /// Where the removal spent its time, pass by pass. Null where it never walked a tree: the path was
+    /// already gone, refused, a link, a file, or the removal was cancelled before its walk finished.
+    /// </summary>
+    public RemovalPasses? Passes { get; init; }
 }

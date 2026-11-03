@@ -59,6 +59,25 @@ public sealed class ProfileRemovalTests : IDisposable
     }
 
     /// <summary>§5.6: a sibling profile that went with the removal fails the run, and is named.</summary>
+    /// <summary>
+    /// The look at the profile's folder before Windows removes it whole is the step's look, so a slow one
+    /// is reported as a look rather than as the removal.
+    /// </summary>
+    [Fact]
+    public async Task TheLookBeforeWindowsRemovesAProfileIsTimedAsALook()
+    {
+        var gone = _profiles.AddLocal(1002, "former", bytes: 4000);
+
+        var provider = Provider();
+        var result = await provider.ExecuteAsync(await provider.PlanAsync());
+        var timing = Assert.Single(result.Steps).Timing;
+
+        Assert.Equal([gone.Sid], _profiles.Removed);
+        Assert.True(Directory.Exists(_colleague.Folder));
+        Assert.True(timing.Look > TimeSpan.Zero, "the look at the profile's folder was not timed");
+        Assert.True(timing.Look <= timing.Elapsed, "the look took longer than its step");
+    }
+
     [Fact]
     public async Task TheCheckFailsWhenASiblingProfileWentToo()
     {

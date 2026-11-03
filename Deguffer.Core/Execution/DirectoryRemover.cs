@@ -4,7 +4,7 @@ using Deguffer.Core.Scanning;
 namespace Deguffer.Core.Execution;
 
 /// <summary>
-/// Deletes a directory tree.
+/// Deletes a directory tree, as <see cref="TreeRemoval"/> lists it.
 ///
 /// §6.3: deletion is genuinely parallel — these trees are hundreds of thousands of small files,
 /// and wall-clock time is dominated by per-file overhead, not bytes. Every path goes through the
@@ -45,6 +45,10 @@ public static class DirectoryRemover
     /// with <see cref="RemovalOutcome.Interrupted"/> set. What a removal stopped part-way has already
     /// taken, and where it went, is what §5.6 needs afterwards, and an exception carries neither.
     /// </param>
+    /// <param name="time">
+    /// The clock <see cref="RemovalOutcome.Passes"/> is measured on. Defaults to the system clock. The
+    /// executor hands over its own, so a step and the passes inside it are read from one clock.
+    /// </param>
     public static Task<RemovalOutcome> RemoveAsync(
         string path,
         MinimumAge keep = default,
@@ -52,6 +56,7 @@ public static class DirectoryRemover
         CancellationToken ct = default,
         IFileSystem? fileSystem = null,
         RemovalBounds? bounds = null,
+        TimeProvider? time = null,
         long plannedEntries = 0) =>
         // Not handed the token: a task handed one is cancelled where the token is before the work
         // starts, which would break the contract above at its first step. On a thread of its own,
@@ -64,34 +69,22 @@ public static class DirectoryRemover
                 progress,
                 plannedEntries,
                 fileSystem ?? WindowsFileSystem.Default,
+                time ?? TimeProvider.System,
                 ct),
             CancellationToken.None);
 
     /// <summary>
-    /// Gather every tree in <paramref name="paths"/> as its removal would, off the calling thread, and
-    /// delete nothing. Each is then removed by <see cref="DeleteAsync"/>, which lists nothing again.
-    /// </summary>
-    /// <exception cref="OperationCanceledException">The clean was cancelled before every tree was gathered.</exception>
-    internal static Task<IReadOnlyList<GatheredRemoval>> GatherAsync(
-        IReadOnlyList<string> paths,
-        MinimumAge keep,
-        IFileSystem fs,
-        CancellationToken ct) =>
-        WorkerThreads.Shared.RunAsync<IReadOnlyList<GatheredRemoval>>(
-            () => [.. paths.Select(path => Gather(path, keep, RemovalBounds.None, fs, ct))],
-            ct);
-
-    /// <summary>
     /// Delete what <paramref name="gathered"/> holds, on the terms of
-    /// <see cref="RemoveAsync(string, MinimumAge, IProgress{double}?, CancellationToken, IFileSystem?, RemovalBounds?)"/>,
-    /// whose cancellation is never thrown either.
+    /// <see cref="RemoveAsync(string, MinimumAge, IProgress{double}?, CancellationToken, IFileSystem?, RemovalBounds?, TimeProvider?, long)"/>,
+    /// whose cancellation is never thrown either, with its passes timed on <paramref name="time"/>.
     /// </summary>
     internal static Task<RemovalOutcome> DeleteAsync(
         GatheredRemoval gathered,
         IProgress<double>? progress,
         IFileSystem fs,
+        TimeProvider time,
         CancellationToken ct) =>
-        WorkerThreads.Shared.RunAsync(() => Delete(gathered, progress, fs, ct), CancellationToken.None);
+        WorkerThreads.Shared.RunAsync(() => Delete(gathered, progress, fs, time, ct), CancellationToken.None);
 
     private static RemovalOutcome Remove(
         string path,
@@ -100,6 +93,7 @@ public static class DirectoryRemover
         IProgress<double>? progress,
         long plannedEntries,
         IFileSystem fs,
+        TimeProvider time,
         CancellationToken ct)
     {
         if (ct.IsCancellationRequested)
@@ -109,11 +103,13 @@ public static class DirectoryRemover
 
         var extended = LongPath.Extended(path);
 
-        if (Probe(extended, keep, bounds, fs) is { } notATree)
+        if (GatheredRemoval.Probe(extended, keep, bounds, fs) is { } notATree)
         {
-            return Delete(notATree, progress, fs, ct);
+            return Delete(notATree, progress, fs, time, ct);
         }
 
+        // Deleted while it is listed: each folder's files as soon as its own listing is complete. See
+        // TreeRemoval.
         var root = new RemovalFolder(extended, parent: null);
 
         return TreeRemoval.Run(
@@ -123,94 +119,15 @@ public static class DirectoryRemover
             progress,
             plannedEntries,
             fs,
+            time,
             ct);
-    }
-
-    /// <summary>
-    /// What stands at <paramref name="path"/>, and for a directory, everything its removal would act
-    /// on. Nothing is deleted.
-    /// </summary>
-    /// <exception cref="OperationCanceledException">The walk was cancelled.</exception>
-    internal static GatheredRemoval Gather(
-        string path,
-        MinimumAge keep,
-        RemovalBounds bounds,
-        IFileSystem fs,
-        CancellationToken ct)
-    {
-        var extended = LongPath.Extended(path);
-
-        if (Probe(extended, keep, bounds, fs) is { } notATree)
-        {
-            return notATree;
-        }
-
-        // Walked to its end before anything is deleted, so the removal can be judged on everything it
-        // would act on. Deleted from what it gathered: see DeleteAsync.
-        var root = new RemovalFolder(extended, parent: null);
-        RemovalWalk.Visit(root, keep, bounds, fs, WalkTuning.Default, static _ => { }, ct);
-
-        return new GatheredRemoval.Tree(extended, bounds, root);
-    }
-
-    /// <summary>
-    /// What stands at <paramref name="extended"/> where it is not a directory to walk: nothing, a path
-    /// Windows will not describe, a file, or a link. Null for a directory.
-    /// </summary>
-    private static GatheredRemoval? Probe(string extended, MinimumAge keep, RemovalBounds bounds, IFileSystem fs)
-    {
-        var presence = fs.ProbeDirectory(extended);
-
-        // The directory probe answers Absent for a file, so absence is decided by the entry probe. A
-        // file that has taken the directory's name since the preview is nothing this step planned to
-        // remove, and reading it as the directory gone reported "Removed." for a path still occupied —
-        // and let the directory an index belongs to go while a file stood where the index was.
-        if (presence is PathPresence.Absent)
-        {
-            presence = fs.ProbeEntry(extended);
-
-            if (presence is PathPresence.Present)
-            {
-                return new GatheredRemoval.NotAFolder(extended, bounds);
-            }
-        }
-
-        switch (presence)
-        {
-            case PathPresence.Absent:
-                return new GatheredRemoval.Gone(extended, bounds);
-
-            case PathPresence.Refused:
-                return new GatheredRemoval.Refused(extended, bounds);
-        }
-
-        // The root is the one entry no enumeration classified, so it is the one place a link can
-        // still be walked through. Enumerating a junction returns the target's children, which are
-        // ordinary directories and files, so the walk would gather a tree nobody looked at and the
-        // §5.6 negative — written against paths inside the profile — would pass. The link is removed
-        // and nothing behind it, exactly as the walk does for a link it finds below.
-        if (fs.IsReparsePoint(extended))
-        {
-            // The guard covers the root exactly as the walk covers a link below it, and for the same
-            // reason: a junction carries its own timestamps, so one made an hour ago is an hour old
-            // whatever it points at. Without this a cache directory somebody had just relocated with
-            // mklink was removed under a plan promising nothing touched in the last eight hours
-            // would be — silently, because a link's length is zero and the outcome reported success.
-            //
-            // Asked of the path rather than of an enumerated entry, because a root is the one thing
-            // no enumeration classified. FileRemover re-asks the same question the same way.
-            var kept = fs.TryGetNewestFileTime(extended) is { } newest && keep.Protects(newest);
-
-            return new GatheredRemoval.Link(extended, bounds, kept);
-        }
-
-        return null;
     }
 
     private static RemovalOutcome Delete(
         GatheredRemoval gathered,
         IProgress<double>? progress,
         IFileSystem fs,
+        TimeProvider time,
         CancellationToken ct)
     {
         if (ct.IsCancellationRequested)
@@ -222,9 +139,10 @@ public static class DirectoryRemover
 
         switch (gathered)
         {
-            // Handed over folder by folder from what the walk gathered, which lists nothing again.
+            // Handed over folder by folder from what the walk gathered, which lists nothing again. The
+            // walk that gathered it is the removal's walk.
             case GatheredRemoval.Tree tree:
-                return TreeRemoval.Run(
+                var removal = TreeRemoval.Run(
                     tree.Root,
                     bounds,
                     (listed, stop) =>
@@ -238,7 +156,10 @@ public static class DirectoryRemover
                     progress,
                     planned: 0,
                     fs,
+                    time,
                     ct);
+
+                return removal with { Passes = removal.Passes! with { Walk = tree.Walk } };
 
             case GatheredRemoval.NotAFolder:
                 progress?.Report(1.0);

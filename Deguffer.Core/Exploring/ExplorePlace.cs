@@ -5,7 +5,7 @@ namespace Deguffer.Core.Exploring;
 /// <summary>
 /// Where a view standing on one node should stand once the tree under it is replaced.
 ///
-/// <para>A walked scan publishes a partial tree every so often, and every scan hands back a
+/// <para>A scan in progress publishes a partial tree every so often, and every scan hands back a
 /// finished one at the end. Each is a whole new <see cref="ExploreTree"/>, so something has to say
 /// which of its nodes the user is now looking at. Opening every one at its root is what put
 /// somebody back at the drive while they were reading a folder.</para>
@@ -21,9 +21,10 @@ public static class ExplorePlace
     /// <paramref name="standing"/>, or the new tree's root where nothing does.
     ///
     /// <para>Found by path rather than by trusting the number. A tree's node numbers are its own: a
-    /// walked scan keeps a node's number from one snapshot to the next, but two file-table scans of
-    /// one place number only what each reaches (<see cref="ExploreTree.Create"/>), so a folder that
-    /// gained a sibling between them can have another number in the second. And two trees of
+    /// walked scan keeps a node's number from one snapshot to the next, but a tree drawn from the file
+    /// table numbers only what it reaches (<see cref="ExploreTree.Create"/>), so a folder can have
+    /// another number in each of a read's snapshots, and in two scans of one place where it gained a
+    /// sibling between them. And two trees of
     /// different places number their nodes alike, where the same number would name one folder while
     /// listing another's contents. Finding the same path settles every case without this having to
     /// know which route produced either tree.</para>

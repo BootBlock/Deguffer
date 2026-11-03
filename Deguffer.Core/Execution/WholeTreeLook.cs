@@ -172,14 +172,13 @@ public sealed record WholeTreeLook(
     /// The same answers, read from what a removal Deguffer performs gathered before it deletes
     /// anything, so a directory that goes whole or not at all is listed once rather than twice.
     ///
-    /// <para><b>The walk it is read from is the walk the deletion then acts on.</b> Nothing is listed
-    /// between the two, so the interval in which a store can arrive unseen is the deletion's own rather
-    /// than a second walk of the tree. A store that arrives in it is still never handed to a delete,
-    /// and holds its folder standing.</para>
+    /// <para><b>The walk it is read from is the walk the deletion then acts on.</b> No tree is walked
+    /// again between the two, so a store that arrives in a folder once it is gathered is never handed to
+    /// a delete, and holds that folder standing.</para>
     ///
-    /// <para><b>What the guard keeps is what that walk held back</b>, a file or a link, because that is
-    /// what the removal would leave standing. A folder is not kept by its own timestamps: the removal
-    /// takes it once it is empty. No link is named, because only a tool's command can follow one.</para>
+    /// <para><b>Something recent is what <see cref="Take(IReadOnlyList{string}, MinimumAge, IFileSystem, CancellationToken)"/>
+    /// would call recent</b>: a file or a link the guard would keep, or a folder whose own timestamps
+    /// it protects. No link is named, because only a tool's command can follow one.</para>
     /// </summary>
     /// <param name="guarded">
     /// Whether anything the guard holds back stops the removal. False where only Outlook data files do,
@@ -187,7 +186,7 @@ public sealed record WholeTreeLook(
     /// </param>
     internal static WholeTreeLook Of(IReadOnlyList<GatheredRemoval> gathered, bool guarded) => new(
         InOneOrder(gathered.SelectMany(removal => removal.MailStores).Select(LongPath.Display)),
-        guarded && gathered.Any(removal => removal.Kept > 0),
+        guarded && gathered.Any(removal => removal.HoldsRecent),
         InOneOrder(gathered.SelectMany(removal => removal.Unlisted).Select(LongPath.Display)),
         InOneOrder(gathered.SelectMany(removal => removal.NotFolders).Select(LongPath.Display)),
         []);

@@ -35,16 +35,31 @@ internal sealed class TreeRemoval
     private readonly Func<bool> _readyToLook;
 
     private readonly RemovalTally _tally;
+    private readonly TimeProvider _time;
+    private readonly PassSpan _files;
+    private readonly PassSpan _folders;
 
     // Work queued and not yet done. The removal is over once the walk is and this is zero.
     private int _pending;
+
+    // Every entry the walk gathered: each folder it listed, and the files and links in it.
+    private long _walked;
 
     // Set where the removal stopped with work left: a listing not handed over, a folder not climbed
     // to, or work still queued.
     private bool _abandoned;
 
-    private TreeRemoval(string root, RemovalBounds bounds, RemovalProgress progress, IFileSystem fs, CancellationToken ct)
+    private TreeRemoval(
+        string root,
+        RemovalBounds bounds,
+        RemovalProgress progress,
+        IFileSystem fs,
+        TimeProvider time,
+        CancellationToken ct)
     {
+        _time = time;
+        _files = new PassSpan(time);
+        _folders = new PassSpan(time);
         _tally = new RemovalTally(root);
         _bounds = bounds;
         _progress = progress;
@@ -70,6 +85,7 @@ internal sealed class TreeRemoval
     /// cancelled. A tree already gathered is handed over folder by folder.
     /// </param>
     /// <param name="planned">How many entries the plan measured, for progress until the walk is over.</param>
+    /// <param name="time">The clock <see cref="RemovalOutcome.Passes"/> is measured on.</param>
     public static RemovalOutcome Run(
         RemovalFolder root,
         RemovalBounds bounds,
@@ -77,9 +93,10 @@ internal sealed class TreeRemoval
         IProgress<double>? progress,
         long planned,
         IFileSystem fs,
+        TimeProvider time,
         CancellationToken ct)
     {
-        var removal = new TreeRemoval(root.FoundAs, bounds, new RemovalProgress(progress, planned), fs, ct);
+        var removal = new TreeRemoval(root.FoundAs, bounds, new RemovalProgress(progress, planned), fs, time, ct);
 
         try
         {
@@ -93,7 +110,10 @@ internal sealed class TreeRemoval
 
     private RemovalOutcome Run(RemovalFolder root, Action<Action<RemovalFolder>, CancellationToken> walk)
     {
+        using var wake = _crew.WakeOn(_ct);
+
         var walked = false;
+        var walkStarted = _time.GetTimestamp();
 
         try
         {
@@ -111,6 +131,8 @@ internal sealed class TreeRemoval
             // unchanged, once every helper has ended.
             _crew.Fail(ex);
         }
+
+        var walkTook = new PassTiming(_time.GetElapsedTime(walkStarted), Interlocked.Read(ref _walked));
 
         // The walk is over, so this thread joins the crew until the last of the work is done.
         while (walked && !Stopping)
@@ -133,7 +155,10 @@ internal sealed class TreeRemoval
             _progress.Finished();
         }
 
-        return _tally.Outcome(root, _bounds, _fs, interrupted: !finished);
+        return _tally.Outcome(root, _bounds, _fs, interrupted: !finished) with
+        {
+            Passes = new RemovalPasses(walkTook, _files.Timing, _folders.Timing),
+        };
     }
 
     /// <summary>
@@ -142,16 +167,19 @@ internal sealed class TreeRemoval
     /// </summary>
     private void Listed(RemovalFolder folder)
     {
+        var entries = folder.Files.Count + folder.Links.Count;
+
+        Interlocked.Add(ref _walked, 1 + entries);
+
         if (Stopping)
         {
-            // A deletion failed: stop the walk too, so the failure is thrown without listing the rest.
+            // Cancelled, or a deletion failed: stop the walk too, so a failure is thrown without listing
+            // the rest of the tree.
             Volatile.Write(ref _abandoned, true);
             _stop.Cancel();
             return;
         }
 
-        var files = folder.Files.Count;
-        var entries = files + folder.Links.Count;
         var itself = folder.Parent is null && _bounds.KeepRoot ? 0 : 1;
 
         _progress.Found(entries + itself);
@@ -224,6 +252,7 @@ internal sealed class TreeRemoval
     private void Delete(RemovalFolder folder, int entry)
     {
         _tally.Attempting();
+        var began = _files.Beginning();
 
         var files = folder.Files;
         if (entry < files.Count)
@@ -256,6 +285,7 @@ internal sealed class TreeRemoval
             }
         }
 
+        _files.Ended(began);
         _progress.Done();
 
         if (folder.Finish())
@@ -286,7 +316,9 @@ internal sealed class TreeRemoval
             if (next.Parent is not null || !_bounds.KeepRoot)
             {
                 _tally.Attempting();
+                var began = _folders.Beginning();
                 next.Record(DirectoryDeletion.TryDelete(next.Path, _fs));
+                _folders.Ended(began);
                 _progress.Done();
             }
 

@@ -16,22 +16,28 @@ internal delegate ContentReading ReadContent(DuplicateCandidate file, ContentPar
 /// <para><b>A file read whole at the first stage is done.</b> A file no longer than its first and last
 /// blocks is read at once in full, so its group is confirmed as soon as its files are read.</para>
 ///
-/// <para><b>Confirmed as each group finishes.</b> A group is matched again the moment its last file
-/// is read, and a group of the last stage is passed on then, so results reach the page while the
-/// search runs. Nothing is passed on once the search is stopped.</para>
+/// <para><b>The stages overlap.</b> A group is matched again the moment its last file is read, and the
+/// files whose blocks still match are queued to be read in full there and then, beside the blocks of
+/// the groups still waiting. So a fast disk reads its full content while a slow one is still reading
+/// blocks, a disk bound by opens is also kept busy by long reads, and a large group is confirmed
+/// without waiting for every small file's blocks. A group of the last stage is passed on as it is
+/// confirmed, so results reach the page while the search runs. Nothing is passed on once the search
+/// is stopped.</para>
+///
+/// <para><b>The groups that could free the most first.</b> Each read is queued with the space its
+/// group could free, so within a disk a group's full reads overtake the blocks of smaller groups, and
+/// the results worth most arrive first.</para>
 ///
 /// <para><b>Read in lanes, one a disk</b> (<see cref="ReadingLanes"/>), each bounded, all at once,
-/// each on threads of its own (<see cref="ListWorkers"/>) rather than the pool's. A file that
-/// could not be read, or was not the identified file by the time it was, is left out and counted;
-/// an error never makes two files the same.</para>
+/// each on threads of its own (<see cref="LaneWorkers{T}"/>) rather than the pool's. A spinning disk
+/// is read by one in both stages. A file that could not be read, or was not the identified file by
+/// the time it was, is left out and counted; an error never makes two files the same.</para>
 /// </summary>
 internal sealed class ContentMatching
 {
-    /// <summary>How often a stage says how far it has got, which is often enough to watch and rare enough not to flood the page.</summary>
-    private const long ReportEveryMilliseconds = 100;
-
     private readonly ReadContent _read;
     private readonly VolumeMediaCache _media;
+    private readonly TimeProvider _clock;
     private readonly Lock _confirming = new();
 
     private int _gone;
@@ -41,9 +47,16 @@ internal sealed class ContentMatching
     private int _changed;
 
     public ContentMatching(ReadContent read, VolumeMediaCache media)
+        : this(read, media, TimeProvider.System)
+    {
+    }
+
+    /// <param name="clock">What times the progress reports: the seam a test reports every change through.</param>
+    internal ContentMatching(ReadContent read, VolumeMediaCache media, TimeProvider clock)
     {
         _read = read;
         _media = media;
+        _clock = clock;
     }
 
     /// <summary>What reading left out, to add to what finding the candidates left out.</summary>
@@ -61,85 +74,16 @@ internal sealed class ContentMatching
         IProgress<DuplicateSearchProgress>? progress,
         CancellationToken ct)
     {
-        // The groups that could free the most go first, so the results worth most arrive first.
-        IReadOnlyList<IReadOnlyList<DuplicateCandidate>> byTheirEnds =
-            [.. groups.OrderByDescending(group => group.Files[0].Length * (group.Files.Count - 1)).Select(group => group.Files)];
+        var run = new Run(
+            this,
+            ReadingLanes.Of(groups.SelectMany(group => group.Files).Select(file => file.Volume), _media),
+            new StageMeasure(DuplicateSearchStage.ComparingContent, groups.SelectMany(group => group.Files).Sum(file => ContentReader.MostToRead(file.Length)), progress, _clock),
+            criteria,
+            algorithm,
+            confirmed,
+            ct);
 
-        var unsettled = await StageAsync(
-            DuplicateSearchStage.FirstAndLastBlocks, ContentPart.Ends, byTheirEnds, criteria, algorithm, confirmed, progress, ct)
-            .ConfigureAwait(false);
-
-        await StageAsync(DuplicateSearchStage.FullContent, ContentPart.Whole, unsettled, criteria, algorithm, confirmed, progress, ct)
-            .ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// Reads <paramref name="part"/> of every file in <paramref name="groups"/>, confirms each group
-    /// that the reading settles, and answers the groups the next stage must read further.
-    /// </summary>
-    private async Task<IReadOnlyList<IReadOnlyList<DuplicateCandidate>>> StageAsync(
-        DuplicateSearchStage stage,
-        ContentPart part,
-        IReadOnlyList<IReadOnlyList<DuplicateCandidate>> groups,
-        MatchCriteria criteria,
-        ChecksumAlgorithm algorithm,
-        Action<DuplicateGroup> confirmed,
-        IProgress<DuplicateSearchProgress>? progress,
-        CancellationToken ct)
-    {
-        var total = groups.Sum(group => group.Count);
-        var unread = groups.Select(group => group.Count).ToArray();
-        var checksums = groups.Select(group => new ContentChecksum?[group.Count]).ToArray();
-        List<IReadOnlyList<DuplicateCandidate>> further = [];
-        ConcurrentBag<Checksum> idle = [];
-        var done = 0;
-        var reported = Environment.TickCount64;
-
-        progress?.Report(new DuplicateSearchProgress(stage, 0, total));
-
-        var lanes = ReadingLanes.Of(
-            groups.SelectMany((group, g) => group.Select((file, f) => (Group: g, File: f))),
-            item => groups[item.Group][item.File].Volume,
-            _media);
-
-        try
-        {
-            void ReadOne((int Group, int File) item)
-            {
-                checksums[item.Group][item.File] = Read(groups[item.Group][item.File], part, algorithm, idle, ct);
-
-                var finished = Interlocked.Increment(ref done);
-                var now = Environment.TickCount64;
-                var last = Volatile.Read(ref reported);
-
-                if (finished == total || (now - last >= ReportEveryMilliseconds && Interlocked.CompareExchange(ref reported, now, last) == last))
-                {
-                    progress?.Report(new DuplicateSearchProgress(stage, finished, total));
-                }
-
-                if (Interlocked.Decrement(ref unread[item.Group]) == 0)
-                {
-                    Settle(groups[item.Group], checksums[item.Group], part, criteria, confirmed, further, ct);
-                }
-            }
-
-            await Task.WhenAll(lanes.Select(lane => WorkerThreads.Shared.RunAsync(
-                () =>
-                {
-                    ListWorkers.Run(lane.Files.Count, lane.Readers, file => ReadOne(lane.Files[file]), ct);
-                    return true;
-                },
-                ct))).ConfigureAwait(false);
-        }
-        finally
-        {
-            foreach (var checksum in idle)
-            {
-                checksum.Dispose();
-            }
-        }
-
-        return further;
+        await run.MatchAsync(groups).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -188,48 +132,127 @@ internal sealed class ContentMatching
         }
     }
 
-    /// <summary>
-    /// Groups the files of one finished group by what was read, and confirms each match that read
-    /// every byte or passes it on to be read in full. A file alone in its group has no match.
-    /// </summary>
-    private void Settle(
-        IReadOnlyList<DuplicateCandidate> group,
-        ContentChecksum?[] checksums,
-        ContentPart part,
+    /// <summary>The space a group of <paramref name="files"/> could free, which orders its reads.</summary>
+    private static long Space(IReadOnlyList<DuplicateCandidate> files) => files[0].Length * (files.Count - 1);
+
+    /// <summary>One group of files as one part of each is read, and what has been read of them so far.</summary>
+    private sealed class Reading(IReadOnlyList<DuplicateCandidate> files, ContentPart part)
+    {
+        public IReadOnlyList<DuplicateCandidate> Files { get; } = files;
+
+        public ContentPart Part { get; } = part;
+
+        public ContentChecksum?[] Checksums { get; } = new ContentChecksum?[files.Count];
+
+        public int Unread = files.Count;
+    }
+
+    /// <summary>One file of a <see cref="Reading"/>, by its place there.</summary>
+    private readonly record struct FileRead(Reading Group, int File);
+
+    /// <summary>One call of <see cref="MatchAsync"/>: its lanes, its measure, and the running checksums its readers share.</summary>
+    private sealed class Run(
+        ContentMatching matching,
+        ReadingLanes lanes,
+        StageMeasure measure,
         MatchCriteria criteria,
+        ChecksumAlgorithm algorithm,
         Action<DuplicateGroup> confirmed,
-        List<IReadOnlyList<DuplicateCandidate>> further,
         CancellationToken ct)
     {
-        var whole = ContentReader.IsWhole(part, group[0].Length);
+        private readonly LaneWorkers<FileRead> _workers = new(lanes.Readers, ct);
+        private readonly ConcurrentBag<Checksum> _idle = [];
 
-        var matches = group
-            .Select((file, i) => (File: file, Checksum: checksums[i]))
-            .Where(read => read.Checksum is not null)
-            .GroupBy(read => read.Checksum!.Value)
-            .Where(match => match.Count() > 1);
-
-        foreach (var match in matches)
+        public async Task MatchAsync(IReadOnlyList<CandidateGroup> groups)
         {
-            IReadOnlyList<DuplicateCandidate> files = [.. match.Select(read => read.File)];
-
-            lock (_confirming)
+            try
             {
-                // Under the same lock as every other confirmation, so none is passed on after the
-                // search was stopped, and the caller is never given two at once.
-                if (ct.IsCancellationRequested)
+                await _workers.RunAsync(groups.SelectMany(group => Reads(new Reading(group.Files, ContentPart.Ends))), ReadOne)
+                    .ConfigureAwait(false);
+            }
+            finally
+            {
+                // Every reader has ended by now, whether the run ended, stopped or failed.
+                foreach (var checksum in _idle)
                 {
-                    return;
+                    checksum.Dispose();
+                }
+            }
+
+            measure.Finished();
+        }
+
+        /// <summary>Every file of <paramref name="group"/>, in its lane, behind the reads of groups that could free more.</summary>
+        private IEnumerable<(int Lane, FileRead Item, long Priority)> Reads(Reading group)
+        {
+            var space = Space(group.Files);
+
+            for (var file = 0; file < group.Files.Count; file++)
+            {
+                yield return (lanes.LaneOf(group.Files[file].Volume), new FileRead(group, file), space);
+            }
+        }
+
+        private void ReadOne(FileRead read)
+        {
+            var (group, file) = read;
+            var candidate = group.Files[file];
+
+            group.Checksums[file] = matching.Read(candidate, group.Part, algorithm, _idle, ct);
+            measure.Done(ContentReader.BytesOf(group.Part, candidate.Length));
+
+            if (Interlocked.Decrement(ref group.Unread) == 0)
+            {
+                Settle(group);
+            }
+        }
+
+        /// <summary>
+        /// Groups the files of one finished group by what was read, and confirms each match that read
+        /// every byte or queues it to be read in full. A file alone in its group has no match.
+        /// </summary>
+        private void Settle(Reading group)
+        {
+            var length = group.Files[0].Length;
+            var whole = ContentReader.IsWhole(group.Part, length);
+            var goingOn = 0;
+
+            var matches = group.Files
+                .Select((file, i) => (File: file, Checksum: group.Checksums[i]))
+                .Where(read => read.Checksum is not null)
+                .GroupBy(read => read.Checksum!.Value)
+                .Where(match => match.Count() > 1);
+
+            foreach (var match in matches)
+            {
+                IReadOnlyList<DuplicateCandidate> files = [.. match.Select(read => read.File)];
+
+                lock (matching._confirming)
+                {
+                    // Under the same lock as every other confirmation, so none is passed on after the
+                    // search was stopped, and the caller is never given two at once.
+                    if (ct.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    if (whole)
+                    {
+                        confirmed(new DuplicateGroup(criteria, length, match.Key, files));
+                        continue;
+                    }
                 }
 
-                if (whole)
+                goingOn += files.Count;
+                foreach (var (lane, item, priority) in Reads(new Reading(files, ContentPart.Whole)))
                 {
-                    confirmed(new DuplicateGroup(criteria, files[0].Length, match.Key, files));
+                    _workers.Add(lane, item, priority);
                 }
-                else
-                {
-                    further.Add(files);
-                }
+            }
+
+            if (!whole)
+            {
+                measure.Dropped(length * (group.Files.Count - goingOn));
             }
         }
     }

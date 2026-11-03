@@ -32,6 +32,7 @@ internal static class WholeDirectoryRemoval
         RunResidue runResidue,
         IProgress<double>? progress,
         IFileSystem fs,
+        TimeProvider time,
         CancellationToken ct)
     {
         var (guard, how) = step.GoesWholeOrNotAtAll
@@ -43,7 +44,7 @@ internal static class WholeDirectoryRemoval
         try
         {
             // The index first and the directory last, the order the removals below take them in.
-            gathered = await DirectoryRemover.GatherAsync([.. step.IndexedBy, step.Path], keep, fs, ct).ConfigureAwait(false);
+            gathered = await GatheredRemoval.TakeAsync([.. step.IndexedBy, step.Path], keep, fs, time, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -62,14 +63,14 @@ internal static class WholeDirectoryRemoval
         // The index first, and the directory it indexes only once all of it is gone. See
         // DeleteDirectoryStep.IndexedBy.
         var index = await IndexRemoval.RemoveAsync(
-            step, [.. gathered.Take(step.IndexedBy.Count)], refusals, runResidue, fs, ct).ConfigureAwait(false);
+            step, [.. gathered.Take(step.IndexedBy.Count)], refusals, runResidue, fs, time, ct).ConfigureAwait(false);
 
         if (!index.Complete)
         {
             return index.Stopped(step);
         }
 
-        var removal = await DirectoryRemover.DeleteAsync(gathered[^1], progress, fs, ct).ConfigureAwait(false);
+        var removal = await DirectoryRemover.DeleteAsync(gathered[^1], progress, fs, time, ct).ConfigureAwait(false);
 
         refusals.Record(step.Path, removal);
         runResidue.Record(step.Path, removal.LeftStanding);
@@ -82,6 +83,7 @@ internal static class WholeDirectoryRemoval
             Refused = removal.Refused + index.Refused,
             RefusedFolders = removal.RefusedFolders + index.RefusedFolders,
             EntriesRemoved = removal.EntriesRemoved + index.EntriesRemoved,
+            Passes = RemovalPasses.Combine(removal.Passes, index.Passes),
             Kept = removal.Kept + index.Kept,
         };
 
