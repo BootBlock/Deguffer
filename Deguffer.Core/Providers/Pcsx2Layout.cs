@@ -89,24 +89,17 @@ public sealed partial class Pcsx2Layout : EmulatorLayout
         yield return folder;
     }
 
-    public override IReadOnlyList<EmulatorCacheFolder> CacheFoldersIn(string root)
-    {
-        var configured = SettingIn(root, "Folders", "Cache") is { Length: > 0 } value ? value : DefaultCacheFolder;
-        var folder = Path.IsPathFullyQualified(configured)
-            ? LongPath.Configured(configured)
-            : LongPath.Configured(Path.Combine(root, configured));
-
-        return folder is null
-            ? []
-            :
+    public override IReadOnlyList<EmulatorCacheFolder> CacheFoldersIn(string root) =>
+        IniSetting.Folder(root, Path.Combine(root, "inis", SettingsFile), "Folders", "Cache", DefaultCacheFolder, MaximumSettingsBytes) is { } folder
+            ?
             [
                 new EmulatorCacheFolder(
                     folder,
                     TargetKind.File,
                     Classify,
                     [("fonts", "On-screen display fonts you downloaded. PCSX2 may be set to use one.")]),
-            ];
-    }
+            ]
+            : [];
 
     private static ChildClassification Classify(string name) =>
         ShaderFile().IsMatch(name)
@@ -127,40 +120,6 @@ public sealed partial class Pcsx2Layout : EmulatorLayout
         }
 
         return LongPath.Configured(Path.Combine(folder, named));
-    }
-
-    /// <summary>
-    /// A value from <paramref name="root"/>'s settings file, or null where the file, the section or the
-    /// key is missing or the file cannot be read.
-    /// </summary>
-    private static string? SettingIn(string root, string section, string key)
-    {
-        if (BoundedFile.Read(Path.Combine(root, "inis", SettingsFile), MaximumSettingsBytes) is not { } content)
-        {
-            return null;
-        }
-
-        var inSection = false;
-
-        foreach (var raw in Encoding.UTF8.GetString(content.Span).Split('\n'))
-        {
-            var line = raw.Trim();
-
-            if (line.StartsWith('[') && line.EndsWith(']'))
-            {
-                inSection = line[1..^1].Trim().Equals(section, StringComparison.OrdinalIgnoreCase);
-                continue;
-            }
-
-            if (inSection
-                && line.IndexOf('=') is > 0 and var equals
-                && line[..equals].Trim().Equals(key, StringComparison.OrdinalIgnoreCase))
-            {
-                return line[(equals + 1)..].Trim();
-            }
-        }
-
-        return null;
     }
 
     /// <summary>

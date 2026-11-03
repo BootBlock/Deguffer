@@ -66,6 +66,50 @@ public abstract class EmulatorLayout
     public virtual IReadOnlyList<EmulatorGameCaches> GameCachesIn(string root) => [];
 
     /// <summary>
+    /// Whether this layout takes a declared folder as its own only where its program is there, because
+    /// its settings file is one another emulator writes too. A folder such a layout proved is not also
+    /// read as the folder of one that proved it by that settings file alone: Vita3K's
+    /// <c>config.yml</c> beside its program is the file an older RPCS3 wrote.
+    /// </summary>
+    public virtual bool IsKnownByItsProgram => false;
+
+    /// <summary>
+    /// Whether nothing proves <paramref name="root"/> to be this emulator's but a settings file
+    /// <paramref name="other"/> writes there too. A marker of this layout's own that Windows would not
+    /// answer for counts as present, so the folder stays this emulator's as well.
+    /// </summary>
+    public bool IsProvenOnlyByMarkersOf(EmulatorLayout other, string root) =>
+        Markers
+            .Where(marker => !other.Markers.Contains(marker, StringComparer.OrdinalIgnoreCase))
+            .All(marker => LongPath.ProbeFile(Path.Combine(root, marker)) is PathPresence.Absent);
+
+    /// <summary>
+    /// Whether one of this emulator's programs is in <paramref name="folder"/>. A refusal counts, so the
+    /// root is probed and reported as unread rather than the folder said to hold no emulator.
+    /// </summary>
+    protected bool HoldsProgram(string folder) =>
+        ProcessNames.Any(program => LongPath.ProbeFile(Path.Combine(folder, program + ".exe")) is not PathPresence.Absent);
+
+    /// <summary>
+    /// The folder called <paramref name="name"/> beside this emulator's program, where
+    /// <paramref name="folder"/> is the program's folder or that folder itself.
+    /// </summary>
+    protected IEnumerable<string> FolderBesideProgram(string folder, string name)
+    {
+        if (HoldsProgram(folder))
+        {
+            yield return Path.Combine(folder, name);
+        }
+
+        if (Path.GetFileName(folder).Equals(name, StringComparison.OrdinalIgnoreCase)
+            && Path.GetDirectoryName(folder) is { } parent
+            && HoldsProgram(parent))
+        {
+            yield return folder;
+        }
+    }
+
+    /// <summary>
     /// Whether <paramref name="root"/> holds a marker. Refused where no marker is there and Windows
     /// would not answer for one, so an unreadable root is reported rather than read as no emulator.
     /// </summary>
