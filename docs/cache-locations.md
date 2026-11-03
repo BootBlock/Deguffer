@@ -4816,6 +4816,113 @@ Sources:
 
 ---
 
+## Topaz Labs AI models
+
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
+acknowledgement.
+
+| | |
+| --- | --- |
+| **Location** | `%PROGRAMDATA%\Topaz Labs LLC\<Product>\models`, and `Topaz Video\models\models` for Topaz Video |
+| **Method** | Delete a product's whole `models` folder, or for an installed product holding its sign-in record there, only the `models` folder inside it |
+| **Typical size** | Topaz states 51 GB for Topaz Photo and 48 GB for Topaz Gigapixel; a full install of everything is around 70 GB |
+
+### What it is
+
+Topaz Photo, Gigapixel and Video, and the discontinued DeNoise AI, Sharpen AI and Mask AI, run
+machine-learning models that are not in their installers. Each application downloads the models
+its filters need and keeps every one it has used, for every user of the computer, in a folder named
+for the product under `%PROGRAMDATA%\Topaz Labs LLC`. Newer models are 4 to 7 GB each.
+
+**A product that is gone keeps its models.** Topaz renamed its products (Photo AI became Photo,
+Gigapixel AI became Gigapixel, Video AI became Video), and the data folder was renamed with them, so
+an upgrade can leave the old folder behind. The classic applications are discontinued. A models
+folder whose product is no longer installed is weight nothing will load again, and Deguffer lists
+those first, under **No longer installed**.
+
+### What Deguffer does
+
+Inside `Topaz Labs LLC`, Deguffer looks only in folders whose name starts with `Topaz `. Anything
+else stays in Tier 4, and Deguffer tells you it is leaving it alone. Inside a product's folder,
+**`models` is the only child Deguffer will ever remove**. A single model file is never removed: a
+part-removed set is reported to fail with "Error Loading Model" rather than download again.
+
+A product counts as **no longer installed** only when all of these hold, and every place Deguffer
+read answered:
+
+- there is no `Program Files\Topaz Labs LLC\<Product>` folder, in either program directory;
+- no `Uninstall` entry has an install folder of that name, or a display name that is the product's
+  name with at most a version after it (so `Topaz Photo AI 3.1.2` does not count for `Topaz Photo`);
+- none of `TVAI_MODEL_DIR`, `TVAI_MODEL_DATA_DIR`, `VEAI_MODEL_DIR`, `VEAI_MODEL_DATA_DIR` or
+  `PAI_MODEL_DIR` names a folder inside it.
+
+A folder or a registry key Windows would not read could be the installation, so the product is then
+treated as installed.
+
+For a product that is no longer installed, the whole `models` folder goes. For one that is, or may
+be, installed, Deguffer first looks at the top of `models`, and at the top of the `models` folder
+inside it, which Topaz Video has. A user report has Topaz Video AI keeping `auth.tz`, the product's
+sign-in record, and `tvai.tz`, whose role nobody has established, beside its model files. If either
+is in the outer folder, only an inner `models` folder holding neither may go. If either is in the
+inner folder, or there is no inner folder, or it is a link Deguffer does not look through, nothing goes, and the folder is named and left alone.
+Which of Topaz Video's files sit at which level is not documented, so Deguffer asks the files
+rather than assuming.
+
+While a program runs from a Topaz program folder, an installed product's models are held back and
+Explore refuses them. That covers Topaz Video's renders through the `ffmpeg.exe` it installs beside
+itself, which open no window. So does a Topaz application running from anywhere, or Photoshop or
+Lightroom, which Topaz's plugins were reported running inside. The clean asks again just before it
+removes each one, and if Deguffer cannot tell what is running, the models are held back too.
+
+### What is protected
+
+The `Topaz Labs LLC` folder and every product folder, which are never removed; everything beside
+`models` in a product folder, such as `Logs`; the sign-in record and every other file beside an
+inner `models` folder; and the applications in `Program Files`, which Deguffer never reaches.
+Each entry Deguffer leaves standing is named, and checked afterwards to be still there.
+
+**Not reached at all:** a models folder moved with Topaz Video's Resource Folder setting, Photo
+AI's `ModelDir` registry value or a model variable, and Topaz Video's temporary and workspace
+folders. Topaz publishes no default path for those, and the workspace folder mixes preview files
+with your `.tvai` projects.
+
+### What it costs you
+
+**Nothing, for a product that is no longer installed.** Reinstalling it downloads its models again.
+
+**A download, for one that is installed.** The application fetches each model again the next time
+a filter needs it, which needs an internet connection and a signed-in, licensed Topaz account.
+Gigapixel does this only while **Enable in-app model downloads** is on in its preferences. If a
+model will not load afterwards, run the product's installer again and choose **Repair**, which Topaz
+staff say downloads missing or damaged models again.
+
+Your projects, presets and settings are untouched.
+
+### Why Tier 2, not Tier 1
+
+Nothing fetches a model back in the background, and getting it back needs a connection and an
+account. On a metered connection, or a computer kept offline, that is close to permanent.
+
+**§5.1 has nothing Deguffer can call.** Topaz Video's **File → Model Manager** downloads models,
+and Photo's and Gigapixel's installers choose which models to install, but none of them removes
+one. They are the way back, and the row names them.
+
+**No administrator rights are declared, and nobody has measured the folder's rights.** The
+applications download models on demand into these folders as the signed-in user, so that user can
+write there. A model an installer placed may carry rights that refuse an ordinary account. Then
+Deguffer reports the refusal, and Repair is the way back from a part-removed set.
+
+Sources:
+
+- Topaz Photo system requirements: <https://docs.topazlabs.com/topaz-photo/system-requirements>
+- Topaz Gigapixel system requirements: <https://docs.topazlabs.com/topaz-gigapixel/system-requirements>
+- Topaz Video troubleshooting: <https://docs.topazlabs.com/topaz-video/troubleshooting>
+- Topaz Video preferences: <https://docs.topazlabs.com/topaz-video/reference-guide/preferences>
+- Topaz Photo installation issues: <https://docs.topazlabs.com/topaz-photo/installation-or-update-issues>
+- Topaz community, model download errors: <https://community.topazlabs.com/t/resolved-steps-for-model-download-errors/90098>
+
+---
+
 ## Capture One previews and thumbnails
 
 **Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an

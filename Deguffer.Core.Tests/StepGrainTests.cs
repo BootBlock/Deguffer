@@ -68,6 +68,7 @@ public class StepGrainTests
             "steam-library-artwork",
             "steam-shader-cache",
             "stm32cube-firmware-zips",
+            "topaz-models",
             "tox-environments",
             "typescript-typings",
             "unity-library",
