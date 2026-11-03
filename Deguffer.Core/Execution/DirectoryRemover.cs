@@ -41,19 +41,30 @@ public static class DirectoryRemover
     /// with <see cref="RemovalOutcome.Interrupted"/> set. What a removal stopped part-way has already
     /// taken, and where it went, is what §5.6 needs afterwards, and an exception carries neither.
     /// </param>
+    /// <param name="time">
+    /// The clock <see cref="RemovalOutcome.Passes"/> is measured on. Defaults to the system clock. The
+    /// executor hands over its own, so a step and the passes inside it are read from one clock.
+    /// </param>
     public static Task<RemovalOutcome> RemoveAsync(
         string path,
         MinimumAge keep = default,
         IProgress<double>? progress = null,
         CancellationToken ct = default,
         IFileSystem? fileSystem = null,
-        RemovalBounds? bounds = null) =>
+        RemovalBounds? bounds = null,
+        TimeProvider? time = null) =>
         // Not handed the token: a task handed one is cancelled where the token is before the work
         // starts, which would break the contract above at its first step. On a thread of its own,
         // because the walk holds the thread that drives it for the whole removal.
         WorkerThreads.Shared.RunAsync(
             () => Remove(
-                path, keep, bounds ?? RemovalBounds.None, progress, fileSystem ?? WindowsFileSystem.Default, ct),
+                path,
+                keep,
+                bounds ?? RemovalBounds.None,
+                progress,
+                fileSystem ?? WindowsFileSystem.Default,
+                time ?? TimeProvider.System,
+                ct),
             CancellationToken.None);
 
     private static RemovalOutcome Remove(
@@ -62,6 +73,7 @@ public static class DirectoryRemover
         RemovalBounds bounds,
         IProgress<double>? progress,
         IFileSystem fs,
+        TimeProvider time,
         CancellationToken ct)
     {
         if (ct.IsCancellationRequested)
@@ -161,6 +173,7 @@ public static class DirectoryRemover
         // then delete depth-first. Gathering also means a mid-run enumeration failure cannot
         // leave us deleting a partially-understood tree.
         RemovalInventory inventory;
+        var walkStarted = time.GetTimestamp();
 
         try
         {
@@ -170,6 +183,15 @@ public static class DirectoryRemover
         {
             return NothingDone;
         }
+
+        var walk = new PassTiming(
+            time.GetElapsedTime(walkStarted),
+            inventory.Files.Count + inventory.Directories.Count + inventory.Links.Count);
+
+        // The links are deleted as files are, one call each, so their time is the file pass's.
+        var passStarted = time.GetTimestamp();
+        TimeSpan? filesTook = null;
+        TimeSpan? foldersTook = null;
 
         var leftStanding = new List<string>();
 
@@ -238,13 +260,29 @@ public static class DirectoryRemover
                 }
             }, ct);
 
+            filesTook = time.GetElapsedTime(passStarted);
+            passStarted = time.GetTimestamp();
+
             RemoveDirectories(directories, bounds.KeepRoot, attempts, fs, ct);
+
+            foldersTook = time.GetElapsedTime(passStarted);
 
             progress?.Report(1.0);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             interrupted = true;
+
+            // The pass that was running when it stopped took the time until now. One never begun took
+            // none.
+            if (filesTook is null)
+            {
+                filesTook = time.GetElapsedTime(passStarted);
+            }
+            else
+            {
+                foldersTook = time.GetElapsedTime(passStarted);
+            }
         }
 
         var refusedFolders = FolderRefusals.None;
@@ -308,6 +346,10 @@ public static class DirectoryRemover
             LeftAlone = [.. inventory.Spared.Concat(inventory.UserWork).Select(LongPath.Display)],
             UserWork = inventory.UserWork.Count,
             Interrupted = interrupted,
+            Passes = new RemovalPasses(
+                walk,
+                new PassTiming(filesTook.Value, inventory.Links.Count + Volatile.Read(ref done)),
+                new PassTiming(foldersTook ?? TimeSpan.Zero, attempts.Count(attempt => attempt is not null))),
         };
     }
 

@@ -67,7 +67,20 @@ public sealed record StepOutcome(
     long BytesRequested = 0,
     long BytesScheduled = 0,
     bool Interrupted = false,
-    int UserWork = 0);
+    int UserWork = 0)
+{
+    /// <summary>
+    /// How long the step took, and on what. Set by <see cref="PlanExecutor"/> once the step has its
+    /// outcome, because the step's own route cannot time the checks asked before it.
+    /// </summary>
+    public StepTiming Timing { get; init; }
+
+    /// <summary>
+    /// Where a directory step's removal spent its time, pass by pass. Null for every other step, and
+    /// for a removal that never walked a tree. See <see cref="RemovalOutcome.Passes"/>.
+    /// </summary>
+    public RemovalPasses? Passes { get; init; }
+}
 
 /// <summary>The outcome of executing a plan, including the §5.6 verification.</summary>
 public sealed record CleanupResult
@@ -78,6 +91,7 @@ public sealed record CleanupResult
 
     public IReadOnlyList<StepOutcome> Steps { get; init; } = [];
 
+    /// <summary>The whole plan, from its first step to its last. See <see cref="StepOutcome.Timing"/> for each step.</summary>
     public TimeSpan Duration { get; init; }
 
     public VerificationResult? Verification { get; init; }

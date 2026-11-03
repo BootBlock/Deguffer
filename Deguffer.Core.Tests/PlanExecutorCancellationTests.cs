@@ -331,7 +331,7 @@ public sealed class PlanExecutorCancellationTests : IDisposable
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        var removal = await IndexRemoval.RemoveAsync(step, MinimumAge.Off, RefusalLog, new RunResidue(), cts.Token);
+        var removal = await IndexRemoval.RemoveAsync(step, MinimumAge.Off, RefusalLog, new RunResidue(), TimeProvider.System, cts.Token);
 
         Assert.True(removal.Interrupted);
         Assert.False(removal.Complete);

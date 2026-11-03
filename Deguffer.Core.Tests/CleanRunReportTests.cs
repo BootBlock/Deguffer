@@ -217,6 +217,60 @@ public sealed class CleanRunReportTests : IDisposable
         Assert.DoesNotContain("survived`", report, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The report says how long each row and each step took, where a step spent it, and where its
+    /// removal spent its share, so a slow clean reported from a user's machine names the step and the
+    /// pass that were slow. Figures only: nothing in a timing line is a path.
+    /// </summary>
+    [Fact]
+    public void StatesWhereEachStepSpentItsTimeWithNoPath()
+    {
+        var environment = new FakeUserEnvironment(_temp.Path);
+        var obj = Path.Combine(environment.UserProfile, "source", "App", "obj");
+        var result = new CleanupResult
+        {
+            ProviderId = "build-output",
+            ProviderName = "Build output",
+            Duration = TimeSpan.FromSeconds(12.5),
+            Steps =
+            [
+                new StepOutcome($"Delete {obj}", Succeeded: true, 1024, Refusals.None, $"Removed {obj}.")
+                {
+                    Timing = new StepTiming(TimeSpan.FromSeconds(4), UseCheck: TimeSpan.FromSeconds(1.25), Look: TimeSpan.FromMilliseconds(500)),
+                    Passes = new RemovalPasses(
+                        new PassTiming(TimeSpan.FromMilliseconds(250), 1234),
+                        new PassTiming(TimeSpan.FromSeconds(1.5), 1000),
+                        new PassTiming(TimeSpan.FromMilliseconds(500), 234)),
+                },
+                new StepOutcome("Run the tool's own clean", Succeeded: true, 0, Refusals.None)
+                {
+                    Timing = new StepTiming(TimeSpan.FromSeconds(8), TimeSpan.Zero, TimeSpan.Zero),
+                },
+            ],
+        };
+
+        var report = CleanRunReport.Describe([result], Origin, environment);
+        var lines = report.Split(Environment.NewLine);
+
+        Assert.Contains("Took 12.500 s.", lines);
+        Assert.Contains("  - Took 4.000 s: use check 1.250 s, look 0.500 s, the rest 2.250 s", lines);
+        Assert.Contains("  - Removal: walk 0.250 s over 1,234, files 1.500 s over 1,000, folders 0.500 s over 234", lines);
+        Assert.Contains("  - Took 8.000 s: use check 0.000 s, look 0.000 s, the rest 8.000 s", lines);
+        Assert.Single(lines, line => line.StartsWith("  - Removal:", StringComparison.Ordinal));
+
+        var timingLines = lines.Where(line => line.StartsWith("  - Took", StringComparison.Ordinal)
+            || line.StartsWith("  - Removal:", StringComparison.Ordinal)
+            || line.StartsWith("Took", StringComparison.Ordinal));
+
+        Assert.All(timingLines, line =>
+        {
+            Assert.DoesNotContain('\\', line);
+            Assert.DoesNotContain('/', line);
+            Assert.DoesNotContain("%USERPROFILE%", line, StringComparison.Ordinal);
+        });
+        Assert.DoesNotContain(environment.UserProfile, report, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static CleanupResult Failed(string path, string step, string? message) => new()
     {
         ProviderId = "temp-directories",

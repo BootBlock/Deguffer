@@ -652,7 +652,7 @@ public sealed class PlanExecutorTests : IDisposable
         var output = _temp.CreateDirectory("project", "out");
         var step = new DeleteDirectoryStep(output, "Output") { IndexedBy = [index] };
 
-        var removal = await IndexRemoval.RemoveAsync(step, MinimumAge.Off, RefusalLog, new RunResidue(), default);
+        var removal = await IndexRemoval.RemoveAsync(step, MinimumAge.Off, RefusalLog, new RunResidue(), TimeProvider.System, default);
 
         Assert.False(removal.Complete);
         Assert.True(removal.NotADirectory);
