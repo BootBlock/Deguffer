@@ -49,7 +49,7 @@ public sealed class CleanupPlanner
 
     /// <summary>
     /// The sources verified by hand in §4.1 and §4.2, plus pip, pipenv, Poetry, pre-commit's hook environments, Cargo, Go, Zig, Deno, Electron's downloads, TypeScript's typings, the task caches Nx keeps in the profile and in each workspace, ccache, sccache,
-    /// Maven, vcpkg, pnpm, Yarn 1, Bun, Composer, Arduino's downloads and build cache, the tool archives ESP-IDF's installers keep, conda, Playwright, Puppeteer, the browsers VS Code extensions download for themselves, the browser profiles test runners leave in the
+    /// Maven, vcpkg, pnpm, Yarn 1, the global cache of Yarn 2 and later, Bun, Composer, Arduino's downloads and build cache, the tool archives ESP-IDF's installers keep, conda, Playwright, Puppeteer, the browsers VS Code extensions download for themselves, the browser profiles test runners leave in the
     /// temporary folders, the GPU shader caches, the Chromium application caches and the offline storage sites keep beside them, the Firefox
     /// profile caches, the Epic Games launcher's store cache and its own logs, the Battle.net
     /// launcher's cache and its logs, the Steam client's
@@ -64,7 +64,7 @@ public sealed class CleanupPlanner
     /// <c>docs/cache-locations.md</c>.
     ///
     /// Tier 1 throughout except Unity, Unreal's per-project intermediate files and derived data, Cargo's per-project target, node_modules, Python virtual
-    /// environments, conda, Maven, vcpkg, Steam's shader caches, the shared Unreal Engine derived data cache, Unity's GI cache, Affinity's models, Capture One's previews, DaVinci Resolve's render cache, PlatformIO, the STM32Cube firmware zips, Playwright, Puppeteer, the Azure Functions Core Tools
+    /// environments, conda, Maven, vcpkg, Steam's shader caches, the shared Unreal Engine derived data cache, Unity's GI cache, Affinity's models, Capture One's previews, DaVinci Resolve's render cache, PlatformIO, the STM32Cube firmware zips, the global cache of Yarn 2 and later, Playwright, Puppeteer, the Azure Functions Core Tools
     /// releases, the graphics driver installer files, the installer downloads in the temporary folders, the superseded Squirrel builds, the local copies of cloud files, the Dropbox cache and the component store's cleanup, which are Tier 2, and the
     /// Recycle Bins, the component store's reset, the File History target, the crash dumps, the servicing logs, the Epic
     /// launcher's logs, the VS Code logs, the tool logs in the temporary folders, and Claude Code's conversations, rewind snapshots and MCP server logs, which are Tier 3. Neither tier is ever
@@ -322,6 +322,7 @@ public sealed class CleanupPlanner
             new SquirrelStagingProvider(environment, discovery: squirrel, liveTrees: liveTrees, scanner: scanner),
             new PlatformIoCacheProvider(environment, scanner: scanner),
             new Stm32CubeFirmwareZipProvider(environment, scanner: scanner),
+            new YarnBerryCacheProvider(environment, scanner: scanner),
             new PlaywrightBrowsersProvider(environment, liveTrees: liveTrees, scanner: scanner),
             new PuppeteerBrowsersProvider(environment, liveTrees: liveTrees, scanner: scanner),
             new VsCodeExtensionBrowsersProvider(environment, liveTrees: liveTrees, scanner: scanner),

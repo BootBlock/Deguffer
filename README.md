@@ -146,7 +146,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | NuGet package cache | Cleared with `dotnet nuget locals all --clear`, not by path |
 | npm package cache | Cleared with `npm cache clean --force` |
 | pnpm store | Researched |
-| Yarn 1 package cache | Cleared with `yarn cache clean`, only where the `yarn` on your PATH is Yarn 1, never Yarn 2 or later. Researched |
+| Yarn 1 package cache | Cleared with `yarn cache clean`, only where the `yarn` on your PATH is Yarn 1, never Yarn 2 or later's cache, which is a Tier 2 row of its own. Researched |
 | Bun install cache | Cleared with `bun pm cache prune`, which keeps Bun's global store; needs Bun 1.4.4 or later. Researched |
 | Composer package cache | Cleared with `composer clear-cache`, only where every folder it empties is Composer's own |
 | Arduino downloads and build cache | Downloaded archives cleared with `arduino-cli cache clean`, only where the downloads folder holds nothing but the archives the CLI stages there; build-cache entries only where the CLI's `.last-used` marker is inside; never the data folder with your installed boards, or your sketchbook. Researched |
@@ -221,6 +221,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | Adobe media cache | The converted audio, waveforms and database shared by Premiere Pro, After Effects, Audition and Media Encoder, wherever Adobe's settings put them; never your LUTs, templates or Team Projects' auto-saves, and nothing while an Adobe application is running. Each project opens slowly once while Adobe converts its audio again. Researched |
 | CapCut editing cache | Thumbnails, waveforms and the audio extracted for subtitles in CapCut's and Jianying Pro's `User Data\Cache`, and nothing while either is running; never your drafts, settings, downloaded effects or imported media. Researched |
 | Capture One previews and thumbnails | The `Cache` in each catalog and session that Capture One lists, wherever it is; never the photographs or the adjustments next to it. A catalog whose originals are offline cannot be browsed until they are reconnected. Researched |
+| Yarn global package cache | The `cache` folder of Yarn 2 and later, in `%LOCALAPPDATA%\Yarn\Berry` and the global folder Yarn reports, removed whole by path and only where everything in it is a package archive Yarn named itself; never `store`, `metadata` or anything else beside it, a project's own `.yarn\cache`, or a cache Yarn is set not to clean. Every Yarn 4 Plug'n'Play project needs `yarn install` before it runs again. Researched |
 | Playwright browsers | |
 | Puppeteer browsers | The builds in `.cache\puppeteer`, never the rest of `.cache`; never a build that a running browser is using, or the metadata Puppeteer uses to find its builds. Researched |
 | LM Studio superseded runtimes | Every llama.cpp build LM Studio has downloaded except the one it uses and the newest for each kind of hardware, removed by LM Studio's own command. LM Studio must be open, and it frees the space the next time it starts |

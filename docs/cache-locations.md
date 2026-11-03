@@ -1262,8 +1262,8 @@ Yarn 2 and later, which Plug'n'Play projects run from directly.
 
 It first asks the `yarn` on your PATH for its version. A `yarnPath` setting in a `.yarnrc.yml` in your
 profile, or a Corepack shim, can make `yarn` run Yarn 4, and Yarn 4's `yarn cache clean` deletes the
-cache Plug'n'Play projects run from. So unless the answer is a Yarn 1 version, Deguffer offers
-nothing and says which Yarn it found.
+cache Plug'n'Play projects run from. So unless the answer is a Yarn 1 version, this row offers
+nothing and says which Yarn it found. That cache has its own row, *Yarn global package cache*.
 
 For Yarn 1 it asks `yarn cache dir` where the cache is, because `yarn config set cache-folder` and
 `YARN_CACHE_FOLDER` can move it. Yarn 1's `cache clean` deletes the **whole cache root**, the folder
@@ -1302,6 +1302,76 @@ cache.
 
 Every package in the cache is a copy of something the registry still serves, and Yarn fetches it
 again when an install needs it.
+
+---
+
+## Yarn global package cache
+
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
+acknowledgement: see *Some rows are researched rather than observed* at the top of this page.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\Yarn\Berry\cache`, and the `cache` folder in the global folder `yarn config get globalFolder` names |
+| **Method** | Delete the `cache` folder whole, by path, only where everything in it is a package archive Yarn named itself. Never `yarn cache clean` |
+| **Typical size** | Not measured: no Yarn was installed on the machine this was written against |
+
+### What it is
+
+Yarn 2 and later, also called Yarn Berry, keep every package they download as a zip in one cache
+that all your projects share. The cache is the `cache` folder inside Yarn's global folder, which is
+`%LOCALAPPDATA%\Yarn\Berry` on Windows
+([folderUtils.ts](https://github.com/yarnpkg/berry/blob/75ebe063092f86e47e4afeaf1ae4bdf24402874b/packages/yarnpkg-core/sources/folderUtils.ts#L4-L20)).
+Yarn's documentation names `~/.yarn/berry`, which is the location on other systems.
+
+From Yarn 4, `enableGlobalCache` is on by default, and a **Plug'n'Play** project runs its packages
+straight from the zips in this cache: its `.pnp.cjs` points into them rather than copying them. In
+Yarn 2 and 3 the same folder is a mirror, which each project copies into its own `.yarn\cache`.
+Yarn never removes anything from it, and keeps no record of which projects use it
+([yarnpkg/berry#2775](https://github.com/yarnpkg/berry/issues/2775)), so it grows with every
+package version any project has used.
+
+### What Deguffer does
+
+It looks in the default global folder, and asks the `yarn` on your PATH for its version. Where that
+is Yarn 2 or later, it also asks `yarn config get globalFolder`, because `YARN_GLOBAL_FOLDER` and the
+`.yarnrc.yml` in your profile can move the folder, and looks there too. A global folder that is a
+drive, your profile, a temporary folder or a folder Windows is built from is left alone. Where Yarn
+reports `enableCacheClean: false`, Deguffer offers nothing. Where the `yarn` on your PATH is Yarn 1,
+which is the usual case where Corepack runs Yarn 4 inside projects, only the default folder is
+looked at.
+
+The cache is removed **whole, by path**, and only where every entry in it is a file Yarn writes
+there: a package archive named `<package>-<10 hex>-<cache key>.zip`, an archive being written
+(`.tmp`) or an archive's lock (`.flock`). A folder, a link, or any other file in it, such as a
+`.gitignore`, means Deguffer leaves the whole cache alone and says what it found.
+
+**It does not use `yarn cache clean`**, and this is a recorded exception to the rule of using a
+tool's own command. Yarn 2 and 3 fail on every form of that command outside a project. Yarn 4's
+deletes whatever folder its settings name. And a `yarnPath` setting or a Corepack shim can put
+Yarn 1 behind the same `yarn` between the preview and the clean: Yarn 1 ignores options it does not
+know, so it would clear its own cache instead. Deguffer's removal does what Yarn's command does to
+the folder, and cannot reach anything else.
+
+### What is protected
+
+The **global folder** itself and everything in it beside the cache: **`store`**, the files
+`node_modules` folders are hard-linked from; Yarn 4's **`metadata`** and **`index`**; and
+**`telemetry.json`**. Deguffer asserts that each survived the run, and Explore refuses all of them.
+A project's own **`.yarn\cache`** is never looked at: a Zero-Installs project commits it to version
+control.
+
+### What it costs you
+
+**Every Yarn 4 project that uses Plug'n'Play stops working until you run `yarn install` in it**,
+which downloads its packages again. Projects with a `node_modules` folder, and projects that keep
+their own `.yarn\cache`, keep working, and their next install downloads what it needs.
+
+### Why Tier 2
+
+The archives are copies of what the registry still serves, but Plug'n'Play projects run from them,
+and nothing records which ones. Removing them costs a `yarn install` in each such project before it
+runs again, which you have to do yourself.
 
 ---
 
