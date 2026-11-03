@@ -265,7 +265,7 @@ Every tool Deguffer starts has a stated lifetime. A query only reads, so it has 
 minutes, DISM's analysis thirty), and a cancelled scan or a limit reached ends it and everything it
 started, before the scan moves on. An eviction command has no limit, and each one says what a
 cancelled clean does to it. It is ended only where a clean stopped part-way leaves nothing worse than
-misses: npm's and pnpm's stores check every entry against its hash, pip's entries are single files,
+misses: npm's and pnpm's stores check every entry against its hash, pip's entries are single files, restic reads any file missing from its cache from the repository,
 and `lms` only asks LM Studio to remove a runtime later. Everything else is left to finish, because
 ended part-way it could leave damage rather than a smaller cache: DISM's servicing, `pnputil`'s
 driver removal, File History's cleanup, Delivery Optimization's clear and a registry restore in
