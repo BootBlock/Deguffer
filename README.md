@@ -247,7 +247,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | Previous Windows installation | `Windows.old` and Setup's leftovers, removed by Windows' own Disk Cleanup handlers once the upgrade can no longer be undone and no update is unfinished |
 | Leftover Windows update folders | `$WinREAgent` and `$GetCurrent`, which Microsoft does not document. They are offered on Deguffer's own stated judgement, as a whole, once nothing inside has changed for 30 days |
 | Superseded driver packages | Older versions of drivers in Windows' driver store, removed by Windows' own Disk Cleanup handler; never the newest version of a driver, one that a device is using, or one that is part of Windows |
-| Superseded Windows components | The component store (`WinSxS`), reduced by `DISM /StartComponentCleanup` as administrator and sized by DISM's own analysis, which counts what the store shares with Windows only once; nothing is ever deleted from the store |
+| Superseded Windows components | The component store (`WinSxS`), reduced by `DISM /StartComponentCleanup` as administrator and sized by DISM's own analysis, which counts what the store shares with Windows only once; nothing is ever deleted from the store, and the row is clear once the cleanup has run to its end on the store as it is now |
 | Local copies of cloud files | OneDrive's own "free up space": every file stays listed and opens while you are online. Files you keep on this device, and files with changes not yet uploaded, stay as they are |
 </details>
 

@@ -243,6 +243,10 @@ public sealed class CleanupPlanner
         // and the cleanup and the reset ask it the same question.
         var componentStore = new ComponentStoreAnalysis(SystemDirectories.Current, ProcessRunner.Default);
 
+        // One record of what each of the store's cleanups left, because the reset settles the cleanup's
+        // row as well as its own, within the session as across sessions.
+        var componentStoreSettlement = new ComponentStoreSettlement(environment);
+
         // One walk for the two rows inside every Chromium user-data folder, on the same reasoning: each
         // lists every directory below both application-data roots to find the folders, and the folders
         // are the same for both.
@@ -346,8 +350,8 @@ public sealed class CleanupPlanner
             new UpgradeDiscardedFilesProvider(handlers, environment, scanner: scanner),
             new WindowsUpdateLeftoverProvider(environment, scanner: scanner),
             new DriverStoreProvider(handlers, environment, scanner: hardLinks),
-            new ComponentStoreCleanupProvider(environment, analysis: componentStore, scanner: scanner),
-            new ComponentStoreResetBaseProvider(environment, analysis: componentStore, scanner: scanner),
+            new ComponentStoreCleanupProvider(environment, analysis: componentStore, scanner: scanner, settlement: componentStoreSettlement),
+            new ComponentStoreResetBaseProvider(environment, analysis: componentStore, scanner: scanner, settlement: componentStoreSettlement),
             new RestorePointProvider(WindowsSystemProtection.Default, environment, scanner: scanner),
             new OtherAccountProfilesProvider(WindowsUserProfiles.Default, environment, scanner: scanner),
             new CrashDumpProvider(environment, scanner: scanner),
