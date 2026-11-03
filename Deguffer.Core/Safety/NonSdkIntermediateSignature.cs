@@ -326,7 +326,7 @@ public static class NonSdkIntermediateSignature
 
         try
         {
-            using var stream = new MemoryStream(content.ToArray(), writable: false);
+            using var stream = BoundedFile.AsStream(content);
             using var reader = XmlReader.Create(stream, ProjectReading);
 
             // An SDK-style project may carry the 2003 namespace too, so the Sdk attribute is what
