@@ -75,14 +75,16 @@ public sealed record RedshiftCacheLayout(
     /// <summary>
     /// §5.3. The programs that load Redshift. Only <c>Cinebench</c> was seen rendering with it. The rest
     /// are the published program names of the hosts Maxon ships Redshift for, not checked against an
-    /// installation: Cinema 4D with its command-line renderer and its Python, Maya with its batch
-    /// renderer, Houdini with its batch tools, 3ds Max with its command-line renderers, Katana, Blender,
+    /// installation: Cinema 4D with its command-line renderer, its Python and its Team Render client and
+    /// server, which render with Redshift on a node where Cinema 4D is closed, Maya with its batch
+    /// renderer and its Python, Houdini with its batch tools, 3ds Max with its command-line renderers, Katana, Blender,
     /// and Redshift's own command-line renderer. A name that is wrong holds nothing back while that
     /// program renders.
     /// </summary>
     public static readonly IReadOnlyList<string> ProcessNames =
     [
-        "Cinebench", "Cinema 4D", "Commandline", "c4dpy", "maya", "mayabatch", "houdini", "houdinifx",
+        "Cinebench", "Cinema 4D", "Commandline", "c4dpy", "Team Render Client", "Cinema 4D Team Render Client",
+        "Team Render Server", "Cinema 4D Team Render Server", "maya", "mayabatch", "mayapy", "houdini", "houdinifx",
         "houdinicore", "hython", "hbatch", "husk", "3dsmax", "3dsmaxcmd", "3dsmaxbatch", "katanaBin",
         "blender", "redshiftCmdLine",
     ];

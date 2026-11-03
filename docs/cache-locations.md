@@ -4719,8 +4719,9 @@ caches must remain untouched only as long as a rendering of the corresponding pr
 running", and nothing outside the application says whether a render is running. So while one of
 these programs runs, the plan leaves the cache alone, Explore refuses it, and the question is asked
 again when you press Clean. Cinebench was seen rendering with Redshift. The other names are those the
-programs of Cinema 4D, Maya, Houdini, 3ds Max, Katana, Blender and Redshift's command-line renderer
-are published under, and were not checked against an installation.
+programs of Cinema 4D and its Team Render client and server, Maya, Houdini, 3ds Max, Katana, Blender
+and Redshift's command-line renderer are published under, and were not checked against an
+installation.
 
 **A cache that is not on a disk in this computer is left alone.** A cache folder can be on a share
 that other computers render from, and a render on another computer may be using it. No check here
@@ -4750,6 +4751,11 @@ running. Deguffer also refuses to look through a link.
 
 **The next render converts its textures again.** The first render of each scene after a clean starts
 more slowly. Your scenes, your images, Redshift's preferences and its logs are untouched.
+
+### Why Tier 1
+
+Every converted texture is made from an image the scene still names, and Maxon says missing cache
+files are recalculated, so the cost of losing one is converting it again.
 
 Sources:
 

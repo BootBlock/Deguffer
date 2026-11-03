@@ -131,8 +131,9 @@ public sealed class RedshiftCacheProviderTests : IDisposable
     /// <summary>
     /// §5.6, proved by running a plan. The numbered folders go and <c>Textures</c> stays. The image, the
     /// user's folder and the oddly numbered folder in <c>Textures</c>, the mesh cache with a running
-    /// program's lock, the preferences, the logs and a cache folder nothing names all survive, and each
-    /// one is asserted rather than merely omitted. So does the rest of the host's preferences folder.
+    /// program's lock, the preferences and the logs all survive, and each is asserted rather than merely
+    /// omitted. A cache folder nothing names and the rest of the host's preferences folder are never
+    /// listed, so they are checked on the disk only.
     /// </summary>
     [Fact]
     public async Task EverythingButTheNumberedFoldersSurvivesARunAndIsAsserted()
@@ -185,6 +186,7 @@ public sealed class RedshiftCacheProviderTests : IDisposable
     [InlineData("Cinebench")]
     [InlineData("Cinema 4D")]
     [InlineData("Commandline")]
+    [InlineData("Team Render Client")]
     [InlineData("maya")]
     [InlineData("houdinifx")]
     [InlineData("hython")]
