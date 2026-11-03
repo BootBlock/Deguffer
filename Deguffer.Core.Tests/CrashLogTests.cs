@@ -144,24 +144,36 @@ public class CrashLogTests
     }
 
     /// <summary>
-    /// A profile path the platform reported as empty — <c>LongPath</c> rejects it before any I/O
-    /// is attempted, which is the one failure that arrives as an ArgumentException rather than an
-    /// IOException. It must still not escape.
+    /// A profile path the platform reported as empty leaves the log a relative path, which is
+    /// refused before anything is attempted rather than resolved against the working directory.
     /// </summary>
     [Fact]
-    public void ReportsFailureRatherThanThrowingWhenTheProfilePathIsUnusable()
+    public void ReportsFailureRatherThanThrowingWhenTheProfilePathIsEmpty()
     {
-        var log = new CrashLog(new UnusableProfileEnvironment());
+        var log = new CrashLog(new UnusableProfileEnvironment(string.Empty));
 
         Assert.False(log.Record("Application.UnhandledException", Thrown("fault on a broken profile")));
     }
 
-    /// <summary>A platform that reports no local profile at all, as it can in a damaged session.</summary>
-    private sealed class UnusableProfileEnvironment : IUserEnvironment
+    /// <summary>
+    /// A rooted profile path Windows will not accept as a path, here for the NUL inside it.
+    /// <c>LongPath</c> rejects it before any I/O is attempted, which is the one failure that arrives
+    /// as an ArgumentException rather than an IOException. It must still not escape.
+    /// </summary>
+    [Fact]
+    public void ReportsFailureRatherThanThrowingWhenWindowsRefusesTheProfilePath()
+    {
+        var log = new CrashLog(new UnusableProfileEnvironment(@"C:\Users\testuser\App" + "\0" + @"Data\Local"));
+
+        Assert.False(log.Record("Application.UnhandledException", Thrown("fault on a broken profile")));
+    }
+
+    /// <summary>A platform that reports no usable local profile, as it can in a damaged session.</summary>
+    private sealed class UnusableProfileEnvironment(string localAppData) : IUserEnvironment
     {
         public string UserProfile => string.Empty;
 
-        public string LocalAppData => string.Empty;
+        public string LocalAppData => localAppData;
 
         public string RoamingAppData => string.Empty;
 

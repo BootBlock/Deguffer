@@ -9,7 +9,7 @@ namespace Deguffer.Core.Tests;
 /// <em>does not</em> stop. A provider that wanted a file a service holds open would reach for one of
 /// three things: a Win32 call into the service control manager, a .NET type that wraps those calls, or
 /// a command such as <c>sc.exe</c> or <c>Stop-Service</c>. Each fails here the moment it is written,
-/// in either project.</para>
+/// in any product project.</para>
 /// </summary>
 public sealed partial class ServiceControlTests
 {
@@ -60,8 +60,7 @@ public sealed partial class ServiceControlTests
 
         // The declaration and one call are the only lines of code that name it, so a second call
         // cannot ask for more access in a form the call's own pattern does not match.
-        Assert.Equal(2, source.Split('\n').Count(line =>
-            ManagerMention().IsMatch(line) && !line.TrimStart().StartsWith("//", StringComparison.Ordinal)));
+        Assert.Equal(2, ProductSources.Code(source).Count(line => ManagerMention().IsMatch(line)));
         Assert.Equal("EnumerateService", Assert.Single(ManagerOpen().Matches(source)).Groups["access"].Value);
     }
 
@@ -78,8 +77,7 @@ public sealed partial class ServiceControlTests
         Assert.Contains(files, file => file.EndsWith("ServiceTableReader.cs", StringComparison.Ordinal));
 
         var named = files
-            .SelectMany(file => File.ReadLines(file)
-                .Where(line => !line.TrimStart().StartsWith("//", StringComparison.Ordinal))
+            .SelectMany(file => ProductSources.Code(File.ReadAllText(file))
                 .Select(line => ServiceCommand().Match(line))
                 .Where(match => match.Success)
                 .Select(match => $"{Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file)}: {match.Value}"))

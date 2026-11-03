@@ -343,7 +343,9 @@ public sealed class ItemGuideTests : IDisposable
     /// <summary>
     /// A place that names no directory contributes nothing. <c>%ProgramFiles(x86)%</c> is genuinely
     /// empty on a 32-bit Windows, and an empty anchor combined with a relative path would build a
-    /// key that matches something nobody meant.
+    /// key that matches something nobody meant: the relative path resolved against the working
+    /// directory. That is the path asked about, because it is the one a wrongly resolved key would
+    /// describe. The entry is placed rather than named, so nothing but its path key could match.
     /// </summary>
     [Fact]
     public void APlaceThatNamesNoDirectoryContributesNothing()
@@ -353,6 +355,7 @@ public sealed class ItemGuideTests : IDisposable
             new Dictionary<KnownPlace, string> { [KnownPlace.ProgramFilesX86] = string.Empty },
             _volumes);
 
+        Assert.Null(guide.Describe(Path.GetFullPath("Common Files")));
         Assert.Null(guide.Describe(@"C:\Program Files (x86)\Common Files"));
     }
 
