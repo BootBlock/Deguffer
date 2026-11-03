@@ -432,8 +432,8 @@ public sealed record DeleteDirectoryStep(string Path, string What) : DeleteStep(
     /// its content and the record Windows keeps beside it to restore it — so a removal that stepped
     /// over an Outlook mail store inside a deleted folder would keep the store and take its record,
     /// leaving it on the disk with nothing able to put it back (§9). A step like that is withheld
-    /// while it holds a store, and looked at again on the disk immediately before it runs, as
-    /// <see cref="EmptyRecycleBinStep"/> is.</para>
+    /// while it holds a store, and judged again before anything in it is deleted, on what its removal
+    /// gathers from the disk. See <see cref="WholeTreeLook.Of"/>.</para>
     ///
     /// <para>False by default, which is every other removal: a cache or a build directory is a
     /// collection of independent files, and stepping over a store in one leaves the rest meaningful.</para>
@@ -447,8 +447,8 @@ public sealed record DeleteDirectoryStep(string Path, string What) : DeleteStep(
     /// <para>Stronger than <see cref="IsIndivisible"/>, which is about Outlook data files alone. The
     /// ordinary removal keeps what the guard protects and what Windows refuses and takes the rest,
     /// which is right for a cache and wrong for a folder such as <c>$WinREAgent</c>, where a rollback
-    /// manifest means nothing without the image it restores. Looked at on the disk immediately before
-    /// the removal, through <see cref="WholeTreeLook"/>.</para>
+    /// manifest means nothing without the image it restores. Judged from what the removal gathers on
+    /// the disk before it deletes anything, through <see cref="WholeTreeLook.Of"/>.</para>
     /// </summary>
     public bool IsAllOrNothing { get; init; }
 

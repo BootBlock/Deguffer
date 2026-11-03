@@ -66,23 +66,43 @@ public sealed class StepTimingTests : IDisposable
     }
 
     /// <summary>
-    /// A look at the whole tree is timed apart from the removal, and only where one is taken. The look
-    /// walks the real disk, so this is measured on the real clock.
+    /// A look at the whole tree is timed apart from the removal, and only where one is taken: before a
+    /// tool's command, which cannot be told to leave anything. A directory that goes whole or not at
+    /// all takes none, because it is judged on its removal's own walk, which is timed as that removal's
+    /// walk pass. The look walks the real disk, so this is measured on the real clock.
     /// </summary>
     [Fact]
     public async Task ALookIsTimedApartAndOnlyWhereOneIsTaken()
     {
+        var cleared = _temp.CreateDirectory("cleared");
+        var store = _temp.CreateFile(10, "cleared", "saved", "archive.pst");
         var whole = _temp.CreateDirectory("whole");
         _temp.CreateFile(10, "whole", "a.bin");
         var plain = _temp.CreateDirectory("plain");
         _temp.CreateFile(10, "plain", "a.bin");
 
-        var looked = await Execute(new DeleteDirectoryStep(whole, "Whole") { IsIndivisible = true }, TimeProvider.System);
+        // The store stops the command at the look, so no tool is run.
+        var command = new RunCommandStep("tool.exe", "clean", "Clear the cache")
+        {
+            WhenCancelled = CancelledCommand.Ended,
+            Estimated = new ScanSize(10, 10),
+            MeasuredPaths = [cleared],
+        };
+
+        var looked = await Execute(command, TimeProvider.System);
+        var indivisible = await Execute(new DeleteDirectoryStep(whole, "Whole") { IsIndivisible = true }, TimeProvider.System);
         var walked = await Execute(new DeleteDirectoryStep(plain, "Plain"), TimeProvider.System);
 
         var lookTiming = Assert.Single(looked.Steps).Timing;
-        Assert.True(lookTiming.Look > TimeSpan.Zero, "the look at an indivisible tree was not timed");
+        Assert.True(lookTiming.Look > TimeSpan.Zero, "the look before a command was not timed");
         Assert.True(lookTiming.Look <= lookTiming.Elapsed, "the look took longer than its step");
+        Assert.True(File.Exists(store), "a store under a command's paths was removed");
+
+        var indivisibleOutcome = Assert.Single(indivisible.Steps);
+        Assert.True(indivisibleOutcome.Succeeded);
+        Assert.Equal(TimeSpan.Zero, indivisibleOutcome.Timing.Look);
+        Assert.Equal(2, Assert.IsType<RemovalPasses>(indivisibleOutcome.Passes).Walk.Entries);
+
         Assert.Equal(TimeSpan.Zero, Assert.Single(walked.Steps).Timing.Look);
     }
 

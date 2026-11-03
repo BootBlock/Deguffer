@@ -8,12 +8,17 @@ namespace Deguffer.Core.Execution;
 /// What directories about to be removed whole hold, looked at on the disk immediately before they go.
 ///
 /// <para><b>For a removal that cannot do less.</b> A tool's own command, a Recycle Bin emptied by
-/// Windows or removed whole by Deguffer, Windows' own Disk Cleanup handler, a folder whose parts only
-/// mean something together, and Explore moving a folder to the Recycle Bin all take their subject
-/// whole. None can step over an Outlook data file (§9), and some cannot leave a file the guard on
-/// recently changed files would keep. So the plan's answers, made minutes earlier, are asked again
-/// here of the disk, and any one of them stops the removal. A removal Deguffer performs file by file
-/// needs no such look, because its own walk meets every store as it goes and steps over it.</para>
+/// Windows, Windows' own Disk Cleanup handler, a profile removed by Windows, and Explore moving a
+/// folder to the Recycle Bin all take their subject whole. None can step over an Outlook data file
+/// (§9), and some cannot leave a file the guard on recently changed files would keep. So the plan's
+/// answers, made minutes earlier, are asked again here of the disk, and any one of them stops the
+/// removal. A removal Deguffer performs file by file needs no such look, because its own walk meets
+/// every store as it goes and steps over it.</para>
+///
+/// <para><b>A folder whose parts only mean something together is answered from that walk.</b>
+/// Deguffer removes it file by file, but must not leave a part of it standing, so the same answers
+/// are read from what its removal gathered before it deleted anything (<see cref="Of"/>) rather than
+/// from a walk of its own.</para>
 ///
 /// <para><b>A folder that would not be listed stops it too.</b> A removal Deguffer performs walks
 /// what it can and leaves the rest, so a folder it could not list is a folder it did not touch. A
@@ -147,10 +152,6 @@ public sealed record WholeTreeLook(
             InOneOrder(notFolders),
             InOneOrder(links));
 
-        // Ordered before the duplicates go, so the spelling kept is the same however the work interleaved.
-        static IReadOnlyList<string> InOneOrder(IEnumerable<string> paths) =>
-            [.. paths.Order(StringComparer.OrdinalIgnoreCase).ThenBy(path => path, StringComparer.Ordinal).Distinct(StringComparer.OrdinalIgnoreCase)];
-
         void Notice(WalkEntry entry)
         {
             if (keep.IsOn && keep.Protects(entry.NewestFileTime))
@@ -166,6 +167,33 @@ public sealed record WholeTreeLook(
             }
         }
     }
+
+    /// <summary>
+    /// The same answers, read from what a removal Deguffer performs gathered before it deletes
+    /// anything, so a directory that goes whole or not at all is listed once rather than twice.
+    ///
+    /// <para><b>The walk it is read from is the walk the deletion then acts on.</b> No tree is walked
+    /// again between the two, so a store that arrives in a folder once it is gathered is never handed to
+    /// a delete, and holds that folder standing.</para>
+    ///
+    /// <para><b>Something recent is what <see cref="Take(IReadOnlyList{string}, MinimumAge, IFileSystem, CancellationToken)"/>
+    /// would call recent</b>: a file or a link the guard would keep, or a folder whose own timestamps
+    /// it protects. No link is named, because only a tool's command can follow one.</para>
+    /// </summary>
+    /// <param name="guarded">
+    /// Whether anything the guard holds back stops the removal. False where only Outlook data files do,
+    /// for a removal whose kept files can stay. See <see cref="DeleteDirectoryStep.IsIndivisible"/>.
+    /// </param>
+    internal static WholeTreeLook Of(IReadOnlyList<GatheredRemoval> gathered, bool guarded) => new(
+        InOneOrder(gathered.SelectMany(removal => removal.MailStores).Select(LongPath.Display)),
+        guarded && gathered.Any(removal => removal.HoldsRecent),
+        InOneOrder(gathered.SelectMany(removal => removal.Unlisted).Select(LongPath.Display)),
+        InOneOrder(gathered.SelectMany(removal => removal.NotFolders).Select(LongPath.Display)),
+        []);
+
+    // Ordered before the duplicates go, so the spelling kept is the same however the work interleaved.
+    private static IReadOnlyList<string> InOneOrder(IEnumerable<string> paths) =>
+        [.. paths.Order(StringComparer.OrdinalIgnoreCase).ThenBy(path => path, StringComparer.Ordinal).Distinct(StringComparer.OrdinalIgnoreCase)];
 
     /// <summary>
     /// Why the removal must not run, written for the user, or null where nothing found stops it. A
