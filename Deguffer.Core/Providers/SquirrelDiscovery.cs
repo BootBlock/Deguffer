@@ -22,10 +22,18 @@ namespace Deguffer.Core.Providers;
 /// first half of the identification test and fail the second, because a listing right is separate
 /// from a traverse right — and it is not an application with no builds.
 /// </param>
+/// <param name="UpdaterFolders">
+/// Every folder that holds the updater, whether or not it then passed the rest of the identification
+/// test: the folders a running updater may be writing the staging folder from. Wider than
+/// <paramref name="Installations"/> on purpose. That list decides what may be removed, so it drops
+/// what it cannot establish, and this one decides what is held back, so dropping an application whose
+/// only build has a version Deguffer cannot read would offer the directory it is updating through.
+/// </param>
 public sealed record SquirrelSweep(
     IReadOnlyList<SquirrelInstallation> Installations,
     bool ApplicationDataUnreadable,
-    IReadOnlyList<string> UnreadableRoots);
+    IReadOnlyList<string> UnreadableRoots,
+    IReadOnlyList<string> UpdaterFolders);
 
 /// <summary>
 /// Finds the applications the Squirrel updater installed, one level under <c>%LOCALAPPDATA%</c>.
@@ -164,11 +172,12 @@ public sealed partial class SquirrelDiscovery
 
         if (scan.Unreadable)
         {
-            return new SquirrelSweep([], ApplicationDataUnreadable: true, []);
+            return new SquirrelSweep([], ApplicationDataUnreadable: true, [], []);
         }
 
         var found = new List<SquirrelInstallation>();
         var refused = new List<string>();
+        var updaters = new List<string>();
 
         foreach (var child in scan.Directories)
         {
@@ -176,7 +185,16 @@ public sealed partial class SquirrelDiscovery
 
             var root = LongPath.Display(child.FullName);
 
-            if (!LongPath.FileExists(Path.Combine(root, UpdaterName)))
+            var updater = LongPath.ProbeFile(Path.Combine(root, UpdaterName));
+
+            // A folder Windows would not say holds the updater may hold one, and a writer it may be
+            // running is held against, though nothing in the folder is offered.
+            if (updater is not PathPresence.Absent)
+            {
+                updaters.Add(root);
+            }
+
+            if (updater is not PathPresence.Present)
             {
                 continue;
             }
@@ -243,6 +261,6 @@ public sealed partial class SquirrelDiscovery
                 SquirrelReleaseIndex.Read(Path.Combine(root, PackagesDirectoryName))));
         }
 
-        return new SquirrelSweep(found, ApplicationDataUnreadable: false, refused);
+        return new SquirrelSweep(found, ApplicationDataUnreadable: false, refused, updaters);
     }
 }

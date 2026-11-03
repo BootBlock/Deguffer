@@ -92,6 +92,21 @@ public sealed class LiveTreeWriterTests
     }
 
     /// <summary>
+    /// The tolerance is the timestamp's precision and no wider. A program started three seconds
+    /// after the last write did not make the directory, so a leftover is still offered.
+    /// </summary>
+    [Fact]
+    public void AProgramStartedJustPastTheTimestampToleranceDoesNotMakeTheDirectoryLive()
+    {
+        var query = Query();
+
+        var findings = Inspector(Program(Installation + @"\Update.exe", Written.AddSeconds(3))).FindLive([query]);
+
+        Assert.True(findings.Complete);
+        Assert.False(findings.IsLive(query.Directory));
+    }
+
+    /// <summary>
     /// The folder is a boundary. A program from another folder whose name merely begins with the
     /// installation's is no evidence, however long it has been running.
     /// </summary>
@@ -125,11 +140,16 @@ public sealed class LiveTreeWriterTests
         Assert.False(findings.IsAnswered(unknownStart.Directory));
         Assert.False(findings.IsLive(unknownStart.Directory));
 
+        var earlier = Query("tempd") with { Writers = new LiveTreeWriters([Installation], Written.AddMinutes(-10)) };
+
         var both = Inspector(Program(Installation + @"\Update.exe", Written.AddMinutes(-3)))
-            .FindLive([unknownWrite, Query("tempc")]);
+            .FindLive([unknownWrite, Query("tempc"), earlier]);
 
         Assert.False(both.IsAnswered(unknownWrite.Directory));
         Assert.True(both.IsLive(Path.Combine(Staging, "tempc")));
+        Assert.True(both.IsAnswered(Path.Combine(Staging, "tempc")));
+        Assert.False(both.IsLive(earlier.Directory));
+        Assert.True(both.IsAnswered(earlier.Directory));
     }
 
     /// <summary>

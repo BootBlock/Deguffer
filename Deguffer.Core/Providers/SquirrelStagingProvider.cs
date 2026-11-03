@@ -101,12 +101,14 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
         ILiveTreeInspector? liveTrees = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        IVolumeInventory? volumes = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner)
+            scanner,
+            volumes: volumes)
     {
         _discovery = discovery ?? new SquirrelDiscovery(Environment);
         _liveTrees = liveTrees ?? LiveTreeInspector.Default;
@@ -224,7 +226,7 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
             .Select(child => new RecognisedBuildDirectory(LongPath.Display(child.FullName), root))
             .ToList();
 
-        var live = LiveTreeVeto.Apply(_liveTrees, candidates, Question, ct);
+        var live = LiveTreeVeto.Apply(_liveTrees, candidates, QuestionAbout(root), ct);
 
         return Task.FromResult<IReadOnlyList<ToolRoot>>(
         [
@@ -240,8 +242,12 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
         ]);
     }
 
-    /// <summary>The veto's question for one reading of the machine. See <see cref="SquirrelStagingQuestion"/>.</summary>
-    private LiveTreeQuestion Question(CancellationToken ct) => SquirrelStagingQuestion.For(_discovery, ct);
+    /// <summary>
+    /// The rule that builds the veto's question about the directories in <paramref name="root"/>, for
+    /// each reading of the machine. See <see cref="SquirrelStagingQuestion"/>.
+    /// </summary>
+    private Func<CancellationToken, LiveTreeQuestion> QuestionAbout(string root) =>
+        ct => SquirrelStagingQuestion.For(_discovery, Environment, Volumes, root, ct);
 
     public override void InvalidateCaches()
     {
@@ -468,7 +474,7 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
             }
         }
 
-        var live = LiveTreeVeto.Apply(_liveTrees, candidates, Question, ct);
+        var live = LiveTreeVeto.Apply(_liveTrees, candidates, QuestionAbout(root), ct);
 
         survivors.AddRange(live.Survivors);
 

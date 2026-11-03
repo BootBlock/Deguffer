@@ -385,7 +385,12 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
 
         AssertOffered(plan, busy, idle);
 
-        _liveTrees.WithProgram("Setup", Path.Combine(busy, "Setup.exe"), _temp.Path);
+        // Started after both directories were last written, so the setup program running from the
+        // staging folder is no writer of the leftover beside the one it runs from. A program there
+        // with no start time would hold every directory in the folder.
+        WrittenAt(busy, DateTimeOffset.UtcNow.AddHours(-1));
+        WrittenAt(idle, DateTimeOffset.UtcNow.AddHours(-1));
+        _liveTrees.WithProgram("Setup", Path.Combine(busy, "Setup.exe"), _temp.Path, started: DateTimeOffset.UtcNow);
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -409,10 +414,8 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
         var idle = Populate(Path.Combine(staging, "tempb"));
         var started = DateTimeOffset.UtcNow.AddHours(-1);
 
-        Directory.SetLastWriteTimeUtc(idle, started.AddHours(-1).UtcDateTime);
-        Directory.SetCreationTimeUtc(idle, started.AddHours(-1).UtcDateTime);
-        Directory.SetLastWriteTimeUtc(busy, started.AddHours(-1).UtcDateTime);
-        Directory.SetCreationTimeUtc(busy, started.AddHours(-1).UtcDateTime);
+        WrittenAt(idle, started.AddHours(-1));
+        WrittenAt(busy, started.AddHours(-1));
 
         var provider = new SquirrelStagingProvider(
             _environment,
@@ -533,6 +536,13 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
         Directory.CreateDirectory(path);
         File.WriteAllBytes(Path.Combine(path, "data.bin"), new byte[4096]);
         return path;
+    }
+
+    /// <summary>Sets both of a directory's own times, which is what the staging veto compares.</summary>
+    private static void WrittenAt(string directory, DateTimeOffset when)
+    {
+        Directory.SetCreationTimeUtc(directory, when.UtcDateTime);
+        Directory.SetLastWriteTimeUtc(directory, when.UtcDateTime);
     }
 
     /// <summary>A Squirrel application: the updater beside it, its packages, and a folder per build.</summary>
