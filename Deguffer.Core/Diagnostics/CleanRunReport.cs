@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
@@ -12,7 +13,7 @@ public sealed record ReportOrigin(string AppVersion, string OperatingSystem, boo
 
 /// <summary>
 /// A finished clean written out for a GitHub issue: the verdict, every §5.6 check the run has to
-/// answer for, and what each step did.
+/// answer for, and what each step did and how long it took.
 ///
 /// <para><b>The verdict asks the user to report a fault, and this is what they report.</b> The page
 /// names each check, but a reader copying it by hand loses which provider it belonged to, what each
@@ -69,16 +70,46 @@ public static class CleanRunReport
                 text.AppendLine();
             }
 
-            text.AppendLine("Steps:");
+            text.AppendLine($"Took {Seconds(result.Duration)}.")
+                .AppendLine()
+                .AppendLine("Steps:");
 
             foreach (var step in result.Steps)
             {
                 text.AppendLine(
                     $"- {(step.Succeeded ? "Done" : "Not done")}: {step.Description}"
                     + (string.IsNullOrEmpty(step.Message) ? string.Empty : $" — {step.Message}"));
+
+                AppendTiming(text, step);
             }
         }
 
         return new ReportRedaction(environment).Apply(text.ToString());
     }
+
+    /// <summary>
+    /// Where one step spent its time, so a slow clean reported from a user's machine names the step and
+    /// the pass that were slow. Figures alone, and never a path, so redaction has nothing here to miss.
+    /// </summary>
+    private static void AppendTiming(StringBuilder text, StepOutcome step)
+    {
+        var timing = step.Timing;
+
+        text.AppendLine(
+            $"  - Took {Seconds(timing.Elapsed)}: use check {Seconds(timing.UseCheck)}, "
+            + $"look {Seconds(timing.Look)}, the rest {Seconds(timing.Acting)}");
+
+        if (step.Passes is { } passes)
+        {
+            text.AppendLine(
+                $"  - Removal: walk {Pass(passes.Walk)}, files {Pass(passes.Files)}, folders {Pass(passes.Folders)}");
+        }
+    }
+
+    private static string Pass(PassTiming pass) =>
+        string.Create(CultureInfo.InvariantCulture, $"{Seconds(pass.Elapsed)} over {pass.Entries:N0}");
+
+    /// <summary>Invariant, because the report is read by whoever answers the issue, not by the machine it came from.</summary>
+    private static string Seconds(TimeSpan elapsed) =>
+        string.Create(CultureInfo.InvariantCulture, $"{elapsed.TotalSeconds:0.000} s");
 }

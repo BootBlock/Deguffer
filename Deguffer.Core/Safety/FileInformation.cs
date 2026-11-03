@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
@@ -37,6 +38,9 @@ internal delegate bool IdentityReader(SafeFileHandle handle, IdentityRoute route
 /// file's volume, or answers null where Windows would not list them.
 /// </summary>
 internal delegate IReadOnlyList<string>? NameLister(string extendedPath);
+
+/// <summary>The normalised path of whatever a handle is open on, as <see cref="FileInformation.FinalPathOf"/> reads it, or null where Windows would not say.</summary>
+internal delegate string? FinalPathReader(SafeFileHandle handle);
 
 /// <summary>
 /// What Windows says about a file or folder through a handle opened for its attributes alone, which
@@ -109,6 +113,7 @@ internal sealed unsafe partial class FileInformation
     private readonly IdentityReader _identify;
     private readonly NameLister _listNames;
     private readonly StandardByNameReader _readByName;
+    private readonly FinalPathReader _finalPath;
 
     /// <param name="open">
     /// Opens the handle a path is resolved or described through, given the path in the form it
@@ -131,16 +136,22 @@ internal sealed unsafe partial class FileInformation
     /// does not answer by name and see the read turn to <paramref name="open"/>. Where none is given,
     /// <see cref="StatByName.Read"/>.
     /// </param>
+    /// <param name="finalPath">
+    /// Reads where a handle is open on, so a test can see which reads ask Windows for a path, and have
+    /// Windows refuse to give one. Where none is given, <see cref="FinalPathOf"/>.
+    /// </param>
     internal FileInformation(
         HandleOpener open,
         IdentityReader identify,
         NameLister? listNames = null,
-        StandardByNameReader? readByName = null)
+        StandardByNameReader? readByName = null,
+        FinalPathReader? finalPath = null)
     {
         _open = open;
         _identify = identify;
         _listNames = listNames ?? ListNames;
         _readByName = readByName ?? StatByName.Read;
+        _finalPath = finalPath ?? FinalPathOf;
     }
 
     /// <summary>
@@ -188,7 +199,7 @@ internal sealed unsafe partial class FileInformation
     {
         using var handle = _open(LongPath.Extended(path), HandleUse.Resolve);
 
-        return handle.IsInvalid ? null : FinalPathOf(handle);
+        return handle.IsInvalid ? null : _finalPath(handle);
     }
 
     /// <summary>
@@ -223,21 +234,23 @@ internal sealed unsafe partial class FileInformation
     /// tag, all through one handle that follows no link and recalls nothing.
     ///
     /// <para>Gone only where Windows said the file or a folder on the way is not there. Every other
-    /// failure, to open or to read, is <see cref="FileReadingResult.Unreadable"/>.</para>
+    /// failure, to open or to read, where Windows would not say where the handle is open included,
+    /// is <see cref="FileReadingResult.Unreadable"/>.</para>
     /// </summary>
     /// <param name="route">The route the volume's files are identified by, never mixed within one volume.</param>
     public FileReading Describe(string path, IdentityRoute route)
     {
         using var held = Hold(path, route);
 
-        return held.Reading;
+        return Locate(held);
     }
 
     /// <summary>
-    /// The entry at <paramref name="path"/> described as <see cref="Describe(string, IdentityRoute)"/>
-    /// describes it, with the attributes-only handle it was described through kept open where it was
-    /// identified, for a caller that goes on to open the file by its number on that volume
-    /// (<see cref="OpenById"/>). The caller disposes it.
+    /// The state of the entry at <paramref name="path"/>, read as <see cref="Describe(string, IdentityRoute)"/>
+    /// reads it but without its path, with the attributes-only handle it was read through kept open
+    /// where it was identified, for a caller that goes on to open the file by its number on that
+    /// volume (<see cref="OpenById"/>). The caller disposes it, and asks <see cref="Locate"/> where it
+    /// needs the path.
     /// </summary>
     public HeldFile Hold(string path, IdentityRoute route)
     {
@@ -249,11 +262,11 @@ internal sealed unsafe partial class FileInformation
             handle.Dispose();
 
             return new HeldFile(
-                error is FileAttributeRead.FileNotFound or FileAttributeRead.PathNotFound ? FileReading.Gone : FileReading.Unreadable,
+                error is FileAttributeRead.FileNotFound or FileAttributeRead.PathNotFound ? FileStateReading.Gone : FileStateReading.Unreadable,
                 Handle: null);
         }
 
-        var reading = Describe(handle, route);
+        var reading = State(handle, route);
 
         if (reading.Result is not FileReadingResult.Identified)
         {
@@ -265,28 +278,44 @@ internal sealed unsafe partial class FileInformation
     }
 
     /// <summary>
+    /// What <paramref name="held"/> read, with where its handle says the file is, or
+    /// <see cref="FileReadingResult.Unreadable"/> where Windows would not say. The caller still
+    /// disposes <paramref name="held"/>.
+    /// </summary>
+    public FileReading Locate(HeldFile held) =>
+        held.Handle is { } handle ? Located(held.Reading, handle) : new FileReading(held.Reading.Result, Description: null);
+
+    /// <summary>
     /// The file <paramref name="handle"/> is open on, described as <see cref="Describe(string, IdentityRoute)"/>
     /// describes a path, or <see cref="FileReadingResult.Unreadable"/> where Windows would not say.
     /// Never <see cref="FileReadingResult.Gone"/>: a file held open is there.
+    ///
+    /// <para>For a handle already held, where the caller needs where the file is as well as what it
+    /// is. A caller that compares only what it is asks <see cref="State"/>.</para>
+    /// </summary>
+    public FileReading Describe(SafeFileHandle handle, IdentityRoute route) => Located(State(handle, route), handle);
+
+    /// <summary>
+    /// The file <paramref name="handle"/> is open on, read as <see cref="Describe(SafeFileHandle, IdentityRoute)"/>
+    /// reads it but without its path, or <see cref="FileReadingResult.Unreadable"/> where Windows
+    /// would not say. Never <see cref="FileReadingResult.Gone"/>: a file held open is there.
     ///
     /// <para>For a handle already held, such as one opened to read a file's content, so the file
     /// read can be checked to be the file that was described by its path, through the handle the
     /// bytes came from rather than a path that can name another file by then.</para>
     /// </summary>
-    public FileReading Describe(SafeFileHandle handle, IdentityRoute route)
+    public FileStateReading State(SafeFileHandle handle, IdentityRoute route)
     {
         if (!_identify(handle, route, out var identity)
             || !TryStandard(handle, out var standard)
             || !TryBasic(handle, out var basic)
-            || !TryAttributeTag(handle, out var tag)
-            || FinalPathOf(handle) is not { } final)
+            || !TryAttributeTag(handle, out var tag))
         {
-            return FileReading.Unreadable;
+            return FileStateReading.Unreadable;
         }
 
-        return new FileReading(FileReadingResult.Identified, new FileDescription(
+        return new FileStateReading(FileReadingResult.Identified, new FileState(
             identity,
-            LongPath.Display(final),
             standard.EndOfFile,
             standard.AllocationSize,
             (int)standard.NumberOfLinks,
@@ -294,6 +323,19 @@ internal sealed unsafe partial class FileInformation
             DateTime.FromFileTimeUtc(basic.ChangeTime),
             (FileAttributes)basic.FileAttributes,
             tag.ReparseTag));
+    }
+
+    /// <summary><paramref name="reading"/> with where <paramref name="handle"/> is open, or unreadable where Windows would not say.</summary>
+    private FileReading Located(FileStateReading reading, SafeFileHandle handle)
+    {
+        if (reading.State is not { } state)
+        {
+            return new FileReading(reading.Result, Description: null);
+        }
+
+        return _finalPath(handle) is { } final
+            ? new FileReading(FileReadingResult.Identified, new FileDescription(state, LongPath.Display(final)))
+            : FileReading.Unreadable;
     }
 
     /// <summary>
@@ -347,36 +389,43 @@ internal sealed unsafe partial class FileInformation
     /// <summary>Every name of the file at <paramref name="extendedPath"/>, as Windows lists them.</summary>
     internal static IReadOnlyList<string>? ListNames(string extendedPath)
     {
-        var buffer = new char[LongestPath];
+        var buffer = ArrayPool<char>.Shared.Rent(LongestPath);
 
-        fixed (char* chars = buffer)
+        try
         {
-            var length = (uint)LongestPath;
-            var find = FindFirstFileName(extendedPath, 0, ref length, chars);
-
-            if (find == InvalidFind)
+            fixed (char* chars = buffer)
             {
-                return null;
-            }
+                var length = (uint)LongestPath;
+                var find = FindFirstFileName(extendedPath, 0, ref length, chars);
 
-            try
-            {
-                List<string> names = [];
-
-                do
+                if (find == InvalidFind)
                 {
-                    names.Add(new string(chars));
-                    length = LongestPath;
+                    return null;
                 }
-                while (FindNextFileName(find, ref length, chars));
 
-                // The listing ends by reaching its end; anything else left names unlisted.
-                return Marshal.GetLastPInvokeError() == ErrorHandleEof ? names : null;
+                try
+                {
+                    List<string> names = [];
+
+                    do
+                    {
+                        names.Add(new string(chars));
+                        length = LongestPath;
+                    }
+                    while (FindNextFileName(find, ref length, chars));
+
+                    // The listing ends by reaching its end; anything else left names unlisted.
+                    return Marshal.GetLastPInvokeError() == ErrorHandleEof ? names : null;
+                }
+                finally
+                {
+                    FindClose(find);
+                }
             }
-            finally
-            {
-                FindClose(find);
-            }
+        }
+        finally
+        {
+            ArrayPool<char>.Shared.Return(buffer);
         }
     }
 
@@ -386,13 +435,20 @@ internal sealed unsafe partial class FileInformation
     /// </summary>
     public static string? FinalPathOf(SafeFileHandle handle)
     {
-        var buffer = new char[LongestPath];
+        var buffer = ArrayPool<char>.Shared.Rent(LongestPath);
 
-        fixed (char* chars = buffer)
+        try
         {
-            var length = GetFinalPathNameByHandle(handle, chars, LongestPath, FileNameNormalized);
+            fixed (char* chars = buffer)
+            {
+                var length = GetFinalPathNameByHandle(handle, chars, LongestPath, FileNameNormalized);
 
-            return length is > 0 and < LongestPath ? new string(chars, 0, (int)length) : null;
+                return length is > 0 and < LongestPath ? new string(chars, 0, (int)length) : null;
+            }
+        }
+        finally
+        {
+            ArrayPool<char>.Shared.Return(buffer);
         }
     }
 

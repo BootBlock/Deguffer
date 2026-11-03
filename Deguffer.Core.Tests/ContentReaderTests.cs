@@ -36,8 +36,8 @@ public sealed class ContentReaderTests : IDisposable
         var file = Candidate(path);
         var reader = new ContentReader(
             FileInformation.Default,
-            (described, route) => FileInformation.Default.Hold(described, route) is { Reading.Description: { } description } held
-                ? held with { Reading = held.Reading with { Description = description with { Attributes = description.Attributes | (FileAttributes)recall } } }
+            (described, route) => FileInformation.Default.Hold(described, route) is { Reading.State: { } state } held
+                ? held with { Reading = held.Reading with { State = state with { Attributes = state.Attributes | (FileAttributes)recall } } }
                 : throw new InvalidOperationException("The fixture's file could not be described."),
             (_, _, _) => throw new InvalidOperationException("The content of a file not on this device was opened."),
             _ => throw new InvalidOperationException("The content of a file not on this device was opened by its path."));
@@ -149,6 +149,50 @@ public sealed class ContentReaderTests : IDisposable
         File.Delete(path);
 
         Assert.Equal(ContentReadResult.Gone, Read(ContentReader.Default, file).Result);
+    }
+
+    /// <summary>
+    /// A read judges the file by what it is, never by where it is, so it never asks Windows for the
+    /// file's normalised path: not where the path is described, nor before the first byte or after
+    /// the last. The query costs about as much as the rest of a description together.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AReadNeverAsksWindowsWhereTheFileIs(bool whole)
+    {
+        var path = _temp.CreateFile(3 * ContentReader.BlockBytes, "a.bin");
+        var file = Candidate(path);
+        var asked = 0;
+        var files = new FileInformation(
+            FileInformation.Open,
+            FileInformation.ReadIdentity,
+            finalPath: handle =>
+            {
+                asked++;
+                return FileInformation.FinalPathOf(handle);
+            });
+        var reader = new ContentReader(files, files.Hold, FileInformation.OpenById, NoPath);
+        using var checksum = Checksum.For(ChecksumAlgorithm.XxHash128);
+
+        Assert.Equal(ContentReadResult.Read, reader.Read(file, whole ? ContentPart.Whole : ContentPart.Ends, checksum, default).Result);
+        Assert.Equal(0, asked);
+    }
+
+    /// <summary>
+    /// A file whose path Windows will not give is read, because the read needs no path, and is still
+    /// not identified, because identification does: no file gets into a search that way.
+    /// </summary>
+    [Fact]
+    public void AFileWhosePathWindowsWillNotGiveIsReadButNotIdentified()
+    {
+        var path = _temp.CreateFile(100, "a.bin");
+        var file = Candidate(path);
+        var files = new FileInformation(FileInformation.Open, FileInformation.ReadIdentity, finalPath: _ => null);
+        var reader = new ContentReader(files, files.Hold, FileInformation.OpenById, NoPath);
+
+        Assert.Equal(ContentReadResult.Read, Read(reader, file).Result);
+        Assert.Equal(FileReadingResult.Unreadable, files.Describe(path, IdentityRoute.FileId).Result);
     }
 
     /// <summary>
