@@ -74,11 +74,14 @@ public sealed class CloudFilesTests : IDisposable
         using var profile = TempDirectory.InProfile();
         using var root = new ScratchSyncRoot(profile.CreateDirectory("Synced"));
 
-        var listed = Assert.Single(_cloud.SyncRoots(), candidate => candidate.Id == root.Id);
+        var roots = _cloud.SyncRoots();
+
+        Assert.NotNull(roots);
+        var listed = Assert.Single(roots, candidate => candidate.Id == root.Id);
 
         Assert.Equal(root.Path, listed.Path, ignoreCase: true);
         Assert.Equal(ScratchSyncRoot.ProviderName, listed.ProviderName);
-        Assert.DoesNotContain(_cloud.SyncRoots(), candidate => candidate.Id == _root.Id);
+        Assert.DoesNotContain(roots, candidate => candidate.Id == _root.Id);
     }
 
     [Fact]

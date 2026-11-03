@@ -33,7 +33,7 @@ public sealed class HuggingFaceEnvironmentTests
     [Fact]
     public void ReadsTheVersionAndTheFolders()
     {
-        var environment = HuggingFaceEnvironment.Read(Observed.Replace("\n", "\r\n", StringComparison.Ordinal));
+        var environment = HuggingFaceEnvironment.Read(Observed.ReplaceLineEndings("\r\n"));
 
         Assert.Equal(new Version(2, 4), environment.Version);
         Assert.True(environment.KnowsSharedBlobs);
