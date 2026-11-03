@@ -7,8 +7,9 @@ namespace Deguffer.Core.Providers;
 
 /// <summary>
 /// The shaders console emulators compile for this GPU and keep, which reach many gigabytes on a machine
-/// with a real library: Cemu's, RPCS3's, Dolphin's and PCSX2's, and those of the Nintendo Switch
-/// emulators Ryujinx, Eden, Citron and yuzu.
+/// with a real library: Cemu's, RPCS3's, Dolphin's, PCSX2's, DuckStation's, PPSSPP's and Vita3K's,
+/// those of the Nintendo Switch emulators Ryujinx, Eden, Citron and yuzu, and those of the Nintendo 3DS
+/// emulators Azahar, Lime3DS and Citra.
 ///
 /// <para><b>One provider over a table of layouts, as <see cref="GpuShaderCacheProvider"/> is.</b> The
 /// tier, the consequence and the reasoning are one fact for every emulator here, and what differs is
@@ -22,19 +23,19 @@ namespace Deguffer.Core.Providers;
 /// stutter until it has been played through, rather than a slower next use.</para>
 ///
 /// <para><b>§5.1 has nothing to prefer.</b> No emulator here offers an eviction command Deguffer can
-/// call. RPCS3's and Cemu's are menu items inside the running program, and Cemu's removes the
-/// transferable cache as well. So §5.2 carries the whole burden, and everything a layout does not
+/// call. RPCS3's, Cemu's, Vita3K's and Azahar's are menu items inside the running program, and Cemu's
+/// and Azahar's remove the transferable caches as well. So §5.2 carries the whole burden, and everything a layout does not
 /// name is left alone at every level.</para>
 ///
 /// <para><b>Found where each emulator puts its data, and where the user says it is.</b> The fixed
-/// locations are looked at on every machine. A portable install, and every RPCS3 install, is beside
+/// locations are looked at on every machine. A portable install, and every RPCS3 and Vita3K install, is beside
 /// the program wherever it was unpacked, so it is reached only through a folder the user declares in
 /// Settings, see <see cref="EmulatorFolderStore"/>.</para>
 ///
 /// <para><b>Nothing of an emulator's while it runs (§5.3).</b> An emulator writes its shader cache
 /// while a game is played, so while it is in the process table every folder it proved is held back
 /// and refused in Explore, and the clean asks again before each removal. A folder two emulators
-/// proved, as two forks of yuzu can, is held while either runs.</para>
+/// proved, as two forks of yuzu or of Citra can, is held while either runs.</para>
 /// </summary>
 public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
 {
@@ -44,10 +45,16 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
         new Rpcs3Layout(),
         new DolphinLayout(),
         new Pcsx2Layout(),
+        new DuckStationLayout(),
+        new PpssppLayout(),
+        new Vita3KLayout(),
         new RyujinxLayout(),
         YuzuFamilyLayout.Eden,
         YuzuFamilyLayout.Citron,
         YuzuFamilyLayout.Yuzu,
+        CitraFamilyLayout.Azahar,
+        CitraFamilyLayout.Lime3DS,
+        CitraFamilyLayout.Citra,
     ];
 
     private readonly EmulatorFolderStore _folders;
@@ -88,20 +95,22 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
         + "while, or waits longer before it starts. RPCS3 also compiles each game's code again the next "
         + "time it boots, which can take minutes, and Ryujinx translates it again over the next few boots. "
         + "Your saves, memory cards, save states, firmware, keys, installed games and settings are "
-        + "untouched, and so are Cemu's transferable cache and the Switch emulators' guest shader caches.";
+        + "untouched, and so are Cemu's and the 3DS emulators' transferable caches and the Switch "
+        + "emulators' guest shader caches.";
 
     public override ProviderBasis Basis => ProviderBasis.Researched;
 
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Games,
-        Application = "Cemu, RPCS3, Dolphin, PCSX2, Ryujinx, Eden, Citron and yuzu, the console emulators",
+        Application = "Cemu, RPCS3, Dolphin, PCSX2, DuckStation, PPSSPP, Vita3K, Ryujinx, Eden, Citron, yuzu, "
+            + "Azahar, Lime3DS and Citra, the console emulators",
         Publisher = "each emulator's open-source project",
         Purpose = "An emulator translates each game's shaders for your graphics card as the game draws, "
             + "and keeps the result so the next session does not stutter while it translates them again.",
         Recommendation = "Remove these for a game you have finished with, or after a driver or emulator "
             + "update has made them stale. Deguffer finds each emulator where it keeps its data by "
-            + "default. For a portable install, and for every RPCS3 install, add its folder under "
+            + "default. For a portable install, and for every RPCS3 and Vita3K install, add its folder under "
             + "Emulator folders in Settings.",
     };
 
@@ -166,11 +175,14 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
             var reason = $"This is {root.Layout.Name}'s folder, which holds your saves, firmware and settings "
                 + "beside its shader cache. Deguffer removes only the shader cache inside it.";
 
-            roots.AddRange(ToolRoot.WayDown(root.Path, root.CacheFolders.Select(folder => folder.Path), reason));
-            roots.AddRange(root.CacheFolders.Select(folder => new ToolRoot(
-                folder.Path,
-                $"This is {root.Layout.Name}'s cache folder. Deguffer removes only the shader caches in it.",
-                folder.Recognises)));
+            // A cache folder can sit inside another, as Eden's game folders and Azahar's pipeline
+            // folder do, and Explore asks each root on its own and refuses by the deepest that
+            // refuses. So the outer folder's one root recognises both its caches and the way into the
+            // inner folder, which still refuses itself, and the way down declares no second root there.
+            var cacheFolders = root.CacheFolders.Select(folder => folder.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            roots.AddRange(ToolRoot.WayDown(root.Path, cacheFolders, reason).Where(level => !cacheFolders.Contains(level.Path)));
+            roots.AddRange(root.CacheFolders.Select(folder => CacheFolderRoot(root, folder, cacheFolders)));
         }
 
         var declared = roots.Select(root => root.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -271,6 +283,23 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
             WasNotExamined = steps.Count == 0 && (held.Count > 0 || examination.Declined.Count > 0),
             HasUnreadableRoot = examination.Unreadable,
         };
+    }
+
+    /// <summary>
+    /// <paramref name="folder"/>'s root for Explore: what the plan recognised in it, and the first
+    /// folder on the way to each cache folder of <paramref name="root"/> inside it.
+    /// </summary>
+    private static ToolRoot CacheFolderRoot(EmulatorRoot root, EmulatorCacheFolderReading folder, IReadOnlySet<string> cacheFolders)
+    {
+        var wayIn = cacheFolders
+            .Where(inner => LongPath.Contains(folder.Path, inner) && !inner.Equals(folder.Path, StringComparison.OrdinalIgnoreCase))
+            .Select(inner => LongPath.Relative(folder.Path, inner).Split(Path.DirectorySeparatorChar)[0])
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return new ToolRoot(
+            folder.Path,
+            $"This is {root.Layout.Name}'s cache folder. Deguffer removes only the shader caches in it.",
+            child => folder.Recognises(child) || (child.Kind == ChildKind.Folder && wayIn.Contains(child.Name)));
     }
 
     private bool IsRunning(EmulatorLayout layout) => Inspector.FindRunning(layout.ProcessNames).Count > 0;

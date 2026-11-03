@@ -123,25 +123,14 @@ public sealed class YuzuFamilyLayout : EmulatorLayout
         yield return Path.Combine(environment.RoamingAppData, _folderName);
     }
 
+    public override bool IsKnownByItsProgram => true;
+
     /// <summary>
     /// The <c>user</c> folder of this fork's program, where <paramref name="folder"/> is the program's
-    /// folder or that <c>user</c> folder itself. Never a declared folder on its own word, unlike the
-    /// other layouts, because every fork's data folder looks alike.
+    /// folder or that <c>user</c> folder itself. Never a declared folder on its own word, because every
+    /// fork's data folder looks alike.
     /// </summary>
-    public override IEnumerable<string> RootsDeclaredBy(string folder)
-    {
-        if (HoldsProgram(folder))
-        {
-            yield return Path.Combine(folder, PortableFolder);
-        }
-
-        if (Path.GetFileName(folder).Equals(PortableFolder, StringComparison.OrdinalIgnoreCase)
-            && Path.GetDirectoryName(folder) is { } parent
-            && HoldsProgram(parent))
-        {
-            yield return folder;
-        }
-    }
+    public override IEnumerable<string> RootsDeclaredBy(string folder) => FolderBesideProgram(folder, PortableFolder);
 
     /// <summary>
     /// The driver's cache of the emulator's own pipelines, which Eden keeps beside the game folders
@@ -185,11 +174,4 @@ public sealed class YuzuFamilyLayout : EmulatorLayout
                 _guestCacheFiles.Contains(name, StringComparer.OrdinalIgnoreCase)
                     ? GuestCacheReason
                     : "Not the driver's pipeline cache, so it is left alone.");
-
-    /// <summary>
-    /// Whether this fork's program is in <paramref name="folder"/>. A refusal counts, so the root is
-    /// probed and reported as unread rather than the folder said to hold no emulator.
-    /// </summary>
-    private bool HoldsProgram(string folder) =>
-        ProcessNames.Any(program => LongPath.ProbeFile(Path.Combine(folder, program + ".exe")) is not PathPresence.Absent);
 }
