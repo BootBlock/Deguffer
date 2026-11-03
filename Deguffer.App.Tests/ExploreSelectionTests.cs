@@ -194,6 +194,10 @@ public sealed class ExploreSelectionTests : IDisposable
     /// <summary>
     /// The policy is asked off the window's thread, because each path is a question to the machine
     /// and a list selects any number of rows at once: a few thousand held the window for seconds.
+    ///
+    /// <para>It waits for the answer itself, which follows every question, rather than for any note:
+    /// a thread pool slow to start the questions, as a full run's load makes it, shows the note that
+    /// the answer is being worked out before one has been asked.</para>
     /// </summary>
     [Fact]
     public void TheSelectionIsAskedAboutOffTheWindowsThread() => UiThread.Run(async () =>
@@ -207,7 +211,9 @@ public sealed class ExploreSelectionTests : IDisposable
         _explore.Volumes.Asked = _ => threads.Add(Environment.CurrentManagedThreadId);
         selection.Select([folder, file]);
 
-        await Eventually.HoldsAsync(() => selection.HasNote, "the refusal stated");
+        await Eventually.HoldsAsync(
+            () => selection.Note == "One of these 2 items will not be removed: Kept for a reason.",
+            "the refusal stated");
         Assert.NotEmpty(threads);
         Assert.DoesNotContain(Environment.CurrentManagedThreadId, threads);
     });
@@ -344,9 +350,11 @@ public sealed class ExploreSelectionTests : IDisposable
 
         Assert.Contains("still working out what it has to protect", selection.Note);
 
+        // On the change that takes the note away, which is the answer: one slow to be worked out is
+        // first restated as being worked out, and that is not what this asserts.
         selection.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(ExploreSelection.HasNote))
+            if (e.PropertyName == nameof(ExploreSelection.HasNote) && !selection.HasNote)
             {
                 restated.TrySetResult(Environment.CurrentManagedThreadId);
             }
