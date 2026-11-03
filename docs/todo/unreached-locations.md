@@ -5,7 +5,7 @@
 > providers and the Tier 1 caches inside Visual Studio's `.vs`, §4's Chromium application caches, §4a's Code - OSS editor caches and logs, §5's GPU
 > shader caches, Steam shader pre-cache and graphics driver installer leftovers, §6's crash dumps,
 > servicing logs, completed upgrade scaffolding and Delivery Optimization cache, §7's per-volume recycle bins and older restore points, §8's Unreal Engine
-> derived-data caches, DaVinci Resolve render cache, Adobe media cache and After Effects disk cache, §10's release of OneDrive's local copies,
+> derived-data caches, DaVinci Resolve render cache, Adobe media cache and After Effects disk cache, §9's Hugging Face hub cache, §10's release of OneDrive's local copies,
 > §11's virtual disk report and §12's Squirrel staging and superseded builds have shipped; everything
 > else is unstarted.
 > **Open questions 1, 2, 3 and 4 are answered** — see the foot of this document.
@@ -1599,6 +1599,16 @@ future availability of a remote artefact, and for model weights that claim is fr
 
 `ollama list` and `ollama rm` give a per-model view with real names, which is a far better subject
 than a directory of hashes. If this is ever built, build it on that.
+
+**Shipped for the Hugging Face hub cache** as `HuggingFaceHubProvider`, on the grounds recorded in
+issue #412: Tier 3, one item per repository, never pre-selected, and removed only by
+`hf cache rm`. It needs `huggingface_hub` 1.32 or later, because from that version a repository's
+files can be links into a store in `hublobs` that repositories share, and older versions leave a
+removed repository's shared files behind. So nothing is removed by path, and below 1.32 the row
+offers nothing and says why. `hf cache prune` is not used: a revision pinned by its full commit hash
+is stored with no ref, so prune cannot tell it from a superseded one. A repository a program holds a
+file of open is held back, at the preview and again at the clean. Ollama and LM Studio's model
+directory are not built.
 
 ---
 

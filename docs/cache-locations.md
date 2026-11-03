@@ -5532,6 +5532,75 @@ version that may not stay published, so it is offered and never ticked on your b
 
 ---
 
+## Hugging Face models and datasets
+
+**Tier 3 — user data.** Offered one repository at a time, and **never pre-selected**.
+
+| | |
+| --- | --- |
+| **Location** | `%USERPROFILE%\.cache\huggingface\hub\<type>s--<owner>--<name>`, wherever `hf env` says the hub cache is |
+| **Method** | Hugging Face's own `hf cache rm <type>/<owner>/<name> --cache-dir <hub> --format json --yes`, one repository at a time, with `huggingface_hub` 1.32 or later |
+| **Typical size** | 3.4 GB in two repositories on one workstation, one of them 3.1 GB |
+
+### What it is
+
+Every model, dataset and Space a Python program downloads from the Hugging Face Hub through
+`huggingface_hub` is kept in one cache: Transformers, Diffusers, faster-whisper and many more use it.
+Each repository has a folder of its own, with every revision of it that a program asked for. On a
+machine that runs local models it is tens of gigabytes.
+
+The cache moves with `HF_HUB_CACHE`, then `HUGGINGFACE_HUB_CACHE`, then `HF_HOME\hub`, and `HF_HOME`
+follows `XDG_CACHE_HOME`. Deguffer asks `hf env` where it is, rather than working it out, and tells
+every later command the same folder with `--cache-dir`, so what the preview examined is what the
+clean acts on.
+
+### What Deguffer does
+
+`hf cache ls --format json` lists the repositories with their sizes, and each is one item, grouped
+into models, datasets and Spaces. An item is removed by `hf cache rm`, which removes every revision of
+the repository. The size shown is the tool's own figure, which it prints to three figures.
+
+A repository is offered only if the tool lists it with a type and a name the Hub would give a
+repository, and its folder is where the tool's own naming rule puts it and is not a link. A listing
+Deguffer cannot read in full offers nothing.
+
+**Only from 1.32.** From version 1.32 the cache can keep one copy of a file that several repositories
+share, in `hublobs`, and each repository's files are then links into it. Older versions leave a
+removed repository's shared files behind, and other tools can remove a shared file that another
+repository still uses. So below 1.32 the row offers nothing, and says to update with
+`pip install -U huggingface_hub`. For the same reason nothing in the cache is ever deleted by path:
+deleting a repository's folder leaves its shared files, and deleting `hublobs` breaks every
+repository that links into it.
+
+**Not `hf cache prune`.** It removes every revision that no branch or tag names, and a revision a
+program pinned by its full commit hash is stored with none, so prune cannot tell a superseded
+revision from one a program depends on.
+
+**In use.** The tool keeps no lock while a model is loaded, but a program that has loaded a model
+holds its files open. Deguffer asks Windows about every file in every revision, and a repository a
+program has open, or one it cannot ask about in full, is not offered. It asks again when you press
+Clean, because a removal stopped part-way by an open file leaves a broken repository.
+
+### What is protected
+
+The hub cache itself, `CACHEDIR.TAG`, `version.txt`, `.locks`, the shared `blobs` store, every
+repository not chosen or held back, and every folder the tool did not list are checked after the
+clean to prove they survived. So are the access tokens in `token` and `stored_tokens`, the `assets`
+folder, and every other folder beside `hub` in the Hugging Face folder. Explore refuses the hub cache
+and the Hugging Face folder directly.
+
+### What it costs you
+
+A program that needs a removed model or dataset downloads it again, if the Hub still offers it.
+Model weights are often several gigabytes.
+
+### Why Tier 3, not Tier 2
+
+A model that is gated, private, withdrawn, or replaced by a new revision under the same name cannot
+be downloaded again, so the copy in the cache may be the only one you can get.
+
+---
+
 ## Vagrant superseded box versions
 
 **Tier 2 — regenerable, with cost.** Not pre-selected.

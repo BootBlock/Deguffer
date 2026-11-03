@@ -257,6 +257,7 @@ you would lose by deleting it. By default, only Tier 1 rows start out selected:
 | Epic Games launcher logs and crash reports | |
 | Battle.net launcher logs | |
 | RetroArch thumbnails | Each system's box art, snapshots, title screens and logos, grouped by system. Most will download again, but a picture you added yourself cannot be told apart from the rest and will be lost |
+| Hugging Face models and datasets | One item per repository in the hub cache that Transformers, Diffusers and other Python tools download into, removed by Hugging Face's own `hf cache rm`, version 1.32 or later; never a repository a running program has open, the store of files that repositories share, or your access tokens. A model that has been withdrawn or made private cannot be downloaded again |
 | Claude Code MCP server logs | |
 | Tool logs in temporary folders | The Remote Desktop client's traces, the Windows App's and ServiceHub's logs, and VS Code's updater logs; the folders they are written to stay |
 | Claude Code rewind snapshots | One folder per session, dated by the folder and never by the snapshots in it; a running session's snapshots are never offered |
