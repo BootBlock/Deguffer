@@ -90,6 +90,8 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
         + "Your saves, memory cards, save states, firmware, keys, installed games and settings are "
         + "untouched, and so are Cemu's transferable cache and the Switch emulators' guest shader caches.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Games,

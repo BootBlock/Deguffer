@@ -49,6 +49,8 @@ public sealed class NpmCacheProvider : CleanupProviderBase
     public override string WhatHappensOnNextUse =>
         "The next npm install re-downloads packages from the registry. Installed node_modules are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.PackageCaches,

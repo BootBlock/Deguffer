@@ -55,6 +55,8 @@ public sealed class MypyCacheProvider : BuildDirectoryProvider
         "The next mypy run checks every module from the start rather than only what changed, so " +
         "that one run is slower. mypy makes the folder again as it goes.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.ProjectBuildOutput,

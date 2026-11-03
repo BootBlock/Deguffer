@@ -71,6 +71,8 @@ public sealed class YarnClassicCacheProvider : CleanupProviderBase
         "The next yarn install downloads its packages from the registry again. Installed node_modules, "
         + "your global packages and Yarn 2 and later's caches are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.PackageCaches,

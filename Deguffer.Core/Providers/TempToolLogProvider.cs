@@ -107,6 +107,8 @@ public sealed partial class TempToolLogProvider : TempMarkerProviderBase
         + "the record of past connections, services and updates, which support may ask for after "
         + "something has gone wrong.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.TemporaryFiles,

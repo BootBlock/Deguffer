@@ -124,6 +124,8 @@ public sealed partial class ClaudeCodeCommandSnapshotProvider : TempMarkerProvid
         "Nothing changes. Claude Code takes a new snapshot the next time it runs a command in a project, and "
         + "the snapshots a running session may still be using are left where they are.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.DeveloperTools,

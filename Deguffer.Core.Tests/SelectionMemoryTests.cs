@@ -1,5 +1,6 @@
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Safety;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -30,8 +31,8 @@ public class SelectionMemoryTests
     {
         var memory = new SelectionMemory(new Dictionary<string, RememberedSelection>());
 
-        Assert.True(memory.RowStartsSelected("gradle", SafetyTier.RegenerableCache, byDefault: true));
-        Assert.False(memory.RowStartsSelected("maven", SafetyTier.RegenerableWithCost, byDefault: false));
+        Assert.True(memory.RowStartsSelected(new FakeCleanupProvider("gradle", SafetyTier.RegenerableCache), byDefault: true));
+        Assert.False(memory.RowStartsSelected(new FakeCleanupProvider("maven", SafetyTier.RegenerableWithCost), byDefault: false));
     }
 
     /// <summary>
@@ -43,10 +44,10 @@ public class SelectionMemoryTests
     public void RestoresWhatTheUserChoseOverTheTierDefault()
     {
         Assert.False(Remembering(Npm, isSelected: false)
-            .RowStartsSelected(Npm, SafetyTier.RegenerableCache, byDefault: true));
+            .RowStartsSelected(new FakeCleanupProvider(Npm, SafetyTier.RegenerableCache), byDefault: true));
 
         Assert.True(Remembering("maven", isSelected: true)
-            .RowStartsSelected("maven", SafetyTier.RegenerableWithCost, byDefault: false));
+            .RowStartsSelected(new FakeCleanupProvider("maven", SafetyTier.RegenerableWithCost), byDefault: false));
     }
 
     /// <summary>
@@ -62,9 +63,9 @@ public class SelectionMemoryTests
             isSelected: true,
             (@"C:\$Recycle.Bin", true));
 
-        Assert.False(memory.RowStartsSelected("recycle-bin", SafetyTier.UserData, byDefault: false));
+        Assert.False(memory.RowStartsSelected(new FakeCleanupProvider("recycle-bin", SafetyTier.UserData), byDefault: false));
         Assert.False(memory.StepStartsSelected(
-            "recycle-bin", SafetyTier.UserData, @"C:\$Recycle.Bin", rowStartsSelected: true));
+            new FakeCleanupProvider("recycle-bin", SafetyTier.UserData), @"C:\$Recycle.Bin", rowStartsSelected: true));
     }
 
     /// <summary>
@@ -81,11 +82,11 @@ public class SelectionMemoryTests
 
         // Tier 2 with the tier default against it, which is what the provider really is. Both
         // answers here are the user's own, so both have to beat that default.
-        var row = memory.RowStartsSelected(NodeModules, SafetyTier.RegenerableWithCost, byDefault: false);
+        var row = memory.RowStartsSelected(new FakeCleanupProvider(NodeModules, SafetyTier.RegenerableWithCost), byDefault: false);
 
         Assert.True(row);
-        Assert.True(memory.StepStartsSelected(NodeModules, SafetyTier.RegenerableWithCost, Kept, row));
-        Assert.False(memory.StepStartsSelected(NodeModules, SafetyTier.RegenerableWithCost, Cleared, row));
+        Assert.True(memory.StepStartsSelected(new FakeCleanupProvider(NodeModules, SafetyTier.RegenerableWithCost), Kept, row));
+        Assert.False(memory.StepStartsSelected(new FakeCleanupProvider(NodeModules, SafetyTier.RegenerableWithCost), Cleared, row));
     }
 
     /// <summary>
@@ -98,10 +99,10 @@ public class SelectionMemoryTests
     {
         var memory = Remembering(NodeModules, isSelected: false);
 
-        var row = memory.RowStartsSelected(NodeModules, SafetyTier.RegenerableCache, byDefault: true);
+        var row = memory.RowStartsSelected(new FakeCleanupProvider(NodeModules, SafetyTier.RegenerableCache), byDefault: true);
 
         Assert.False(row);
-        Assert.False(memory.StepStartsSelected(NodeModules, SafetyTier.RegenerableCache, Fresh, row));
+        Assert.False(memory.StepStartsSelected(new FakeCleanupProvider(NodeModules, SafetyTier.RegenerableCache), Fresh, row));
     }
 
     /// <summary>
@@ -114,14 +115,14 @@ public class SelectionMemoryTests
     {
         var memory = Remembering(NodeModules, isSelected: true);
 
-        var tierTwo = memory.RowStartsSelected(NodeModules, SafetyTier.RegenerableWithCost, byDefault: false);
-        var tierOne = memory.RowStartsSelected(NodeModules, SafetyTier.RegenerableCache, byDefault: true);
+        var tierTwo = memory.RowStartsSelected(new FakeCleanupProvider(NodeModules, SafetyTier.RegenerableWithCost), byDefault: false);
+        var tierOne = memory.RowStartsSelected(new FakeCleanupProvider(NodeModules, SafetyTier.RegenerableCache), byDefault: true);
 
         Assert.True(tierTwo);
-        Assert.False(memory.StepStartsSelected(NodeModules, SafetyTier.RegenerableWithCost, Fresh, tierTwo));
+        Assert.False(memory.StepStartsSelected(new FakeCleanupProvider(NodeModules, SafetyTier.RegenerableWithCost), Fresh, tierTwo));
 
         Assert.True(tierOne);
-        Assert.True(memory.StepStartsSelected(NodeModules, SafetyTier.RegenerableCache, Fresh, tierOne));
+        Assert.True(memory.StepStartsSelected(new FakeCleanupProvider(NodeModules, SafetyTier.RegenerableCache), Fresh, tierOne));
     }
 
     /// <summary>
@@ -134,8 +135,8 @@ public class SelectionMemoryTests
     {
         var memory = Remembering("hypothetical", isSelected: true, (Fresh, true));
 
-        Assert.False(memory.RowStartsSelected("hypothetical", SafetyTier.DoNotTouch, byDefault: true));
-        Assert.False(memory.StepStartsSelected("hypothetical", SafetyTier.DoNotTouch, Fresh, rowStartsSelected: true));
+        Assert.False(memory.RowStartsSelected(new FakeCleanupProvider("hypothetical", SafetyTier.DoNotTouch), byDefault: true));
+        Assert.False(memory.StepStartsSelected(new FakeCleanupProvider("hypothetical", SafetyTier.DoNotTouch), Fresh, rowStartsSelected: true));
     }
 
     /// <summary>
@@ -149,7 +150,7 @@ public class SelectionMemoryTests
         var memory = Remembering(Npm, isSelected: true, (CacheStep, false));
 
         Assert.False(memory.StepStartsSelected(
-            Npm, SafetyTier.RegenerableCache, CacheStep.ToUpperInvariant(), rowStartsSelected: true));
+            new FakeCleanupProvider(Npm, SafetyTier.RegenerableCache), CacheStep.ToUpperInvariant(), rowStartsSelected: true));
     }
 
     [Fact]

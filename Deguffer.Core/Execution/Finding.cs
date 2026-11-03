@@ -44,9 +44,9 @@ public sealed record Finding(
     public bool HasSomethingToRemove => Plan?.Steps.Any(step => step.RemovesSomething) == true;
 
     /// <summary>
-    /// §3's "Default" column: only Tier 1 is pre-selected, and only when there is something to
-    /// reclaim. This lives here rather than in the view-model so the tier table is answerable in
-    /// one place.
+    /// §3's "Default" column: only Tier 1 is pre-selected, only when its layout was observed (see
+    /// <see cref="ProviderBasis"/>), and only when there is something to reclaim. This lives here
+    /// rather than in the view-model so the tier table is answerable in one place.
     /// </summary>
-    public bool IsPreSelectedByDefault => HasSomethingToRemove && Provider.Tier.IsPreSelectedByDefault();
+    public bool IsPreSelectedByDefault => HasSomethingToRemove && Provider.IsPreSelectedByDefault();
 }

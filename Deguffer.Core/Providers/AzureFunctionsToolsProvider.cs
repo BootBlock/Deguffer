@@ -112,6 +112,8 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
         + "minutes and a few hundred megabytes. Your function projects and their settings are "
         + "untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.DeveloperTools,

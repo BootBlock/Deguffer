@@ -108,6 +108,8 @@ public sealed class JetBrainsSupersededSystemProvider : CleanupProviderBase
         "start one of those old versions again, it builds its caches and indexes again from scratch. " +
         "Its local history and logs, its settings and its plugins are not touched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.DeveloperTools,

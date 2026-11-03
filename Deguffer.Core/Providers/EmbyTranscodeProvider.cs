@@ -32,6 +32,8 @@ public sealed class EmbyTranscodeProvider : MediaServerTranscodeProvider
         "Emby converts a film or an episode again the next time a player that cannot play the original "
         + "asks for it. Your libraries, users, watch history and settings are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.MediaAndCreative,

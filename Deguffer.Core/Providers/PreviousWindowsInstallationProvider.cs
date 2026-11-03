@@ -67,6 +67,8 @@ public sealed class PreviousWindowsInstallationProvider : SetupCleanupProviderBa
         + "installation files as needed to reset this PC, so a reset afterwards needs Windows "
         + "downloaded again or installation media. Windows itself keeps working exactly as it is now.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Windows,

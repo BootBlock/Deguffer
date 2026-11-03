@@ -63,6 +63,8 @@ public sealed class RetroArchThumbnailProvider : RetroArchProviderBase
         + "added yourself, or one for a game the libretro server does not carry, is gone permanently: "
         + "nothing tells it apart from a downloaded one. Your games, playlists and saves are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Games,

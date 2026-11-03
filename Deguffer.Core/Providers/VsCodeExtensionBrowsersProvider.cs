@@ -61,6 +61,8 @@ public sealed class VsCodeExtensionBrowsersProvider : CleanupProviderBase
         "The extension downloads its browser again the next time it opens one, which is several hundred "
         + "megabytes. Its conversations, checkpoints and settings are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.DeveloperTools,

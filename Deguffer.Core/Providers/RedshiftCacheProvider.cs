@@ -67,6 +67,8 @@ public sealed class RedshiftCacheProvider : CleanupProviderBase
 
     public override StepGrain Grain => StepGrain.Parts;
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override string WhatHappensOnNextUse =>
         "The next time a scene renders with Redshift, Redshift converts its textures from your images "
         + "again, so that render starts more slowly once. Your scenes, your images, Redshift's preferences "

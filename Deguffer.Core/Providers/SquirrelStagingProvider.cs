@@ -126,6 +126,8 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
         + "package it builds that patch from is left in place. The next install or update unpacks "
         + "itself into the staging folder again, exactly as it would have done.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.InstallersAndUpdates,

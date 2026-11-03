@@ -83,6 +83,8 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
         "Playwright tests stop running until 'playwright install' is run again, which re-downloads " +
         "roughly a gigabyte of browser builds. Test code, configuration and reports are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.PackageCaches,

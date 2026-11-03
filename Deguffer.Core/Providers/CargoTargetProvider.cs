@@ -80,6 +80,8 @@ public sealed class CargoTargetProvider : BuildDirectoryProvider
         "cache where that is still present, and from the network where it is not. Anything you built " +
         "and are running from target goes with it.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.ProjectBuildOutput,

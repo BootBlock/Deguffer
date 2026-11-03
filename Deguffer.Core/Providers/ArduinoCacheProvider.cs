@@ -96,6 +96,8 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
         + "of each sketch builds its core and sketch from scratch. Installed boards, tools and libraries, "
         + "your sketches and your settings are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.PackageCaches,

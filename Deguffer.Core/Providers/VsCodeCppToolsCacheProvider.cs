@@ -90,6 +90,8 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
         "The next time a C++ project is opened, the extension rebuilds its precompiled headers. " +
         "IntelliSense is slower until that finishes.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.DeveloperTools,

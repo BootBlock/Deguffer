@@ -57,6 +57,8 @@ public sealed class PnpmStoreProvider : CleanupProviderBase
         "A later install that needs a removed package downloads it again. Projects and their "
         + "node_modules are untouched: anything a project still links stays in the store.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.PackageCaches,

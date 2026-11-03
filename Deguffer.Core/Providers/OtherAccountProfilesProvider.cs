@@ -66,6 +66,8 @@ public sealed class OtherAccountProfilesProvider : CleanupProviderBase
         + "and nothing brings it back. Only the profiles of local accounts that no longer exist are offered, so "
         + "nobody can sign in to one of them.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Windows,

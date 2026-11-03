@@ -90,6 +90,8 @@ public sealed class EpicLauncherContentCacheProvider : CleanupProviderBase
         + "the storefront fills in more slowly once. Your installed games, your library and your "
         + "sign-in are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Games,

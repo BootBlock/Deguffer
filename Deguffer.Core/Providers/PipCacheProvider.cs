@@ -56,6 +56,8 @@ public sealed class PipCacheProvider : CleanupProviderBase
         "built from source — which for a package with C extensions means compiling it again. " +
         "Installed packages, virtual environments and site-packages are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.PackageCaches,
