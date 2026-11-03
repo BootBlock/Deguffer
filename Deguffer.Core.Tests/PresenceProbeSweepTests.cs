@@ -25,7 +25,7 @@ public sealed partial class PresenceProbeSweepTests
     /// <list type="bullet">
     /// <item>Classification: the file or folder says what a location is, and a refusal leaves it
     /// unrecognised and left alone. Chromium's <c>Local State</c> and profile file, Jellyfin's marker
-    /// (its cache tag is read through <c>MarkerFile</c>), LM Studio's deletion marker, Squirrel's <c>Update.exe</c>, Steam's and vcpkg's
+    /// (its cache tag is read through <c>MarkerFile</c>), LM Studio's deletion marker, Steam's and vcpkg's
     /// root markers, the editor's identifying files, and the build-directory and <c>obj</c>
     /// signatures.</item>
     /// <item>Behind a refusal check: an earlier probe or obstacle walk stops on a refusal, so only
@@ -49,7 +49,6 @@ public sealed partial class PresenceProbeSweepTests
         ["Deguffer.Core/Providers/JellyfinServerLayout.cs"] = 1,
         ["Deguffer.Core/Providers/LmStudioRuntimeProvider.cs"] = 3,
         ["Deguffer.Core/Providers/PackageContainers.cs"] = 1,
-        ["Deguffer.Core/Providers/SquirrelDiscovery.cs"] = 1,
         ["Deguffer.Core/Providers/SteamDiscovery.cs"] = 1,
         ["Deguffer.Core/Providers/SteamShaderCacheProvider.cs"] = 2,
         ["Deguffer.Core/Providers/VcpkgDiscovery.cs"] = 1,

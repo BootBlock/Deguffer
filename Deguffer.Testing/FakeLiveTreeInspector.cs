@@ -79,14 +79,19 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     /// <para><paramref name="arguments"/> are the full paths it was started with, which
     /// <see cref="FindLiveChildren"/> alone answers, as the real inspector does: the child of a
     /// scratch folder an argument names, or names a path inside.</para>
+    ///
+    /// <para><paramref name="started"/> is when it started, which only a candidate naming
+    /// <see cref="LiveTreeQuery.Writers"/> asks, by the real inspector's rule. Null is a start time
+    /// Windows would not give.</para>
     /// </summary>
     public FakeLiveTreeInspector WithProgram(
         string name,
         string? executable = null,
         string? workingDirectory = null,
-        IReadOnlyList<string>? arguments = null)
+        IReadOnlyList<string>? arguments = null,
+        DateTimeOffset? started = null)
     {
-        _programs.Add(new RunningProgram(name, executable, workingDirectory, arguments ?? []));
+        _programs.Add(new RunningProgram(name, executable, workingDirectory, arguments ?? [], started));
         return this;
     }
 
@@ -117,11 +122,14 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     {
         Asked = candidates;
 
+        var unknown = new List<string>();
+
         return Answer(
             [.. candidates
-                .Select(c => new LiveTree(c.Directory, HoldersOf(c)))
+                .Select(c => new LiveTree(c.Directory, HoldersOf(c, unknown)))
                 .Where(tree => tree.Holders.Count > 0)],
-            [.. candidates.Select(c => c.Directory)]);
+            [.. candidates.Select(c => c.Directory)],
+            unknown);
     }
 
     public LiveTreeFindings FindOccupiedDirectories(CancellationToken ct = default) =>
@@ -138,7 +146,11 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
                 .Select(group => new LiveTree(group.Key, [.. group.Select(place => place.Holder)]))],
             _complete);
 
-    private List<string> HoldersOf(LiveTreeQuery candidate)
+    /// <summary>
+    /// What makes <paramref name="candidate"/> live, adding it to <paramref name="unknown"/> where a
+    /// writer's start or its last write could not be compared, as the real inspector does.
+    /// </summary>
+    private List<string> HoldersOf(LiveTreeQuery candidate, List<string> unknown)
     {
         var holders = new List<string>();
 
@@ -160,6 +172,16 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
         foreach (var program in _programs)
         {
             holders.AddRange(_match.Holders(candidate, program.Name, program.Executable, program.WorkingDirectory));
+
+            if (_match.Writer(candidate, program.Name, program.Executable, program.Started, out var cannotTell) is { } writer)
+            {
+                holders.Add(writer);
+            }
+
+            if (cannotTell && !unknown.Contains(candidate.Directory, StringComparer.OrdinalIgnoreCase))
+            {
+                unknown.Add(candidate.Directory);
+            }
         }
 
         return holders;
@@ -198,11 +220,18 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
 
     /// <summary>
     /// What the real inspector answers: nothing whole where the table could not be read, and otherwise
-    /// a whole answer but for the directories asked about that a test made unanswerable.
+    /// a whole answer but for the directories asked about that a test made unanswerable, or whose
+    /// writers' times could not be compared (<paramref name="unknown"/>).
     /// </summary>
-    private LiveTreeFindings Answer(IReadOnlyList<LiveTree> live, IReadOnlyList<string> asked) =>
+    private LiveTreeFindings Answer(
+        IReadOnlyList<LiveTree> live,
+        IReadOnlyList<string> asked,
+        IReadOnlyList<string>? unknown = null) =>
         _complete
-            ? LiveTreeFindings.Partly(live, [.. asked.Where(_unanswered.Contains)])
+            ? LiveTreeFindings.Partly(
+                live,
+                [.. asked.Where(directory => _unanswered.Contains(directory)
+                    || (unknown?.Contains(directory, StringComparer.OrdinalIgnoreCase) ?? false))])
             : new LiveTreeFindings(live, Complete: false);
 
     private static bool IsImmediateChild(string root, string child) =>
@@ -224,5 +253,6 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
         string Name,
         string? Executable,
         string? WorkingDirectory,
-        IReadOnlyList<string> Arguments);
+        IReadOnlyList<string> Arguments,
+        DateTimeOffset? Started);
 }

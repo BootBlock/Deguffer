@@ -38,7 +38,7 @@ largest files inside it:
 
 Besides Settings and About, Deguffer has six pages:
 
-- [Storage](#storage) checks 120 sources of waste, from package-manager and browser caches to
+- [Storage](#storage) checks 121 sources of waste, from package-manager and browser caches to
   `Windows.old` and old restore points, and puts each one in a [safety tier](#safety-tiers). You
   choose what goes, and when the clean has finished Deguffer checks that everything it said it would
   leave alone is still there.
@@ -125,7 +125,7 @@ remove one by any route.
 
 ## Storage
 
-Each of the 120 sources has its own provider, which knows what that location is and what sits next
+Each of the 121 sources has its own provider, which knows what that location is and what sits next
 to it. Rows for tools you do not have are hidden unless you ask the Storage page to show them. Build
 output and project caches, such as `node_modules`, `obj`, Rust's `target`, Python's `.tox` and
 `.pytest_cache` folders, and the caches in Visual Studio's `.vs` folders, are only looked for
@@ -164,6 +164,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | sccache compiler cache | sccache's server is stopped first; never its settings. Researched |
 | Debugger symbol cache | The symbol files and programs that debuggers downloaded into a store that only Microsoft's public symbol servers fill, as `_NT_SYMBOL_PATH` names it; never the store's markers or anything else in it, a store that SymStore built, or anything while a debugger that writes to the store is running |
 | Conan package cache | Conan's own cache clean, limited to sources, build folders and unfinished builds; the packages you built or downloaded stay, with their metadata and your configuration. Researched |
+| Pulumi plugin cache | One item per plugin in `.pulumi\plugins`, or wherever `PULUMI_HOME` points, removed with Pulumi's own `pulumi plugin rm`, or by path where Pulumi is not installed; never your access tokens, a stack's state, a plugin a running program is using, or anything while Pulumi is running. Researched |
 | pip package cache | |
 | uv package cache | |
 | Poetry package cache | `poetry cache clear` for each repository; never its `virtualenvs`. Researched |
@@ -252,6 +253,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | Superseded driver packages | Older versions of drivers in Windows' driver store, removed by Windows' own Disk Cleanup handler; never the newest version of a driver, one that a device is using, or one that is part of Windows |
 | Superseded Windows components | The component store (`WinSxS`), reduced by `DISM /StartComponentCleanup` as administrator and sized by DISM's own analysis, which counts what the store shares with Windows only once; nothing is ever deleted from the store, and the row is clear once the cleanup has run to its end on the store as it is now |
 | Local copies of cloud files | OneDrive's own "free up space": every file stays listed and opens while you are online. Files you keep on this device, and files with changes not yet uploaded, stay as they are |
+| Dropbox cache | Emptied in place: what Dropbox staged in the hidden `.dropbox.cache` at the top of each Dropbox folder its `info.json` records; never the cache folder itself, your files beside it, or anything while Dropbox is running. Researched |
 </details>
 
 <details>

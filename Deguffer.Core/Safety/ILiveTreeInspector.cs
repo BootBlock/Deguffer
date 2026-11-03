@@ -40,7 +40,32 @@ public sealed record LiveTreeQuery(string Directory, string Project, IReadOnlyLi
     /// even though both are below the solution.</para>
     /// </summary>
     public IReadOnlyList<string> Workspaces { get; init; } = [];
+
+    /// <summary>
+    /// The programs that write <see cref="Directory"/> from outside it, and when it was last
+    /// written, or null where no program does.
+    ///
+    /// <para>For a directory a tool makes, fills and deletes from a process that neither runs from
+    /// it nor works in it: Squirrel's updater unpacks an update into a staging directory from the
+    /// application's own folder. The place a program is cannot show that it is using the directory,
+    /// and the time can. A program that was already running when the directory was last written may
+    /// be the one writing it, and one started since cannot have made it.</para>
+    /// </summary>
+    public LiveTreeWriters? Writers { get; init; }
 }
+
+/// <summary>Where the programs that write a directory from outside it run, and when it was last written.</summary>
+/// <param name="Folders">
+/// The folders such a program runs from. A program whose executable is at or below one of them, and
+/// that was already running when the directory was last written, is using it.
+/// </param>
+/// <param name="LastWritten">
+/// The later of the directory's creation and its own last write, or null where Windows would not say.
+/// The creation time alone is not enough: Windows can give a directory made seconds after another of
+/// the same name was deleted the deleted one's creation time, and that reads as older than the program
+/// that made it.
+/// </param>
+public sealed record LiveTreeWriters(IReadOnlyList<string> Folders, DateTimeOffset? LastWritten);
 
 /// <summary>A directory something is using right now.</summary>
 /// <param name="Directory">The directory asked about, as it was asked.</param>
@@ -146,9 +171,10 @@ public interface ILiveTreeInspector
     /// Which of <paramref name="candidates"/> are in use. Batched because the process table is read
     /// once for the whole set — asking per directory would walk it once per project.
     ///
-    /// <para>A candidate whose declared lock file Windows would not describe, or whose Restart Manager
-    /// query did not answer, is named in <see cref="LiveTreeFindings.Unanswered"/>, and the rest of the
-    /// answer stands. A process table that could not be read leaves every candidate unanswered.</para>
+    /// <para>A candidate whose declared lock file Windows would not describe, whose Restart Manager
+    /// query did not answer, or one of whose <see cref="LiveTreeQuery.Writers"/> is running at a time
+    /// that cannot be compared with its last write, is named in
+    /// <see cref="LiveTreeFindings.Unanswered"/>, and the rest of the answer stands. A process table that could not be read leaves every candidate unanswered.</para>
     /// </summary>
     LiveTreeFindings FindLive(IReadOnlyList<LiveTreeQuery> candidates, CancellationToken ct = default);
 

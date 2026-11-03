@@ -30,12 +30,13 @@ public sealed class SquirrelStagingProviderTests : IDisposable
     private string StagingRoot =>
         Path.Combine(_environment.LocalAppData, SquirrelDiscovery.StagingDirectoryName);
 
-    private SquirrelStagingProvider CreateProvider(ILiveTreeInspector? liveTrees = null) =>
+    private SquirrelStagingProvider CreateProvider(ILiveTreeInspector? liveTrees = null, IVolumeInventory? volumes = null) =>
         new(
             _environment,
             liveTrees: liveTrees ?? FakeLiveTreeInspector.NothingLive,
             runner: new FakeProcessRunner(),
-            inspector: FakeProcessInspector.NothingRunning);
+            inspector: FakeProcessInspector.NothingRunning,
+            volumes: volumes);
 
     /// <summary>A directory with a file in it, so it measures above zero and is selectable.</summary>
     private static string Populate(string path)
@@ -444,6 +445,267 @@ public sealed class SquirrelStagingProviderTests : IDisposable
 
         Assert.True(result.Succeeded);
         Assert.True(Directory.Exists(busy), $"{busy} was removed while in use");
+    }
+
+    /// <summary>
+    /// An update is unpacked by the application's own <c>Update.exe</c>, or by the application
+    /// itself, and both run from the installation folder rather than from the staging directory.
+    /// One already running when a staging directory was last written may be writing it, so the
+    /// directory is refused. One written before the program started cannot be its, and is still
+    /// offered, so the rule does not hold every leftover while an application is open.
+    /// </summary>
+    [Theory]
+    [InlineData(SquirrelDiscovery.UpdaterName)]
+    [InlineData(@"app-1.0.9254\Chatterbox.exe")]
+    public async Task AStagingDirectoryWrittenWhileAnInstalledApplicationsProgramRanIsRefused(string program)
+    {
+        var application = CreateApplication("Chatterbox", "1.0.9254");
+        var busy = Populate(Path.Combine(StagingRoot, "tempa"));
+        var idle = Populate(Path.Combine(StagingRoot, "tempb"));
+        var started = DateTimeOffset.UtcNow.AddHours(-1);
+
+        Written(busy, started.AddMinutes(1));
+        Written(idle, started.AddHours(-1));
+
+        var liveTrees = new FakeLiveTreeInspector().WithProgram(
+            Path.GetFileNameWithoutExtension(program),
+            Path.Combine(application, program),
+            application,
+            started: started);
+
+        var provider = CreateProvider(liveTrees);
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(idle, Assert.Single(plan.TargetedPaths));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == busy && p.PresenceBefore is PathPresence.Present);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("installing or updating", StringComparison.Ordinal));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.True(Directory.Exists(busy), $"{busy} was removed while an update may have been writing it");
+        Assert.True(Directory.Exists(StagingRoot), "the shared staging folder was removed");
+        Assert.True(Directory.Exists(application), "the installation was removed");
+        Assert.False(Directory.Exists(idle), $"{idle} was kept although it was written before anything ran");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// A program with the updater's name running from anywhere other than an installation Deguffer
+    /// found is no evidence about the staging folder. Other software ships an <c>Update.exe</c>.
+    /// </summary>
+    [Fact]
+    public async Task AnUpdaterOutsideEveryFoundInstallationHoldsNothing()
+    {
+        CreateApplication("Chatterbox", "1.0.9254");
+        var staging = Populate(Path.Combine(StagingRoot, "tempa"));
+        var elsewhere = Path.Combine(_temp.Path, "Vendor");
+
+        Written(staging, DateTimeOffset.UtcNow);
+
+        var liveTrees = new FakeLiveTreeInspector().WithProgram(
+            "Update",
+            Path.Combine(elsewhere, SquirrelDiscovery.UpdaterName),
+            elsewhere,
+            started: DateTimeOffset.UtcNow.AddDays(-1));
+
+        var plan = await CreateProvider(liveTrees).PlanAsync();
+
+        Assert.Equal(staging, Assert.Single(plan.TargetedPaths));
+    }
+
+    /// <summary>
+    /// An installation's program whose start Windows would not give cannot be compared with the
+    /// directory's last write, and "could not tell" is not "nothing is using it" (§3).
+    /// </summary>
+    [Fact]
+    public async Task AStagingDirectoryWhoseWriterCannotBeTimedIsHeldBackAsUnchecked()
+    {
+        var application = CreateApplication("Chatterbox", "1.0.9254");
+        var staging = Populate(Path.Combine(StagingRoot, "tempa"));
+
+        var liveTrees = new FakeLiveTreeInspector().WithProgram(
+            "Update",
+            Path.Combine(application, SquirrelDiscovery.UpdaterName),
+            application,
+            started: null);
+
+        var plan = await CreateProvider(liveTrees).PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == staging && p.Reason == LiveTreeVeto.UncheckedReason);
+    }
+
+    /// <summary>
+    /// §7.1 over a staging directory an update may be writing. Its name matches the staging pattern,
+    /// so only the declaration that asks the same question as the plan keeps Explore from offering it.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesAStagingDirectoryAnUpdateMayBeWriting()
+    {
+        var application = CreateApplication("Chatterbox", "1.0.9254");
+        var busy = Populate(Path.Combine(StagingRoot, "tempa"));
+        var idle = Populate(Path.Combine(StagingRoot, "tempb"));
+        var started = DateTimeOffset.UtcNow.AddHours(-1);
+
+        Written(busy, started.AddMinutes(1));
+        Written(idle, started.AddHours(-1));
+
+        var provider = CreateProvider(new FakeLiveTreeInspector().WithProgram(
+            "Update",
+            Path.Combine(application, SquirrelDiscovery.UpdaterName),
+            application,
+            started: started));
+
+        var policy = await ExploreActionPolicy.ForAsync(
+            new FakeSystemDirectories(_temp.Path), _environment, new FakeVolumeInventory(), [provider]);
+
+        var refusal = policy.MayRemove(busy);
+        Assert.False(refusal.IsAllowed);
+        Assert.Contains("already running when it was last written", refusal.Reason, StringComparison.Ordinal);
+        Assert.True(policy.MayRemove(idle).IsAllowed);
+    }
+
+    public enum WriterPlace
+    {
+        /// <summary>An application whose only build has a pre-release version Deguffer cannot read.</summary>
+        UnreadableVersion,
+
+        /// <summary>An application folder that holds the updater and refuses to be listed.</summary>
+        UnlistedApplicationFolder,
+
+        /// <summary>An application folder whose updater Windows will not describe.</summary>
+        UndescribedUpdater,
+
+        /// <summary>An application folder moved to another place, with a junction left behind.</summary>
+        LinkedApplicationFolder,
+
+        /// <summary>A profile whose <c>%LOCALAPPDATA%</c> refuses to be listed, with the staging folder moved out.</summary>
+        UnlistedLocalAppData,
+
+        /// <summary>An install running from one staging directory, unpacking into another.</summary>
+        StagingFolder,
+    }
+
+    /// <summary>
+    /// The writer folders are wider than the installations a plan may remove from, because the two
+    /// lists err in opposite directions. An application discovery cannot establish is never offered,
+    /// and its updater must still hold the staging directory it is writing. Each case keeps the
+    /// directory written while the writer ran, and still offers the leftover written before it
+    /// started (§5.6 both ways).
+    /// </summary>
+    [Theory]
+    [InlineData(WriterPlace.UnreadableVersion)]
+    [InlineData(WriterPlace.UnlistedApplicationFolder)]
+    [InlineData(WriterPlace.UndescribedUpdater)]
+    [InlineData(WriterPlace.LinkedApplicationFolder)]
+    [InlineData(WriterPlace.UnlistedLocalAppData)]
+    [InlineData(WriterPlace.StagingFolder)]
+    public async Task AWriterDiscoveryCannotEstablishStillHoldsWhatItWrote(WriterPlace place)
+    {
+        var staging = place is WriterPlace.UnlistedLocalAppData
+            ? Path.Combine(_temp.Path, "squirrel-staging")
+            : StagingRoot;
+
+        if (place is WriterPlace.UnlistedLocalAppData)
+        {
+            _environment.WithEnvironmentVariable(SquirrelDiscovery.StagingVariable, staging);
+        }
+
+        var busy = Populate(Path.Combine(staging, "tempb"));
+        var idle = Populate(Path.Combine(staging, "tempc"));
+        var application = place is WriterPlace.LinkedApplicationFolder
+            ? Path.Combine(_temp.Path, "moved", "Chatterbox")
+            : Path.Combine(_environment.LocalAppData, "Chatterbox");
+        var program = Path.Combine(application, SquirrelDiscovery.UpdaterName);
+
+        Directory.CreateDirectory(application);
+        File.WriteAllBytes(program, new byte[64]);
+
+        switch (place)
+        {
+            case WriterPlace.UnreadableVersion:
+                Populate(Path.Combine(application, "app-3.0.0-beta1"));
+                break;
+
+            case WriterPlace.StagingFolder:
+                program = Path.Combine(Populate(Path.Combine(staging, "tempa")), SquirrelDiscovery.UpdaterName);
+                break;
+
+            // The program reports the folder it really runs from, which is the far side of the link.
+            case WriterPlace.LinkedApplicationFolder:
+                Populate(Path.Combine(application, "app-1.0.9254"));
+                Junction.ToDirectory(Path.Combine(_environment.LocalAppData, "Chatterbox"), application);
+                break;
+        }
+
+        var started = DateTimeOffset.UtcNow.AddHours(-1);
+
+        Written(busy, started.AddMinutes(1));
+        Written(idle, started.AddHours(-1));
+
+        if (place is WriterPlace.StagingFolder)
+        {
+            Written(Path.Combine(staging, "tempa"), started.AddHours(-1));
+        }
+
+        using var denied = place switch
+        {
+            WriterPlace.UnlistedApplicationFolder => new DeniedDirectory(application),
+            WriterPlace.UndescribedUpdater => DeniedDirectory.WithUnreadableFile(program),
+            WriterPlace.UnlistedLocalAppData => new DeniedDirectory(_environment.LocalAppData),
+            _ => null,
+        };
+
+        // Working outside the staging folder, as a setup program started from a download does: one
+        // working in it holds every directory there, and would prove nothing about the writer rule.
+        var liveTrees = new FakeLiveTreeInspector().WithProgram("Update", program, _temp.Path, started: started);
+
+        var provider = CreateProvider(liveTrees);
+        var plan = await provider.PlanAsync();
+
+        Assert.DoesNotContain(busy, plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == busy && p.PresenceBefore is PathPresence.Present);
+        Assert.Contains(idle, plan.TargetedPaths);
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(busy), $"{busy} was removed while an update may have been writing it");
+        Assert.True(Directory.Exists(staging), "the shared staging folder was removed");
+        Assert.False(Directory.Exists(idle), $"{idle} was kept although it was written before anything ran");
+    }
+
+    /// <summary>
+    /// A staging folder on a share is dated by the share's clock, which cannot be compared with this
+    /// machine's start time for a program. With a writer running, the directory is held back as
+    /// unchecked rather than compared across two clocks.
+    /// </summary>
+    [Fact]
+    public async Task AStagingFolderOnAShareIsHeldBackWhileAWriterRuns()
+    {
+        var application = CreateApplication("Chatterbox", "1.0.9254");
+        var staging = Populate(Path.Combine(StagingRoot, "tempa"));
+
+        Written(staging, DateTimeOffset.UtcNow.AddDays(-1));
+
+        var liveTrees = new FakeLiveTreeInspector().WithProgram(
+            "Update",
+            Path.Combine(application, SquirrelDiscovery.UpdaterName),
+            application,
+            started: DateTimeOffset.UtcNow);
+
+        var volumes = new FakeVolumeInventory().With(Path.GetPathRoot(_temp.Path)!, DriveType.Network);
+        var plan = await CreateProvider(liveTrees, volumes).PlanAsync();
+
+        Assert.DoesNotContain(staging, plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == staging && p.Reason == LiveTreeVeto.UncheckedReason);
+    }
+
+    /// <summary>Sets both of a directory's own times, which is what the staging veto compares.</summary>
+    private static void Written(string directory, DateTimeOffset when)
+    {
+        Directory.SetCreationTimeUtc(directory, when.UtcDateTime);
+        Directory.SetLastWriteTimeUtc(directory, when.UtcDateTime);
     }
 
     /// <summary>
