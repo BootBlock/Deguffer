@@ -2,6 +2,7 @@ using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.InstalledApps;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning.Media;
 
 namespace Deguffer.Core.Duplicates;
 
@@ -79,15 +80,21 @@ public sealed class CandidateFinder
     private readonly IUninstallRegistry _registry;
     private readonly IUserEnvironment _environment;
     private readonly ISystemDirectories _system;
+    private readonly VolumeMediaCache _media;
     private readonly FileInformation _files;
 
+    /// <param name="media">
+    /// The disks behind each volume, and their kind, remembered for the life of the app, so the files
+    /// are identified in lanes by disk.
+    /// </param>
     public CandidateFinder(
         ExploreScanner scanner,
         IVolumeInventory volumes,
         IUninstallRegistry registry,
         IUserEnvironment environment,
-        ISystemDirectories system)
-        : this(scanner, volumes, registry, environment, system, FileInformation.Default)
+        ISystemDirectories system,
+        VolumeMediaCache media)
+        : this(scanner, volumes, registry, environment, system, media, FileInformation.Default)
     {
     }
 
@@ -102,6 +109,7 @@ public sealed class CandidateFinder
         IUninstallRegistry registry,
         IUserEnvironment environment,
         ISystemDirectories system,
+        VolumeMediaCache media,
         FileInformation files)
     {
         _scanner = scanner;
@@ -109,6 +117,7 @@ public sealed class CandidateFinder
         _registry = registry;
         _environment = environment;
         _system = system;
+        _media = media;
         _files = files;
     }
 
@@ -132,10 +141,14 @@ public sealed class CandidateFinder
     /// What <see cref="Locate"/> answered for <paramref name="search"/>, so the locations are opened
     /// once per search; located here where null.
     /// </param>
+    /// <param name="progress">
+    /// Told how far the scan has got, as <see cref="DuplicateSearchStage.Finding"/>, and then how far
+    /// identifying the files has, as <see cref="DuplicateSearchStage.Identifying"/>.
+    /// </param>
     public async Task<CandidateFinding> FindAsync(
         DuplicateSearch search,
         ExploreActionPolicy policy,
-        IProgress<ExploreProgress>? progress = null,
+        IProgress<DuplicateSearchProgress>? progress = null,
         CancellationToken ct = default,
         SearchLocations? located = null)
     {
@@ -201,7 +214,7 @@ public sealed class CandidateFinder
         var scans = await _scanner.ScanFoldersAsync(
             [.. roots.Select(root => root.Folder)],
             [.. passOver.Select(below => (LeavesUnlisted)((parent, parentIsRoot) => below.In(parent, parentIsRoot).PassesOver))],
-            progress,
+            progress is null ? null : new ScanProgress(progress),
             ct).ConfigureAwait(false);
 
         for (var i = 0; i < roots.Count; i++)
@@ -228,8 +241,8 @@ public sealed class CandidateFinder
             }
         }
 
-        var identification = new CandidateIdentification(_files, search.Criteria);
-        var groups = identification.Group(walk.Found, ct);
+        var identification = new CandidateIdentification(_files, search.Criteria, _media);
+        var groups = await identification.GroupAsync(walk.Found, progress, ct).ConfigureAwait(false);
 
         return new CandidateFinding(
             groups,
@@ -242,5 +255,12 @@ public sealed class CandidateFinder
             programs.Installed,
             programs.Unread,
             walk.LeftOut + identification.LeftOut);
+    }
+
+    /// <summary>The scan's progress, as the first stage of the search's.</summary>
+    private sealed class ScanProgress(IProgress<DuplicateSearchProgress> progress) : IProgress<ExploreProgress>
+    {
+        public void Report(ExploreProgress value) =>
+            progress.Report(new DuplicateSearchProgress(DuplicateSearchStage.Finding, 0, Total: null, value));
     }
 }

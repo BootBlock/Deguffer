@@ -27,9 +27,6 @@ internal delegate ContentReading ReadContent(DuplicateCandidate file, ContentPar
 /// </summary>
 internal sealed class ContentMatching
 {
-    /// <summary>How often a stage says how far it has got, which is often enough to watch and rare enough not to flood the page.</summary>
-    private const long ReportEveryMilliseconds = 100;
-
     private readonly ReadContent _read;
     private readonly VolumeMediaCache _media;
     private readonly Lock _confirming = new();
@@ -87,15 +84,11 @@ internal sealed class ContentMatching
         IProgress<DuplicateSearchProgress>? progress,
         CancellationToken ct)
     {
-        var total = groups.Sum(group => group.Count);
         var unread = groups.Select(group => group.Count).ToArray();
         var checksums = groups.Select(group => new ContentChecksum?[group.Count]).ToArray();
         List<IReadOnlyList<DuplicateCandidate>> further = [];
         ConcurrentBag<Checksum> idle = [];
-        var done = 0;
-        var reported = Environment.TickCount64;
-
-        progress?.Report(new DuplicateSearchProgress(stage, 0, total));
+        var counter = new StageCounter(stage, groups.Sum(group => group.Count), progress);
 
         var lanes = ReadingLanes.Of(
             groups.SelectMany((group, g) => group.Select((file, f) => (Group: g, File: f))),
@@ -107,15 +100,7 @@ internal sealed class ContentMatching
             void ReadOne((int Group, int File) item)
             {
                 checksums[item.Group][item.File] = Read(groups[item.Group][item.File], part, algorithm, idle, ct);
-
-                var finished = Interlocked.Increment(ref done);
-                var now = Environment.TickCount64;
-                var last = Volatile.Read(ref reported);
-
-                if (finished == total || (now - last >= ReportEveryMilliseconds && Interlocked.CompareExchange(ref reported, now, last) == last))
-                {
-                    progress?.Report(new DuplicateSearchProgress(stage, finished, total));
-                }
+                counter.Finished();
 
                 if (Interlocked.Decrement(ref unread[item.Group]) == 0)
                 {
@@ -123,13 +108,7 @@ internal sealed class ContentMatching
                 }
             }
 
-            await Task.WhenAll(lanes.Select(lane => WorkerThreads.Shared.RunAsync(
-                () =>
-                {
-                    ListWorkers.Run(lane.Files.Count, lane.Readers, file => ReadOne(lane.Files[file]), ct);
-                    return true;
-                },
-                ct))).ConfigureAwait(false);
+            await ReadingLane<(int Group, int File)>.ReadAllAsync(lanes, ReadOne, ct).ConfigureAwait(false);
         }
         finally
         {

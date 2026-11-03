@@ -26,13 +26,16 @@ internal sealed class DuplicateTree : IDisposable
     public DuplicateTree(string? fileSystem = "NTFS")
     {
         Top = LongPath.Display(FileInformation.Default.FinalPath(_temp.Path)!);
-        Volumes = new FakeVolumeInventory().With(Top + Path.DirectorySeparatorChar, fileSystem: fileSystem);
+        Volumes = new FakeVolumeInventory().With(Root, fileSystem: fileSystem);
         System = new FakeSystemDirectories(Top);
         Environment = new FakeUserEnvironment(Path.Combine(Top, "Users"));
     }
 
     /// <summary>The top of the scratch volume.</summary>
     public string Top { get; }
+
+    /// <summary>The scratch volume's root, as its disks are described by.</summary>
+    public string Root => Top + Path.DirectorySeparatorChar;
 
     public FakeVolumeInventory Volumes { get; }
 
@@ -71,11 +74,16 @@ internal sealed class DuplicateTree : IDisposable
     public ExploreActionPolicy Policy() =>
         new(ProtectedRegions.For(System, Environment), [], Volumes);
 
-    /// <summary>Search by walking, which is the route a test can run without administrator rights.</summary>
+    /// <summary>
+    /// Search by walking, which is the route a test can run without administrator rights. The drive's
+    /// disks are not described unless <paramref name="storage"/> describes them, so its files are
+    /// identified one at a time, as on a disk Windows did not describe.
+    /// </summary>
     /// <param name="files">Where each location is opened, for a test that has Windows refuse one.</param>
-    public CandidateFinder Finder(ExploreScanner? scanner = null, FileInformation? files = null) =>
+    /// <param name="storage">The disks behind the scratch volume (<see cref="Root"/>), for a test that stands for one.</param>
+    public CandidateFinder Finder(ExploreScanner? scanner = null, FileInformation? files = null, FakeStorageQueries? storage = null) =>
         new(scanner ?? new ExploreScanner(FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated)),
-            Volumes, Registry, Environment, System, files ?? FileInformation.Default);
+            Volumes, Registry, Environment, System, new VolumeMediaCache(storage ?? new FakeStorageQueries()), files ?? FileInformation.Default);
 
     /// <summary>
     /// The whole search, reading by walking. The drive's disks are not described, so its files are

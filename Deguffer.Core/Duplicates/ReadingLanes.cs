@@ -1,10 +1,28 @@
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Media;
 
 namespace Deguffer.Core.Duplicates;
 
 /// <summary>The files read by one set of readers, and how many may read at once.</summary>
-internal sealed record ReadingLane<T>(int Readers, IReadOnlyList<T> Files);
+internal sealed record ReadingLane<T>(int Readers, IReadOnlyList<T> Files)
+{
+    /// <summary>
+    /// Every lane's files given to <paramref name="read"/>, the lanes all at once, each by no more
+    /// than its readers, on threads of its own (<see cref="ListWorkers"/>) rather than the pool's:
+    /// each read blocks its thread for as long as the disk takes.
+    /// </summary>
+    /// <param name="read">Called once a file, from any of the readers' threads.</param>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was cancelled; every reader has stopped by then.</exception>
+    public static Task ReadAllAsync(IEnumerable<ReadingLane<T>> lanes, Action<T> read, CancellationToken ct) =>
+        Task.WhenAll(lanes.Select(lane => WorkerThreads.Shared.RunAsync(
+            () =>
+            {
+                ListWorkers.Run(lane.Files.Count, lane.Readers, file => read(lane.Files[file]), ct);
+                return true;
+            },
+            ct)));
+}
 
 /// <summary>
 /// Puts the files a stage reads into lanes, one a physical disk, each with its own bound on how
