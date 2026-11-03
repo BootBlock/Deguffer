@@ -6,8 +6,9 @@ using System.Runtime.CompilerServices;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// The types of an assembly whose code creates an instance of a given type, read from the IL rather
-/// than the source, so a creation is found however the source spells it.
+/// The types of an assembly whose code calls a constructor of a given type, read from the IL rather
+/// than the source, so a <c>new</c> is found however the source spells it. A creation through
+/// reflection calls no constructor in the IL, and is not found.
 ///
 /// <para><b>A creation belongs to the type that wrote it.</b> The compiler moves the body of a lambda,
 /// a local function, an iterator or an async method into a type it generates, nested in the one the

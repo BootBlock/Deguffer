@@ -24,12 +24,21 @@ public sealed class ScratchSyncRootCollectionTests
     [Fact]
     public void EveryClassThatMakesAScratchSyncRootRunsInTheirCollection()
     {
-        var outside = ObjectCreations.TypesCreating(typeof(ScratchSyncRootCollectionTests).Assembly, typeof(ScratchSyncRoot))
-            .Where(maker => CollectionOf(maker) != ScratchSyncRootTests.Collection)
-            .Select(maker => maker.FullName);
-
-        Assert.Empty(outside);
+        Assert.Empty(RunOutside(typeof(ScratchSyncRootCollectionTests).Assembly, typeof(ScratchSyncRoot), ScratchSyncRootTests.Collection));
         Assert.Empty(ObjectCreations.TypesCreating(typeof(ScratchSyncRoot).Assembly, typeof(ScratchSyncRoot)));
+    }
+
+    /// <summary>
+    /// The rule judged as xUnit runs the classes, proved on types made for it. A class nested in one
+    /// in the collection is not in it, a class that inherits the code that makes one is judged by its
+    /// own collection, and a class that names none takes its base's.
+    /// </summary>
+    [Fact]
+    public void AClassIsJudgedByTheCollectionXunitRunsItIn()
+    {
+        Assert.Equal(
+            [typeof(KeptByAnInheritorElsewhere).FullName, typeof(KeptInTheCollection.NestedInIt).FullName, typeof(KeptOutsideIt).FullName],
+            RunOutside(typeof(ScratchSyncRootCollectionTests).Assembly, typeof(Kept), SampleCollection));
     }
 
     /// <summary>
@@ -72,10 +81,29 @@ public sealed class ScratchSyncRootCollectionTests
             makers);
     }
 
-    /// <summary>The name of the xUnit collection <paramref name="type"/> or a type it is nested in is in, if any.</summary>
+    /// <summary>
+    /// The full name of every type in <paramref name="assembly"/> that runs code creating a
+    /// <paramref name="created"/>, its own or inherited, outside <paramref name="collection"/>, in
+    /// name order. Only an abstract class is left out, because xUnit runs only what derives from it.
+    /// </summary>
+    private static IReadOnlyList<string?> RunOutside(System.Reflection.Assembly assembly, Type created, string collection)
+    {
+        var makers = ObjectCreations.TypesCreating(assembly, created);
+
+        return [.. assembly.GetTypes()
+            .Where(type => !(type.IsAbstract && !type.IsSealed) && makers.Any(maker => maker.IsAssignableFrom(type)))
+            .Where(type => CollectionOf(type) != collection)
+            .Select(type => type.FullName)
+            .Order(StringComparer.Ordinal)];
+    }
+
+    /// <summary>
+    /// The name of the xUnit collection <paramref name="type"/> runs in, if it names one. xUnit reads
+    /// the attribute from the class and the classes it derives from, never from a class it is nested in.
+    /// </summary>
     private static string? CollectionOf(Type type)
     {
-        for (Type? candidate = type; candidate is not null; candidate = candidate.DeclaringType)
+        for (Type? candidate = type; candidate is not null; candidate = candidate.BaseType)
         {
             if (candidate.GetCustomAttributesData().SingleOrDefault(attribute => attribute.AttributeType == typeof(CollectionAttribute)) is { } collection)
             {
@@ -145,4 +173,35 @@ public sealed class ScratchSyncRootCollectionTests
 
         public static bool Is(object value) => value is Made;
     }
+
+    private const string SampleCollection = "Samples of the scratch sync root rule";
+
+    private sealed class Kept;
+
+    [Collection(SampleCollection)]
+    private sealed class KeptInTheCollection
+    {
+        public Kept Kept { get; } = new();
+
+        public sealed class NestedInIt
+        {
+            public Kept Kept { get; } = new();
+        }
+    }
+
+    private sealed class KeptOutsideIt
+    {
+        public Kept Kept { get; } = new();
+    }
+
+    [Collection(SampleCollection)]
+    private class KeptByABase
+    {
+        public Kept Kept { get; } = new();
+    }
+
+    private sealed class KeptByAnInheritor : KeptByABase;
+
+    [Collection("Another collection")]
+    private sealed class KeptByAnInheritorElsewhere : KeptByABase;
 }
