@@ -230,12 +230,12 @@ public sealed class NxSharedCacheProviderTests : IDisposable
 
         Assert.Equal([nx.Cache], plan.TargetedPaths);
 
-        NxCacheFixture.Write(Path.Combine(nx.Index, "4d1c7e0b-machine-v3.db"), "SQLite format 3 ");
+        NxCacheFixture.Write(Path.Combine(nx.Index, "4d1c7e0b-machine-v3.db"), "SQLite format 3\0");
 
         var result = await provider.ExecuteAsync(plan);
 
         Assert.True(File.Exists(nx.Entry), "the cache was removed under an older Nx's index");
-        Assert.Contains(result.Steps, step => step.Message.Contains("an older Nx reads", StringComparison.Ordinal));
+        Assert.Contains(result.Steps, step => step.Message is { } message && message.Contains("an older Nx reads", StringComparison.Ordinal));
     }
 
     /// <summary>"Could not tell" is not "nothing is using it", so an answer that is not whole offers nothing.</summary>
