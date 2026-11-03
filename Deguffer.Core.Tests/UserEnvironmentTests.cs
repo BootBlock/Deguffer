@@ -155,6 +155,9 @@ public sealed class UserEnvironmentTests : IDisposable
         Assert.Null(environment.ChangedEnvironment);
 
         user["ARDUINO_DIRECTORIES_DATA"] = new EnvironmentValue(@"D:\arduino", Expandable: false);
+
+        Assert.Null(environment.ChangedEnvironment);
+
         environment.Invalidate();
 
         var changed = environment.ChangedEnvironment;
@@ -162,6 +165,28 @@ public sealed class UserEnvironmentTests : IDisposable
         Assert.NotNull(changed);
         Assert.Equal(@"D:\arduino", changed["ARDUINO_DIRECTORIES_DATA"]);
         Assert.Equal(@"C:\Windows", changed["SystemRoot"]);
+    }
+
+    /// <summary>
+    /// A check made after the preview reads the machine as it stands then, and leaves what the planning
+    /// pass read alone, so a plan's other answers are not moved under it.
+    /// </summary>
+    [Fact]
+    public void AFreshReadSeesAChangeTheCachedPassDoesNot()
+    {
+        var user = Expandable();
+        var environment = new UserEnvironment(
+            () => Expandable(("SystemRoot", @"C:\Windows")),
+            () => user,
+            EnvironmentBlock.Startup(Values(("SystemRoot", @"C:\Windows")), Expandable(("SystemRoot", @"C:\Windows")), Expandable()));
+
+        Assert.Null(environment.ChangedEnvironment);
+
+        user["ARDUINO_DIRECTORIES_USER"] = new EnvironmentValue(@"D:\sketches", Expandable: false);
+
+        Assert.Equal(@"D:\sketches", environment.ReadChangedEnvironmentNow()?["ARDUINO_DIRECTORIES_USER"]);
+        Assert.Null(environment.ChangedEnvironment);
+        Assert.Null(environment.GetEnvironmentVariable("ARDUINO_DIRECTORIES_USER"));
     }
 
     /// <summary>

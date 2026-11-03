@@ -356,6 +356,12 @@ public sealed class FakeUserEnvironment : IUserEnvironment
     public IReadOnlyDictionary<string, string>? ChangedEnvironment =>
         _toolVariables.Count == 0 ? null : new Dictionary<string, string>(_variables, StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// The machine as it stands when asked, which here is <see cref="ChangedEnvironment"/>: a fake's
+    /// variables change the moment a test sets them, with nothing kept from a pass.
+    /// </summary>
+    public IReadOnlyDictionary<string, string>? ReadChangedEnvironmentNow() => ChangedEnvironment;
+
     public int InvalidateCount { get; private set; }
 
     public string? FindExecutable(string command) =>

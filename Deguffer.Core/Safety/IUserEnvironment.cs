@@ -177,6 +177,16 @@ public interface IUserEnvironment
     IReadOnlyDictionary<string, string>? ChangedEnvironment { get; }
 
     /// <summary>
+    /// <see cref="ChangedEnvironment"/> as the machine stands at this moment, read afresh and kept
+    /// nowhere, so what the planning pass read is left as it was.
+    ///
+    /// <para>Exists for a check made after the preview, immediately before a command runs. Nothing
+    /// reads the machine again between planning and the clean, so <see cref="ChangedEnvironment"/>
+    /// still describes the machine as it was when the plan was made.</para>
+    /// </summary>
+    IReadOnlyDictionary<string, string>? ReadChangedEnvironmentNow();
+
+    /// <summary>
     /// Read a string value from under <c>HKEY_CURRENT_USER</c>, or null when the key, the value or
     /// the permission to read it is missing.
     ///
@@ -449,8 +459,13 @@ public sealed partial class UserEnvironment : IUserEnvironment
     /// Compared with the start-up block, which holds this process's own variables: those are what
     /// <see cref="GetToolEnvironmentVariable"/> reads and what <see cref="ProcessRunner"/> hands on.
     /// </summary>
-    public IReadOnlyDictionary<string, string>? ChangedEnvironment =>
-        Block is var current && current.ReadsDifferentlyFrom(_startup) ? current.Variables : null;
+    public IReadOnlyDictionary<string, string>? ChangedEnvironment => ChangedIn(Block);
+
+    public IReadOnlyDictionary<string, string>? ReadChangedEnvironmentNow() =>
+        ChangedIn(_startup.Refresh(_readMachine(), _readUser()));
+
+    private IReadOnlyDictionary<string, string>? ChangedIn(EnvironmentBlock current) =>
+        current.ReadsDifferentlyFrom(_startup) ? current.Variables : null;
 
     /// <summary>
     /// Not memoised, so no answer here can outlive <see cref="Invalidate"/>. A caller that needs one

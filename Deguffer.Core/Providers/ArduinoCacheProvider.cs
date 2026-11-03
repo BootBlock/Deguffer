@@ -32,12 +32,11 @@ namespace Deguffer.Core.Providers;
 /// <c>inventory.yaml</c> and <c>arduino-cli.yaml</c>. The sketchbook. Never <c>Arduino15</c> as a
 /// unit.</para>
 ///
-/// <para><b>Two environments.</b> A tool Deguffer starts inherits the environment Deguffer started
-/// with, and one the user starts now has the machine's (see <see cref="IUserEnvironment.ChangedEnvironment"/>).
-/// Where a setting changed between the two, each configuration is asked again by a CLI started with
-/// the machine's environment. The plan runs and measures from the first answer, because that is the
-/// CLI its clean starts. Explore, a duplicate search and §5.6 hear both, and a clean is declined where
-/// it would reach a folder the second names: a declaration only narrows what may be removed.</para>
+/// <para><b>Two environments.</b> Where the machine's environment changed after Deguffer started, each
+/// configuration is answered twice (see <see cref="ArduinoInstallations"/>). The plan runs and measures
+/// from the answer of the CLI its clean starts. Explore, a duplicate search and §5.6 hear both, and a
+/// clean is declined where it would reach a folder a CLI the user starts now uses: a declaration only
+/// narrows what may be removed.</para>
 ///
 /// <para>Before arduino-cli 1.0.4 the build cache was <c>%TEMP%\arduino</c>, which the temporary files
 /// row already reaches by age.</para>
@@ -69,8 +68,7 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
 
     private readonly ISystemDirectories _system;
     private readonly ArduinoFolderRules _rules;
-    private readonly PassMemo<Task<IReadOnlyList<Installation>>> _installations = new();
-    private readonly PassMemo<FoundClis> _clis = new();
+    private readonly ArduinoInstallations _installations;
 
     public ArduinoCacheProvider(
         IUserEnvironment? environment = null,
@@ -88,6 +86,7 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
     {
         _system = system ?? SystemDirectories.Current;
         _rules = new ArduinoFolderRules(Environment, _system, Volumes, Reach);
+        _installations = new ArduinoInstallations(Environment, Runner, [.. BundledClis], IdeConfigFile, DefaultData);
     }
 
     public override string Id => "arduino";
@@ -162,7 +161,7 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
     {
         List<ToolRoot> roots = [];
 
-        foreach (var settings in Answered(await InstallationsAsync(ct).ConfigureAwait(false)))
+        foreach (var settings in (await _installations.AskAsync(ct).ConfigureAwait(false)).Answered)
         {
             var clearable = settings.Downloads.Folder is not null && _rules.WhyNotCleared(settings) is null;
 
@@ -197,7 +196,7 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
     {
         List<string> places = [Path.Combine(DefaultData, ArduinoSettings.DefaultDownloadsName), DefaultBuildCache];
 
-        foreach (var settings in Answered(await InstallationsAsync(ct).ConfigureAwait(false)))
+        foreach (var settings in (await _installations.AskAsync(ct).ConfigureAwait(false)).Answered)
         {
             if (settings.Downloads.Folder is { } downloads && _rules.WhyNotCleared(settings) is null)
             {
@@ -214,20 +213,19 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
     }
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(Clis is { Own: not null } or { Ide: not null });
+        Task.FromResult(_installations.AnyCli);
 
     /// <summary>Every answer is configuration, which the user can change between one scan and the next.</summary>
     public override void InvalidateCaches()
     {
         _installations.Forget();
-        _clis.Forget();
         base.InvalidateCaches();
     }
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
-        var asked = await InstallationsAsync(ct).ConfigureAwait(false);
-        var installations = asked.Where(i => i.Reading is VariableReading.Tool).ToList();
+        var answers = await _installations.AskAsync(ct).ConfigureAwait(false);
+        var installations = answers.Tool;
 
         if (installations.Count == 0)
         {
@@ -235,7 +233,6 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
         }
 
         var known = installations.Where(i => i.Settings is not null).ToList();
-        var startedNow = StartedNow.Of(asked.Where(i => i.Reading is VariableReading.Current));
 
         if (known.Count == 0)
         {
@@ -257,24 +254,24 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
                 + "Deguffer leaves everything it names alone."));
         }
 
-        if (startedNow.Unknown)
+        if (answers.StartedNowUnknown)
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Warning,
                 "A setting that moves Arduino's folders changed on this machine after Deguffer started, and an Arduino "
                 + "CLI started with it did not say where its folders are, so Deguffer cannot tell what a clean would "
-                + "reach. It leaves the downloads and the build cache alone until Deguffer is started again."));
+                + "reach. It leaves the downloads and the build cache alone while that CLI does not answer."));
         }
 
-        var (commands, staged) = await PlanDownloadsAsync(known, startedNow, notes, survivors, unreachable, ct).ConfigureAwait(false);
-        var (builds, built) = await PlanBuildCachesAsync(known, startedNow, keep, notes, survivors, unreachable, ct).ConfigureAwait(false);
+        var (commands, staged) = await PlanDownloadsAsync(known, answers, notes, survivors, unreachable, ct).ConfigureAwait(false);
+        var (builds, built) = await PlanBuildCachesAsync(known, answers, keep, notes, survivors, unreachable, ct).ConfigureAwait(false);
 
         // After the clean is planned, because one configuration's data folder can hold the downloads
         // folder another configuration's clean removes, and that folder is not a survivor of either.
         IReadOnlyList<string> removed = [.. commands.OfType<RunCommandStep>().SelectMany(step => step.MeasuredPaths)];
 
         // A CLI the user starts now keeps its folders where its answer says, so they survive as the clean's do.
-        foreach (var settings in known.Select(i => i.Settings!).Concat(startedNow.Known).Distinct())
+        foreach (var settings in known.Select(i => i.Settings!).Concat(answers.StartedNow).Distinct())
         {
             survivors.AddRange(_rules.Survivors(settings, removed));
 
@@ -315,14 +312,14 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
     /// One <c>cache clean</c> per downloads folder that may be removed outright and holds something.
     /// </summary>
     private async Task<(IReadOnlyList<CleanupStep> Steps, ScanBatch Measured)> PlanDownloadsAsync(
-        IReadOnlyList<Installation> known,
-        StartedNow startedNow,
+        IReadOnlyList<ArduinoInstallation> known,
+        ArduinoAnswers answers,
         List<PlanNote> notes,
         List<(string Path, string Reason)> survivors,
         List<string> unreachable,
         CancellationToken ct)
     {
-        var cleared = new List<Installation>();
+        var cleared = new List<ArduinoInstallation>();
 
         foreach (var installation in known.DistinctBy(i => i.Settings!.Downloads.Folder ?? i.Settings.Downloads.Reported, StringComparer.OrdinalIgnoreCase))
         {
@@ -342,7 +339,7 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
 
             var downloads = settings.Downloads.Folder!;
 
-            if (startedNow.Reaches(downloads, _rules.WhyNotClearedBeside, notes))
+            if (answers.ReachesStartedNow(downloads, _rules.WhyNotClearedBeside, notes))
             {
                 survivors.Add((downloads, "The Arduino downloads folder, which Deguffer is leaving alone."));
                 continue;
@@ -393,8 +390,10 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
                 MeasuredPaths = [installation.Settings.Downloads.Folder!],
                 Group = DownloadsGroup,
                 TargetCheck = new ArduinoCleanTarget(
-                    () => ReadConfiguration(installation.Settings.ConfigFile),
+                    () => _installations.ReadConfiguration(VariableReading.Tool, installation.Settings.ConfigFile),
                     installation.Configuration,
+                    Environment.ReadChangedEnvironmentNow,
+                    answers.Changed,
                     installation.Settings.Downloads.Folder!),
             }),
         ];
@@ -404,8 +403,8 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
 
     /// <summary>One removal per build cache entry the CLI marked as its own.</summary>
     private async Task<(IReadOnlyList<CleanupStep> Steps, ScanBatch Measured)> PlanBuildCachesAsync(
-        IReadOnlyList<Installation> known,
-        StartedNow startedNow,
+        IReadOnlyList<ArduinoInstallation> known,
+        ArduinoAnswers answers,
         MinimumAge keep,
         List<PlanNote> notes,
         List<(string Path, string Reason)> survivors,
@@ -424,7 +423,7 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
 
             var cache = settings.BuildCache.Folder!;
 
-            if (startedNow.Reaches(cache, _rules.WhyNotReadBeside, notes))
+            if (answers.ReachesStartedNow(cache, _rules.WhyNotReadBeside, notes))
             {
                 survivors.Add((cache, BuildCacheReason));
                 continue;
@@ -467,142 +466,5 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
         }
 
         return await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// Each configuration on this machine, with the CLI that answers for it and what it said, asked once
-    /// per planning pass because the presence probe, Explore and the plan all need it.
-    /// </summary>
-    private Task<IReadOnlyList<Installation>> InstallationsAsync(CancellationToken ct) =>
-        _installations.Get(async () =>
-        {
-            List<(string Cli, string? ConfigFile)> asked = [];
-
-            var clis = Clis;
-
-            if ((clis.Own ?? clis.Ide) is { } own)
-            {
-                asked.Add((own, null));
-            }
-
-            // A refusal may hide the file, so it is asked about then too: the CLI says whether it can read it.
-            if (LongPath.FileMayExist(IdeConfigFile) && (clis.Ide ?? clis.Own) is { } ide)
-            {
-                asked.Add((ide, IdeConfigFile));
-            }
-
-            // Null on a machine nobody changed since Deguffer started, where a second answer would be the first.
-            var changed = Environment.ChangedEnvironment;
-            var installations = new List<Installation>(changed is null ? asked.Count : 2 * asked.Count);
-
-            foreach (var (cli, configFile) in asked)
-            {
-                installations.Add(await AskAsync(cli, configFile, VariableReading.Tool, ToolRun.Query, ct).ConfigureAwait(false));
-
-                if (changed is not null)
-                {
-                    installations.Add(await AskAsync(
-                        cli, configFile, VariableReading.Current, ToolRun.Query.StartedWith(changed), ct).ConfigureAwait(false));
-                }
-            }
-
-            return (IReadOnlyList<Installation>)installations;
-        });
-
-    /// <summary>
-    /// What one CLI says of one configuration, started with the environment <paramref name="reading"/>
-    /// names, and what it read to say it.
-    /// </summary>
-    private async Task<Installation> AskAsync(
-        string cli, string? configFile, VariableReading reading, ToolRun run, CancellationToken ct)
-    {
-        // Read on both sides of the four queries, so the clean is held to what the CLI read when it
-        // answered. A configuration that moved while it answered may have given answers from two
-        // configurations, and none of them is then the one to hold the clean to.
-        var before = ReadConfiguration(reading, configFile);
-        var settings = await ArduinoSettings.AskAsync(Runner, cli, configFile, run, ct).ConfigureAwait(false);
-
-        return new Installation(
-            cli,
-            reading,
-            before,
-            ReadConfiguration(reading, configFile).SameAs(before) || before.WhyUnknown is not null ? settings : null);
-    }
-
-    /// <summary>
-    /// Every answer once: where a change on the machine moved nothing of Arduino's, a CLI the user
-    /// starts now answers as the one Deguffer starts.
-    /// </summary>
-    private static IEnumerable<ArduinoSettings> Answered(IEnumerable<Installation> installations) =>
-        installations.Select(i => i.Settings).OfType<ArduinoSettings>().Distinct();
-
-    /// <summary>
-    /// The Arduino CLI on the PATH, which answers for its own configuration, and the one Arduino IDE 2
-    /// installed with itself, which answers for the IDE's, found once per planning pass.
-    ///
-    /// <para>A bundled CLI Windows would not describe is taken as there: the row is then planned, and a
-    /// CLI that cannot be started says so, rather than the row reporting Arduino as not installed on a
-    /// refusal.</para>
-    /// </summary>
-    private FoundClis Clis => _clis.Get(() => new FoundClis(
-        Environment.FindExecutable("arduino-cli"),
-        BundledClis.FirstOrDefault(LongPath.FileMayExist)));
-
-    /// <summary>What the CLI the clean starts reads, which <see cref="ArduinoCleanTarget"/> holds the clean to.</summary>
-    private ArduinoConfiguration ReadConfiguration(string? configFile) =>
-        ReadConfiguration(VariableReading.Tool, configFile);
-
-    private ArduinoConfiguration ReadConfiguration(VariableReading reading, string? configFile) =>
-        ArduinoConfiguration.Read(reading, Environment, configFile, DefaultData);
-
-    /// <param name="Own">The CLI on the PATH, or null.</param>
-    /// <param name="Ide">The CLI Arduino IDE 2 bundles, or null.</param>
-    private sealed record FoundClis(string? Own, string? Ide);
-
-    /// <param name="Cli">The executable that answered, and that the clean runs.</param>
-    /// <param name="Reading">
-    /// Which environment it was started with: Deguffer's, as the clean is, or the machine's, as a CLI the
-    /// user starts now is.
-    /// </param>
-    /// <param name="Configuration">What the CLI read to find its folders, recorded just before it answered.</param>
-    /// <param name="Settings">What it said, or null where any answer was missing.</param>
-    private sealed record Installation(
-        string Cli, VariableReading Reading, ArduinoConfiguration Configuration, ArduinoSettings? Settings);
-
-    /// <summary>What a CLI the user starts now said of each configuration, which no clean may reach.</summary>
-    /// <param name="Known">Each answer it gave.</param>
-    /// <param name="Unknown">
-    /// Whether it did not say for one configuration, so nothing can be held against that one and every
-    /// clean is declined. The plan's warning says why, once.
-    /// </param>
-    private sealed record StartedNow(IReadOnlyList<ArduinoSettings> Known, bool Unknown)
-    {
-        public static StartedNow Of(IEnumerable<Installation> asked)
-        {
-            IReadOnlyList<Installation> all = [.. asked];
-            IReadOnlyList<ArduinoSettings> known = [.. Answered(all)];
-
-            return new StartedNow(known, all.Any(i => i.Settings is null));
-        }
-
-        /// <summary>
-        /// Whether a clean of <paramref name="folder"/> would reach a folder a CLI started now uses, by
-        /// <paramref name="rule"/>, adding the rule's reason to <paramref name="notes"/>.
-        /// </summary>
-        public bool Reaches(string folder, Func<string, ArduinoSettings, string?> rule, List<PlanNote> notes)
-        {
-            if (Unknown)
-            {
-                return true;
-            }
-
-            if (Known.Select(settings => rule(folder, settings)).FirstOrDefault(why => why is not null) is not { } why)
-            {
-                return false;
-            }
-
-            notes.Add(new PlanNote(PlanNoteSeverity.Information, why));
-            return true;
-        }
     }
 }

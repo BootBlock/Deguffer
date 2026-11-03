@@ -16,21 +16,43 @@ namespace Deguffer.Core.Providers;
 /// the CLI answered (see <see cref="ArduinoConfiguration"/>), and the folder, read again by the
 /// plan's own rule, is not a link and holds only the CLI's <c>packages</c> and <c>libraries</c>. This
 /// asks no subprocess.</para>
+///
+/// <para><b>And while the machine's own variables are what they were.</b> The plan declined a clean
+/// that would reach a folder a CLI the user starts now uses, and that CLI reads the machine's
+/// environment, which can change after the preview while Deguffer's own cannot. The CLI binds every
+/// <c>ARDUINO_</c> variable to a setting, so any change to one, set, changed or dropped, holds the clean
+/// back. So does the machine starting or ceasing to read differently from Deguffer at all: the
+/// variables Deguffer started with are not listed here to compare against, so that is read as a
+/// change.</para>
 /// </summary>
 /// <param name="readAgain">Reads the configuration afresh, as the plan first did.</param>
 /// <param name="planned">What the CLI read when it answered for the plan.</param>
+/// <param name="environmentNow">
+/// Reads the machine's environment afresh (<see cref="Safety.IUserEnvironment.ReadChangedEnvironmentNow"/>).
+/// </param>
+/// <param name="plannedEnvironment">The machine's environment when the plan was made, or null where it read as Deguffer's.</param>
 /// <param name="downloads">The downloads folder the plan examined.</param>
 internal sealed class ArduinoCleanTarget(
     Func<ArduinoConfiguration> readAgain,
     ArduinoConfiguration planned,
+    Func<IReadOnlyDictionary<string, string>?> environmentNow,
+    IReadOnlyDictionary<string, string>? plannedEnvironment,
     string downloads) : ICommandTargetCheck
 {
+    private const string VariablePrefix = "ARDUINO_";
+
     public string? WhyNot(RunCommandStep step, CancellationToken ct)
     {
         if (!readAgain().SameAs(planned))
         {
             return "the Arduino CLI's configuration, or a setting that moves its folders, has changed since the "
                 + $"preview, so its cache clean could remove a folder other than {downloads}";
+        }
+
+        if (!SameArduinoVariables(plannedEnvironment, environmentNow()))
+        {
+            return "a setting that moves Arduino's folders has changed on this machine since the preview, so "
+                + $"{downloads} may now be a folder an Arduino CLI you start yourself uses";
         }
 
         return ArduinoFolderRules.WhyNotEmptied(downloads) switch
@@ -42,6 +64,22 @@ internal sealed class ArduinoCleanTarget(
             _ => null,
         };
     }
+
+    private static bool SameArduinoVariables(IReadOnlyDictionary<string, string>? then, IReadOnlyDictionary<string, string>? now) =>
+        (then, now) switch
+        {
+            (null, null) => true,
+            ({ } before, { } after) => ArduinoVariables(before).SetEquals(ArduinoVariables(after)),
+            _ => false,
+        };
+
+    /// <summary>Each <c>ARDUINO_</c> variable as one entry, its name in one case because Windows ignores the case of a name.</summary>
+    private static HashSet<string> ArduinoVariables(IReadOnlyDictionary<string, string> environment) =>
+    [
+        .. environment
+            .Where(pair => pair.Key.StartsWith(VariablePrefix, StringComparison.OrdinalIgnoreCase))
+            .Select(pair => $"{pair.Key.ToUpperInvariant()}={pair.Value}"),
+    ];
 
     /// <summary>The sentence as a clause, which completes "Not run: …".</summary>
     private static string LowerFirst(string sentence) =>

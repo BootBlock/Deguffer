@@ -360,6 +360,42 @@ public sealed class ArduinoCacheProviderTests : IDisposable
         Assert.Contains(result.Steps, s => s.Message?.Contains("changed since the preview", StringComparison.Ordinal) == true);
     }
 
+    /// <summary>
+    /// A variable set on the machine after the preview can make the downloads folder one a CLI the user
+    /// starts now uses, here as its sketchbook, where a library it installs lands in <c>libraries</c>
+    /// beside the archives. Deguffer's own environment cannot show that, so the machine's is read again
+    /// before the clean, which is held back, and the folder survives with everything in it.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DoesNotRunTheCommandWhenAnArduinoVariableOnTheMachineChangedSinceThePreview(bool changedBefore)
+    {
+        InstalledData();
+
+        if (changedBefore)
+        {
+            InstalledMovedData();
+            _environment.WithEnvironmentVariableSetSinceStart(DataVariable, MovedData);
+        }
+
+        var ran = new List<string>();
+        var provider = CreateProvider(CliAnswering(ran: ran));
+        var plan = await provider.PlanAsync();
+
+        Assert.Single(plan.Steps.OfType<RunCommandStep>());
+
+        _environment.WithEnvironmentVariableSetSinceStart("ARDUINO_DIRECTORIES_USER", Staging);
+        var installed = _temp.CreateFile(100, "profile", "AppData", "Local", "Arduino15", "staging", "libraries", "Servo", "library.properties");
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.DoesNotContain(ran, a => a.StartsWith("cache clean", StringComparison.Ordinal));
+        Exists(installed);
+        Exists(Path.Combine(Staging, "packages", "avr-gcc-7.3.0.tar.bz2"));
+        Assert.Contains(result.Steps, s => s.Message?.Contains("changed on this machine since the preview", StringComparison.Ordinal) == true);
+    }
+
     /// <summary>A file saved into the downloads folder after the preview would go with the archives, so the command is held back.</summary>
     [Fact]
     public async Task DoesNotRunTheCommandWhenTheDownloadsGainedSomethingSinceThePreview()
