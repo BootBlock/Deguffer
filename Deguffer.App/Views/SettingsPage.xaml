@@ -211,7 +211,7 @@
 
             <views:SettingsRow Glyph="&#xE8B7;"
                                Title="Where to look for build output"
-                               Description="Deguffer looks inside these folders and nowhere else for build output it can recognise: .NET obj, the caches in a Visual Studio solution's .vs folder, Unity Library, an Unreal project's Intermediate and DerivedDataCache, Rust target, node_modules and Python virtual environments. Nothing outside them is ever offered, even when it is plainly build output, and a project something is using is left alone. A folder does not have to hold your own code: a machine-learning or image-generation application installs outside your code folders, and the Python virtual environment it builds there is usually the largest one on the machine, so add that application's folder too if you want it considered.">
+                               Description="Deguffer looks inside these folders and nowhere else for build output it can recognise: .NET obj, the caches in a Visual Studio solution's .vs folder, Unity Library, an Unreal project's Intermediate and DerivedDataCache, Rust target, node_modules and Python virtual environments. It also offers the old file versions Git LFS keeps in the Git repositories there, through Git LFS's own prune. Nothing outside them is ever offered, even when it is plainly build output, and a project something is using is left alone. A folder does not have to hold your own code: a machine-learning or image-generation application installs outside your code folders, and the Python virtual environment it builds there is usually the largest one on the machine, so add that application's folder too if you want it considered.">
                 <views:SettingsRow.Control>
                     <Button Content="Add folder…"
                             Click="OnAddSourceRoot"
@@ -283,7 +283,7 @@
 
             <views:SettingsRow Glyph="&#xE7FC;"
                                Title="Where your emulators are installed"
-                               Description="Deguffer finds Cemu, Dolphin, PCSX2, Ryujinx, Eden, Citron and yuzu where each keeps its data by default, and RetroArch where Steam installed it. Add the folder of a portable install here, and the folder of every RPCS3 install and any other RetroArch, which keep everything beside the program. Deguffer looks in each folder only for the emulator's own settings file or program, and removes only the caches the emulator compiled and RetroArch's downloads, never saves, memory cards, firmware or games.">
+                               Description="Deguffer finds Cemu, Dolphin, PCSX2, DuckStation, PPSSPP, Ryujinx, Eden, Citron, yuzu, Azahar, Lime3DS and Citra where each keeps its data by default, and RetroArch where Steam installed it. Add the folder of a portable install here, and the folder of every RPCS3 and Vita3K install and any other RetroArch, which keep everything beside the program. Deguffer looks in each folder only for the emulator's own settings file or program, or the file that names PPSSPP's memory stick, and removes only the caches the emulator compiled and RetroArch's downloads, never saves, memory cards, firmware or games.">
                 <views:SettingsRow.Control>
                     <Button Content="Add folder…"
                             Click="OnAddEmulatorFolder"

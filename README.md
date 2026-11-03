@@ -38,7 +38,7 @@ largest files inside it:
 
 Besides Settings and About, Deguffer has six pages:
 
-- [Storage](#storage) checks 113 sources of waste, from package-manager and browser caches to
+- [Storage](#storage) checks 115 sources of waste, from package-manager and browser caches to
   `Windows.old` and old restore points, and puts each one in a [safety tier](#safety-tiers). You
   choose what goes, and when the clean has finished Deguffer checks that everything it said it would
   leave alone is still there.
@@ -125,7 +125,7 @@ remove one by any route.
 
 ## Storage
 
-Each of the 113 sources has its own provider, which knows what that location is and what sits next
+Each of the 115 sources has its own provider, which knows what that location is and what sits next
 to it. Rows for tools you do not have are hidden unless you ask the Storage page to show them. Build
 output and project caches, such as `node_modules`, `obj`, Rust's `target`, Python's `.tox` and
 `.pytest_cache` folders, and the caches in Visual Studio's `.vs` folders, are only looked for
@@ -224,7 +224,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | Autodesk installer files | What Autodesk's installers extracted into `C:\Autodesk` and left behind; never the network licence server, an administrator's deployment images or Autodesk Access's updates. A repair or an update then downloads the product again. Researched |
 | Steam library artwork | One item per game, fetched again when Steam next shows it; never Steam's index of it. A picture you replaced by hand is lost, so keep that game |
 | Steam shader pre-cache | One item per game, in every library listed by Steam itself; never the games next to it |
-| Emulator shader caches | What Cemu, RPCS3, Dolphin, PCSX2, Ryujinx, Eden, Citron and yuzu compile for your GPU, and Ryujinx's translated code, found where each one keeps its data and in the emulator folders you add in Settings; never Cemu's transferable cache or a Switch emulator's guest shader cache, saves, memory cards, firmware or Dolphin's own `Shaders`, and nothing while the emulator is running. Researched |
+| Emulator shader caches | What Cemu, RPCS3, Dolphin, PCSX2, DuckStation, PPSSPP, Vita3K, Ryujinx, Eden, Citron, yuzu, Azahar, Lime3DS and Citra compile for your GPU, and Ryujinx's translated code, found where each one keeps its data and in the emulator folders you add in Settings; never Cemu's or a 3DS emulator's transferable cache, a Switch emulator's guest shader cache, DuckStation's achievement record, saves, memory cards, firmware or Dolphin's own `Shaders`, and nothing while the emulator is running. Researched |
 | RetroArch shaders and game databases | The shader sets and `.rdb` databases its Online Updater downloaded, found through Steam's records and the emulator folders you add in Settings, in the folders named by its own `retroarch.cfg`; never the presets you saved, `system`, cores, cheats, overlays or saves, and nothing while RetroArch is running. Researched |
 | Unreal Engine derived data cache | The cache that every project shares, in both the older folder and each Zen store; a store is left alone while its server is running. Researched |
 | Unity GI cache | The lighting cache that every project shares, in `%LOCALAPPDATA%\Unity\Caches\GiCache`, and nothing while a Unity Editor is running; never the build cache next to it. A cache moved in Unity's preferences is named, never removed. Researched |
@@ -233,6 +233,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | tox environments | `.tox` folders under your own source folders, only where tox's own cache tag is inside and a tox configuration is next to it. Researched |
 | nox environments | `.nox` folders under your own source folders, only where nox's cache tag and `.gitignore` are inside and a `noxfile.py` is next to it. Researched |
 | Dart and Flutter tool folders | `.dart_tool` folders under your own source folders, only where pub's own package configuration is inside, `pubspec.yaml` and `pubspec.lock` are next to it, and git tracks nothing inside it |
+| Git LFS old file versions | Old versions of large files in `.git\lfs\objects` in the Git repositories under your own source folders, removed only by Git LFS's own prune after the repository's server confirms it still holds each one. A repository whose remote is a folder, whose store is shared, or that something is working in is left alone |
 | Rust build output | `target` folders under your own source folders |
 | Unity project library | |
 | Unreal project intermediate files | `Intermediate` next to a `.uproject` under your own source folders; never `Saved` or `Binaries`. Researched |
@@ -265,6 +266,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | Epic Games launcher logs and crash reports | |
 | Battle.net launcher logs | |
 | RetroArch thumbnails | Each system's box art, snapshots, title screens and logos, grouped by system. Most will download again, but a picture you added yourself cannot be told apart from the rest and will be lost. Researched |
+| Hugging Face models and datasets | One item per repository in the hub cache that Transformers, Diffusers and other Python tools download into, removed by Hugging Face's own `hf cache rm`, version 1.32 or later; never a repository a running program has open, the store of files that repositories share, or your access tokens. A model that has been withdrawn or made private cannot be downloaded again |
 | Claude Code MCP server logs | |
 | Tool logs in temporary folders | The Remote Desktop client's traces, the Windows App's and ServiceHub's logs, and VS Code's updater logs; the folders they are written to stay |
 | Claude Code rewind snapshots | One folder per session, dated by the folder and never by the snapshots in it; a running session's snapshots are never offered |

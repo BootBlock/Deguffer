@@ -7,9 +7,9 @@ namespace Deguffer.Core.Configuration;
 /// The folders the user has told Deguffer an emulator is installed in, persisted as a JSON array of
 /// paths beside the other settings.
 ///
-/// <para><b>Declared, because nothing else can say.</b> RPCS3 keeps everything beside its own
-/// executable wherever the archive was unpacked, and the portable layouts of Cemu, Dolphin, PCSX2 and
-/// the Switch emulators do the same, as does every RetroArch. Windows records none of those places anywhere Deguffer may
+/// <para><b>Declared, because nothing else can say.</b> RPCS3 and Vita3K keep everything beside their
+/// own executable wherever the archive was unpacked, and the portable layouts of Cemu, Dolphin, PCSX2,
+/// DuckStation, PPSSPP and the Switch and 3DS emulators do the same, as does every RetroArch. Windows records none of those places anywhere Deguffer may
 /// rely on, so §5.2's "never assume a location" leaves the user as the only source. A folder listed
 /// here is never trusted on its own word: an emulator's root inside it is recognised only by the file
 /// that emulator writes there, see <see cref="Providers.EmulatorLayout"/>, and RetroArch only by its

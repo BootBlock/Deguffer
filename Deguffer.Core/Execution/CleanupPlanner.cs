@@ -199,6 +199,7 @@ public sealed class CleanupPlanner
         new ToxEnvironmentProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
         new NoxEnvironmentProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
         new DartToolProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+        new GitLfsObjectProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
     ];
 
     private static IReadOnlyList<ICleanupProvider> CacheProviders(
@@ -316,6 +317,7 @@ public sealed class CleanupPlanner
             new PuppeteerBrowsersProvider(environment, liveTrees: liveTrees, scanner: scanner),
             new VsCodeExtensionBrowsersProvider(environment, liveTrees: liveTrees, scanner: scanner),
             new LmStudioRuntimeProvider(environment, scanner: scanner),
+            new HuggingFaceHubProvider(environment, scanner: scanner, liveTrees: liveTrees),
             new VagrantSupersededBoxProvider(environment, scanner: scanner),
             testBrowsers,
             new SquirrelSupersededVersionProvider(environment, discovery: squirrel, liveTrees: liveTrees, scanner: scanner),

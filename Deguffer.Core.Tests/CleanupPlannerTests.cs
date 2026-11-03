@@ -465,14 +465,14 @@ public sealed class CleanupPlannerTests
         Assert.Equal(
             [
                 "dotnet-obj", "visual-studio-solution-cache", "unity-library", "unreal-intermediate", "unreal-project-ddc", "cargo-target", "node-modules", "python-venv",
-                "pytest-cache", "mypy-cache", "ruff-cache", "tox-environments", "nox-environments", "dart-tool",
+                "pytest-cache", "mypy-cache", "ruff-cache", "tox-environments", "nox-environments", "dart-tool", "git-lfs-objects",
                 "nuget", "gradle", "npm", "pnpm", "yarn", "bun", "composer", "arduino", "scoop-cache", "vscode-cpptools", "dart-analysis-server", "roslyn-cache", "jetbrains-superseded-system", "temp-tool-caches",
                 "uv", "pip", "poetry", "conda", "pre-commit", "cargo", "go", "zig", "deno", "electron", "typescript-typings", "ccache", "sccache", "debugger-symbols", "debugger-symbols-other-servers", "maven", "vcpkg", "conan", "gpu-shader-cache",
                 "chromium-app-cache", "chromium-service-worker-storage", "vscode-cache", "firefox", "thunderbird", "epic-launcher-webcache",
                 "epic-launcher-content-cache", "battle-net-cache", "steam", "steam-library-artwork", "steam-shader-cache", "emulator-shader-cache", "retroarch-downloads", "retroarch-thumbnails", "unreal-ddc", "unity-gi-cache", "spotify",
                 "plex-transcode", "jellyfin-transcode", "emby-transcode", "affinity-model-cache", "capture-one-cache", "davinci-resolve-render-cache", "after-effects-disk-cache", "adobe-media-cache", "redshift-cache", "capcut-cache",
                 "squirrel-staging",
-                "platformio", "playwright", "puppeteer", "vscode-extension-browsers", "lmstudio-runtimes", "vagrant-boxes", "test-browser-profiles", "squirrel-superseded-versions", "capcut-superseded-builds", "azure-functions-tools",
+                "platformio", "playwright", "puppeteer", "vscode-extension-browsers", "lmstudio-runtimes", "huggingface-hub", "vagrant-boxes", "test-browser-profiles", "squirrel-superseded-versions", "capcut-superseded-builds", "azure-functions-tools",
                 "graphics-driver-installers", "autodesk-installers", "claude-code-leftovers", "claude-code-command-snapshots", "recycle-bin", "file-history", "cloud-local-copies", "temp-directories",
                 "temp-installer-downloads", "delivery-optimization", "previous-windows-installation", "upgrade-discarded-files", "windows-update-leftovers",
                 "driver-store", "component-store", "component-store-reset-base", "restore-points", "other-account-profiles", "crash-dumps",
@@ -484,7 +484,7 @@ public sealed class CleanupPlannerTests
         Assert.Equal(
             [
                 "unity-library", "unreal-intermediate", "unreal-project-ddc", "cargo-target", "node-modules", "python-venv",
-                "tox-environments", "nox-environments", "dart-tool",
+                "tox-environments", "nox-environments", "dart-tool", "git-lfs-objects",
                 "conda", "debugger-symbols-other-servers", "maven", "vcpkg", "chromium-service-worker-storage", "steam-library-artwork", "steam-shader-cache", "emulator-shader-cache", "retroarch-downloads", "unreal-ddc", "unity-gi-cache", "affinity-model-cache", "capture-one-cache", "davinci-resolve-render-cache", "after-effects-disk-cache", "adobe-media-cache", "platformio", "playwright", "puppeteer", "lmstudio-runtimes", "vagrant-boxes",
                 "squirrel-superseded-versions", "capcut-superseded-builds", "azure-functions-tools", "graphics-driver-installers", "autodesk-installers",
                 "cloud-local-copies", "temp-directories", "temp-installer-downloads", "previous-windows-installation",
@@ -494,7 +494,7 @@ public sealed class CleanupPlannerTests
 
         Assert.Equal(
             [
-                "retroarch-thumbnails", "recycle-bin", "file-history", "upgrade-discarded-files", "component-store-reset-base", "restore-points", "other-account-profiles", "crash-dumps", "windows-servicing-logs",
+                "retroarch-thumbnails", "huggingface-hub", "recycle-bin", "file-history", "upgrade-discarded-files", "component-store-reset-base", "restore-points", "other-account-profiles", "crash-dumps", "windows-servicing-logs",
                 "epic-launcher-logs", "battle-net-logs", "vscode-logs", "claude-code-mcp-logs", "temp-tool-logs", "claude-code-file-history",
                 "claude-code-conversations", "virtual-disks",
             ],

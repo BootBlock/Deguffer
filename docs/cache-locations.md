@@ -3466,8 +3466,8 @@ acknowledgement.
 
 | | |
 | --- | --- |
-| **Location** | Cemu `shaderCache\precompiled` and `shaderCache\driver`; RPCS3 `cache\<serial>`; Dolphin `Cache\Shaders`; PCSX2's shader files in its cache folder; Ryujinx's host shader files in `games\<title id>\cache\shader`, and `cpu\0` and `cpu\1` in `games\<title id>\cache\cpu`; `vulkan_pipelines.bin` in each game's folder in Eden's `cache\shader` and in Citron's and yuzu's `shader`, and Eden's `cache\shader\vulkan_static_pipelines.bin`. Each inside that emulator's own folder, found as the table below describes |
-| **Method** | Delete the recognised folders, or for PCSX2 and the Switch emulators the recognised files, one item each |
+| **Location** | Cemu `shaderCache\precompiled` and `shaderCache\driver`; RPCS3 `cache\<serial>`; Dolphin `Cache\Shaders`; PCSX2's and DuckStation's shader files in their cache folders; PPSSPP's `.vkshadercache` and `.glshadercache` files and `vulkan_spirv.cache` in `PSP\SYSTEM\CACHE`; Vita3K `cache\shaders\<title id>`; Azahar's, Lime3DS's and Citra's `shaders\opengl\precompiled`, their Vulkan pipeline caches in `shaders\vulkan`, and Azahar's in `shaders\vulkan\pipeline`; Ryujinx's host shader files in `games\<title id>\cache\shader`, and `cpu\0` and `cpu\1` in `games\<title id>\cache\cpu`; `vulkan_pipelines.bin` in each game's folder in Eden's `cache\shader` and in Citron's and yuzu's `shader`, and Eden's `cache\shader\vulkan_static_pipelines.bin`. Each inside that emulator's own folder, found as the table below describes |
+| **Method** | Delete the recognised folders, or for PCSX2, DuckStation, PPSSPP and the Switch and 3DS emulators' Vulkan caches the recognised files, one item each |
 | **Typical size** | Nothing measured: the machine this was written on has no emulator that has compiled a shader. Community reports for a real library run to many gigabytes |
 
 ### What it is
@@ -3485,6 +3485,12 @@ shader the game has used. Only playing builds it, and players often share it. Th
 pipeline cache (`vulkan_pipelines.bin`) is compiled from it for this graphics card when the game
 boots. Deguffer offers the second and never the first, as it does for Cemu.
 
+The Nintendo 3DS emulators Azahar, Lime3DS and Citra do the same. Their `transferable` folders, for
+OpenGL and for Vulkan, record every shader each game has used, and only playing builds them. Azahar's
+Vulkan `.vkch` files in that folder hold the record and the shaders compiled from it together, so
+Deguffer keeps them whole. It offers only the OpenGL programs and Vulkan pipeline caches compiled for
+this graphics card.
+
 ### What Deguffer does
 
 **It looks where each emulator keeps its data, and nowhere else.**
@@ -3499,12 +3505,20 @@ boots. Deguffer offers the second and never the first, as it does for Cemu.
 | Eden | `%APPDATA%\eden`, and `user` inside each emulator folder you add that holds `eden.exe` or `eden-cli.exe`. You can also add that `user` folder itself | `config\qt-config.ini` |
 | Citron | `%APPDATA%\citron`, and the same as Eden for a folder that holds `citron.exe` or `citron-cmd.exe` | `config\qt-config.ini` |
 | yuzu | `%APPDATA%\yuzu`, and the same as Eden for a folder that holds `yuzu.exe` or `yuzu-cmd.exe` | `config\qt-config.ini` |
+| DuckStation | `Documents\DuckStation`, `%LOCALAPPDATA%\DuckStation`, and each emulator folder you add that holds a `duckstation-qt-*.exe` program | `settings.ini` |
+| PPSSPP | `Documents\PPSSPP`, and in each emulator folder you add: the folder `installed.txt` names, `memstick` inside it, or the folder itself | `PSP\SYSTEM\ppsspp.ini` |
+| Vita3K | Only each emulator folder you add that holds `Vita3K.exe`: `portable` inside it, or the folder itself. You can also add that `portable` folder itself | `config.yml` |
+| Azahar | `%APPDATA%\Azahar`, and `user` inside each emulator folder you add that holds `azahar.exe`. You can also add that `user` folder itself | `config\qt-config.ini`, or `config\sdl2-config.ini` |
+| Lime3DS | `%APPDATA%\Lime3DS`, and the same as Azahar for a folder that holds `lime3ds.exe`, `lime3ds-gui.exe` or `lime3ds-cli.exe` | The same as Azahar |
+| Citra | `%APPDATA%\Citra`, and the same as Azahar for a folder that holds `citra-qt.exe` or `citra.exe` | The same as Azahar |
 
-**Add an emulator folder in Settings for a portable install, and for every RPCS3 install.** RPCS3
-keeps everything beside `rpcs3.exe`, wherever you unpacked it, and a portable Cemu, Dolphin, PCSX2,
-Ryujinx, Eden, Citron or yuzu does the same. Windows records none of those places anywhere Deguffer can rely on, so Deguffer does
+**Add an emulator folder in Settings for a portable install, and for every RPCS3 and Vita3K
+install.** RPCS3 keeps everything beside `rpcs3.exe`, and Vita3K its settings and cache beside
+`Vita3K.exe`, wherever you unpacked them, and a portable Cemu, Dolphin, PCSX2, DuckStation, PPSSPP,
+Ryujinx, Eden, Citron, yuzu, Azahar, Lime3DS or Citra does the same. Windows records none of those places anywhere Deguffer can rely on, so Deguffer does
 not search your drives for them. A folder you add is looked in only for the settings file in the
-table, and for Eden, Citron and yuzu also for the program. A folder with none in it gets a note on the plan, and this row touches nothing in it. A
+table, for DuckStation, Vita3K and the Switch and 3DS forks also for the program, and for PPSSPP
+also for the `installed.txt` that names its memory stick. A folder with none in it gets a note on the plan, and this row touches nothing in it. A
 folder that holds RetroArch gets no note, because the
 [RetroArch rows](#retroarchs-downloaded-shaders-databases-and-thumbnails) answer for it.
 
@@ -3512,23 +3526,37 @@ folder that holds RetroArch gets no note, because the
 a `cache` directory is not an emulator's. A folder that holds your whole profile, or a drive's root,
 is never treated as an emulator's folder, whatever file is in it.
 
-**Eden, Citron and yuzu are told apart by their program.** Each one's portable folder is called
-`user` and holds the same settings file, so Deguffer reads a `user` folder as a fork's only where
-that fork's program is beside it. The old `shader` folder that Eden's migration can leave in its
-folder is not Eden's cache, and is left alone.
+**Eden, Citron and yuzu are told apart by their program, and so are Azahar, Lime3DS and Citra.**
+Each one's portable folder is called `user` and holds the same settings file, so Deguffer reads a
+`user` folder as a fork's only where that fork's program is beside it. The old `shader` folder that
+Eden's migration can leave in its folder is not Eden's cache, and is left alone. In the same way,
+DuckStation's `settings.ini` is a name many programs use, and Vita3K's `config.yml` is the name an
+older RPCS3 used, so a folder you add is read as DuckStation's or Vita3K's only where its program is
+there, and a Vita3K folder is never also read as RPCS3's.
+
+**Azahar's migration copies, and never moves.** When Azahar first starts, it offers to copy your
+`%APPDATA%\Citra` or `%APPDATA%\Lime3DS` folder. The old folder stays, with its own caches, so
+Deguffer looks in all three and offers each under its own name.
 
 **Only the paths in the Location row are offered, found by their path from that folder.** This is
 what keeps Dolphin safe: `Shaders` in Dolphin's folder holds post-processing shaders you installed,
 and `Cache\Shaders` is the compiled cache. Only the second is offered. In RPCS3's `cache`, only a
 folder named by a game's serial, such as `BLUS30443`, is offered, which is the folder RPCS3's own
 **Remove All Caches** removes. In PCSX2's cache folder, only the shader and pipeline files each
-renderer writes are offered, as files, because the same folder holds other things. In the Switch
+renderer writes are offered, as files, because the same folder holds other things, and the same is
+true of DuckStation's cache folder, which also holds your achievement record. In PPSSPP's
+`PSP\SYSTEM\CACHE`, only the files with a shader cache's extension are offered, because a game's id
+is not always of one form. In Vita3K's `cache\shaders`, only a folder named by a game's title id,
+such as `PCSE00001`, is offered, which is the folder Vita3K's own **Delete Shader Caches** removes.
+In the 3DS emulators' `shaders` folder, which also holds your post-processing shaders, only the
+paths in the Location row are reached. In the Switch
 emulators, only a folder named by a game's title id, such as `0100f2c0115b6000`, is entered, so
 Citron's `shader\nvidia` is left alone, and so is everything beside the game folders except Eden's
 `vulkan_static_pipelines.bin`.
 
-**PCSX2's cache folder is where PCSX2's settings put it.** `[Folders] Cache` in `inis\PCSX2.ini` can
-move it anywhere, and Deguffer reads it rather than assuming the default.
+**PCSX2's and DuckStation's cache folders are where their settings put them.** `[Folders] Cache` in
+PCSX2's `inis\PCSX2.ini` and in DuckStation's `settings.ini` can move it anywhere, and Deguffer reads
+it rather than assuming the default.
 
 **One folder is one folder, however it is named.** A folder you add that is an emulator's default
 folder reached through a `subst` letter or a second mount of the volume is read once, and a cache
@@ -3537,13 +3565,13 @@ refuses each at both names.
 
 **Nothing of an emulator's while it runs.** An emulator writes its cache while you play, so while
 one is running its caches are not offered, the plan says why, and Explore refuses them. A folder that
-two forks of yuzu both use is held back while either one runs. The clean
+two forks of yuzu or of Citra both use is held back while either one runs. The clean
 asks again before it removes each item, so an emulator started while the preview is on screen holds
 its cache back too.
 
-No emulator here offers a command Deguffer could run to clear its own cache. RPCS3's and Cemu's are
-menu items inside the running program, and Cemu's also removes the transferable cache, which Deguffer
-keeps.
+No emulator here offers a command Deguffer could run to clear its own cache. RPCS3's, Cemu's,
+Vita3K's and Azahar's are menu items inside the running program, and Cemu's and Azahar's also remove
+the transferable caches, which Deguffer keeps.
 
 ### What is protected
 
@@ -3576,6 +3604,26 @@ are asserted by name after a clean:
 | Eden, Citron, yuzu | `keys`, `nand`, `sdmc` | Your keys, the emulated storage with your saves, firmware and games, and the SD card |
 | Eden, Citron, yuzu | `load`, `dump`, `amiibo`, `tas`, `screenshots`, `play_time`, `config` | What you installed, dumped, recorded and chose |
 | Eden | `lossless`, `post_shaders`, `post_presets` | What you added for scaling and post-processing |
+| DuckStation | `achievements.db` in the cache folder | Your achievement unlocks recorded on this machine. They cannot be downloaded again |
+| DuckStation | Everything else in the cache folder | The game list, the game database and downloaded images |
+| DuckStation | `shaders` | Post-processing shaders you installed. Not the compiled cache |
+| DuckStation | `bios`, `memcards`, `savestates` | The BIOS you dumped, your memory cards and save states |
+| DuckStation | `cheats`, `patches`, `textures`, `gamesettings`, `inputprofiles`, `covers`, `screenshots`, `settings.ini`, `playtime.dat` | What you set, added and took |
+| PPSSPP | Everything else in `PSP\SYSTEM\CACHE` | Copies of game images read from a slow drive, downloads and achievement icons |
+| PPSSPP | `PSP\SHADERS` | Post-processing shaders you installed. Not the compiled cache |
+| PPSSPP | `PSP\SAVEDATA`, `PSP\PPSSPP_STATE`, `PSP\GAME` | Your saves, save states, and the games and homebrew you installed |
+| PPSSPP | `PSP\TEXTURES`, `PSP\Cheats`, `PSP\PLUGINS`, `PSP\SCREENSHOT`, `PSP\NAND`, `PSP\SYSTEM\ppsspp.ini` | What you installed, added, took and set, and the firmware you supplied |
+| Vita3K | `cache\decrypted_selfs` | Game programs you asked Vita3K to decrypt |
+| Vita3K | `config.yml`, `config`, `gui-configs`, `textures`, `patch` | What you set, installed and added |
+| Vita3K | `fs` in a portable install | The emulated PS Vita storage: your saves, games, updates, DLC and firmware |
+| Azahar, Lime3DS, Citra | `shaders\opengl\transferable`, `shaders\vulkan\transferable` | The transferable caches. Built only by playing, and the compiled caches are built from them |
+| Azahar, Lime3DS, Citra | `shaders\anaglyph` | Anaglyph shaders you installed |
+| Azahar, Lime3DS, Citra | `sdmc`, `nand`, `sysdata` | The emulated SD card and system storage with your games and saves, and your keys and console files |
+| Azahar, Lime3DS, Citra | `states`, `cheats`, `load`, `dump`, `config`, `log` | Your save states, and what you added, dumped and set |
+
+The rest of Vita3K's `cache`, and the post-processing shaders you put loose in a 3DS emulator's
+`shaders` folder, are never reached: Deguffer goes only to `cache\shaders` and to the paths in the
+Location row by name, and lists nothing beside them.
 
 Explore enforces the same rule. In each emulator's folder it allows only the way to the cache, and
 in the cache folder only what the plan recognised.
@@ -3594,7 +3642,7 @@ often mistaken for a hang. **Ryujinx translates each game's code again over its 
 they start more slowly.
 
 **Your saves, memory cards, save states, firmware, keys, games and settings are untouched**, and so
-are Cemu's transferable cache and the Switch emulators' guest shader caches.
+are Cemu's and the 3DS emulators' transferable caches and the Switch emulators' guest shader caches.
 
 ### Why Tier 2, not Tier 1
 
@@ -5838,6 +5886,75 @@ version that may not stay published, so it is offered and never ticked on your b
 
 ---
 
+## Hugging Face models and datasets
+
+**Tier 3 — user data.** Offered one repository at a time, and **never pre-selected**.
+
+| | |
+| --- | --- |
+| **Location** | `%USERPROFILE%\.cache\huggingface\hub\<type>s--<owner>--<name>`, wherever `hf env` says the hub cache is |
+| **Method** | Hugging Face's own `hf cache rm <type>/<owner>/<name> --cache-dir <hub> --format json --yes`, one repository at a time, with `huggingface_hub` 1.32 or later |
+| **Typical size** | 3.4 GB in two repositories on one workstation, one of them 3.1 GB |
+
+### What it is
+
+Every model, dataset and Space a Python program downloads from the Hugging Face Hub through
+`huggingface_hub` is kept in one cache: Transformers, Diffusers, faster-whisper and many more use it.
+Each repository has a folder of its own, with every revision of it that a program asked for. On a
+machine that runs local models it is tens of gigabytes.
+
+The cache moves with `HF_HUB_CACHE`, then `HUGGINGFACE_HUB_CACHE`, then `HF_HOME\hub`, and `HF_HOME`
+follows `XDG_CACHE_HOME`. Deguffer asks `hf env` where it is, rather than working it out, and tells
+every later command the same folder with `--cache-dir`, so what the preview examined is what the
+clean acts on.
+
+### What Deguffer does
+
+`hf cache ls --format json` lists the repositories with their sizes, and each is one item, grouped
+into models, datasets and Spaces. An item is removed by `hf cache rm`, which removes every revision of
+the repository. The size shown is the tool's own figure, which it prints to three figures.
+
+A repository is offered only if the tool lists it with a type and a name the Hub would give a
+repository, and its folder is where the tool's own naming rule puts it and is not a link. A listing
+Deguffer cannot read in full offers nothing.
+
+**Only from 1.32.** From version 1.32 the cache can keep one copy of a file that several repositories
+share, in `hub\blobs`, and each repository's files are then links into it. Older versions leave a
+removed repository's shared files behind, and other tools can remove a shared file that another
+repository still uses. So below 1.32 the row offers nothing, and says to update with
+`pip install -U huggingface_hub`. For the same reason nothing in the cache is ever deleted by path:
+deleting a repository's folder leaves its shared files, and deleting `hub\blobs` breaks every
+repository that links into it.
+
+**Not `hf cache prune`.** It removes every revision that no branch or tag names, and a revision a
+program pinned by its full commit hash is stored with none, so prune cannot tell a superseded
+revision from one a program depends on.
+
+**In use.** The tool keeps no lock while a model is loaded, but a program that has loaded a model
+holds its files open. Deguffer asks Windows about every file in every revision, and a repository a
+program has open, or one it cannot ask about in full, is not offered. It asks again when you press
+Clean, because a removal stopped part-way by an open file leaves a broken repository.
+
+### What is protected
+
+The hub cache itself, `CACHEDIR.TAG`, `version.txt`, `.locks`, the shared `blobs` store, every
+repository not chosen or held back, and every folder the tool did not list are checked after the
+clean to prove they survived. So are the access tokens in `token` and `stored_tokens`, the `assets`
+folder, and every other folder beside `hub` in the Hugging Face folder. Explore refuses the hub cache
+and the Hugging Face folder directly.
+
+### What it costs you
+
+A program that needs a removed model or dataset downloads it again, if the Hub still offers it.
+Model weights are often several gigabytes.
+
+### Why Tier 3, not Tier 2
+
+A model that is gated, private, withdrawn, or replaced by a new revision under the same name cannot
+be downloaded again, so the copy in the cache may be the only one you can get.
+
+---
+
 ## Vagrant superseded box versions
 
 **Tier 2 — regenerable, with cost, researched.** Not pre-selected.
@@ -6361,7 +6478,8 @@ its own.
 ## Per-project build output
 
 **Tier 1 for .NET intermediate output, the caches in Visual Studio's `.vs` folders and three Python
-tools' caches, Tier 2 for the rest.** The only thing Deguffer looks for inside your own folders, and the only thing it will not look for
+tools' caches, Tier 2 for the rest.** With [Git LFS old file versions](#git-lfs-old-file-versions),
+the only thing Deguffer looks for inside your own folders, and the only thing it will not look for
 anywhere else.
 
 | Directory | What it belongs to | Tier |
@@ -6402,7 +6520,8 @@ to change your mind. The row in Settings says which of your folders carry that p
 removing the folder is how you take it back.
 
 Approving a folder approves it for **every** kind of build output in the table above, which is what
-the Settings description says. If you want a narrower scope, add narrower folders.
+the Settings description says, and for [Git LFS old file versions](#git-lfs-old-file-versions) in
+the repositories inside it. If you want a narrower scope, add narrower folders.
 
 **A folder does not have to hold your own code.** The single largest thing this section can offer is
 usually a Python virtual environment that nobody would think to declare: a machine-learning or
@@ -6716,6 +6835,85 @@ cache, named with its solution.
   working there, and whether anything holds a file the caches are recognised by.
 - **Where the C++ caches use the *Fallback Location*,** they are in your temporary folder, and the
   Windows temporary folders row reaches them there.
+
+---
+
+## Git LFS old file versions
+
+**Tier 2 — regenerable, with cost.** Not pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `.git\lfs\objects` in each Git repository inside a folder listed in **Settings → Source folders**, and each submodule's store in `.git\modules\<name>\lfs\objects` |
+| **Method** | `git lfs prune --verify-remote`, offered from what `git lfs prune --dry-run --verbose` names |
+| **Typical size** | In a game, art or machine-learning repository, often larger than the checkout itself |
+
+### What it is
+
+Git LFS keeps large files outside a repository's history, and keeps a local copy of every version of
+each one it has downloaded. Switching branches, pulling and checking out older commits all add
+versions, and nothing removes them on its own.
+
+### What Deguffer does
+
+It looks in the same source folders as [Per-project build output](#per-project-build-output), and
+nowhere else, for repositories that keep a Git LFS store. Each repository is a separate item, and
+so is each submodule, because a submodule keeps a store of its own that pruning the repository does
+not reach. A linked worktree shares its repository's store, so it is pruned once, with the
+repository.
+
+For each one it runs Git LFS's own prune as a dry run, which names every file it would remove, and
+measures those files. Prune keeps every file that each worktree's checkout and staged changes use,
+that a stash uses, that a commit you have not pushed uses, or that a recent commit or branch uses.
+The repository's `lfs.fetchrecentrefsdays`, `lfs.fetchrecentcommitsdays` and `lfs.pruneoffsetdays`
+settings say how recent. Deguffer does not decide which versions go. Git LFS does.
+
+The clean runs prune with `--verify-remote`. Before Git LFS removes anything, it asks the
+repository's server whether it still has every file it would remove. If one is missing there, or the
+server does not answer, nothing is removed from that repository. Git LFS is told never to ask you to
+sign in, so a server that needs you to sign in leaves the repository as it was. Prune also removes
+Git LFS's own unfinished downloads that are more than an hour old, at the preview and at the clean.
+
+Git is told which repository, which checkout and which store to act on, by full path, so nothing is
+left for it to work out when it runs. A cancelled prune is stopped: it removes one file at a time,
+so stopping it leaves fewer old versions and no damaged store.
+
+**These are not offered:**
+
+- A folder named `.git` that holds no `HEAD` file, because it is not a Git repository.
+- A repository whose `lfs.storage` setting keeps its files somewhere else, or whose store is reached
+  through a link. Several repositories can share one store that way, and Git LFS's own manual says
+  not to prune a shared store.
+- A submodule whose configuration does not say where it is checked out, or whose checkout is gone.
+- A repository whose remote is a folder or a drive rather than a server, or that has no remote. Git
+  LFS does not ask a folder whether it still holds a file, so a version that was never pushed, such
+  as one a commit you amended before pushing held, could be removed with no copy anywhere else.
+- A repository that a program is working in, such as an editor, a terminal or Git itself. Prune
+  takes no lock, and a file Git is adding at that moment could be removed. Deguffer asks again
+  immediately before prune runs.
+- Every repository, where Git LFS is not installed, or where its dry run fails or does not list
+  every file it counts.
+
+Deguffer reads only folder names inside a `.git` folder, to find the stores. Nothing inside one is
+ever deleted by path, and the source search never goes inside one.
+
+### What is protected
+
+The repository's checkout and its `.git` folder, and in it `HEAD`, `config`, `objects`, `refs`,
+`index` and `packed-refs`. Git LFS's `lfs` folder and its `objects` folder are protected too, because
+prune removes files from the store and never the store. Every repository and store that was not
+offered is protected as well. Deguffer checks after the clean that all of these are still there.
+
+### What it costs you
+
+Checking out an older commit, or a branch that is no longer recent, downloads the large files it
+needs from the repository's server again. On a slow connection, or for a large repository, that is a
+long wait. The files your checkout uses stay, so nothing changes until then.
+
+### Why Tier 2, not Tier 1
+
+Getting a removed version back is a download from the repository's server, and it depends on the
+server still holding it. So it is offered and never ticked on your behalf.
 
 ---
 
