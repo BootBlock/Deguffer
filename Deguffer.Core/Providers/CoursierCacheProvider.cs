@@ -56,33 +56,6 @@ public sealed class CoursierCacheProvider : CleanupProviderBase
             "Artefacts Coursier downloaded over HTTP. It downloads them again when a build next needs them."),
     ]);
 
-    /// <summary>
-    /// Coursier's caches that are not downloads, each with the variable that moves it and the folder
-    /// it has in <see cref="DefaultCacheHome"/> where that is unset.
-    /// </summary>
-    public static readonly IReadOnlyList<KeptCache> KeptCaches =
-    [
-        new(
-            "COURSIER_ARCHIVE_CACHE",
-            "arc",
-            "Archives Coursier extracted, among them the Java runtimes 'cs java' and 'cs setup' installed. "
-            + "JAVA_HOME may point into it."),
-        new(
-            "COURSIER_JVM_CACHE",
-            "jvm",
-            "Java runtimes that older Coursier releases installed. JAVA_HOME may point into it."),
-        new(
-            "COURSIER_DIGEST_BASED_CACHE",
-            "digest",
-            "Container image layers, among them ones 'cs docker build' made on this computer, which exist "
-            + "nowhere else."),
-        new(
-            "COURSIER_PRIVILEDGED_ARCHIVE_CACHE",
-            "priv",
-            "Container image layers Coursier unpacked with elevated rights, which a running container may be "
-            + "built on."),
-    ];
-
     private static readonly IReadOnlyList<CacheLevel> Levels = [new CacheLevel(string.Empty, ArtefactChildren)];
 
     private const string HomeReason =
@@ -168,30 +141,53 @@ public sealed class CoursierCacheProvider : CleanupProviderBase
     /// <summary>
     /// The way down from <see cref="CoursierHome"/> to the default artefact cache, so Explore refuses
     /// the Java runtimes and the installed applications beside it, then the artefact cache in use and
-    /// the default one, each recognising only its downloads. A kept cache a variable moved somewhere
-    /// this accepts is declared as well, recognising nothing, so Explore refuses it there too. One
-    /// this declines is not: the folder is not Coursier's to speak for.
+    /// the default one, each recognising only the download folders that overlap no kept cache. A kept
+    /// cache a variable moved somewhere this accepts is declared as well, recognising nothing. One this
+    /// declines is declared in <see cref="DiscoverToolRootsAsync"/>.
     /// </summary>
-    public override IReadOnlyList<ToolRoot> ToolRoots =>
-    [
-        .. ToolRoot.WayDown(CoursierHome, [DefaultArtefactCache], HomeReason),
-        .. ArtefactCaches().Select(cache => ToolRoot.Of(cache, ArtefactCacheReason, ArtefactChildren)),
-        .. KeptCaches
-            .Select(kept => (Kept: kept, Setting: Resolve(kept.Variable, Path.Combine(DefaultCacheHome, kept.Name))))
-            .Where(moved => moved.Setting.Value is not null && moved.Setting.Folder is not null)
-            .Select(moved => ToolRoot.Folders(moved.Setting.Folder!, moved.Kept.Reason, static _ => false)),
-    ];
+    public override IReadOnlyList<ToolRoot> ToolRoots
+    {
+        get
+        {
+            var kept = Kept();
+
+            return
+            [
+                .. ToolRoot.WayDown(CoursierHome, [DefaultArtefactCache], HomeReason),
+                .. ArtefactCaches().Select(cache => ToolRoot.Folders(
+                    cache,
+                    ArtefactCacheReason,
+                    name => ArtefactChildren.IsDisposable(name) && kept.Overlapping(Path.Combine(cache, name)) is null)),
+                .. kept.MovedRoots,
+            ];
+        }
+    }
+
+    /// <summary>
+    /// A kept cache a variable names in a folder this declines is still where Coursier extracts, so
+    /// Explore refuses what it fills there and nothing else. Declared here because a declaration made
+    /// here only ever adds a refusal. See <see cref="ToolRoot.Sparing"/>.
+    /// </summary>
+    public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<ToolRoot>>([.. Kept().DeclinedRoots]);
 
     /// <summary>
     /// The downloads in the artefact cache in use and in the default one, because the variable can be
-    /// unset again after a duplicate search has read it. Only those: nothing else in either is cleaned.
+    /// unset again after a duplicate search has read it. Only those that overlap no kept cache, which
+    /// the plan spares: nothing else in either is cleaned.
     /// </summary>
-    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<CleanedPlace>>(
+    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default)
+    {
+        var kept = Kept();
+
+        return Task.FromResult<IReadOnlyList<CleanedPlace>>(
         [
-            .. ArtefactCaches().SelectMany(cache => ArtefactChildren.DisposableNames
-                .Select(child => CleanedPlace.Whole(Path.Combine(cache, child)))),
+            .. ArtefactCaches()
+                .SelectMany(cache => ArtefactChildren.DisposableNames.Select(child => Path.Combine(cache, child)))
+                .Where(place => kept.Overlapping(place) is null)
+                .Select(CleanedPlace.Whole),
         ]);
+    }
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(ResolveArtefactCache() is { } cache && LongPath.DirectoryMayExist(cache));
@@ -219,7 +215,7 @@ public sealed class CoursierCacheProvider : CleanupProviderBase
                 + "through a link.");
         }
 
-        var kept = KeptLocations();
+        var kept = Kept();
         var walk = CacheLevelWalk.Under(Levels, cache, ct);
 
         // A variable can put one of the kept caches inside a download folder, or the artefact cache
@@ -230,7 +226,7 @@ public sealed class CoursierCacheProvider : CleanupProviderBase
 
         foreach (var target in walk.Targets)
         {
-            if (kept.FirstOrDefault(k => LongPath.Contains(target.Path, k.Path) || LongPath.Contains(k.Path, target.Path)) is { Path: not null } overlap)
+            if (kept.Overlapping(target.Path) is { } overlap)
             {
                 overlapping.Add((target.Path, $"It overlaps '{overlap.Path}', which is not a download. {overlap.Reason}"));
             }
@@ -246,7 +242,7 @@ public sealed class CoursierCacheProvider : CleanupProviderBase
 
         List<(string Path, string Reason)> spared =
         [
-            .. unrecognised.Where(child => !kept.Any(k => LongPath.Contains(k.Path, child.Path) && LongPath.Contains(child.Path, k.Path))),
+            .. unrecognised.Where(child => !kept.IsKept(child.Path)),
             .. overlapping,
         ];
 
@@ -254,7 +250,7 @@ public sealed class CoursierCacheProvider : CleanupProviderBase
         [
             .. walk.Notes,
             .. spared.Select(CacheLevelWalk.SparedNote),
-            .. kept
+            .. kept.Protected
                 .Where(k => LongPath.ProbeDirectory(k.Path) is PathPresence.Present)
                 .Select(CacheLevelWalk.SparedNote),
         ];
@@ -284,7 +280,7 @@ public sealed class CoursierCacheProvider : CleanupProviderBase
                 [
                     (cache, "Coursier's artefact cache itself must survive — only the downloads inside it are removed."),
                     (DefaultCacheHome, "The folder holding Coursier's caches must survive — only downloads inside it are removed."),
-                    .. kept,
+                    .. kept.Protected,
                 ]),
             Notes = notes,
             Fallback = measured.Fallback,
@@ -293,19 +289,8 @@ public sealed class CoursierCacheProvider : CleanupProviderBase
         };
     }
 
-    /// <summary>
-    /// Where each kept cache is, wherever its variable puts it, including a folder this would decline to
-    /// examine: asserting that something survived needs no claim that the folder is Coursier's. A
-    /// relative value names nowhere Deguffer can find, so that cache is left out.
-    /// </summary>
-    private IReadOnlyList<(string Path, string Reason)> KeptLocations() =>
-    [
-        .. KeptCaches
-            .Select(kept => (Setting: Resolve(kept.Variable, Path.Combine(DefaultCacheHome, kept.Name)), kept.Reason))
-            .Select(kept => (Path: kept.Setting.Value is null ? kept.Setting.Folder : kept.Setting.Named, kept.Reason))
-            .Where(kept => kept.Path is not null)
-            .Select(kept => (kept.Path!, kept.Reason)),
-    ];
+    private CoursierKeptCaches Kept() =>
+        CoursierKeptCaches.Resolve(DefaultCacheHome, Environment, _system, Volumes);
 
     private IEnumerable<string> ArtefactCaches() =>
         new[] { ResolveArtefactCache(), DefaultArtefactCache }
@@ -314,10 +299,4 @@ public sealed class CoursierCacheProvider : CleanupProviderBase
 
     private ConfiguredFolder.Setting Resolve(string variable, string defaultFolder) =>
         ConfiguredFolder.FromVariable(variable, defaultFolder, Environment, _system, Volumes);
-
-    /// <summary>One of Coursier's caches that holds something other than downloads.</summary>
-    /// <param name="Variable">The environment variable that moves it, and names the folder itself.</param>
-    /// <param name="Name">Its folder in <see cref="DefaultCacheHome"/> where the variable is unset.</param>
-    /// <param name="Reason">What it holds, written for the user.</param>
-    public sealed record KeptCache(string Variable, string Name, string Reason);
 }

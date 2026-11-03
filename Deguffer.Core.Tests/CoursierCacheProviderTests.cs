@@ -361,18 +361,110 @@ public sealed class CoursierCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A kept cache moved to a folder this declines is not Coursier's to speak for, so nothing is
-    /// declared there and the user's Documents are not refused on Coursier's word.
+    /// The plan spares the archive cache's <c>https</c> where the variable names the archive cache as the
+    /// artefact cache. Explore must refuse it there too, or the user can pick the JDKs out of the map.
     /// </summary>
     [Fact]
-    public void DeclaresNoRootWhereAKeptCacheVariableNamesTheAccountsDocuments()
+    public async Task ExploreRefusesTheJavaRuntimesWhereTheVariableNamesTheArchiveCacheAsTheArtefactCache()
     {
-        _environment.WithEnvironmentVariable("COURSIER_JVM_CACHE", _environment.Documents!);
+        var arc = Path.Combine(CacheHome, "arc");
+        var java = InstallJdk(arc);
+        _environment.WithEnvironmentVariable(CoursierCacheProvider.CacheVariable, arc);
 
-        Assert.DoesNotContain(
-            CreateProvider().ToolRoots,
-            root => root.Path.Equals(_environment.Documents, StringComparison.OrdinalIgnoreCase));
+        var policy = await WiredPolicyAsync(CreateProvider());
+
+        Assert.False(policy.MayRemove(Path.Combine(arc, "https")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.GetDirectoryName(java)!).IsAllowed);
     }
+
+    /// <summary>
+    /// Two variables naming one folder put the artefact cache's root and the archive cache's refusal at
+    /// the same place, where a root that recognises a child would lift the other's refusal.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesTheJavaRuntimesWhereBothVariablesNameOneFolder()
+    {
+        var shared = Path.Combine(_environment.UserProfile, "coursier");
+        var java = InstallJdk(shared);
+        _environment.WithEnvironmentVariable(CoursierCacheProvider.CacheVariable, shared);
+        _environment.WithEnvironmentVariable("COURSIER_ARCHIVE_CACHE", shared);
+
+        var provider = CreateProvider();
+        var policy = await WiredPolicyAsync(provider);
+
+        Assert.False(policy.MayRemove(Path.Combine(shared, "https")).IsAllowed);
+        Assert.True((await provider.PlanAsync()).TargetedPaths.Count == 0);
+        Assert.True(File.Exists(java));
+    }
+
+    /// <summary>
+    /// §7.4. A duplicate search keeps no copy inside a place the next clean removes, so a download folder
+    /// the plan spares must not be declared cleaned, or the only copy of a JDK file reads as disposable.
+    /// </summary>
+    [Fact]
+    public async Task CleanedPlacesLeaveOutADownloadFolderThatOverlapsAKeptCache()
+    {
+        var arc = Path.Combine(CacheHome, "arc");
+        InstallJdk(arc);
+        _environment.WithEnvironmentVariable(CoursierCacheProvider.CacheVariable, arc);
+
+        var places = await CreateProvider().CleanedPlacesAsync();
+
+        Assert.DoesNotContain(places, place => LongPath.Contains(arc, place.Path));
+        Assert.Contains(places, place => place.Path.Equals(Path.Combine(ArtefactCache, "https"), StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// A kept cache moved to a folder this declines, such as Documents, still holds Java runtimes. Explore
+    /// refuses what Coursier fills there and nothing else, so the user's own folders stay theirs.
+    /// </summary>
+    [Fact]
+    public async Task ExploreRefusesOnlyCoursiersEntriesWhereAKeptCacheVariableNamesTheAccountsDocuments()
+    {
+        var documents = _environment.Documents!;
+        var java = InstallJdk(documents);
+        var theirs = Directory.CreateDirectory(Path.Combine(documents, "letters")).FullName;
+        _environment.WithEnvironmentVariable("COURSIER_ARCHIVE_CACHE", documents);
+
+        var provider = CreateProvider();
+
+        Assert.DoesNotContain(provider.ToolRoots, root => root.Path.Equals(documents, StringComparison.OrdinalIgnoreCase));
+
+        var policy = await WiredPolicyAsync(provider);
+
+        Assert.False(policy.MayRemove(Path.Combine(documents, "https")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.GetDirectoryName(java)!).IsAllowed);
+        Assert.True(policy.MayRemove(theirs).IsAllowed);
+    }
+
+    /// <summary>
+    /// §5.2 through a substituted letter. The archive cache named through <c>S:</c> is inside the
+    /// artefact cache's <c>https</c>, which no comparison of the two paths' text can see.
+    /// </summary>
+    [Fact]
+    public async Task SparesADownloadFolderThatHoldsAKeptCacheNamedThroughASubstitutedLetter()
+    {
+        CreateAt(ArtefactCache, "http", 4096);
+        var https = Path.Combine(ArtefactCache, "https");
+        var java = InstallJdk(Path.Combine(https, "runtimes"));
+        var volumes = new FakeVolumeInventory().Substituting(@"S:\", _environment.LocalAppData);
+        _environment.WithEnvironmentVariable("COURSIER_ARCHIVE_CACHE", @"S:\Coursier\Cache\v1\https\runtimes");
+
+        var provider = new CoursierCacheProvider(
+            _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, system: _system, volumes: volumes);
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([Path.Combine(ArtefactCache, "http")], plan.TargetedPaths);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(File.Exists(java));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>The policy as the shell builds it, from what the provider declares and discovers.</summary>
+    private Task<ExploreActionPolicy> WiredPolicyAsync(CoursierCacheProvider provider) =>
+        ExploreActionPolicy.ForAsync(_system, _environment, new FakeVolumeInventory(), [provider]);
 
     private ExploreActionPolicy Policy(CoursierCacheProvider provider) =>
         new(ProtectedRegions.For(_system, _environment), provider.ToolRoots, volumes: new FakeVolumeInventory());

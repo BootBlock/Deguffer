@@ -552,12 +552,15 @@ the run:
 Each of these has its own variable (`COURSIER_ARCHIVE_CACHE`, `COURSIER_JVM_CACHE`,
 `COURSIER_DIGEST_BASED_CACHE` and `COURSIER_PRIVILEDGED_ARCHIVE_CACHE`), and Deguffer protects each
 wherever its variable puts it. Where a variable puts one of them inside `https` or `http`, or puts the
-cache inside one of them, Deguffer offers nothing in the overlap.
+cache inside one of them, Deguffer offers nothing in the overlap. It compares the folders at every
+path they are reachable at, so a `subst` letter or a second mount does not hide an overlap.
 
 In Explore, Deguffer refuses everything in `%LOCALAPPDATA%\Coursier` except the downloads, which
-includes the applications `cs install` put on your path in `data`. It also refuses a kept folder that
-a variable moved, unless that is a folder Deguffer would not treat as Coursier's, such as your
-Documents.
+includes the applications `cs install` put on your path in `data`, and it refuses a download folder
+that overlaps a kept folder, as the plan does. It also refuses a kept folder that a variable moved.
+Where that is a folder Deguffer would not treat as Coursier's, such as your Documents, it refuses only
+the `https` and `http` folders Coursier extracts into there, and leaves the rest of the folder to you.
+A duplicate search treats only the download folders the plan would remove as cleaned.
 
 ### What it costs you
 
