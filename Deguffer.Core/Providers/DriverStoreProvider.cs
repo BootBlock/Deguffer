@@ -54,6 +54,15 @@ public sealed class DriverStoreProvider : CleanupProviderBase
     /// </summary>
     private readonly PassMemo<Task<DriverStoreListing>> _listing = new();
 
+    /// <summary>
+    /// Windows' cleanup asked what it would clear, started with the listing and handed to the plan,
+    /// which takes it or discards it. See <see cref="ListingAsync"/>.
+    /// </summary>
+    private EarlyDiskCleanupSurvey? _early;
+
+    /// <summary>The system volume, in the display form the handler answers for.</summary>
+    private readonly string _volume;
+
     public DriverStoreProvider(
         IDiskCleanupHandlers handlers,
         IUserEnvironment? environment = null,
@@ -75,6 +84,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         _system = system ?? SystemDirectories.Current;
         _store = store ?? new DriverStore(Runner, _system);
         _repository = Path.Combine(_system.WindowsDirectory, "System32", "DriverStore", "FileRepository");
+        _volume = LongPath.Display(_system.SystemDrive);
     }
 
     public override string Id => "driver-store";
@@ -110,6 +120,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
     public override void InvalidateCaches()
     {
         _listing.Forget();
+        Interlocked.Exchange(ref _early, null)?.Abandon();
         base.InvalidateCaches();
     }
 
@@ -125,8 +136,15 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         }
 
         var listing = await ListingAsync(ct).ConfigureAwait(false);
+        var present = listing.Failure is not null || SupersededDrivers.Of(listing.Packages, _repository).Newest.Count > 0;
 
-        return listing.Failure is not null || SupersededDrivers.Of(listing.Packages, _repository).Newest.Count > 0;
+        // The planner plans only a row that is present, so nothing else would take the answer.
+        if (!present && TakeEarlySurvey() is { } unneeded)
+        {
+            await unneeded.DiscardAsync().ConfigureAwait(false);
+        }
+
+        return present;
     }
 
     /// <summary>
@@ -149,7 +167,33 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         }
 
         var listing = await ListingAsync(ct).ConfigureAwait(false);
+        var early = TakeEarlySurvey();
 
+        try
+        {
+            return await PlanOverAsync(listing, early, keep, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            // Every plan that returns before it needs Windows' answer leaves the survey unread, and
+            // one that took the answer has nothing left to stop.
+            if (early is not null)
+            {
+                await early.DiscardAsync().ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <param name="early">
+    /// The survey started with the listing, or null where none was: an update held it back, or this is
+    /// the pass's second plan over one listing. Read only once every gate has passed.
+    /// </param>
+    private async Task<CleanupPlan> PlanOverAsync(
+        DriverStoreListing listing,
+        EarlyDiskCleanupSurvey? early,
+        MinimumAge keep,
+        CancellationToken ct)
+    {
         if (listing.Failure is { } failure)
         {
             return UnexaminedPlan(
@@ -190,16 +234,14 @@ public sealed class DriverStoreProvider : CleanupProviderBase
             return Plan([], notes, [.. kept, .. folders.Select(UnfinishedUpdate.Held)]);
         }
 
-        // Asked last, for the reason PreviousWindowsInstallationProvider asks last: the handler works
-        // out what it would clear, and that is the one question here that can take a while.
-        var volume = LongPath.Display(_system.SystemDrive);
-        var survey = await Task.Run(() => _handlers.Survey(Handler, volume, ct), ct).ConfigureAwait(false);
+        // Read last: every gate above decides over the answer's use, never over whether it was asked.
+        var survey = await (early ?? new EarlyDiskCleanupSurvey(_handlers, Handler, _volume, ct)).TakeAsync().ConfigureAwait(false);
 
         return survey.Answer switch
         {
             DiskCleanupAnswer.Unavailable => await ByPackageAsync(
                 drivers, listing, survey, notes, [.. kept, .. matched ? [] : Protect([.. unlisted.Select(folder => (folder, NotAsked))])], ct).ConfigureAwait(false),
-            _ when survey.MayOffer => await ByHandlerAsync(folders, volume, keep, matched, notes, kept, ct).ConfigureAwait(false),
+            _ when survey.MayOffer => await ByHandlerAsync(folders, _volume, keep, matched, notes, kept, ct).ConfigureAwait(false),
             _ => Plan(
                 [],
                 [.. notes, new PlanNote(PlanNoteSeverity.Information, survey.WhyLeftAlone("Device driver packages", LongPath.Display(_repository))!)],
@@ -440,5 +482,32 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         return dates.Any(d => d is null) ? null : dates.Max();
     }
 
-    private Task<DriverStoreListing> ListingAsync(CancellationToken ct) => _listing.Get(() => _store.ListAsync(ct));
+    /// <summary>
+    /// The pass's listing, and with it Windows' cleanup asked what it would clear, so the handler's
+    /// measurement runs beside pnputil's listing rather than after it.
+    ///
+    /// <para><b>Asked before the plan knows it needs the answer.</b> Elevated on Windows 11 24H2, the
+    /// listing took 1.2 to 2.1 s and the survey 3.5 to 4.1 s, and the two together took as long as
+    /// the survey alone. Where the listing shows nothing superseded, the survey is stopped, which the
+    /// handler obeyed within 110 ms. Unelevated, <see cref="DiskCleanupHandlers.Survey"/> answers
+    /// before it loads the handler, so the early start costs a registry read.</para>
+    ///
+    /// <para><b>Not asked while an update is unfinished</b>, which holds every package back in any
+    /// case: Windows Update installs drivers, and nothing documents what the handler's measurement
+    /// does beside it. The plan asks again before it reads the answer.</para>
+    /// </summary>
+    private Task<DriverStoreListing> ListingAsync(CancellationToken ct) => _listing.Get(() =>
+    {
+        var survey = UnfinishedUpdate.HoldsEverything(Servicing, Inspector) is null
+            ? new EarlyDiskCleanupSurvey(_handlers, Handler, _volume, ct)
+            : null;
+
+        // A listing that failed is asked again, and the survey started with it is replaced.
+        Interlocked.Exchange(ref _early, survey)?.Abandon();
+
+        return _store.ListAsync(ct);
+    });
+
+    /// <summary>The survey started with the listing, handed to exactly one caller.</summary>
+    private EarlyDiskCleanupSurvey? TakeEarlySurvey() => Interlocked.Exchange(ref _early, null);
 }

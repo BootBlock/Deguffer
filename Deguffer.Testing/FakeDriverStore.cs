@@ -6,9 +6,14 @@ namespace Deguffer.Testing;
 /// A driver store whose listing a test states, over folders the test built. The real one lists the
 /// driver store of whoever runs the suite.
 /// </summary>
-public sealed class FakeDriverStore(Func<DriverStoreListing> listing) : IDriverStore
+public sealed class FakeDriverStore(Func<CancellationToken, Task<DriverStoreListing>> listing) : IDriverStore
 {
     private readonly Dictionary<string, string?> _names = new(StringComparer.OrdinalIgnoreCase);
+
+    public FakeDriverStore(Func<DriverStoreListing> listing)
+        : this(_ => Task.FromResult(listing()))
+    {
+    }
 
     public FakeDriverStore(params DriverPackage[] packages)
         : this(() => new DriverStoreListing(packages))
@@ -25,7 +30,7 @@ public sealed class FakeDriverStore(Func<DriverStoreListing> listing) : IDriverS
     public Task<DriverStoreListing> ListAsync(CancellationToken ct)
     {
         Listings++;
-        return Task.FromResult(listing());
+        return listing(ct);
     }
 
     public string? FolderOf(string publishedName) => _names.GetValueOrDefault(publishedName);

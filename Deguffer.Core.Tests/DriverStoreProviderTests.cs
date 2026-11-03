@@ -22,6 +22,12 @@ public sealed class DriverStoreProviderTests : IDisposable
     private readonly FakeSystemDirectories _system;
     private readonly string _store;
 
+    /// <summary>
+    /// A measurement Windows' cleanup never finishes on its own, so only stopping it ends a survey.
+    /// Completed when the test ends, so a survey a defect left running does not hold its thread.
+    /// </summary>
+    private readonly TaskCompletionSource _endless = new();
+
     public DriverStoreProviderTests()
     {
         _environment = new FakeUserEnvironment(_temp.Path);
@@ -30,7 +36,32 @@ public sealed class DriverStoreProviderTests : IDisposable
         Directory.CreateDirectory(_store);
     }
 
-    public void Dispose() => _temp.Dispose();
+    public void Dispose()
+    {
+        _endless.TrySetResult();
+        _temp.Dispose();
+    }
+
+    /// <summary>
+    /// Windows' cleanup measuring until it is told to stop, and then answering "has something", as the
+    /// real one does. A plan that read a survey it stopped would offer packages from that answer.
+    /// </summary>
+    private FakeDiskCleanupHandlers StillMeasuring() => FakeDiskCleanupHandlers.Measuring(_endless.Task);
+
+    /// <summary>Long enough that only a plan waiting on something that never comes reaches it.</summary>
+    private static readonly TimeSpan Hung = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// A listing that returns only once Windows' cleanup is measuring, so the plan decides whether it
+    /// needs the answer while the handler is busy. A plan can otherwise stop the survey before its
+    /// thread reaches the handler, and a test could not tell a stopped survey from one never asked.
+    /// </summary>
+    private static FakeDriverStore ListedWhileMeasuring(FakeDiskCleanupHandlers handlers, DriverStoreListing listing) =>
+        new(async ct =>
+        {
+            await handlers.SurveyStarted.WaitAsync(Hung, ct);
+            return listing;
+        });
 
     /// <summary>A third-party package staged in the store, holding one file.</summary>
     private DriverPackage Staged(string published, string date, string original = "wifi.inf", bool inUse = false)
@@ -255,25 +286,36 @@ public sealed class DriverStoreProviderTests : IDisposable
     {
         var older = Staged("oem1.inf", "2022-01-01", inUse: true);
         var newest = Staged("oem2.inf", "2024-01-01");
-        var handlers = Removing();
-        var provider = CreateProvider(new FakeDriverStore(older, newest), handlers);
+        var handlers = StillMeasuring();
+        var provider = CreateProvider(ListedWhileMeasuring(handlers, new DriverStoreListing([older, newest])), handlers);
 
-        var plan = await provider.PlanAsync();
+        var plan = await provider.PlanAsync().WaitAsync(Hung);
 
         Assert.Empty(plan.Steps);
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(older.Folder, StringComparison.OrdinalIgnoreCase));
         Assert.Contains(plan.Notes, n => n.Message.Contains("a device is installed with", StringComparison.Ordinal));
-        Assert.Empty(handlers.Surveyed);
+
+        // Asked beside the listing, then stopped unread once the listing showed nothing superseded.
+        Assert.Equal([(DriverStoreProvider.Handler, true)], handlers.Returned);
     }
 
     [Fact]
     public async Task IsNotPresentWhereNoDriverHasAnOlderVersion()
     {
-        var provider = CreateProvider(new FakeDriverStore(Staged("oem1.inf", "2022-01-01"), Staged("oem2.inf", "2024-01-01", original: "bt.inf")));
+        var handlers = StillMeasuring();
+        var provider = CreateProvider(
+            ListedWhileMeasuring(
+                handlers,
+                new DriverStoreListing([Staged("oem1.inf", "2022-01-01"), Staged("oem2.inf", "2024-01-01", original: "bt.inf")])),
+            handlers);
 
-        Assert.False(await provider.IsPresentAsync());
+        Assert.False(await provider.IsPresentAsync().WaitAsync(Hung));
 
-        var plan = await provider.PlanAsync();
+        // The planner plans no row that is absent, so presence stops the survey it started, and waits
+        // for Windows' cleanup to return rather than leaving it running past the pass.
+        Assert.Equal([(DriverStoreProvider.Handler, true)], handlers.Returned);
+
+        var plan = await provider.PlanAsync().WaitAsync(Hung);
         Assert.True(plan.IsEmpty);
         Assert.False(plan.WasNotExamined);
     }
@@ -282,14 +324,96 @@ public sealed class DriverStoreProviderTests : IDisposable
     [Fact]
     public async Task AListingThatFailedIsShownAndOffersNothing()
     {
-        var provider = CreateProvider(new FakeDriverStore(() => DriverStoreListing.Failed("pnputil would not start.")));
+        var handlers = StillMeasuring();
+        var provider = CreateProvider(ListedWhileMeasuring(handlers, DriverStoreListing.Failed("pnputil would not start.")), handlers);
 
-        Assert.True(await provider.IsPresentAsync());
+        Assert.True(await provider.IsPresentAsync().WaitAsync(Hung));
 
-        var plan = await provider.PlanAsync();
+        var plan = await provider.PlanAsync().WaitAsync(Hung);
         Assert.Empty(plan.Steps);
         Assert.True(plan.WasNotExamined);
         Assert.Contains(plan.Notes, n => n.Message.Contains("pnputil would not start.", StringComparison.Ordinal));
+        Assert.Equal([(DriverStoreProvider.Handler, true)], handlers.Returned);
+    }
+
+    /// <summary>
+    /// Windows' cleanup is asked what it would clear while pnputil lists the store, not after it: the
+    /// two took 1.2 to 2.1 s and 3.5 to 4.1 s elevated, and together as long as the survey alone. The
+    /// listing here finishes only once the survey has started, and the survey only once the listing
+    /// has, so a plan that asked one after the other never finishes.
+    /// </summary>
+    [Fact]
+    public async Task AsksWindowsCleanupWhileTheStoreIsBeingListed()
+    {
+        DriverPackage[] packages = [Staged("oem1.inf", "2022-01-01"), Staged("oem2.inf", "2024-01-01")];
+        var listing = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handlers = FakeDiskCleanupHandlers.Measuring(listing.Task);
+        var store = new FakeDriverStore(async ct =>
+        {
+            listing.TrySetResult();
+            await handlers.SurveyStarted.WaitAsync(Hung, ct);
+            return new DriverStoreListing(packages);
+        });
+        var provider = CreateProvider(store, handlers);
+
+        Assert.True(await provider.IsPresentAsync().WaitAsync(Hung));
+        var plan = await provider.PlanAsync().WaitAsync(Hung);
+
+        var step = Assert.IsType<DiskCleanupStep>(Assert.Single(plan.Steps));
+        Assert.Equal(DriverStoreProvider.Handler, step.Handler);
+        Assert.Equal([(DriverStoreProvider.Handler, false)], handlers.Returned);
+        Assert.Equal(1, store.Listings);
+    }
+
+    /// <summary>
+    /// An update that starts after the survey did still holds every package back, and the survey's
+    /// answer is not read: the gate decides over the answer's use, not over whether it was asked.
+    /// </summary>
+    [Fact]
+    public async Task AnUpdateThatStartsWhileTheStoreIsListedStopsTheSurveyUnread()
+    {
+        var older = Staged("oem1.inf", "2022-01-01");
+        DriverPackage[] packages = [older, Staged("oem2.inf", "2024-01-01")];
+        var servicing = new FakeWindowsServicing();
+        var handlers = StillMeasuring();
+        var store = new FakeDriverStore(async ct =>
+        {
+            await handlers.SurveyStarted.WaitAsync(Hung, ct);
+            servicing.IsRestartPending = true;
+            return new DriverStoreListing(packages);
+        });
+        var provider = CreateProvider(store, handlers, servicing: servicing);
+
+        var plan = await provider.PlanAsync().WaitAsync(Hung);
+
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(older.Folder, StringComparison.OrdinalIgnoreCase) && p.Withheld == Withholding.UpdateInProgress);
+        Assert.Equal([(DriverStoreProvider.Handler, true)], handlers.Returned);
+    }
+
+    /// <summary>
+    /// An update that finishes between the listing and the plan's use of the answer: no survey was
+    /// started while it ran, so the plan asks Windows' cleanup itself before it offers anything.
+    /// </summary>
+    [Fact]
+    public async Task AsksWindowsCleanupWhenItIsNeededWhereAnUpdateHeldTheEarlySurveyBack()
+    {
+        DriverPackage[] packages = [Staged("oem1.inf", "2022-01-01"), Staged("oem2.inf", "2024-01-01")];
+        var servicing = new FakeWindowsServicing { IsRestartPending = true };
+        var handlers = FakeDiskCleanupHandlers.FindingNothing();
+        var store = new FakeDriverStore(_ =>
+        {
+            servicing.IsRestartPending = false;
+            return Task.FromResult(new DriverStoreListing(packages));
+        });
+        var provider = CreateProvider(store, handlers, servicing: servicing);
+
+        var plan = await provider.PlanAsync().WaitAsync(Hung);
+
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("finds nothing of its own to clear", StringComparison.Ordinal));
+        Assert.Equal([(DriverStoreProvider.Handler, false)], handlers.Returned);
     }
 
     /// <summary>
@@ -526,15 +650,18 @@ public sealed class DriverStoreProviderTests : IDisposable
     public async Task ListsTheStoreOncePerPlanningPass()
     {
         var store = new FakeDriverStore(Staged("oem1.inf", "2022-01-01"), Staged("oem2.inf", "2024-01-01"));
-        var provider = CreateProvider(store);
+        var handlers = new FakeDiskCleanupHandlers((_, _) => new DiskCleanupOutcome(Ran: true));
+        var provider = CreateProvider(store, handlers);
 
         await provider.IsPresentAsync();
         await provider.PlanAsync();
         Assert.Equal(1, store.Listings);
+        Assert.Single(handlers.Surveyed);
 
         provider.InvalidateCaches();
         await provider.PlanAsync();
         Assert.Equal(2, store.Listings);
+        Assert.Equal(2, handlers.Surveyed.Count);
     }
 
     /// <summary>
