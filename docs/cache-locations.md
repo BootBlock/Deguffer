@@ -147,6 +147,10 @@ It asks `pip cache dir` where the cache is rather than assuming, because `PIP_CA
 `--cache-dir` and the `cache-dir` key in `pip.ini` can all move it. It then runs `pip cache purge`.
 Deguffer never deletes the path itself.
 
+pip's purge follows a junction it finds inside the cache, and deletes the files
+on the far side. So Deguffer looks through the cache again immediately before the command, and does
+not run it while anything inside is a link. That holds for every tool's own command, not only pip's.
+
 ### What is protected
 
 `%LOCALAPPDATA%\pip` — the folder *containing* the cache — and `pip.ini` inside it. That file holds
@@ -242,6 +246,67 @@ Everything removed is a copy of something obtainable from a package repository, 
 a source distribution, with no input from you. The rebuild cost is real for a package with C
 extensions, but it is time rather than data — and the one thing in the folder that *is* data is
 never removed.
+
+---
+
+## pipenv package cache
+
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\pipenv\pipenv\Cache`, unless `PIPENV_CACHE_DIR` moves it |
+| **Method** | `pip --cache-dir <cache> cache purge` for the part in pip's format; a path deletion for `pipenv-manifests` |
+| **Typical size** | Tens of MB to several GB, depending on how many projects you lock and install |
+
+### What it is
+
+pipenv is a dependency manager for Python projects. It keeps its own cache, apart from pip's, and
+hands it to pip as pip's cache directory whenever it installs or locks. So the folder holds pip's
+layout and pipenv's own:
+
+- **`http` / `http-v2`** — the package archives and index pages pip downloaded for pipenv.
+- **`wheels`** — wheels pip built for pipenv from packages that ship only as source.
+- **`pipenv-manifests`** — the package index pages and package metadata pipenv's resolver has read.
+
+The folder is `pipenv\pipenv\Cache` rather than the `pipenv\Cache` pipenv's documentation names:
+pipenv asks platformdirs for it, and on Windows platformdirs puts the application's name in twice.
+
+### What Deguffer does
+
+It reads `PIPENV_CACHE_DIR`, and uses the default only where that is unset. It then clears the
+folder by two routes:
+
+- **pip's layout** goes through `pip --cache-dir <cache> cache purge`. pip reads the directory from
+  the option and empties its own three folders in it, and nothing else in the folder.
+- **`pipenv-manifests`** is removed by path. No command clears it on its own.
+
+Where pip cannot be found, or one of pip's folders is a link to somewhere else, pip's folders are
+removed by path too, and the link is left alone. A link deeper inside pip's folders stops the purge
+when the clean runs, because pip would follow it, and `pipenv-manifests` is still removed.
+
+`pipenv --clear` is never used. It deletes the whole of this folder and then the whole of pip's own
+cache, which is a different row.
+
+### What is protected
+
+The cache folder itself, and `%LOCALAPPDATA%\pipenv` above it. Anything else inside the cache folder
+that Deguffer does not recognise, such as the `pkgs` folder pipenv names to pip for downloads, is left
+alone, named, and asserted to have survived the run. A `PIPENV_CACHE_DIR` that names a drive root, a
+folder of your own or a temporary folder is not treated as pipenv's at all.
+
+### What it costs you
+
+The next `pipenv install` or `pipenv lock` re-downloads packages and index pages, and rebuilds any
+wheel pip had built from source, which for a package with C extensions means compiling it again.
+
+**Your virtual environments, Pipfiles and lock files are untouched.** pipenv keeps its environments
+elsewhere, in `~\.virtualenvs` or in each project's `.venv`.
+
+### Why Tier 1
+
+Everything removed is a copy of something obtainable from a package index, or rebuildable from a
+source distribution, with no input from you.
 
 ---
 
@@ -743,6 +808,98 @@ appear once. Your projects and their own packages are untouched.
 
 Every file is a download from the npm registry, and TypeScript fetches it again by itself when a
 project needs it.
+
+---
+
+## Nx task caches
+
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+
+| | |
+| --- | --- |
+| **Location** | `%USERPROFILE%\.nx\<id>\cache`, one for each workspace, and `.nx\cache` in each Nx workspace inside your source folders |
+| **Method** | Delete the `cache` folder, by path, as `nx reset --onlyCache` does, only where every Nx that reads its index treats a missing entry as a miss |
+| **Typical size** | Up to a tenth of the disk for each workspace, which is the cap Nx sets unless `maxCacheSize` says otherwise. Not measured: no Nx workspace was on the surveyed machine |
+
+### What it is
+
+Nx, the JavaScript monorepo build system, keeps the outputs and terminal logs of every task it runs,
+so that a task whose inputs have not changed is restored rather than run again. Each entry is a
+folder named by the task's hash, beside a `terminalOutputs` folder holding each task's log. A
+SQLite database beside the cache, its index, names each entry.
+
+Everything here was read from Nx's source, at versions 18 to 24.0.3
+(`packages/nx/src/utils/cache-directory.ts`, `packages/nx/src/native/cache/cache.rs`,
+`packages/nx/src/native/db/mod.rs`, `packages/nx/src/command-line/reset/reset.ts`).
+
+- **Nx 17 to 23.1** keep the cache in `.nx\cache` in the workspace, and from Nx 19 the index in
+  `.nx\workspace-data`.
+- **From Nx 23.2** a workspace with a git remote or an Nx Cloud id keeps its cache in
+  `%USERPROFILE%\.nx\<id>\cache`, and its index in `<id>\databases`, shared by every checkout of
+  the workspace. `<id>` is the first 16 hexadecimal characters of a SHA-256 hash of that identity,
+  so it cannot be traced back to a workspace. A workspace without an identity, or one that sets
+  `cacheDirectory` or `NX_CACHE_DIRECTORY`, keeps using its own folder, and a workspace that moved
+  keeps the `.nx\cache` it had.
+
+Nx trims a cache to its cap only when that workspace runs. The cache of a workspace that has been
+deleted is never trimmed again, and that is most of what this row is for.
+
+### What Deguffer does
+
+**It deletes the `cache` folder, and nothing beside it.** That is the folder `nx reset --onlyCache`
+removes, and Nx makes it again at its next run. In the profile, `.nx` and each workspace's folder
+stay, and so do `databases` and anything else in them. In a workspace, `.nx` stays, with
+`workspace-data` and the Nx wrapper's `nxw.js` and `installation`, which a workspace commits.
+
+**A cache is recognised by what Nx makes in it, not by its name.** The folder must hold the
+`terminalOutputs` folder Nx creates in every cache it opens. In the profile, the workspace's folder
+must be named by 16 lower-case hexadecimal characters, as Nx names it. In a workspace, `.nx` must sit
+beside an `nx.json`. A cache that git tracks a file in is somebody's fixture and is left alone.
+
+**The index is read where Nx keeps it.** A workspace's index moves where `NX_WORKSPACE_DATA_DIRECTORY`
+or, failing that, `NX_PROJECT_GRAPH_CACHE_DIRECTORY` says, resolved against the workspace when it is
+relative, and Deguffer reads it there. A variable set only inside one terminal is invisible to
+Deguffer, so a workspace whose `.nx\workspace-data` is not there keeps its cache: the index may be
+somewhere else. A shared index never moves away from its cache.
+
+**A cache that an older Nx indexes is left alone.** Nx 19 to 23.2 trust the index: when a task's
+entry folder is gone, they still report the task as restored from the cache, copy nothing back, and
+the build goes on without the task's outputs. Nx's own `nx reset --onlyCache` leaves that state in
+those versions too. Nx 23.3.0 added the check that treats such an entry as a miss. Each version
+names its database after its schema: Nx 19 to 22 write `<machine>.db`, 23.0 to 23.2 write
+`<machine>-v3.db`, and 23.3.0 onwards write `-v4.db` or later. So Deguffer offers a cache only where
+every database beside it is `-v4` or later, or where there is no database at all, and says
+otherwise to run `nx reset` in the workspace, which clears the cache and its index together. It
+reads the databases again when you press Clean, because an older checkout of the same workspace can
+write one in between and hold nothing open after.
+
+**§5.1 was asked, and the answer is the path.** `nx reset --onlyCache` runs only inside a workspace,
+with that workspace's Nx installed, and a cache in the profile names no workspace to run it in. Where
+it could run, under Nx 23.2 or earlier it leaves the broken state above.
+
+**A cache Nx is using is left alone.** Nx holds the index open while it runs a task, and its daemon
+holds it for as long as it runs. Deguffer asks Windows whether anything holds the database or its
+journal files, and for a workspace whether a program is working in the workspace. It asks again
+when you press Clean, and Explore refuses a cache that is held back.
+
+### What is protected
+
+`%USERPROFILE%\.nx`, each workspace's folder in it and everything in that folder except `cache`,
+and every folder in `.nx` not named as Nx names a workspace's. In a workspace: the workspace folder,
+`nx.json`, `.nx` and everything in it except `cache`. Every cache left alone, with the reason.
+Deguffer asserts that they survived.
+
+### What it costs you
+
+The next Nx run in each workspace runs its tasks again rather than restoring them, so it takes longer
+once. The task history in the index stays. A workspace that uses Nx Cloud's remote cache restores
+from there instead.
+
+### Why Tier 1
+
+Every entry is the output of a task Nx can run again from the workspace's source, and Nx 23.3 and
+later run it again by themselves when the entry is missing. Where that cannot be shown, the cache is
+not offered.
 
 ---
 
@@ -1882,6 +2039,116 @@ are untouched.
 
 Getting either part back is a download, and embedded toolchains are commonly fetched over
 connections where that is a real cost.
+
+---
+
+## STM32Cube firmware package downloads
+
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
+acknowledgement. Each zip is an item that can be kept.
+
+| | |
+| --- | --- |
+| **Location** | The zips in `%USERPROFILE%\STM32Cube\Repository`, and in the repository STM32CubeMX's **Help > Updater Settings** names |
+| **Method** | Delete each zip whose package is unpacked beside it, only while STM32CubeMX and STM32CubeIDE are closed |
+| **Typical size** | Not measured: neither tool was on the machine this was researched on. One user reported that removing the zips cut a repository of over 40 GB to about a third |
+
+### What it is
+
+STM32CubeMX and STM32CubeIDE download each STM32 firmware package as a zip into a local repository,
+unpack it into a folder beside the zip, and keep both:
+
+```
+%USERPROFILE%\STM32Cube\Repository\
+    stm32cube_fw_f4_v1270.zip          (the download)
+    STM32Cube_FW_F4_V1.27.0\           (the package your projects use)
+    Packs\                             (packs from ST and other vendors)
+```
+
+The updater names a download after its package: the folder's name in lower case, with its dots
+removed. STM32CubeIDE's log records it downloading and unpacking `stm32cube_fw_l4_v1180.zip` and then
+the patch `stm32cube_fw_l4_v1181.zip`. ST's staff tell users who download a package from ST's website
+to rename it the same way before they put it in the repository. The package's own `package.xml`, not
+the zip's name, says which package and version it is.
+
+### What Deguffer does
+
+**It deletes a zip only where three things agree.** The zip is named as the updater names a
+download, such as `stm32cube_fw_f4_v1270.zip`. The package folder with that name,
+`STM32Cube_FW_F4_V1.27.0`, is beside it with its `package.xml`. And the zip, read from its directory
+without unpacking it, holds that one folder and nothing else. Deguffer never turns the name back into
+a version, because `v1115` reads as 1.11.5 and as 1.1.15. A zip that fails any check stays, and the
+plan says why.
+
+**The repository STM32CubeMX names is followed.** Its Updater Settings are saved as the
+`RepositoryPath` line of `%USERPROFILE%\.stm32cubemx\plugins\updater\updater.ini`, as an open-source
+tool that reads the file parses it. No copy of the file has been seen, so a value written in Java's
+escaped form, `C\:\\Users\\...`, is read as well as a plain path, and a value in double quotes as well
+as a bare one. Deguffer refuses the folder
+if it is not a full path, a drive root, one of your own folders such as Documents, or a folder that
+holds a temporary folder. It leaves a repository that is not on a disk in this computer alone,
+because another computer may be installing a patch from it.
+
+**A repository only STM32CubeIDE was told to use is not found.** STM32CubeIDE keeps its own copy of
+the setting in each workspace, and nothing outside a workspace lists the workspaces. Such a
+repository is not reclaimed, and nothing in it is touched.
+
+**While STM32CubeMX or STM32CubeIDE is running, the zips are left alone.** Either can be downloading,
+unpacking or patching in the repository, and a patch reads its base zip. So the plan leaves them
+alone, Explore refuses them, and the question is asked again when you press Clean. Both process
+names are published names, not checked against an installation. STM32CubeMX started with
+`java -jar` runs as Java, and is not seen.
+
+**§5.1 has nothing to prefer.** Neither tool has a command that removes a download and keeps its
+package.
+
+### What is protected
+
+| Neighbour | What it really is |
+| --- | --- |
+| The repository | Never a target. Only the zips inside it go |
+| `STM32Cube_FW_*` package folders | The packages your projects use and build against. Tier 4 |
+| A zip with no package beside it | STM32CubeMX may still need it to install that package |
+| A zip that holds anything but its package, or that could not be read | Nothing shows that it is the package's download |
+| A zip from ST's website, such as `en.stm32cubef4_v1-27-0.zip` | Not named as the updater names a download, so it was put there by hand |
+| `Packs` | Packs from ST and other vendors, such as X-CUBE-AI |
+| Anything else in the repository | Not classified, so Tier 4 |
+
+Explore enforces the same rule: in the repository it allows only the zips the plan offers, and none
+of them while either tool runs. Deguffer also refuses to look through a link.
+
+### What it costs you
+
+**The next patch needs the base package's zip again.** Your projects and the packages they use are
+untouched. STM32CubeIDE was seen unpacking a package's zip again before it applied a patch to it, so
+after a clean the next patch needs that zip back. No source says outright that the tools then
+download it again, though that is the expected result. Installing a patch offline fails until you put the zip back in
+the repository, so keep the zip of any package you patch offline.
+
+### Why Tier 2
+
+The issue that proposed this row said Tier 1, on the strength of an answer on ST's community: "You
+should not need the ZIP files once they have been installed/unzipped". That is true of using a
+package, and not of patching one. STM32CubeIDE's log shows it unpacking a base zip it already held,
+with no download, before it applied the patch, and ST's staff describe the offline patch install as
+putting the base zip in the repository first. Getting the zip back costs a download, or an offline
+patch install that fails until the zip is put back, which is Tier 2's consequence.
+
+Sources:
+
+- Removing the zips, and the size it saved:
+  <https://community.st.com/t5/stm32cubemx-mcus/uncluttering-the-repository/m-p/634809>
+- The version in `package.xml`, and unpacking a package into the repository by hand:
+  <https://community.st.com/t5/stm32cubemx-mcus/how-to-install-stm32cube-fw-f4-v1-27-0/m-p/51004>
+- Renaming a download to `stm32cube_fw_f4_v1270.zip`, and installing a patch offline:
+  <https://community.st.com/t5/stm32cubemx-mcus/how-do-i-install-stm32cube-mcu-package-for-stm32f4-series-1-27-1/td-p/90365>
+  and <https://community.st.com/t5/stm32cubemx-mcus/how-to-install-a-patch-offline-in-the-stm32cube-ide/td-p/116004>
+- STM32CubeIDE unpacking a base zip again before a patch, in a log committed to a public project:
+  <https://github.com/jwachlin/Nanosleeper/blob/main/.metadata/.ide.log-2025-05-18.log>
+- The `RepositoryPath` line of `updater.ini`, as an open-source tool reads it:
+  <https://github.com/BakeSheep/EmberProbe-MCU-Flash-Debug/blob/5c982e622cafa92257acce41773cc9ff902e74f1/src/services/cubemxFirmware.js>
+- STM32CubeIDE's own repository setting, stored per workspace:
+  <https://github.com/kolod/st-link-loaders>
 
 ---
 
@@ -6487,8 +6754,8 @@ its own.
 
 ## Per-project build output
 
-**Tier 1 for .NET intermediate output, the caches in Visual Studio's `.vs` folders and three Python
-tools' caches, Tier 2 for the rest.** With [Git LFS old file versions](#git-lfs-old-file-versions),
+**Tier 1 for .NET intermediate output, the caches in Visual Studio's `.vs` folders, Nx's task cache
+and three Python tools' caches, Tier 2 for the rest.** With [Git LFS old file versions](#git-lfs-old-file-versions) and the workspace half of [Nx task caches](#nx-task-caches),
 the only thing Deguffer looks for inside your own folders, and the only thing it will not look for
 anywhere else.
 
@@ -6496,6 +6763,7 @@ anywhere else.
 | --- | --- | --- |
 | `obj` | .NET intermediate build output | 1 |
 | Caches inside `.vs` | A Visual Studio solution's caches, and nothing else in the folder | 1 |
+| `cache` inside `.nx` | An Nx workspace's task cache, and nothing else in the folder | 1 |
 | `Library` | A Unity project's imported assets and caches | 2 |
 | `Intermediate` | An Unreal project's intermediate build files | 2 |
 | `DerivedDataCache` | An Unreal project's own derived data cache | 2 |
@@ -6558,6 +6826,7 @@ the tool itself writes inside it.
 | `obj` | A project file the restore manifest names | `project.assets.json`, and the generated NuGet imports for that same project |
 | `obj` of an old-style project | An old-style project file (the MSBuild 2003 namespace, no `Sdk`) that the build's records name | Only configuration and platform directories, at least one holding the build's file list, which names that same directory |
 | Caches inside `.vs` | A `.sln` or `.slnx` | Each cache its own files, and only those. See [Visual Studio's `.vs` folder](#visual-studios-vs-folder-the-caches-and-nothing-else) |
+| `cache` inside `.nx` | `nx.json` beside `.nx` | `terminalOutputs`, and an index that only Nx 23.3 or later reads. See [Nx task caches](#nx-task-caches) |
 | `Library` | `Assets`, `Packages`, `ProjectSettings` | — |
 | `Intermediate` / `DerivedDataCache` | A file ending in `.uproject`, whose name is the project's own | — |
 | `target` | `Cargo.toml` | `CACHEDIR.TAG`, opening with the tagging specification's header |
@@ -6603,7 +6872,7 @@ only ([workspaces](https://dart.dev/tools/pub/workspaces)), so a member's `.dart
 removes the folder itself, as it does Cargo's `target`.
 
 Every condition has to hold. A directory that fails any of them is left alone, and the scan says
-how many were left and why. `obj`, `.dart_tool` and `.vs` carry an extra check: git is asked whether the
+how many were left and why. `obj`, `.dart_tool`, `.vs` and Nx's `cache` carry an extra check: git is asked whether the
 directory holds any tracked file, because the tool's output never should, and one that does is not
 the tool's output whatever stands beside it. For `.dart_tool` this was found, not imagined: test
 fixtures holding one are committed into the Flutter SDK's own repository. The check needs git on `PATH`. Where git
@@ -6737,6 +7006,7 @@ the deletion runs:
 | Directory | The next use |
 | --- | --- |
 | `obj` | The next build regenerates it, so that build is slower. Nothing here is unique. |
+| `cache` inside `.nx` | The next Nx run in the workspace runs its tasks again rather than restoring them, so that run is slower. The index, its task history and the rest of `.nx` stay. |
 | Caches inside `.vs` | The next time the solution opens, Visual Studio evaluates its projects, runs design-time builds and indexes its files again, and for C++ rebuilds the browsing database and precompiled headers. That open is slower, and Find in Files and IntelliSense can be incomplete until it finishes. |
 | `Library` | Unity reimports every asset when you next open the project. On a large one that is tens of minutes, and packages it had downloaded are fetched again. |
 | `Intermediate` | A C++ project's next build compiles its code from the start, and its Visual Studio solution shows the projects as unavailable until you choose **Generate Visual Studio project files** on the `.uproject`. A Blueprint-only project opens as before. |
@@ -7713,6 +7983,14 @@ Nothing is offered:
   count. The previous installation's test for a restart due to move a file inside its folder
   does not apply, because this row removes nothing by path.
 - **where Windows reports that the store does not need cleaning**, which is DISM's own verdict.
+- **where the cleanup has nothing left to do.** DISM can go on recommending a cleanup that keeps every
+  byte. On Windows 11 24H2, which Windows services with checkpoint cumulative updates, the analysis
+  counts the checkpoint update and the feature payloads beside it as reclaimable, and the cleanup keeps
+  them: the servicing log says the store "matches last scavenge cookie, skipping scavenge". So after a
+  cleanup that ran to its end, Deguffer records DISM's figures for the store it left, in
+  `%LOCALAPPDATA%\Deguffer\component-store.json`. While a later analysis reads the same figures, the
+  row is clear and says why. Any change to the store, such as an update installed, offers it again.
+  The record holds DISM's six figures and nothing else, and a record that cannot be read is no record.
 
 ### What is protected
 
@@ -7758,7 +8036,10 @@ be uninstalled after this command is completed, but this won't block the uninsta
 update packages". That cost is permanent, so it is its own decision with its own confirmation.
 
 Both rows can be chosen in one clean. Each asks DISM for the store's size immediately before and after
-its own command, so a gigabyte the first frees is not counted again by the second. The preview's
+its own command, so a gigabyte the first frees is not counted again by the second.
+
+A reset that ran to its end settles both rows, because it removes everything the cleanup removes. A
+cleanup settles only its own row, and the reset is still offered. The preview's
 totals count the store's overhead once, however many of the two rows are chosen.
 
 ### What is protected

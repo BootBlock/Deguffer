@@ -48,12 +48,12 @@ public sealed class CleanupPlanner
     }
 
     /// <summary>
-    /// The sources verified by hand in §4.1 and §4.2, plus pip, Poetry, pre-commit's hook environments, Cargo, Go, Zig, Deno, Electron's downloads, TypeScript's typings, ccache, sccache,
+    /// The sources verified by hand in §4.1 and §4.2, plus pip, pipenv, Poetry, pre-commit's hook environments, Cargo, Go, Zig, Deno, Electron's downloads, TypeScript's typings, the task caches Nx keeps in the profile and in each workspace, ccache, sccache,
     /// Maven, vcpkg, pnpm, Yarn 1, Bun, Composer, Arduino's downloads and build cache, conda, Playwright, Puppeteer, the browsers VS Code extensions download for themselves, the browser profiles test runners leave in the
     /// temporary folders, the GPU shader caches, the Chromium application caches and the offline storage sites keep beside them, the Firefox
     /// profile caches, the Epic Games launcher's store cache and its own logs, the Battle.net
     /// launcher's cache and its logs, the Steam client's
-    /// HTTP cache and the shader caches it downloads per game, the Unreal Engine derived data cache every project shares, the Unity Editor's shared GI cache, the Spotify desktop app's streaming cache, the transcoder leftovers of Plex, Jellyfin and Emby, Affinity's machine-learning models, Capture One's previews, DaVinci Resolve's render cache, the media cache Adobe's video and audio applications share, the textures the Redshift renderer converted, the Squirrel updater's staging and the builds it superseded, the Dart analysis
+    /// HTTP cache and the shader caches it downloads per game, the Unreal Engine derived data cache every project shares, the Unity Editor's shared GI cache, the Spotify desktop app's streaming cache, the transcoder leftovers of Plex, Jellyfin and Emby, Affinity's machine-learning models, Capture One's previews, DaVinci Resolve's render cache, the media cache Adobe's video and audio applications share, the textures the Redshift renderer converted, the Squirrel updater's staging and the builds it superseded, the firmware package zips STM32CubeMX keeps beside the packages it unpacked, the Dart analysis
     /// server's byte store, Roslyn's solution indexes, the Azure Functions Core Tools releases Visual Studio downloads, the driver packages graphics driver installers leave behind, what
     /// Claude Code's sessions leave behind, its conversations, its rewind snapshots and the logs of the MCP servers it runs, the
     /// caches, installer downloads and logs named tools leave in the temporary folders, the
@@ -64,7 +64,7 @@ public sealed class CleanupPlanner
     /// <c>docs/cache-locations.md</c>.
     ///
     /// Tier 1 throughout except Unity, Unreal's per-project intermediate files and derived data, Cargo's per-project target, node_modules, Python virtual
-    /// environments, conda, Maven, vcpkg, Steam's shader caches, the shared Unreal Engine derived data cache, Unity's GI cache, Affinity's models, Capture One's previews, DaVinci Resolve's render cache, PlatformIO, Playwright, Puppeteer, the Azure Functions Core Tools
+    /// environments, conda, Maven, vcpkg, Steam's shader caches, the shared Unreal Engine derived data cache, Unity's GI cache, Affinity's models, Capture One's previews, DaVinci Resolve's render cache, PlatformIO, the STM32Cube firmware zips, Playwright, Puppeteer, the Azure Functions Core Tools
     /// releases, the graphics driver installer files, the installer downloads in the temporary folders, the superseded Squirrel builds, the local copies of cloud files and the component store's cleanup, which are Tier 2, and the
     /// Recycle Bins, the component store's reset, the File History target, the crash dumps, the servicing logs, the Epic
     /// launcher's logs, the VS Code logs, the tool logs in the temporary folders, and Claude Code's conversations, rewind snapshots and MCP server logs, which are Tier 3. Neither tier is ever
@@ -199,6 +199,7 @@ public sealed class CleanupPlanner
         new ToxEnvironmentProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
         new NoxEnvironmentProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
         new DartToolProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+        new NxWorkspaceCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
         new GitLfsObjectProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
     ];
 
@@ -242,6 +243,10 @@ public sealed class CleanupPlanner
         // and the cleanup and the reset ask it the same question.
         var componentStore = new ComponentStoreAnalysis(SystemDirectories.Current, ProcessRunner.Default);
 
+        // One record of what each of the store's cleanups left, because the reset settles the cleanup's
+        // row as well as its own, within the session as across sessions.
+        var componentStoreSettlement = new ComponentStoreSettlement(environment);
+
         // One walk for the two rows inside every Chromium user-data folder, on the same reasoning: each
         // lists every directory below both application-data roots to find the folders, and the folders
         // are the same for both.
@@ -266,6 +271,7 @@ public sealed class CleanupPlanner
             new UvCacheProvider(environment, scanner: scanner),
             new PipCacheProvider(environment, scanner: scanner),
             new PoetryCacheProvider(environment, declarations: declarations, scanner: scanner),
+            new PipenvCacheProvider(environment, declarations: declarations, scanner: scanner),
             new CondaCacheProvider(environment, scanner: scanner),
             new PreCommitStoreProvider(environment, scanner: scanner),
             new CargoCacheProvider(environment, scanner: scanner),
@@ -274,6 +280,7 @@ public sealed class CleanupPlanner
             new DenoCacheProvider(environment, scanner: scanner),
             new ElectronCacheProvider(environment, scanner: scanner),
             new TypeScriptTypingsCacheProvider(environment, liveTrees: liveTrees, scanner: scanner),
+            new NxSharedCacheProvider(environment, scanner: scanner, liveTrees: liveTrees),
             new CcacheProvider(environment, scanner: scanner),
             new SccacheProvider(environment, scanner: scanner),
             microsoftSymbols,
@@ -313,6 +320,7 @@ public sealed class CleanupPlanner
             new CapCutCacheProvider(environment, scanner: scanner),
             new SquirrelStagingProvider(environment, discovery: squirrel, liveTrees: liveTrees, scanner: scanner),
             new PlatformIoCacheProvider(environment, scanner: scanner),
+            new Stm32CubeFirmwareZipProvider(environment, scanner: scanner),
             new PlaywrightBrowsersProvider(environment, liveTrees: liveTrees, scanner: scanner),
             new PuppeteerBrowsersProvider(environment, liveTrees: liveTrees, scanner: scanner),
             new VsCodeExtensionBrowsersProvider(environment, liveTrees: liveTrees, scanner: scanner),
@@ -344,8 +352,8 @@ public sealed class CleanupPlanner
             new UpgradeDiscardedFilesProvider(handlers, environment, scanner: scanner),
             new WindowsUpdateLeftoverProvider(environment, scanner: scanner),
             new DriverStoreProvider(handlers, environment, scanner: hardLinks),
-            new ComponentStoreCleanupProvider(environment, analysis: componentStore, scanner: scanner),
-            new ComponentStoreResetBaseProvider(environment, analysis: componentStore, scanner: scanner),
+            new ComponentStoreCleanupProvider(environment, analysis: componentStore, scanner: scanner, settlement: componentStoreSettlement),
+            new ComponentStoreResetBaseProvider(environment, analysis: componentStore, scanner: scanner, settlement: componentStoreSettlement),
             new RestorePointProvider(WindowsSystemProtection.Default, environment, scanner: scanner),
             new OtherAccountProfilesProvider(WindowsUserProfiles.Default, environment, scanner: scanner),
             new CrashDumpProvider(environment, scanner: scanner),

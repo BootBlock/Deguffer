@@ -81,7 +81,7 @@ internal sealed class DeliveryOptimizationCache : IToolMeasurement
                     : $"Windows answered '{outcome.StandardOutput.Trim()}', which is not a size.");
     }
 
-    public async Task<long?> MeasureAsync(CancellationToken ct) => (await ReadAsync(ct).ConfigureAwait(false)).Bytes;
+    public async Task<long?> MeasureAsync(MeasuredWhen when, CancellationToken ct) => (await ReadAsync(ct).ConfigureAwait(false)).Bytes;
 }
 
 /// <summary>What Windows said its Delivery Optimization cache holds.</summary>

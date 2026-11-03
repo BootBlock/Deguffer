@@ -25,8 +25,9 @@ public sealed class ComponentStoreResetBaseProvider(
     IWindowsServicing? servicing = null,
     ComponentStoreAnalysis? analysis = null,
     IDirectoryScanner? scanner = null,
-    OwnServicingCalls? servicingCalls = null)
-    : ComponentStoreProviderBase(environment, runner, inspector, system, servicing, analysis, scanner, servicingCalls)
+    OwnServicingCalls? servicingCalls = null,
+    ComponentStoreSettlement? settlement = null)
+    : ComponentStoreProviderBase(environment, runner, inspector, system, servicing, analysis, scanner, servicingCalls, settlement)
 {
     public override string Id => "component-store-reset-base";
 
@@ -53,6 +54,8 @@ public sealed class ComponentStoreResetBaseProvider(
             + "matters more than being able to remove one. Windows does the reset with its own command, and "
             + "Deguffer never deletes from the store.",
     };
+
+    protected override ComponentStoreCommand Command => ComponentStoreCommand.ResetBase;
 
     protected override string CleanupArguments => "/StartComponentCleanup /ResetBase";
 
