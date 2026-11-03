@@ -644,6 +644,30 @@ public sealed class CleanupPlannerTests
     }
 
     /// <summary>
+    /// Every default row that examines the temporary folders reads them through one listing, so a pass
+    /// lists each folder once rather than once per row. Asked of each row's own listing, because the one
+    /// a row was built with is what it examines with.
+    /// </summary>
+    [Fact]
+    public void TheDefaultTemporaryFolderRowsShareOneListing()
+    {
+        using var temp = new TempDirectory();
+        var planner = CleanupPlanner.CreateDefault(
+            liveTrees: FakeLiveTreeInspector.NothingLive,
+            environment: new FakeUserEnvironment(temp.Path));
+
+        var listings = planner.Providers
+            .OfType<TempMarkerProviderBase>()
+            .Select(provider => typeof(TempMarkerProviderBase)
+                .GetField("_listings", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                .GetValue(provider))
+            .ToList();
+
+        Assert.Equal(4, listings.Count);
+        Assert.Single(listings.Distinct(ReferenceEqualityComparer.Instance));
+    }
+
+    /// <summary>
     /// The default is §7's strict rule, so a caller that never mentions the preference still gets
     /// the typed phrase demanded of it. Forgetting to pass it has to fail closed, not open.
     /// </summary>

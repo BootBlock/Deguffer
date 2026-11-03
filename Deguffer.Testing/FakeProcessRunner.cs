@@ -14,8 +14,23 @@ namespace Deguffer.Testing;
 public sealed class FakeProcessRunner : IProcessRunner
 {
     private readonly Dictionary<string, Program> _programs = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<Invocation> _invocations = [];
+    private readonly Lock _recording = new();
 
-    public List<Invocation> Invocations { get; } = [];
+    /// <summary>
+    /// Every run so far in the order each started, as a copy, because code under test may start its
+    /// runs from several threads at once.
+    /// </summary>
+    public IReadOnlyList<Invocation> Invocations
+    {
+        get
+        {
+            lock (_recording)
+            {
+                return [.. _invocations];
+            }
+        }
+    }
 
     /// <summary>
     /// Reply per invocation of <paramref name="fileName"/>, returning null to fall through to its
@@ -48,6 +63,17 @@ public sealed class FakeProcessRunner : IProcessRunner
     }
 
     /// <summary>
+    /// Keep each run of <paramref name="fileName"/> whose arguments contain
+    /// <paramref name="argumentMatch"/> open until <paramref name="held"/> releases it, then reply as
+    /// the program's other replies say. A run that matches no hold replies at once.
+    /// </summary>
+    public FakeProcessRunner Holding(string fileName, string argumentMatch, HeldRuns held)
+    {
+        For(fileName).Holds.Add((argumentMatch, held));
+        return this;
+    }
+
+    /// <summary>
     /// Keeps <see cref="IProcessRunner.RunAsync"/>'s promise about cancellation, so code under test
     /// meets the same contract the real runner keeps: nothing starts once the run is cancelled, and a
     /// reply given after a cancellation is thrown away for a tool that is
@@ -58,7 +84,32 @@ public sealed class FakeProcessRunner : IProcessRunner
     {
         ct.ThrowIfCancellationRequested();
 
-        var outcome = await Task.FromResult(Reply(fileName, arguments, run)).ConfigureAwait(false);
+        lock (_recording)
+        {
+            _invocations.Add(new Invocation(fileName, arguments, run));
+        }
+
+        var program = ProgramFor(fileName, arguments);
+        var held = program.HoldFor(arguments);
+        CommandOutcome outcome;
+
+        if (held is null)
+        {
+            outcome = program.ReplyTo(arguments, run);
+        }
+        else
+        {
+            await held.EnterAsync().ConfigureAwait(false);
+
+            try
+            {
+                outcome = program.ReplyTo(arguments, run);
+            }
+            finally
+            {
+                held.Leave();
+            }
+        }
 
         if (run.WhenCancelled is CancelledCommand.Ended)
         {
@@ -68,32 +119,12 @@ public sealed class FakeProcessRunner : IProcessRunner
         return outcome;
     }
 
-    private CommandOutcome Reply(string fileName, string arguments, ToolRun run)
-    {
-        Invocations.Add(new Invocation(fileName, arguments, run));
-
-        if (!_programs.TryGetValue(fileName, out var program))
-        {
-            throw new InvalidOperationException(
+    private Program ProgramFor(string fileName, string arguments) =>
+        _programs.TryGetValue(fileName, out var program)
+            ? program
+            : throw new InvalidOperationException(
                 $"'{fileName}' was run with '{arguments}', and no reply is set for that program. "
                 + $"Replies are set for: {(_programs.Count == 0 ? "no program" : string.Join(", ", _programs.Keys.Select(k => $"'{k}'")))}.");
-        }
-
-        if (program.Reply?.Invoke(arguments, run) is { } replied)
-        {
-            return replied;
-        }
-
-        foreach (var (match, outcome) in program.Responses)
-        {
-            if (arguments.Contains(match, StringComparison.OrdinalIgnoreCase))
-            {
-                return outcome;
-            }
-        }
-
-        return new CommandOutcome(0, string.Empty, string.Empty);
-    }
 
     private Program For(string fileName)
     {
@@ -110,6 +141,29 @@ public sealed class FakeProcessRunner : IProcessRunner
         public Dictionary<string, CommandOutcome> Responses { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         public Func<string, ToolRun, CommandOutcome?>? Reply { get; set; }
+
+        public List<(string ArgumentMatch, HeldRuns Held)> Holds { get; } = [];
+
+        public HeldRuns? HoldFor(string arguments) =>
+            Holds.FirstOrDefault(hold => arguments.Contains(hold.ArgumentMatch, StringComparison.OrdinalIgnoreCase)).Held;
+
+        public CommandOutcome ReplyTo(string arguments, ToolRun run)
+        {
+            if (Reply?.Invoke(arguments, run) is { } replied)
+            {
+                return replied;
+            }
+
+            foreach (var (match, outcome) in Responses)
+            {
+                if (arguments.Contains(match, StringComparison.OrdinalIgnoreCase))
+                {
+                    return outcome;
+                }
+            }
+
+            return new CommandOutcome(0, string.Empty, string.Empty);
+        }
     }
 }
 

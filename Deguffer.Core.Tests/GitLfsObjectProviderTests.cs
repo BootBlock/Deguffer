@@ -134,11 +134,14 @@ public sealed class GitLfsObjectProviderTests : IDisposable
     /// git as the plan meets it: Git LFS installed, every configuration query answered from
     /// <see cref="_configuration"/> or with the <see cref="Origin"/> remote alone, every
     /// <c>git lfs env</c> from <see cref="_environments"/> or with <see cref="ServerEnvironment"/>, and
-    /// every dry run from <see cref="_dryRuns"/>.
+    /// every dry run from <see cref="_dryRuns"/>. <paramref name="answering"/> sees each run before git
+    /// answers it, so a test can decide the order git answers in.
     /// </summary>
-    private FakeProcessRunner Runner(bool lfsInstalled = true) =>
+    private FakeProcessRunner Runner(bool lfsInstalled = true, Action<string>? answering = null) =>
         new FakeProcessRunner().Replying(Git, arguments =>
         {
+            answering?.Invoke(arguments);
+
             if (arguments == "lfs version")
             {
                 return lfsInstalled
@@ -711,5 +714,171 @@ public sealed class GitLfsObjectProviderTests : IDisposable
 
         Assert.False(await provider.IsPresentAsync());
         Assert.True(await CreateProvider(Runner()).IsPresentAsync());
+    }
+
+    /// <summary>
+    /// Each store is a repository of its own and no store's answer feeds another's question, so git is
+    /// asked about several at once: every store's settings are read, and every dry run started, before
+    /// git has answered any of them. Asked one store after another, the first held run waits for a
+    /// second that cannot start until it ends. §5.6 for a plan built this way: every repository's
+    /// checkout, git directory and store, a store reached through a link, and a folder named
+    /// <c>.git</c> that is not a git directory (§5.2), all survive.
+    /// </summary>
+    [Fact]
+    public async Task AsksGitAboutSeveralStoresAtOnceAndStillProtectsEachOne()
+    {
+        string[] names = ["alpha", "bravo", "charlie"];
+        var repositories = names.Select(name => CreateRepository(_root, name, (Oid(name), 2_000))).ToList();
+        repositories.ForEach(repository => DryRunReports(Path.Combine(repository, ".git"), Report(1, Oid(Path.GetFileName(repository)))));
+        var impostor = Path.Combine(_root, "notes", ".git");
+        Directory.CreateDirectory(impostor);
+        var linked = Path.Combine(CreateRepository(_root, "delta"), ".git", "lfs");
+        var shared = Path.Combine(_temp.Path, "shared-lfs");
+        Directory.Delete(linked, recursive: true);
+        Directory.CreateDirectory(Path.Combine(shared, "objects"));
+        Junction.ToDirectory(linked, shared);
+        var settings = new HeldRuns(together: names.Length);
+        var dryRuns = new HeldRuns(together: names.Length);
+        var runner = Runner().Holding(Git, " config -z --get-regexp ", settings).Holding(Git, " lfs prune --dry-run ", dryRuns);
+
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.True(settings.StartedTogether, "The stores' settings were read one store after another.");
+        Assert.True(dryRuns.StartedTogether, "The stores' dry runs were run one store after another.");
+        Assert.Equal(names.Length, plan.Steps.OfType<RunCommandStep>().Count());
+        Assert.Empty(plan.TargetedPaths);
+
+        string[] survivors =
+        [
+            .. repositories.SelectMany(repository => new[]
+            {
+                repository,
+                Path.Combine(repository, ".git"),
+                Path.Combine(repository, ".git", "HEAD"),
+                Path.Combine(repository, ".git", "lfs", "objects"),
+            }),
+            impostor,
+            linked,
+        ];
+
+        foreach (var survivor in survivors)
+        {
+            Assert.Contains(plan.ProtectedPaths, p =>
+                p.Path.Equals(survivor, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
+        }
+    }
+
+    /// <summary>
+    /// G4: however many stores there are, git is asked about no more than the bound at once, in either
+    /// phase, and about more than one.
+    ///
+    /// <para>The lower bound is proven by order. The upper bound is not: a run that starts after the
+    /// held set is released replies at once, so a lost bound shows only where a further run starts
+    /// before the set has replied. That needs a machine with more logical processors than the bound,
+    /// because with no bound given <see cref="Parallel.ForEachAsync{TSource}(IEnumerable{TSource}, ParallelOptions, Func{TSource, CancellationToken, ValueTask})"/>
+    /// runs one body per processor, and it rests on scheduling rather than on order.</para>
+    /// </summary>
+    [Fact]
+    public async Task AsksGitAboutNoMoreStoresAtOnceThanItsBound()
+    {
+        var count = GitLfsObjectProvider.StoresAtOnce * 3;
+
+        for (var index = 0; index < count; index++)
+        {
+            var name = $"repository{index:00}";
+            DryRunReports(Path.Combine(CreateRepository(_root, name, (Oid(name), 1_000)), ".git"), Report(1, Oid(name)));
+        }
+
+        var settings = new HeldRuns(together: GitLfsObjectProvider.StoresAtOnce);
+        var dryRuns = new HeldRuns(together: GitLfsObjectProvider.StoresAtOnce);
+        var runner = Runner().Holding(Git, " config -z --get-regexp ", settings).Holding(Git, " lfs prune --dry-run ", dryRuns);
+
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.Equal(count, plan.Steps.OfType<RunCommandStep>().Count());
+        Assert.True(settings.StartedTogether);
+        Assert.True(dryRuns.StartedTogether);
+        Assert.InRange(settings.MostAtOnce, 2, GitLfsObjectProvider.StoresAtOnce);
+        Assert.InRange(dryRuns.MostAtOnce, 2, GitLfsObjectProvider.StoresAtOnce);
+    }
+
+    /// <summary>
+    /// git answers for the stores last first, in both phases, and the plan still reads in the stores'
+    /// order: the notes of those Git LFS could not describe, then of those whose dry run failed, and the
+    /// survivors of each.
+    /// </summary>
+    [Fact]
+    public async Task ThePlanReadsInTheStoresOrderWhateverOrderGitAnswersIn()
+    {
+        string[] undescribed = ["alpha", "bravo", "charlie"];
+        string[] failing = ["delta", "echo", "foxtrot"];
+        string[] names = [.. undescribed, .. failing];
+        var gitDirectories = names.ToDictionary(name => name, name => Path.Combine(CreateRepository(_root, name, (Oid(name), 1_000)), ".git"));
+
+        foreach (var name in undescribed)
+        {
+            Described(gitDirectories[name], $"Error: {name} is not a git repository", exitCode: 2);
+        }
+
+        foreach (var name in failing)
+        {
+            DryRunReports(gitDirectories[name], $"Prune error: {name} cannot resolve HEAD", exitCode: 2);
+        }
+
+        var environments = new LastFirst(" lfs env", [.. undescribed.Select(name => gitDirectories[name])]);
+        var dryRuns = new LastFirst(" lfs prune --dry-run ", [.. failing.Select(name => gitDirectories[name])]);
+
+        var plan = await CreateProvider(Runner(answering: arguments =>
+        {
+            environments.Answer(arguments);
+            dryRuns.Answer(arguments);
+        })).PlanAsync();
+
+        Assert.True(plan.IsEmpty);
+
+        string[] said = [.. undescribed.Select(name => $"{name} is not a git repository"), .. failing.Select(name => $"{name} cannot resolve HEAD")];
+        var notes = plan.Notes.ToList();
+        var noted = said.Select(text => notes.FindIndex(n => n.Message.Contains(text, StringComparison.Ordinal))).ToList();
+        Assert.DoesNotContain(-1, noted);
+        Assert.Equal(noted.Order(), noted);
+
+        var protectedPaths = plan.ProtectedPaths.ToList();
+        var stores = names.Select(name => protectedPaths.FindIndex(p =>
+            p.Path.Equals(Path.Combine(gitDirectories[name], "lfs"), StringComparison.OrdinalIgnoreCase))).ToList();
+        Assert.DoesNotContain(-1, stores);
+        Assert.Equal(stores.Order(), stores);
+    }
+
+    /// <summary>
+    /// Holds git's reply to <paramref name="command"/> for each of <paramref name="gitDirectories"/>
+    /// until the one after it has been answered, so git answers for them last first. Asked one after
+    /// another, the first waits for one that cannot be asked until it ends, and the test fails.
+    /// </summary>
+    private sealed class LastFirst(string command, IReadOnlyList<string> gitDirectories)
+    {
+        private readonly ManualResetEventSlim[] _answered = [.. gitDirectories.Select(_ => new ManualResetEventSlim())];
+
+        public void Answer(string arguments)
+        {
+            if (!arguments.Contains(command, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            var asked = GitDirectoryIn(arguments);
+            var index = gitDirectories.Select(Forward).ToList().FindIndex(d => d.Equals(asked, StringComparison.OrdinalIgnoreCase));
+
+            if (index < 0)
+            {
+                return;
+            }
+
+            if (index + 1 < gitDirectories.Count && !_answered[index + 1].Wait(HeldRuns.DefaultDeadline))
+            {
+                throw new TimeoutException($"git was not asked '{command}' of {gitDirectories[index + 1]} while {gitDirectories[index]} waited.");
+            }
+
+            _answered[index].Set();
+        }
     }
 }
