@@ -109,9 +109,8 @@ public sealed partial class CloseMessageTests
         // Every line of code that names the call is the declaration or a call with one plain flag.
         // Anything else, a flag combined with a force flag or the call taken as a delegate included,
         // is a line here that matches neither. Comments are left out, because they name it in prose.
-        var code = source
-            .Split('\n')
-            .Where(line => SessionEndMention().IsMatch(line) && !line.TrimStart().StartsWith("//", StringComparison.Ordinal))
+        var code = ProductSources.Code(source)
+            .Where(line => SessionEndMention().IsMatch(line))
             .ToList();
 
         Assert.Equal(4, code.Count);
@@ -157,7 +156,8 @@ public sealed partial class CloseMessageTests
     /// is <c>TerminateProcess</c>, <c>CloseMainWindow</c> is a posted close Deguffer did not choose the
     /// window for, <c>SendKeys</c> is <c>SendInput</c>, WMI's <c>Win32_Process.Terminate</c> arrives
     /// through <c>System.Management</c>, and <c>NativeLibrary</c> reaches any export by name without a
-    /// declaration at all. <c>GetProcessById</c> is the handle every one of them starts from.
+    /// declaration at all. <c>GetProcessById</c> hands over another program's <c>Process</c>, which is
+    /// where a <c>Kill</c> or a <c>CloseMainWindow</c> would start.
     ///
     /// <para>Matched on code, not comments, because the comments explain why these are not used.</para>
     /// </summary>
@@ -165,7 +165,7 @@ public sealed partial class CloseMessageTests
     public void NoManagedRouteEndsOrCommandsAnotherProgram()
     {
         var used = ProductSources.Files()
-            .SelectMany(file => Code(File.ReadAllText(file))
+            .SelectMany(file => ProductSources.Code(File.ReadAllText(file))
                 .SelectMany(line => ManagedRoute().Matches(line))
                 .Select(match => (Route: match.Groups["route"].Value, File: Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file))))
             .Where(use => !NativeLibraryAllowance(use.Route, use.File))
@@ -187,7 +187,7 @@ public sealed partial class CloseMessageTests
     [Fact]
     public void TheOnlyLibraryLoadedByNameRemovesARestorePoint()
     {
-        var code = string.Join('\n', Code(File.ReadAllText(Path.Combine(MarkdownGuide.RepositoryRoot, RestorePointCalls))));
+        var code = string.Join('\n', ProductSources.Code(File.ReadAllText(Path.Combine(MarkdownGuide.RepositoryRoot, RestorePointCalls))));
 
         Assert.Equal(["\"SRRemoveRestorePoint\""], ExportLoaded().Matches(code).Select(match => match.Groups["export"].Value.Trim()));
     }
@@ -197,30 +197,6 @@ public sealed partial class CloseMessageTests
 
     private static bool NativeLibraryAllowance(string route, string file) =>
         route == "NativeLibrary" && file == RestorePointCalls;
-
-    /// <summary>The lines of <paramref name="source"/> that are code, every comment line left out.</summary>
-    private static IEnumerable<string> Code(string source)
-    {
-        var inBlock = false;
-
-        foreach (var line in source.Split('\n'))
-        {
-            var trimmed = line.TrimStart();
-
-            if (inBlock)
-            {
-                inBlock = !trimmed.Contains("*/", StringComparison.Ordinal);
-            }
-            else if (trimmed.StartsWith("/*", StringComparison.Ordinal))
-            {
-                inBlock = !trimmed.Contains("*/", StringComparison.Ordinal);
-            }
-            else if (!trimmed.StartsWith("//", StringComparison.Ordinal))
-            {
-                yield return line;
-            }
-        }
-    }
 
     private static string Core =>
         Path.Combine(MarkdownGuide.RepositoryRoot, "Deguffer.Core");
