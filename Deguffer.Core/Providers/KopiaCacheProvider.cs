@@ -117,7 +117,8 @@ public sealed class KopiaCacheProvider : CleanupProviderBase
 
     /// <summary>
     /// Each cache folder recognises only the folders Kopia caches into, and nothing at all while Kopia
-    /// runs. Each connection file is refused wherever <see cref="KopiaCacheLayout.ConfigVariable"/> put it.
+    /// runs. Each connection file, and the password file Kopia may keep beside it, is refused wherever
+    /// <see cref="KopiaCacheLayout.ConfigVariable"/> put it.
     /// </summary>
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
@@ -138,7 +139,10 @@ public sealed class KopiaCacheProvider : CleanupProviderBase
                 .Select(folder => ToolRoot.Sparing(
                     folder,
                     ConfigReason,
-                    layout.ConnectionFiles.Where(file => Path.GetDirectoryName(file)!.Equals(folder, StringComparison.OrdinalIgnoreCase)).Select(file => Path.GetFileName(file)))),
+                    layout.ConnectionFiles
+                        .Where(file => Path.GetDirectoryName(file)!.Equals(folder, StringComparison.OrdinalIgnoreCase))
+                        .SelectMany(file => new[] { file, KopiaCacheLayout.PasswordFileOf(file) })
+                        .Select(file => Path.GetFileName(file)))),
         ]);
     }
 
@@ -155,7 +159,7 @@ public sealed class KopiaCacheProvider : CleanupProviderBase
     /// wrote it, and nothing here runs Kopia.
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(Layout.Caches.Any(cache => KopiaCacheLayout.Children.DisposableNames
+        Task.FromResult(Layout.Unreadable.Count > 0 || Layout.Caches.Any(cache => KopiaCacheLayout.Children.DisposableNames
             .Any(child => LongPath.DirectoryMayExist(Path.Combine(cache, child)))));
 
     /// <summary>The connection files, the variables and the disk can all change between one scan and the next.</summary>
@@ -170,6 +174,15 @@ public sealed class KopiaCacheProvider : CleanupProviderBase
         var layout = Layout;
         var notes = new List<PlanNote>(layout.Notes);
 
+        if (layout.Caches.Count == 0 && layout.Unreadable.Count > 0)
+        {
+            return EmptyPlan(UnreadableRoot.WhyItCouldNotBeReached(layout.Unreadable[0])) with
+            {
+                Notes = notes,
+                HasUnreadableRoot = true,
+            };
+        }
+
         if (layout.Caches.Count == 0)
         {
             return notes.Count > 0
@@ -182,7 +195,7 @@ public sealed class KopiaCacheProvider : CleanupProviderBase
         var targets = new List<DeletionTarget>();
         var survivors = new List<(string Path, string Reason)>();
         var held = new List<(string Path, string Reason)>();
-        var unreadable = false;
+        var unreadable = layout.Unreadable.Count > 0;
         var declined = false;
 
         foreach (var cache in layout.Caches)
@@ -240,7 +253,11 @@ public sealed class KopiaCacheProvider : CleanupProviderBase
             [
                 .. held,
                 (KopiaCacheLayout.ConfigFolder(Environment), "Kopia's configuration folder, with your connections to your repositories."),
-                .. layout.ConnectionFiles.Select(file => (file, "A Kopia connection: where a repository is and how to reach it.")),
+                .. layout.ConnectionFiles.SelectMany(file => new[]
+                {
+                    (file, "A Kopia connection: where a repository is and how to reach it."),
+                    (KopiaCacheLayout.PasswordFileOf(file), "The password Kopia keeps for this connection where Windows does not keep it."),
+                }),
                 (KopiaCacheLayout.LocalFolder(Environment), "Kopia's folder for its caches and its logs."),
                 .. survivors,
             ]),

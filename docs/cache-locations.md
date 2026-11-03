@@ -6496,7 +6496,9 @@ before they act, which needs its password and a connection to wherever the backu
 
 ### What is protected
 
-`%APPDATA%\kopia` and every connection file, which are never searched for anything to remove.
+`%APPDATA%\kopia`, every connection file wherever `KOPIA_CONFIG_PATH` puts it, and the
+`.kopia-password` file Kopia may keep beside each, none of which is ever searched for anything to
+remove.
 `%LOCALAPPDATA%\kopia` and the logs in it, each cache folder, the format records and the
 `CACHEDIR.TAG` Kopia keeps as files in it, and anything else Deguffer does not recognise. A link is
 left alone. A cache folder a connection records that is a drive root, a folder of your own or a

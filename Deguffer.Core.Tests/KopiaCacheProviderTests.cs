@@ -252,6 +252,59 @@ public sealed class KopiaCacheProviderTests : IDisposable
         Assert.Equal(0, result.BytesReclaimed);
     }
 
+    /// <summary>
+    /// A folder Windows will not describe is not an empty one: a cache may be in it, so the row appears and
+    /// says it could not look, rather than report that Kopia cached nothing.
+    /// </summary>
+    [Fact]
+    public async Task AKopiaFolderWindowsWillNotDescribeIsReportedRatherThanReadAsEmpty()
+    {
+        CreateCache();
+        using var denied = DeniedDirectory.WithUnreadableAttributes(LocalFolder);
+
+        var provider = CreateProvider();
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.HasUnreadableRoot);
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("cached nothing", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A connection the command line keeps elsewhere still has its password beside it, and both are refused
+    /// in Explore and asserted to survive. The rest of that folder is the user's, and stays open.
+    /// </summary>
+    [Fact]
+    public async Task AConnectionKeptElsewhereIsRefusedWithItsPassword()
+    {
+        CreateCache();
+        var folder = Path.Combine(_temp.Path, "backup-settings");
+        Directory.CreateDirectory(folder);
+        var connection = Path.Combine(folder, "nas.config");
+        File.WriteAllText(connection, $$"""{ "caching": { "cacheDirectory": {{System.Text.Json.JsonSerializer.Serialize(Cache)}} } }""");
+        var password = connection + ".kopia-password";
+        File.WriteAllText(password, "<YOUR_PASSWORD>");
+        var mine = Path.Combine(folder, "notes.txt");
+        File.WriteAllText(mine, "mine");
+        _environment.WithEnvironmentVariable(KopiaCacheLayout.ConfigVariable, connection);
+
+        var provider = CreateProvider();
+        var policy = new ExploreActionPolicy(
+            [], provider.ToolRoots, new FakeVolumeInventory(), probedRoots: await provider.DiscoverToolRootsAsync());
+
+        Assert.False(policy.MayRemove(connection).IsAllowed);
+        Assert.False(policy.MayRemove(password).IsAllowed);
+        Assert.True(policy.MayRemove(mine).IsAllowed);
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(connection, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(password, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
+    }
+
     [Fact]
     public async Task CleanedPlacesCoverEveryPathThePlanCleans()
     {

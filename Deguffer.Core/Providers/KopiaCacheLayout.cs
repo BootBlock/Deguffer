@@ -28,11 +28,16 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 /// <param name="Caches">Every cache folder found, in display form.</param>
 /// <param name="ConnectionFiles">Every connection file read, in display form.</param>
-/// <param name="Notes">A cache folder a connection file names that is declined, and why.</param>
+/// <param name="Notes">A cache folder a connection file names that is declined, and a folder Windows would not list.</param>
+/// <param name="Unreadable">
+/// The configuration folder or the local folder, where Windows would not list it. Neither is an empty
+/// folder: a cache or a connection may be in it.
+/// </param>
 internal sealed partial record KopiaCacheLayout(
     IReadOnlyList<string> Caches,
     IReadOnlyList<string> ConnectionFiles,
-    IReadOnlyList<PlanNote> Notes)
+    IReadOnlyList<PlanNote> Notes,
+    IReadOnlyList<string> Unreadable)
 {
     /// <summary>Names the connection file the command line uses (<c>--config-file</c>).</summary>
     public const string ConfigVariable = "KOPIA_CONFIG_PATH";
@@ -43,6 +48,9 @@ internal sealed partial record KopiaCacheLayout(
     private const string ConnectionSuffix = ".config";
 
     private const string DefaultConnection = "repository.config";
+
+    /// <summary>What Kopia appends to a connection file's name for the file it keeps the password in (<c>passwordpersist</c>).</summary>
+    private const string PasswordSuffix = ".kopia-password";
 
     /// <summary>A connection file is a few kilobytes. Anything far larger is not one.</summary>
     private const int MaximumConnectionBytes = 1024 * 1024;
@@ -93,6 +101,12 @@ internal sealed partial record KopiaCacheLayout(
     /// <summary>The folder Kopia keeps its caches and its logs in.</summary>
     public static string LocalFolder(IUserEnvironment environment) => Path.Combine(environment.LocalAppData, "kopia");
 
+    /// <summary>
+    /// The file Kopia keeps <paramref name="connection"/>'s repository password in beside it, where the
+    /// Windows credential store was not used.
+    /// </summary>
+    public static string PasswordFileOf(string connection) => connection + PasswordSuffix;
+
     /// <summary>Whether <paramref name="name"/> is a cache folder as Kopia names one in <see cref="LocalFolder"/>.</summary>
     public static bool IsCacheName(string name) => CacheName().IsMatch(name);
 
@@ -100,7 +114,8 @@ internal sealed partial record KopiaCacheLayout(
     public static KopiaCacheLayout Find(IUserEnvironment environment, ISystemDirectories machine, IVolumeInventory volumes)
     {
         var notes = new List<PlanNote>();
-        var connections = ConnectionFilesOf(environment);
+        var unreadable = new List<string>();
+        var connections = ConnectionFilesOf(environment, unreadable, notes);
         var named = new List<string>();
 
         foreach (var connection in connections)
@@ -140,11 +155,11 @@ internal sealed partial record KopiaCacheLayout(
         }
 
         caches.AddRange(
-            (FolderEntries.Of(local) ?? [])
+            Listed(local, unreadable, notes)
                 .Where(entry => entry is DirectoryInfo && IsCacheName(entry.Name) && !entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
                 .Select(entry => LongPath.Display(entry.FullName)));
 
-        return new KopiaCacheLayout([.. caches.Distinct(StringComparer.OrdinalIgnoreCase)], connections, notes);
+        return new KopiaCacheLayout([.. caches.Distinct(StringComparer.OrdinalIgnoreCase)], connections, notes, unreadable);
     }
 
     /// <summary>
@@ -152,10 +167,10 @@ internal sealed partial record KopiaCacheLayout(
     /// <see cref="ConfigVariable"/> names for the command line: a bare file name in the configuration
     /// folder, or a full path.
     /// </summary>
-    private static IReadOnlyList<string> ConnectionFilesOf(IUserEnvironment environment)
+    private static IReadOnlyList<string> ConnectionFilesOf(IUserEnvironment environment, List<string> unreadable, List<PlanNote> notes)
     {
         var folder = ConfigFolder(environment);
-        var files = (FolderEntries.Of(folder) ?? [])
+        var files = Listed(folder, unreadable, notes)
             .Where(entry => entry is FileInfo && entry.Name.EndsWith(ConnectionSuffix, StringComparison.OrdinalIgnoreCase))
             .Select(entry => LongPath.Display(entry.FullName))
             .ToList();
@@ -196,6 +211,27 @@ internal sealed partial record KopiaCacheLayout(
         // Configured resolves the '..' Kopia writes to reach the local folder from the roaming one, and
         // answers null for a value no full path can be made of.
         return LongPath.Configured(Path.Combine(Path.GetDirectoryName(connection)!, recorded));
+    }
+
+    /// <summary>
+    /// What <paramref name="folder"/> holds, or nothing where it is not there. A folder Windows would not
+    /// list is recorded and named instead, because it is not an empty folder (§5.3).
+    /// </summary>
+    private static IReadOnlyList<FileSystemInfo> Listed(string folder, List<string> unreadable, List<PlanNote> notes)
+    {
+        if (FolderEntries.Of(folder) is { } entries)
+        {
+            return entries;
+        }
+
+        unreadable.Add(folder);
+
+        // "Could not list" says the folder is there, which a folder Windows would not describe never showed.
+        notes.Add(LongPath.ProbeDirectory(folder) is PathPresence.Refused
+            ? UnreadableRoot.UnreachedNote(folder)
+            : UnreadableRoot.Note(folder));
+
+        return [];
     }
 
     private static bool IsInside(string folder, string candidate) =>
