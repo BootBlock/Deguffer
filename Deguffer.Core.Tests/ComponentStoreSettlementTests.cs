@@ -27,7 +27,7 @@ public sealed class ComponentStoreSettlementTests : IDisposable
     [Fact]
     public void ARecordIsReadBackByTheNextSession()
     {
-        Assert.True(new ComponentStoreSettlement(_environment).Record(ComponentStoreCommand.Cleanup, Store));
+        new ComponentStoreSettlement(_environment).Record(ComponentStoreCommand.Cleanup, Store);
 
         var next = new ComponentStoreSettlement(_environment);
 
@@ -56,14 +56,18 @@ public sealed class ComponentStoreSettlementTests : IDisposable
         Assert.All(changed, state => Assert.False(settlement.HasSettled(ComponentStoreCommand.ResetBase, state)));
     }
 
-    /// <summary>A file this store would not write is no record, never part of one.</summary>
+    /// <summary>
+    /// A file this store would not write is no record, never part of one. Each case but the torn and
+    /// the null one carries a valid entry for the cleanup beside its fault, so it passes only where the
+    /// whole file is refused.
+    /// </summary>
     [Theory]
     [InlineData("{ \"format\": 1, \"left\": { \"Cleanup\": { \"explorerSize\": 1")]
     [InlineData("{ \"format\": 2, \"left\": { \"Cleanup\": { \"explorerSize\": 1, \"actualSize\": 1, \"sharedWithWindows\": 0, \"backupsAndDisabledFeatures\": 0, \"cacheAndTemporaryData\": 0, \"reclaimablePackages\": 0 } } }")]
     [InlineData("{ \"format\": 1, \"left\": { \"Cleanup\": { \"explorerSize\": 1, \"actualSize\": 1, \"sharedWithWindows\": 0, \"backupsAndDisabledFeatures\": 0, \"cacheAndTemporaryData\": 0 } } }")]
     [InlineData("{ \"format\": 1, \"left\": { \"Cleanup\": { \"explorerSize\": 1, \"actualSize\": 1, \"sharedWithWindows\": 0, \"backupsAndDisabledFeatures\": 0, \"cacheAndTemporaryData\": 0, \"reclaimablePackages\": 0 }, \"Repair\": { \"explorerSize\": 1, \"actualSize\": 1, \"sharedWithWindows\": 0, \"backupsAndDisabledFeatures\": 0, \"cacheAndTemporaryData\": 0, \"reclaimablePackages\": 0 } } }")]
-    [InlineData("{ \"format\": 1, \"left\": { \"1\": { \"explorerSize\": 1, \"actualSize\": 1, \"sharedWithWindows\": 0, \"backupsAndDisabledFeatures\": 0, \"cacheAndTemporaryData\": 0, \"reclaimablePackages\": 0 } } }")]
-    [InlineData("{ \"format\": 1, \"left\": { \"Cleanup\": { \"explorerSize\": 1, \"actualSize\": -1, \"sharedWithWindows\": 0, \"backupsAndDisabledFeatures\": 0, \"cacheAndTemporaryData\": 0, \"reclaimablePackages\": 0 } } }")]
+    [InlineData("{ \"format\": 1, \"left\": { \"Cleanup\": { \"explorerSize\": 1, \"actualSize\": 1, \"sharedWithWindows\": 0, \"backupsAndDisabledFeatures\": 0, \"cacheAndTemporaryData\": 0, \"reclaimablePackages\": 0 }, \"1\": { \"explorerSize\": 1, \"actualSize\": 1, \"sharedWithWindows\": 0, \"backupsAndDisabledFeatures\": 0, \"cacheAndTemporaryData\": 0, \"reclaimablePackages\": 0 } } }")]
+    [InlineData("{ \"format\": 1, \"left\": { \"Cleanup\": { \"explorerSize\": 1, \"actualSize\": 1, \"sharedWithWindows\": 0, \"backupsAndDisabledFeatures\": 0, \"cacheAndTemporaryData\": 0, \"reclaimablePackages\": 0 }, \"ResetBase\": { \"explorerSize\": 1, \"actualSize\": -1, \"sharedWithWindows\": 0, \"backupsAndDisabledFeatures\": 0, \"cacheAndTemporaryData\": 0, \"reclaimablePackages\": 0 } } }")]
     [InlineData("{ \"format\": 1, \"left\": { \"Cleanup\": null } }")]
     public void AFileThisStoreWouldNotWriteIsNoRecord(string contents)
     {

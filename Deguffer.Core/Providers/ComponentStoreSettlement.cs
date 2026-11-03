@@ -63,10 +63,9 @@ public sealed class ComponentStoreSettlement
     /// <summary>
     /// Record that <paramref name="command"/> ran to a successful end and left the store as
     /// <paramref name="left"/> describes. The reset removes everything the cleanup removes, so it settles
-    /// the cleanup as well. Returns whether the record was written; one that was not still answers for
-    /// this session.
+    /// the cleanup as well. A record that cannot be written still answers for this session.
     /// </summary>
-    public bool Record(ComponentStoreCommand command, ComponentStoreState left)
+    public void Record(ComponentStoreCommand command, ComponentStoreState left)
     {
         lock (_gate)
         {
@@ -84,14 +83,11 @@ public sealed class ComponentStoreSettlement
                     record.ToDictionary(entry => entry.Key.ToString(), entry => StoredState.Of(entry.Value), StringComparer.Ordinal));
 
                 StoreFile.Replace(_file, JsonSerializer.Serialize(stored, SerializerOptions));
-
-                return true;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 // Held or refused. The next session runs the command once more, which is the cost of
                 // having no record.
-                return false;
             }
         }
     }
