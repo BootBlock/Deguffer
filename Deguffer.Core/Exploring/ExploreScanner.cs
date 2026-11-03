@@ -233,7 +233,7 @@ public sealed class ExploreScanner(
                     continue;
                 }
 
-                var located = MftExploreReader.Locate(tree, folder.Volume!.Value.Components);
+                var located = MftExploreRooting.Locate(tree, folder.Volume!.Value.Components);
 
                 if (located.Node is { } node)
                 {

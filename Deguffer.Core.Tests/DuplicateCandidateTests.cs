@@ -423,7 +423,7 @@ public sealed class DuplicateCandidateTests : IDisposable
                 unsized, directory, "unsized.bin", allocated: 4096, logical: 4096, extension: directory + 3, ListMismatch.ItsOwnSequence);
 
         var tree = MftExploreReader.Read(fixture.Build(), @"X:\", [], TableTuning.Default, progress: null, default).Tree!;
-        var data = MftExploreReader.Locate(tree, ["Data"]).Node!.Value;
+        var data = MftExploreRooting.Locate(tree, ["Data"]).Node!.Value;
         var file = ExploreTreePaths.NodeAt(tree, @"X:\Data\unsized.bin");
 
         // The fixture gives the file no length, and says so, which is the case under test.
@@ -469,7 +469,7 @@ public sealed class DuplicateCandidateTests : IDisposable
             .AddFileLink(directory + 5, directory, "link.bin", logical: 4096);
 
         var tree = MftExploreReader.Read(fixture.Build(), @"X:\", [], TableTuning.Default, progress: null, default).Tree!;
-        var data = MftExploreReader.Locate(tree, ["Data"]).Node!.Value;
+        var data = MftExploreRooting.Locate(tree, ["Data"]).Node!.Value;
 
         Assert.Equal(
             ["cloud.bin", "compressed.bin", "deduplicated.bin", "plain.bin"],

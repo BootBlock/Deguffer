@@ -4,7 +4,8 @@ namespace Deguffer.Core.Exploring;
 /// When a scan still in progress hands over a tree to draw, and the assembling of each one away
 /// from the scan's own threads.
 ///
-/// <para>A snapshot is a pass over every node found so far, so its cost grows with the scan. Taken
+/// <para>A snapshot is a pass over every node found so far, or over every record slot of the file
+/// table, so it is costly however early it is taken. Taken
 /// on a walk worker, under the lock every worker needs, it stopped the whole walk; started on a
 /// fixed cadence, a snapshot that took longer than the interval was followed by the next at once,
 /// and a large walk did little else. Here the report only takes what a snapshot is assembled from,

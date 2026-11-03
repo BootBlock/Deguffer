@@ -118,7 +118,7 @@ public sealed class ProtectionScope
 
     /// <summary>
     /// The node of <paramref name="tree"/> that is <paramref name="folder"/>, found as
-    /// <see cref="MftExploreReader.Locate"/> finds a folder, or null where the tree does not hold it,
+    /// <see cref="MftExploreRooting.Locate"/> finds a folder, or null where the tree does not hold it,
     /// or holds it without having listed it: past a link the scan did not enter, or a folder that
     /// refused its listing. A walk of the disk asks about either itself.
     /// </summary>
@@ -129,7 +129,7 @@ public sealed class ProtectionScope
             return null;
         }
 
-        var (node, _) = MftExploreReader.Locate(tree, relative == "." ? [] : relative.Split(Path.DirectorySeparatorChar));
+        var (node, _) = MftExploreRooting.Locate(tree, relative == "." ? [] : relative.Split(Path.DirectorySeparatorChar));
 
         return node is { } listed && !tree.ListingWasRefused(listed) ? listed : null;
     }

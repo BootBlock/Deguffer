@@ -382,7 +382,7 @@ public sealed class DuplicateIdentityTests : IDisposable
             .AddCloudFile(directory + 2, directory, "came.bin", logical: 100)
             .AddCompressedFile(directory + 3, directory, "packed.bin", logical: 100, onDisk: 50);
         var tree = MftExploreReader.Read(fixture.Build(), @"X:\", [], TableTuning.Default, progress: null, default).Tree!;
-        var data = MftExploreReader.Locate(tree, ["Data"]).Node!.Value;
+        var data = MftExploreRooting.Locate(tree, ["Data"]).Node!.Value;
 
         IdentifiedFile Identified(string name, FileAttributes attributes, int number) => new(
             new FoundFile(tree, tree.ChildrenOf(data).ToArray().Single(child => tree.NameOf(child) == name), LocationRole.Search, IdentityRoute.FileId, DriveX),
@@ -406,7 +406,7 @@ public sealed class DuplicateIdentityTests : IDisposable
     {
         var tree = MftExploreReader.Read(
             fixture.Build(), top + Path.DirectorySeparatorChar, [], TableTuning.Default, progress: null, default).Tree!;
-        var node = MftExploreReader.Locate(tree, ["Data"]).Node!.Value;
+        var node = MftExploreRooting.Locate(tree, ["Data"]).Node!.Value;
         var folder = Path.Combine(top, "Data");
         var volume = new LocalVolume(_tree.Top + Path.DirectorySeparatorChar, DriveType.Fixed, VolumeReadiness.Ready);
         var root = new ResolvedLocation(new(folder, role), folder, ReachedFolder.At(folder, _tree.Volumes), role, volume);

@@ -461,20 +461,28 @@ public class ExploreScannerTests
     }
 
     /// <summary>
-    /// A search across folders on the file table is told counts and never a snapshot, for the
-    /// reason the walk's is: nothing draws its folders until every one is read.
+    /// A search across folders on the file table takes no snapshot, for the reason the walk's
+    /// takes none: nothing draws its folders until every one is read. Counted where a snapshot would
+    /// be assembled, because the search's own progress reports carry none whatever is assembled.
     /// </summary>
     [Fact]
     public async Task ASearchAcrossFoldersOnTheTableIsToldCountsAndNoSnapshot()
     {
         const char letter = DriveLetters.Faked;
-        var (scanner, progress, reports) = Timed(FakeMftSourceFactory.Serving(letter, LongVolume()));
+        var assembled = 0;
+        var (scanner, progress, reports) = Timed(
+            FakeMftSourceFactory.Serving(letter, LongVolume()),
+            assemble =>
+            {
+                assembled++;
+                return OnTheSpot(assemble);
+            });
 
         var scans = await scanner.ScanFoldersAsync([$@"{letter}:\Users"], progress);
 
         Assert.Equal(ScanStrategy.MasterFileTable, Assert.Single(scans).Strategy);
         Assert.True(reports.Count >= 3, $"The read made {reports.Count} reports, not one at nought, one at each interval and one at the end.");
-        Assert.All(reports, report => Assert.Null(report.Snapshot));
+        Assert.Equal(0, assembled);
     }
 
     /// <summary>
@@ -486,11 +494,11 @@ public class ExploreScannerTests
     private static MftFixture LongVolume() => Volume().AddUnused((3 * MftPassProgress.Interval) + 10).WithoutBitmap();
 
     /// <summary>
-    /// A scanner that assembles each snapshot on the spot, and a progress that moves its clock a
-    /// whole snapshot interval on every report it records.
+    /// A scanner that assembles each snapshot by <paramref name="assemble"/>, on the spot where it is
+    /// null, and a progress that moves its clock a whole snapshot interval on every report it records.
     /// </summary>
     private static (ExploreScanner Scanner, IProgress<ExploreProgress> Progress, List<ExploreProgress> Reports) Timed(
-        IMftSourceFactory sources)
+        IMftSourceFactory sources, Func<Action, Task>? assemble = null)
     {
         var clock = new ManualTimeProvider();
         var reports = new List<ExploreProgress>();
@@ -502,7 +510,7 @@ public class ExploreScannerTests
 
         var scanner = new ExploreScanner(sources, clock)
         {
-            AssembleSnapshot = OnTheSpot,
+            AssembleSnapshot = assemble ?? OnTheSpot,
             Walker = new WalkRecorder().Walk,
         };
 

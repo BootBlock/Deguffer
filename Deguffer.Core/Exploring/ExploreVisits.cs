@@ -19,7 +19,7 @@ public sealed class ExploreVisits
 {
     /// <summary>
     /// How many steps are kept in either direction, the oldest forgotten first. Bounded because every
-    /// snapshot of a walked scan carries each step into the arriving tree (see <see cref="Carry"/>),
+    /// snapshot of a scan in progress carries each step into the arriving tree (see <see cref="Carry"/>),
     /// which finds each step's folder again in it, at every snapshot.
     /// </summary>
     public const int Depth = 50;
