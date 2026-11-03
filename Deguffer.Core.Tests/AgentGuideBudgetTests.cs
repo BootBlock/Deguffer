@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace Deguffer.Core.Tests;
 
@@ -14,7 +15,7 @@ namespace Deguffer.Core.Tests;
 /// copies together. With no copy there is nothing to drift, so these tests guard only against a
 /// copy returning.
 /// </summary>
-public sealed class AgentGuideBudgetTests
+public sealed partial class AgentGuideBudgetTests
 {
     private const int ClaudeFileBudget = 10_000;
     private const int ClaudeSectionBudget = 1_200;
@@ -53,20 +54,24 @@ public sealed class AgentGuideBudgetTests
                 + $"{string.Join(", ", over)}. {HowToFix}");
     }
 
+    /// <summary>
+    /// An agent reads the numbers in CLAUDE.md, not here, so the two must agree. Read from the one
+    /// sentence that states them, each number against its own budget: a number found anywhere in
+    /// the file would let two budgets trade values, or "600" be found inside "1,600".
+    /// </summary>
     [Fact]
     public void ClaudeMdStatesTheBudgetsTheseTestsEnforce()
     {
-        // An agent reads the numbers in CLAUDE.md, not here, so the two must agree.
         var claude = MarkdownGuide.AtRepositoryRoot("CLAUDE.md");
 
-        foreach (var budget in new[] { ClaudeFileBudget, ClaudeSectionBudget, AgentsFileBudget })
-        {
-            var written = budget.ToString("N0", CultureInfo.InvariantCulture);
+        var stated = Assert.Single(BudgetSentence().Matches(claude.Text));
 
-            Assert.True(
-                claude.Text.Contains(written, StringComparison.Ordinal),
-                $"CLAUDE.md does not state the {written}-character budget these tests enforce.");
-        }
+        Assert.Equal(ClaudeFileBudget, Budget(stated, "file"));
+        Assert.Equal(ClaudeSectionBudget, Budget(stated, "section"));
+        Assert.Equal(AgentsFileBudget, Budget(stated, "agents"));
+
+        static int Budget(Match stated, string group) =>
+            int.Parse(stated.Groups[group].Value, NumberStyles.AllowThousands, CultureInfo.InvariantCulture);
     }
 
     [Fact]
@@ -85,4 +90,9 @@ public sealed class AgentGuideBudgetTests
             $"AGENTS.md is {agents.Text.Length} characters, over its {AgentsFileBudget} budget. It is "
                 + "a pointer: put the rule in CLAUDE.md instead.");
     }
+
+    /// <summary>The sentence in CLAUDE.md that states the budgets, wherever its lines wrap.</summary>
+    [GeneratedRegex(
+        @"`AgentGuideBudgetTests`\s+fails\s+past\s+(?<file>[\d,]+)\s+characters\s+here,\s+(?<section>[\d,]+)\s+in\s+a\s+section,\s+or\s+(?<agents>[\d,]+)\s+in\s+`AGENTS\.md`")]
+    private static partial Regex BudgetSentence();
 }

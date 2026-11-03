@@ -9,7 +9,8 @@ namespace Deguffer.Core.Tests;
 /// property of the whole program rather than of one code path: no test can drive the message
 /// Deguffer <em>does not</em> send. A new import is how a second verb would arrive — a
 /// <c>WM_QUERYENDSESSION</c> here, a <c>TerminateProcess</c> there, each reasonable on its own — and
-/// this fails the moment one is declared, in either project.</para>
+/// this fails the moment one is declared, in any product project. The managed calls that wrap the
+/// same ends need no declaration, so they are matched by name in the code.</para>
 ///
 /// <para>The declarations are read rather than the prose, as <see cref="ProductSources.Win32Imports"/> says.</para>
 /// </summary>
@@ -150,8 +151,86 @@ public sealed partial class CloseMessageTests
         Assert.Contains("var handle = ToolProcessNative.CreateJobObject(0, 0);", job, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The managed routes to the same ends, which no import declares and so
+    /// <see cref="NoCallThatEndsOrCommandsAnotherProgramIsDeclared"/> cannot see: <c>Process.Kill</c>
+    /// is <c>TerminateProcess</c>, <c>CloseMainWindow</c> is a posted close Deguffer did not choose the
+    /// window for, <c>SendKeys</c> is <c>SendInput</c>, WMI's <c>Win32_Process.Terminate</c> arrives
+    /// through <c>System.Management</c>, and <c>NativeLibrary</c> reaches any export by name without a
+    /// declaration at all. <c>GetProcessById</c> is the handle every one of them starts from.
+    ///
+    /// <para>Matched on code, not comments, because the comments explain why these are not used.</para>
+    /// </summary>
+    [Fact]
+    public void NoManagedRouteEndsOrCommandsAnotherProgram()
+    {
+        var used = ProductSources.Files()
+            .SelectMany(file => Code(File.ReadAllText(file))
+                .SelectMany(line => ManagedRoute().Matches(line))
+                .Select(match => (Route: match.Groups["route"].Value, File: Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file))))
+            .Where(use => !NativeLibraryAllowance(use.Route, use.File))
+            .Select(use => $"{use.Route} in {use.File}")
+            .ToList();
+
+        Assert.True(
+            used.Count == 0,
+            $"{string.Join(", ", used)}. §7.2.1 has one verb: the program's own close, posted as WM_CLOSE "
+            + "to a window Deguffer chose.");
+    }
+
+    /// <summary>
+    /// The one <c>NativeLibrary</c> use: <c>SRRemoveRestorePoint</c>, which Microsoft says is loaded
+    /// by name rather than linked, and which removes a restore point rather than reaching any program.
+    /// The allowance is held to that file and that export, so a second export loaded there is a
+    /// second route and fails.
+    /// </summary>
+    [Fact]
+    public void TheOnlyLibraryLoadedByNameRemovesARestorePoint()
+    {
+        var code = string.Join('\n', Code(File.ReadAllText(Path.Combine(MarkdownGuide.RepositoryRoot, RestorePointCalls))));
+
+        Assert.Equal(["\"SRRemoveRestorePoint\""], ExportLoaded().Matches(code).Select(match => match.Groups["export"].Value.Trim()));
+    }
+
+    /// <summary>The one file allowed <c>NativeLibrary</c>, for the reason <see cref="TheOnlyLibraryLoadedByNameRemovesARestorePoint"/> gives.</summary>
+    private static readonly string RestorePointCalls = Path.Combine("Deguffer.Core", "SystemProtection", "RestorePointCalls.cs");
+
+    private static bool NativeLibraryAllowance(string route, string file) =>
+        route == "NativeLibrary" && file == RestorePointCalls;
+
+    /// <summary>The lines of <paramref name="source"/> that are code, every comment line left out.</summary>
+    private static IEnumerable<string> Code(string source)
+    {
+        var inBlock = false;
+
+        foreach (var line in source.Split('\n'))
+        {
+            var trimmed = line.TrimStart();
+
+            if (inBlock)
+            {
+                inBlock = !trimmed.Contains("*/", StringComparison.Ordinal);
+            }
+            else if (trimmed.StartsWith("/*", StringComparison.Ordinal))
+            {
+                inBlock = !trimmed.Contains("*/", StringComparison.Ordinal);
+            }
+            else if (!trimmed.StartsWith("//", StringComparison.Ordinal))
+            {
+                yield return line;
+            }
+        }
+    }
+
     private static string Core =>
         Path.Combine(MarkdownGuide.RepositoryRoot, "Deguffer.Core");
+
+    [GeneratedRegex(@"(?<route>\bKill\b|\bCloseMainWindow\b|\bGetProcessById\b|\bNativeLibrary\b|\bSystem\.Management\b|\bSendKeys\b)")]
+    private static partial Regex ManagedRoute();
+
+    /// <summary>Every export taken, by the text of its name argument, so one named by a variable is seen too.</summary>
+    [GeneratedRegex(@"\bNativeLibrary\.(?:Try)?GetExport\s*\(\s*\w+\s*,\s*(?<export>[^,)]+)")]
+    private static partial Regex ExportLoaded();
 
     [GeneratedRegex(@"\bPostMessage\(\s*\w+\s*,\s*(?<message>\w+)")]
     private static partial Regex PostCall();

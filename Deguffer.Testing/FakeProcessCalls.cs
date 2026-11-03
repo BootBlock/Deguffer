@@ -45,7 +45,7 @@ internal sealed class FakeProcessCalls : IProcessCalls
             return ProcessOpening.NotRunning;
         }
 
-        return process.OpenRefused ? ProcessOpening.Refused : ProcessOpening.Of(process);
+        return process.OpenRefused ? ProcessOpening.Refused : ProcessOpening.Of(process.Opened());
     }
 
     public OwnProcess Own()
@@ -92,47 +92,79 @@ internal sealed class FakeProcess : IOpenProcess
     /// <summary>How many facts beyond its identity were read, which a process that has gone must not reach.</summary>
     public int FactsRead { get; private set; }
 
+    /// <summary>Whether the handle the latest open gave out has been closed.</summary>
     public bool Disposed { get; private set; }
 
-    public long? CreationTime() => CreatedAt;
+    /// <summary>How many times the process was asked whether it has gone, which is how often a watch polled.</summary>
+    public int ExitReads { get; private set; }
 
-    public bool? HasExited() => Exited;
+    public long? CreationTime()
+    {
+        Live();
+        return CreatedAt;
+    }
+
+    public bool? HasExited()
+    {
+        Live();
+        ExitReads++;
+        return Exited;
+    }
 
     public uint? SessionId()
     {
+        Live();
         FactsRead++;
         return Session;
     }
 
     public TokenFacts Token()
     {
+        Live();
         FactsRead++;
         return new TokenFacts(User, Integrity);
     }
 
     public bool? IsCritical()
     {
+        Live();
         FactsRead++;
         return Critical;
     }
 
     public PackageIdentity Package()
     {
+        Live();
         FactsRead++;
         return Packaging;
     }
 
     public bool? IsFrozen()
     {
+        Live();
         FactsRead++;
         return Frozen;
     }
 
     public string? ImagePath()
     {
+        Live();
         FactsRead++;
         return Image;
     }
 
     public void Dispose() => Disposed = true;
+
+    /// <summary>A new handle to the same process, as each open of it gives one.</summary>
+    internal FakeProcess Opened()
+    {
+        Disposed = false;
+        return this;
+    }
+
+    /// <summary>
+    /// A closed handle answers nothing, as Windows refuses a call through one. Without this a fact
+    /// read after the handle was closed would read as well as one read through it.
+    /// </summary>
+    private void Live() => ObjectDisposedException.ThrowIf(Disposed, this);
 }
