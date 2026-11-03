@@ -126,9 +126,16 @@ internal sealed record EspIdfArchives(
 
             reached.Add((folder.Downloads, Classify(folder.Downloads, downloads, kept, listed, ref linked, ct)));
 
-            // The tools folder was described, so a listing that fails here leaves only its unnamed
-            // entries unasserted, and the folder itself is already a survivor.
-            foreach (var entry in FolderEntries.Of(folder.Path) ?? [])
+            // The tools folder itself is already a survivor. A listing that fails leaves the entries
+            // beside dist unasserted, so the plan says so.
+            if (FolderEntries.Of(folder.Path) is not { } beside)
+            {
+                unlisted = true;
+                listed.Add(UnreadableRoot.Note(LongPath.Display(folder.Path)));
+                continue;
+            }
+
+            foreach (var entry in beside)
             {
                 if (!entry.Name.Equals(EspIdfLayout.DownloadFolder, StringComparison.OrdinalIgnoreCase))
                 {
@@ -137,7 +144,13 @@ internal sealed record EspIdfArchives(
             }
         }
 
-        return new EspIdfArchives(scan, reached, kept, listed, unlisted, linked, [.. reached.SelectMany(found => found.Archives)]);
+        IReadOnlyList<DeletionTarget> archives = [.. reached.SelectMany(found => found.Archives)];
+        var removed = archives.Select(archive => archive.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // One tools folder can be another's dist, where IDF_TOOLS_PATH or the record names it. Its
+        // entries are then that dist's, and an archive the other folder offers is not a survivor.
+        return new EspIdfArchives(
+            scan, reached, [.. kept.Where(entry => !removed.Contains(entry.Path))], listed, unlisted, linked, archives);
     }
 
     private static IReadOnlyList<DeletionTarget> Classify(

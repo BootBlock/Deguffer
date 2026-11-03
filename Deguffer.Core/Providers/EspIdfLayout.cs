@@ -16,16 +16,19 @@ namespace Deguffer.Core.Providers;
 /// also where the older ESP-IDF Tools Installer kept its archives. It records each ESP-IDF it installs in
 /// <c>eim_idf.json</c> in its tools folder, and sets <c>IDF_TOOLS_PATH</c> to the <c>idfToolsPath</c> of
 /// that record in the environment it activates, so an <c>idf_tools.py</c> run there downloads into the
-/// <c>dist</c> inside that folder. Each recorded folder is examined as well.</para>
+/// <c>dist</c> inside that folder. Each recorded folder is examined as well. The Installation Manager
+/// downloads into the <c>dist</c> beside its tools folder, and its drive choice moves both folders together
+/// while the record stays on the system drive, so where a recorded folder is named <c>tools</c>, the
+/// folder holding it is examined as the Installation Manager's own.</para>
 ///
 /// <para><b>The Installation Manager's paths are written in, not read from the system.</b> Its default is
 /// <c>C:\Espressif</c> whatever drive Windows is on. It is looked for on the system drive, which is drive C
 /// on nearly every machine, so that a test can build it.</para>
 ///
-/// <para><b>A renamed download folder is not looked for.</b> The Installation Manager's
-/// <c>tool_download_folder_name</c> setting moves its downloads, and it records the choice nowhere
-/// Deguffer can read. Where the Installation Manager is installed, the plan says so rather than search
-/// the disk for a folder of archives.</para>
+/// <para><b>A download folder set apart from the tools folder is not looked for.</b> The Installation
+/// Manager's <c>tool_download_folder_name</c> setting can name any folder, and the record keeps only the
+/// tools folder. Where the Installation Manager is installed, the plan says so rather than search the
+/// disk for a folder of archives.</para>
 ///
 /// <para>A folder named by <c>IDF_TOOLS_PATH</c> or by the record is something another program wrote,
 /// so it is vetted by <see cref="ConfiguredFolder"/> before anything in it is examined.</para>
@@ -151,9 +154,9 @@ public sealed record EspIdfLayout(
 
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
-                "The ESP-IDF Installation Manager can be set to download into a folder of another name, and it "
-                + "records that choice nowhere Deguffer can read. Deguffer looks only in the dist folders "
-                + "named here, so archives in a renamed folder are not found."));
+                "The ESP-IDF Installation Manager can be set to download into any folder, and its record keeps "
+                + "only the folder it installs tools into. Deguffer looks in the dist folder inside and beside each "
+                + "tools folder it records, so archives in a download folder set anywhere else are not found."));
         }
 
         return new EspIdfLayout([.. folders.Select(known => known.Folder)], notes, declinedFolders, withheld, hasManager);
@@ -187,6 +190,25 @@ public sealed record EspIdfLayout(
             }
 
             Add(named, RecordedReason);
+
+            // The Installation Manager's own downloads are in the dist beside its tools folder, wherever
+            // its drive choice put the two.
+            if (Path.GetFileName(Path.TrimEndingDirectorySeparator(named)).Equals("tools", StringComparison.OrdinalIgnoreCase)
+                && Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(named)) is { Length: > 0 } holder)
+            {
+                if (ConfiguredFolder.WhyNotOwned(holder, environment, machine, volumes, temporary) is { } held)
+                {
+                    withheld = true;
+                    notes.Add(new PlanNote(
+                        PlanNoteSeverity.Information,
+                        $"The ESP-IDF Installation Manager's downloads would be beside '{LongPath.Display(named)}', "
+                        + $"in '{LongPath.Display(holder)}', and Deguffer leaves that folder alone: {held}"));
+                }
+                else
+                {
+                    Add(holder, InstallationManagerReason);
+                }
+            }
         }
 
         // One tools folder, examined once however it is named. A folder with no dist in it has nothing

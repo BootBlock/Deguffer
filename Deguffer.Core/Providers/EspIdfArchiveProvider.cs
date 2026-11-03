@@ -24,9 +24,9 @@ namespace Deguffer.Core.Providers;
 /// archives. The Installation Manager's <c>--cleanup</c> runs only during an install, and its
 /// <c>remove</c> and <c>purge</c> uninstall.</para>
 ///
-/// <para><b>Nothing while the Installation Manager runs (§5.3).</b> It downloads every archive before it
-/// unpacks any, and it writes with the sharing Rust's standard library gives, which lets Windows delete a
-/// file it is still writing. So while <c>eim</c> runs the archives are left alone, and the clean asks
+/// <para><b>Nothing while the Installation Manager runs (§5.3).</b> It downloads each archive and then
+/// unpacks it, one tool after another, and it writes with the sharing Rust's standard library gives, which
+/// lets Windows delete a file it is still writing. So while <c>eim</c> runs the archives are left alone, and the clean asks
 /// again before it removes each one. <c>idf_tools.py</c> downloads and unpacks through Python's own
 /// file objects, which Windows will not let another program delete while they are open, so an archive
 /// it is writing or unpacking is refused to the removal by Windows itself.</para>
@@ -125,7 +125,8 @@ public sealed class EspIdfArchiveProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// §5.2 for Explore. Each tools folder recognises only the way down to its <c>dist</c>, and each <c>dist</c> only the
+    /// §5.2 for Explore. Each tools folder recognises only the way down to its <c>dist</c> and to any tools
+    /// folder inside it, and each <c>dist</c> only the
     /// archive files in it, or nothing while the Installation Manager runs. A declined folder refuses the
     /// entries ESP-IDF writes in it.
     /// </summary>
@@ -136,12 +137,13 @@ public sealed class EspIdfArchiveProvider : CleanupProviderBase
 
         return Task.FromResult<IReadOnlyList<ToolRoot>>(
         [
-            // dist is recognised only to open the way down to the archives. It is a root itself, so Explore
-            // still refuses it, and with it the files in it nobody classified.
-            .. layout.Folders.Select(folder => ToolRoot.Folders(
+            // dist, and the way to each tools folder inside another, are recognised only to open the way
+            // down to the archives. Each is a root itself, so Explore still refuses it, and with it the
+            // files nobody classified.
+            .. layout.Folders.SelectMany(folder => ToolRoot.WayDown(
                 folder.Path,
-                ToolsExploreReason,
-                static name => name.Equals(EspIdfLayout.DownloadFolder, StringComparison.OrdinalIgnoreCase))),
+                [folder.Downloads, .. layout.Folders.Select(other => other.Path)],
+                ToolsExploreReason)),
             .. layout.Folders.Select(folder => running
                 ? new ToolRoot(folder.Downloads, HeldReason, static _ => false)
                 : new ToolRoot(folder.Downloads, DownloadsExploreReason, static child =>

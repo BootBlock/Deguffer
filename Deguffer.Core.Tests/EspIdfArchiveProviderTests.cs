@@ -276,7 +276,7 @@ public sealed class EspIdfArchiveProviderTests : IDisposable
     /// <summary>
     /// The Installation Manager downloads into the <c>dist</c> beside its tools, and an <c>idf_tools.py</c>
     /// run in an environment it activated downloads into the <c>dist</c> inside the tools folder it recorded.
-    /// Both are planned, its record survives, and the plan says a renamed download folder is not looked for.
+    /// Both are planned, its record survives, and the plan says a download folder set elsewhere is not looked for.
     /// </summary>
     [Fact]
     public async Task PlansTheInstallationManagersDistAndEachRecordedToolsFolder()
@@ -295,7 +295,7 @@ public sealed class EspIdfArchiveProviderTests : IDisposable
             plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
         AssertProtected(plan, Record);
         AssertProtected(plan, Path.Combine(ManagerTools, "xtensa-esp-elf"));
-        Assert.Contains(plan.Notes, n => n.Message.Contains("renamed", StringComparison.Ordinal));
+        Assert.Contains(plan.Notes, n => n.Message.Contains("set anywhere else are not found", StringComparison.Ordinal));
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -304,6 +304,112 @@ public sealed class EspIdfArchiveProviderTests : IDisposable
         Assert.True(File.Exists(installed));
         Assert.False(File.Exists(managed));
         Assert.False(File.Exists(recorded));
+    }
+
+    /// <summary>
+    /// The Installation Manager's drive choice moves its tools and its downloads together while the record
+    /// stays on the system drive, so the <c>dist</c> beside a recorded <c>tools</c> folder is planned too,
+    /// and Explore may take the archives in both.
+    /// </summary>
+    [Fact]
+    public async Task PlansTheDistBesideARecordedToolsFolderOnAnotherDrive()
+    {
+        var other = Path.Combine(_temp.Path, "drive-d", "Espressif");
+        var beside = Write(Path.Combine(other, "dist", Toolchain));
+        var inside = Write(Path.Combine(other, "tools", "dist", Debugger));
+        var installed = Write(Path.Combine(other, "tools", "xtensa-esp-elf", "esp-14.2.0_20241119", "bin", "xtensa-esp32-elf-gcc.exe"));
+        WriteRecord(Path.Combine(other, "tools"));
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(
+            new[] { beside, inside }.Order(StringComparer.OrdinalIgnoreCase),
+            plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
+        AssertProtected(plan, Path.Combine(other, "tools"));
+
+        var policy = new ExploreActionPolicy([], [], new FakeVolumeInventory(), probedRoots: await provider.DiscoverToolRootsAsync());
+
+        Assert.True(policy.MayRemove(beside).IsAllowed, policy.MayRemove(beside).Reason);
+        Assert.True(policy.MayRemove(inside).IsAllowed, policy.MayRemove(inside).Reason);
+        Assert.False(policy.MayRemove(Path.Combine(other, "tools")).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(other, "tools", "xtensa-esp-elf")).IsAllowed);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+        Assert.True(File.Exists(installed));
+        Assert.False(File.Exists(beside));
+        Assert.False(File.Exists(inside));
+    }
+
+    /// <summary>
+    /// A tools folder inside another opens the way down to its archives in Explore, and nothing else: the
+    /// Installation Manager's record and its installed tools stay refused.
+    /// </summary>
+    [Fact]
+    public async Task ExploreReachesTheArchivesOfARecordedToolsFolderInsideTheManagersFolder()
+    {
+        Write(Path.Combine(ManagerDist, Toolchain));
+        var recorded = Write(Path.Combine(ManagerTools, "dist", Debugger));
+        var installed = Write(Path.Combine(ManagerTools, "xtensa-esp-elf", "esp-14.2.0_20241119", "bin", "xtensa-esp32-elf-gcc.exe"));
+        WriteRecord(ManagerTools);
+
+        var policy = new ExploreActionPolicy([], [], new FakeVolumeInventory(), probedRoots: await CreateProvider().DiscoverToolRootsAsync());
+
+        Assert.True(policy.MayRemove(recorded).IsAllowed, policy.MayRemove(recorded).Reason);
+        Assert.False(policy.MayRemove(ManagerTools).IsAllowed);
+        Assert.False(policy.MayRemove(Record).IsAllowed);
+        Assert.False(policy.MayRemove(installed).IsAllowed);
+        Assert.False(policy.MayRemove(Path.Combine(ManagerTools, "dist")).IsAllowed);
+    }
+
+    /// <summary>
+    /// A variable naming another tools folder's <c>dist</c> makes that <c>dist</c> a tools folder too. An
+    /// archive in it is offered once and is not also a survivor, so §5.6 does not report the removal the user
+    /// chose as a failure, and what is not an archive still survives.
+    /// </summary>
+    [Fact]
+    public async Task AToolsFolderThatIsAnotherDistDoesNotProtectItsArchives()
+    {
+        var outer = Write(Path.Combine(DefaultDist, Toolchain));
+        var inner = Write(Path.Combine(DefaultDist, "dist", Debugger));
+        var notes = Write(Path.Combine(DefaultDist, "notes.txt"));
+        _environment.WithEnvironmentVariable(EspIdfLayout.ToolsPathVariable, DefaultDist);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(
+            new[] { outer, inner }.Order(StringComparer.OrdinalIgnoreCase),
+            plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
+        Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path.Equals(outer, StringComparison.OrdinalIgnoreCase));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+        Assert.False(File.Exists(outer));
+        Assert.False(File.Exists(inner));
+        Assert.True(File.Exists(notes));
+    }
+
+    /// <summary>
+    /// A tools folder Windows will not list leaves the entries beside <c>dist</c> unasserted, so the plan
+    /// says so rather than read as fully checked. The archives in <c>dist</c> are still offered.
+    /// </summary>
+    [Fact]
+    public async Task AToolsFolderThatWillNotBeListedIsSaid()
+    {
+        var (archives, _) = CreateToolsFolder(DefaultTools);
+
+        using (new DeniedDirectory(DefaultTools))
+        {
+            var plan = await CreateProvider().PlanAsync();
+
+            Assert.Equal(archives.Order(StringComparer.OrdinalIgnoreCase), plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
+            Assert.True(plan.HasUnreadableRoot);
+            Assert.Contains(plan.Notes, n => n.Message.Contains(DefaultTools, StringComparison.OrdinalIgnoreCase));
+        }
     }
 
     /// <summary>
@@ -365,7 +471,7 @@ public sealed class EspIdfArchiveProviderTests : IDisposable
     }
 
     /// <summary>
-    /// §5.3. The Installation Manager downloads every archive before it unpacks any, and Windows lets a file
+    /// §5.3. The Installation Manager downloads and unpacks one archive after another, and Windows lets a file
     /// it is writing be deleted, so while it runs nothing is offered, each <c>dist</c> is named for why, the
     /// row does not read as clear, and Explore refuses it.
     /// </summary>

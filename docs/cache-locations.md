@@ -1368,7 +1368,7 @@ Everything removed is a download the CLI fetches again, or a build the next comp
 
 | | |
 | --- | --- |
-| **Location** | `dist` in `%USERPROFILE%\.espressif`, in the folder `IDF_TOOLS_PATH` names, in `C:\Espressif`, and in each tools folder the ESP-IDF Installation Manager records |
+| **Location** | `dist` in `%USERPROFILE%\.espressif`, in the folder `IDF_TOOLS_PATH` names, in `C:\Espressif`, and inside and beside each tools folder the ESP-IDF Installation Manager records |
 | **Method** | Path deletion of each archive file |
 | **Typical size** | Not measured: ESP-IDF was not installed on the machine this was written against |
 
@@ -1387,7 +1387,9 @@ archives multiply with every version installed.
   `C:\Espressif\dist`, which is also where the older ESP-IDF Tools Installer kept its archives. It
   records each ESP-IDF it installs in `C:\Espressif\tools\eim_idf.json`, and the environment it
   activates sets `IDF_TOOLS_PATH` to the tools folder of that record (`idfToolsPath`). An
-  `idf_tools.py` run in that environment downloads into the `dist` inside that tools folder.
+  `idf_tools.py` run in that environment downloads into the `dist` inside that tools folder. The
+  Installation Manager's choice of drive moves its tools and its downloads together, for example to
+  `D:\Espressif	ools` and `D:\Espressif\dist`, while the record stays on drive C.
 
 ### What Deguffer does
 
@@ -1400,17 +1402,19 @@ a download that did not finish, and is offered too. A folder, a link and a file 
 own: never the profile, a drive root, Documents or a folder holding a temporary folder, and never a
 value that is not a full path. Deguffer says which folder it left alone and why.
 
-The Installation Manager can be set to download into a folder of another name
-(`tool_download_folder_name`), and it records that choice nowhere Deguffer can read. Deguffer does
-not search the disk for it, and where the Installation Manager is installed, the row says so.
+For each tools folder the record names, Deguffer examines the `dist` inside it, and, where the
+folder is named `tools`, the `dist` beside it. The Installation Manager can also be set to download
+into any other folder (`tool_download_folder_name`), and its record keeps only the tools folder.
+Deguffer does not search the disk for that folder, and where the Installation Manager is installed,
+the row says so.
 
 ESP-IDF's own `idf_tools.py uninstall --remove-archives` is not used. It first removes every
 installed tool version the active ESP-IDF does not use, and `tools` is shared by every ESP-IDF
 version on the machine, so it breaks the others. The Installation Manager's `--cleanup` runs only
 during an install, and its `remove` and `purge` uninstall.
 
-While the Installation Manager (`eim`) is running, nothing is offered: it downloads every archive
-before it unpacks any, and Windows lets another program delete a file it is still writing. The clean
+While the Installation Manager (`eim`) is running, nothing is offered: it downloads and unpacks one
+archive after another, and Windows lets another program delete a file it is still writing. The clean
 asks again before it removes each archive. An archive `idf_tools.py` is writing or unpacking is open
 in Python, and Windows refuses its removal until Python closes it.
 
