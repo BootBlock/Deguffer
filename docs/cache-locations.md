@@ -5565,11 +5565,11 @@ repository, and its folder is where the tool's own naming rule puts it and is no
 Deguffer cannot read in full offers nothing.
 
 **Only from 1.32.** From version 1.32 the cache can keep one copy of a file that several repositories
-share, in `hublobs`, and each repository's files are then links into it. Older versions leave a
+share, in `hub\blobs`, and each repository's files are then links into it. Older versions leave a
 removed repository's shared files behind, and other tools can remove a shared file that another
 repository still uses. So below 1.32 the row offers nothing, and says to update with
 `pip install -U huggingface_hub`. For the same reason nothing in the cache is ever deleted by path:
-deleting a repository's folder leaves its shared files, and deleting `hublobs` breaks every
+deleting a repository's folder leaves its shared files, and deleting `hub\blobs` breaks every
 repository that links into it.
 
 **Not `hf cache prune`.** It removes every revision that no branch or tag names, and a revision a

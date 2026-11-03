@@ -3,7 +3,7 @@ using Deguffer.Core.Providers;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// <c>hf cache ls --format json</c> as huggingface_hub 1.31, 1.32 and 2.4 print it. A listing that
+/// <c>hf cache ls --format json</c> as huggingface_hub 2.4 prints it. A listing that
 /// names a repository this cannot name exactly is no listing to choose from, because the command finds
 /// a repository by its id and the plan measures and protects a folder.
 /// </summary>
@@ -23,22 +23,27 @@ public sealed class HuggingFaceCacheListingTests
         Assert.NotNull(repositories);
         Assert.Equal(
             [
-                new HuggingFaceRepository("dataset/hf-internal-testing/fixtures_image_utils", "hf-internal-testing/fixtures_image_utils", "dataset", 365),
-                new HuggingFaceRepository("model/hf-internal-testing/tiny-random-LlamaForCausalLM", "hf-internal-testing/tiny-random-LlamaForCausalLM", "model", 4_100_000),
-                new HuggingFaceRepository("model/hf-internal-testing/tiny-random-bert", "hf-internal-testing/tiny-random-bert", "model", 520_800),
+                new HuggingFaceRepository("dataset/hf-internal-testing/fixtures_image_utils", "hf-internal-testing/fixtures_image_utils", HuggingFaceRepositoryType.Dataset, 365),
+                new HuggingFaceRepository("model/hf-internal-testing/tiny-random-LlamaForCausalLM", "hf-internal-testing/tiny-random-LlamaForCausalLM", HuggingFaceRepositoryType.Model, 4_100_000),
+                new HuggingFaceRepository("model/hf-internal-testing/tiny-random-bert", "hf-internal-testing/tiny-random-bert", HuggingFaceRepositoryType.Model, 520_800),
             ],
             repositories);
     }
 
     /// <summary>The folder is the tool's <c>repo_folder_name</c>: the plural type and the parts joined with <c>--</c>.</summary>
     [Theory]
-    [InlineData("model", "openai-community/gpt2", "models--openai-community--gpt2")]
-    [InlineData("dataset", "rajpurkar/squad", "datasets--rajpurkar--squad")]
-    [InlineData("model", "gpt2", "models--gpt2")]
-    [InlineData("space", "org/demo", "spaces--org--demo")]
-    public void NamesTheFolderTheToolKeepsARepositoryIn(string type, string repoId, string folder)
+    [InlineData("model/openai-community/gpt2", "models--openai-community--gpt2")]
+    [InlineData("dataset/rajpurkar/squad", "datasets--rajpurkar--squad")]
+    [InlineData("model/gpt2", "models--gpt2")]
+    [InlineData("space/org/demo", "spaces--org--demo")]
+    [InlineData("kernel/org/kernel", "kernels--org--kernel")]
+    public void NamesTheFolderTheToolKeepsARepositoryIn(string id, string folder)
     {
-        Assert.Equal(folder, new HuggingFaceRepository($"{type}/{repoId}", repoId, type, 0).Folder);
+        var slash = id.IndexOf('/', StringComparison.Ordinal);
+        var listing = HuggingFaceCacheListing.TryRead(
+            $$"""[{"id": "{{id}}", "repo_id": "{{id[(slash + 1)..]}}", "repo_type": "{{id[..slash]}}", "size": "1.0K"}]""");
+
+        Assert.Equal(folder, Assert.Single(listing!).Folder);
     }
 
     [Fact]

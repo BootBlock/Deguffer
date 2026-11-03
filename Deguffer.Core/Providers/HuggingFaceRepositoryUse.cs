@@ -42,11 +42,15 @@ internal sealed record HuggingFaceRepositoryUse(ILiveTreeInspector Inspector, st
     /// </summary>
     /// <param name="inspector">What reads the process table and asks the Restart Manager.</param>
     /// <param name="idsByFolder">Each repository's folder, in display form, and the id it is named to the user by.</param>
-    public static HuggingFaceUse Partition(ILiveTreeInspector inspector, IReadOnlyDictionary<string, string> idsByFolder)
+    /// <param name="ct">Ends the Restart Manager's question, which covers every file of every repository.</param>
+    public static HuggingFaceUse Partition(
+        ILiveTreeInspector inspector,
+        IReadOnlyDictionary<string, string> idsByFolder,
+        CancellationToken ct)
     {
         var queries = idsByFolder.Keys.Select(folder => (Folder: folder, Query: Query(folder))).ToList();
         var asked = queries.Select(item => item.Query).OfType<LiveTreeQuery>().ToList();
-        var findings = asked.Count > 0 ? inspector.FindLive(asked) : LiveTreeFindings.Nothing;
+        var findings = asked.Count > 0 ? inspector.FindLive(asked, ct) : LiveTreeFindings.Nothing;
 
         var unused = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var held = new List<(string Path, string Reason)>();

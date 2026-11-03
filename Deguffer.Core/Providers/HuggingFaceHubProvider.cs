@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -47,14 +48,18 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 public sealed class HuggingFaceHubProvider : CleanupProviderBase
 {
-    /// <summary>The files and folders <c>huggingface_hub</c> itself keeps at the top of the hub cache.</summary>
-    public static readonly IReadOnlyList<(string Name, string Reason)> CacheFiles =
-    [
-        ("CACHEDIR.TAG", "The tag that tells backup tools this folder is a cache."),
-        ("version.txt", "The record of which version of the cache's layout this is."),
-        (".locks", "The locks huggingface_hub takes while it downloads."),
-        ("blobs", "The shared store of files several repositories link into. Only 'hf cache rm' may remove a file from it."),
-    ];
+    /// <summary>
+    /// What sits at the top of the hub cache beside the repositories, with why each survives:
+    /// <c>huggingface_hub</c>'s own tag, locks and shared store, and the <c>version.txt</c> Transformers
+    /// writes there to record which layout it last moved the cache to.
+    /// </summary>
+    public static readonly FrozenDictionary<string, string> CacheFiles = new Dictionary<string, string>
+    {
+        ["CACHEDIR.TAG"] = "The tag that tells backup tools this folder is a cache.",
+        ["version.txt"] = "The record Transformers keeps of which layout it last moved the cache to.",
+        [".locks"] = "The locks huggingface_hub takes while it downloads.",
+        ["blobs"] = "The shared store of files several repositories link into. Only 'hf cache rm' may remove a file from it.",
+    }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// The tool's own programs, which write into the cache while they run. The library itself runs
@@ -122,9 +127,6 @@ public sealed class HuggingFaceHubProvider : CleanupProviderBase
     };
 
     protected override IReadOnlyList<string> ConflictingProcessNames => HfProcessNames;
-
-    /// <summary>Where <c>huggingface_hub</c> keeps everything when no variable moves it.</summary>
-    public string DefaultHome => HuggingFaceLocations.DefaultHome(Environment);
 
     /// <summary>Where the hub cache is when no variable moves it.</summary>
     public string DefaultHubCache => HuggingFaceLocations.DefaultHub(Environment);
@@ -288,7 +290,7 @@ public sealed class HuggingFaceHubProvider : CleanupProviderBase
 
         var candidates = Locate(hub, repositories, notes);
         var use = HuggingFaceRepositoryUse.Partition(
-            _liveTrees, candidates.ToDictionary(item => item.Folder, item => item.Repository.Id, StringComparer.OrdinalIgnoreCase));
+            _liveTrees, candidates.ToDictionary(item => item.Folder, item => item.Repository.Id, StringComparer.OrdinalIgnoreCase), ct);
         var unused = candidates.Where(item => use.Unused.Contains(item.Folder)).ToList();
         notes.AddRange(use.Notes);
 
@@ -391,13 +393,12 @@ public sealed class HuggingFaceHubProvider : CleanupProviderBase
         IReadOnlyList<(string Path, string Reason)> held)
     {
         var excluded = new HashSet<string>(offered, StringComparer.OrdinalIgnoreCase);
-        var named = CacheFiles.ToDictionary(file => file.Name, file => file.Reason, StringComparer.OrdinalIgnoreCase);
         var heldReasons = held.ToDictionary(item => item.Path, item => item.Reason, StringComparer.OrdinalIgnoreCase);
 
         var inCache = entries
             .Select(entry => LongPath.Display(entry.FullName))
             .Where(path => !excluded.Contains(path))
-            .Select(path => (path, named.GetValueOrDefault(Path.GetFileName(path))
+            .Select(path => (path, CacheFiles.GetValueOrDefault(Path.GetFileName(path))
                 ?? heldReasons.GetValueOrDefault(path)
                 ?? "Not a repository Deguffer offers, so it must survive."));
 
@@ -425,12 +426,13 @@ public sealed class HuggingFaceHubProvider : CleanupProviderBase
     }
 
     /// <summary>The heading a repository is listed under, by what kind of repository it is.</summary>
-    private static string GroupOf(string type) => type switch
+    private static string GroupOf(HuggingFaceRepositoryType type) => type switch
     {
-        "model" => "Models",
-        "dataset" => "Datasets",
-        "space" => "Spaces",
-        _ => "Kernels",
+        HuggingFaceRepositoryType.Model => "Models",
+        HuggingFaceRepositoryType.Dataset => "Datasets",
+        HuggingFaceRepositoryType.Space => "Spaces",
+        HuggingFaceRepositoryType.Kernel => "Kernels",
+        _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
     };
 
     /// <summary>

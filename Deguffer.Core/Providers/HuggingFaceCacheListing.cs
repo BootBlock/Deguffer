@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -12,12 +13,12 @@ namespace Deguffer.Core.Providers;
 /// <c>model/openai-community/gpt2</c>. The type is what keeps a model and a dataset of one name apart.
 /// </param>
 /// <param name="RepoId">The repository as the Hub names it, such as <c>openai-community/gpt2</c>.</param>
-/// <param name="Type">The kind of repository: <c>model</c>, <c>dataset</c>, <c>space</c> or <c>kernel</c>.</param>
+/// <param name="Type">The kind of repository.</param>
 /// <param name="Bytes">
 /// What the tool says the repository's files take up, read back from the figure it prints to three
 /// figures, so it is close rather than exact.
 /// </param>
-internal sealed record HuggingFaceRepository(string Id, string RepoId, string Type, long Bytes)
+internal sealed record HuggingFaceRepository(string Id, string RepoId, HuggingFaceRepositoryType Type, long Bytes)
 {
     /// <summary>
     /// The folder <c>huggingface_hub</c> keeps the repository in, inside the hub cache:
@@ -25,7 +26,16 @@ internal sealed record HuggingFaceRepository(string Id, string RepoId, string Ty
     /// repository joined with <c>--</c>. Only one repository can have it, because a repository name
     /// may not hold <c>--</c>, which <see cref="HuggingFaceCacheListing"/> checks.
     /// </summary>
-    public string Folder => $"{Type}s--{RepoId.Replace("/", "--", StringComparison.Ordinal)}";
+    public string Folder => $"{Plural}--{RepoId.Replace("/", "--", StringComparison.Ordinal)}";
+
+    private string Plural => Type switch
+    {
+        HuggingFaceRepositoryType.Model => "models",
+        HuggingFaceRepositoryType.Dataset => "datasets",
+        HuggingFaceRepositoryType.Space => "spaces",
+        HuggingFaceRepositoryType.Kernel => "kernels",
+        _ => throw new InvalidOperationException($"No folder prefix for {Type}."),
+    };
 }
 
 /// <summary>
@@ -46,7 +56,13 @@ internal sealed record HuggingFaceRepository(string Id, string RepoId, string Ty
 internal static partial class HuggingFaceCacheListing
 {
     /// <summary>The kinds of repository <c>REPO_TYPES_MAPPING</c> in <c>constants.py</c> keeps a folder for.</summary>
-    private static readonly IReadOnlySet<string> Types = new HashSet<string>(["model", "dataset", "space", "kernel"], StringComparer.Ordinal);
+    private static readonly FrozenDictionary<string, HuggingFaceRepositoryType> Types = new Dictionary<string, HuggingFaceRepositoryType>
+    {
+        ["model"] = HuggingFaceRepositoryType.Model,
+        ["dataset"] = HuggingFaceRepositoryType.Dataset,
+        ["space"] = HuggingFaceRepositoryType.Space,
+        ["kernel"] = HuggingFaceRepositoryType.Kernel,
+    }.ToFrozenDictionary(StringComparer.Ordinal);
 
     /// <summary>The units <c>_format_size</c> prints, each a thousand times the one before.</summary>
     private const string Units = "KMGTPEZY";
@@ -134,12 +150,12 @@ internal static partial class HuggingFaceCacheListing
         }
 
         // validate_repo_id refuses "--" and "..", and the first is what makes the folder name one repository's.
-        return Types.Contains(type)
+        return Types.TryGetValue(type, out var kind)
             && id == $"{type}/{repoId}"
             && RepositoryName().IsMatch(repoId)
             && !repoId.Contains("--", StringComparison.Ordinal)
             && !repoId.Contains("..", StringComparison.Ordinal)
-                ? new HuggingFaceRepository(id, repoId, type, bytes)
+                ? new HuggingFaceRepository(id, repoId, kind, bytes)
                 : null;
     }
 

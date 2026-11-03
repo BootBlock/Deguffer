@@ -1603,7 +1603,7 @@ than a directory of hashes. If this is ever built, build it on that.
 **Shipped for the Hugging Face hub cache** as `HuggingFaceHubProvider`, on the grounds recorded in
 issue #412: Tier 3, one item per repository, never pre-selected, and removed only by
 `hf cache rm`. It needs `huggingface_hub` 1.32 or later, because from that version a repository's
-files can be links into a store in `hublobs` that repositories share, and older versions leave a
+files can be links into a store in `hub\blobs` that repositories share, and older versions leave a
 removed repository's shared files behind. So nothing is removed by path, and below 1.32 the row
 offers nothing and says why. `hf cache prune` is not used: a revision pinned by its full commit hash
 is stored with no ref, so prune cannot tell it from a superseded one. A repository a program holds a
