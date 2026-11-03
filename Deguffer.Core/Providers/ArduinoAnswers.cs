@@ -8,24 +8,31 @@ namespace Deguffer.Core.Providers;
 /// configuration from a CLI started as one the user starts now would be.
 /// </summary>
 /// <param name="All">Each answer, in the order the configurations were asked.</param>
-/// <param name="Changed">
-/// The environment the second answers were asked with (<see cref="Safety.IUserEnvironment.ChangedEnvironment"/>),
-/// or null where nothing changed and none was asked. The clean is held to it.
+/// <param name="Machine">
+/// Every variable a CLI the user starts now had when the answers were given
+/// (<see cref="Safety.IUserEnvironment.CurrentEnvironment"/>). The clean is held to it.
 /// </param>
-internal sealed record ArduinoAnswers(IReadOnlyList<ArduinoInstallation> All, IReadOnlyDictionary<string, string>? Changed)
+internal sealed record ArduinoAnswers(IReadOnlyList<ArduinoInstallation> All, IReadOnlyDictionary<string, string> Machine)
 {
     /// <summary>The answers of the CLI the clean starts, from which the plan runs and measures.</summary>
     public IReadOnlyList<ArduinoInstallation> Tool { get; } = [.. All.Where(i => i.Reading is VariableReading.Tool)];
 
+    /// <summary>
+    /// The answers of a CLI started as one the user starts now, asked only where the machine's
+    /// environment changed after Deguffer started. The clean re-reads what each read.
+    /// </summary>
+    public IReadOnlyList<ArduinoInstallation> StartedNowInstallations { get; } =
+        [.. All.Where(i => i.Reading is VariableReading.Current)];
+
     /// <summary>What a CLI the user starts now said, where it said it.</summary>
-    public IReadOnlyList<ArduinoSettings> StartedNow { get; } =
-        [.. Distinct(All.Where(i => i.Reading is VariableReading.Current))];
+    public IEnumerable<ArduinoSettings> StartedNow => Distinct(StartedNowInstallations);
 
     /// <summary>
-    /// Whether a CLI the user starts now did not say for one configuration, so nothing can be held
-    /// against that one and every clean is declined.
+    /// Whether a CLI the user starts now did not say for one configuration, or read a configuration a
+    /// clean cannot be held to, so nothing can be held against that one and every clean is declined.
     /// </summary>
-    public bool StartedNowUnknown => All.Any(i => i.Reading is VariableReading.Current && i.Settings is null);
+    public bool StartedNowUnknown =>
+        StartedNowInstallations.Any(i => i.Settings is null || i.Configuration.WhyUnknown is not null);
 
     /// <summary>
     /// Every answer once, from either CLI: where a change on the machine moved nothing of Arduino's, a

@@ -53,6 +53,7 @@ internal sealed class ArduinoInstallations(
 
             // Null on a machine nobody changed since Deguffer started, where a second answer would be the first.
             var changed = environment.ChangedEnvironment;
+            var machine = environment.CurrentEnvironment;
             var installations = new List<ArduinoInstallation>(changed is null ? asked.Count : 2 * asked.Count);
 
             foreach (var (cli, configFile) in asked)
@@ -66,7 +67,7 @@ internal sealed class ArduinoInstallations(
                 }
             }
 
-            return new ArduinoAnswers(installations, changed);
+            return new ArduinoAnswers(installations, machine);
         });
 
     /// <summary>Every answer is configuration, which the user can change between one scan and the next.</summary>
@@ -78,7 +79,14 @@ internal sealed class ArduinoInstallations(
 
     /// <summary>What a CLI started with the environment <paramref name="reading"/> names reads now.</summary>
     public ArduinoConfiguration ReadConfiguration(VariableReading reading, string? configFile) =>
-        ArduinoConfiguration.Read(reading, environment, configFile, defaultData);
+        ArduinoConfiguration.Read(variable => ConfiguredFolder.Read(reading, variable, environment), configFile, defaultData);
+
+    /// <summary>
+    /// What a CLI the user starts now reads with the machine's variables as <paramref name="machine"/>
+    /// gives them, which the clean's check reads afresh rather than as the planning pass kept them.
+    /// </summary>
+    public ArduinoConfiguration ReadConfiguration(IReadOnlyDictionary<string, string> machine, string? configFile) =>
+        ArduinoConfiguration.Read(variable => machine.GetValueOrDefault(variable), configFile, defaultData);
 
     /// <summary>
     /// What one CLI says of one configuration, started with the environment <paramref name="reading"/>
@@ -95,6 +103,7 @@ internal sealed class ArduinoInstallations(
 
         return new ArduinoInstallation(
             cli,
+            configFile,
             reading,
             before,
             ReadConfiguration(reading, configFile).SameAs(before) || before.WhyUnknown is not null ? settings : null);

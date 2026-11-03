@@ -396,6 +396,78 @@ public sealed class ArduinoCacheProviderTests : IDisposable
         Assert.Contains(result.Steps, s => s.Message?.Contains("changed on this machine since the preview", StringComparison.Ordinal) == true);
     }
 
+    /// <summary>
+    /// Only an <c>ARDUINO_</c> variable moves the CLI's folders, so a variable of another tool set on
+    /// the machine after the preview leaves the clean to run, whether or not the machine had already
+    /// changed when the plan was made.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunsTheCommandWhenOnlyAnotherToolsVariableChangedSinceThePreview(bool changedBefore)
+    {
+        InstalledData();
+
+        if (changedBefore)
+        {
+            InstalledMovedData();
+            _environment.WithEnvironmentVariableSetSinceStart(DataVariable, MovedData);
+        }
+
+        var provider = CreateProvider(CliAnswering());
+        var plan = await provider.PlanAsync();
+
+        _environment.WithEnvironmentVariableSetSinceStart("JAVA_HOME", Path.Combine(_temp.Path, "jdk"));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+        Assert.False(Directory.Exists(Staging));
+    }
+
+    /// <summary>
+    /// A CLI the user starts now reads the configuration file the machine's variables name, and that
+    /// file can be edited after the preview to put one of its folders in the downloads folder. Deguffer's
+    /// own configuration is unchanged, so only reading that file again holds the clean back.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotRunTheCommandWhenTheConfigurationACliStartedNowReadsChangedSinceThePreview()
+    {
+        InstalledData();
+        var config = _temp.CreateFile(10, "profile", "ArduinoConfig", "arduino-cli.yaml");
+        _environment.WithEnvironmentVariableSetSinceStart("ARDUINO_CONFIG_FILE", config);
+
+        var ran = new List<string>();
+        var provider = CreateProvider(CliAnswering(ran: ran));
+        var plan = await provider.PlanAsync();
+
+        Assert.Single(plan.Steps.OfType<RunCommandStep>());
+
+        File.WriteAllText(config, $"directories:\n  user: {Staging}\n");
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.DoesNotContain(ran, a => a.StartsWith("cache clean", StringComparison.Ordinal));
+        Exists(Path.Combine(Staging, "packages", "avr-gcc-7.3.0.tar.bz2"));
+        Assert.Contains(result.Steps, s => s.Message?.Contains("Arduino CLI you start yourself reads has changed", StringComparison.Ordinal) == true);
+    }
+
+    /// <summary>
+    /// A CLI the user starts now that is pointed at a configuration file by a path that is not a full
+    /// one reads a file nobody can name, so no clean can be held to what it said, and none is offered.
+    /// </summary>
+    [Fact]
+    public async Task OffersNoCleanWhenACliStartedNowReadsAConfigurationThatCannotBeNamed()
+    {
+        InstalledData();
+        _environment.WithEnvironmentVariableSetSinceStart("ARDUINO_CONFIG_FILE", "arduino-cli.yaml");
+
+        var plan = await CreateProvider(CliAnswering()).PlanAsync();
+
+        Assert.Empty(plan.Steps.OfType<RunCommandStep>());
+        Assert.Contains(plan.Notes, n => n.Severity is PlanNoteSeverity.Warning && n.Message.Contains("cannot check", StringComparison.Ordinal));
+    }
+
     /// <summary>A file saved into the downloads folder after the preview would go with the archives, so the command is held back.</summary>
     [Fact]
     public async Task DoesNotRunTheCommandWhenTheDownloadsGainedSomethingSinceThePreview()

@@ -259,8 +259,9 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Warning,
                 "A setting that moves Arduino's folders changed on this machine after Deguffer started, and an Arduino "
-                + "CLI started with it did not say where its folders are, so Deguffer cannot tell what a clean would "
-                + "reach. It leaves the downloads and the build cache alone while that CLI does not answer."));
+                + "CLI started with it did not say where its folders are, or reads a configuration file Deguffer cannot "
+                + "check, so Deguffer cannot tell what a clean would reach. It leaves the downloads and the build cache "
+                + "alone while that is so."));
         }
 
         var (commands, staged) = await PlanDownloadsAsync(known, answers, notes, survivors, unreachable, ct).ConfigureAwait(false);
@@ -392,8 +393,7 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
                 TargetCheck = new ArduinoCleanTarget(
                     () => _installations.ReadConfiguration(VariableReading.Tool, installation.Settings.ConfigFile),
                     installation.Configuration,
-                    Environment.ReadChangedEnvironmentNow,
-                    answers.Changed,
+                    new ArduinoStartedNowCheck(Environment.ReadEnvironmentNow, answers, _installations.ReadConfiguration),
                     installation.Settings.Downloads.Folder!),
             }),
         ];

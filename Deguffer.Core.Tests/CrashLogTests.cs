@@ -195,7 +195,9 @@ public class CrashLogTests
 
         public IReadOnlyDictionary<string, string>? ChangedEnvironment => null;
 
-        public IReadOnlyDictionary<string, string>? ReadChangedEnvironmentNow() => null;
+        public IReadOnlyDictionary<string, string> CurrentEnvironment { get; } = new Dictionary<string, string>();
+
+        public IReadOnlyDictionary<string, string> ReadEnvironmentNow() => CurrentEnvironment;
 
         public string? ReadCurrentUserRegistryValue(string keyPath, string valueName) => null;
 

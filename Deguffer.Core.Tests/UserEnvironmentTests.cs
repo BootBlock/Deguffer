@@ -184,7 +184,7 @@ public sealed class UserEnvironmentTests : IDisposable
 
         user["ARDUINO_DIRECTORIES_USER"] = new EnvironmentValue(@"D:\sketches", Expandable: false);
 
-        Assert.Equal(@"D:\sketches", environment.ReadChangedEnvironmentNow()?["ARDUINO_DIRECTORIES_USER"]);
+        Assert.Equal(@"D:\sketches", environment.ReadEnvironmentNow()["ARDUINO_DIRECTORIES_USER"]);
         Assert.Null(environment.ChangedEnvironment);
         Assert.Null(environment.GetEnvironmentVariable("ARDUINO_DIRECTORIES_USER"));
     }
