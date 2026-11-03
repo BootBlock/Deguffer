@@ -93,7 +93,7 @@ internal sealed class HeldCopy : IDisposable
     /// where it is still the copy as the search found it, on this device.
     /// </summary>
     public (RemovalCheck Check, string Why)? Recheck(FileInformation files) =>
-        ContentReader.Judge(files.Describe(Content, Copy.Route), Copy, Copy.Attributes) is { } result
+        ContentReader.Judge(files.State(Content, Copy.Route), Copy, Copy.Attributes) is { } result
             ? (Check(result), Sentence(result))
             : null;
 

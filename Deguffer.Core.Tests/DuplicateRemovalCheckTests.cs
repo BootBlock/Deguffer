@@ -302,9 +302,8 @@ public sealed class DuplicateRemovalCheckTests : DuplicateRemovalScene
     }
 
     /// <summary>
-    /// A content read no longer asks where a file is, but a removal still does: it checks the copy is
-    /// still at its path, so a copy whose path Windows will not give stays as one it could not
-    /// identify.
+    /// A removal asks where the copy is, though a content read does not: it checks the copy is still
+    /// at its path, so a copy whose path Windows will not give stays as one it could not identify.
     /// </summary>
     [Theory]
     [InlineData(ExploreRemovalMode.RecycleBin)]
@@ -329,8 +328,9 @@ public sealed class DuplicateRemovalCheckTests : DuplicateRemovalScene
 
     /// <summary>
     /// The removal compares where the copy is with where the search found it, so a copy Windows says
-    /// is now at another path stays, however unchanged the file itself is. Only the first description
-    /// of the copy compares its path: every check after it compares what the file is.
+    /// is now at another path stays, however unchanged the file itself is. Only the description of the
+    /// copy before it is opened compares that path: the checks of the held copy after it compare what
+    /// the file is.
     /// </summary>
     [Theory]
     [InlineData(ExploreRemovalMode.RecycleBin)]
