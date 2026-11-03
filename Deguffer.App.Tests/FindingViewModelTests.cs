@@ -1,6 +1,7 @@
 using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Testing;
 
@@ -36,6 +37,24 @@ public class FindingViewModelTests
         Assert.All(row.Steps, step => Assert.True(step.IsSelected));
         Assert.True(row.IsSelected);
         Assert.Equal(30, row.SelectedSize.Reclaimable);
+    }
+
+    /// <summary>
+    /// The shell's half of the researched rule: the row reads its default and its chip from the
+    /// provider's basis. Tier 1 here, so only the basis can be what leaves it unticked.
+    /// </summary>
+    [Fact]
+    public void AResearchedRowStartsUntickedAndSaysItIsResearched()
+    {
+        var researched = new FakeCleanupProvider("researched") { Basis = ProviderBasis.Researched };
+
+        var row = Rows.Row(Rows.Found(researched, Rows.Folder("a", 10)));
+
+        Assert.False(row.IsSelected);
+        Assert.False(Assert.Single(row.Steps).IsSelected);
+        Assert.True(row.IsResearched);
+        Assert.Equal("Researched", row.BasisLabel);
+        Assert.False(Rows.Row(Rows.Found(Cache, Rows.Folder("a", 10))).IsResearched);
     }
 
     /// <summary>

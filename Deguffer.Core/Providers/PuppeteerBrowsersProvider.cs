@@ -71,6 +71,8 @@ public sealed class PuppeteerBrowsersProvider : CleanupProviderBase
         + "'npx puppeteer browsers install' is run or Puppeteer is installed again, which re-downloads "
         + "a few hundred megabytes for each browser. Scripts, configuration and projects are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.PackageCaches,

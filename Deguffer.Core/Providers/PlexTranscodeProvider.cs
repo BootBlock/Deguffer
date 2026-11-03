@@ -34,6 +34,8 @@ public sealed class PlexTranscodeProvider : MediaServerTranscodeProvider
         + "asks for it, and resizes posters and thumbnails again as they are shown. Your libraries, watch "
         + "history, ratings and downloads waiting to go to a phone are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.MediaAndCreative,

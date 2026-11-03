@@ -88,6 +88,17 @@
                                    TextWrapping="Wrap" />
                     </StackPanel>
 
+                    <!-- Where the rules come from, beside whose files these are: how Deguffer
+                         knows what it says above. Shown for both bases, because "checked against
+                         a real installation" is information too. -->
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="How Deguffer knows this" Style="{StaticResource FieldLabel}" />
+                        <TextBlock Text="{x:Bind Finding.BasisExplanation}"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                   IsTextSelectionEnabled="True"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+
                     <Border Style="{StaticResource Divider}" />
 
                     <StackPanel Spacing="8">

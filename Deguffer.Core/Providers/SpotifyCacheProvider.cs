@@ -86,6 +86,8 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
         + "they may take a moment to start and use more data for a while. The music and podcasts you "
         + "downloaded, your settings and your sign-in are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.MediaAndCreative,

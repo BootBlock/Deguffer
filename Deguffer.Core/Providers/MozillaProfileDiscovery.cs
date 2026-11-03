@@ -67,7 +67,7 @@ public enum MozillaRegisterReading
 /// <para>The application directory is a constructor argument rather than a constant because
 /// Thunderbird keeps the identical layout under <c>%APPDATA%\Thunderbird</c> — the same
 /// <c>profiles.ini</c>, the same two roots, the same <c>cache2</c>. Nothing here knows the name of
-/// any application, so a second one is a second provider and no change to this file.</para>
+/// any application; <see cref="MozillaApplication"/> is where each one is named.</para>
 /// </summary>
 /// <param name="environment">The two application-data roots, behind the seam that makes this testable.</param>
 /// <param name="applicationDirectory">

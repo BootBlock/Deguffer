@@ -75,6 +75,8 @@ public sealed class DartAnalysisServerProvider : CleanupProviderBase
         "The next time a Dart or Flutter project is opened, the analysis server re-analyses it from "
         + "source. Errors, completion and navigation are slower until that first pass finishes.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.DeveloperTools,

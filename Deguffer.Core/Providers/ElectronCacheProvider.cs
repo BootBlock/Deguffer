@@ -78,6 +78,8 @@ public sealed partial class ElectronCacheProvider : CleanupProviderBase
         "The next time a project installs one of these Electron versions from scratch, it downloads it "
         + "again. Projects already installed keep working, because each has its own unpacked copy.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.PackageCaches,

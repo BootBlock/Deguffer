@@ -80,6 +80,8 @@ public sealed class ClaudeCodeMcpLogProvider : CleanupProviderBase
         + "attached to a bug report afterwards. Claude Code keeps writing new logs exactly as before, and your "
         + "servers and conversations are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.DeveloperTools,

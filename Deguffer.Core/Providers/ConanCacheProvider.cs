@@ -99,6 +99,8 @@ public sealed class ConanCacheProvider : CleanupProviderBase
         "A package built from source again fetches its sources and builds from a fresh folder. Every "
         + "recipe and package binary in the cache, and everything Conan downloaded, is untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.PackageCaches,

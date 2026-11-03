@@ -165,6 +165,8 @@ public sealed partial class TempToolCacheProvider : TempMarkerProviderBase
         + "anything a running Flutter, Dart or Firefox may be using, and any Roslyn session that is "
         + "still open, is left where it is.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.TemporaryFiles,

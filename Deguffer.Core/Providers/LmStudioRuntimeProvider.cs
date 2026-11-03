@@ -77,6 +77,8 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
         + "build for each kind of hardware stay. Going back to a removed version downloads it again, "
         + "and an old version may no longer be offered. Your models, chats and settings are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.DeveloperTools,

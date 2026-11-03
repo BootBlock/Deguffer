@@ -71,6 +71,8 @@ public sealed class UnityLibraryProvider : BuildDirectoryProvider
         "On a large project that takes many minutes, and any packages it had downloaded are fetched " +
         "again. Nothing is lost — all of it is derived from Assets, Packages and ProjectSettings.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.ProjectBuildOutput,

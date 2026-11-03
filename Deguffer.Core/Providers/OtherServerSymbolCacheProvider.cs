@@ -42,6 +42,8 @@ public sealed class OtherServerSymbolCacheProvider : DebuggerSymbolCacheProvider
         + "server that no longer keeps an old build's symbols cannot supply them again. Your symbol path and "
         + "debugger settings are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.DeveloperTools,

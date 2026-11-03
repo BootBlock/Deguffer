@@ -94,6 +94,8 @@ public sealed class VsCodeLogProvider : CleanupProviderBase
         "of it can be attached to a bug report afterwards. The editor keeps writing new logs " +
         "exactly as before, and nothing about how it works changes.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.DeveloperTools,

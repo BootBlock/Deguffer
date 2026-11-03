@@ -51,6 +51,8 @@ public sealed class UnrealIntermediateProvider : BuildDirectoryProvider
         + "project files on the .uproject. A Blueprint-only project opens as before. Your content, "
         + "code, settings and autosaves are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.ProjectBuildOutput,

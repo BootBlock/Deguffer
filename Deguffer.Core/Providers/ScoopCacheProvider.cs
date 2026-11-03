@@ -64,6 +64,8 @@ public sealed class ScoopCacheProvider : CleanupProviderBase
         "The next Scoop install or update that needs a removed download fetches it again. Installed "
         + "apps, their persisted data and your buckets are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.PackageCaches,

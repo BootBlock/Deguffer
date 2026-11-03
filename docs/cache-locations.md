@@ -26,6 +26,14 @@ four questions worth asking before deleting anything:
 anything it does not recognise stays in Tier 4 and is left alone. If Deguffer finds something
 unexpected next to a cache it tells you it is leaving it there rather than guessing.
 
+**Some rows are researched rather than observed.** Most rows were written against folders seen on
+a real installation of the tool. The others were written from the publisher's documentation, the
+tool's source and reports from its users, because nobody working on Deguffer had those folders: the
+tool was not installed, or was installed with nothing in them. Each of
+those rows carries a **Researched** chip, and its *What is this?* dialog says so. A researched row
+keeps every rule above, but it is **never pre-selected**, whatever its tier: look at what it lists
+before you tick it. A tick you gave it before is remembered.
+
 ---
 
 ## The rule that shapes all of this
@@ -163,7 +171,7 @@ about compilation rather than promising a uniformly cheap refill — but the cos
 
 ## Poetry package cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -296,7 +304,7 @@ and they are never a candidate.
 
 ## Cargo crate cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -438,7 +446,7 @@ the distribution server a project already names.
 
 ## Go build and module caches
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -495,7 +503,7 @@ regular Go build as a risk.
 
 ## Zig build cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -564,7 +572,7 @@ could depend on somebody else's server is the one Deguffer does not touch.
 
 ## Deno cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -740,7 +748,7 @@ project needs it.
 
 ## ccache compiler cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -787,7 +795,7 @@ again the next time a build compiles it.
 
 ## sccache compiler cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -994,7 +1002,7 @@ install needs it.
 
 ## pnpm store
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -1075,7 +1083,7 @@ time a project asks for it, with no command from you and nothing to re-configure
 
 ## Yarn 1 package cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -1142,7 +1150,7 @@ again when an install needs it.
 
 ## Bun install cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -1281,7 +1289,7 @@ already deletes the oldest of it on its own.
 
 ## Arduino downloads and build cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -1356,7 +1364,7 @@ Everything removed is a download the CLI fetches again, or a build the next comp
 
 ## Scoop download cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -1409,7 +1417,7 @@ Every archive is a copy of what the app's manifest URL still serves.
 
 ## Maven local repository
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -1485,7 +1493,7 @@ broken one".
 
 ## vcpkg build caches
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -1565,7 +1573,7 @@ each directory is its own row, so you can take the scratch and leave the binary 
 
 ## Conan package cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -1624,7 +1632,7 @@ in the store that can exist nowhere else, is never touched.
 
 ## Conda package cache
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -1708,7 +1716,7 @@ this is not about environments being expensive to rebuild.
 
 ## pre-commit hook environments
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -2761,10 +2769,82 @@ Every one of the five is derived content with an authoritative source elsewhere:
 still has, lists Mozilla still publishes, and compiled output of code that is still on your disk.
 Firefox refills all of it without being asked.
 
-### Not reached: Thunderbird
+---
 
-Thunderbird keeps the identical layout — its own `profiles.ini`, the same two roots, the same
-`cache2`. Deguffer does not reach it yet, because nothing here has been measured against it.
+## Thunderbird caches
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%LOCALAPPDATA%\Thunderbird\Profiles\<profile>`, for each profile `profiles.ini` names |
+| **Method** | Delete three recognised cache directories, per profile |
+| **Typical size** | 124 KB in a new profile on Thunderbird 159, nearly all of it the startup cache. A profile in use grows with the web content Thunderbird has fetched |
+
+### What it is
+
+Thunderbird is built on Firefox's engine and keeps its profiles the same way, in two halves, under
+its own folders rather than below a `Mozilla` folder:
+
+| Half | Where | What is in it |
+| --- | --- | --- |
+| **Roaming** | `%APPDATA%\Thunderbird\Profiles\<profile>` | Your mail, address books, calendars, saved passwords, OpenPGP keys and every setting, your accounts among them |
+| **Local** | `%LOCALAPPDATA%\Thunderbird\Profiles\<profile>` | The disk cache and the other files Thunderbird refills by itself |
+
+A new profile on Thunderbird 159 held these three in its local half, and nothing else:
+
+| Directory | What it holds |
+| --- | --- |
+| `cache2` | Content Thunderbird downloaded and kept so it would not fetch the same thing twice |
+| `startupCache` | Interface and script data Thunderbird precompiles for its own start-up |
+| `safebrowsing` | Where the engine keeps its Safe Browsing lists |
+
+### What Deguffer does
+
+The same as for Firefox. It reads `%APPDATA%\Thunderbird\profiles.ini` to learn which directories
+are profiles, deletes only the three directories above by exact name from each profile's local
+half, reports a profile kept somewhere else instead of examining it, and refuses to delete through
+a link anywhere on the way.
+
+Firefox's other caches, `thumbnails` and `jumpListCache`, were not in the measured profile, so in a
+Thunderbird profile they are not recognised and are left alone.
+
+### What is protected
+
+**The whole roaming half, and everything in the local half that is not one of the three.**
+Deguffer asserts afterwards that these survived:
+
+| Neighbour | What it really is |
+| --- | --- |
+| `Mail`, `ImapMail`, `News` | Your mail and newsgroups |
+| `calendar-data` | Your local calendars |
+| `abook.sqlite`, `history.sqlite` | Your address book, and the addresses collected from mail you sent |
+| `key4.db`, `logins.json`, `logins.db` | Your saved account passwords and the key that decrypts them |
+| `secring.gpg`, `pubring.gpg`, `openpgp.sqlite` | Your OpenPGP keys, and which of them you have accepted |
+| `cert9.db` | The certificates and exceptions you have accepted |
+| `prefs.js` | Every setting you have changed, your accounts among them |
+| `global-messages-db.sqlite` | The search index of your mail |
+| `profiles.ini` | The register itself. Losing it loses every profile |
+
+**The search index is not offered.** Thunderbird rebuilds `global-messages-db.sqlite` when it is
+missing, so nothing is lost, but it re-reads every message to do so, and that can take a long time.
+
+### What it costs you
+
+Thunderbird fetches web content from the network rather than from disk for a while, and rebuilds
+its startup cache the first time it opens, so one start is slower.
+
+**Mail, address books, calendars, saved passwords and settings are untouched.** They are all in the
+other half of the profile, which Deguffer never removes anything from.
+
+Close Thunderbird first if you can. It keeps its cache files open while it runs, and anything held
+open is left in place rather than removed.
+
+### Why Tier 1
+
+Each of the three is derived content that Thunderbird refills without being asked: content the
+server still has, lists Mozilla still publishes, and compiled output of code that is still on your
+disk.
 
 ---
 
@@ -3381,7 +3461,7 @@ by definition.
 
 ## Emulator shader caches
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -3531,7 +3611,7 @@ Two rows, because they are two tiers.
 
 | | |
 | --- | --- |
-| **Rows** | **RetroArch shaders and game databases**, Tier 2. **RetroArch thumbnails**, Tier 3 |
+| **Rows** | **RetroArch shaders and game databases**, Tier 2. **RetroArch thumbnails**, Tier 3. Both researched: See *Some rows are researched rather than observed* at the top of this page |
 | **Location** | `shaders_slang`, `shaders_glsl` and `shaders_cg` in RetroArch's shader folder; the `.rdb` files in its database folder; `Named_Boxarts`, `Named_Snaps`, `Named_Titles` and `Named_Logos` in each system's folder in its thumbnails folder. Each folder is where RetroArch's settings put it, `shaders`, `database\rdb` and `thumbnails` beside the program by default |
 | **Method** | Delete the recognised folders, and the `.rdb` files one by one, one item each. Thumbnails are grouped by system |
 | **Typical size** | Nothing measured: the machine this was written on has no RetroArch. The libretro servers put the shader sets at about 15 to 54 MB compressed each, a few hundred megabytes extracted, and the databases at about 52 MB compressed. Thumbnails run to many gigabytes for a large library |
@@ -3630,7 +3710,7 @@ permanent loss.
 
 ## Unreal Engine derived data cache
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -3720,7 +3800,7 @@ but only by re-indexing for minutes.
 
 ## Unity GI cache
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -3804,7 +3884,7 @@ re-created, but only by re-computing for a long time.
 
 ## Spotify streaming cache
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -3922,7 +4002,7 @@ opposite case, which is why they are kept out entirely rather than offered at a 
 
 ## Plex Media Server transcoder files
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -4002,7 +4082,7 @@ one is making it again.
 
 ## Jellyfin transcoder files
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -4083,7 +4163,7 @@ Every segment is derived from media still on disk.
 
 ## Emby Server transcoder files
 
-**Tier 1 — regenerable cache.** Pre-selected.
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
 
 | | |
 | --- | --- |
@@ -4228,7 +4308,7 @@ Sources:
 
 ## Capture One previews and thumbnails
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -4353,7 +4433,7 @@ Sources:
 
 ## DaVinci Resolve render cache
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -4465,7 +4545,7 @@ Sources:
 
 ## Adobe media cache
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -4588,9 +4668,78 @@ Sources:
 
 ---
 
+## CapCut editing cache
+
+**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**, because nobody working
+on Deguffer has seen a CapCut installation.
+
+| | |
+| --- | --- |
+| **Location** | Seven named folders in `%LOCALAPPDATA%\CapCut\User Data\Cache`, and the same in `%LOCALAPPDATA%\JianyingPro\User Data\Cache` |
+| **Method** | Delete those folders, and nothing beside them |
+| **Typical size** | Not measured here: CapCut was not installed on the machine this was written on. One user measured 54 GB in `recognize` alone |
+
+### What it is
+
+CapCut is a free video editor from ByteDance. Jianying Pro is its edition for mainland China, and
+keeps the same folders under its own name. While you edit, the editor keeps what it works out from
+your clips so that it does not have to work it out again:
+
+- **`frameThumbnail`**: thumbnails of video frames for the timeline.
+- **`audioWave`**: waveforms of audio clips.
+- **`recognize`**: audio extracted from clips to write automatic subtitles.
+- **`AlgorithmCache`**: results of the editor's analysis of clips.
+- **`MotionBlurCache`**: frames rendered for the motion blur effect.
+- **`ttsTemp`**: speech generated from text while it was placed in a draft.
+- **`tmp`**: the editor's scratch space.
+
+### How these folders were chosen
+
+Not every folder in `Cache` is a cache. One user measured each folder of Jianying Pro's cache,
+removed them and reopened every draft. A published cleaner adopted the result, and the folder names
+match those in a real CapCut tree. The folders above are the ones that test showed the editor makes
+again. The rest are material your drafts use:
+
+- **`effect`, `onlineMaterial`, `artistEffect`, `music` and `template`** hold effects and material
+  downloaded for your drafts, which the drafts name directly.
+- **`image` and `importcache3`** hold copies of media you imported, which may be the only copy left.
+- **`agencycache`, `prerender` and `RemuxCache`** hold footage the editor transcoded or rendered.
+  They regenerated in that test, but they can outlive the original file, and CapCut's settings can
+  move them to a folder you chose.
+
+CapCut's own **Clear cache** button has no command behind it, and no source says which folders it
+empties, so Deguffer cannot use it (§5.1).
+
+### What Deguffer does
+
+It removes the seven folders above, and nothing else. **Nothing is offered while CapCut or Jianying
+Pro is running**, because the editor reads these folders while a draft is open. The same question
+is asked again before each folder goes. A folder that is a link is left alone and named.
+
+### What is protected
+
+`%LOCALAPPDATA%\CapCut`, `User Data` and `Cache` are never targets. **What you keep is named,
+checked after the run, and refused in Explore**: your drafts in `User Data\Projects`, the settings
+and automatic draft backups in `User Data\Config`, the installed builds in `Apps`, and every `Cache`
+folder listed under *How these folders were chosen*. Any other folder in `Cache` is left alone.
+
+### What it costs you
+
+The next time you open a draft, CapCut draws its thumbnails and waveforms again, which takes a moment
+on a long timeline. Subtitles you already made are in the draft, so `recognize` is filled again only
+if you make subtitles again.
+
+### Why Tier 1, and why not pre-selected
+
+Each folder is derived from media the draft still names, and the editor makes it again when it needs
+it. That is Tier 1. The row is not pre-selected only because the evidence is research: see *Some rows
+are researched rather than observed* at the top of this page.
+
+---
+
 ## After Effects disk cache
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -4986,6 +5135,61 @@ and it asks for the extra acknowledgement Tier 2 carries.
 
 ---
 
+## CapCut superseded builds
+
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
+acknowledgement.
+
+| | |
+| --- | --- |
+| **Location** | The build folders in `%LOCALAPPDATA%\CapCut\Apps` and `%LOCALAPPDATA%\JianyingPro\Apps`, other than the one CapCut starts and the newest |
+| **Method** | Delete the folders holding builds CapCut has replaced |
+| **Typical size** | Not measured here: CapCut was not installed on the machine this was written on. Users report 21 builds holding 31.5 GB, and 50 GB recovered |
+
+### What it is
+
+CapCut installs each update as a complete new copy of the program, in a folder named by its version
+(`6.6.0.2610`) inside `Apps`. A small launcher, `Apps\CapCut.exe`, starts the build that
+`Apps\configure.ini` names on its `last_version` line. Nothing removes the old builds, so each
+update leaves another behind.
+
+### What Deguffer does
+
+It reads `last_version` and offers every build except **the one it names** and **the newest one**.
+The newest is kept even when the record names an older build: tools that stop CapCut updating do so
+by pinning `last_version` to an old build, and an update may have written a new build before it
+rewrote the record. Builds are ordered by their version numbers, so `10.0.0.100` is newer than
+`9.2.0.3931`.
+
+**Every build is left alone, and the row says why, if** `configure.ini` is missing or cannot be read,
+it names no build or two different ones, it names a build that is not there, or a build's number is
+too large to order. In each case Deguffer cannot tell which build CapCut starts.
+
+**Nothing is offered while anything runs from `Apps`**: the editor, its helpers and its background
+service all run from a build, and an update may still be reading the folder beside the one it
+started from. The same question is asked again before each build goes. A build that is a link is left
+alone and named.
+
+### What is protected
+
+The `Apps` folder, the launcher, `configure.ini`, `uninst.exe` and every build that is not offered
+are named, checked after the run, and refused in Explore. Only a folder named by four numbers
+(`3.8.0.1431`) is ever a build. A folder an update is still writing, which is named by a timestamp,
+and anything else in `Apps` is left alone.
+
+### What it costs you
+
+CapCut starts the build it starts now. Each older build is gone for good: CapCut offers no way to
+download an old version again. Your drafts, settings and caches are in `User Data` and are untouched.
+
+### Why Tier 2
+
+A build does not refill: getting an old version back means finding its installer somewhere else. So
+the row is offered, never pre-selected, and needs an acknowledgement. It is also researched: see *Some
+rows are researched rather than observed* at the top of this page.
+
+---
+
 ## Dart analysis server cache
 
 **Tier 1 — regenerable cache.** Pre-selected.
@@ -5317,7 +5521,7 @@ rather than a global install.
 
 ## Puppeteer browsers
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -5534,7 +5738,7 @@ version that may not stay published, so it is offered and never ticked on your b
 
 ## Vagrant superseded box versions
 
-**Tier 2 — regenerable, with cost.** Not pre-selected.
+**Tier 2 — regenerable, with cost, researched.** Not pre-selected.
 
 | | |
 | --- | --- |
@@ -5772,7 +5976,7 @@ what is left.
 
 ## Graphics driver installer files
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -5881,7 +6085,7 @@ location nobody has measured out of the default selection.
 
 ## Autodesk installer files
 
-**Tier 2 — regenerable, with cost.** Offered but **not pre-selected**, and requires an
+**Tier 2 — regenerable, with cost, researched.** Offered but **not pre-selected**, and requires an
 acknowledgement.
 
 | | |
@@ -6328,6 +6532,11 @@ Studio rebuilds each of them by itself the next time the solution opens. pytest'
 tool records them as it runs and makes them again on the next run, and what goes is one slower run,
 and for pytest the record of which tests failed last.
 
+The three Python caches are researched, written from each tool's source on a machine where none of
+them had been run, so their rows are not pre-selected: see *Some rows are researched rather than
+observed* at the top of this page. `obj` and the `.vs` caches were observed, and are. Of the Tier 2
+rows, tox's and nox's environments and the two Unreal folders are researched too.
+
 The others cost more than a slower next use, and §3's definition of Tier 2 — "re-created, but
 only by re-downloading gigabytes or re-indexing for minutes" — is met by each of them differently:
 
@@ -6608,7 +6817,7 @@ type the name out as well.
 
 ## Windows File History
 
-**Tier 3 — user data.** Offered, **never pre-selected**, and confirmed by a dialog that says the
+**Tier 3 — user data, researched.** Offered, **never pre-selected**, and confirmed by a dialog that says the
 loss is permanent. Switch *Type a name to delete user data* on in Settings and that dialog asks you
 to type the words out.
 

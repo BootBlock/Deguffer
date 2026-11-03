@@ -64,6 +64,8 @@ public sealed class BattleNetCacheProvider : CleanupProviderBase
         "The launcher downloads what it had cached again the next time it needs it, so it may "
         + "start more slowly once. Your sign-in, your games and your settings are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Games,

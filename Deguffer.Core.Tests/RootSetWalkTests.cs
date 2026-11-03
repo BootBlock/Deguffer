@@ -16,10 +16,11 @@ public sealed class RootSetWalkTests
     private const int Threads = 8;
 
     /// <summary>
-    /// Long enough for any machine to start the threads, however busy. A walk that left the roots to
-    /// the calling thread never reaches the count at all.
+    /// How long a walk that never reaches its count is waited for before the test fails rather than
+    /// hangs. A walk that left the roots to the calling thread never reaches it at all, and one that
+    /// does reaches it whenever its threads are scheduled, which on a loaded machine is later.
     /// </summary>
-    private static readonly TimeSpan Deadline = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan HangGuard = TimeSpan.FromSeconds(30);
 
     /// <summary>
     /// A list of folders with no folder inside them queues nothing as it is read, so the walk has to
@@ -44,10 +45,10 @@ public sealed class RootSetWalkTests
                 CancellationToken.None),
             TaskCreationOptions.LongRunning);
 
-        var reached = tree.WaitForFullCount(Deadline);
+        var reached = tree.WaitForFullCount(HangGuard);
         var peak = tree.Peak;
         tree.Release();
-        await walk.WaitAsync(TimeSpan.FromSeconds(30));
+        await walk.WaitAsync(HangGuard);
 
         Assert.True(reached, $"{peak} of {Threads} folders were being listed at once.");
         Assert.Equal(leaves.Length, tree.Listed);

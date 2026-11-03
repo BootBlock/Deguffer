@@ -149,6 +149,15 @@
                             AutomationProperties.Name="{x:Bind ViewModel.Row.TierLabel}"
                             AutomationProperties.HelpText="{x:Bind ViewModel.Row.TierExplanation}" />
 
+            <ContentControl Grid.Column="3"
+                            HorizontalAlignment="Left"
+                            Content="{x:Bind ViewModel.Row.BasisLabel}"
+                            Visibility="{x:Bind ViewModel.Row.IsResearched}"
+                            Style="{StaticResource BasisChip}"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.Row.BasisExplanation}"
+                            AutomationProperties.Name="{x:Bind ViewModel.Row.BasisLabel}"
+                            AutomationProperties.HelpText="{x:Bind ViewModel.Row.BasisExplanation}" />
+
             <TextBlock Grid.Column="4"
                        Text="{x:Bind ViewModel.SelectionLabel, Mode=OneWay}"
                        Style="{StaticResource SecondaryText}"

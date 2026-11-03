@@ -149,6 +149,8 @@ public sealed class DenoCacheProvider : CleanupProviderBase
         + "type-checks from scratch, so it starts more slowly once. What Deno programs saved and your "
         + "REPL history are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.PackageCaches,

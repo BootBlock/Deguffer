@@ -36,6 +36,8 @@ public sealed class JellyfinTranscodeProvider : MediaServerTranscodeProvider
         "Jellyfin converts a film or an episode again the next time a player that cannot play the "
         + "original asks for it. Your libraries, users, watch history, settings and backups are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.MediaAndCreative,

@@ -117,6 +117,8 @@ public sealed class VagrantSupersededBoxProvider : CleanupProviderBase
         + "machine is created from it. The newest version of every box stays, and no machine Vagrant "
         + "records was created from a version that is removed.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.DeveloperTools,

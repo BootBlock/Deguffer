@@ -42,6 +42,8 @@ public sealed class UvCacheProvider : CleanupProviderBase
         "The next uv install re-downloads and re-unpacks packages. Existing virtual environments " +
         "and uv-installed tools are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.PackageCaches,
