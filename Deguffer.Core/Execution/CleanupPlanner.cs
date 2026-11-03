@@ -256,6 +256,8 @@ public sealed class CleanupPlanner
         [
             nuget,
             new GradleCacheProvider(environment, declarations: declarations, scanner: scanner),
+            new CoursierCacheProvider(environment, declarations: declarations, scanner: scanner),
+            new IvyCacheProvider(environment, declarations: declarations, scanner: scanner),
             new NpmCacheProvider(environment, scanner: scanner),
             new PnpmStoreProvider(environment, scanner: hardLinks),
             new YarnClassicCacheProvider(environment, scanner: scanner),

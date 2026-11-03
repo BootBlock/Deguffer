@@ -153,6 +153,8 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | ESP-IDF downloaded tool archives | The archives in each `dist` folder: `%USERPROFILE%\.espressif\dist`, wherever `IDF_TOOLS_PATH` points, the ESP-IDF Installation Manager's `C:\Espressif\dist`, and the `dist` inside and beside each tools folder it records; never the installed tools every ESP-IDF version shares, the Python environments, the installers' records or an ESP-IDF checkout, or anything while the Installation Manager is running. Researched |
 | Scoop download cache | Cleared with Scoop's own cache command, only where everything in the cache is a download Scoop made; installed apps are not touched. Researched |
 | Gradle build cache | `caches` and `wrapper` only, never the Gradle user home itself: `.gradle`, or wherever `GRADLE_USER_HOME` points |
+| Coursier artefact cache | The downloads in `%LOCALAPPDATA%\Coursier\Cache\v1`, or wherever `COURSIER_CACHE` points; never the Java runtimes Coursier installed beside it in `arc` and `jvm`, its container image layers, or the applications `cs install` put on your path. Researched |
+| Ivy dependency cache | `.ivy2\cache` only; never `.ivy2\local`, which holds what `publishLocal` published from this computer, or your `.credentials`. Researched |
 | Cargo crate cache | Researched |
 | Go build and module caches | Researched |
 | Zig build cache | Never the packages Zig fetched. What it built is removed only together with the records that point to it. Researched |

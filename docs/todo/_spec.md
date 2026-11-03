@@ -284,6 +284,12 @@ waiting.
 - `%USERPROFILE%\.nuget` may contain `NuGet.Config` beside the `packages` cache. On the audited
   machine the config lived in `%APPDATA%\NuGet` instead — **so its location cannot be assumed**;
   probe both.
+- `%LOCALAPPDATA%\Coursier\Cache` holds the artefact cache `v1` beside `arc`, where Coursier 2.1
+  and later extract the **Java runtimes `JAVA_HOME` points into**, and `digest`, which holds container
+  layers `cs docker build` made locally. `%USERPROFILE%\.ivy2` holds its `cache` beside `local`,
+  **what `publishLocal` published, which exists on no remote**. Decided
+  ([#88](https://github.com/BootBlock/Deguffer/issues/88)): only `v1`'s `https` and `http` and
+  `.ivy2\cache` are offered.
 
 Rule: **never delete a tool's root directory.** Enumerate known-disposable children explicitly, and
 treat anything unrecognised as Tier 4.
