@@ -337,6 +337,7 @@ public sealed class ProviderInvalidationTests : IDisposable
         // Built on a fake runner: the real DISM would analyse the component store of whoever ran the suite.
         : parameter == typeof(ComponentStoreAnalysis)
             ? new ComponentStoreAnalysis(new FakeSystemDirectories(_temp.Path), new FakeProcessRunner())
+        : parameter == typeof(ComponentStoreSettlement) ? new ComponentStoreSettlement(_environment)
         : parameter == typeof(INamedMutexes) ? FakeNamedMutexes.None
         : parameter == typeof(IReadOnlyList<ITemporaryFolderTenant>) ? Array.Empty<ITemporaryFolderTenant>()
         : throw new XunitException(

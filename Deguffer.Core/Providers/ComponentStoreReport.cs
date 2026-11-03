@@ -48,6 +48,10 @@ public sealed record ComponentStoreReport(
     /// </summary>
     public long Overhead => BackupsAndDisabledFeatures + CacheAndTemporaryData;
 
+    /// <summary>The figures that describe the store itself, which <see cref="ComponentStoreSettlement"/> compares.</summary>
+    public ComponentStoreState State =>
+        new(ExplorerSize, ActualSize, SharedWithWindows, BackupsAndDisabledFeatures, CacheAndTemporaryData, ReclaimablePackages);
+
     /// <summary>
     /// The report in <paramref name="output"/>, or null where any figure a plan relies on is missing
     /// or unreadable. Half a report is not a report: a missing actual size would be read as an empty

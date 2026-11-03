@@ -7703,6 +7703,14 @@ Nothing is offered:
   count. The previous installation's test for a restart due to move a file inside its folder
   does not apply, because this row removes nothing by path.
 - **where Windows reports that the store does not need cleaning**, which is DISM's own verdict.
+- **where the cleanup has nothing left to do.** DISM can go on recommending a cleanup that keeps every
+  byte. On Windows 11 24H2, which Windows services with checkpoint cumulative updates, the analysis
+  counts the checkpoint update and the feature payloads beside it as reclaimable, and the cleanup keeps
+  them: the servicing log says the store "matches last scavenge cookie, skipping scavenge". So after a
+  cleanup that ran to its end, Deguffer records DISM's figures for the store it left, in
+  `%LOCALAPPDATA%\Deguffer\component-store.json`. While a later analysis reads the same figures, the
+  row is clear and says why. Any change to the store, such as an update installed, offers it again.
+  The record holds DISM's six figures and nothing else, and a record that cannot be read is no record.
 
 ### What is protected
 
@@ -7748,7 +7756,10 @@ be uninstalled after this command is completed, but this won't block the uninsta
 update packages". That cost is permanent, so it is its own decision with its own confirmation.
 
 Both rows can be chosen in one clean. Each asks DISM for the store's size immediately before and after
-its own command, so a gigabyte the first frees is not counted again by the second. The preview's
+its own command, so a gigabyte the first frees is not counted again by the second.
+
+A reset that ran to its end settles both rows, because it removes everything the cleanup removes. A
+cleanup settles only its own row, and the reset is still offered. The preview's
 totals count the store's overhead once, however many of the two rows are chosen.
 
 ### What is protected
