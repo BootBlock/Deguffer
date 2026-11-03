@@ -387,6 +387,11 @@ public sealed class PlanExecutor(
                 step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, held, MailStores: look.Stores.Count);
         }
 
+        if (look.WhyNotThroughLinks("Not run") is { } linked)
+        {
+            return new StepOutcome(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, linked);
+        }
+
         // A tool that states its own figure is asked for it immediately before the command as well as
         // after, rather than trusted from the plan. What it describes can change without Deguffer:
         // Windows cleans its component store on a schedule, and another row in the same clean can run a
