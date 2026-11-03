@@ -136,7 +136,7 @@ public sealed class PlanExecutor(
                 $"The executor for '{plan.ProviderId}' was given no way to carry out a {unroutable.GetType().Name}.");
         }
 
-        var runResidue = residue ?? new RunResidue();
+        var runResidue = residue ?? RunResidue.Begin([plan]);
         var stopwatch = Stopwatch.StartNew();
         var outcomes = new List<StepOutcome>(plan.Steps.Count);
         var heldAtClean = new List<ProtectedPath>();

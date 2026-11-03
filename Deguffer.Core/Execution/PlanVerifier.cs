@@ -84,6 +84,17 @@ public static class PlanVerifier
     }
 
     /// <summary>
+    /// Every path whose absence <see cref="Verify"/> judges in <paramref name="plan"/>: each protected
+    /// path that was there to preserve, and each file a <see cref="ReleaseLocalCopiesStep"/> named.
+    /// What a run reads before its first deletion, through <see cref="RunResidue.Begin"/>.
+    /// </summary>
+    internal static IEnumerable<string> PathsHeldStanding(CleanupPlan plan) =>
+        plan.ProtectedPaths
+            .Where(protectedPath => protectedPath.PresenceBefore is not PathPresence.Absent)
+            .Select(protectedPath => protectedPath.Path)
+            .Concat(plan.Steps.OfType<ReleaseLocalCopiesStep>().SelectMany(release => release.Files).Select(file => file.Path));
+
+    /// <summary>
     /// §5.6 for a file whose local copy was to be released: it must still be there, and still be a file
     /// the sync app can hand back.
     ///
@@ -192,6 +203,19 @@ public static class PlanVerifier
                     + "No step in this run named anything inside it.")
                 : new VerificationCheck(
                     protectedPath.Path, protectedPath.Reason, VerificationOutcome.Survived, "Still present.");
+        }
+
+        // Asked first, because it is the one answer that needs no reasoning about where the run
+        // reached: nothing can remove what had gone before anything was removed.
+        if (residue?.WasGoneBeforeRun(protectedPath.Path) is true)
+        {
+            return new VerificationCheck(
+                protectedPath.Path,
+                protectedPath.Reason,
+                VerificationOutcome.RemovedFromOutside,
+                "GONE — it had already gone when this clean began, so nothing in the clean removed it. "
+                + "Something else on the machine removed it after the scan ran, such as the program it "
+                + "belongs to.");
         }
 
         if (WasBeyondThisRunsReach(protectedPath.Path, places))
@@ -397,12 +421,12 @@ public static class PlanVerifier
     /// leave the alarm in place. An unbounded reach does as well, because a tool's own command may
     /// have taken it whatever Deguffer's removal did.</para>
     ///
-    /// <para><b>An entry gone before the walk reached it stays the alarm.</b> Its absence shows only
-    /// that this removal did not take it. An earlier removal in the run may have, through a link no
-    /// comparison of paths can see, and so may a removal Deguffer made after the preview in an earlier
-    /// clean or on another page. Telling those apart from a program that removed its own entry needs a
-    /// record of every removal since the plan was measured, which nothing keeps, and the cost of
-    /// reading it the other way is a hidden over-reach.</para>
+    /// <para><b>An entry gone before the walk reached it stays the alarm here.</b> Its absence shows
+    /// only that this removal did not take it. An earlier removal in the run may have, through a link
+    /// no comparison of paths can see, and the cost of reading it the other way is a hidden over-reach.
+    /// An entry that had gone before the run's first removal is answered before this is asked, by
+    /// <see cref="RunResidue.WasGoneBeforeRun"/>, so what stays the alarm is an entry that went while
+    /// the run was under way.</para>
     ///
     /// <para><b>What it cannot see</b> is the blind spot <see cref="WasBeyondThisRunsReach"/>
     /// records: a later removal in the same plan that reaches the entry through a junction in its

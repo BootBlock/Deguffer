@@ -83,10 +83,12 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
         Assert.Contains(plan.ProtectedPaths, p =>
             p.Path.Equals(logFiles, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Refused);
 
-        // Stands in for the over-broad rule the negative exists to catch.
+        // The run begins with the container standing, and the deletion stands in for the over-broad
+        // rule the negative exists to catch. Gone before the run began, it would be somebody else's.
+        var residue = RunResidue.Begin([plan]);
         Directory.Delete(logFiles, recursive: true);
 
-        var result = await provider.ExecuteAsync(plan);
+        var result = await provider.ExecuteAsync(plan, residue: residue);
         var check = Assert.Single(
             result.Verification!.Checks,
             c => c.Subject.Equals(logFiles, StringComparison.OrdinalIgnoreCase));

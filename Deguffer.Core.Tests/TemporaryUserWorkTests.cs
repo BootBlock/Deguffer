@@ -105,6 +105,38 @@ public sealed class TemporaryUserWorkTests : IDisposable
     }
 
     /// <summary>
+    /// Saving a temporary sketch in the IDE deletes its folder, so a user who saves it after reading
+    /// the plan and then presses Clean leaves the plan keeping a folder that has gone. The clean did not
+    /// take it, so §5.6 reports it removed from outside rather than as a lost sketch, and still holds
+    /// the run to everything else: the scratch beside it goes and the temporary folder stays.
+    /// </summary>
+    [Fact]
+    public async Task ASketchSavedBetweenThePreviewAndTheCleanIsReportedAsRemovedFromOutside()
+    {
+        var sketch = Path.Combine(UserTemp, UnsavedSketch);
+        Abandoned(4096, "temp", UnsavedSketch, "sketch_jul15a", "sketch_jul15a.ino");
+        var build = Abandoned(1024, "temp", "arduino-sketch-0123456789ABCDEF", "sketch_jul15a.ino.elf");
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Contains(sketch, Assert.Single(plan.Steps.OfType<ClearDirectoryStep>(), s => s.Path == UserTemp).UserWork);
+
+        Directory.Delete(sketch, recursive: true);
+
+        var result = await provider.ExecuteAsync(plan);
+        var verification = result.Verification!;
+
+        Assert.False(File.Exists(build), "ordinary scratch beside the saved sketch was kept");
+        Assert.True(Directory.Exists(UserTemp), "the temporary folder itself was removed");
+        Assert.Empty(verification.Failures);
+
+        var check = Assert.Single(verification.RemovedFromOutside);
+        Assert.Equal(sketch, check.Subject, ignoreCase: true);
+        Assert.Contains("already gone when this clean began", check.Detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A sketch begun while the preview was on screen is not in the plan, and with no age limit
     /// nothing else holds it back. The clean looks again and keeps it.
     /// </summary>

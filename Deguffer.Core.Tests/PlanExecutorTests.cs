@@ -1275,12 +1275,12 @@ public sealed class PlanExecutorTests : IDisposable
     }
 
     /// <summary>
-    /// The same, with the program finished before the clear reached the folder, which stays the alarm.
-    /// The walk cannot meet an entry that is not there, and its absence shows only that this clear did
-    /// not take it: an earlier removal may have. See PlanVerifier.
+    /// The same, with the program finished before the clean began. The walk cannot meet an entry that
+    /// is not there, so the clear records nothing about it, but the run read it gone before its first
+    /// deletion, and nothing in the run can have taken it. See RunResidue.Begin.
     /// </summary>
     [Fact]
-    public async Task ASparedEntryGoneBeforeTheClearBeganStillFailsVerification()
+    public async Task ASparedEntryGoneBeforeTheClearBeganWasRemovedFromOutside()
     {
         var scratch = _temp.CreateDirectory("scratch");
         var live = _temp.CreateDirectory("scratch", "kitprobe");
@@ -1292,7 +1292,10 @@ public sealed class PlanExecutorTests : IDisposable
         var result = await new PlanExecutor(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog)
             .ExecuteAsync(plan, runReach: null, residue: null, progress: null, underway: null, ct: default);
 
-        Assert.Equal(VerificationOutcome.Failed, Assert.Single(result.Verification!.Checks).Outcome);
+        Assert.Equal(VerificationOutcome.RemovedFromOutside, Assert.Single(result.Verification!.Checks).Outcome);
+        Assert.Empty(result.Verification.Failures);
+        Assert.False(File.Exists(Path.Combine(scratch, "abandoned.tmp")), "the clear kept the scratch around the entry");
+        Assert.True(Directory.Exists(scratch), "the clear removed the folder it was told to keep");
     }
 
     /// <summary>

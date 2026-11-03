@@ -962,6 +962,55 @@ public sealed class CleanupPlannerTests
         Assert.Equal(VerificationOutcome.Entered, check.Outcome);
     }
 
+    /// <summary>
+    /// A survivor that had gone before the clean began is somebody else's doing, whichever plan in the
+    /// run was working in the folder around it. The run reads what has gone before its first deletion.
+    /// </summary>
+    [Fact]
+    public async Task ASurvivorGoneBeforeTheRunBeganWasRemovedFromOutside()
+    {
+        using var temp = new TempDirectory();
+        var scratch = temp.CreateDirectory("scratch");
+        var kept = temp.CreateDirectory("scratch", "kept");
+
+        var clearing = new StubProvider("clear", bytes: 1_000, deletes: scratch);
+        var keeping = new StubProvider("keep", bytes: 0, protects: kept);
+        var planner = new CleanupPlanner([clearing, keeping]);
+        var plans = await planner.PlanAllAsync();
+
+        Directory.Delete(kept);
+
+        var results = await planner.ExecuteAsync(plans);
+
+        var check = Assert.Single(results.Single(r => r.ProviderId == "keep").Verification!.Checks);
+
+        Assert.Equal(VerificationOutcome.RemovedFromOutside, check.Outcome);
+    }
+
+    /// <summary>
+    /// The run reads what has gone before its <em>first</em> deletion, not before each plan's. A
+    /// survivor an earlier plan in the run took was standing when the run began, so it is the alarm
+    /// for the plan verified after it, never somebody else's doing.
+    /// </summary>
+    [Fact]
+    public async Task ASurvivorAnEarlierPlanInTheRunTookIsStillAFailure()
+    {
+        using var temp = new TempDirectory();
+        var scratch = temp.CreateDirectory("scratch");
+        var kept = temp.CreateDirectory("scratch", "kept");
+
+        // Stands in for an over-reach: the first plan's removal takes the folder the second protects.
+        var clearing = new StubProvider("clear", bytes: 1_000, deletes: scratch, onExecute: () => Directory.Delete(kept));
+        var keeping = new StubProvider("keep", bytes: 0, protects: kept);
+        var planner = new CleanupPlanner([clearing, keeping]);
+
+        var results = await planner.ExecuteAsync(await planner.PlanAllAsync());
+
+        var check = Assert.Single(results.Single(r => r.ProviderId == "keep").Verification!.Checks);
+
+        Assert.Equal(VerificationOutcome.Failed, check.Outcome);
+    }
+
     /// <summary>Records each report, then acts on it, as a caller's handler would.</summary>
     private sealed class RecordThen<T>(ProgressRecorder<T> recorder, Action<T> then) : IProgress<T>
     {

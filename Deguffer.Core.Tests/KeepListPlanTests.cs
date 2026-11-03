@@ -84,7 +84,9 @@ public sealed class KeepListPlanTests : IDisposable
     /// <summary>
     /// The case the keep list makes ordinary: every candidate in a row is kept, so the row has no step
     /// and is never ticked. Its promise is still owed evidence, and the run provides it — and that
-    /// evidence is real, because a kept build that is gone is reported rather than passed over.
+    /// evidence is real, because a kept build that is gone is reported rather than passed over. A run
+    /// with no step removes nothing, so one that had gone before it began is reported as removed from
+    /// outside it.
     /// </summary>
     [Fact]
     public async Task ARunInWhichEveryCandidateIsKeptStillVerifiesThatTheySurvived()
@@ -113,7 +115,8 @@ public sealed class KeepListPlanTests : IDisposable
 
         var afterLoss = Assert.Single(await planner.ExecuteAsync([proving]));
 
-        Assert.Equal(Path.Combine(root, Chromium), Assert.Single(afterLoss.Verification!.Failures).Subject);
+        Assert.False(afterLoss.Verification!.Passed, afterLoss.Verification.Summary);
+        Assert.Equal(Path.Combine(root, Chromium), Assert.Single(afterLoss.Verification.RemovedFromOutside).Subject);
     }
 
     /// <summary>
