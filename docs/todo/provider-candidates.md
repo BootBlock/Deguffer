@@ -660,8 +660,9 @@ reset it". Three gaps stop it being built:
   *Persistent Thumbnail Cache* says it "also stores user-added or adjusted metadata such as ratings,
   labels, keywords, captions, rotation, and GPS data". Its *Embedding metadata* puts a raw file's
   metadata in an XMP sidecar. A JPG's, TIFF's or PSD's is embedded when the image is edited, copied
-  for editing or sent to another program, or through *Embed Metadata*, and otherwise is not. A PNG
-  cannot take embedded metadata at all, and AI keywords are not embedded by default. So for some
+  for editing or sent to another program, through *Embed Metadata*, or as it is scanned where the
+  *Automatically Embed Metadata* option is on, and otherwise is not. A PNG cannot take embedded
+  metadata at all, and AI keywords are not embedded by default. So for some
   photographs ON1's own store may hold the only copy of the user's ratings and keywords. Tier 2 needs
   an installation to show that the `NDService` database, not the cache, holds that copy.
 - **§5.1: what *empty* keeps is unverified.** The preference's *empty* control is ON1's own eviction,
@@ -676,9 +677,10 @@ reset it". Three gaps stop it being built:
 **Survivors**, whatever the tier: `%APPDATA%\ON1` and each version folder are roots. Beside the cache
 sit `NDService`, which users' reports call the database of every edit and say ON1 does not support
 moving or backing up, and `PhotoSettingsCache`, which despite its name holds per-photo settings. The
-guide names two sidecars ON1 writes beside images, `.on1` for metadata and `.on1meta` for edit
-information. A version folder for an uninstalled version is not orphaned cache either: its presets
-and database may be the only copy. **In use:** the guide installs each edition as
+`.on1` sidecars, which issue #79 places beside the photographs, carry ON1's edits and metadata. The
+guide names `.on1` for metadata and `.on1meta` for edit information, though only as files its
+Lightroom migration exports. Neither is ever a target. A version folder for an uninstalled version
+is not orphaned cache either: its presets and database may be the only copy. **In use:** the guide installs each edition as
 `\Program Files\ON1\ON1 (app name)`, for example `ON1 Photo RAW 2025` and `ON1 Photo RAW MAX 2026`.
 A public project's launcher finds `ON1 Photo RAW 2026.exe` in its folder, and the MAX edition's
 executable and version folder names are unverified. MAX also runs as a plugin inside Photoshop,
