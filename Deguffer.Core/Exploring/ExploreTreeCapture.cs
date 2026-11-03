@@ -129,6 +129,12 @@ internal sealed class ExploreTreeCapture
     }
 
     /// <summary>
+    /// The tree as a snapshot of a walk in progress draws it: <see cref="Build"/> in
+    /// <see cref="ExploreChildOrder.ByName"/>, for <see cref="ScanSnapshots"/>' reason.
+    /// </summary>
+    public ExploreTree Snapshot(CancellationToken ct) => Build(ExploreChildOrder.ByName, ct);
+
+    /// <summary>
     /// Rank by name every child of each of <paramref name="listedTwice"/> among all of its
     /// siblings, not only those recorded in the same call. Two calls' ranks for one parent both
     /// start at zero, and placed as they are, one child would take another's place in the tree.

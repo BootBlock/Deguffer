@@ -226,7 +226,7 @@ public sealed class WalkExploreReaderTests : IDisposable
             new CallbackProgress<ExploreProgress>(report =>
             {
                 reports.Add(report);
-                clock.Advance(WalkSnapshots.Interval);
+                clock.Advance(ScanSnapshots.Interval);
             }),
             clock,
             default,
