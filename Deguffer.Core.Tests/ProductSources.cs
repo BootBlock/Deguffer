@@ -58,6 +58,34 @@ internal static partial class ProductSources
         return imports.ToLookup(import => import.Name, import => import.File, StringComparer.Ordinal);
     }
 
+    /// <summary>
+    /// The lines of <paramref name="source"/> that are code: every line comment and every line of a
+    /// block comment left out. For a sweep that matches a name, because the comments name what the
+    /// code never does in order to explain why.
+    /// </summary>
+    public static IEnumerable<string> Code(string source)
+    {
+        var inBlock = false;
+
+        foreach (var line in source.Split('\n'))
+        {
+            var trimmed = line.TrimStart();
+
+            if (inBlock)
+            {
+                inBlock = !trimmed.Contains("*/", StringComparison.Ordinal);
+            }
+            else if (trimmed.StartsWith("/*", StringComparison.Ordinal))
+            {
+                inBlock = !trimmed.Contains("*/", StringComparison.Ordinal);
+            }
+            else if (!trimmed.StartsWith("//", StringComparison.Ordinal))
+            {
+                yield return line;
+            }
+        }
+    }
+
     [GeneratedRegex(
         """\[(?:[\w.]+\.)?(?:LibraryImport|DllImport)(?:Attribute)?\("[^"]+"(?:[^\]]*?EntryPoint\s*=\s*"(?<entry>[^"]+)")?[^\]]*\)\](?:\s*\[[^\]]*\])*\s*(?:public|internal|private|protected)?\s*(?:static\s+|extern\s+|partial\s+|unsafe\s+)*[^\s(]+\s+(?<method>\w+)\s*\(""",
         RegexOptions.Singleline)]

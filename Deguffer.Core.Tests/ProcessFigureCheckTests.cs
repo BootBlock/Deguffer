@@ -33,14 +33,21 @@ public sealed class ProcessFigureCheckTests
             Judge(TableWithOwn(privateWorkingSet: 100 * MiB), new OwnProcessReference(Created, 400 * MiB)));
 
     /// <summary>
-    /// Twenty megabytes apart on a hundred is a fifth, inside the quarter the two may drift, and
-    /// outside anything tighter.
+    /// The two may drift a quarter of the counter apart, either way, and no further. A megabyte each
+    /// side of the quarter on a hundred, with the quarter itself, so a margin of a fifth or a third
+    /// fails as surely as a missing one. A hundred is far enough above the floor that the quarter is
+    /// what decides.
     /// </summary>
-    [Fact]
-    public void DriftWithinAQuarterOfTheCounterStillAgrees() =>
+    [Theory]
+    [InlineData(124, ProcessFigures.Checked)]
+    [InlineData(125, ProcessFigures.Checked)]
+    [InlineData(126, ProcessFigures.PrivateWorkingSetDisagrees)]
+    [InlineData(76, ProcessFigures.Checked)]
+    [InlineData(74, ProcessFigures.PrivateWorkingSetDisagrees)]
+    public void DriftWithinAQuarterOfTheCounterStillAgrees(long readMiB, ProcessFigures expected) =>
         Assert.Equal(
-            ProcessFigures.Checked,
-            Judge(TableWithOwn(privateWorkingSet: 120 * MiB), new OwnProcessReference(Created, 100 * MiB)));
+            expected,
+            Judge(TableWithOwn(privateWorkingSet: readMiB * MiB), new OwnProcessReference(Created, 100 * MiB)));
 
     /// <summary>
     /// A quarter of four megabytes is one, which a single garbage collection crosses, so a small

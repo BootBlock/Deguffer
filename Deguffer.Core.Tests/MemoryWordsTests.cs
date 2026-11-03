@@ -210,11 +210,132 @@ public sealed class MemoryWordsTests
             && note.Contains("no figure attributes", StringComparison.Ordinal));
     }
 
-    [Fact]
-    public void ListsThatCouldNotBeUsedSayTheSystemCacheStandsForThem() =>
-        Assert.Contains(
-            MemoryNotes.For(Tree(Snapshot())),
+    /// <summary>
+    /// The system cache takes the place of one list of the three, the standby list. A note that put
+    /// all three in it would tell the reader free memory is inside a shape it is not in, and leave
+    /// them an unexplained remainder to take for a leak (§7.2).
+    /// </summary>
+    [Theory]
+    [InlineData(MemoryListState.NotReturned)]
+    [InlineData(MemoryListState.Disagrees)]
+    public void ListsThatCouldNotBeUsedSayTheSystemCacheStandsForTheStandbyListOnly(MemoryListState state)
+    {
+        var note = Assert.Single(
+            MemoryNotes.For(Tree(WithLists(state))),
             note => note.Contains("system cache is drawn", StringComparison.Ordinal));
+
+        Assert.Contains("in place of the standby list", note, StringComparison.Ordinal);
+        Assert.Contains(
+            "free, zeroed and modified pages are inside the part no figure attributes", note, StringComparison.Ordinal);
+        Assert.DoesNotContain("all three", note, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ListsThatWereUsedNeedNoNote() =>
+        Assert.DoesNotContain(
+            MemoryNotes.For(Tree(WithLists(MemoryListState.Checked))),
+            note => note.Contains("system cache", StringComparison.Ordinal));
+
+    /// <summary>
+    /// What the memory no figure attributes holds follows from which parts the read drew, so its hover
+    /// is pinned against the tree rather than against the list state alone: the system working set
+    /// where the standby list is drawn on its own, and the free, zeroed and modified pages where the
+    /// system cache is drawn in its place.
+    /// </summary>
+    [Theory]
+    [InlineData(MemoryListState.Checked)]
+    [InlineData(MemoryListState.NotReturned)]
+    [InlineData(MemoryListState.Disagrees)]
+    public void NotAttributedNamesWhatTheseListsLeftToIt(MemoryListState state)
+    {
+        var tree = Tree(WithLists(state));
+        var said = Unattributed(tree);
+        var standbyDrawn = tree.Find(MemoryNodeKey.Of(MemoryPart.Standby)) is not null;
+
+        Assert.Equal(state == MemoryListState.Checked, standbyDrawn);
+        Assert.StartsWith(MemoryPartGuide.Describe(MemoryPart.Unattributed), said, StringComparison.Ordinal);
+        Assert.Equal(standbyDrawn, said.Contains("also holds the system working set", StringComparison.Ordinal));
+        Assert.Equal(!standbyDrawn, said.Contains("free, zeroed and modified pages", StringComparison.Ordinal));
+        Assert.DoesNotContain("every process's own memory", said, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Windows documents the system cache as the standby list and the system working set, but its
+    /// figure was measured below the standby list alone. So where the cache is drawn, the hover may
+    /// not tell the reader the system working set is inside it: it names both as possibly here, and
+    /// says why, rather than leaving that shortfall as a remainder nothing explains.
+    /// </summary>
+    [Theory]
+    [InlineData(MemoryListState.NotReturned)]
+    [InlineData(MemoryListState.Disagrees)]
+    public void NotAttributedBesideTheSystemCacheSaysTheCacheCanFallShort(MemoryListState state)
+    {
+        var said = Unattributed(Tree(WithLists(state)));
+
+        Assert.Contains("smaller than it documents", said, StringComparison.Ordinal);
+        Assert.Contains("the standby list and the system working set can be here as well", said, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The paged pool in memory is inside the system working set, so it is never in the sentence that
+    /// holds for every read, and is named where the system working set is certainly unattributed.
+    /// </summary>
+    [Fact]
+    public void ThePagedPoolIsNamedOnlyWithTheSystemWorkingSet()
+    {
+        Assert.DoesNotContain("paged pool", MemoryPartGuide.Describe(MemoryPart.Unattributed), StringComparison.Ordinal);
+        Assert.Contains("paged pool", Unattributed(Tree(WithLists(MemoryListState.Checked))), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Where the figures overlap, this part is drawn at nothing and the notes say nothing is left
+    /// unattributed, so its hover makes no claim about what it holds in this read.
+    /// </summary>
+    [Fact]
+    public void NotAttributedDrawnAtNothingSaysWhyAndClaimsNothingMore()
+    {
+        var tree = Tree(new MemorySnapshotBuilder()
+            .System(physicalMiB: 1_000, systemCacheMiB: 800, nonPagedPoolMiB: 100)
+            .Process(100, 1, "alpha.exe", 300, created: 10)
+            .Build());
+        var said = Unattributed(tree);
+
+        Assert.True(tree.Overcount > 0, "The fixture does not overlap.");
+        Assert.Contains("figures overlap", said, StringComparison.Ordinal);
+        Assert.DoesNotContain("also holds", said, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(MemoryListState.Checked)]
+    [InlineData(MemoryListState.NotReturned)]
+    public void NotAttributedHoldsEveryProcessWhereTheirFiguresWereOff(MemoryListState state)
+    {
+        var snapshot = WithLists(state);
+        var said = Unattributed(Tree(snapshot with
+        {
+            Processes = snapshot.Processes with { Figures = ProcessFigures.CreationTimeDisagrees },
+        }));
+
+        Assert.Contains("every process's own memory", said, StringComparison.Ordinal);
+        Assert.Contains("compression store", said, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NotAttributedTellsTheReaderToActOnNothingInAnyRead()
+    {
+        foreach (var state in Enum.GetValues<MemoryListState>())
+        {
+            foreach (var figures in Enum.GetValues<ProcessFigures>())
+            {
+                var snapshot = WithLists(state);
+
+                AssertSaysNothingToDo(Unattributed(Tree(snapshot with
+                {
+                    Processes = snapshot.Processes with { Figures = figures },
+                })));
+            }
+        }
+    }
 
     [Fact]
     public void FiguresThatOverlapSayByHowMuch()
@@ -344,6 +465,33 @@ public sealed class MemoryWordsTests
     private static int Host(MemoryTree tree, int processId, long created) =>
         tree.Find(new MemoryNodeKey(MemoryPart.Process, processId, created))
             ?? throw new InvalidOperationException($"The tree has no process {processId}.");
+
+    private static string Unattributed(MemoryTree tree) =>
+        MemoryPartGuide.Describe(
+            tree,
+            tree.Find(MemoryNodeKey.Of(MemoryPart.Unattributed))
+                ?? throw new InvalidOperationException("The tree has no part for unattributed memory."));
+
+    /// <summary>
+    /// A read whose memory lists came to <paramref name="state"/>. Lists that disagreed are dropped as the
+    /// check against the documented available memory drops them, so the tree draws the system cache in
+    /// place of the standby list.
+    /// </summary>
+    private static MemorySnapshot WithLists(MemoryListState state)
+    {
+        var built = new MemorySnapshotBuilder().Process(100, 1, "alpha.exe", 500, created: 10);
+
+        if (state == MemoryListState.NotReturned)
+        {
+            return built.Build();
+        }
+
+        var snapshot = built.Lists(zeroedMiB: 300, freeMiB: 500, modifiedMiB: 100, standbyMiB: 4_000).Build();
+
+        return state == MemoryListState.Checked
+            ? snapshot
+            : snapshot with { System = snapshot.System with { Lists = null, ListState = state } };
+    }
 
     private static MemoryTree Tree(MemorySnapshot snapshot) => MemoryTreeBuilder.Build(snapshot);
 
