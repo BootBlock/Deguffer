@@ -8,9 +8,10 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// The Redshift renderer's converted textures. They are reached by name inside Redshift's own folders, so
-/// what has to be shown is that only <c>Textures</c> is emptied, that the mesh cache, the preferences, the
-/// logs and anything unrecognised beside it survive, that nothing is offered while a Redshift host runs,
-/// and that a folder a setting names is followed only where it may be Redshift's.
+/// what has to be shown is that only the numbered folders in <c>Textures</c> go, that anything else in
+/// <c>Textures</c>, the mesh cache, the preferences, the logs and anything unrecognised beside them
+/// survive, that nothing is offered while a Redshift host runs, and that a folder a setting names is
+/// followed only where it is Redshift's.
 /// </summary>
 public sealed class RedshiftCacheProviderTests : IDisposable
 {
@@ -30,7 +31,7 @@ public sealed class RedshiftCacheProviderTests : IDisposable
 
     private string StandaloneTextures => Path.Combine(Standalone, "Cache", "Textures");
 
-    /// <summary>The preferences folder of a Maxon application, laid out as Cinebench 2026 left it.</summary>
+    /// <summary>A Maxon application's preferences folder, invented, holding the layout Cinebench 2026 left.</summary>
     private string Host => Path.Combine(_environment.RoamingAppData, "Maxon", "Maxon Cinema 4D 2026_A1B2C3D4");
 
     private string HostRedshift => Path.Combine(Host, "Redshift");
@@ -48,10 +49,12 @@ public sealed class RedshiftCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// One Redshift folder as measured: converted textures in two levels of numbered folders, a mesh cache
-    /// with a process's lock, the preferences, a log, and a cache folder nobody has seen yet.
+    /// One Redshift folder as observed: converted textures in two levels of numbered folders, a mesh
+    /// cache with a process's lock, the preferences and a log. Beside them, what Redshift was not seen
+    /// writing: a cache folder nobody has classified, and in <c>Textures</c> an image, a folder of the
+    /// user's, and a folder whose number is not written the way Redshift writes it.
     /// </summary>
-    /// <returns>The textures, which go, and everything beside them, which stays.</returns>
+    /// <returns>The converted textures, which go, and everything else, which stays.</returns>
     private static (string[] Cached, string[] Kept) CreateRedshiftFolder(string redshift, int bytes = 4096) =>
     (
         [
@@ -59,6 +62,9 @@ public sealed class RedshiftCacheProviderTests : IDisposable
             Write(Path.Combine(redshift, "Cache", "Textures", "25", "108", "a6d45dd342a0db4.rstexbin"), bytes),
         ],
         [
+            Write(Path.Combine(redshift, "Cache", "Textures", "brick_albedo.jpg")),
+            Write(Path.Combine(redshift, "Cache", "Textures", "Wood", "oak_converted.rstexbin")),
+            Write(Path.Combine(redshift, "Cache", "Textures", "007", "1", "kept.rstexbin")),
             Write(Path.Combine(redshift, "Cache", "Meshes", "WORKSTATION", "64868", "lock"), 0),
             Write(Path.Combine(redshift, "Cache", "Shaders", "kernel.bin")),
             Write(Path.Combine(redshift, "preferences.xml"), 544),
@@ -76,13 +82,13 @@ public sealed class RedshiftCacheProviderTests : IDisposable
         Assert.True((await provider.PlanAsync()).IsEmpty);
     }
 
-    /// <summary>Redshift creates <c>Textures</c> each time it starts, so an empty one is no row.</summary>
+    /// <summary>A <c>Textures</c> folder with no numbered folder in it holds nothing this row may take.</summary>
     [Fact]
-    public async Task AnEmptyTexturesFolderIsNotPresence()
+    public async Task ATexturesFolderWithNoNumberedFolderIsNotPresence()
     {
-        Directory.CreateDirectory(Path.Combine(StandaloneTextures, "107"));
+        Directory.CreateDirectory(StandaloneTextures);
         Write(Path.Combine(HostRedshift, "preferences.xml"));
-        Directory.CreateDirectory(HostTextures);
+        Write(Path.Combine(HostTextures, "brick_albedo.jpg"));
 
         var provider = CreateProvider();
 
@@ -90,9 +96,12 @@ public sealed class RedshiftCacheProviderTests : IDisposable
         Assert.True((await provider.PlanAsync()).IsEmpty);
     }
 
-    /// <summary>§3. Redshift converts the textures again by itself, so the row is Tier 1 and ticked.</summary>
+    /// <summary>
+    /// §3. Redshift converts the textures again by itself, and the layout was observed, so the row is
+    /// Tier 1 and ticked. Each numbered folder is a part, listed under the cache it is in.
+    /// </summary>
     [Fact]
-    public async Task PlansTheStandaloneAndEachHostsTexturesAtTier1()
+    public async Task PlansTheNumberedFoldersOfTheStandaloneAndEachHostsCacheAtTier1()
     {
         CreateRedshiftFolder(Standalone, 1024);
         CreateRedshiftFolder(HostRedshift, 2048);
@@ -102,22 +111,31 @@ public sealed class RedshiftCacheProviderTests : IDisposable
 
         var plan = await provider.PlanAsync();
 
-        Assert.Equal([StandaloneTextures, HostTextures], plan.TargetedPaths);
-        Assert.All(plan.Steps, step => Assert.IsType<ClearDirectoryStep>(step));
-        Assert.All(plan.Steps, step => Assert.Null(step.LastWritten));
+        Assert.Equal(
+            new[]
+            {
+                Path.Combine(StandaloneTextures, "107"), Path.Combine(StandaloneTextures, "25"),
+                Path.Combine(HostTextures, "107"), Path.Combine(HostTextures, "25"),
+            }.Order(StringComparer.OrdinalIgnoreCase),
+            plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
+        Assert.All(plan.Steps, step => Assert.IsType<DeleteDirectoryStep>(step));
+        Assert.Equal(
+            [Path.Combine(Standalone, "Cache"), Path.Combine(HostRedshift, "Cache")],
+            plan.Steps.Select(step => step.Group).Distinct().Order(StringComparer.OrdinalIgnoreCase));
         Assert.Equal(SafetyTier.RegenerableCache, plan.Tier);
+        Assert.Equal(ProviderBasis.Observed, provider.Basis);
         Assert.Equal((2 * 1024) + (2 * 2048), plan.EstimatedBytes);
         Assert.True(new Finding(provider, IsPresent: true, plan).IsPreSelectedByDefault);
     }
 
     /// <summary>
-    /// §5.6, proved by running a plan. The textures go and their folder stays. The mesh cache with a
-    /// running program's lock, the preferences, the logs and a cache folder nothing names all survive,
-    /// and each named one is asserted rather than merely omitted. So does the rest of the host's
-    /// preferences folder.
+    /// §5.6, proved by running a plan. The numbered folders go and <c>Textures</c> stays. The image, the
+    /// user's folder and the oddly numbered folder in <c>Textures</c>, the mesh cache with a running
+    /// program's lock, the preferences, the logs and a cache folder nothing names all survive, and each
+    /// one is asserted rather than merely omitted. So does the rest of the host's preferences folder.
     /// </summary>
     [Fact]
-    public async Task EverythingBesideTheTexturesSurvivesARunAndIsAsserted()
+    public async Task EverythingButTheNumberedFoldersSurvivesARunAndIsAsserted()
     {
         var (standaloneCached, standaloneKept) = CreateRedshiftFolder(Standalone);
         var (hostCached, hostKept) = CreateRedshiftFolder(HostRedshift);
@@ -128,9 +146,14 @@ public sealed class RedshiftCacheProviderTests : IDisposable
 
         foreach (var redshift in new[] { Standalone, HostRedshift })
         {
+            var textures = Path.Combine(redshift, "Cache", "Textures");
+
             foreach (var path in new[]
             {
                 redshift,
+                textures,
+                Path.Combine(textures, "Wood"),
+                Path.Combine(textures, "007"),
                 Path.Combine(redshift, "Cache", "Meshes"),
                 Path.Combine(redshift, "preferences.xml"),
                 Path.Combine(redshift, "Log"),
@@ -166,6 +189,7 @@ public sealed class RedshiftCacheProviderTests : IDisposable
     [InlineData("houdinifx")]
     [InlineData("hython")]
     [InlineData("3dsmax")]
+    [InlineData("3dsmaxcmd")]
     [InlineData("blender")]
     [InlineData("redshiftCmdLine")]
     public async Task NothingIsOfferedWhileARedshiftHostRuns(string process)
@@ -194,6 +218,20 @@ public sealed class RedshiftCacheProviderTests : IDisposable
         Assert.All(cached, path => Assert.True(File.Exists(path)));
     }
 
+    /// <summary>The program measured holding the cache is the first one the user is told to close.</summary>
+    [Fact]
+    public async Task TheHeldReasonNamesCinebench()
+    {
+        CreateRedshiftFolder(HostRedshift);
+
+        var plan = await CreateProvider(new FakeProcessInspector("Cinebench")).PlanAsync();
+
+        Assert.Contains(
+            "Close Cinebench",
+            Assert.Single(plan.ProtectedPaths, p => p.Path.Equals(HostTextures, StringComparison.OrdinalIgnoreCase)).Reason,
+            StringComparison.Ordinal);
+    }
+
     /// <summary>The clean asks again, so Cinema 4D opened while the preview was on screen holds the cache back.</summary>
     [Fact]
     public async Task AHostStartedAfterThePreviewHoldsTheCacheBack()
@@ -204,7 +242,7 @@ public sealed class RedshiftCacheProviderTests : IDisposable
         var provider = CreateProvider(inspector);
         var plan = await provider.PlanAsync();
 
-        Assert.Equal([HostTextures], plan.TargetedPaths);
+        Assert.NotEmpty(plan.Steps);
 
         inspector.WithRunning("Cinema 4D");
         var result = await provider.ExecuteAsync(plan);
@@ -214,36 +252,44 @@ public sealed class RedshiftCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// §7.1. Explore may take from a cache only <c>Textures</c>, never the mesh cache or a folder nobody
-    /// has classified, and nothing at all from Redshift's own folder.
+    /// §7.1. Explore may take from <c>Textures</c> only the numbered folders, written as Redshift writes
+    /// them, and nothing at all from the cache or from Redshift's own folder.
     /// </summary>
     [Theory]
-    [InlineData("Textures", true)]
-    [InlineData("Meshes", false)]
-    [InlineData("Shaders", false)]
-    [InlineData("Unrecognised", false)]
-    public async Task ExploreMayTakeOnlyTheTexturesFromACache(string child, bool recognised)
+    [InlineData("0", true)]
+    [InlineData("107", true)]
+    [InlineData("255", true)]
+    [InlineData("256", false)]
+    [InlineData("007", false)]
+    [InlineData("-1", false)]
+    [InlineData("Wood", false)]
+    public async Task ExploreMayTakeOnlyTheNumberedFoldersFromTextures(string child, bool recognised)
     {
         CreateRedshiftFolder(HostRedshift);
 
         var roots = await CreateProvider().DiscoverToolRootsAsync();
+        var textures = Assert.Single(roots, r => r.Path.Equals(HostTextures, StringComparison.OrdinalIgnoreCase));
         var cache = Assert.Single(roots, r => r.Path.Equals(Path.Combine(HostRedshift, "Cache"), StringComparison.OrdinalIgnoreCase));
         var redshift = Assert.Single(roots, r => r.Path.Equals(HostRedshift, StringComparison.OrdinalIgnoreCase));
 
-        Assert.Equal(recognised, cache.RecognisesFolder(child));
+        Assert.Equal(recognised, textures.RecognisesFolder(child));
+        Assert.False(cache.RecognisesFolder("Textures"));
+        Assert.False(cache.RecognisesFolder("Meshes"));
         Assert.False(redshift.RecognisesFolder("Cache"));
         Assert.False(redshift.RecognisesFolder("Log"));
     }
 
     /// <summary>
-    /// <c>REDSHIFT_CACHEPATH</c> moves the cache, and Redshift keeps <c>Textures</c> inside it. Only those
-    /// are emptied there, and the mesh cache and anything else in the folder survive (§5.6).
+    /// <c>REDSHIFT_CACHEPATH</c> moves the cache, and Redshift keeps <c>Textures</c> and <c>Meshes</c> in
+    /// it. Only the numbered folders go there, and the user's images in <c>Textures</c>, the mesh cache
+    /// and anything else in the folder survive (§5.6).
     /// </summary>
     [Fact]
     public async Task FollowsTheFolderTheVariableNames()
     {
         var moved = Path.Combine(_temp.Path, "RenderCache");
         var cached = Write(Path.Combine(moved, "Textures", "1", "109", "683a659da5e1f846.rstexbin"));
+        var image = Write(Path.Combine(moved, "Textures", "brick_albedo.jpg"));
         var lockFile = Write(Path.Combine(moved, "Meshes", "WORKSTATION", "4242", "lock"), 0);
         var unnamed = Write(Path.Combine(moved, "Shaders", "kernel.bin"));
         _environment.WithEnvironmentVariable(RedshiftCacheLayout.CacheVariable, moved);
@@ -251,7 +297,7 @@ public sealed class RedshiftCacheProviderTests : IDisposable
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
 
-        Assert.Equal([Path.Combine(moved, "Textures")], plan.TargetedPaths);
+        Assert.Equal([Path.Combine(moved, "Textures", "1")], plan.TargetedPaths);
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(moved, StringComparison.OrdinalIgnoreCase));
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(Path.Combine(moved, "Meshes"), StringComparison.OrdinalIgnoreCase));
 
@@ -259,8 +305,38 @@ public sealed class RedshiftCacheProviderTests : IDisposable
 
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
         Assert.False(File.Exists(cached));
-        Assert.True(File.Exists(lockFile));
-        Assert.True(File.Exists(unnamed));
+        Assert.All([image, lockFile, unnamed], path => Assert.True(File.Exists(path), $"{path} went."));
+    }
+
+    /// <summary>
+    /// A variable naming a project folder whose <c>Textures</c> holds the user's images, numbered folders
+    /// included, and no mesh cache: nothing shows the folder is Redshift's, so it is named and left alone,
+    /// and Explore is given nothing in it.
+    /// </summary>
+    [Fact]
+    public async Task LeavesAVariableFolderWithNoMeshCacheAlone()
+    {
+        var project = Path.Combine(_temp.Path, "Projects", "Job1");
+        var mine = new[]
+        {
+            Write(Path.Combine(project, "Textures", "1", "brick_albedo.exr")),
+            Write(Path.Combine(project, "Textures", "brick_albedo.rstexbin")),
+        };
+        _environment.WithEnvironmentVariable(RedshiftCacheLayout.CacheVariable, project);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.True(await provider.IsPresentAsync());
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.Contains(project, StringComparison.OrdinalIgnoreCase)
+            && n.Message.Contains("Meshes", StringComparison.Ordinal));
+        Assert.DoesNotContain(await provider.DiscoverToolRootsAsync(), r => LongPath.Contains(project, r.Path));
+
+        await provider.ExecuteAsync(plan);
+
+        Assert.All(mine, path => Assert.True(File.Exists(path)));
     }
 
     /// <summary>The variable naming the default folder names one cache, offered once.</summary>
@@ -272,19 +348,38 @@ public sealed class RedshiftCacheProviderTests : IDisposable
 
         var plan = await CreateProvider().PlanAsync();
 
-        Assert.Equal([StandaloneTextures], plan.TargetedPaths);
+        Assert.Equal(
+            [Path.Combine(StandaloneTextures, "107"), Path.Combine(StandaloneTextures, "25")],
+            plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
     }
 
     /// <summary>
-    /// A variable naming a folder inside another cache's textures adds nothing: emptying the outer
-    /// textures takes it, and declaring it too would assert that its mesh cache survived a run bound to
-    /// remove it (§5.6).
+    /// The variable set to the default folder names Redshift's own cache, which needs no mesh cache to
+    /// prove it, so a default cache Redshift has not yet made <c>Meshes</c> in is still offered, and the
+    /// plan does not say it was left alone.
+    /// </summary>
+    [Fact]
+    public async Task TheVariableNamingTheDefaultCacheNeedsNoMeshCache()
+    {
+        Write(Path.Combine(StandaloneTextures, "107", "202", "16d9054c043cb86.rstexbin"));
+        _environment.WithEnvironmentVariable(RedshiftCacheLayout.CacheVariable, Path.Combine(Standalone, "Cache"));
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Equal([Path.Combine(StandaloneTextures, "107")], plan.TargetedPaths);
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains(RedshiftCacheLayout.CacheVariable, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A variable naming a folder inside another cache's textures adds nothing: that cache's walk may
+    /// remove it, and declaring it too would assert that its mesh cache survived a run bound to remove it
+    /// (§5.6).
     /// </summary>
     [Fact]
     public async Task AVariableInsideAnotherCachesTexturesIsNotDeclared()
     {
         CreateRedshiftFolder(Standalone);
-        var nested = Path.Combine(StandaloneTextures, "nested");
+        var nested = Path.Combine(StandaloneTextures, "12", "nested");
         Write(Path.Combine(nested, "Textures", "1", "2", "inner.rstexbin"));
         Write(Path.Combine(nested, "Meshes", "lock"), 0);
         _environment.WithEnvironmentVariable(RedshiftCacheLayout.CacheVariable, nested);
@@ -292,7 +387,8 @@ public sealed class RedshiftCacheProviderTests : IDisposable
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
 
-        Assert.Equal([StandaloneTextures], plan.TargetedPaths);
+        Assert.DoesNotContain(plan.TargetedPaths, path => LongPath.Contains(nested, path));
+        Assert.DoesNotContain(plan.ProtectedPaths, p => LongPath.Contains(nested, p.Path));
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -307,7 +403,8 @@ public sealed class RedshiftCacheProviderTests : IDisposable
     [Fact]
     public async Task DeclinesAVariableNamingTheProfileAndReachesNothingInIt()
     {
-        var mine = Write(Path.Combine(_environment.UserProfile, "Textures", "brick_albedo.rstexbin"));
+        var mine = Write(Path.Combine(_environment.UserProfile, "Textures", "1", "brick_albedo.rstexbin"));
+        Directory.CreateDirectory(Path.Combine(_environment.UserProfile, "Meshes"));
         _environment.WithEnvironmentVariable(RedshiftCacheLayout.CacheVariable, _environment.UserProfile);
 
         var provider = CreateProvider();
@@ -320,7 +417,7 @@ public sealed class RedshiftCacheProviderTests : IDisposable
         Assert.True(File.Exists(mine));
         Assert.DoesNotContain(
             await provider.DiscoverToolRootsAsync(),
-            r => LongPath.Contains(_environment.UserProfile, r.Path) && r.RecognisesFolder("Textures"));
+            r => LongPath.Contains(_environment.UserProfile, r.Path) && r.RecognisesFolder("1"));
     }
 
     /// <summary>A relative value could name any folder, so it is said out loud and resolved against nothing.</summary>
@@ -337,8 +434,8 @@ public sealed class RedshiftCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The <c>CacheFolder</c> preference was measured naming a folder Redshift did not use, so it moves
-    /// nothing: a folder it names is never reached.
+    /// The <c>CacheFolder</c> preference was observed naming a folder Redshift did not use, so it moves
+    /// nothing: a folder it names is never reached, even one laid out as a cache.
     /// </summary>
     [Fact]
     public async Task TheCacheFolderPreferenceIsNotFollowed()
@@ -346,6 +443,7 @@ public sealed class RedshiftCacheProviderTests : IDisposable
         CreateRedshiftFolder(HostRedshift);
         var named = Path.Combine(_temp.Path, "Projects");
         var mine = Write(Path.Combine(named, "Textures", "1", "2", "converted_by_hand.rstexbin"));
+        Directory.CreateDirectory(Path.Combine(named, "Meshes"));
         File.WriteAllText(
             Path.Combine(HostRedshift, "preferences.xml"),
             $"""
@@ -358,7 +456,7 @@ public sealed class RedshiftCacheProviderTests : IDisposable
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
 
-        Assert.Equal([HostTextures], plan.TargetedPaths);
+        Assert.All(plan.TargetedPaths, path => Assert.True(LongPath.Contains(HostTextures, path), path));
 
         await provider.ExecuteAsync(plan);
 
@@ -401,6 +499,29 @@ public sealed class RedshiftCacheProviderTests : IDisposable
         Assert.Empty(plan.Steps);
         Assert.True(plan.WasNotExamined);
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(HostTextures, StringComparison.OrdinalIgnoreCase));
+        Assert.True(File.Exists(target));
+    }
+
+    /// <summary>A numbered folder that is a link is declined and named, while its real siblings go.</summary>
+    [Fact]
+    public async Task ANumberedFolderThatIsALinkIsLeftAlone()
+    {
+        var (cached, _) = CreateRedshiftFolder(HostRedshift);
+        var elsewhere = Path.Combine(_temp.Path, "elsewhere");
+        var target = Write(Path.Combine(elsewhere, "2", "a.rstexbin"));
+        var link = Path.Combine(HostTextures, "9");
+        SymbolicLink.ToDirectory(link, elsewhere);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.DoesNotContain(plan.TargetedPaths, path => path.Equals(link, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(link, StringComparison.OrdinalIgnoreCase));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+        Assert.All(cached, path => Assert.False(File.Exists(path)));
         Assert.True(File.Exists(target));
     }
 }

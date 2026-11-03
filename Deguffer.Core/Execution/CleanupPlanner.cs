@@ -308,7 +308,7 @@ public sealed class CleanupPlanner
             new ResolveRenderCacheProvider(environment, scanner: scanner),
             afterEffects,
             new AdobeMediaCacheProvider(environment, scanner: scanner),
-            new RedshiftCacheProvider(environment, scanner: scanner),
+            new RedshiftCacheProvider(environment, declarations: declarations, scanner: scanner),
             new CapCutCacheProvider(environment, scanner: scanner),
             new SquirrelStagingProvider(environment, discovery: squirrel, liveTrees: liveTrees, scanner: scanner),
             new PlatformIoCacheProvider(environment, scanner: scanner),

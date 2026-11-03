@@ -8,10 +8,11 @@ namespace Deguffer.Core.Providers;
 /// The textures Maxon's Redshift renderer converted to its own format, kept in its disk cache for Cinema
 /// 4D, Maya, Houdini, 3ds Max, Katana, Blender and Redshift's own command line.
 ///
-/// <para><b>Tier 1.</b> Maxon: "Since missing caches are automatically recalculated, manually deleting
-/// files from the cache directory is also an option". The cost is a conversion of each texture the next
-/// time a scene that uses it renders. Redshift trims the cache to its own <b>Texture Cache Max GB</b>,
-/// 32 GB by default, so the row is for reclaiming that allowance.</para>
+/// <para><b>Tier 1, observed.</b> Maxon: "Since missing caches are automatically recalculated, manually
+/// deleting files from the cache directory is also an option". The cost is a conversion of each texture
+/// the next time a scene that uses it renders. Redshift trims the cache to its own <b>Texture Cache Max
+/// GB</b>, 32 GB by default, so the row is for reclaiming that allowance. The folders it acts on and the
+/// program holding them were seen on a Cinebench 2026 installation.</para>
 ///
 /// <para><b>§5.1 has no route Deguffer can take.</b> Cinema 4D's <b>Clear Baked Textures</b> is a command
 /// inside the running application, and clears one project's.</para>
@@ -22,24 +23,31 @@ namespace Deguffer.Core.Providers;
 /// left alone, named as a survivor and refused in Explore, and the clean asks again before it removes
 /// anything.</para>
 ///
-/// <para>Where the caches are, why only <c>Textures</c> is reached, and what beside it is never touched is
-/// <see cref="RedshiftCacheLayout"/>.</para>
+/// <para>Where the caches are, why only the numbered folders in <c>Textures</c> are reached, and what
+/// beside them is never touched is <see cref="RedshiftCacheLayout"/>.</para>
 /// </summary>
 public sealed class RedshiftCacheProvider : CleanupProviderBase
 {
     private const string HeldReason =
         "A program that renders with Redshift is running, and Maxon says the cache must stay untouched "
-        + "while a render is running, so the cache is left alone. Close Cinema 4D, Maya, Houdini, 3ds Max, "
-        + "Katana, Blender and any Redshift render, then scan again.";
+        + "while a render is running, so the cache is left alone. Close Cinebench, Cinema 4D, Maya, Houdini, "
+        + "3ds Max, Katana, Blender and any Redshift render, then scan again.";
 
-    private const string ExploreReason =
-        "This is Redshift's cache. Only the converted textures in it may be removed, never the mesh cache "
-        + "a running render holds a lock in.";
+    private const string CacheExploreReason =
+        "This is Redshift's cache. Only the numbered folders of converted textures inside its Textures "
+        + "folder may be removed, never the mesh cache a running render holds a lock in.";
+
+    private const string TexturesExploreReason =
+        "This is the folder Redshift keeps its converted textures in. Only the numbered folders inside it "
+        + "may be removed.";
+
+    private static readonly IReadOnlyList<CacheLevel> TexturesLevel = [new CacheLevel("", RedshiftCacheLayout.Buckets)];
 
     private readonly ISystemDirectories _system;
+    private readonly RowDeclarations _declarations;
     private readonly RunningProcessCheck _stillClosed;
     private readonly PassMemo<RedshiftCacheLayout> _layout = new();
-    private readonly PassMemo<DeclaredLocationScan> _scan = new();
+    private readonly PassMemo<Examination> _examination = new();
 
     public RedshiftCacheProvider(
         IUserEnvironment? environment = null,
@@ -47,7 +55,8 @@ public sealed class RedshiftCacheProvider : CleanupProviderBase
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
         ISystemDirectories? system = null,
-        IVolumeInventory? volumes = null)
+        IVolumeInventory? volumes = null,
+        RowDeclarations? declarations = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
@@ -56,6 +65,7 @@ public sealed class RedshiftCacheProvider : CleanupProviderBase
             volumes: volumes)
     {
         _system = system ?? SystemDirectories.Current;
+        _declarations = declarations ?? new RowDeclarations();
         _stillClosed = new RunningProcessCheck(Inspector, RedshiftCacheLayout.ProcessNames);
     }
 
@@ -89,35 +99,31 @@ public sealed class RedshiftCacheProvider : CleanupProviderBase
 
     private RedshiftCacheLayout Layout => _layout.Get(() => RedshiftCacheLayout.Find(Environment, _system, Volumes));
 
-    private DeclaredLocationScan Scan(CancellationToken ct) => _scan.Get(() => DeclaredLocations.Examine([.. Layout.Caches.Select(cache => cache.Declared)], ct));
+    private Examination Examine(CancellationToken ct) => _examination.Get(() => Examination.Of(Layout, ct));
 
     /// <summary>Every answer here is configuration or the disk, which can change between one scan and the next.</summary>
     public override void InvalidateCaches()
     {
         _layout.Forget();
-        _scan.Forget();
+        _examination.Forget();
         Volumes.Invalidate();
         base.InvalidateCaches();
     }
 
     /// <summary>
-    /// Present where a converted texture may be there, or where a cache was found and withheld. A
-    /// <c>Textures</c> folder holding nothing is no row: Redshift creates it each time it starts.
+    /// Present where a numbered folder of converted textures is there, or where a cache was found and
+    /// left unexamined. A <c>Textures</c> folder with no numbered folder in it is no row.
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default)
     {
-        var scan = Scan(ct);
+        var examined = Examine(ct);
 
-        return Task.FromResult(
-            scan.Targets.Any(target => DirectoryContent.MayBePresent(target.Path))
-            || scan.Declined.Count > 0
-            || scan.CouldNotBeReached
-            || Layout.Notes.Count > 0);
+        return Task.FromResult(examined.Buckets.Count > 0 || examined.LeftSomethingOut || Layout.Notes.Count > 0);
     }
 
     /// <summary>
-    /// §5.2 for Explore. Each Redshift folder recognises nothing, and each cache only its textures. While
-    /// a host runs, the textures are refused too.
+    /// §5.2 for Explore. Each Redshift folder and each cache recognises nothing, and each <c>Textures</c>
+    /// only its numbered folders. While a host runs, those are refused too.
     /// </summary>
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
@@ -128,38 +134,36 @@ public sealed class RedshiftCacheProvider : CleanupProviderBase
             .. Layout.Caches
                 .Where(cache => cache.IsInsideDataFolder)
                 .Select(cache => new ToolRoot(cache.Declared.Path, cache.Declared.Reason, static _ => false)),
+            .. Layout.Caches.Select(cache => new ToolRoot(cache.Folder, running ? HeldReason : CacheExploreReason, static _ => false)),
             .. Layout.Caches.Select(cache => running
-                ? new ToolRoot(cache.Folder, HeldReason, static _ => false)
-                : ToolRoot.Folders(
-                    cache.Folder,
-                    ExploreReason,
-                    static name => name.Equals(RedshiftCacheLayout.TexturesFolder, StringComparison.OrdinalIgnoreCase))),
-            .. Layout.Caches
-                .Where(_ => running)
-                .Select(cache => new ToolRoot(cache.Textures, HeldReason, static _ => false)),
+                ? new ToolRoot(cache.Textures, HeldReason, static _ => false)
+                : ToolRoot.Of(cache.Textures, TexturesExploreReason, RedshiftCacheLayout.Buckets)),
         ]);
     }
 
+    /// <summary>
+    /// Each <c>Textures</c> folder whole. The clean removes only the numbered folders in it, so this names
+    /// more than the clean can reach, which only ever makes a duplicate there less likely to be kept.
+    /// </summary>
     public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<CleanedPlace>>([.. Layout.Caches.Select(cache => CleanedPlace.Whole(cache.Textures))]);
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var layout = Layout;
-        var scan = Scan(ct);
+        var examined = Examine(ct);
 
-        // A Textures folder Redshift created and never filled is not a cache to offer.
-        var found = scan.Targets.Where(target => DirectoryContent.MayBePresent(target.Path)).ToList();
-
-        if (found.Count == 0 && scan.Declined.Count == 0 && !scan.CouldNotBeReached && layout.Notes.Count == 0)
+        if (examined.Buckets.Count == 0 && !examined.LeftSomethingOut && layout.Notes.Count == 0)
         {
             return EmptyPlan("Redshift has kept no converted textures in this user's account.");
         }
 
-        var notes = new List<PlanNote>(scan.Notes);
+        var notes = new List<PlanNote>(examined.Notes);
         notes.AddRange(layout.Notes);
 
-        var held = RedshiftIsRunning() ? found.Select(target => target.Path).ToList() : [];
+        var held = RedshiftIsRunning()
+            ? examined.Walks.Where(walked => walked.Walk.Targets.Count > 0).Select(walked => walked.Textures).ToList()
+            : [];
 
         if (held.Count > 0)
         {
@@ -167,13 +171,20 @@ public sealed class RedshiftCacheProvider : CleanupProviderBase
         }
 
         var (steps, measured) = await PlanDeletionsAsync(
-            [.. found.Where(_ => held.Count == 0).Select(target => target with { UseCheck = _stillClosed })],
+            [.. examined.Buckets.Where(_ => held.Count == 0).Select(bucket => bucket with { UseCheck = _stillClosed })],
             keep,
             ct).ConfigureAwait(false);
 
         if (measured.Note is { } scanNote)
         {
             notes.Add(scanNote);
+        }
+
+        List<(string Path, string Reason)> unrecognised = [];
+
+        foreach (var walked in examined.Walks)
+        {
+            unrecognised.AddRange(await walked.Walk.SurvivorsAsync(_declarations, ct).ConfigureAwait(false));
         }
 
         return new CleanupPlan
@@ -184,16 +195,64 @@ public sealed class RedshiftCacheProvider : CleanupProviderBase
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
             // Held first, so a held textures folder is named for why it was held rather than as the folder
-            // only the contents of are removed.
-            ProtectedPaths = Protect([.. held.Select(path => (Path: path, Reason: HeldReason)), .. scan.Protected]),
+            // only some of the contents of are removed.
+            ProtectedPaths = Protect(
+            [
+                .. held.Select(path => (Path: path, Reason: HeldReason)),
+                .. examined.Scan.Protected,
+                .. examined.Walks.SelectMany(walked => walked.Walk.Declined),
+                .. unrecognised,
+            ]),
             Notes = notes,
             Fallback = measured.Fallback,
             // A cache held back while a host runs, behind a link, or withheld from another computer's disk
             // is something real left unexamined, so a row with no steps must not read as clear.
-            WasNotExamined = steps.Count == 0 && (held.Count > 0 || scan.Declined.Count > 0 || layout.LeftSomethingUnexamined),
-            HasUnreadableRoot = scan.CouldNotBeReached,
+            WasNotExamined = steps.Count == 0 && (held.Count > 0 || examined.LeftSomethingOut || layout.LeftSomethingUnexamined),
+            HasUnreadableRoot = examined.Unreadable,
         };
     }
 
     private bool RedshiftIsRunning() => Inspector.FindRunning(RedshiftCacheLayout.ProcessNames).Count > 0;
+
+    /// <summary>
+    /// One planning pass's reading of the disk: each cache's folders down to <c>Textures</c>, and the
+    /// numbered folders in each <c>Textures</c>, read once so presence, the plan and Explore agree.
+    /// </summary>
+    /// <param name="Scan">The declared folders down to each <c>Textures</c>, with what must survive beside them.</param>
+    /// <param name="Walks">Each <c>Textures</c> that was reached, with what its walk found.</param>
+    /// <param name="Buckets">Every numbered folder found, listed under the cache it is in.</param>
+    private sealed record Examination(
+        DeclaredLocationScan Scan,
+        IReadOnlyList<(string Textures, LevelWalk Walk)> Walks,
+        IReadOnlyList<DeletionTarget> Buckets)
+    {
+        public IEnumerable<PlanNote> Notes => Scan.Notes.Concat(Walks.SelectMany(walked => walked.Walk.Notes));
+
+        /// <summary>A folder declined as a link, or one Windows would not describe or list.</summary>
+        public bool LeftSomethingOut =>
+            Scan.Declined.Count > 0 || Walks.Any(walked => walked.Walk.Declined.Count > 0) || Unreadable;
+
+        public bool Unreadable => Scan.CouldNotBeReached || Walks.Any(walked => walked.Walk.Unreadable);
+
+        public static Examination Of(RedshiftCacheLayout layout, CancellationToken ct)
+        {
+            var scan = DeclaredLocations.Examine([.. layout.Caches.Select(cache => cache.Declared)], ct);
+            var reached = scan.Targets.Select(target => target.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var walks = new List<(string Textures, LevelWalk Walk)>();
+            var buckets = new List<DeletionTarget>();
+
+            // Only a Textures folder the scan reached is walked: one behind a link, or one Windows would not
+            // describe, was declined or reported there.
+            foreach (var cache in layout.Caches.Where(cache => reached.Contains(cache.Textures)))
+            {
+                var walk = CacheLevelWalk.Under(TexturesLevel, cache.Textures, ct);
+                var heading = LongPath.Display(cache.Folder);
+
+                walks.Add((cache.Textures, walk));
+                buckets.AddRange(walk.Targets.Select(bucket => bucket with { Group = heading }));
+            }
+
+            return new Examination(scan, walks, buckets);
+        }
+    }
 }

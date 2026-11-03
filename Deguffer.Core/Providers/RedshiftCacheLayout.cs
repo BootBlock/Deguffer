@@ -1,47 +1,52 @@
+using System.Globalization;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Providers;
 
 /// <summary>
-/// Where Maxon's Redshift renderer keeps its disk cache on this machine, and what beside it is never
-/// touched.
+/// Where Maxon's Redshift renderer keeps its disk cache on this machine, and what in and beside it is
+/// never touched.
 ///
 /// <para><b>Measured from Cinebench 2026, which renders with Redshift inside a Cinema 4D shell.</b> Inside
-/// a Maxon host, Redshift's local data folder is <c>Redshift</c> in the host's preferences folder,
-/// <c>%APPDATA%\Maxon\&lt;host&gt;_&lt;id&gt;\Redshift</c>. Redshift's log names it as the local data path and
-/// the folder <c>preferences.xml</c> is read from. The cache is <c>Cache</c> inside it, and holds
-/// <c>Textures</c>, the textures Redshift converted to its own format as <c>.rstexbin</c> files in two
-/// levels of numbered folders, and <c>Meshes</c>, which held one folder per computer and one per process
-/// with a <c>lock</c> in it. One GPU benchmark run wrote 4.33 GB of converted textures.</para>
+/// a Maxon host, Redshift's folder is <c>Redshift</c> in the host's preferences folder,
+/// <c>%APPDATA%\Maxon\&lt;host&gt;_&lt;id&gt;\Redshift</c>. Redshift's log gave that folder as its local data
+/// path and the <c>preferences.xml</c> in it as its preferences file. The cache is <c>Cache</c> inside
+/// it, and held <c>Textures</c> and <c>Meshes</c>. <c>Textures</c> held only numbered folders between 1
+/// and 255, each holding numbered folders, each holding one <c>.rstexbin</c> texture Redshift converted
+/// to its own format. <c>Meshes</c> held one folder per computer and one per process with a <c>lock</c>
+/// in it. One GPU benchmark run wrote 4.33 GB of converted textures.</para>
 ///
 /// <para><b>The standalone default is Redshift's own.</b> <c>%LOCALAPPDATA%\Redshift\Cache</c> is the
 /// default Maxon documents for a standalone install, and the one written into Redshift's core library and
-/// into a new <c>preferences.xml</c>. No standalone install has been measured, so only the same
-/// <c>Textures</c> folder is reached in it.</para>
+/// into a new <c>preferences.xml</c>. No standalone install has been measured, so the rules for a host's
+/// cache are applied to it unchanged.</para>
 ///
-/// <para><b>Only <c>Textures</c> is reached.</b> Maxon says missing cache files are "automatically
-/// recalculated", and that "The caches must remain untouched only as long as a rendering of the
-/// corresponding project is still running". <c>Meshes</c> holds per-process locks, so it is Tier 4. A
-/// shader cache Redshift may keep beside them has not been seen, and anything else in <c>Cache</c> is never
-/// enumerated, so it survives by construction.</para>
+/// <para><b>Only the numbered folders in <c>Textures</c> are reached (§5.2).</b> Maxon says missing cache
+/// files are "automatically recalculated". The numbered folders are the shape Redshift's converted
+/// textures were seen in, and anything else in <c>Textures</c> is Tier 4: <c>Textures</c> is a common
+/// name for a folder of source images, and a texture a user converted by hand and keeps beside them is no
+/// cache. <c>Meshes</c> holds per-process locks, so it is Tier 4. A shader cache Redshift may keep beside
+/// them has not been seen, and nothing else in <c>Cache</c> is enumerated, so it survives by
+/// construction.</para>
 ///
-/// <para><b><c>REDSHIFT_CACHEPATH</c> moves the cache, and is followed.</b> Maxon documents it as the
-/// variable that overrides the cache location, and Redshift keeps the same <c>Textures</c> folder inside
-/// whatever it names. The folder is vetted by <see cref="ConfiguredFolder"/> like any folder a setting
-/// names.</para>
+/// <para><b><c>REDSHIFT_CACHEPATH</c> moves the cache, and is followed where the folder is Redshift's.</b>
+/// Maxon documents it as the variable that overrides the cache location. The folder is vetted by
+/// <see cref="ConfiguredFolder"/> like any folder a setting names, and is examined only where it holds
+/// <c>Meshes</c> beside <c>Textures</c>: Redshift's log showed it creating the mesh cache in the cache
+/// folder as it started, and a folder of the user's own is unlikely to hold both.</para>
 ///
 /// <para><b>The <c>CacheFolder</c> preference is not read.</b> In the measured run, <c>preferences.xml</c>
 /// named <c>%LOCALAPPDATA%\Redshift\Cache</c> while Redshift, by its own log, used the host's folder. A
 /// setting that was measured disagreeing with the cache in use cannot be taken to say where the cache
 /// is.</para>
 ///
-/// <para><b>A cache on another computer's disk is withheld.</b> Redshift divides <c>Meshes</c> by
-/// computer because a cache folder can be shared between machines, as a render farm shares one. A cache
+/// <para><b>A cache on another computer's disk is withheld.</b> A cache folder can be on a share that
+/// other computers render from, and <c>Meshes</c> was divided by computer name as if for that. A cache
 /// that is not on a disk in this computer may be in use by a render elsewhere, which no process check
 /// here can see.</para>
 /// </summary>
-/// <param name="Caches">The caches to examine, each reaching only its <c>Textures</c>.</param>
+/// <param name="Caches">The caches to examine, each reaching only the numbered folders in its <c>Textures</c>.</param>
 /// <param name="Notes">What the user is told about a cache that was found and withheld.</param>
 /// <param name="LeftSomethingUnexamined">Whether a cache was named and withheld rather than examined.</param>
 public sealed record RedshiftCacheLayout(
@@ -58,7 +63,7 @@ public sealed record RedshiftCacheLayout(
     /// <summary>The cache inside Redshift's folder.</summary>
     public const string CacheFolder = "Cache";
 
-    /// <summary>The converted textures inside the cache, the one folder whose contents are removed.</summary>
+    /// <summary>The converted textures inside the cache.</summary>
     public const string TexturesFolder = "Textures";
 
     /// <summary>The mesh cache beside the textures, which holds a lock per running process.</summary>
@@ -68,21 +73,38 @@ public sealed record RedshiftCacheLayout(
     public const string MaxonFolder = "Maxon";
 
     /// <summary>
-    /// §5.3. The programs that load Redshift. <c>Cinebench</c> was measured rendering with it. The others
-    /// are the hosts Maxon ships Redshift for, by the names of their programs: Cinema 4D and its
-    /// command-line renderer, Maya, Houdini and its batch renderers, 3ds Max, Katana, Blender, and
-    /// Redshift's own command-line renderer.
+    /// §5.3. The programs that load Redshift. Only <c>Cinebench</c> was seen rendering with it. The rest
+    /// are the published program names of the hosts Maxon ships Redshift for, not checked against an
+    /// installation: Cinema 4D with its command-line renderer and its Python, Maya with its batch
+    /// renderer, Houdini with its batch tools, 3ds Max with its command-line renderers, Katana, Blender,
+    /// and Redshift's own command-line renderer. A name that is wrong holds nothing back while that
+    /// program renders.
     /// </summary>
     public static readonly IReadOnlyList<string> ProcessNames =
     [
-        "Cinebench", "Cinema 4D", "Commandline", "maya", "mayabatch", "houdini", "houdinifx", "houdinicore",
-        "hython", "husk", "3dsmax", "katanaBin", "blender", "redshiftCmdLine",
+        "Cinebench", "Cinema 4D", "Commandline", "c4dpy", "maya", "mayabatch", "houdini", "houdinifx",
+        "houdinicore", "hython", "hbatch", "husk", "3dsmax", "3dsmaxcmd", "3dsmaxbatch", "katanaBin",
+        "blender", "redshiftCmdLine",
     ];
 
-    /// <summary>What the user is told about the converted textures, in the plan and in Explore.</summary>
-    public const string TexturesReason =
+    /// <summary>What the user is told about a numbered folder of converted textures, in the plan and in Explore.</summary>
+    public const string BucketReason =
         "Textures Redshift converted to its own format. Redshift converts them again from your images "
         + "the next time a scene that uses them renders.";
+
+    /// <summary>
+    /// §5.2 for <c>Textures</c>: the numbered folders Redshift was seen keeping its converted textures in,
+    /// which were named from 1 to 255, with 0 included as the other value a byte can take. Anything else
+    /// is Tier 4.
+    /// </summary>
+    public static readonly DisposableChildSet Buckets = new(
+    [
+        .. Enumerable.Range(0, 256).Select(bucket => new ChildClassification(
+            bucket.ToString(CultureInfo.InvariantCulture), SafetyTier.RegenerableCache, BucketReason)),
+    ]);
+
+    private const string TexturesFolderReason =
+        "The folder Redshift keeps its converted textures in. Only the numbered folders inside it are removed.";
 
     private const string DataFolderReason =
         "Redshift's own folder. Its preferences, its logs and its mesh cache are in it, and only the "
@@ -107,11 +129,14 @@ public sealed record RedshiftCacheLayout(
         (MeshesFolder, MeshesReason),
     ];
 
+    // Declared as a folder emptied in place so that every folder on the way down to it is checked for a
+    // link, and so that the folder itself is asserted to survive. Only the numbered folders in it are
+    // ever planned, by RedshiftCacheProvider's walk of Buckets.
     private static readonly DeclaredLocation DataFolderTextures = new(
-        Path.Combine(CacheFolder, TexturesFolder), TexturesReason, DeclaredLocationKind.DirectoryContents, ReportsAge: false);
+        Path.Combine(CacheFolder, TexturesFolder), TexturesFolderReason, DeclaredLocationKind.DirectoryContents, ReportsAge: false);
 
     private static readonly DeclaredLocation MovedTextures = new(
-        TexturesFolder, TexturesReason, DeclaredLocationKind.DirectoryContents, ReportsAge: false);
+        TexturesFolder, TexturesFolderReason, DeclaredLocationKind.DirectoryContents, ReportsAge: false);
 
     /// <summary>Redshift's folder for a standalone install.</summary>
     public static string StandaloneFolder(IUserEnvironment environment) =>
@@ -167,14 +192,29 @@ public sealed record RedshiftCacheLayout(
                 $"{CacheVariable} names '{setting.Named ?? setting.Value}' for Redshift's cache, and Deguffer "
                 + $"leaves it alone: {declined}"));
         }
-        else if (setting.Folder is { } moved)
+        // Unset, the variable answers with the default cache, and set to it, however it is spelt, it names
+        // that folder too. Either way the folder is already declared as Redshift's own.
+        else if (setting.Folder is { } moved
+            && !ReachedFolder.At(moved, volumes).IsSameAs(ReachedFolder.At(DefaultCache(environment), volumes)))
         {
-            Add(moved, relativeCache: null, MovedReason, MovedTextures, MovedSurvivors);
+            if (IsMovedCacheUnproven(moved))
+            {
+                withheld = true;
+                notes.Add(new PlanNote(
+                    PlanNoteSeverity.Information,
+                    $"{CacheVariable} names '{LongPath.Display(moved)}' for Redshift's cache, and Deguffer leaves "
+                    + $"it alone: it holds no '{MeshesFolder}' folder beside '{TexturesFolder}', which Redshift "
+                    + "makes in its cache, so nothing shows that the textures there are Redshift's."));
+            }
+            else
+            {
+                Add(moved, relativeCache: null, MovedReason, MovedTextures, MovedSurvivors);
+            }
         }
 
-        // REDSHIFT_CACHEPATH can name a folder inside another cache's textures. Emptying those textures
-        // takes the inner folder with it, so the inner one is left out: declared as well, its survivors
-        // would be asserted to outlive a run that is bound to remove them.
+        // REDSHIFT_CACHEPATH can name a folder inside another cache's textures. That cache's walk may
+        // remove it, so it is left out: declared as well, its survivors would be asserted to outlive a
+        // run that may remove them.
         return new RedshiftCacheLayout(
             [
                 .. roots
@@ -183,6 +223,12 @@ public sealed record RedshiftCacheLayout(
             ],
             notes,
             withheld);
+
+        // A folder the variable names that holds textures and no mesh cache. One without textures has
+        // nothing to examine, and is passed over without a word, as an absent default is.
+        static bool IsMovedCacheUnproven(string folder) =>
+            LongPath.ProbeDirectory(Path.Combine(folder, TexturesFolder)) is not PathPresence.Absent
+            && LongPath.ProbeDirectory(Path.Combine(folder, MeshesFolder)) is PathPresence.Absent;
 
         // One Redshift folder, examined once however it is named, and withheld where it is not on a disk
         // in this computer. Said only where something is there, so a machine without Redshift says nothing.
@@ -230,7 +276,7 @@ public sealed record RedshiftCacheLayout(
 /// <param name="Folder">The cache, which holds the textures and the mesh cache.</param>
 public sealed record RedshiftCache(DeclaredRoot Declared, string Folder)
 {
-    /// <summary>The converted textures, the one folder whose contents are removed.</summary>
+    /// <summary>The converted textures. Only the numbered folders in it are removed.</summary>
     public string Textures => Path.Combine(Folder, RedshiftCacheLayout.TexturesFolder);
 
     /// <summary>Whether <see cref="Declared"/> is Redshift's own folder around the cache, rather than the cache.</summary>
