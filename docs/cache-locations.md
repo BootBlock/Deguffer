@@ -1914,8 +1914,10 @@ a version, because `v1115` reads as 1.11.5 and as 1.1.15. A zip that fails any c
 plan says why.
 
 **The repository STM32CubeMX names is followed.** Its Updater Settings are saved as the
-`RepositoryPath` line of `%USERPROFILE%\.stm32cubemx\plugins\updater\updater.ini`. A value written in
-Java's escaped form, `C\:\\Users\\...`, is read as well as a plain path. Deguffer refuses the folder
+`RepositoryPath` line of `%USERPROFILE%\.stm32cubemx\plugins\updater\updater.ini`, as an open-source
+tool that reads the file parses it. No copy of the file has been seen, so a value written in Java's
+escaped form, `C\:\\Users\\...`, is read as well as a plain path, and a value in double quotes as well
+as a bare one. Deguffer refuses the folder
 if it is not a full path, a drive root, one of your own folders such as Documents, or a folder that
 holds a temporary folder. It leaves a repository that is not on a disk in this computer alone,
 because another computer may be installing a patch from it.
@@ -1950,9 +1952,10 @@ of them while either tool runs. Deguffer also refuses to look through a link.
 
 ### What it costs you
 
-**The next patch downloads the base package again.** Your projects and the packages they use are
-untouched. STM32CubeMX unpacks a package's zip again before it applies a patch to it, so after a
-clean it downloads that zip first. Installing a patch offline fails until you put the zip back in
+**The next patch needs the base package's zip again.** Your projects and the packages they use are
+untouched. STM32CubeIDE was seen unpacking a package's zip again before it applied a patch to it, so
+after a clean the next patch needs that zip back. No source says outright that the tools then
+download it again, though that is the expected result. Installing a patch offline fails until you put the zip back in
 the repository, so keep the zip of any package you patch offline.
 
 ### Why Tier 2
@@ -1961,8 +1964,8 @@ The issue that proposed this row said Tier 1, on the strength of an answer on ST
 should not need the ZIP files once they have been installed/unzipped". That is true of using a
 package, and not of patching one. STM32CubeIDE's log shows it unpacking a base zip it already held,
 with no download, before it applied the patch, and ST's staff describe the offline patch install as
-putting the base zip in the repository first. Getting the zip back is a download of hundreds of
-megabytes, which is Tier 2's consequence.
+putting the base zip in the repository first. Getting the zip back costs a download, or an offline
+patch install that fails until the zip is put back, which is Tier 2's consequence.
 
 Sources:
 
@@ -1975,6 +1978,8 @@ Sources:
   and <https://community.st.com/t5/stm32cubemx-mcus/how-to-install-a-patch-offline-in-the-stm32cube-ide/td-p/116004>
 - STM32CubeIDE unpacking a base zip again before a patch, in a log committed to a public project:
   <https://github.com/jwachlin/Nanosleeper/blob/main/.metadata/.ide.log-2025-05-18.log>
+- The `RepositoryPath` line of `updater.ini`, as an open-source tool reads it:
+  <https://github.com/BakeSheep/EmberProbe-MCU-Flash-Debug/blob/5c982e622cafa92257acce41773cc9ff902e74f1/src/services/cubemxFirmware.js>
 - STM32CubeIDE's own repository setting, stored per workspace:
   <https://github.com/kolod/st-link-loaders>
 

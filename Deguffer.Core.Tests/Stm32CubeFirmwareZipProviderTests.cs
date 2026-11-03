@@ -402,8 +402,8 @@ public sealed class Stm32CubeFirmwareZipProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A link on the way to the default repository, or as a zip's name in it, is declined, named as
-    /// protected and never followed, so what it points at survives.
+    /// A link on the way to the default repository is declined, named as protected and never followed,
+    /// so what it points at survives.
     /// </summary>
     [Fact]
     public async Task DeclinesALinkToTheRepository()
@@ -425,6 +425,47 @@ public sealed class Stm32CubeFirmwareZipProviderTests : IDisposable
 
         Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
         Assert.True(File.Exists(zip));
+    }
+
+    /// <summary>
+    /// A package folder in the repository that is a link to a package somewhere else is declined and
+    /// named as protected, and it pairs with no zip: nothing shows the package is unpacked here. The
+    /// zip beside it, the link and what the link points at all survive.
+    /// </summary>
+    [Fact]
+    public async Task APackageFolderThatIsALinkPairsWithNoZip()
+    {
+        var elsewhere = Package(Path.Combine(_temp.Path, "elsewhere"), F4);
+        Directory.CreateDirectory(Repository);
+        var link = Path.Combine(Repository, F4);
+        Junction.ToDirectory(link, elsewhere);
+        var zip = Zip(Path.Combine(Repository, F4Zip), F4);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(link, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(plan.Notes, n => n.Message.Contains(link, StringComparison.Ordinal) && n.Message.Contains("link", StringComparison.Ordinal));
+        Assert.Contains(plan.Notes, n => n.Message.Contains($"'{F4Zip}'", StringComparison.Ordinal));
+        var root = Assert.Single(await provider.DiscoverToolRootsAsync());
+        Assert.False(root.Recognises(new ToolRootChild(F4Zip, ChildKind.File)));
+        Assert.False(root.RecognisesFolder(F4));
+
+        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
+        Assert.True(File.Exists(zip));
+        Assert.True(File.Exists(Path.Combine(elsewhere, "package.xml")));
+    }
+
+    /// <summary>A path holding a space may be written in double quotes, which are not part of the folder's name.</summary>
+    [Fact]
+    public void ReadsAQuotedSetting()
+    {
+        Write(SettingsFile, 0);
+        File.WriteAllText(SettingsFile, "RepositoryPath = \"D:\\ST Tools\\Repository\"\n");
+
+        Assert.Equal(@"D:\ST Tools\Repository", Stm32CubeRepositories.ReadSetting(SettingsFile));
     }
 
     /// <summary>The value STM32CubeMX's settings hold, as Java's properties writer and a plain writer leave it.</summary>

@@ -12,8 +12,8 @@ namespace Deguffer.Core.Providers;
 /// folder, which projects use, and the zip is not read to use it. It is read again to install a patch:
 /// STM32CubeIDE's log shows it unpacking a base package's zip it already held before it applied the
 /// patch's, and ST's staff tell users installing a patch offline to put the base zip in the repository
-/// first. So removing one costs downloading it again for the next patch, and an offline patch install
-/// fails until it is back. Each zip is an item, so the base of a package that is patched offline can be
+/// first. So the next patch needs the zip back, which is expected to be a download (no source says so
+/// outright), and an offline patch install fails until it is back. Each zip is an item, so the base of a package that is patched offline can be
 /// kept.</para>
 ///
 /// <para><b>Researched.</b> No installation has been seen. The sources are in
@@ -84,9 +84,9 @@ public sealed class Stm32CubeFirmwareZipProvider : CleanupProviderBase
     public override ProviderBasis Basis => ProviderBasis.Researched;
 
     public override string WhatHappensOnNextUse =>
-        "Your projects and the firmware packages they use are untouched. The next time STM32CubeMX or "
-        + "STM32CubeIDE installs a patch for one of these packages, it downloads the package's zip again "
-        + "first. Installing a patch offline fails until you put that zip back in the repository, so keep "
+        "Your projects and the firmware packages they use are untouched. STM32CubeIDE was seen unpacking "
+        + "a package's zip again to install a patch to it, so the next patch to one of these packages "
+        + "needs its zip back, which is expected to mean downloading it again. Installing a patch offline fails until you put that zip back in the repository, so keep "
         + "the zip of any package you patch offline.";
 
     public override ProviderDescription Description { get; } = new()
@@ -95,8 +95,8 @@ public sealed class Stm32CubeFirmwareZipProvider : CleanupProviderBase
         Application = "STM32CubeMX and STM32CubeIDE",
         Publisher = "STMicroelectronics",
         Purpose = "ST's tools download each STM32 firmware package as a zip into their repository, unpack it "
-            + "into a folder beside the zip, and keep both. Each package is hundreds of megabytes, so the zips "
-            + "can be a third of the repository or more.",
+            + "into a folder beside the zip, and keep both. One user reported that removing the zips cut a "
+            + "repository of over 40 GB to about a third of that.",
         Recommendation = "Remove these if you install patches online, or not at all. Deguffer removes only a "
             + "zip whose package is already unpacked beside it, and never a package your projects use.",
     };
@@ -286,7 +286,7 @@ public sealed class Stm32CubeFirmwareZipProvider : CleanupProviderBase
                             targets.Add(new DeletionTarget(
                                 path,
                                 $"The zip {package} was downloaded as. The package is unpacked in the folder beside it, "
-                                + "and STM32CubeMX downloads the zip again when it next needs it to install a patch.",
+                                + "and a patch to it needs the zip again, which is expected to mean downloading it.",
                                 Kind: TargetKind.File,
                                 Identity: new ItemIdentity(entry.Name.ToLowerInvariant(), package),
                                 Group: repository));

@@ -10,9 +10,10 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>Researched, not observed.</b> ST's tools default to <c>%USERPROFILE%\STM32Cube\Repository</c>.
 /// STM32CubeMX moves it under <b>Help, Updater Settings</b>, and the folder it chose is the
-/// <c>RepositoryPath</c> line of <c>.stm32cubemx\plugins\updater\updater.ini</c> in the profile, as three
-/// independent tools that read the file parse it. No copy of the file has been seen, so a value written
-/// in Java's properties form, <c>C\:\\Users\\...</c>, is read as well as a plain path.</para>
+/// <c>RepositoryPath</c> line of <c>.stm32cubemx\plugins\updater\updater.ini</c> in the profile, as an
+/// open-source tool that reads the file parses it, removing double quotes around the value. No copy of
+/// the file has been seen, so a value written in Java's properties form, <c>C\:\\Users\\...</c>, is read
+/// as well as a plain path, and a quoted value as well as a bare one.</para>
 ///
 /// <para><b>A folder STM32CubeIDE alone was told to use is not found.</b> The IDE keeps its own setting in
 /// each workspace's preferences, and nothing outside a workspace lists the workspaces. Missing such a
@@ -169,14 +170,18 @@ public sealed record Stm32CubeRepositories(
 
             if (line.IndexOf('=') is > 0 and var equals
                 && line[..equals].Trim().Equals(SettingsKey, StringComparison.OrdinalIgnoreCase)
-                && line[(equals + 1)..].Trim() is { Length: > 0 } value)
+                && Unescaped(Unquoted(line[(equals + 1)..].Trim())) is { Length: > 0 } value)
             {
-                return Unescaped(value);
+                return value;
             }
         }
 
         return null;
     }
+
+    /// <summary><paramref name="value"/> without the double quotes a path holding a space may be written in.</summary>
+    internal static string Unquoted(string value) =>
+        value.Length >= 2 && value[0] == '"' && value[^1] == '"' ? value[1..^1].Trim() : value;
 
     /// <summary>
     /// <paramref name="value"/> as Java's properties reader reads it where it was written that way, and
