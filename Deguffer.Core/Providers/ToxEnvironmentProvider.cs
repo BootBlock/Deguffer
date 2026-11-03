@@ -57,6 +57,8 @@ public sealed class ToxEnvironmentProvider : BuildDirectoryProvider
         "dependencies, which needs the network unless pip's cache still holds them. Logs of earlier " +
         "runs go with the folder.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.ProjectBuildOutput,

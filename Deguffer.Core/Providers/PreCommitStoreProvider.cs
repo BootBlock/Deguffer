@@ -87,6 +87,8 @@ public sealed partial class PreCommitStoreProvider : CleanupProviderBase
         + "can no longer read, such as one on a drive that is not connected, installs its hooks again the "
         + "next time pre-commit runs there. Stashed unstaged changes are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.DeveloperTools,

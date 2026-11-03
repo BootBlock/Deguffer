@@ -102,6 +102,8 @@ public sealed class SteamLibraryArtworkProvider : CleanupProviderBase
         + "artwork, your picture is lost and Steam's comes back: keep that game. Your games, your "
         + "cloud saves and artwork you set through Steam are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Games,

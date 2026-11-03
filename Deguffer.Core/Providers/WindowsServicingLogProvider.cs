@@ -122,6 +122,8 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
         + "Windows writes a fresh log the next time it services itself, and updating still works "
         + "exactly as before.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Windows,

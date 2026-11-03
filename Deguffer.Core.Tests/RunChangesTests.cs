@@ -179,6 +179,8 @@ public sealed class RunChangesTests
 
         public string WhatHappensOnNextUse => "Nothing.";
 
+        public ProviderBasis Basis => ProviderBasis.Observed;
+
         public ProviderDescription Description { get; } = new()
         {
             Category = ProviderCategory.TemporaryFiles,

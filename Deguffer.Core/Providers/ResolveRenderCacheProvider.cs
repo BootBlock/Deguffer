@@ -71,6 +71,8 @@ public sealed class ResolveRenderCacheProvider : CleanupProviderBase
         + "the media is connected. Your projects, media, optimised media, proxies, backups and recordings "
         + "are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.MediaAndCreative,

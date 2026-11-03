@@ -84,6 +84,8 @@ public sealed partial class GraphicsDriverInstallerProvider : InstallerPayloadPr
         + "reinstall one of these releases, or to repair an older AMD Software installation that "
         + "asks for its setup files, download the installer again from the vendor.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.InstallersAndUpdates,

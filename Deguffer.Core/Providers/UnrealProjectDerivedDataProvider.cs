@@ -49,6 +49,8 @@ public sealed class UnrealProjectDerivedDataProvider : BuildDirectoryProvider
         + "again. On a large project that can take tens of minutes. Nothing is lost: all of it is "
         + "derived from the project's content.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.ProjectBuildOutput,

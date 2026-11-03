@@ -67,6 +67,8 @@ public sealed class GoCacheProvider : CleanupProviderBase
         + "Go toolchain and anything installed with 'go install' are untouched. A module from a "
         + "private or unreachable host can only come back while that host is available.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.PackageCaches,

@@ -85,6 +85,8 @@ public sealed class CcacheProvider : CleanupProviderBase
         "The next build that compiles through ccache compiles everything again, so it takes longer once. "
         + "ccache's settings, including its size limit, are kept, and your projects are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.DeveloperTools,

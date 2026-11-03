@@ -85,6 +85,8 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
         + "releases their local copies in the background, so anything you open offline afterwards will "
         + "not be available until you reconnect.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.Windows,

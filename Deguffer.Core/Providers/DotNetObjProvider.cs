@@ -80,6 +80,8 @@ public sealed class DotNetObjProvider : CleanupProviderBase
         "If you also clear the NuGet cache in this run, the next restore needs the network, and a " +
         "project whose feed is unreachable will not rebuild until that is resolved.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.ProjectBuildOutput,

@@ -69,6 +69,8 @@ public sealed class PythonVirtualEnvironmentProvider : BuildDirectoryProvider
         "holds the wheels. A manifest only lists what somebody wrote down, so check it covers what " +
         "you had installed before removing an environment you still use.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.ProjectBuildOutput,

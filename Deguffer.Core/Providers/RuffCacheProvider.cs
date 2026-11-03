@@ -57,6 +57,8 @@ public sealed class RuffCacheProvider : BuildDirectoryProvider
         "The next ruff run lints and formats every file rather than only what changed, so that one " +
         "run is slower. ruff makes the folder again as it goes.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.ProjectBuildOutput,

@@ -86,6 +86,8 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
         + "wanting one downloads it again, and a toolchain is a multi-gigabyte download. Your "
         + "installed platforms, every toolchain they require and your global libraries are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.PackageCaches,

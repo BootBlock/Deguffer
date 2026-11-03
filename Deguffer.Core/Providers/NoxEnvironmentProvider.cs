@@ -56,6 +56,8 @@ public sealed class NoxEnvironmentProvider : BuildDirectoryProvider
         "The next nox run builds every session's environment again and installs its dependencies, " +
         "which needs the network unless pip's cache still holds them.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.ProjectBuildOutput,

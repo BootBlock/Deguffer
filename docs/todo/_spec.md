@@ -128,6 +128,14 @@ sizes are easy to compute, the classification is the part that takes knowledge.
 | **3 — User data** | Logs, histories, saved sessions. Looks like cache, *is not*. Also anything else whose loss is permanent, such as the means to uninstall updates. | **Gone permanently.** | Shown, never pre-selected, explicit warning |
 | **4 — Do not touch** | Config, credentials, live application state, anything the tool cannot prove is idle. | Breakage. | Excluded from the UI entirely |
 
+**Each provider also declares what its rules rest on** (`ProviderBasis`). *Observed* means its
+folders, files and processes were seen on a real installation. *Researched* means they come from the
+publisher's documentation, the tool's source and users' reports, with no installation seen. The
+basis never widens what a provider may do. It narrows the default: a researched provider is never
+pre-selected, whatever its tier, and its row says it is researched. A tick the user gave is still
+remembered. The declaration is required of every provider, because a default would claim an
+observation nobody made.
+
 ### The mistake this model exists to prevent
 
 During the audit, ~11 GB of VS Code `workspaceStorage` was initially classified as cache. It is

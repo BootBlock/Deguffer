@@ -161,6 +161,8 @@ public sealed partial class TempInstallerDownloadProvider : TempMarkerProviderBa
         + "which for Visual Studio can be more than a gigabyte. Nothing is removed while its "
         + "application is running, and Blender's recovery files are never removed.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.TemporaryFiles,

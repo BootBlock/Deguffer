@@ -38,6 +38,8 @@ public sealed class DebuggerSymbolCacheProvider : DebuggerSymbolCacheProviderBas
         "The next time a debugger needs a symbol file, it downloads it again from Microsoft, so loading symbols "
         + "takes longer once. Your symbol path and debugger settings are untouched.";
 
+    public override ProviderBasis Basis => ProviderBasis.Observed;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.DeveloperTools,

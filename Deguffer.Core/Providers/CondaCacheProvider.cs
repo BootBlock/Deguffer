@@ -67,6 +67,8 @@ public sealed class CondaCacheProvider : CleanupProviderBase
         "The next conda install downloads packages and re-fetches the channel index. Your "
         + "environments are untouched: conda keeps every package an environment still links.";
 
+    public override ProviderBasis Basis => ProviderBasis.Researched;
+
     public override ProviderDescription Description { get; } = new()
     {
         Category = ProviderCategory.PackageCaches,
