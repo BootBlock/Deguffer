@@ -56,7 +56,4 @@ internal sealed record TreeShape(long Files, int Depth, int Fanout, bool ReadOnl
 
     /// <summary>The folders below the root. The shape's own values were accepted only where this is in range.</summary>
     public long Folders => FoldersBelowRoot(Depth, Fanout)!.Value;
-
-    /// <summary>Every entry the tree holds below its root: its folders and its files.</summary>
-    public long Entries => Folders + Files;
 }

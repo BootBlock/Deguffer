@@ -122,7 +122,7 @@ internal sealed record BenchmarkRequest(
         --trees N              Clean only. How many build folders the plan removes, 1 to
                                100000. The default is 500.
         --files-per-tree N     Clean only. How many empty files each build folder holds, in
-                               six folders, 0 to 100000, for at most 10000000 files in all.
+                               seven folders, 0 to 100000, for at most 10000000 files in all.
                                The default is 100.
         --read-size KiB        Table routes only. How many KiB of records each read asks for, 4
                                to 16384.

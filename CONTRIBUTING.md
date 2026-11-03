@@ -88,7 +88,7 @@ Deguffer.Benchmark clean D:\benchmark --trees 500 --files-per-tree 100
   each folder above the deepest holds (default 4), for at most 1,000,000 folders. `--read-only`
   marks every file read-only, which a removal has to clear before it can delete the file.
 - `clean <new folder>` creates the folder, builds `--trees N` projects in it (default 500), each
-  with a build folder of `--files-per-tree N` empty files in six folders (default 100), and
+  with a build folder of `--files-per-tree N` empty files spread over seven folders (default 100), and
   removes the build folders as one plan, as a clean of the `obj` row does. It reports the time per
   step, the use checks, the looks and the work apart, and the removals' passes summed over the
   plan. The use checks ask fakes rather than this machine's running programs, so the result is

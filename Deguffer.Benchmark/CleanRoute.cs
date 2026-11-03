@@ -23,7 +23,7 @@ namespace Deguffer.Benchmark;
 internal sealed class CleanRoute
 {
     /// <summary>
-    /// Each build folder's shape below its root: two levels, two folders to a folder, so six folders,
+    /// Each build folder's shape below its root: two levels, two folders to a folder, so six folders below it and seven with the files,
     /// as an <c>obj</c> folder holds its files in a handful.
     /// </summary>
     private const int TreeDepth = 2;

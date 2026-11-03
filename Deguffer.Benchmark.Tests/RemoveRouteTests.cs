@@ -70,6 +70,19 @@ public sealed class RemoveRouteTests : IDisposable
     }
 
     /// <summary>
+    /// A file an earlier run left standing fails the build as the I/O error it is, which the run loop
+    /// reports without the file's path, rather than as the parallel loop's wrapper, which it does not.
+    /// </summary>
+    [Fact]
+    public void AFileLeftStandingFailsTheBuildAsAnInputOutputError()
+    {
+        var root = Path.Combine(_temp.Path, "tree");
+        _temp.CreateFile(0, "tree", "d0", "f1");
+
+        Assert.Throws<IOException>(() => SynthesisedTree.Build(root, Shape, CancellationToken.None));
+    }
+
+    /// <summary>
     /// Built and removed again on every run, and after every run the tree is gone while the site, the
     /// file kept beside the tree, and a folder outside the site are all still there (§5.6).
     /// </summary>
@@ -94,7 +107,7 @@ public sealed class RemoveRouteTests : IDisposable
             Assert.True(tally.Complete);
 
             // Every folder and file below the root, and the root.
-            Assert.Equal(Shape.Entries + 1, tally.Items);
+            Assert.Equal(Shape.Folders + Shape.Files + 1, tally.Items);
         }
 
         Assert.Equal(["kept"], Directory.EnumerateFileSystemEntries(site.Beside).Select(Path.GetFileName));
@@ -129,7 +142,7 @@ public sealed class RemoveRouteTests : IDisposable
 
         Assert.Equal(Shape.Files, passes.Files.Entries);
         Assert.Equal(Shape.Folders + 1, passes.Folders.Entries);
-        Assert.Equal(Shape.Entries + 1, passes.Walk.Entries);
+        Assert.Equal(Shape.Folders + Shape.Files + 1, passes.Walk.Entries);
         Assert.True(passes.Walk.Elapsed > TimeSpan.Zero);
         Assert.True(passes.Files.Elapsed > TimeSpan.Zero);
         Assert.True(passes.Folders.Elapsed > TimeSpan.Zero);

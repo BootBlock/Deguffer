@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Benchmark;
@@ -40,7 +41,7 @@ internal static class SynthesisedTree
                 }
             }
 
-            Parallel.ForEach(children, options, child => Directory.CreateDirectory(child));
+            Unwrapped(() => Parallel.ForEach(children, options, child => Directory.CreateDirectory(child)));
 
             level = folders.Count;
             folders.AddRange(children);
@@ -48,7 +49,7 @@ internal static class SynthesisedTree
 
         // Dealt across every folder in turn, so a deep tree's files are at every depth rather than
         // only at its deepest.
-        Parallel.For(0, folders.Count, options, f =>
+        Unwrapped(() => Parallel.For(0, folders.Count, options, f =>
         {
             for (long n = f; n < shape.Files; n += folders.Count)
             {
@@ -63,6 +64,23 @@ internal static class SynthesisedTree
                     File.SetAttributes(file, FileAttributes.ReadOnly);
                 }
             }
-        });
+        }));
+    }
+
+    /// <summary>
+    /// Run a parallel loop, and throw the first failure of its body as itself. The loop wraps every
+    /// failure in an <see cref="AggregateException"/>, which the run loop does not report: unhandled,
+    /// it would end the process with the file's path in the message, and without removing the site.
+    /// </summary>
+    private static void Unwrapped(Action loop)
+    {
+        try
+        {
+            loop();
+        }
+        catch (AggregateException ex)
+        {
+            ExceptionDispatchInfo.Throw(ex.InnerExceptions[0]);
+        }
     }
 }
