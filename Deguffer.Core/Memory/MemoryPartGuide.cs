@@ -20,15 +20,45 @@ public static class MemoryPartGuide
     /// <para>The names belong here rather than in the shape's label, which the picture trims to the
     /// width of the shape. A host of several services is the one case where the label cannot carry
     /// what <see cref="MemoryPart.Services"/> promises, so this is where that promise is kept.</para>
+    ///
+    /// <para>The memory no figure attributes is the other: what it holds follows from which parts this
+    /// read could draw, so the part's own sentence cannot say it.</para>
     /// </summary>
     public static string Describe(MemoryTree tree, int node)
     {
         ArgumentNullException.ThrowIfNull(tree);
 
-        var part = Describe(tree.PartOf(node));
-        var holds = ServiceHostText.Holds(tree.ServicesOf(node));
+        var kind = tree.PartOf(node);
+        var part = Describe(kind);
+        var more = kind == MemoryPart.Unattributed
+            ? WhatThisReadLeaves(tree.Snapshot)
+            : ServiceHostText.Holds(tree.ServicesOf(node));
 
-        return holds.Length == 0 ? part : $"{part} {holds}";
+        return more.Length == 0 ? part : $"{part} {more}";
+    }
+
+    /// <summary>
+    /// What the memory no figure attributes holds beyond what it always holds, in the read
+    /// <see cref="MemoryTreeBuilder"/> drew it from (§7.2).
+    ///
+    /// <para>Said for every read, the lists' own included. Told that free memory is inside a shape it
+    /// is not in, or left to find an unexplained remainder, a reader takes the rest for a leak, which
+    /// is the reading this part is drawn to prevent.</para>
+    /// </summary>
+    private static string WhatThisReadLeaves(MemorySnapshot snapshot)
+    {
+        var lists = snapshot.System.ListState == MemoryListState.Checked
+            ? "In this picture it also holds the system working set: the memory Windows keeps in use for "
+                + "its file cache, its own code and the part of the paged pool in memory, which no figure "
+                + "here separates out."
+            : "In this picture it also holds the free, zeroed and modified pages: the separate page lists "
+                + "could not be used, and the system cache drawn beside it stands in for the standby list "
+                + "alone.";
+
+        return snapshot.Processes.Figures == ProcessFigures.Checked
+            ? lists
+            : $"{lists} It holds every process's own memory as well, the compression store's included, "
+                + "because the per-process figures were not used.";
     }
 
     /// <summary>
@@ -111,11 +141,13 @@ public static class MemoryPartGuide
         // Named rather than left to the arm below, so that a part added with no sentence of its own
         // fails the test that every part says what it is, instead of silently inheriting this one.
         // The compiler will not catch it: an enum switch needs a default arm whatever it covers.
+        // Only what it holds in every read: the rest follows from the read, and Describe(tree, node)
+        // says it.
         MemoryPart.Unattributed =>
             "Physical memory these figures cannot attribute: shared and shareable pages, page tables, "
-            + "kernel stacks, memory drivers have locked, and the paged pool. Separating it needs "
-            + "rights Deguffer does not ask for, so a large figure here is what could not be told "
-            + "apart rather than memory that has gone missing.",
+            + "kernel stacks, memory drivers have locked, and whatever the parts beside it leave. "
+            + "Separating it needs rights Deguffer does not ask for, so a large figure here is what "
+            + "could not be told apart rather than memory that has gone missing.",
 
         _ => throw new ArgumentOutOfRangeException(nameof(part)),
     };

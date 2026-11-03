@@ -52,7 +52,8 @@ public static class MemoryNotes
         {
             notes.Add(
                 "The free, modified and standby lists could not be used, so the system cache is drawn "
-                + "in their place and holds all three.");
+                + "in place of the standby list, and the free and modified pages are inside the part no "
+                + "figure attributes.");
         }
 
         if (tree.Overcount > 0)
