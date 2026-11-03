@@ -207,7 +207,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
             return EmptyPlan("No driver in Windows' driver store has an older version of itself beside it.");
         }
 
-        var notes = new List<PlanNote>(Considered(listing, drivers));
+        var notes = new List<PlanNote>(DriverPackageNotes.Considered(listing, drivers));
         var unlisted = Unlisted(listing, notes);
 
         // A third-party package that did not read, or whose folder Windows would not name, is also a
@@ -240,7 +240,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         return survey.Answer switch
         {
             DiskCleanupAnswer.Unavailable => await ByPackageAsync(
-                drivers, listing, survey, notes, [.. kept, .. matched ? [] : Protect([.. unlisted.Select(folder => (folder, NotAsked))])], ct).ConfigureAwait(false),
+                drivers, listing, survey, notes, [.. kept, .. matched ? [] : Protect([.. unlisted.Select(folder => (folder, DriverPackageNotes.NotAsked))])], ct).ConfigureAwait(false),
             _ when survey.MayOffer => await ByHandlerAsync(folders, _volume, keep, matched, notes, kept, ct).ConfigureAwait(false),
             _ => Plan(
                 [],
@@ -270,7 +270,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
     {
         if (!matched)
         {
-            notes.Add(Unmatched);
+            notes.Add(DriverPackageNotes.Unmatched);
         }
 
         var target = new DiskCleanupTarget(
@@ -289,7 +289,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
             PlanNoteSeverity.Information,
             "Windows' own cleanup decides which older driver packages to remove, and keeps the newest "
             + "version of each driver and every driver a device is using. The figure is the "
-            + $"{Count(folders.Count, "older package")} Deguffer found with a newer version beside them, so Windows may "
+            + $"{DriverPackageNotes.Count(folders.Count, "older package")} Deguffer found with a newer version beside them, so Windows may "
             + "remove a little more or less."));
 
         if (measured.Note is { } scanNote)
@@ -325,7 +325,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
             .. drivers.Superseded.Select((superseded, i) => new RunCommandStep(
                 pnpUtil,
                 $"/delete-driver {superseded.Package.PublishedName}",
-                $"Remove {Described(superseded.Package)}, which version {superseded.Newest.Version} of "
+                $"Remove {DriverPackageNotes.Described(superseded.Package)}, which version {superseded.Newest.Version} of "
                 + $"{superseded.Newest.Date:d MMMM yyyy} replaces, using Windows' own command")
             {
                 // The driver store is Windows' own, and nothing documents what a removal ended part-way
@@ -357,7 +357,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
             .Select(p => p.Folder)
             .OfType<string>()
             .Where(folder => accounted.Add(folder) && SupersededDrivers.IsChildOf(folder, _repository))
-            .Select(folder => (folder, NotAsked));
+            .Select(folder => (folder, DriverPackageNotes.NotAsked));
 
         return Plan(steps, notes, [.. kept, .. Protect([.. others])]) with { Fallback = measured.Fallback };
     }
@@ -389,25 +389,10 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         foreach (var package in kept)
         {
             yield return (package.Folder!, package.InUse
-                ? $"{Described(package)}, which a device is installed with."
-                : $"{Described(package)}, the newest version of that driver here.");
+                ? $"{DriverPackageNotes.Described(package)}, which a device is installed with."
+                : $"{DriverPackageNotes.Described(package)}, the newest version of that driver here.");
         }
     }
-
-    /// <summary>Why a folder stays where the plan names exactly what <c>pnputil</c> removes.</summary>
-    private const string NotAsked = "A driver package pnputil was not asked to remove.";
-
-    /// <summary>
-    /// Said where Windows' cleanup does the work and a listed package could not be matched to its
-    /// folder: that cleanup may rightly take the unmatched package, so no unlisted folder can be
-    /// asserted afterwards. Where <c>pnputil</c> does the work, Deguffer names exactly what goes and
-    /// every unlisted folder is asserted regardless.
-    /// </summary>
-    private static readonly PlanNote Unmatched = new(
-        PlanNoteSeverity.Information,
-        "Deguffer could not match every driver package Windows listed to its folder, so it cannot tell "
-        + "which folders in the store hold drivers that are part of Windows, and the clean cannot check "
-        + "afterwards that they are still there.");
 
     /// <summary>
     /// Every folder in the store that no listed package was matched to: where every package was
@@ -438,41 +423,6 @@ public sealed class DriverStoreProvider : CleanupProviderBase
             .Where(child => !listed.Contains(child)),
         ];
     }
-
-    /// <summary>What the plan tells the user about the packages it did not consider or will not offer.</summary>
-    private static IEnumerable<PlanNote> Considered(DriverStoreListing listing, SupersededDrivers drivers)
-    {
-        if (listing.Unread > 0)
-        {
-            yield return new PlanNote(
-                PlanNoteSeverity.Information,
-                $"Deguffer could not read what Windows listed about {Count(listing.Unread, "driver package")}, "
-                + "so none of them is offered.");
-        }
-
-        if (drivers.InUse.Count > 0)
-        {
-            yield return new PlanNote(
-                PlanNoteSeverity.Information,
-                $"Leaving {Count(drivers.InUse.Count, "older package")} alone although a newer version is "
-                + (drivers.InUse.Count == 1
-                    ? "here: a device is installed with it."
-                    : "here: a device is installed with each of them."));
-        }
-
-        if (drivers.Unplaced > 0)
-        {
-            yield return new PlanNote(
-                PlanNoteSeverity.Information,
-                $"Leaving {Count(drivers.Unplaced, "older package")} alone: Windows did not say where in its "
-                + "driver store they are.");
-        }
-    }
-
-    private static string Described(DriverPackage package) =>
-        $"{package.Provider}'s {package.OriginalName} version {package.Version} of {package.Date:d MMMM yyyy}";
-
-    private static string Count(int count, string what) => count == 1 ? $"1 {what}" : $"{count} {what}s";
 
     /// <summary>The newest write among <paramref name="folders"/>, or null where any could not be dated.</summary>
     private static DateTime? Newest(IReadOnlyList<string> folders, CancellationToken ct)
