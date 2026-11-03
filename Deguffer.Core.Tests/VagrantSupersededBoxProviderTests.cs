@@ -120,6 +120,49 @@ public sealed class VagrantSupersededBoxProviderTests : IDisposable
     }
 
     /// <summary>
+    /// Prune acts on the home its own environment names, so a home Deguffer started with and the machine
+    /// has since dropped is the one examined, measured and asserted as surviving (§5.6), never the default.
+    /// </summary>
+    [Fact]
+    public async Task ExaminesTheHomeThePruneWillActOn()
+    {
+        var home = Path.Combine(_temp.Path, "elsewhere", "vagrant-home");
+        _environment.WithToolEnvironmentVariable(VagrantSupersededBoxProvider.HomeVariable, home);
+        var (kept, removed) = InstallBionic(home);
+        InstallBionic(DefaultHome);
+        var provider = CreateProvider(Reporting(BionicReport));
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(removed.Order(StringComparer.OrdinalIgnoreCase), TheStep(plan).MeasuredPaths.Order(StringComparer.OrdinalIgnoreCase));
+        foreach (var survivor in new[] { home, BoxesIn(home), kept })
+        {
+            Assert.Contains(plan.ProtectedPaths, p =>
+                p.Path.Equals(survivor, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
+        }
+
+        Assert.Contains(provider.ToolRoots, root => root.Path.Equals(home, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(await provider.CleanedPlacesAsync(), place => place.Path.Equals(BoxesIn(home), StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>A home declined as prune would read it is declined, though the machine's own value is unset.</summary>
+    [Fact]
+    public async Task RunsNothingWhereThePruneWouldReadTheProfileAsVagrantsHome()
+    {
+        _environment.WithToolEnvironmentVariable(VagrantSupersededBoxProvider.HomeVariable, _environment.UserProfile);
+        InstallBionic(_environment.UserProfile);
+        InstallBionic(DefaultHome);
+        var runner = Reporting(BionicReport);
+        var provider = CreateProvider(runner);
+
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.WasNotExamined);
+        Assert.Empty(runner.Invocations);
+        Assert.Equal(_environment.UserProfile, Assert.Single(await provider.DiscoverToolRootsAsync()).Path);
+    }
+
+    /// <summary>
     /// Vagrant expands a relative value against its own working directory, which is Deguffer's tool
     /// folder rather than anything the user chose, so there is no reading of it to act on.
     /// </summary>

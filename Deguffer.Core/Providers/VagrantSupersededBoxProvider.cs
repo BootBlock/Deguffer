@@ -334,6 +334,10 @@ public sealed class VagrantSupersededBoxProvider : CleanupProviderBase
 
     private static bool MayBeThere(PathPresence presence) => presence is not PathPresence.Absent;
 
+    /// <summary>
+    /// The home as prune reads it, from the environment Deguffer hands Vagrant rather than the machine's
+    /// current one, so the roots, the cleaned places and the §5.6 survivors describe the home prune acts on.
+    /// </summary>
     private ConfiguredFolder.Setting Resolve() =>
-        ConfiguredFolder.FromVariable(HomeVariable, DefaultHome, Environment, _system, Volumes);
+        ConfiguredFolder.FromToolVariable(HomeVariable, DefaultHome, Environment, _system, Volumes);
 }

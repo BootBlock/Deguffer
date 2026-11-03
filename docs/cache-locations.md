@@ -5553,7 +5553,9 @@ as created from a version it would remove, or if either cannot be read. Scanning
 the prune would remove now.
 
 A `VAGRANT_HOME` that puts the home at your profile, a drive's root or another folder Deguffer never
-treats as one tool's is left alone: Vagrant is not run, and nothing in it is offered. Vagrant is
+treats as one tool's is left alone: Vagrant is not run, and nothing in it is offered. Deguffer
+reads `VAGRANT_HOME` as the prune it starts sees it, which is its value when Deguffer started, so a
+change made since applies once Deguffer is started again. Vagrant is
 never started for a home with no `boxes` folder, because every Vagrant command creates its home.
 Running Vagrant loads the Vagrantfile in its home and any Vagrantfile in the folder Deguffer runs
 tools in or above it, such as your profile. It also contacts HashiCorp unless
