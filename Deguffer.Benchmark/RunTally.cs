@@ -1,3 +1,5 @@
+using Deguffer.Core.Execution;
+
 namespace Deguffer.Benchmark;
 
 /// <summary>
@@ -22,6 +24,14 @@ namespace Deguffer.Benchmark;
 /// <param name="PeakListings">
 /// The most folders the walk was listing at once. Zero for a table route, which lists no folders.
 /// </param>
+/// <param name="PeakWorkers">
+/// The most threads the removal's worker pool held at once. Zero for a route that removes nothing.
+/// </param>
+/// <param name="Passes">
+/// Where a removal route's removals spent their time, pass by pass, summed over every removal the run
+/// made. Null for a route that removes nothing.
+/// </param>
+/// <param name="Steps">What the clean route's steps spent their time on. Null for every other route.</param>
 /// <param name="Kept">
 /// What the route built and a scan would keep, held only until <see cref="Timing"/> has measured
 /// it (<see cref="RunSample.KeptBytes"/>), or null for a route that keeps nothing.
@@ -34,4 +44,7 @@ internal readonly record struct RunTally(
     KeptResult? Kept = null,
     long Reads = 0,
     long ClusterReads = 0,
-    TimeSpan ListReadTime = default);
+    TimeSpan ListReadTime = default,
+    int PeakWorkers = 0,
+    RemovalPasses? Passes = null,
+    StepTimes? Steps = null);

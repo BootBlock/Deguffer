@@ -415,7 +415,7 @@ Deguffer.Core.Tests/
 Deguffer.Testing/     the fakes and fixtures the test projects share
 Deguffer.App/         the WinUI 3 shell
 Deguffer.App.Tests/
-Deguffer.Benchmark/   times how a scan reads the disk, run by hand (see CONTRIBUTING.md)
+Deguffer.Benchmark/   times how a scan reads the disk and a clean removes, run by hand (see CONTRIBUTING.md)
 Deguffer.Benchmark.Tests/
 ```
 

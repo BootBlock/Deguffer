@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Mft;
 
@@ -162,7 +163,7 @@ public sealed class ReportTests
     public void TheWalksValuesAreTheOnesItRanWith() =>
         Assert.Equal(
             "3 folders listed at once, 8 KiB listing buffer",
-            Deguffer.Benchmark.Tuning.Describe(Route.Walk, new WalkTuning(3, 8 * 1024), TableTuning.Default, snapshots: true, LinkRead.Name));
+            Deguffer.Benchmark.Tuning.Describe(Route.Walk, new WalkTuning(3, 8 * 1024), TableTuning.Default, snapshots: true, LinkRead.Name, BenchmarkRequest.DefaultTree, trees: 1));
 
     /// <summary>
     /// The Explore walk also states whether it took snapshots, which is the value it is timed both
@@ -174,7 +175,7 @@ public sealed class ReportTests
     public void TheExploreWalkSaysWhetherItTookSnapshots(bool snapshots, string expected) =>
         Assert.Equal(
             expected,
-            Deguffer.Benchmark.Tuning.Describe(Route.ExploreWalk, new WalkTuning(3, 8 * 1024), TableTuning.Default, snapshots, LinkRead.Name));
+            Deguffer.Benchmark.Tuning.Describe(Route.ExploreWalk, new WalkTuning(3, 8 * 1024), TableTuning.Default, snapshots, LinkRead.Name, BenchmarkRequest.DefaultTree, trees: 1));
 
     /// <summary>
     /// The Explore walk counts what its walk listed, as the walk does, so the two results name the
@@ -192,7 +193,7 @@ public sealed class ReportTests
     public void ATableRoutesValuesAreTheOnesItRanWith() =>
         Assert.Equal(
             "2048 KiB reads, 8 in flight, parsed on 3 threads, 24 list reads in flight",
-            Deguffer.Benchmark.Tuning.Describe(Route.Index, WalkTuning.Default, new TableTuning(2048 * 1024, 8, 3, 24), snapshots: true, LinkRead.Name));
+            Deguffer.Benchmark.Tuning.Describe(Route.Index, WalkTuning.Default, new TableTuning(2048 * 1024, 8, 3, 24), snapshots: true, LinkRead.Name, BenchmarkRequest.DefaultTree, trees: 1));
 
     [Fact]
     public void ADebugBuildIsCalledOut()
@@ -215,11 +216,79 @@ public sealed class ReportTests
     public void TheFoldersRouteSaysItRanWithASearchsValues() =>
         Assert.Equal(
             "the values a search uses for each drive's kind, under the shipped settings",
-            Deguffer.Benchmark.Tuning.Describe(Route.Folders, new WalkTuning(3, 8 * 1024), TableTuning.Default, snapshots: true, LinkRead.Name));
+            Deguffer.Benchmark.Tuning.Describe(Route.Folders, new WalkTuning(3, 8 * 1024), TableTuning.Default, snapshots: true, LinkRead.Name, BenchmarkRequest.DefaultTree, trees: 1));
 
     [Fact]
     public void ThePlaceIsTheDriveAndItsFileSystem() =>
         Assert.Equal("place              C: (Fixed, NTFS)", Line(Render(Route.Walk, Run(1)), "place"));
+
+    /// <summary>
+    /// A removal's passes are reported apart, each the first run apart from the median of the rest,
+    /// with the processor time and the most worker threads the removal held.
+    /// </summary>
+    [Fact]
+    public void ARemovalsPassesAreReportedApart()
+    {
+        var text = Render(Route.Remove, Removal(walk: 1, files: 4, folders: 2), Removal(walk: 0.5, files: 3, folders: 1), Removal(walk: 0.25, files: 5, folders: 3));
+
+        Assert.Equal("walk               1.000 s         375.0 ms (250.0 ms to 500.0 ms)", Line(text, "walk"));
+        Assert.Equal("file pass          4.000 s         4.000 s (3.000 s to 5.000 s)", Line(text, "file pass"));
+        Assert.Equal("folder pass        2.000 s         2.000 s (1.000 s to 3.000 s)", Line(text, "folder pass"));
+        Assert.Equal("processor time     6.000 s         6.000 s (6.000 s to 6.000 s)", Line(text, "processor time"));
+        Assert.Equal("worker threads     12              12 (12 to 12)", Line(text, "worker threads"));
+        Assert.DoesNotContain("folders at once", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("per step", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The clean route adds its steps' times, the time per step being the steps' over how many there
+    /// were, so plans of different sizes read the same.
+    /// </summary>
+    [Fact]
+    public void ACleansStepsAreReportedPerStepAndByPart()
+    {
+        var steps = new StepTimes(4, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(0.5), TimeSpan.Zero, TimeSpan.FromSeconds(1.5));
+        var text = Render(Route.Clean, Removal(walk: 0.25, files: 0.5, folders: 0.25, steps));
+
+        Assert.Equal("per step           500.0 ms", Line(text, "per step"));
+        Assert.Equal("use checks         500.0 ms", Line(text, "use checks"));
+        Assert.Equal("looks              0.0 ms", Line(text, "looks"));
+        Assert.Equal("acting             1.500 s", Line(text, "acting"));
+        Assert.Equal("steps/s            4", Line(text, "steps/s"));
+        Assert.Equal("file pass          500.0 ms", Line(text, "file pass"));
+    }
+
+    /// <summary>The shape of the tree is the whole of what a removal result is a result for, so it is stated.</summary>
+    [Fact]
+    public void ARemovalRouteStatesTheTreesItRemoved()
+    {
+        Assert.Equal(
+            "a tree of 10 empty read-only files in 13 folders, 2 deep, 3 to a folder, removed as a clean removes it",
+            Deguffer.Benchmark.Tuning.Describe(
+                Route.Remove, WalkTuning.Default, TableTuning.Default, snapshots: true, LinkRead.Name, new TreeShape(10, 2, 3, ReadOnly: true), trees: 1));
+        Assert.Equal(
+            "1,000 build folders of 100 empty files in 7 folders, removed as one plan with nothing running",
+            Deguffer.Benchmark.Tuning.Describe(
+                Route.Clean, WalkTuning.Default, TableTuning.Default, snapshots: true, LinkRead.Name, CleanRoute.Shape(100), trees: 1000));
+    }
+
+    private static RunSample Removal(double walk, double files, double folders, StepTimes? steps = null)
+    {
+        var run = Run(walk + files + folders, items: steps?.Count ?? 100, processorSeconds: 6);
+
+        return run with
+        {
+            Tally = run.Tally with
+            {
+                PeakWorkers = 12,
+                Passes = new RemovalPasses(
+                    new PassTiming(TimeSpan.FromSeconds(walk), 10),
+                    new PassTiming(TimeSpan.FromSeconds(files), 6),
+                    new PassTiming(TimeSpan.FromSeconds(folders), 4)),
+                Steps = steps,
+            },
+        };
+    }
 
     private static string Render(Route route, params RunSample[] runs) => Report.Render(route, Tuning, [Place], Machine, runs);
 

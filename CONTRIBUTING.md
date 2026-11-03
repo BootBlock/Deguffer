@@ -29,12 +29,13 @@ and crop any screenshot that shows them.
 For a security vulnerability, follow [SECURITY.md](SECURITY.md) and report it privately. Do not
 open a public issue.
 
-## Measuring a scan
+## Measuring a scan or a clean
 
-`Deguffer.Benchmark` times the routes a scan takes, so a change to how Deguffer reads the disk can
-be judged by a measurement rather than a guess. It only reads: nothing on the drive is written,
-moved or deleted. It is not part of `dotnet test`, because a timing changes with whatever else the
-machine is doing.
+`Deguffer.Benchmark` times the routes a scan takes and the removal a clean makes, so a change to how
+Deguffer reads or removes can be judged by a measurement rather than a guess. Every route but
+`remove` and `clean` only reads: nothing on the drive is written, moved or deleted. Those two write
+and delete only inside a folder they create. It is not part of `dotnet test`, because a timing
+changes with whatever else the machine is doing.
 
 Build it in Release, then run one route at a time:
 
@@ -52,6 +53,8 @@ Deguffer.Benchmark explore C
 Deguffer.Benchmark explorefolder C:\Users\<user>\Downloads
 Deguffer.Benchmark explorewalk C:\Users\<user>\source --snapshots off
 Deguffer.Benchmark folders C:\Users\<user>\Pictures D:\Photos
+Deguffer.Benchmark remove D:\benchmark --files 100000 --depth 15 --fanout 2 --read-only
+Deguffer.Benchmark clean D:\benchmark --trees 500 --files-per-tree 100
 ```
 
 - `walk <folder>` walks a folder as an unelevated scan does. Run it from an ordinary prompt.
@@ -77,6 +80,23 @@ Deguffer.Benchmark folders C:\Users\<user>\Pictures D:\Photos
   elevated prompt. `table` reads and parses every record and keeps nothing. `index` builds what the
   clean measures locations from. `explore` builds the Explore tree for the whole volume, and
   `explorefolder <folder>` the tree for one folder on it, which still reads the whole table.
+- `remove <new folder>` creates the folder, builds a tree of empty files in it before each run, and
+  removes the tree as a clean removes a cache or a build folder. It reports the walk, the file pass
+  and the folder pass apart, the processor time, and the most worker threads the removal held.
+  `--files N`, `--depth N` and `--fanout N` set the tree: how many files it holds (default
+  100,000), how many levels of folders it has below its root (default 5), and how many folders
+  each folder above the deepest holds (default 4), for at most 1,000,000 folders. `--read-only`
+  marks every file read-only, which a removal has to clear before it can delete the file.
+- `clean <new folder>` creates the folder, builds `--trees N` projects in it (default 500), each
+  with a build folder of `--files-per-tree N` empty files spread over seven folders (default 100), and
+  removes the build folders as one plan, as a clean of the `obj` row does. It reports the time per
+  step, the use checks, the looks and the work apart, and the removals' passes summed over the
+  plan. The use checks ask fakes rather than this machine's running programs, so the result is
+  what a step costs with nothing running.
+- `remove` and `clean` refuse a folder that already exists, and its parent must exist. After each
+  run they check that a file they keep beside the trees, and every project, is still there, and
+  stop if one is not. They remove the folder when they finish, even when cancelled. The tree is
+  built before each run and is not part of its time.
 - `--runs N` runs the route N times. The default is 5.
 - `--threads N` and `--listing-buffer KiB` set how many folders the walk lists at once (1 to 64) and
   how many KiB of entries each listing asks Windows for (4 to 1024). Both default to what a scan

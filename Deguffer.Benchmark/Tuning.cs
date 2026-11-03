@@ -14,8 +14,28 @@ namespace Deguffer.Benchmark;
 /// </summary>
 internal static class Tuning
 {
-    public static string Describe(Route route, WalkTuning walk, TableTuning table, bool snapshots, LinkRead readBy)
+    /// <param name="tree">The tree a removal route builds, or each of the clean route's. No other route reads it.</param>
+    /// <param name="trees">How many trees the clean route builds. No other route reads it.</param>
+    public static string Describe(
+        Route route, WalkTuning walk, TableTuning table, bool snapshots, LinkRead readBy, TreeShape tree, int trees)
     {
+        // The shape is stated because it is the whole of what one removal result is a result for.
+        if (route is Route.Remove)
+        {
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"a tree of {tree.Files:N0} empty {(tree.ReadOnly ? "read-only " : string.Empty)}files in {tree.Folders + 1:N0} folders, " +
+                $"{tree.Depth} deep, {tree.Fanout} to a folder, removed as a clean removes it");
+        }
+
+        if (route is Route.Clean)
+        {
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"{trees:N0} build folders of {tree.Files:N0} empty files in {tree.Folders + 1:N0} folders, " +
+                $"removed as one plan with nothing running");
+        }
+
         if (route.ReadsTable())
         {
             return string.Create(
