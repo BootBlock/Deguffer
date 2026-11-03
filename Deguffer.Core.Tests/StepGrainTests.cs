@@ -46,6 +46,7 @@ public class StepGrainTests
             "dart-tool",
             "dotnet-obj",
             "electron",
+            "git-lfs-objects",
             "graphics-driver-installers",
             "jetbrains-superseded-system",
             "lmstudio-runtimes",

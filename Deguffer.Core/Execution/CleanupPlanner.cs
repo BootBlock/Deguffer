@@ -199,6 +199,7 @@ public sealed class CleanupPlanner
         new ToxEnvironmentProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
         new NoxEnvironmentProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
         new DartToolProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+        new GitLfsObjectProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
     ];
 
     private static IReadOnlyList<ICleanupProvider> CacheProviders(

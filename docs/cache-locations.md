@@ -6055,7 +6055,8 @@ its own.
 ## Per-project build output
 
 **Tier 1 for .NET intermediate output, the caches in Visual Studio's `.vs` folders and three Python
-tools' caches, Tier 2 for the rest.** The only thing Deguffer looks for inside your own folders, and the only thing it will not look for
+tools' caches, Tier 2 for the rest.** With [Git LFS old file versions](#git-lfs-old-file-versions),
+the only thing Deguffer looks for inside your own folders, and the only thing it will not look for
 anywhere else.
 
 | Directory | What it belongs to | Tier |
@@ -6096,7 +6097,8 @@ to change your mind. The row in Settings says which of your folders carry that p
 removing the folder is how you take it back.
 
 Approving a folder approves it for **every** kind of build output in the table above, which is what
-the Settings description says. If you want a narrower scope, add narrower folders.
+the Settings description says, and for [Git LFS old file versions](#git-lfs-old-file-versions) in
+the repositories inside it. If you want a narrower scope, add narrower folders.
 
 **A folder does not have to hold your own code.** The single largest thing this section can offer is
 usually a Python virtual environment that nobody would think to declare: a machine-learning or
@@ -6405,6 +6407,83 @@ cache, named with its solution.
   working there, and whether anything holds a file the caches are recognised by.
 - **Where the C++ caches use the *Fallback Location*,** they are in your temporary folder, and the
   Windows temporary folders row reaches them there.
+
+---
+
+## Git LFS old file versions
+
+**Tier 2 — regenerable, with cost.** Not pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `.git\lfs\objects` in each Git repository inside a folder listed in **Settings → Source folders**, and each submodule's store in `.git\modules\<name>\lfs\objects` |
+| **Method** | `git lfs prune --verify-remote`, offered from what `git lfs prune --dry-run --verbose` names |
+| **Typical size** | In a game, art or machine-learning repository, often larger than the checkout itself |
+
+### What it is
+
+Git LFS keeps large files outside a repository's history, and keeps a local copy of every version of
+each one it has downloaded. Switching branches, pulling and checking out older commits all add
+versions, and nothing removes them on its own.
+
+### What Deguffer does
+
+It looks in the same source folders as [Per-project build output](#per-project-build-output), and
+nowhere else, for repositories that keep a Git LFS store. Each repository is a separate item, and
+so is each submodule, because a submodule keeps a store of its own that pruning the repository does
+not reach. A linked worktree shares its repository's store, so it is pruned once, with the
+repository.
+
+For each one it runs Git LFS's own prune as a dry run, which names every file it would remove, and
+measures those files. Prune keeps every file that each worktree's checkout and staged changes use,
+that a stash uses, that a commit you have not pushed uses, or that a recent commit or branch uses.
+The repository's `lfs.fetchrecentrefsdays`, `lfs.fetchrecentcommitsdays` and `lfs.pruneoffsetdays`
+settings say how recent. Deguffer does not decide which versions go. Git LFS does.
+
+The clean runs prune with `--verify-remote`. Before Git LFS removes anything, it asks the
+repository's server whether it still has every file it would remove. If one is missing there, or the
+server does not answer, nothing is removed from that repository. Git LFS is told never to ask you to
+sign in, so a server that needs you to sign in leaves the repository as it was. For a repository
+whose remote is a folder rather than a server, Git LFS does not check. Prune also removes Git LFS's
+own unfinished downloads that are more than an hour old, at the preview and at the clean.
+
+Git is told which repository, which checkout and which store to act on, by full path, so nothing is
+left for it to work out when it runs. A cancelled prune is stopped: it removes one file at a time,
+so stopping it leaves fewer old versions and no damaged store.
+
+**These are not offered:**
+
+- A folder named `.git` that holds no `HEAD` file, because it is not a Git repository.
+- A repository whose `lfs.storage` setting keeps its files somewhere else, or whose store is reached
+  through a link. Several repositories can share one store that way, and Git LFS's own manual says
+  not to prune a shared store.
+- A submodule whose configuration does not say where it is checked out, or whose checkout is gone.
+- A repository that a program is working in, such as an editor, a terminal or Git itself. Prune
+  takes no lock, and a file Git is adding at that moment could be removed. Deguffer asks again
+  immediately before prune runs.
+- Every repository, where Git LFS is not installed, or where its dry run fails or does not list
+  every file it counts.
+
+Deguffer reads only folder names inside a `.git` folder, to find the stores. Nothing inside one is
+ever deleted by path, and the source search never goes inside one.
+
+### What is protected
+
+The repository's checkout and its `.git` folder, and in it `HEAD`, `config`, `objects`, `refs`,
+`index` and `packed-refs`. Git LFS's `lfs` folder and its `objects` folder are protected too, because
+prune removes files from the store and never the store. Every repository and store that was not
+offered is protected as well. Deguffer checks after the clean that all of these are still there.
+
+### What it costs you
+
+Checking out an older commit, or a branch that is no longer recent, downloads the large files it
+needs from the repository's server again. On a slow connection, or for a large repository, that is a
+long wait. The files your checkout uses stay, so nothing changes until then.
+
+### Why Tier 2, not Tier 1
+
+Getting a removed version back is a download from the repository's server, and it depends on the
+server still holding it. So it is offered and never ticked on your behalf.
 
 ---
 
