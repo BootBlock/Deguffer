@@ -262,8 +262,9 @@ misses: npm's and pnpm's stores check every entry against its hash, pip's entrie
 and `lms` only asks LM Studio to remove a runtime later. Everything else is left to finish, because
 ended part-way it could leave damage rather than a smaller cache: DISM's servicing, `pnputil`'s
 driver removal, File History's cleanup, Delivery Optimization's clear and a registry restore in
-Windows' own stores, and NuGet, conda, PlatformIO, Go, uv and Poetry, which can take a half-removed
-package for an installed one. A clean cancelled during such a command reports it as run, and counts
+Windows' own stores, NuGet, conda, PlatformIO, Go, uv and Poetry, which can take a half-removed
+package for an installed one, and Hugging Face's `hf cache rm`, which can leave a revision linking to
+files that are gone. A clean cancelled during such a command reports it as run, and counts
 nothing for it. Every tool that may be ended runs in a job object Deguffer holds for its whole
 life, so nothing it started outlives Deguffer. A tool is started by full path only, with nothing on
 its standard input, so a tool that stops to ask a question reads the end of its input instead of
