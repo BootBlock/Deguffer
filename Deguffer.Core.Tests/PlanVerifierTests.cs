@@ -604,6 +604,70 @@ public sealed class PlanVerifierTests : IDisposable
     }
 
     /// <summary>
+    /// A kept entry its program removed before the clean began, which no removal met and so none
+    /// recorded leaving alone. The run read it gone before its first deletion, so nothing in the run
+    /// took it, even though the folder holding it is standing and the run was working inside it.
+    /// </summary>
+    [Fact]
+    public void AKeptEntryGoneBeforeTheRunBeganWasRemovedFromOutside()
+    {
+        var scratch = _temp.CreateDirectory("scratch");
+        var live = _temp.CreateDirectory("scratch", "kitprobe");
+        var plan = Plan([new ClearDirectoryStep(scratch, "Scratch files") { Spared = [live] }], Protect(live));
+
+        Directory.Delete(live);
+
+        var residue = RunResidue.Begin([plan]);
+        residue.RecordLeftAlone(scratch, []);
+
+        var check = Verify(plan, runReach: null, residue).Checks.Single();
+
+        Assert.Equal(VerificationOutcome.RemovedFromOutside, check.Outcome);
+        Assert.Contains("already gone when this clean began", check.Detail, StringComparison.Ordinal);
+        Assert.Equal(VerificationOutcome.Failed, Verify(plan, runReach: null, new RunResidue()).Checks.Single().Outcome);
+    }
+
+    /// <summary>
+    /// The other side of the same evidence: an entry standing when the run began and gone after it went
+    /// while the run was under way, when the run may have taken it, so it stays the alarm.
+    /// </summary>
+    [Fact]
+    public void AKeptEntryStandingWhenTheRunBeganThatWentIsStillAFailure()
+    {
+        var scratch = _temp.CreateDirectory("scratch");
+        var live = _temp.CreateDirectory("scratch", "kitprobe");
+        var plan = Plan([new ClearDirectoryStep(scratch, "Scratch files") { Spared = [live] }], Protect(live));
+
+        var residue = RunResidue.Begin([plan]);
+
+        Directory.Delete(live);
+        residue.RecordLeftAlone(scratch, []);
+
+        Assert.Equal(VerificationOutcome.Failed, Verify(plan, runReach: null, residue).Checks.Single().Outcome);
+    }
+
+    /// <summary>
+    /// What had gone before the run began needs no reasoning about where the run reached, so it holds
+    /// for a step that named the entry itself and for a tool's own command whose reach nobody can state.
+    /// </summary>
+    [Fact]
+    public void AnEntryGoneBeforeTheRunBeganWasRemovedFromOutsideWhateverTheRunReached()
+    {
+        var scratch = _temp.CreateDirectory("scratch");
+        var live = _temp.CreateDirectory("scratch", "kitprobe");
+        var plan = Plan([new ClearDirectoryStep(scratch, "Scratch files") { Spared = [live] }], Protect(live));
+
+        Directory.Delete(live);
+
+        var residue = RunResidue.Begin([plan]);
+        var named = new RunReach([scratch, live], [], Unbounded: false);
+        var unbounded = new RunReach([scratch], [], Unbounded: true);
+
+        Assert.Equal(VerificationOutcome.RemovedFromOutside, Verify(plan, named, residue).Checks.Single().Outcome);
+        Assert.Equal(VerificationOutcome.RemovedFromOutside, Verify(plan, unbounded, residue).Checks.Single().Outcome);
+    }
+
+    /// <summary>
     /// One removal leaving an entry alone does not answer for another that reached it: a step that
     /// names the entry itself keeps the alarm, and so does a tool's own command, whose reach nobody
     /// can state.

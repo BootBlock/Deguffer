@@ -35,6 +35,14 @@ namespace Deguffer.Core.Execution;
 /// <see cref="PlanVerifier"/> asks it of every removal whose root holds the missing path. See
 /// <see cref="RemovalOutcome.LeftAlone"/>.</para>
 ///
+/// <para><b>What had already gone when the run began is the evidence a removal cannot give.</b> A
+/// walk records only what it met, so an entry its program removed between the preview and the clean
+/// is not among what the removal left alone, and its absence reads as the removal's doing. Saving an
+/// unsaved Arduino sketch deletes the temporary folder the plan keeps, so the ordinary case is a user
+/// who saves the sketch and then presses Clean. <see cref="Begin"/> reads every path the run will be
+/// held to before the first deletion, and a path absent then is one no removal in the run can have
+/// taken, under any spelling or through any link.</para>
+///
 /// <para>Not safe for concurrent use. A run executes one step at a time, which makes that step's
 /// executor the only writer.</para>
 /// </summary>
@@ -58,6 +66,69 @@ public sealed class RunResidue
     /// the same folder took it, would vouch for the removal that did.</para>
     /// </summary>
     private readonly Dictionary<string, List<HashSet<string>>> _leftAloneByRoot = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Every path the run is held to that Windows said was not there before the first deletion, in the
+    /// one form compared here. Empty for a record made without <see cref="Begin"/>, which knows of
+    /// nothing gone and so excuses nothing.
+    /// </summary>
+    private readonly HashSet<string> _goneBeforeRun = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// A record that read nothing of the disk before the run, so it can say only what the run's own
+    /// removals recorded. A run reads the disk first through <see cref="Begin"/>.
+    /// </summary>
+    public RunResidue()
+    {
+    }
+
+    /// <summary>
+    /// The record for a run of <paramref name="plans"/>, made before the first of them deletes anything,
+    /// holding each path they will be held to that has already gone.
+    ///
+    /// <para><b>Absent, not merely undescribed.</b> A path Windows will not describe may be there, and
+    /// reading it as gone would excuse its loss on nothing.</para>
+    ///
+    /// <para><b>What it cannot see</b> is an entry that comes back during the run and is then taken by
+    /// it: it was gone when the run began, so its loss reads as somebody else's. A removal walk that
+    /// meets a kept entry standing holds it back by its path, so only an over-reach somewhere else in
+    /// the run could take it. Nor can it tell a stranger from an earlier clean of Deguffer's own: a
+    /// path gone before this run began reads as removed from outside it whoever removed it, as a path
+    /// whose whole folder had gone always has.</para>
+    /// </summary>
+    public static RunResidue Begin(IReadOnlyList<CleanupPlan> plans)
+    {
+        ArgumentNullException.ThrowIfNull(plans);
+
+        var residue = new RunResidue();
+
+        foreach (var path in plans.SelectMany(PathsHeldStanding))
+        {
+            if (LongPath.ProbeEntry(path) is PathPresence.Absent)
+            {
+                residue._goneBeforeRun.Add(Normalised(path));
+            }
+        }
+
+        return residue;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="path"/> had already gone when the run began, so nothing in the run can
+    /// have removed it. False for a path <see cref="Begin"/> was not asked about.
+    /// </summary>
+    public bool WasGoneBeforeRun(string path) => _goneBeforeRun.Contains(Normalised(path));
+
+    /// <summary>
+    /// Every path whose absence <see cref="PlanVerifier.Verify"/> judges in <paramref name="plan"/>: each
+    /// protected path that was there to preserve, and each file a <see cref="ReleaseLocalCopiesStep"/>
+    /// named. A path the verifier asks about that is missing here is one whose loss stays the alarm.
+    /// </summary>
+    private static IEnumerable<string> PathsHeldStanding(CleanupPlan plan) =>
+        plan.ProtectedPaths
+            .Where(protectedPath => protectedPath.PresenceBefore is not PathPresence.Absent)
+            .Select(protectedPath => protectedPath.Path)
+            .Concat(plan.Steps.OfType<ReleaseLocalCopiesStep>().SelectMany(release => release.Files).Select(file => file.Path));
 
     /// <param name="root">The path the removal was handed, as its step named it.</param>
     /// <param name="leftStanding">

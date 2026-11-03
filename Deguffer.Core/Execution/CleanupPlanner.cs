@@ -639,8 +639,9 @@ public sealed class CleanupPlanner
         // What the run's removals leave standing and leave alone, written by each plan as it executes
         // and read by every verification after it. One record for the whole run, for the reason the
         // reach is one value: a folder one provider's removal went into may be a folder another
-        // provider promised to leave. See RunResidue.
-        var residue = new RunResidue();
+        // provider promised to leave. Begun before the first deletion, because what had already gone
+        // by then is what no removal in the run can have taken. See RunResidue.
+        var residue = RunResidue.Begin([.. plans.Select(p => p.Plan)]);
 
         // §7's extra confirmation for anything above Tier 1, for every plan before the first deletion.
         // The requirement is derived here rather than trusted from the caller: a shell that forgot to
