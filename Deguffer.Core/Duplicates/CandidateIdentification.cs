@@ -68,7 +68,7 @@ internal sealed class CandidateIdentification
                 ? CandidateGrouping.MinuteOf(identified.Description.Modified)
                 : null));
 
-        var grouped = byTheTree.SelectMany(group => group);
+        IReadOnlyList<FoundFile> grouped = [.. byTheTree.SelectMany(group => group)];
 
         await IdentifyAsync(grouped, progress, ct).ConfigureAwait(false);
 
