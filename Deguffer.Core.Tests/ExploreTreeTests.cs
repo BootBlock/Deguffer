@@ -91,35 +91,33 @@ public class ExploreTreeTests
         Assert.Equal(["alpha.bin", "bravo.bin", "charlie.bin", "delta.bin", "echo.bin"], NamesOfChildren(tree, tree.RootNode));
         Assert.Equal([first + 3, first + 1, first + 4, first, first + 2], tree.ChildrenOf(tree.RootNode).ToArray());
     }
+
     /// <summary>
-    /// The same tree, assembled twice, orders identically — including a directory of equal-sized
-    /// children large enough that the runtime sorts it rather than inserting it, whose ties are put
-    /// in name order.
+    /// The name order of equal siblings holds in a directory large enough that the runtime sorts it
+    /// rather than inserting it, where the sort itself is unstable. Recorded in an order neither
+    /// sorted nor reversed, so only the tie-break can put them in name order: a tie broken by
+    /// anything else, a hash randomised per process included, would fail.
     /// </summary>
     [Fact]
-    public void TheSameTreeAssembledTwiceOrdersEveryLevelIdentically()
+    public void EqualSizedSiblingsTooManyToInsertAreStillInNameOrder()
     {
-        Assert.Equal(OrderOfARepeatedlyBuiltTree(), OrderOfARepeatedlyBuiltTree());
+        const int Count = 64;
 
-        static List<string> OrderOfARepeatedlyBuiltTree()
-        {
-            var builder = new ExploreTreeBuilder(Root);
+        // 37 shares no factor with 64, so this visits every index once, in an order that is not a run.
+        var recorded = Enumerable.Range(0, Count).Select(i => i * 37 % Count).ToArray();
+        var builder = new ExploreTreeBuilder(Root);
 
-            var top = builder.AddChildren(ExploreTreeBuilder.RootNode, [Directory("cache"), Directory("logs")]);
+        var first = builder.AddChildren(
+            ExploreTreeBuilder.RootNode, [.. recorded.Select(i => File($"pack-{i:D2}.tgz", 4096))]);
 
-            builder.AddChildren(top, [.. Enumerable.Range(0, 64).Select(i => File($"pack-{i:D2}.tgz", 4096))]);
-            builder.AddChildren(top + 1, [File("a.log", 30), File("b.log", 30), File("c.log", 900)]);
+        var tree = builder.Build(ExploreChildOrder.BySize);
 
-            var tree = builder.Build(ExploreChildOrder.BySize);
-            var order = new List<string>();
-
-            for (var node = 0; node < tree.NodeCount; node++)
-            {
-                order.AddRange(NamesOfChildren(tree, node));
-            }
-
-            return order;
-        }
+        Assert.Equal(
+            Enumerable.Range(0, Count).Select(i => $"pack-{i:D2}.tgz"),
+            NamesOfChildren(tree, tree.RootNode));
+        Assert.Equal(
+            Enumerable.Range(0, Count).Select(i => first + Array.IndexOf(recorded, i)),
+            tree.ChildrenOf(tree.RootNode).ToArray());
     }
 
     [Fact]

@@ -94,11 +94,18 @@ public sealed class WindowPlacementStoreTests : IDisposable
         Assert.Null(CreateStore().Load());
     }
 
-    /// <summary>A negative extent, which is the same non-window arrived at from the other side.</summary>
-    [Fact]
-    public void RemembersNothingWhenTheStoredExtentIsNegative()
+    /// <summary>
+    /// A negative or empty extent, which is the same non-window arrived at from the other side. Each
+    /// side alone, with the other one a window's, because each is checked on its own.
+    /// </summary>
+    [Theory]
+    [InlineData(1000, -700)]
+    [InlineData(-1000, 700)]
+    [InlineData(0, 700)]
+    [InlineData(1000, 0)]
+    public void RemembersNothingWhenEitherStoredExtentIsNotPositive(int width, int height)
     {
-        HandEdit("""{ "Bounds": { "X": 412, "Y": 96, "Width": 1000, "Height": -700 }, "IsMaximized": false }""");
+        HandEdit($$"""{ "Bounds": { "X": 412, "Y": 96, "Width": {{width}}, "Height": {{height}} }, "IsMaximized": false }""");
 
         Assert.Null(CreateStore().Load());
     }

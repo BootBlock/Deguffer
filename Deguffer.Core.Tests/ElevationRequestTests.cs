@@ -53,6 +53,19 @@ public sealed class ElevationRequestTests
         Assert.IsType<InstalledAppsRequest>(ElevationRequest.From(["--startup", "--installed-apps"]));
     }
 
+    /// <summary>
+    /// Explore wins over a preview, which nothing writes together but a hand-typed command line can:
+    /// the other way round starts a whole-machine preview the user did not ask for.
+    /// </summary>
+    [Fact]
+    public void ExploreWinsOverAPreview()
+    {
+        var request = Assert.IsType<ExploreRequest>(
+            ElevationRequest.From(["--rescan", "--explore", @"--explore-drive=D:\"]));
+
+        Assert.Equal(@"D:\", request.Drive);
+    }
+
     [Fact]
     public void InstalledAppsWinsOverAPreviewAndLosesToExplore()
     {

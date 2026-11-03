@@ -33,13 +33,23 @@ internal sealed class FakeWindowCalls : IWindowCalls
     /// </summary>
     public IReadOnlyList<nint> Posted => _posted;
 
+    /// <summary>
+    /// How many questions were asked of the desktop's windows, posts aside. §7.2.1 reads nothing about
+    /// a process that is not the one picked, and its windows are part of what it would read.
+    /// </summary>
+    public int Reads { get; private set; }
+
     public FakeWindowCalls With(FakeWindow window)
     {
         _windows.Add(window);
         return this;
     }
 
-    public IReadOnlyList<nint>? TopLevel() => Enumerates ? [.. _windows.Select(window => window.Handle)] : null;
+    public IReadOnlyList<nint>? TopLevel()
+    {
+        Reads++;
+        return Enumerates ? [.. _windows.Select(window => window.Handle)] : null;
+    }
 
     public int? ProcessOf(nint window) => Find(window).Owner();
 
@@ -53,7 +63,11 @@ internal sealed class FakeWindowCalls : IWindowCalls
 
     public bool Exists(nint window) => Find(window).Exists;
 
-    public nint? ShellWindow() => Shell;
+    public nint? ShellWindow()
+    {
+        Reads++;
+        return Shell;
+    }
 
     public bool PostClose(nint window)
     {
@@ -63,7 +77,11 @@ internal sealed class FakeWindowCalls : IWindowCalls
         return PostSucceeds;
     }
 
-    private FakeWindow Find(nint window) => _windows.Single(candidate => candidate.Handle == window);
+    private FakeWindow Find(nint window)
+    {
+        Reads++;
+        return _windows.Single(candidate => candidate.Handle == window);
+    }
 }
 
 /// <summary>

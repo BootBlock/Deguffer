@@ -126,7 +126,7 @@ public sealed class MemoryActionPolicyTests
     [InlineData(nameof(ProcessFacts.AsOwnAccount), Answer.Unreadable, "which account")]
 
     // A critical process, and one whose criticality will not be read.
-    [InlineData(nameof(ProcessFacts.Critical), Answer.Yes, "critical")]
+    [InlineData(nameof(ProcessFacts.Critical), Answer.Yes, "marks this process critical")]
     [InlineData(nameof(ProcessFacts.Critical), Answer.Unreadable, "whether this process is critical")]
 
     // A process a posted message would not reach, and one whose level will not be read.
@@ -135,22 +135,28 @@ public sealed class MemoryActionPolicyTests
 
     // A console, and a window that would not say whether it is one.
     [InlineData(nameof(ProcessFacts.OwnsConsoleWindow), Answer.Yes, "console window")]
-    [InlineData(nameof(ProcessFacts.OwnsConsoleWindow), Answer.Unreadable, "owns a console")]
+    [InlineData(nameof(ProcessFacts.OwnsConsoleWindow), Answer.Unreadable, "whether it owns a console")]
     public void EachAnswerThatRefusesSaysWhy(string fact, Answer answer, string says)
     {
-        var facts = fact switch
-        {
-            nameof(ProcessFacts.InOwnSession) => Allowed() with { InOwnSession = answer },
-            nameof(ProcessFacts.AsOwnAccount) => Allowed() with { AsOwnAccount = answer },
-            nameof(ProcessFacts.Critical) => Allowed() with { Critical = answer },
-            nameof(ProcessFacts.AboveOwnIntegrity) => Allowed() with { AboveOwnIntegrity = answer },
-            _ => Allowed() with { OwnsConsoleWindow = answer },
-        };
-
-        var verdict = Decide(facts);
+        var verdict = Decide(With(answer));
 
         Assert.False(verdict.IsAllowed);
         Assert.Contains(says, verdict.Reason, StringComparison.Ordinal);
+
+        // The phrase has to be one the other refusal of the same fact does not also say, or this row
+        // would pass with the two sentences swapped.
+        var bad = fact is nameof(ProcessFacts.InOwnSession) or nameof(ProcessFacts.AsOwnAccount) ? Answer.No : Answer.Yes;
+
+        Assert.DoesNotContain(says, Decide(With(answer is Answer.Unreadable ? bad : Answer.Unreadable)).Reason, StringComparison.Ordinal);
+
+        ProcessFacts With(Answer given) => fact switch
+        {
+            nameof(ProcessFacts.InOwnSession) => Allowed() with { InOwnSession = given },
+            nameof(ProcessFacts.AsOwnAccount) => Allowed() with { AsOwnAccount = given },
+            nameof(ProcessFacts.Critical) => Allowed() with { Critical = given },
+            nameof(ProcessFacts.AboveOwnIntegrity) => Allowed() with { AboveOwnIntegrity = given },
+            _ => Allowed() with { OwnsConsoleWindow = given },
+        };
     }
 
     /// <summary>
