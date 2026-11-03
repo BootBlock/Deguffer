@@ -22,6 +22,15 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
+    /// <summary>
+    /// The five folders a published listing of <c>%LOCALAPPDATA%\AMD</c> showed the driver writing,
+    /// spelt as they were listed. Written out rather than read from the table, so a name dropped
+    /// from the table fails here instead of shrinking the expectation with it.
+    /// </summary>
+    private static readonly string[] AmdCaches = ["DX9Cache", "DxCache", "DxcCache", "OglCache", "VkCache"];
+
+    public static TheoryData<string> AmdCacheNames => [.. AmdCaches];
+
     private GpuShaderCacheProvider CreateProvider() =>
         new(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
 
@@ -76,7 +85,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         var dxCache = CreateCache(Path.Combine("NVIDIA", "DXCache"), 8192);
         var glCache = CreateCache(Path.Combine("NVIDIA", "GLCache"), 2048);
         var localLow = CreateLocalLowCache(Path.Combine("NVIDIA", "DXCache"), 4096);
-        var amd = CreateCache(Path.Combine("AMD", "DxCache"));
+        string[] amd = [.. AmdCaches.Select(name => CreateCache(Path.Combine("AMD", name)))];
         var intel = CreateCache(Path.Combine("Intel", "ShaderCache"));
         var direct3D = CreateCache("D3DSCache");
 
@@ -85,7 +94,7 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
 
         var plan = await provider.PlanAsync();
 
-        string[] expected = [amd, direct3D, intel, dxCache, glCache, localLow];
+        string[] expected = [.. amd, direct3D, intel, dxCache, glCache, localLow];
 
         // Both sides sorted, because the two NVIDIA roots sit in sibling directories whose names
         // share a prefix and the order that falls out of that is not worth encoding here.
@@ -363,7 +372,8 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
     [Fact]
     public async Task AChildRecognisedForOneVendorIsNotRecognisedForAnother()
     {
-        // NVIDIA declares GLCache; AMD, on the evidence available, declares only DxCache.
+        // NVIDIA declares GLCache. AMD's driver writes OglCache for OpenGL instead, and GLCache
+        // appeared in no listing of AMD's folder, however often cleaners attribute it there.
         var amdGlCache = CreateCache(Path.Combine("AMD", "GLCache"));
         CreateCache(Path.Combine("AMD", "DxCache"));
 
@@ -373,6 +383,71 @@ public sealed class GpuShaderCacheProviderTests : IDisposable
         var plan = await CreateProvider().PlanAsync();
 
         Assert.DoesNotContain(amdGlCache, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Each AMD cache is removed with an unrecognised sibling beside it, which must be named, kept
+    /// and asserted to survive (§5.2, §5.6): every recognised child carries the case that proves the
+    /// rule recognises it and nothing else.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(AmdCacheNames))]
+    public async Task EachAmdCacheIsRemovedAndAnUnrecognisedSiblingSurvives(string name)
+    {
+        var cache = CreateCache(Path.Combine("AMD", name));
+        var sibling = CreateCache(Path.Combine("AMD", "Radeon"));
+
+        var amd = GpuShaderCacheProvider.Roots.Single(r => r.DirectoryName == "AMD");
+        Assert.Equal(SafetyTier.DoNotTouch, amd.Children.Classify("Radeon").Tier);
+
+        var provider = CreateProvider();
+        Assert.True(await provider.IsPresentAsync());
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal([cache], plan.TargetedPaths);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("AMD\\Radeon", StringComparison.Ordinal));
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(sibling, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.False(Directory.Exists(cache), $"AMD\\{name} was not removed.");
+        Assert.True(Directory.Exists(sibling), $"An unrecognised folder was removed alongside AMD\\{name}.");
+        Assert.True(Directory.Exists(Path.Combine(_environment.LocalAppData, "AMD")));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// <c>CN</c> holds AMD Software's settings and per-game profiles beside the caches. An
+    /// unrecognised folder is kept anyway, so naming it is what gives it a reason the user can read
+    /// and keeps it asserted if a later name is ever too broad.
+    /// </summary>
+    [Fact]
+    public async Task AmdSoftwaresSettingsAreNamedAndAssertedToSurvive()
+    {
+        var caches = AmdCaches.Select(name => CreateCache(Path.Combine("AMD", name))).ToArray();
+        var settings = Path.Combine(_environment.LocalAppData, "AMD", "CN");
+        Directory.CreateDirectory(settings);
+        var profiles = Path.Combine(settings, "gmdb.blb");
+        File.WriteAllBytes(profiles, new byte[512]);
+
+        var provider = CreateProvider();
+        var plan = await provider.PlanAsync();
+
+        Assert.DoesNotContain(settings, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(settings, StringComparison.OrdinalIgnoreCase)
+            && p.PresenceBefore is PathPresence.Present
+            && p.Reason.Contains("AMD Software", StringComparison.Ordinal));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.All(caches, cache => Assert.False(Directory.Exists(cache), $"{cache} was not removed."));
+        Assert.True(File.Exists(profiles), "AMD Software's per-game profiles were removed alongside the caches.");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
     [Fact]
