@@ -437,13 +437,18 @@ public sealed class ProcessCloserTests
     /// §7.2.1: "There is no deadline. A save prompt waits for a person, so a timer would report
     /// 'still running' about a program doing exactly what it was asked."
     ///
-    /// <para>Proven by leaving the program to think for two days of the watch's own clock. A deadline
-    /// of any length, and any limit on how many times the handle is asked, would have given up long
-    /// before the program answered.</para>
+    /// <para>Proven two ways, because a deadline and a cap give up on different things. The program
+    /// thinks for two days of the watch's own clock, which any deadline on that clock would have
+    /// given up on. And the watch is stepped one poll at a time through ten thousand polls, which
+    /// any limit below that on how many times the handle is asked would have given up on. A
+    /// deadline on the machine's own clock is out of a test's reach, and is why the watch is handed
+    /// one.</para>
     /// </summary>
     [Fact]
     public async Task TheWatchWaitsForAsLongAsTheProgramTakes()
     {
+        const int Polls = 10_000;
+
         var before = Before();
         var target = new FakeProcess { ProcessId = TargetId, CreatedAt = TargetCreated };
         var clock = new ManualTimeProvider();
@@ -458,7 +463,16 @@ public sealed class ProcessCloserTests
             clock.Advance(TimeSpan.FromHours(1));
         }
 
+        var asked = target.ExitReads;
+
+        for (var poll = 0; poll < Polls; poll++)
+        {
+            await clock.WhenWaitingAsync(TimeSpan.FromSeconds(5));
+            clock.Advance(ProcessCloser.WatchCadence);
+        }
+
         Assert.False(closing.IsCompleted);
+        Assert.True(target.ExitReads - asked >= Polls, $"The watch asked {target.ExitReads - asked} times in {Polls} polls.");
 
         await clock.WhenWaitingAsync(TimeSpan.FromSeconds(5));
         target.Exited = true;

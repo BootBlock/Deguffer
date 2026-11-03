@@ -18,6 +18,9 @@ public sealed class ManualTimeProvider : TimeProvider
     private readonly List<ManualTimer> _timers = [];
     private DateTimeOffset _now = new(2026, 6, 1, 12, 0, 0, TimeSpan.Zero);
 
+    /// <summary>Completed, and replaced, each time a timer is armed. Read and swapped under <see cref="_gate"/>.</summary>
+    private TaskCompletionSource _armed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     public override DateTimeOffset GetUtcNow()
     {
         lock (_gate)
@@ -54,19 +57,34 @@ public sealed class ManualTimeProvider : TimeProvider
         return timer;
     }
 
-    /// <summary>Completes once something is waiting on this clock.</summary>
+    /// <summary>
+    /// Completes once something is waiting on this clock.
+    ///
+    /// <para>Told by the timer as it is armed rather than found by polling, so a test can step a
+    /// watch through thousands of its own waits: a poll sleeps at least one tick of the machine's
+    /// timer each time it finds nothing armed.</para>
+    /// </summary>
     public async Task WhenWaitingAsync(TimeSpan patience)
     {
-        var deadline = DateTime.UtcNow + patience;
+        Task armed;
 
-        while (Waiting == 0)
+        lock (_gate)
         {
-            if (DateTime.UtcNow > deadline)
+            if (_timers.Any(timer => timer.Due is not null))
             {
-                throw new TimeoutException("Nothing began waiting on the clock.");
+                return;
             }
 
-            await Task.Delay(5);
+            armed = _armed.Task;
+        }
+
+        try
+        {
+            await armed.WaitAsync(patience);
+        }
+        catch (TimeoutException)
+        {
+            throw new TimeoutException("Nothing began waiting on the clock.");
         }
     }
 
@@ -106,6 +124,12 @@ public sealed class ManualTimeProvider : TimeProvider
                 }
 
                 Due = dueTime == Timeout.InfiniteTimeSpan ? null : clock._now + dueTime;
+
+                if (Due is not null)
+                {
+                    clock._armed.SetResult();
+                    clock._armed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                }
             }
 
             return true;

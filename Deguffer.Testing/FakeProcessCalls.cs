@@ -45,7 +45,7 @@ internal sealed class FakeProcessCalls : IProcessCalls
             return ProcessOpening.NotRunning;
         }
 
-        return process.OpenRefused ? ProcessOpening.Refused : ProcessOpening.Of(process);
+        return process.OpenRefused ? ProcessOpening.Refused : ProcessOpening.Of(process.Open());
     }
 
     public OwnProcess Own()
@@ -55,11 +55,18 @@ internal sealed class FakeProcessCalls : IProcessCalls
     }
 }
 
-/// <summary>One process as Windows would answer about it. Every member defaults to an answer that is read.</summary>
-internal sealed class FakeProcess : IOpenProcess
+/// <summary>
+/// One process as Windows would answer about it. Every member defaults to an answer that is read.
+///
+/// <para>It is read through the handles <see cref="FakeProcessCalls.Open"/> gives out, one per open,
+/// and counts every read across them.</para>
+/// </summary>
+internal sealed class FakeProcess
 {
     /// <summary>A creation time exact to the tick, as the kernel records one.</summary>
     public const long Created = 133_900_000_000_000_042;
+
+    private readonly List<FakeProcessHandle> _handles = [];
 
     public required int ProcessId { get; init; }
 
@@ -92,47 +99,62 @@ internal sealed class FakeProcess : IOpenProcess
     /// <summary>How many facts beyond its identity were read, which a process that has gone must not reach.</summary>
     public int FactsRead { get; private set; }
 
-    public bool Disposed { get; private set; }
+    /// <summary>How many times the process was asked whether it has gone, which is how often a watch polled.</summary>
+    public int ExitReads { get; private set; }
 
-    public long? CreationTime() => CreatedAt;
+    /// <summary>Whether it was opened, and every handle given out for it has been closed.</summary>
+    public bool Disposed => _handles.Count > 0 && _handles.TrueForAll(handle => handle.Closed);
 
-    public bool? HasExited() => Exited;
-
-    public uint? SessionId()
+    internal FakeProcessHandle Open()
     {
-        FactsRead++;
-        return Session;
+        var handle = new FakeProcessHandle(this);
+        _handles.Add(handle);
+        return handle;
     }
 
-    public TokenFacts Token()
+    internal bool? ReadExit()
     {
-        FactsRead++;
-        return new TokenFacts(User, Integrity);
+        ExitReads++;
+        return Exited;
     }
 
-    public bool? IsCritical()
+    internal T ReadFact<T>(T fact)
     {
         FactsRead++;
-        return Critical;
+        return fact;
     }
+}
 
-    public PackageIdentity Package()
+/// <summary>
+/// One open handle to a <see cref="FakeProcess"/>. A closed one answers nothing, as Windows refuses a
+/// call through a closed handle, and it stays closed when the process is opened again: so a fact read
+/// through a handle after it was closed fails even where the code has opened another since.
+/// </summary>
+internal sealed class FakeProcessHandle(FakeProcess process) : IOpenProcess
+{
+    public bool Closed { get; private set; }
+
+    public long? CreationTime() => Live().CreatedAt;
+
+    public bool? HasExited() => Live().ReadExit();
+
+    public uint? SessionId() => Live().ReadFact(process.Session);
+
+    public TokenFacts Token() => Live().ReadFact(new TokenFacts(process.User, process.Integrity));
+
+    public bool? IsCritical() => Live().ReadFact(process.Critical);
+
+    public PackageIdentity Package() => Live().ReadFact(process.Packaging);
+
+    public bool? IsFrozen() => Live().ReadFact(process.Frozen);
+
+    public string? ImagePath() => Live().ReadFact(process.Image);
+
+    public void Dispose() => Closed = true;
+
+    private FakeProcess Live()
     {
-        FactsRead++;
-        return Packaging;
+        ObjectDisposedException.ThrowIf(Closed, this);
+        return process;
     }
-
-    public bool? IsFrozen()
-    {
-        FactsRead++;
-        return Frozen;
-    }
-
-    public string? ImagePath()
-    {
-        FactsRead++;
-        return Image;
-    }
-
-    public void Dispose() => Disposed = true;
 }

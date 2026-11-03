@@ -45,21 +45,13 @@ public sealed class ProcessFactSourceTests
     [Fact]
     public void AnIdentifierThatNowBelongsToALaterProcessReadsAsGoneAndNothingElseIsRead()
     {
-        var process = new FakeProcess { ProcessId = Picked, CreatedAt = FakeProcess.Created + 1 };
-
-        var facts = Read(new FakeProcessCalls().With(process));
-
-        Assert.Equal(ProcessFacts.NothingRead(Answer.No), facts);
-        Assert.Equal(0, process.FactsRead);
+        NothingElseIsRead(new FakeProcess { ProcessId = Picked, CreatedAt = FakeProcess.Created + 1 }, Answer.No);
     }
 
     [Fact]
     public void AProcessThatHasExitedWhileStillOpenReadsAsGone()
     {
-        var process = new FakeProcess { ProcessId = Picked, Exited = true };
-
-        Assert.Equal(ProcessFacts.NothingRead(Answer.No), Read(new FakeProcessCalls().With(process)));
-        Assert.Equal(0, process.FactsRead);
+        NothingElseIsRead(new FakeProcess { ProcessId = Picked, Exited = true }, Answer.No);
     }
 
     [Fact]
@@ -89,28 +81,19 @@ public sealed class ProcessFactSourceTests
     [Fact]
     public void ACreationTimeEarlierThanTheOneRecordedSaysNothing()
     {
-        var process = new FakeProcess { ProcessId = Picked, CreatedAt = FakeProcess.Created - 1 };
-
-        Assert.Equal(ProcessFacts.NothingRead(Answer.Unreadable), Read(new FakeProcessCalls().With(process)));
-        Assert.Equal(0, process.FactsRead);
+        NothingElseIsRead(new FakeProcess { ProcessId = Picked, CreatedAt = FakeProcess.Created - 1 }, Answer.Unreadable);
     }
 
     [Fact]
     public void ACreationTimeThatWillNotBeReadSaysNothing()
     {
-        var process = new FakeProcess { ProcessId = Picked, CreatedAt = null };
-
-        Assert.Equal(ProcessFacts.NothingRead(Answer.Unreadable), Read(new FakeProcessCalls().With(process)));
-        Assert.Equal(0, process.FactsRead);
+        NothingElseIsRead(new FakeProcess { ProcessId = Picked, CreatedAt = null }, Answer.Unreadable);
     }
 
     [Fact]
     public void AnExitThatWillNotBeReadSaysNothing()
     {
-        var process = new FakeProcess { ProcessId = Picked, Exited = null };
-
-        Assert.Equal(ProcessFacts.NothingRead(Answer.Unreadable), Read(new FakeProcessCalls().With(process)));
-        Assert.Equal(0, process.FactsRead);
+        NothingElseIsRead(new FakeProcess { ProcessId = Picked, Exited = null }, Answer.Unreadable);
     }
 
     [Fact]
@@ -368,6 +351,20 @@ public sealed class ProcessFactSourceTests
         var process = new FakeProcess { ProcessId = Picked, Image = @"C:\Program Files\Tool\tool.exe", CreatedAt = FakeProcess.Created + 1 };
 
         Assert.Null(Read(new FakeProcessCalls().With(process)).ImagePath);
+    }
+
+    /// <summary>
+    /// Read a process that turns out not to be the one picked, or not to be known as it, with a window
+    /// of its own on the desktop: so a survey of its windows would find something to read, and only
+    /// the order of the reads keeps it from happening.
+    /// </summary>
+    private static void NothingElseIsRead(FakeProcess process, Answer present)
+    {
+        var windows = new FakeWindowCalls().With(new FakeWindow { Handle = 11, ProcessId = Picked });
+
+        Assert.Equal(ProcessFacts.NothingRead(present), Read(new FakeProcessCalls().With(process), windows));
+        Assert.Equal(0, process.FactsRead);
+        Assert.Equal(0, windows.Reads);
     }
 
     private static ProcessFacts Read(FakeProcessCalls processes, FakeWindowCalls? windows = null) =>
