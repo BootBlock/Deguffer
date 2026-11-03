@@ -62,13 +62,33 @@ internal enum Route
     /// the volumes one after another, the difference is what scanning the disks at once saves.
     /// </summary>
     Folders,
+
+    /// <summary>
+    /// Build a tree in a new folder and remove it through <c>DirectoryRemover</c>, as a clean removes
+    /// a cache or a build folder: the walk, the file pass and the folder pass, timed apart. The first of
+    /// the two routes that write, and they write only inside the folder they create.
+    /// </summary>
+    Remove,
+
+    /// <summary>
+    /// Build many small trees in a new folder and remove them as one plan through <c>PlanExecutor</c>,
+    /// as a clean of the <c>obj</c> row does: what each step costs around its removal.
+    /// </summary>
+    Clean,
 }
 
 internal static class RouteFacts
 {
     /// <summary>Whether the route reads a volume's file table, which needs administrator rights.</summary>
     public static bool ReadsTable(this Route route) =>
-        route is not (Route.Walk or Route.Measure or Route.ExploreWalk or Route.Sources or Route.Links or Route.Folders);
+        route is not (Route.Walk or Route.Measure or Route.ExploreWalk or Route.Sources or Route.Links or Route.Folders)
+            && !route.Removes();
+
+    /// <summary>
+    /// Whether the route builds what it removes in a folder it creates, so its target must not exist
+    /// yet, where every other route's must.
+    /// </summary>
+    public static bool Removes(this Route route) => route is Route.Remove or Route.Clean;
 
     /// <summary>
     /// Whether the route walks with the values given on the command line. The links route walks with
@@ -91,7 +111,8 @@ internal static class RouteFacts
     /// <summary>What one counted item is, in the plural, as the report names it.</summary>
     public static string ItemName(this Route route) => route switch
     {
-        Route.Walk or Route.Measure or Route.ExploreWalk or Route.Folders => "entries",
+        Route.Walk or Route.Measure or Route.ExploreWalk or Route.Folders or Route.Remove => "entries",
+        Route.Clean => "steps",
         Route.Sources => "candidates",
         Route.Links => "files",
         _ => "records",

@@ -320,4 +320,66 @@ public sealed class BenchmarkRequestTests
         Assert.Null(BenchmarkRequest.Parse(["walk"], out var error));
         Assert.NotNull(error);
     }
+
+    [Fact]
+    public void TheRemoveRouteBuildsALargeCacheUnlessToldOtherwise()
+    {
+        var request = BenchmarkRequest.Parse(["remove", "relative"], out var error);
+
+        Assert.Null(error);
+        Assert.Equal(Route.Remove, request!.Route);
+        Assert.Equal(Path.GetFullPath("relative"), request.Path);
+        Assert.Equal(BenchmarkRequest.DefaultTree, request.Tree);
+        Assert.Equal(1, request.Trees);
+    }
+
+    /// <summary>The one option that takes no value is read as a flag wherever it stands among the others.</summary>
+    [Theory]
+    [InlineData("--read-only", "--files", "10", "--depth", "2", "--fanout", "3")]
+    [InlineData("--files", "10", "--read-only", "--depth", "2", "--fanout", "3")]
+    [InlineData("--files", "10", "--depth", "2", "--fanout", "3", "--read-only")]
+    public void TheRemoveRoutesTreeCanBeChosen(params string[] rest)
+    {
+        var request = BenchmarkRequest.Parse(["remove", @"C:\new", .. rest, "--runs", "2"], out var error);
+
+        Assert.Null(error);
+        Assert.Equal(new TreeShape(10, Depth: 2, Fanout: 3, ReadOnly: true), request!.Tree);
+        Assert.Equal(2, request.Runs);
+    }
+
+    [Fact]
+    public void TheCleanRoutesTreesCanBeChosen()
+    {
+        var request = BenchmarkRequest.Parse(["clean", @"C:\new", "--trees", "7", "--files-per-tree", "9"], out var error);
+
+        Assert.Null(error);
+        Assert.Equal(Route.Clean, request!.Route);
+        Assert.Equal(7, request.Trees);
+        Assert.Equal(CleanRoute.Shape(9), request.Tree);
+        Assert.Equal(BenchmarkRequest.DefaultTrees, BenchmarkRequest.Parse(["clean", @"C:\new"], out _)!.Trees);
+    }
+
+    /// <summary>
+    /// Each route takes only what it builds with, so a value given to another would be reported unused,
+    /// and a tree too large to build is refused before any of it is.
+    /// </summary>
+    [Theory]
+    [InlineData("remove", "--trees", "4")]
+    [InlineData("remove", "--files-per-tree", "4")]
+    [InlineData("remove", "--files", "10000001")]
+    [InlineData("remove", "--depth", "201")]
+    [InlineData("remove", "--fanout", "0")]
+    [InlineData("remove", "--depth", "10", "--fanout", "10")]
+    [InlineData("remove", "--threads", "4")]
+    [InlineData("clean", "--read-only")]
+    [InlineData("clean", "--files", "10")]
+    [InlineData("clean", "--trees", "0")]
+    [InlineData("clean", "--trees", "100000", "--files-per-tree", "101")]
+    [InlineData("walk", "--files", "10")]
+    [InlineData("walk", "--read-only")]
+    public void ARemovalValueIsTakenOnlyByItsRouteAndOnlyInRange(string route, params string[] rest)
+    {
+        Assert.Null(BenchmarkRequest.Parse([route, @"C:\new", .. rest], out var error));
+        Assert.NotNull(error);
+    }
 }

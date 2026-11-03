@@ -16,6 +16,7 @@ if (request is null)
 }
 
 TableCensus? census = null;
+RemovalSite? site = null;
 
 if (request.Route.ReadsTable())
 {
@@ -31,6 +32,15 @@ if (request.Route.ReadsTable())
         return 2;
     }
 }
+else if (request.Route.Removes())
+{
+    site = RemovalSite.Create(request.Path, out var refused);
+    if (site is null)
+    {
+        Console.Error.WriteLine(refused);
+        return 2;
+    }
+}
 else if (request.Folders.Any(folder => LongPath.ProbeDirectory(folder) is not PathPresence.Present))
 {
     Console.Error.WriteLine(request.Folders.Count == 1
@@ -39,54 +49,90 @@ else if (request.Folders.Any(folder => LongPath.ProbeDirectory(folder) is not Pa
     return 2;
 }
 
-Func<CancellationToken, RunTally> run = request.Route switch
-{
-    Route.Walk => ct => WalkRoute.Run(request.Path, request.Walk, ct),
-    Route.Measure => ct => MeasureRoute.Run(request.Path, request.Walk, ct),
-    Route.ExploreWalk => ct => ExploreWalkRoute.Run(request.Path, request.Walk, request.Snapshots, ct),
-    Route.Sources => ct => SourcesRoute.Run(request.Path, request.Walk, ct),
-    Route.Links => ct => LinksRoute.Run(request.Path, request.ReadBy, ct),
-    Route.Folders => ct => FoldersRoute.Run(VolumeMftSourceFactory.Default, request.Folders, ct),
-    _ => ct => TableRoutes.Run(request.Route, VolumeMftSourceFactory.Default, request.Path, request.Table, ct),
-};
-
-using var cancel = new CancellationTokenSource();
-Console.CancelKeyPress += (_, e) =>
-{
-    // Stop between reads rather than kill the process mid-read, which is what the routes' own
-    // cancellation is for.
-    e.Cancel = true;
-    cancel.Cancel();
-};
-
-var runs = new List<RunSample>(request.Runs);
-
 try
 {
-    for (var i = 1; i <= request.Runs; i++)
+    return Benchmark(request, site, census);
+}
+finally
+{
+    // Whatever stopped the runs, so the folder this created is not left for the person who ran it to
+    // find. What could not be removed is inside the folder they named, and nowhere else.
+    if (site is not null && !site.RemoveAll())
     {
-        Console.Error.WriteLine($"Run {i} of {request.Runs}...");
-        runs.Add(Timing.Measure(run, cancel.Token));
+        Console.Error.WriteLine("The folder the benchmark created could not be removed in full. What is left is inside it.");
     }
 }
-catch (OperationCanceledException)
-{
-    Console.Error.WriteLine("Cancelled.");
-    return 3;
-}
-catch (IOException ex)
-{
-    // The table routes raise this when the volume goes away between runs. Its message names the
-    // volume's state, never a path.
-    Console.Error.WriteLine(ex.Message);
-    return 2;
-}
 
-Console.Out.Write(Report.Render(
-    request.Route,
-    Tuning.Describe(request.Route, request.Walk, request.Table, request.Snapshots, request.ReadBy),
-    [.. request.Folders.Select(MeasuredPlace.Of).Distinct()],
-    MachineFacts.Current,
-    runs,
-    census));
-return 0;
+static int Benchmark(BenchmarkRequest request, RemovalSite? site, TableCensus? census)
+{
+    var route = request.Route switch
+    {
+        Route.Walk => new RouteRun(ct => WalkRoute.Run(request.Path, request.Walk, ct)),
+        Route.Measure => new RouteRun(ct => MeasureRoute.Run(request.Path, request.Walk, ct)),
+        Route.ExploreWalk => new RouteRun(ct => ExploreWalkRoute.Run(request.Path, request.Walk, request.Snapshots, ct)),
+        Route.Sources => new RouteRun(ct => SourcesRoute.Run(request.Path, request.Walk, ct)),
+        Route.Links => new RouteRun(ct => LinksRoute.Run(request.Path, request.ReadBy, ct)),
+        Route.Folders => new RouteRun(ct => FoldersRoute.Run(VolumeMftSourceFactory.Default, request.Folders, ct)),
+        Route.Remove => new RemoveRoute(site!, request.Tree).Timed,
+        Route.Clean => new CleanRoute(
+            site!, request.Trees, request.Tree, UserEnvironment.Current, SystemDirectories.Current, VolumeInventory.Current).Timed,
+        _ => new RouteRun(ct => TableRoutes.Run(request.Route, VolumeMftSourceFactory.Default, request.Path, request.Table, ct)),
+    };
+
+    using var cancel = new CancellationTokenSource();
+    Console.CancelKeyPress += (_, e) =>
+    {
+        // Stop between reads rather than kill the process mid-read, which is what the routes' own
+        // cancellation is for. A removal route's folder is then removed as the process ends.
+        e.Cancel = true;
+        cancel.Cancel();
+    };
+
+    var runs = new List<RunSample>(request.Runs);
+
+    try
+    {
+        for (var i = 1; i <= request.Runs; i++)
+        {
+            Console.Error.WriteLine($"Run {i} of {request.Runs}...");
+
+            route.Before?.Invoke(cancel.Token);
+            runs.Add(Timing.Measure(route.Run, cancel.Token));
+            route.After?.Invoke();
+        }
+    }
+    catch (OperationCanceledException)
+    {
+        Console.Error.WriteLine("Cancelled.");
+        return 3;
+    }
+    catch (Exception ex) when (site is not null && ex is IOException or UnauthorizedAccessException)
+    {
+        // Building a tree, the one thing here that writes. Its message names the file, so only the
+        // error is repeated.
+        Console.Error.WriteLine($"The tree could not be built: error 0x{ex.HResult:X8}.");
+        return 2;
+    }
+    catch (IOException ex)
+    {
+        // The table routes raise this when the volume goes away between runs. Its message names the
+        // volume's state, never a path.
+        Console.Error.WriteLine(ex.Message);
+        return 2;
+    }
+    catch (InvalidOperationException ex) when (site is not null)
+    {
+        // A removal route found something gone beside what it removed. Its message names no path.
+        Console.Error.WriteLine(ex.Message);
+        return 4;
+    }
+
+    Console.Out.Write(Report.Render(
+        request.Route,
+        Tuning.Describe(request.Route, request.Walk, request.Table, request.Snapshots, request.ReadBy, request.Tree, request.Trees),
+        [.. request.Folders.Select(MeasuredPlace.Of).Distinct()],
+        MachineFacts.Current,
+        runs,
+        census));
+    return 0;
+}

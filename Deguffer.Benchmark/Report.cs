@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Deguffer.Core.Execution;
 
 namespace Deguffer.Benchmark;
 
@@ -40,7 +41,7 @@ internal static class Report
         var later = runs.Skip(1).ToArray();
         var text = new StringBuilder();
 
-        Line(text, "Deguffer scan benchmark");
+        Line(text, "Deguffer benchmark");
         Field(text, "route", route.ToString().ToLowerInvariant());
         Field(text, places.Count == 1 ? "place" : "places", string.Join(", ", places));
         Field(text, "tuning", tuning);
@@ -79,6 +80,10 @@ internal static class Report
                 Row(text, "free records read", Bytes(inUse.FreeBytesRead(first.Tally)), Over(later, r => inUse.FreeBytesRead(r.Tally), Bytes));
             }
         }
+        else if (route.Removes())
+        {
+            RemovalRows(text, first, later);
+        }
         else
         {
             Row(text, "folders at once", Count(first.Tally.PeakListings), Over(later, r => r.Tally.PeakListings, Count));
@@ -98,6 +103,37 @@ internal static class Report
 
         return text.ToString();
     }
+
+    /// <summary>
+    /// Where a removal route's time went: the clean route's steps around their removals where it ran
+    /// any, then the removals' three passes, each summed over every removal of the run.
+    /// </summary>
+    private static void RemovalRows(StringBuilder text, RunSample first, RunSample[] later)
+    {
+        if (first.Tally.Steps is not null)
+        {
+            Row(text, "per step", Duration(PerStep(first)), Over(later, PerStep, Duration));
+            Row(text, "use checks", Duration(StepPart(first, s => s.UseCheck)), Over(later, r => StepPart(r, s => s.UseCheck), Duration));
+            Row(text, "looks", Duration(StepPart(first, s => s.Look)), Over(later, r => StepPart(r, s => s.Look), Duration));
+            Row(text, "acting", Duration(StepPart(first, s => s.Acting)), Over(later, r => StepPart(r, s => s.Acting), Duration));
+        }
+
+        Row(text, "walk", Duration(Pass(first, p => p.Walk)), Over(later, r => Pass(r, p => p.Walk), Duration));
+        Row(text, "file pass", Duration(Pass(first, p => p.Files)), Over(later, r => Pass(r, p => p.Files), Duration));
+        Row(text, "folder pass", Duration(Pass(first, p => p.Folders)), Over(later, r => Pass(r, p => p.Folders), Duration));
+        Row(text, "processor time", Duration(first.ProcessorTime.TotalSeconds), Over(later, r => r.ProcessorTime.TotalSeconds, Duration));
+        Row(text, "worker threads", Count(first.Tally.PeakWorkers), Over(later, r => r.Tally.PeakWorkers, Count));
+    }
+
+    /// <summary>A pass's seconds, or zero for a run whose removals never walked a tree.</summary>
+    private static double Pass(RunSample run, Func<RemovalPasses, PassTiming> pass) =>
+        run.Tally.Passes is { } passes ? pass(passes).Elapsed.TotalSeconds : 0;
+
+    private static double StepPart(RunSample run, Func<StepTimes, TimeSpan> part) => part(run.Tally.Steps!).TotalSeconds;
+
+    /// <summary>The steps' time over how many there were, so a plan of any size reads the same.</summary>
+    private static double PerStep(RunSample run) =>
+        run.Tally.Steps is { Count: > 0 } steps ? steps.Elapsed.TotalSeconds / steps.Count : 0;
 
     private static string Describe(MachineFacts machine) => string.Create(
         Invariant,
