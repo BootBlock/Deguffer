@@ -5,12 +5,12 @@ namespace Deguffer.Core.Providers;
 
 /// <summary>
 /// DISM's analysis of the component store, asked once per planning pass for the plans and afresh for
-/// each figure the run subtracts.
+/// each figure the run subtracts (see <see cref="ComponentStoreMeasurement"/>).
 ///
 /// <para><b>One analysis for both component store rows.</b> The analysis is read-only but takes a
 /// minute or more, and the cleanup and the reset ask it the same question, so the planner builds one
 /// and hands it to both. What a planning pass read is kept until the next pass clears it (G4). What
-/// the run asks of <see cref="MeasureAsync"/> is never kept: it is a figure subtracted from another,
+/// the run asks of <see cref="FreshReadingAsync"/> is never kept: it is a figure subtracted from another,
 /// and a remembered one would report nothing freed.</para>
 ///
 /// <para><b>Every call is recorded in <see cref="OwnServicingCalls"/>.</b> Windows starts its servicing
@@ -24,7 +24,7 @@ namespace Deguffer.Core.Providers;
 public sealed class ComponentStoreAnalysis(
     ISystemDirectories system,
     IProcessRunner runner,
-    OwnServicingCalls? servicingCalls = null) : IToolMeasurement
+    OwnServicingCalls? servicingCalls = null)
 {
     /// <summary>The read-only analysis, in English so its labels can be read.</summary>
     public const string AnalyzeArguments = "/Online /English /Cleanup-Image /AnalyzeComponentStore";
@@ -51,9 +51,8 @@ public sealed class ComponentStoreAnalysis(
     /// <summary>Forgets the last pass's reading, for a planning pass that starts afresh.</summary>
     public void Invalidate() => _reading.Forget();
 
-    /// <summary>The store's actual size now, from a fresh analysis, or null where DISM did not give one.</summary>
-    public async Task<long?> MeasureAsync(CancellationToken ct) =>
-        (await ReadAsync(ct).ConfigureAwait(false)).Report?.ActualSize;
+    /// <summary>What the store holds now, from an analysis asked afresh rather than remembered.</summary>
+    public Task<ComponentStoreReading> FreshReadingAsync(CancellationToken ct) => ReadAsync(ct);
 
     private async Task<ComponentStoreReading> ReadAsync(CancellationToken ct)
     {

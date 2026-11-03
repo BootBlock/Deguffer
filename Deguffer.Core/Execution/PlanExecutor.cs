@@ -397,7 +397,9 @@ public sealed class PlanExecutor(
         // Windows cleans its component store on a schedule, and another row in the same clean can run a
         // command over the same store. The plan's figure would then credit this command with a reclaim
         // it did not make.
-        var measuredBefore = step.MeasuredBy is { } asked ? await asked.MeasureAsync(ct).ConfigureAwait(false) : before;
+        var measuredBefore = step.MeasuredBy is { } asked
+            ? await asked.MeasureAsync(MeasuredWhen.BeforeCommand, ct).ConfigureAwait(false)
+            : before;
 
         // Asked again, because the tool's measurement can take a minute, and an update that starts
         // during it is exactly what the hold exists for. The servicing stack the measurement itself
@@ -495,7 +497,8 @@ public sealed class PlanExecutor(
 
         if (step.MeasuredBy is { } tool)
         {
-            measured = await tool.MeasureAsync(ct).ConfigureAwait(false);
+            var when = outcome.Succeeded ? MeasuredWhen.AfterCommandSucceeded : MeasuredWhen.AfterCommandFailed;
+            measured = await tool.MeasureAsync(when, ct).ConfigureAwait(false);
         }
         else
         {
