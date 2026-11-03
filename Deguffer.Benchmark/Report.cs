@@ -106,7 +106,8 @@ internal static class Report
 
     /// <summary>
     /// Where a removal route's time went: the clean route's steps around their removals where it ran
-    /// any, then the removals' three passes, each summed over every removal of the run.
+    /// any, then the removals' three passes, each summed over every removal of the run. A removal runs
+    /// its passes beside each other, so they add to more than its time.
     /// </summary>
     private static void RemovalRows(StringBuilder text, RunSample first, RunSample[] later)
     {

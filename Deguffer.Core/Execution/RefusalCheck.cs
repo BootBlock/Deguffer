@@ -207,10 +207,10 @@ internal static class RefusalCheck
 
         if (presence is PathPresence.Present)
         {
-            var inventory = RemovalWalk.Gather(extended, keep, bounds, fs, ct);
+            var root = RemovalWalk.Gather(extended, keep, bounds, fs, ct);
             var counter = new RefusalCounter();
             var files = new ConcurrentBag<string>();
-            var candidates = inventory.Files;
+            List<WalkEntry> candidates = [.. root.InWalkOrder().SelectMany(folder => folder.Files)];
 
             // On threads of the check's own, never the pool's: each open blocks its thread on the disk.
             // See ListWorkers.

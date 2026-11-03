@@ -3,8 +3,7 @@ namespace Deguffer.Core.Scanning;
 /// <summary>
 /// Works through a list by index on as many threads as the caller allows: the calling thread, and the
 /// rest a <see cref="WorkerCrew"/>'s helpers, each taking the next index until none is left. For work
-/// that blocks on the disk: deleting files and folders, opening a file to ask whether it can go, and
-/// reading one.
+/// that blocks on the disk: opening a file to ask whether it can go, and reading one.
 ///
 /// <para><b>Not the thread pool.</b> Each item blocks its thread for as long as the disk takes. On the
 /// pool, a list bound to four threads is worked by as many as the pool has free, and the pool starts

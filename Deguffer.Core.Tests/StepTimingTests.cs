@@ -107,11 +107,12 @@ public sealed class StepTimingTests : IDisposable
     }
 
     /// <summary>
-    /// A removal's passes are inside its step, so together they take no longer than what the step spent
-    /// apart from its checks, and each counts the entries it handled.
+    /// A removal's passes are inside its step, so none takes longer than what the step spent apart from
+    /// its checks, and each counts the entries it handled. They run beside each other, so it is each
+    /// pass and not their sum that the step bounds.
     /// </summary>
     [Fact]
-    public async Task ARemovalsPassesSumToNoMoreThanItsStep()
+    public async Task NoPassOfARemovalTakesLongerThanItsStep()
     {
         var cache = _temp.CreateDirectory("cache");
         _temp.CreateFile(10, "cache", "a", "1.bin");
@@ -122,9 +123,11 @@ public sealed class StepTimingTests : IDisposable
         var outcome = Assert.Single(result.Steps);
         var passes = Assert.IsType<RemovalPasses>(outcome.Passes);
 
-        Assert.True(
-            Elapsed(passes) <= outcome.Timing.Acting,
-            $"the passes took {Elapsed(passes)}, longer than the {outcome.Timing.Acting} their step spent removing");
+        Assert.All(
+            new[] { passes.Walk, passes.Files, passes.Folders },
+            pass => Assert.True(
+                pass.Elapsed <= outcome.Timing.Acting,
+                $"a pass took {pass.Elapsed}, longer than the {outcome.Timing.Acting} its step spent removing"));
         Assert.Equal(6, passes.Walk.Entries);
         Assert.Equal(3, passes.Files.Entries);
         Assert.Equal(3, passes.Folders.Entries);
@@ -201,12 +204,14 @@ public sealed class StepTimingTests : IDisposable
     private static TimeSpan Elapsed(RemovalPasses passes) => passes.Walk.Elapsed + passes.Files.Elapsed + passes.Folders.Elapsed;
 
     /// <summary>
-    /// Each pass is timed over its own work and nothing else's. The clock moves a millisecond for each
-    /// listing, a second for each file and a minute for each folder, so a pass that took in its
-    /// neighbour's work shows it in a different unit.
+    /// Each pass is timed from its first piece of work to its last, so it spans all of its own work, and
+    /// no pass spans more than the removal moved the clock. The clock moves a millisecond for each
+    /// listing, a second for each file and a minute for each folder. The passes run beside each other,
+    /// so a pass may span some of its neighbours' work, and only these bounds hold however the threads
+    /// interleave.
     /// </summary>
     [Fact]
-    public async Task EachPassIsTimedOverItsOwnWork()
+    public async Task EachPassSpansItsOwnWork()
     {
         var clock = new ManualTimeProvider();
         var root = _temp.CreateDirectory("tree");
@@ -219,15 +224,22 @@ public sealed class StepTimingTests : IDisposable
         var outcome = await DirectoryRemover.RemoveAsync(root, MinimumAge.Off, progress: null, CancellationToken.None, fs, time: clock);
         var passes = Assert.IsType<RemovalPasses>(outcome.Passes);
 
+        var listings = TimeSpan.FromMilliseconds(fs.Listings);
+        var everything = listings + TimeSpan.FromSeconds(4) + TimeSpan.FromMinutes(3);
+
         Assert.True(outcome.RootRemoved);
-        Assert.Equal(new PassTiming(TimeSpan.FromMilliseconds(fs.Listings), 7), passes.Walk);
-        Assert.Equal(new PassTiming(TimeSpan.FromSeconds(4), 4), passes.Files);
-        Assert.Equal(new PassTiming(TimeSpan.FromMinutes(3), 3), passes.Folders);
+        Assert.Equal(7, passes.Walk.Entries);
+        Assert.Equal(4, passes.Files.Entries);
+        Assert.Equal(3, passes.Folders.Entries);
+        Assert.InRange(passes.Walk.Elapsed, listings, everything);
+        Assert.InRange(passes.Files.Elapsed, TimeSpan.FromSeconds(4), everything);
+        Assert.InRange(passes.Folders.Elapsed, TimeSpan.FromMinutes(3), everything);
     }
 
     /// <summary>
     /// A removal cancelled in its file pass reports the time that pass ran and the files it handled,
-    /// and a folder pass that never began.
+    /// and a folder pass that never began. The walk may still have been listing while the files went,
+    /// so the file pass spans no more than its own deletions and those listings.
     /// </summary>
     [Fact]
     public async Task ARemovalCancelledInItsFilePassTimesWhatRan()
@@ -249,7 +261,11 @@ public sealed class StepTimingTests : IDisposable
         var passes = Assert.IsType<RemovalPasses>(outcome.Passes);
 
         Assert.True(outcome.Interrupted);
-        Assert.Equal(new PassTiming(TimeSpan.FromSeconds(fs.FileDeletions), fs.FileDeletions), passes.Files);
+        Assert.Equal(fs.FileDeletions, passes.Files.Entries);
+        Assert.InRange(
+            passes.Files.Elapsed,
+            TimeSpan.FromSeconds(fs.FileDeletions),
+            TimeSpan.FromSeconds(fs.FileDeletions) + TimeSpan.FromMilliseconds(fs.Listings));
         Assert.InRange(passes.Files.Entries, 1, Files - 1);
         Assert.Equal(default, passes.Folders);
     }

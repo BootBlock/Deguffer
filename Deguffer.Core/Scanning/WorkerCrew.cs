@@ -11,8 +11,9 @@ namespace Deguffer.Core.Scanning;
 ///
 /// <para>The walk (<see cref="WalkWorkers{TState}"/>), the read of the file table
 /// (<see cref="Mft.MftReadPass"/>), the work through a list of files that blocks on the disk
-/// (<see cref="ListWorkers"/>) and the reads of a duplicate search, a crew a disk
-/// (<see cref="LaneWorkers{T}"/>), differ in what their work is and in when they are over. They
+/// (<see cref="ListWorkers"/>), the reads of a duplicate search, a crew a disk
+/// (<see cref="LaneWorkers{T}"/>), and a removal's deletions beside its walk
+/// (<see cref="Execution.TreeRemoval"/>) differ in what their work is and in when they are over. They
 /// agree in how a helper starts, ends, fails and is waited for, which is what this holds.</para>
 ///
 /// <para><b>A helper that finds no work ends</b> rather than holding a thread. The calling

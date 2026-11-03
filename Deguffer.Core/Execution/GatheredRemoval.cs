@@ -64,6 +64,31 @@ internal abstract record GatheredRemoval(string Extended, RemovalBounds Bounds)
         CancellationToken ct)
     {
         var extended = LongPath.Extended(path);
+
+        if (Probe(extended, keep, bounds, fs) is { } notATree)
+        {
+            return notATree;
+        }
+
+        // Walked to its end before anything is deleted, so the removal can be judged on everything it
+        // would act on, and then deleted from what the walk gathered.
+        var started = time.GetTimestamp();
+        var root = new RemovalFolder(extended, parent: null);
+        RemovalWalk.Visit(root, keep, bounds, fs, WalkTuning.Default, static _ => { }, ct);
+
+        var took = time.GetElapsedTime(started);
+        var entries = root.InWalkOrder().Sum(folder => 1L + folder.Files.Count + folder.Links.Count);
+
+        return new Tree(extended, bounds, root, new PassTiming(took, entries));
+    }
+
+    /// <summary>
+    /// What stands at <paramref name="extended"/> where it is not a directory to walk: nothing, a path
+    /// Windows will not describe, a file, or a link. Null for a directory, which a removal walks.
+    /// </summary>
+    /// <param name="extended">The path, in the extended-length form §6.3 requires.</param>
+    public static GatheredRemoval? Probe(string extended, MinimumAge keep, RemovalBounds bounds, IFileSystem fs)
+    {
         var presence = fs.ProbeDirectory(extended);
 
         // The directory probe answers Absent for a file, so absence is decided by the entry probe. A
@@ -109,16 +134,7 @@ internal abstract record GatheredRemoval(string Extended, RemovalBounds Bounds)
             return new Link(extended, bounds, kept);
         }
 
-        // Two passes: gather the tree first so progress is a real fraction rather than a guess,
-        // then delete depth-first. Gathering also means a mid-run enumeration failure cannot
-        // leave us deleting a partially-understood tree.
-        var started = time.GetTimestamp();
-        var inventory = RemovalWalk.Gather(extended, keep, bounds, fs, ct);
-        var walk = new PassTiming(
-            time.GetElapsedTime(started),
-            inventory.Files.Count + inventory.Directories.Count + inventory.Links.Count);
-
-        return new Tree(extended, bounds, inventory, walk);
+        return null;
     }
 
     /// <summary>Nothing stands at the path, so nothing inside it can be lost.</summary>
@@ -148,20 +164,62 @@ internal abstract record GatheredRemoval(string Extended, RemovalBounds Bounds)
         public override bool HoldsRecent => IsKept;
     }
 
-    /// <summary>A directory, and everything its walk gathered.</summary>
-    /// <param name="Walk">
-    /// How long the walk took and how many entries it gathered, the first of the removal's passes. See
-    /// <see cref="RemovalPasses"/>.
-    /// </param>
-    public sealed record Tree(string Extended, RemovalBounds Bounds, RemovalInventory Inventory, PassTiming Walk)
-        : GatheredRemoval(Extended, Bounds)
+    /// <summary>
+    /// A directory, and everything its walk gathered, folder by folder. Deleted once, by
+    /// <see cref="DirectoryRemover.DeleteAsync"/>: each folder counts down what is left in it as the
+    /// deletion takes it.
+    /// </summary>
+    public sealed record Tree : GatheredRemoval
     {
-        public override IReadOnlyList<string> MailStores => Inventory.MailStores;
+        /// <param name="walk">
+        /// How long the walk took and how many entries it gathered, the first of the removal's passes.
+        /// See <see cref="RemovalPasses"/>.
+        /// </param>
+        public Tree(string extended, RemovalBounds bounds, RemovalFolder root, PassTiming walk)
+            : base(extended, bounds)
+        {
+            Root = root;
+            Walk = walk;
 
-        public override IReadOnlyList<string> Unlisted => Inventory.Unlisted;
+            var mailStores = new List<string>();
+            var unlisted = new List<string>();
+            var notFolders = new List<string>();
 
-        public override IReadOnlyList<string> NotFolders => Inventory.NotFolders;
+            foreach (var folder in root.InWalkOrder())
+            {
+                mailStores.AddRange(folder.MailStores);
+                HoldsRecent |= folder.Kept > 0 || folder.RecentFolders > 0;
 
-        public override bool HoldsRecent => Inventory.Kept > 0 || Inventory.RecentFolders > 0;
+                switch (folder.Refusal)
+                {
+                    case ListingRefusal.None:
+                        break;
+
+                    case ListingRefusal.NotADirectory:
+                        notFolders.Add(folder.Path);
+                        break;
+
+                    default:
+                        unlisted.Add(folder.Path);
+                        break;
+                }
+            }
+
+            (MailStores, Unlisted, NotFolders) = (mailStores, unlisted, notFolders);
+        }
+
+        /// <summary>The directory's own folder, from which every folder below it is reached.</summary>
+        public RemovalFolder Root { get; }
+
+        /// <summary>How long the walk took, and how many entries it gathered.</summary>
+        public PassTiming Walk { get; }
+
+        public override IReadOnlyList<string> MailStores { get; }
+
+        public override IReadOnlyList<string> Unlisted { get; }
+
+        public override IReadOnlyList<string> NotFolders { get; }
+
+        public override bool HoldsRecent { get; }
     }
 }
