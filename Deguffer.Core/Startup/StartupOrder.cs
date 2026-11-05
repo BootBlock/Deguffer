@@ -1,7 +1,7 @@
 namespace Deguffer.Core.Startup;
 
 /// <summary>
-/// What the Startup page orders its entries by (§7.5). <see cref="Name"/> is the shipped order.
+/// What the Startup page orders its entries by (§7.5). <see cref="State"/> is the shipped order.
 /// Nothing orders by the memory a program uses: the page never ranks an entry by what it costs (§2).
 ///
 /// <para>The values are ordinal, and the page's order picker lists them in this order. They are
@@ -52,7 +52,7 @@ public static class StartupRowOrder
     /// arrives as an order nothing can sort by or show.
     /// </summary>
     public static StartupOrder Known(StartupOrder order) =>
-        Enum.IsDefined(order) ? order : StartupOrder.Name;
+        Enum.IsDefined(order) ? order : StartupOrder.State;
 
     /// <summary><paramref name="direction"/> if a member names it, and otherwise ascending, for the reason <see cref="Known(StartupOrder)"/> gives.</summary>
     public static StartupOrderDirection Known(StartupOrderDirection direction) =>

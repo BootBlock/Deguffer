@@ -384,8 +384,11 @@ points this out and links to the entry.
 
 Disabling an entry records that it should not start, in the same place and in the same form that
 Task Manager uses, so Task Manager and Settings show the change too. The entry, its shortcut and its
-program are left in place, and Enable reverses the change. The list is in name order, and you can
-sort it either way round by whether each entry starts, where it comes from, or its publisher.
+program are left in place, and Enable reverses the change. The list opens with the entries that
+start first, and you can sort it either way round by name, by whether each entry starts, where it
+comes from, or its publisher. Right-click an entry, or press Shift+F10, to disable or enable it, open
+its program's file location or properties, show a Startup folder entry in its folder, or copy what it
+runs.
 Deguffer only changes a record in a form it has seen Windows write. A packaged app's startup task
 can only be changed by the app itself or in Settings, so for those the page offers Settings' own
 Startup page instead. The page never suggests disabling anything because of how much memory a

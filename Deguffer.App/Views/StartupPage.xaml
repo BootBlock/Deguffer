@@ -173,9 +173,63 @@
         <ListView x:Name="EntryList" Grid.Row="4"
                   AutomationProperties.Name="What starts at sign-in"
                   SelectionMode="Single"
+                  KeyboardAcceleratorPlacementMode="Hidden"
                   SelectionChanged="OnSelectionChanged"
                   ItemsSource="{x:Bind ViewModel.Rows}"
                   ItemTemplate="{StaticResource EntryTemplate}"
-                  ItemContainerStyle="{StaticResource EntryContainer}" />
+                  ItemContainerStyle="{StaticResource EntryContainer}">
+            <ListView.ContextFlyout>
+                <!-- The row menu (§7.5), opened by hand from the page's code on the row it lands on,
+                     for the reason Explore's is: an attached ContextFlyout on a ListView never appears.
+                     Declared here rather than as a page resource so the x:Bind below has an item to
+                     set when the page loads. The keys are on the list rather than on the items,
+                     because an item's accelerator fires only while the menu is open, and the items
+                     carry their text so the menu still teaches them. -->
+                <MenuFlyout x:Name="EntryMenu">
+                    <MenuFlyoutItem Text="{x:Bind ViewModel.ChangeLabel, Mode=OneWay}"
+                                    Command="{x:Bind ViewModel.ChangeCommand}">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon Glyph="{x:Bind ViewModel.ChangeGlyph, Mode=OneWay}" />
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+
+                    <MenuFlyoutSeparator />
+
+                    <MenuFlyoutItem Text="Open file location"
+                                    Command="{x:Bind ViewModel.Menu.RevealProgramCommand}"
+                                    KeyboardAcceleratorTextOverride="Ctrl+Enter">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon Glyph="&#xEC50;" />
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+
+                    <MenuFlyoutItem Text="Show in Startup folder"
+                                    Command="{x:Bind ViewModel.Menu.RevealItemCommand}"
+                                    Visibility="{x:Bind ViewModel.Menu.HasItem, Mode=OneWay}">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon Glyph="&#xE8B7;" />
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+
+                    <MenuFlyoutItem Text="Properties"
+                                    Command="{x:Bind ViewModel.Menu.PropertiesCommand}"
+                                    KeyboardAcceleratorTextOverride="Alt+Enter">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon Glyph="&#xE946;" />
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+
+                    <MenuFlyoutSeparator />
+
+                    <MenuFlyoutItem Text="Copy command"
+                                    Command="{x:Bind ViewModel.Menu.CopyCommand}"
+                                    KeyboardAcceleratorTextOverride="Ctrl+C">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon Glyph="&#xE8C8;" />
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+                </MenuFlyout>
+            </ListView.ContextFlyout>
+        </ListView>
     </Grid>
 </Page>

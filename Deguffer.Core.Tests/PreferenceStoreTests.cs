@@ -283,8 +283,8 @@ public class PreferenceStoreTests
         Assert.False(AppPreferences.Default.ShowAlreadyClear);
         Assert.Equal(StorageOrder.Size, AppPreferences.Default.StorageOrder);
 
-        // §7.5 ships the Startup list in name order.
-        Assert.Equal(StartupOrder.Name, AppPreferences.Default.StartupOrder);
+        // §7.5 ships the Startup list with the entries that start first, then the disabled ones.
+        Assert.Equal(StartupOrder.State, AppPreferences.Default.StartupOrder);
         Assert.Equal(StartupOrderDirection.Ascending, AppPreferences.Default.StartupOrderDirection);
     }
 
