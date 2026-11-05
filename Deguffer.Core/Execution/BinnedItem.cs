@@ -3,22 +3,32 @@ using System.Runtime.InteropServices;
 namespace Deguffer.Core.Execution;
 
 /// <summary>
-/// Hears where the shell put the item it moved to the Recycle Bin: <c>PostDeleteItem</c> hands back
-/// the item as it now is in the bin. Measured on 2026-10-09: the item it names is in the account's
-/// <c>$Recycle.Bin</c> folder on the same volume, with the file ID the file had before, because the
-/// move is a rename on that volume.
+/// Hears what the shell did to one item it was asked to move to the Recycle Bin: the item is queued
+/// with this as its own sink, so every notification here is about it. <c>PostDeleteItem</c> hands
+/// back the item as it now is in the bin. Measured on 2026-10-09: the item it names is in the
+/// account's <c>$Recycle.Bin</c> folder on the same volume, with the file ID the file had before,
+/// because the move is a rename on that volume.
 ///
-/// <para>Every other notification is answered with <c>S_OK</c> and ignored. One item is heard,
-/// because <see cref="ShellRecycleBin"/> recycles one item per operation.</para>
+/// <para><b>It stops the batch when the removal is cancelled.</b> <c>PreDeleteItem</c> answers
+/// <c>ERROR_CANCELLED</c> once the token is cancelled. Measured on 2026-11-05: the shell then tells
+/// this item it was cancelled, leaves it where it was, and reaches no item after it.</para>
+///
+/// <para>Every other notification is answered with <c>S_OK</c> and ignored.</para>
 /// </summary>
 [ComVisible(true)]
-internal sealed class BinnedItem : IFileOperationProgressSink
+internal sealed class BinnedItem(CancellationToken ct) : IFileOperationProgressSink
 {
     /// <summary><c>SIGDN_FILESYSPATH</c>: the item's path in the file system.</summary>
     private const uint FileSystemPath = 0x8005_8000;
 
+    /// <summary><c>HRESULT_FROM_WIN32(ERROR_CANCELLED)</c>.</summary>
+    private const int Cancelled = unchecked((int)0x8007_04C7);
+
     /// <summary>Where the bin put the item, or null where the shell did not say.</summary>
     public string? Path { get; private set; }
+
+    /// <summary>Whether the shell reported moving the item and handed back the item in the bin.</summary>
+    public bool Moved { get; private set; }
 
     /// <summary>
     /// Whether the shell reported deleting an item and handed back no item in the bin, which
@@ -26,10 +36,34 @@ internal sealed class BinnedItem : IFileOperationProgressSink
     /// </summary>
     public bool DeletedOutright { get; private set; }
 
+    /// <summary>Whether this sink stopped the batch at this item because the removal was cancelled.</summary>
+    public bool StoppedHere { get; private set; }
+
+    /// <summary>The <c>HRESULT</c> the shell reported failing to move the item with, or null.</summary>
+    public int? Failure { get; private set; }
+
+    /// <summary>Why the shell would not queue the item at all, or null where it did.</summary>
+    public string? Refusal { get; private set; }
+
+    /// <summary>Records that the shell would not queue the item, for <paramref name="why"/>.</summary>
+    public void Refuse(string why) => Refusal = why;
+
+    public int PreDeleteItem(uint flags, IShellItem item)
+    {
+        if (!ct.IsCancellationRequested)
+        {
+            return 0;
+        }
+
+        StoppedHere = true;
+        return Cancelled;
+    }
+
     public int PostDeleteItem(uint flags, IShellItem item, int result, IShellItem? created)
     {
         if (result < 0)
         {
+            Failure = result;
             return 0;
         }
 
@@ -38,6 +72,8 @@ internal sealed class BinnedItem : IFileOperationProgressSink
             DeletedOutright = true;
             return 0;
         }
+
+        Moved = true;
 
         // An item with no path in the file system leaves the answer unknown, which a caller reads as a
         // move it cannot confirm, never as one it can.
@@ -74,7 +110,6 @@ internal sealed class BinnedItem : IFileOperationProgressSink
 
     public int PostCopyItem(uint flags, IShellItem item, IShellItem destination, IntPtr newName, int result, IShellItem? created) => 0;
 
-    public int PreDeleteItem(uint flags, IShellItem item) => 0;
 
     public int PreNewItem(uint flags, IShellItem destination, IntPtr newName) => 0;
 

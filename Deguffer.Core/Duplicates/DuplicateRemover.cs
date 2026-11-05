@@ -22,9 +22,9 @@ internal sealed record PlannedGroup(DuplicateGroup Group, IReadOnlyList<Duplicat
 /// refuses every refused copy and every mark that would leave a group with no copy that can be
 /// kept.</para>
 ///
-/// <para><b>Per copy, immediately before it goes:</b> a copy the group keeps is held open, refusing
-/// every other program's write, rename and delete, until the group's removals have finished; the copy
-/// to remove is held open refusing write (<see cref="HeldCopy"/>); both are the files the search
+/// <para><b>Per copy, before it goes:</b> a copy the group keeps is held open, refusing every other
+/// program's write, rename and delete, until the group's removals have finished; the copy to remove
+/// is held open refusing write until it goes (<see cref="HeldCopy"/>); both are the files the search
 /// found, with the same identity, length, last-modified time and attributes, neither online-only; and
 /// they hold the same bytes and the same named streams apart from <c>Zone.Identifier</c>
 /// (<see cref="CopyComparison"/>). The two are different files by construction: the copy kept is
@@ -32,10 +32,11 @@ internal sealed record PlannedGroup(DuplicateGroup Group, IReadOnlyList<Duplicat
 /// its own file. A copy that fails any check stays, and the result says which.</para>
 ///
 /// <para><b>Then the removal, files only.</b> Permanently through the handle that was compared, so
-/// nothing put at the path since is what goes; or to the Recycle Bin, whose item is then identified
-/// and must be the file compared. Where it is not, or that cannot be told, the run stops there and
-/// names what went to the bin, where it can still be restored. A copy the bin refuses is never
-/// deleted outright in its place.</para>
+/// nothing put at the path since is what goes; or to the Recycle Bin, in batches
+/// (<see cref="DuplicateRecycleBatch"/>), each copy described again as its batch goes and the bin's
+/// item for it then identified, which must be the file compared. Where it is not, or that cannot be
+/// told, the run stops once that batch has gone and names what went to the bin, where it can still
+/// be restored. A copy the bin refuses is never deleted outright in its place.</para>
 ///
 /// <para><b>§5.6 afterwards</b>: every copy left in a group is still there by its file ID
 /// (<see cref="CopySurvival"/>), and everything beside each removed copy by its exact name
@@ -163,6 +164,14 @@ public sealed class DuplicateRemover
         List<CopyRemoval> outcomes = [.. dropped];
         var cancelled = false;
         var stopped = false;
+        using var batch = new DuplicateRecycleBatch(_bin, _files);
+
+        void Go()
+        {
+            var went = batch.Go(outcomes, ct);
+            stopped |= went.Stopped;
+            cancelled |= went.Cancelled;
+        }
 
         foreach (var planned in plan)
         {
@@ -177,7 +186,7 @@ public sealed class DuplicateRemover
 
             var (kept, why) = HoldKept(planned, keeping);
 
-            using (kept)
+            try
             {
                 foreach (var copy in going)
                 {
@@ -194,7 +203,7 @@ public sealed class DuplicateRemover
                     {
                         outcome = kept is null
                             ? new CopyRemoval(copy, RemovalCheck.NoKeptCopy, why!)
-                            : RemoveOne(copy, kept, mode, ct);
+                            : RemoveOne(copy, kept, mode, batch, outcomes.Count, ct);
                     }
                     catch (OperationCanceledException)
                     {
@@ -205,9 +214,25 @@ public sealed class DuplicateRemover
 
                     outcomes.Add(outcome);
                     stopped |= outcome.StopsTheRun;
+
+                    if (batch.IsFull)
+                    {
+                        Go();
+                    }
+                }
+            }
+            finally
+            {
+                // The copy kept stays held until every copy of its group compared with it has gone.
+                if (kept is not null && !batch.TakeOver(kept))
+                {
+                    kept.Dispose();
                 }
             }
         }
+
+        // Copies compared before a cancel or a stop go too, as they would have gone before it one at a time.
+        Go();
 
         HashSet<FileIdentity> removed = [.. outcomes.Where(outcome => outcome.Went).Select(outcome => outcome.Copy.Identity)];
         List<VerificationCheck> checks =
@@ -250,7 +275,14 @@ public sealed class DuplicateRemover
             : $"No copy this group keeps could be held open and found unchanged since the search, so nothing in it was removed. {first}");
     }
 
-    private CopyRemoval RemoveOne(DuplicateCandidate copy, HeldCopy kept, ExploreRemovalMode mode, CancellationToken ct)
+    /// <summary>
+    /// Holds <paramref name="copy"/>, compares it with <paramref name="kept"/>, and deletes it, or
+    /// adds it to <paramref name="batch"/> to go to the Recycle Bin with the copies around it. A copy
+    /// added is answered as not reached until the batch goes and writes its outcome at
+    /// <paramref name="slot"/>.
+    /// </summary>
+    private CopyRemoval RemoveOne(
+        DuplicateCandidate copy, HeldCopy kept, ExploreRemovalMode mode, DuplicateRecycleBatch batch, int slot, CancellationToken ct)
     {
         var (held, check, why) = HeldCopy.Hold(copy, HeldFor.Removing, _files, _open);
 
@@ -259,24 +291,34 @@ public sealed class DuplicateRemover
             return new CopyRemoval(copy, check, why);
         }
 
-        using (held)
+        ComparedCopy? compared = null;
+
+        try
         {
             if (CopyComparison.Compare(kept.Content, kept.Copy.Length, held.Content, copy.Length, out var streams, ct) is { } differs)
             {
                 return new CopyRemoval(copy, differs.Check, differs.Why);
             }
 
-            // Sharing refuses a write, not a change to times or attributes, nor a stream added
-            // beside the content, so both are described again once they are compared.
-            if ((kept.Recheck(_files) ?? held.Recheck(_files)) is not null
-                || CopyComparison.StreamsOf(held.Content) is not { } after
-                || !CopyComparison.SameStreams(streams, after))
+            compared = new ComparedCopy(held, kept, streams);
+        }
+        finally
+        {
+            if (compared is null)
             {
-                return new CopyRemoval(copy, RemovalCheck.Changed,
-                    "It or the copy kept changed while they were compared, so the comparison no longer shows they are the same.");
+                held.Dispose();
             }
+        }
 
-            return mode == ExploreRemovalMode.Permanent ? Delete(copy, held) : Recycle(copy, held);
+        if (mode == ExploreRemovalMode.RecycleBin)
+        {
+            batch.Add(compared, slot);
+            return NotReached(copy);
+        }
+
+        using (compared)
+        {
+            return compared.Changed(_files) ?? Delete(copy, held);
         }
     }
 
@@ -304,74 +346,8 @@ public sealed class DuplicateRemover
     /// The display form, normalised: the shell namespace refuses the extended-length prefix §6.3
     /// requires everywhere else. <see cref="IRecycleBin"/> says why that is a second seam.
     /// </summary>
-    private static string BinPath(DuplicateCandidate copy) => LongPath.Display(LongPath.Extended(copy.Path));
+    internal static string BinPath(DuplicateCandidate copy) => LongPath.Display(LongPath.Extended(copy.Path));
 
-    /// <summary>
-    /// Moves the copy to the Recycle Bin, then identifies what the bin received: it must be the file
-    /// that was compared. The copy is still held, sharing deleting, so the shell can move it.
-    ///
-    /// <para>Identified through the handle the copy was compared through, which follows the file it is
-    /// open on wherever it is moved: measured on 2026-10-09 on NTFS, FAT32 and exFAT, and on an NTFS
-    /// volume mounted in a folder, the handle's final path was the bin item the shell named. A file's number cannot do it everywhere, because
-    /// FAT32 and exFAT number a file by where its entry lies, and a move into the bin changes it. Where
-    /// the volume keeps a file's number, the item is identified by it as well.</para>
-    /// </summary>
-    private CopyRemoval Recycle(DuplicateCandidate copy, HeldCopy held)
-    {
-        var recycled = _bin.Recycle(BinPath(copy));
-
-        if (!recycled.Removed)
-        {
-            return new CopyRemoval(copy, RemovalCheck.BinRefused,
-                $"{recycled.Message ?? "Windows would not move it to the Recycle Bin."} Deguffer never deletes a copy outright in its place.");
-        }
-
-        if (recycled.DeletedOutright)
-        {
-            return new CopyRemoval(copy, RemovalCheck.DeletedOutright,
-                $"Windows deleted '{copy.Path}' outright rather than moving it to the Recycle Bin, so it cannot be restored "
-                + "from there, and Deguffer stopped.");
-        }
-
-        if (recycled.Binned is not { } binned)
-        {
-            return new CopyRemoval(copy, RemovalCheck.BinUnconfirmed,
-                $"Windows moved '{copy.Path}' to the Recycle Bin and did not say where, so Deguffer cannot show the bin received "
-                + "the file it compared, and stopped. Restore it from the Recycle Bin if it is not the copy you meant to remove.");
-        }
-
-        var receivedAnother = new CopyRemoval(copy, RemovalCheck.BinReceivedAnother,
-            $"The Recycle Bin received a file from '{copy.Path}' that is not the copy Deguffer compared, so it stopped. "
-            + "That file is in the Recycle Bin, where it can be restored, and the copy compared is not.");
-
-        if (FileInformation.FinalPathOf(held.Content) is not { } heldAt)
-        {
-            return new CopyRemoval(copy, RemovalCheck.BinUnconfirmed,
-                $"Windows moved '{copy.Path}' to the Recycle Bin, and would not say where the file Deguffer compared is now, so "
-                + "Deguffer cannot show the bin received it, and stopped. Restore it from the Recycle Bin if it is not the copy you meant to remove.");
-        }
-
-        if (!string.Equals(LongPath.Display(heldAt), binned, StringComparison.Ordinal))
-        {
-            return receivedAnother;
-        }
-
-        if (!copy.Volume.KeepsFileNumbers)
-        {
-            return new CopyRemoval(copy, RemovalCheck.Removed, "Moved to the Recycle Bin.");
-        }
-
-        return _files.Describe(binned, copy.Route) switch
-        {
-            { Description: { } item } when item.Identity == copy.Identity =>
-                new CopyRemoval(copy, RemovalCheck.Removed, "Moved to the Recycle Bin."),
-            { Description: not null } => receivedAnother,
-            _ => new CopyRemoval(copy, RemovalCheck.BinUnconfirmed,
-                $"Windows moved '{copy.Path}' to the Recycle Bin, and would not describe the item it put there, so Deguffer "
-                + "cannot show it is the file it compared, and stopped. Restore it from the Recycle Bin if it is not the copy you meant to remove."),
-        };
-    }
-
-    private static CopyRemoval NotReached(DuplicateCandidate copy) =>
+    internal static CopyRemoval NotReached(DuplicateCandidate copy) =>
         new(copy, RemovalCheck.NotReached, "The removal stopped before it reached this copy, so it is still where it was.");
 }

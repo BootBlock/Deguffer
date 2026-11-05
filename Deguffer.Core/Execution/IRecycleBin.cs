@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Execution;
@@ -12,6 +11,17 @@ namespace Deguffer.Core.Execution;
 /// </param>
 public sealed record RecycleOutcome(bool Removed, string? Message = null)
 {
+    /// <summary>
+    /// The outcome of an item the removal was cancelled before reaching. It is where it was, and a
+    /// caller reports it as not reached rather than as refused.
+    /// </summary>
+    public static RecycleOutcome NotReached { get; } = new(
+        Removed: false,
+        "The removal was cancelled before Windows moved this to the Recycle Bin, so it is still where it was.")
+    {
+        Cancelled = true,
+    };
+
     /// <summary>
     /// Where the bin put the item, as the shell said once it had moved it, or null where the shell
     /// did not say. A duplicate removal identifies what is there, to check that the file the bin
@@ -28,6 +38,12 @@ public sealed record RecycleOutcome(bool Removed, string? Message = null)
     public bool DeletedOutright { get; init; }
 
     /// <summary>
+    /// Whether the removal was cancelled before the item was moved (<see cref="NotReached"/>). Nothing
+    /// happened to it.
+    /// </summary>
+    public bool Cancelled { get; init; }
+
+    /// <summary>
     /// What the user is told about an item the bin cannot take, for <paramref name="why"/>
     /// (<see cref="IRecycleBin.WhyItCannotTake"/>). Nothing was handed to the shell, so it says so.
     /// </summary>
@@ -36,7 +52,7 @@ public sealed record RecycleOutcome(bool Removed, string? Message = null)
 }
 
 /// <summary>
-/// Moving one item to the Recycle Bin, behind an interface for the reason
+/// Moving items to the Recycle Bin, behind an interface for the reason
 /// <see cref="IFileSystem"/> is: §6.3 is a requirement about the <em>form</em> of the path that
 /// crosses into Win32, and no outcome of a deletion can demonstrate it.
 ///
@@ -60,12 +76,33 @@ public sealed record RecycleOutcome(bool Removed, string? Message = null)
 /// </summary>
 public interface IRecycleBin
 {
-    /// <param name="path">
-    /// Fully qualified, fully resolved, and without the extended-length prefix. The caller
-    /// normalises; this does not, because a seam that silently corrected its input would make the
-    /// §6.3 assertion above unfalsifiable.
+    /// <summary>
+    /// The most items one <see cref="Recycle"/> call takes. Each costs the shell an operation of its
+    /// own, so a removal of thousands hands them over in batches: measured on 2026-11-05, 300 small
+    /// files took 8.3 seconds one operation each and 2.2 seconds in one. The bound is for what a batch
+    /// widens. Every item is asked whether the bin can take it before the batch goes, so the last item
+    /// moved was asked that the batch's length earlier; and a duplicate removal holds every copy of a
+    /// batch open, with the copy each of their groups keeps, until the batch has gone.
+    /// </summary>
+    const int LargestBatch = 128;
+
+    /// <summary>
+    /// Moves each of <paramref name="paths"/> to the Recycle Bin, in one operation, answering what
+    /// became of each, in the same order. Each item is asked again whether the bin can take it
+    /// (<see cref="WhyItCannotTake"/>) and is refused without reaching the shell where it cannot. A
+    /// refusal of one item does not stop the others.
+    /// </summary>
+    /// <param name="paths">
+    /// At most <see cref="LargestBatch"/>, each fully qualified, fully resolved, and without the
+    /// extended-length prefix. The caller normalises; this does not, because a seam that silently
+    /// corrected its input would make the §6.3 assertion above unfalsifiable.
     /// </param>
-    RecycleOutcome Recycle(string path);
+    /// <param name="ct">
+    /// Stops the batch before its next item, which, with every item after it, is answered
+    /// <see cref="RecycleOutcome.NotReached"/>. Never thrown: what was moved before it is answered as
+    /// moved, so a caller can report it and verify it.
+    /// </param>
+    IReadOnlyList<RecycleOutcome> Recycle(IReadOnlyList<string> paths, CancellationToken ct = default);
 
     /// <summary>
     /// Why the bin cannot take the item at <paramref name="path"/> as things are now, or null where
@@ -76,153 +113,4 @@ public interface IRecycleBin
     /// <param name="path">In the form <see cref="Recycle"/> takes.</param>
     /// <param name="ct">Stops the walk a folder needs, which is of everything inside it.</param>
     string? WhyItCannotTake(string path, CancellationToken ct = default);
-}
-
-/// <summary>
-/// The real Recycle Bin, through the shell's <c>IFileOperation</c>.
-///
-/// <para><c>IFileOperation</c> rather than a flag on <see cref="DirectoryRemover"/>, and the
-/// distinction is a safety one rather than a convenience. That remover deletes outright and must go
-/// on doing so: it exists for the ten-gigabyte package cache, and a Recycle Bin that receives ten
-/// gigabytes has reclaimed nothing at all. §8's fourth question settles that for Storage. §7.1
-/// settles the other half for Explore — the one file a user picked out of a picture is exactly the
-/// case where recovery is available, and where it is available it is not optional.</para>
-///
-/// <para>Stateless, so one instance serves the process (G5). Each call makes and releases its own
-/// COM objects, because a shell operation object is single-use once
-/// <c>PerformOperations</c> has run.</para>
-/// </summary>
-public sealed class ShellRecycleBin : IRecycleBin
-{
-    public static ShellRecycleBin Default { get; } = new(Perform, RecycleBinReach.Default);
-
-    // FOF_SILENT | FOF_NOCONFIRMATION | FOF_ALLOWUNDO | FOF_NOERRORUI, with FOFX_RECYCLEONDELETE
-    // and FOFX_EARLYFAILURE.
-    //
-    // ALLOWUNDO *asks* for the Recycle Bin; the shell falls back to deleting outright whenever the
-    // item cannot go there. Ordinarily it warns first, and the three suppression flags below are
-    // exactly what silences that warning. FOFX_RECYCLEONDELETE was set to make the operation fail
-    // instead, and measured on 2026-10-09 it does not: an item longer than its volume's bin limit,
-    // anything sent to a bin set to keep nothing, and a path of MAX_PATH or more were each deleted
-    // outright, the operation reporting success. So RecycleBinReach is asked first, and the
-    // progress sink's word on what reached the bin is read afterwards. Without either, this route
-    // would report "moved to the Recycle Bin" about a file that no longer exists anywhere, and §5.6
-    // would not catch it because the siblings did survive. Explore ranks by size and points the
-    // user at the largest thing on the drive, which is precisely what exceeds a bin's limit.
-    //
-    // The suppression flags cover the shell's own windows: this app has already asked the user, and
-    // a second modal dialog it does not own — parentless, because handing an HWND down here would
-    // put a UI concept in Core — is a dialog appearing behind the window that caused it.
-    //
-    // FOFX_EARLYFAILURE stops at the first refusal rather than carrying on. The caller recycles one
-    // item per call, so what it buys is that a failure is reported as one rather than swallowed into
-    // an aborted flag.
-    private const uint OperationFlags =
-        0x0004 | 0x0010 | 0x0040 | 0x0400 | 0x00080000 | 0x00100000;
-
-    private static readonly Guid FileOperationClass = new("3ad05575-8857-4850-9277-11b85bdb8e09");
-
-    private readonly Func<string, RecycleOutcome> _perform;
-    private readonly RecycleBinReach _reach;
-
-    /// <param name="perform">
-    /// The shell's move of one item. A seam, so a test can show that an item the bin cannot take
-    /// never reaches the shell without asking the shell to delete anything.
-    /// </param>
-    /// <param name="reach">What the bin can take, asked before the shell is.</param>
-    internal ShellRecycleBin(Func<string, RecycleOutcome> perform, RecycleBinReach reach)
-    {
-        _perform = perform;
-        _reach = reach;
-    }
-
-    public string? WhyItCannotTake(string path, CancellationToken ct = default) => _reach.WhyNot(path, ct);
-
-    public RecycleOutcome Recycle(string path)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
-
-        if (WhyItCannotTake(path) is { } cannotTake)
-        {
-            return new RecycleOutcome(Removed: false, RecycleOutcome.CannotTake(cannotTake));
-        }
-
-        // The shell's apartment requirement, met on a thread of our own rather than by initialising
-        // whatever thread the caller arrived on. Core is called from a thread-pool thread by every
-        // caller it has, and CoInitialize on one of those outlives the call — it would change the
-        // apartment of a thread the runtime hands to something else next.
-        RecycleOutcome outcome = new(Removed: false, "The Recycle Bin operation did not run.");
-
-        var thread = new Thread(() => outcome = _perform(path));
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        thread.Join();
-
-        return outcome;
-    }
-
-    private static RecycleOutcome Perform(string path)
-    {
-        object? operation = null;
-
-        try
-        {
-            var itemId = typeof(IShellItem).GUID;
-            ShellNative.SHCreateItemFromParsingName(path, IntPtr.Zero, ref itemId, out var item);
-
-            operation = Activator.CreateInstance(Type.GetTypeFromCLSID(FileOperationClass)!);
-            var file = (IFileOperation)operation!;
-
-            var binned = new BinnedItem();
-
-            file.SetOperationFlags(OperationFlags);
-            file.Advise(binned, out _);
-            file.DeleteItem(item, IntPtr.Zero);
-            file.PerformOperations();
-            file.GetAnyOperationsAborted(out var aborted);
-
-            return Outcome(aborted, binned);
-        }
-        catch (COMException ex)
-        {
-            // Every refusal the shell has arrives this way: a path it will not parse, a volume with
-            // no Recycle Bin, an item too large for the bin's quota, and a file something else holds
-            // open. They are told apart by HRESULT and none of them is this code's to fix, so the
-            // number goes in the message rather than being mapped to a guess.
-            return new RecycleOutcome(
-                Removed: false,
-                $"Windows would not move this to the Recycle Bin (0x{ex.HResult:X8}). It is still where it was.");
-        }
-        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or InvalidCastException)
-        {
-            // A path the shell's own parser rejected before it got as far as an HRESULT, or a
-            // machine where the file-operation class is not registered.
-            return new RecycleOutcome(
-                Removed: false,
-                $"Windows would not move this to the Recycle Bin: {ex.Message} It is still where it was.");
-        }
-        finally
-        {
-            if (operation is not null)
-            {
-                Marshal.FinalReleaseComObject(operation);
-            }
-        }
-    }
-
-    /// <summary>
-    /// What a finished operation did, as the progress sink saw it. An outright deletion is answered
-    /// first, because whatever else the operation says, the item is gone and not in the bin.
-    /// </summary>
-    internal static RecycleOutcome Outcome(bool aborted, BinnedItem binned) =>
-        binned.DeletedOutright
-            ? new RecycleOutcome(
-                Removed: true,
-                "Windows deleted this outright rather than moving it to the Recycle Bin, so it cannot be restored from there.")
-            {
-                DeletedOutright = true,
-            }
-            : aborted
-                ? new RecycleOutcome(Removed: false, "Windows stopped before moving this to the Recycle Bin.")
-                : new RecycleOutcome(Removed: true) { Binned = binned.Path };
 }

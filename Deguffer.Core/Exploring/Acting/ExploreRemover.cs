@@ -189,8 +189,9 @@ public sealed record ExploreRemovalReport(
 /// <c>C:\Windows</c>, and a WinUI shell is exactly where that class of mistake cannot be
 /// tested.</para>
 ///
-/// <para>It removes one item at a time and never more than it was handed. §7.1 has no bulk action
-/// and no pre-selection: what arrives here is what the user picked out by hand.</para>
+/// <para>It never removes more than it was handed. §7.1 has no bulk action and no pre-selection:
+/// what arrives here is what the user picked out by hand. A permanent removal takes one item at a
+/// time; the Recycle Bin takes them in batches (<see cref="ExploreRecycler"/>).</para>
 /// </summary>
 public static class ExploreRemover
 {
@@ -243,21 +244,9 @@ public static class ExploreRemover
 
         try
         {
-            foreach (var item in allowed)
-            {
-                ct.ThrowIfCancellationRequested();
-
-                var outcome = await RemoveOneAsync(item, mode, bin, fs, ct).ConfigureAwait(false);
-                outcomes.Add(outcome);
-
-                // A folder removal returns what it did rather than throwing, so the item it stopped in
-                // is reported with the rest.
-                if (outcome.Interrupted)
-                {
-                    cancelled = true;
-                    break;
-                }
-            }
+            cancelled = mode == ExploreRemovalMode.RecycleBin
+                ? await ExploreRecycler.RecycleAsync(allowed, bin, fs, outcomes, ct).ConfigureAwait(false)
+                : await DeleteAsync(allowed, fs, outcomes, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -357,35 +346,38 @@ public static class ExploreRemover
     /// requires everywhere else. <see cref="IRecycleBin"/> says why that is a second seam rather than
     /// an argument to the first.
     /// </summary>
-    private static string BinPath(ExploreItem item) => LongPath.Display(LongPath.Extended(item.Path));
+    internal static string BinPath(ExploreItem item) => LongPath.Display(LongPath.Extended(item.Path));
 
-    private static async Task<ExploreItemOutcome> RemoveOneAsync(
-        ExploreItem item,
-        ExploreRemovalMode mode,
-        IRecycleBin bin,
+    /// <summary>
+    /// Deletes each of <paramref name="allowed"/> outright, one at a time, adding what became of each
+    /// to <paramref name="outcomes"/>. Answers whether a cancel stopped it part-way through a folder.
+    /// </summary>
+    private static async Task<bool> DeleteAsync(
+        IReadOnlyList<ExploreItem> allowed,
         IFileSystem fs,
+        List<ExploreItemOutcome> outcomes,
         CancellationToken ct)
     {
-        if (mode == ExploreRemovalMode.RecycleBin)
+        foreach (var item in allowed)
         {
-            if (await RecycleBinLook.WhyItStaysAsync(item, fs, ct).ConfigureAwait(false) is { } stays)
+            ct.ThrowIfCancellationRequested();
+
+            var outcome = await DeleteOneAsync(item, fs, ct).ConfigureAwait(false);
+            outcomes.Add(outcome);
+
+            // A folder removal returns what it did rather than throwing, so the item it stopped in
+            // is reported with the rest.
+            if (outcome.Interrupted)
             {
-                return new ExploreItemOutcome(item.Path, Removed: false, Bytes: 0, stays);
+                return true;
             }
-
-            var recycled = bin.Recycle(BinPath(item));
-
-            return new ExploreItemOutcome(
-                item.Path,
-                recycled.Removed,
-                recycled.Removed ? item.Bytes : 0,
-                recycled.Message ?? "Moved to the Recycle Bin.")
-            {
-                DeletedOutright = recycled.DeletedOutright,
-                LowerBound = recycled.Removed && item.LowerBound,
-            };
         }
 
+        return false;
+    }
+
+    private static async Task<ExploreItemOutcome> DeleteOneAsync(ExploreItem item, IFileSystem fs, CancellationToken ct)
+    {
         if (!item.IsDirectory)
         {
             // MinimumAge.Off, and deliberately. §7.1 has Explore act on one item the user picked

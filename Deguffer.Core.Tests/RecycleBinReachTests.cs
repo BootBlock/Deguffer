@@ -136,7 +136,7 @@ public sealed class RecycleBinReachTests : IDisposable
     {
         var folder = _temp.CreateDirectory("folder");
         _temp.CreateFile(10, "folder", "short.txt");
-        var bin = new ShellRecycleBin(_ => throw new InvalidOperationException("The shell must not be asked."), _reach);
+        var bin = new ShellRecycleBin(StandInShell.NeverAsked([]), _reach);
 
         Assert.Throws<OperationCanceledException>(() => bin.WhyItCannotTake(folder, new CancellationToken(canceled: true)));
     }
@@ -215,32 +215,35 @@ public sealed class RecycleBinReachTests : IDisposable
     }
 
     /// <summary>
-    /// The shell never sees an item the bin cannot take, so it cannot delete it outright. The shell's
-    /// move is stood in for, because the real one would delete this file.
+    /// The shell never sees an item the bin cannot take, so it cannot delete it outright, and the item
+    /// beside it in the batch still goes. The shell's move is stood in for, because the real one would
+    /// delete these files.
     /// </summary>
     [Fact]
-    public void TheShellIsNeverHandedAnItemTheBinCannotTake()
+    public void TheShellIsNeverHandedAnItemTheBinCannotTakeAndTheRestOfItsBatchGoes()
     {
         var file = FileOfLength(RecycleBinReach.LongestPath + 1, "file");
+        var beside = _temp.CreateFile(10, "beside.bin");
         List<string> handed = [];
         var bin = new ShellRecycleBin(
-            path =>
+            StandInShell.Telling(path =>
             {
                 handed.Add(path);
                 File.Delete(LongPath.Extended(path));
-                return new RecycleOutcome(Removed: true);
-            },
+                return ShellTold.Moved();
+            }),
             _reach);
 
-        var outcome = bin.Recycle(file);
+        var outcomes = bin.Recycle([file, beside]);
 
-        Assert.False(outcome.Removed);
-        Assert.Empty(handed);
+        Assert.Equal([beside], handed);
+        Assert.False(outcomes[0].Removed);
         Assert.True(File.Exists(LongPath.Extended(file)));
+        Assert.True(outcomes[1].Removed);
 
         // The reason the bin gives, then what became of the item, so a refusal at the removal says both.
-        Assert.StartsWith(bin.WhyItCannotTake(file)!, outcome.Message, StringComparison.Ordinal);
-        Assert.EndsWith("it is still where it was.", outcome.Message, StringComparison.Ordinal);
+        Assert.StartsWith(bin.WhyItCannotTake(file)!, outcomes[0].Message, StringComparison.Ordinal);
+        Assert.EndsWith("it is still where it was.", outcomes[0].Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -250,10 +253,10 @@ public sealed class RecycleBinReachTests : IDisposable
     [Fact]
     public void AnItemTheShellDeletedWithNoItemInTheBinIsReportedAsDeletedOutright()
     {
-        var sink = new BinnedItem();
+        var sink = new BinnedItem(CancellationToken.None);
         sink.PostDeleteItem(flags: 0, item: null!, result: 0, created: null);
 
-        var outcome = ShellRecycleBin.Outcome(aborted: false, sink);
+        var outcome = ShellRecycleBin.Outcome(sink, failed: null, CancellationToken.None);
 
         Assert.True(outcome.DeletedOutright);
         Assert.True(outcome.Removed);
@@ -261,13 +264,18 @@ public sealed class RecycleBinReachTests : IDisposable
         Assert.Contains("outright", outcome.Message);
     }
 
+    /// <summary>A failure the shell reports for the item is a refusal that names its number, never an outright deletion.</summary>
     [Fact]
-    public void AnItemTheShellFailedToDeleteIsNotReportedAsDeletedOutright()
+    public void AnItemTheShellFailedToDeleteIsRefusedNotReportedAsDeletedOutright()
     {
-        var sink = new BinnedItem();
+        var sink = new BinnedItem(CancellationToken.None);
         sink.PostDeleteItem(flags: 0, item: null!, result: unchecked((int)0x80070020), created: null);
 
-        Assert.False(ShellRecycleBin.Outcome(aborted: true, sink).DeletedOutright);
+        var outcome = ShellRecycleBin.Outcome(sink, failed: null, CancellationToken.None);
+
+        Assert.False(outcome.DeletedOutright);
+        Assert.False(outcome.Removed);
+        Assert.Equal("Windows would not move this to the Recycle Bin (0x80070020). It is still where it was.", outcome.Message);
     }
 
     /// <summary>A file under <paramref name="folder"/> whose full path, in display form, is exactly <paramref name="length"/> characters.</summary>

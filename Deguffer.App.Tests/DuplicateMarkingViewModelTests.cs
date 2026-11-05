@@ -372,8 +372,9 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
     /// <summary>
     /// #301: a removal that took more than the copies it was asked to names each check that failed,
     /// by the copy or folder it failed on and what it found, beside the sentence that counts them.
-    /// Here the bin, moving one group's copy, takes a file beside it and the copy another group
-    /// keeps, and the page says which of each. The next search takes the list with it.
+    /// Here the bin, moving one group's copy, takes a file beside it and a copy another group leaves
+    /// in place but does not hold (the copy a group keeps is held while its copies go), and the page
+    /// says which of each. The next search takes the list with it.
     /// </summary>
     [Fact]
     public void AFailedCheckAfterARemovalIsNamedBesideTheOutcome() => UiThread.Run(async () =>
@@ -386,6 +387,7 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
         var copyFirst = _scene.Written(Path.Combine(_scene.Folder("Downloads"), "a.bin"), first);
         var kept = _scene.Written(Path.Combine(_scene.Folder("Pictures"), "b.bin"), second);
         var copy = _scene.Written(Path.Combine(_scene.Folder("Desktop"), "b.bin"), second);
+        var spare = _scene.Written(Path.Combine(_scene.Folder("Music"), "b.bin"), second);
         var beside = Path.Combine(_scene.Folder("Downloads"), "note.txt");
         File.WriteAllText(beside, "beside the copy");
         RecycleBin = FakeRecycleBin.MovingTo(_scene.Bin, path =>
@@ -393,11 +395,11 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
             if (Path.GetFileName(path) == "a.bin")
             {
                 File.Delete(beside);
-                File.Delete(kept.Path);
+                File.Delete(spare.Path);
             }
         });
         Prompt = new FakeDuplicateConfirmation(true);
-        var page = PageWithPhotos(Finds(Group(keptFirst, copyFirst), Group(kept, copy)));
+        var page = PageWithPhotos(Finds(Group(keptFirst, copyFirst), Group(kept, copy, spare)));
         await page.SearchCommand.ExecuteAsync(null);
         Toggle(page, copyFirst);
         Toggle(page, copy);
@@ -417,7 +419,7 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
         Assert.Equal(VerificationOutcome.Failed, folder.Outcome);
         Assert.Contains("'note.txt'", folder.Detail, StringComparison.Ordinal);
 
-        var lost = Assert.Single(page.Marking.Outcome.Checks, check => check.Subject == kept.Path);
+        var lost = Assert.Single(page.Marking.Outcome.Checks, check => check.Subject == spare.Path);
         Assert.Equal(VerificationOutcome.Failed, lost.Outcome);
         Assert.StartsWith("MISSING", lost.Detail, StringComparison.Ordinal);
 

@@ -34,6 +34,7 @@ public sealed class FakeRecycleBin : IRecycleBin
 
     public FakeRecycleBin(Func<string, RecycleOutcome> behaviour) => _behaviour = behaviour;
 
+    /// <summary>Every path the bin reached, in the order it reached them, across every batch.</summary>
     public List<string> Paths { get; } = [];
 
     /// <summary>
@@ -97,12 +98,36 @@ public sealed class FakeRecycleBin : IRecycleBin
         return CannotTake(path);
     }
 
-    public RecycleOutcome Recycle(string path)
-    {
-        Paths.Add(path);
+    /// <summary>Every batch handed to <see cref="Recycle"/>, as it was handed.</summary>
+    public List<IReadOnlyList<string>> Batches { get; } = [];
 
-        return CannotTake(path) is { } why
-            ? new RecycleOutcome(Removed: false, why)
-            : _behaviour(path);
+    /// <summary>
+    /// Takes each item in turn as the shell does: refused where <see cref="CannotTake"/> says, and
+    /// otherwise handed to the behaviour. A cancel stops it before the next item, as the shell's sink
+    /// does, so that item and every one after it are not reached and are not recorded in
+    /// <see cref="Paths"/>.
+    /// </summary>
+    public IReadOnlyList<RecycleOutcome> Recycle(IReadOnlyList<string> paths, CancellationToken ct = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(paths.Count, IRecycleBin.LargestBatch, nameof(paths));
+        Batches.Add([.. paths]);
+
+        var outcomes = new List<RecycleOutcome>(paths.Count);
+
+        foreach (var path in paths)
+        {
+            if (ct.IsCancellationRequested)
+            {
+                outcomes.Add(RecycleOutcome.NotReached);
+                continue;
+            }
+
+            Paths.Add(path);
+            outcomes.Add(CannotTake(path) is { } why
+                ? new RecycleOutcome(Removed: false, why)
+                : _behaviour(path));
+        }
+
+        return outcomes;
     }
 }

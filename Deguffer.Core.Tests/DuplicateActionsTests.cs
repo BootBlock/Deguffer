@@ -140,12 +140,12 @@ public sealed class DuplicateActionsTests : DuplicateRemovalScene
         Mark(marks, copy);
         List<string> handed = [];
         var bin = new ShellRecycleBin(
-            path =>
+            StandInShell.Telling(path =>
             {
                 handed.Add(path);
                 File.Delete(LongPath.Extended(path));
-                return new RecycleOutcome(Removed: true);
-            },
+                return ShellTold.Moved();
+            }),
             new RecycleBinReach(_tree.Volumes, new RecycleBinRooms(_ => null, _tree.Environment)));
         var prompt = new FakeDuplicateConfirmation(true);
 
