@@ -191,7 +191,7 @@ public abstract class DebuggerSymbolCacheProviderBase : CleanupProviderBase, ITe
                         entry.Path,
                         $"The copies of {Path.GetFileName(entry.Path)} a debugger downloaded. It downloads them again "
                         + "when it needs them.",
-                        DirectoryAge.Of(entry.Path, ct),
+                        entry.LastWritten,
                         Group: entry.Store.Path,
                         UseCheck: checks[entry.Store])),
             ],

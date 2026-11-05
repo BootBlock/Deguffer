@@ -1,5 +1,6 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Providers;
 
@@ -7,7 +8,12 @@ namespace Deguffer.Core.Providers;
 /// <param name="Path">The entry, named for the file it holds every copy of.</param>
 /// <param name="Parent">The store, or the two-letter folder of a two-level store, that it is in.</param>
 /// <param name="Store">The store it is in.</param>
-internal sealed record SymbolStoreEntry(string Path, string Parent, SymbolStore Store);
+/// <param name="LastWritten">
+/// When it was last written, by <see cref="DirectoryAge"/>'s rule: the newest of its own time, from its
+/// parent's listing, and its index folders', from its own. Both are the listings that recognised it, so
+/// dating it lists nothing again.
+/// </param>
+internal sealed record SymbolStoreEntry(string Path, string Parent, SymbolStore Store, DateTime LastWritten);
 
 /// <summary>
 /// What one look into each of a row's stores found: every entry a plan may offer, and everything that
@@ -26,9 +32,22 @@ internal sealed record SymbolStoreEntry(string Path, string Parent, SymbolStore 
 /// <para><b>A store inside another is that store's.</b> Where one folder a setting names is inside
 /// another, the outer store neither offers nor asserts the inner one, because the inner store's own
 /// row empties it.</para>
+///
+/// <para><b>Each store is read in two steps.</b> Its own listing, and each two-letter folder's, are read
+/// in order, which names every folder that may be an entry. Each of those is then looked inside on
+/// several threads at once (<see cref="ListWorkers"/>), because a debugger's store holds one entry per
+/// module it has loaded symbols for, often thousands, and each look waits on the disk. What both steps
+/// found is then recorded in listing order, so the entries, the survivors and the notes read the same
+/// however the looks finished.</para>
 /// </summary>
 internal sealed class SymbolStoreExamination
 {
+    /// <summary>
+    /// How many entries are looked inside at once. Each look is two or three small listings that wait on
+    /// the disk rather than the processor, and the planner already plans several rows at once.
+    /// </summary>
+    private const int EntriesAtOnce = 8;
+
     private const string StoreReason = "The symbol store itself. Only the downloaded copies inside it are removed.";
 
     private const string MarkerReason = "A marker the symbol server program keeps in the store, so the store keeps working.";
@@ -43,6 +62,10 @@ internal sealed class SymbolStoreExamination
 
     private readonly IReadOnlyList<(string Path, ReachedFolder Reached)> _everyStore;
     private readonly IVolumeInventory _volumes;
+    private readonly List<(string Path, string Reason)> _survivors = [];
+
+    // Asked once per level and per unrecognised entry, of a store that may hold tens of thousands.
+    private readonly HashSet<string> _survived = new(StringComparer.OrdinalIgnoreCase);
 
     private SymbolStoreExamination(IReadOnlyList<SymbolStore> everyStore, IVolumeInventory volumes)
     {
@@ -61,7 +84,8 @@ internal sealed class SymbolStoreExamination
     /// <summary>Stores SymStore built, which nothing is ever removed from.</summary>
     public List<SymbolStore> Refused { get; } = [];
 
-    public List<(string Path, string Reason)> Survivors { get; } = [];
+    /// <summary>Everything that must survive, each once, in the order the listings found it.</summary>
+    public IReadOnlyList<(string Path, string Reason)> Survivors => _survivors;
 
     public List<PlanNote> Notes { get; } = [];
 
@@ -140,6 +164,7 @@ internal sealed class SymbolStoreExamination
             .ToList();
 
         var twoLevel = entries.Any(entry => entry is FileInfo && entry.Name.Equals(SymbolStoreLayout.TwoLevelFile, StringComparison.OrdinalIgnoreCase));
+        var walk = new StoreWalk();
 
         foreach (var entry in entries)
         {
@@ -154,38 +179,44 @@ internal sealed class SymbolStoreExamination
 
             if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
             {
-                DeclineLink(path);
+                walk.Saw(Seen.Link, path);
             }
             else if (entry is not DirectoryInfo)
             {
-                Survive(path, SymbolStoreLayout.RootMarkers.Contains(entry.Name) ? MarkerReason : UnrecognisedReason);
+                walk.Saw(Seen.Survivor, path, SymbolStoreLayout.RootMarkers.Contains(entry.Name) ? MarkerReason : UnrecognisedReason);
             }
             else if (!twoLevel)
             {
-                Classify(path, entry.Name, store.Path, level: null, store);
+                walk.Consider(entry, path, store.Path, level: null);
             }
             else if (entry.Name.Length == 2)
             {
-                CollectLevel(path, store, inner, ct);
+                WalkLevel(walk, path, inner, ct);
             }
             else
             {
-                Survive(path, UnrecognisedReason);
+                walk.Saw(Seen.Survivor, path, UnrecognisedReason);
             }
         }
+
+        var written = new DateTime?[walk.Candidates.Count];
+        ListWorkers.Run(written.Length, EntriesAtOnce, index => written[index] = Recognise(walk.Candidates[index]), ct);
+
+        Record(walk, written, store);
     }
 
     /// <summary>One two-letter folder of a two-level store, and each entry in it.</summary>
-    private void CollectLevel(string level, SymbolStore store, IReadOnlyList<ReachedFolder> inner, CancellationToken ct)
+    private void WalkLevel(StoreWalk walk, string level, IReadOnlyList<ReachedFolder> inner, CancellationToken ct)
     {
         if (FolderEntries.Of(level) is not { } entries)
         {
-            Unlisted(level);
+            walk.Saw(Seen.Unlisted, level);
             return;
         }
 
-        Levels.Add((level, store));
-        Survive(level, LevelReason);
+        walk.Saw(Seen.Level, level);
+
+        var letters = Path.GetFileName(level);
 
         foreach (var entry in entries)
         {
@@ -200,43 +231,75 @@ internal sealed class SymbolStoreExamination
 
             if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
             {
-                DeclineLink(path);
+                walk.Saw(Seen.Link, path);
             }
             else if (entry is not DirectoryInfo)
             {
-                Survive(path, UnrecognisedReason);
+                walk.Saw(Seen.Survivor, path, UnrecognisedReason);
             }
             else
             {
-                Classify(path, entry.Name, level, Path.GetFileName(level), store);
+                walk.Consider(entry, path, level, letters);
             }
-        }
-    }
-
-    private void Classify(string path, string name, string parent, string? level, SymbolStore store)
-    {
-        if (SymbolStoreLayout.IsEntryName(name)
-            && (level is null || SymbolStoreLayout.BelongsUnder(level, name))
-            && HoldsOnlyCopies(path, name))
-        {
-            Entries.Add(new SymbolStoreEntry(path, parent, store));
-        }
-        else
-        {
-            Survive(path, UnrecognisedReason);
         }
     }
 
     /// <summary>
-    /// Whether every folder in <paramref name="entry"/> is an index holding only copies of
-    /// <paramref name="name"/>. Nothing here is followed through a link, and a folder that will not be
-    /// listed is not one anybody has seen inside.
+    /// What one store's walk and the looks inside its candidates found, in the order the listings found
+    /// it. <paramref name="written"/> holds each candidate's answer from <see cref="Recognise"/>.
     /// </summary>
-    private static bool HoldsOnlyCopies(string entry, string name)
+    private void Record(StoreWalk walk, DateTime?[] written, SymbolStore store)
     {
-        if (FolderEntries.Of(entry) is not { } indexes)
+        var next = 0;
+
+        foreach (var (what, path, reason) in walk.Sightings)
         {
-            return false;
+            switch (what)
+            {
+                case Seen.Survivor:
+                    Survive(path, reason!);
+                    break;
+
+                case Seen.Link:
+                    DeclineLink(path);
+                    break;
+
+                case Seen.Unlisted:
+                    Unlisted(path);
+                    break;
+
+                case Seen.Level:
+                    Levels.Add((path, store));
+                    Survive(path, LevelReason);
+                    break;
+
+                case Seen.Candidate:
+                    var candidate = walk.Candidates[next];
+
+                    if (written[next++] is { } lastWritten)
+                    {
+                        Entries.Add(new SymbolStoreEntry(path, candidate.Parent, store, lastWritten));
+                    }
+                    else
+                    {
+                        Survive(path, UnrecognisedReason);
+                    }
+
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// When <paramref name="candidate"/> was last written, where every folder in it is an index holding
+    /// only copies of the file it is named for, and null where it is not an entry. Nothing here is
+    /// followed through a link, and a folder that will not be listed is not one anybody has seen inside.
+    /// </summary>
+    private static DateTime? Recognise(Candidate candidate)
+    {
+        if (FolderEntries.Of(candidate.Path) is not { } indexes)
+        {
+            return null;
         }
 
         foreach (var index in indexes)
@@ -247,13 +310,13 @@ internal sealed class SymbolStoreExamination
                 || FolderEntries.Of(LongPath.Display(index.FullName)) is not { } files
                 || !files.All(file => file is FileInfo
                     && !file.Attributes.HasFlag(FileAttributes.ReparsePoint)
-                    && SymbolStoreLayout.IsIndexedFile(name, file.Name)))
+                    && SymbolStoreLayout.IsIndexedFile(candidate.Name, file.Name)))
             {
-                return false;
+                return null;
             }
         }
 
-        return true;
+        return DirectoryAge.Of(candidate.Written, indexes.Select(index => index.LastWriteTimeUtc));
     }
 
     /// <summary>
@@ -266,9 +329,9 @@ internal sealed class SymbolStoreExamination
 
     private void Survive(string path, string reason)
     {
-        if (!Survivors.Any(survivor => survivor.Path.Equals(path, StringComparison.OrdinalIgnoreCase)))
+        if (_survived.Add(path))
         {
-            Survivors.Add((path, reason));
+            _survivors.Add((path, reason));
         }
     }
 
@@ -284,5 +347,51 @@ internal sealed class SymbolStoreExamination
         Notes.Add(UnreadableRoot.Note(path));
         Survive(path, UnreadableRoot.UnreachedReason);
         Unreadable = true;
+    }
+
+    /// <summary>What a store's walk saw at one place in its listings.</summary>
+    private enum Seen
+    {
+        Survivor,
+        Link,
+        Unlisted,
+        Level,
+
+        /// <summary>A folder named like an entry: the next of <see cref="StoreWalk.Candidates"/>.</summary>
+        Candidate,
+    }
+
+    /// <summary>A folder named like an entry, to be looked inside.</summary>
+    /// <param name="Written">Its own last write, from its parent's listing.</param>
+    private readonly record struct Candidate(string Path, string Name, string Parent, DateTime Written);
+
+    /// <summary>
+    /// Everything one store's listings found, in their order, and the folders named like entries among
+    /// them, which are looked inside once the walk has ended.
+    /// </summary>
+    private sealed class StoreWalk
+    {
+        public List<(Seen What, string Path, string? Reason)> Sightings { get; } = [];
+
+        public List<Candidate> Candidates { get; } = [];
+
+        public void Saw(Seen what, string path, string? reason = null) => Sightings.Add((what, path, reason));
+
+        /// <summary>
+        /// A folder in <paramref name="parent"/>: a candidate where its name is an entry's and, in a
+        /// two-level store, starts with the two letters of <paramref name="level"/>.
+        /// </summary>
+        public void Consider(FileSystemInfo folder, string path, string parent, string? level)
+        {
+            if (SymbolStoreLayout.IsEntryName(folder.Name) && (level is null || SymbolStoreLayout.BelongsUnder(level, folder.Name)))
+            {
+                Candidates.Add(new Candidate(path, folder.Name, parent, folder.LastWriteTimeUtc));
+                Saw(Seen.Candidate, path);
+            }
+            else
+            {
+                Saw(Seen.Survivor, path, UnrecognisedReason);
+            }
+        }
     }
 }
