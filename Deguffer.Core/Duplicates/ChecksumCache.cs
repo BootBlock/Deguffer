@@ -32,7 +32,7 @@ internal readonly record struct RememberedChecksum(ContentChecksum Value, int La
 /// <summary>
 /// The checksums duplicate searches read, kept from one search to the next so a second search reads
 /// only what changed (§7.4), in a store under <c>%LOCALAPPDATA%\Deguffer</c>. One instance for the
-/// life of the app, loaded the first time a search asks and stored when a search ends.
+/// life of the app, loaded the first time a search asks.
 ///
 /// <para><b>Never a path.</b> A checksum is kept under the file's volume and number, its length and
 /// its last-modified and change times (<see cref="ChecksumKey"/>), so the store names no file. A
@@ -47,6 +47,15 @@ internal readonly record struct RememberedChecksum(ContentChecksum Value, int La
 /// <para><b>A store that cannot be read loads empty.</b> Missing, refused, torn, hand-edited or of a
 /// format this build does not know, it costs one search the reads it would have saved, and a store
 /// read wrongly would group files that differ or part files that match.</para>
+///
+/// <para><b>Written behind the search, and only for a new value.</b> A full store is tens of
+/// megabytes, so a search hands its result back without waiting for the write
+/// (<see cref="StoreInBackground"/>): the values are copied before that returns, and each write runs
+/// on its copy, one after another. The next search waits for a write still running before it reads
+/// (<see cref="WhenStoredAsync"/>), and so does the app before it closes or relaunches
+/// (<see cref="Save"/>). A value only used on a new day is no reason to write the whole store again:
+/// the day goes with the next write that has a new value, or with the close, and a day a few
+/// searches stale is still well inside <see cref="DaysKeptUnused"/>.</para>
 ///
 /// <para><b>Bounded.</b> A value no search has used for <see cref="DaysKeptUnused"/> days is
 /// dropped, since the file it was read from is most likely gone, and past <see cref="MostKept"/>
@@ -66,10 +75,20 @@ public sealed class ChecksumCache
     private readonly string _file;
     private readonly TimeProvider _time;
     private readonly int _mostKept;
+    private readonly Action<string, Action<Stream>> _store;
     private readonly Lazy<ConcurrentDictionary<ChecksumKey, RememberedChecksum>> _remembered;
 
-    /// <summary>Whether anything was remembered, or used on a new day, since the store was last written.</summary>
-    private int _changed;
+    /// <summary>Taken to copy the values for a write and to chain that write after the last.</summary>
+    private readonly Lock _gate = new();
+
+    /// <summary>Whether a value was remembered since the values were last copied for a write.</summary>
+    private int _newValue;
+
+    /// <summary>Whether a value was used on a new day since the values were last copied for a write.</summary>
+    private int _newDay;
+
+    /// <summary>The last write started, which answers whether the store was written. Under <see cref="_gate"/>.</summary>
+    private Task<bool> _writing = Task.FromResult(true);
 
     public ChecksumCache(IUserEnvironment environment, TimeProvider time)
         : this(FileOf(environment), time)
@@ -78,11 +97,13 @@ public sealed class ChecksumCache
 
     /// <param name="file">Where the store is, so a test can damage it or read it.</param>
     /// <param name="mostKept">The most values kept, so a test can pass the bound without half a million files.</param>
-    internal ChecksumCache(string file, TimeProvider time, int mostKept = MostKept)
+    /// <param name="store">Writes the store's file, so a test can count writes, or hold one to see what waits for it.</param>
+    internal ChecksumCache(string file, TimeProvider time, int mostKept = MostKept, Action<string, Action<Stream>>? store = null)
     {
         _file = file;
         _time = time;
         _mostKept = mostKept;
+        _store = store ?? StoreFile.Replace;
         _remembered = new(Load);
     }
 
@@ -124,7 +145,7 @@ public sealed class ChecksumCache
         if (found.LastUsedDay != today)
         {
             remembered[key] = found with { LastUsedDay = today };
-            Volatile.Write(ref _changed, 1);
+            Volatile.Write(ref _newDay, 1);
         }
 
         return found.Value;
@@ -137,51 +158,119 @@ public sealed class ChecksumCache
     internal void Remember(FileState file, ContentPart part, ContentChecksum value)
     {
         _remembered.Value[ChecksumKey.Of(file, part, value.Algorithm)] = new RememberedChecksum(value, Today);
-        Volatile.Write(ref _changed, 1);
+        Volatile.Write(ref _newValue, 1);
     }
 
     /// <summary>
-    /// Write what is remembered to the store, less what has gone unused too long or is past
-    /// <see cref="MostKept"/>, where anything changed since it was last written. Called once a search
-    /// has stopped reading. Returns false where the store could not be written, which costs the next
-    /// search only the reads it would have saved.
+    /// Start writing the store where a value was remembered since it was last written, and return
+    /// without waiting for the write. Called once a search has stopped reading: the values are copied
+    /// before this returns, so the next search cannot change what the write is writing.
     /// </summary>
-    public bool Save()
+    public void StoreInBackground() => StartWrite(newDayIsReason: false);
+
+    /// <summary>
+    /// Completes once the write in progress, if any, has ended, so a search reads only once the last
+    /// search's values are on disk and no write runs beside its reads.
+    /// </summary>
+    public Task WhenStoredAsync(CancellationToken ct)
     {
-        if (!_remembered.IsValueCreated || Interlocked.Exchange(ref _changed, 0) == 0)
+        lock (_gate)
         {
-            return true;
+            return _writing.WaitAsync(ct);
+        }
+    }
+
+    /// <summary>
+    /// Write the store, after any write in progress, where anything was remembered or used on a new
+    /// day since it was last written, and wait for it. Called as the app closes or relaunches.
+    /// Returns false where the store could not be written, which costs the next search only the reads
+    /// it would have saved.
+    /// </summary>
+    public bool Save() => StartWrite(newDayIsReason: true).GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Copy the values and chain their write after the last, where there is reason to write. Returns
+    /// the write started, or the last one where none was.
+    /// </summary>
+    private Task<bool> StartWrite(bool newDayIsReason)
+    {
+        lock (_gate)
+        {
+            if (!_remembered.IsValueCreated
+                || (Volatile.Read(ref _newValue) == 0 && (!newDayIsReason || Volatile.Read(ref _newDay) == 0)))
+            {
+                return _writing;
+            }
+
+            // Cleared before the copy, so a value remembered while the copy is taken marks the cache
+            // changed again rather than going unwritten.
+            var reasons = new WriteReasons(Interlocked.Exchange(ref _newValue, 0) != 0, Interlocked.Exchange(ref _newDay, 0) != 0);
+            var copy = _remembered.Value.ToArray();
+            var today = Today;
+            var previous = _writing;
+
+            _writing = Task.Run(async () =>
+            {
+                // Only for its end: a write that failed put its reasons back, so this copy covers it.
+                await previous.ConfigureAwait(false);
+
+                return Write(copy, today, reasons);
+            });
+
+            return _writing;
+        }
+    }
+
+    /// <summary>
+    /// Write <paramref name="copy"/> less what has gone unused too long or is past
+    /// <see cref="MostKept"/>, and drop the same values from the cache.
+    /// </summary>
+    private bool Write(KeyValuePair<ChecksumKey, RememberedChecksum>[] copy, int today, WriteReasons reasons)
+    {
+        var oldest = today - DaysKeptUnused;
+        var kept = Array.FindAll(copy, entry => entry.Value.LastUsedDay >= oldest);
+
+        // Sorting is most of a full store's work, and decides nothing until more are left than the
+        // bound keeps.
+        if (kept.Length > _mostKept)
+        {
+            kept = [.. kept.OrderByDescending(entry => entry.Value.LastUsedDay).Take(_mostKept)];
         }
 
-        var remembered = _remembered.Value;
-        var oldest = Today - DaysKeptUnused;
-        var kept = remembered.ToArray()
-            .Where(entry => entry.Value.LastUsedDay >= oldest)
-            .OrderByDescending(entry => entry.Value.LastUsedDay)
-            .Take(_mostKept)
-            .ToArray();
-
-        if (kept.Length < remembered.Count)
+        if (kept.Length < copy.Length)
         {
             var keep = kept.Select(entry => entry.Key).ToHashSet();
+            var remembered = _remembered.Value;
 
-            foreach (var key in remembered.Keys.Where(key => !keep.Contains(key)))
+            foreach (var entry in copy)
             {
-                remembered.TryRemove(key, out _);
+                if (!keep.Contains(entry.Key))
+                {
+                    // Only as it was copied: a value remembered again or used since the copy stays.
+                    remembered.TryRemove(entry);
+                }
             }
         }
 
         try
         {
-            StoreFile.Replace(_file, stream => ChecksumStoreFormat.Write(stream, kept));
+            _store(_file, stream => ChecksumStoreFormat.Write(stream, kept));
 
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // A full disk, a folder refused, or another copy of Deguffer writing the store. Kept as
-            // changed, so the next search tries again.
-            Volatile.Write(ref _changed, 1);
+            // A full disk, a folder refused, or another copy of Deguffer writing the store. The
+            // reasons to write stand, so the next write tries again.
+            if (reasons.NewValue)
+            {
+                Volatile.Write(ref _newValue, 1);
+            }
+
+            if (reasons.NewDay)
+            {
+                Volatile.Write(ref _newDay, 1);
+            }
 
             return false;
         }
@@ -209,4 +298,7 @@ public sealed class ChecksumCache
             return new();
         }
     }
+
+    /// <summary>What a write was started for, put back where the write fails.</summary>
+    private readonly record struct WriteReasons(bool NewValue, bool NewDay);
 }
