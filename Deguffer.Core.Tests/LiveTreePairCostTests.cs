@@ -15,8 +15,9 @@ public sealed class LiveTreePairCostTests
 
     /// <summary>
     /// What one candidate or one program may allocate on a warm call: its reached form, its holder
-    /// list and the small arrays beside them. Allocating per pair instead costs at least a hundred
-    /// bytes for each of the 40,000 pairs, which is ten times this bound.
+    /// list and the small arrays beside them. Even one 24-byte object per pair is 960,000 bytes over
+    /// the 40,000 pairs, more than twice this bound, and the per-pair loop this replaced allocated
+    /// about 28 MB here.
     /// </summary>
     private const long BytesPerCandidateOrProcess = 1024;
 
