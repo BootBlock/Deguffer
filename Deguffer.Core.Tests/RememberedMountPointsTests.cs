@@ -117,6 +117,25 @@ public sealed class RememberedMountPointsTests
     }
 
     /// <summary>
+    /// A volume named a moment ago is mounted somewhere, so an answer of nowhere is a call that
+    /// failed. It is not kept, and the next question finds the system folder at the volume's other
+    /// mount point (#144).
+    /// </summary>
+    [Fact]
+    public void AFailedAnswerIsNotRemembered()
+    {
+        var remembered = new RememberedMountPoints(_volumes);
+        _volumes.FailingMountPointQueries = 1;
+
+        Assert.Empty(remembered.MountPointsOf(@"C:\"));
+
+        var places = VolumeRoot.Places(remembered, @"Q:\SysMount\Windows\System32");
+
+        Assert.NotNull(places);
+        Assert.Contains(places, place => place.Path == @"C:\Windows\System32");
+    }
+
+    /// <summary>
     /// Forgetting is the start of the next pass: the drive is asked about again, and a mount made in
     /// between is in the answer.
     /// </summary>

@@ -161,6 +161,12 @@ public sealed class FakeVolumeInventory : IVolumeInventory
         lock (_gate)
         {
             MountPointsQueries.Add(volumeName);
+
+            if (FailingMountPointQueries > 0)
+            {
+                FailingMountPointQueries--;
+                return [];
+            }
         }
 
         return _volumes.FirstOrDefault(volume => string.Equals(NameOf(volume), volumeName, StringComparison.OrdinalIgnoreCase))
@@ -174,6 +180,12 @@ public sealed class FakeVolumeInventory : IVolumeInventory
     /// often the machine would have been asked where a volume is mounted.
     /// </summary>
     public List<string> MountPointsQueries { get; } = [];
+
+    /// <summary>
+    /// How many of the next <see cref="MountPointsOfVolume"/> calls answer nothing, as the machine's
+    /// does when the call fails, such as for a mount point added between its sizing and its read.
+    /// </summary>
+    public int FailingMountPointQueries { get; set; }
 
     private static string NameOf(LocalVolume volume) => volume.VolumeName ?? $@"\\?\Volume{{{volume.RootPath}}}\";
 

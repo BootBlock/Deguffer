@@ -260,8 +260,8 @@ public interface IVolumeInventory
     /// <para><b>Remembered per volume by the owners that already remember each path's answer</b>,
     /// through <see cref="RememberedMountPoints"/>, for no longer than they do: a provider's pass, one
     /// reading of the process table, one §5.6 verification, one reading of the installed programs,
-    /// one comparison of a clean's locations, and one Explore policy. Nearly every path is on one of a
-    /// few drives. <see cref="VolumeNameOf"/> stays live there, so a letter or folder given to another
+    /// one comparison of a clean's locations, and the building of one Explore policy. Nearly every
+    /// path is on one of a few drives. <see cref="VolumeNameOf"/> stays live there, so a letter or folder given to another
     /// volume is answered with that volume's places, and <see cref="MountPointOf"/> stays live, so a
     /// path under a mount point made since is answered with every place. The executor's last check
     /// before a removal asks at the removal. Never remembered in

@@ -6,8 +6,8 @@ namespace Deguffer.Core.Safety;
 /// The volumes, with every place a volume is mounted asked of the machine once per volume for the
 /// life of its owner, which already keeps where each path it follows is reachable: a provider's pass,
 /// one reading of the process table, one §5.6 verification, one reading of the installed programs,
-/// one comparison of a clean's locations, and one Explore policy. Every other question goes to the
-/// volumes it was built over, at the call.
+/// one comparison of a clean's locations, and the building of one Explore policy. Every other question
+/// goes to the volumes it was built over, at the call.
 ///
 /// <para><b>The question is about the drive, not the path.</b> Nearly every path a pass follows is on
 /// one of a handful of drives, and <see cref="IVolumeInventory.MountPointsOf"/> costs two
@@ -24,11 +24,14 @@ namespace Deguffer.Core.Safety;
 /// <para><b>What a remembered answer can miss</b> is a new place for a volume already asked about,
 /// and only for paths named through its old places. <see cref="IVolumeInventory.MountPointOf"/> stays
 /// live, so a path named through the new place is answered with every place, the old ones included.
-/// A containment asked of any pair of followed folders therefore still matches wherever it matched
-/// before. A place the volume has lost since is still named, which can only add a refusal or a
-/// match. A comparison with a folder named as text alone, such as the account's own folders, has no
-/// second followed side, which is why the executor's last check before a removal asks the machine
-/// itself.</para>
+/// A place the volume has lost since is still named, which can only add a refusal or a match. Two
+/// folders followed through the same owner therefore still match wherever they did, except where one
+/// was followed before the new place existed and the other is named through an old place: neither
+/// then names the new one. That window is the owner's life, so only owners whose life is one
+/// operation remember. Explore's policy outlives a scan, so it remembers while it follows its rules
+/// and asks about each item live. A comparison with a folder named as text alone, such as the
+/// account's own folders, has no second followed side, which is why the clean's last check before a
+/// removal and its §5.6 verification ask the machine.</para>
 ///
 /// <para><b><see cref="IVolumeInventory.SubstituteOf"/> stays live.</b> It is one
 /// <c>QueryDosDevice</c> of about two microseconds, so remembering it would save almost nothing, and
@@ -57,8 +60,23 @@ internal sealed class RememberedMountPoints(IVolumeInventory volumes) : IVolumeI
 
     public string? VolumeNameOf(string mountPoint) => volumes.VolumeNameOf(mountPoint);
 
-    public IReadOnlyList<string> MountPointsOfVolume(string volumeName) =>
-        _mountPoints.GetOrAdd(volumeName, static (name, inner) => inner.MountPointsOfVolume(name), volumes);
+    /// <summary>
+    /// Every place the volume named <paramref name="volumeName"/> is mounted, asked of the machine the
+    /// first time it is asked about. An empty answer is never kept: a volume
+    /// <see cref="VolumeNameOf"/> just named is mounted somewhere, so none is a call that failed,
+    /// which can be a mount point added between the call's sizing and its read.
+    /// </summary>
+    public IReadOnlyList<string> MountPointsOfVolume(string volumeName)
+    {
+        if (_mountPoints.TryGetValue(volumeName, out var known))
+        {
+            return known;
+        }
+
+        var asked = volumes.MountPointsOfVolume(volumeName);
+
+        return asked.Count > 0 ? _mountPoints.GetOrAdd(volumeName, asked) : asked;
+    }
 
     public string? SubstituteOf(string driveRoot) => volumes.SubstituteOf(driveRoot);
 
