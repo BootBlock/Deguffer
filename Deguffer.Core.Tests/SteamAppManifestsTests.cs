@@ -246,7 +246,8 @@ public sealed class SteamAppManifestsTests : IDisposable
     /// <summary>
     /// RetroArch's discovery reads through the same reader. A library whose records will not be
     /// listed may hold RetroArch, so its manifest there is reported unread rather than absent, and a
-    /// library that lists it yields the folder Steam installed it in.
+    /// library that lists it yields the folder Steam installed it in. A row that already named the
+    /// game read the manifest, and it is not read again.
     /// </summary>
     [Fact]
     public void InstallFoldersReportAManifestInALibraryThatWillNotBeListedAsUnread()
@@ -261,6 +262,8 @@ public sealed class SteamAppManifestsTests : IDisposable
             new SteamLibrary(UnpluggedLibrary, PathPresence.Absent)));
 
         using var denied = new DeniedDirectory(Path.Combine(SecondLibrary, "steamapps"));
+
+        Assert.Equal("RetroArch", reader.Describe(RetroArchDiscovery.SteamAppId).Name);
 
         var (folders, unread) = reader.InstallFoldersOf(RetroArchDiscovery.SteamAppId);
 
