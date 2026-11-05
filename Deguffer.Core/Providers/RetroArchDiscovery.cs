@@ -166,12 +166,12 @@ public sealed class RetroArchDiscovery
             yield return folder;
         }
 
-        if (_steam.Libraries is not { } libraries)
+        if (_steam.Manifests is not { } manifests)
         {
             yield break;
         }
 
-        var (folders, unread) = new SteamAppManifests(libraries).InstallFoldersOf(SteamAppId);
+        var (folders, unread) = manifests.InstallFoldersOf(SteamAppId);
 
         foreach (var manifest in unread)
         {
