@@ -54,19 +54,15 @@ internal static class DirectoryAge
             return null;
         }
 
-        var newest = info.LastWriteTimeUtc;
-
         try
         {
-            foreach (var entry in info.EnumerateFileSystemInfos())
-            {
-                ct.ThrowIfCancellationRequested();
-
-                if (entry.LastWriteTimeUtc > newest)
+            return Of(
+                info.LastWriteTimeUtc,
+                info.EnumerateFileSystemInfos().Select(entry =>
                 {
-                    newest = entry.LastWriteTimeUtc;
-                }
-            }
+                    ct.ThrowIfCancellationRequested();
+                    return entry.LastWriteTimeUtc;
+                }));
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
         {
@@ -78,6 +74,25 @@ internal static class DirectoryAge
             // beside a row whose loss is permanent. So §7's column goes blank, for the reason
             // DeclaredLocation.ReportsAge gives for a location that cannot be dated one level down.
             return null;
+        }
+    }
+
+    /// <summary>
+    /// The same rule, for a caller whose listings have read both halves already: the directory's own
+    /// last write from the listing of its parent, and its entries' from its own listing.
+    /// </summary>
+    /// <param name="own">The directory's own last write.</param>
+    /// <param name="entries">The last write of each of its immediate entries, from one whole listing.</param>
+    public static DateTime Of(DateTime own, IEnumerable<DateTime> entries)
+    {
+        var newest = own;
+
+        foreach (var written in entries)
+        {
+            if (written > newest)
+            {
+                newest = written;
+            }
         }
 
         return newest;

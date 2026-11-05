@@ -4,7 +4,7 @@ namespace Deguffer.Core.Providers;
 
 /// <summary>
 /// Whether a file is an SQLite database that nothing has open, judged by its header and by the
-/// files SQLite writes beside it.
+/// files SQLite writes beside it, as a listing of its folder found them.
 ///
 /// <para><b>The header is the format's own.</b> Every SQLite database opens with the sixteen bytes
 /// <c>SQLite format 3\0</c> (<see href="https://www.sqlite.org/fileformat.html">the file format</see>),
@@ -23,16 +23,21 @@ internal static class SqliteDatabaseSignature
     /// <summary>The suffixes SQLite gives the files it keeps beside an open database.</summary>
     private static readonly string[] CompanionSuffixes = ["-journal", "-wal", "-shm"];
 
-    /// <summary>The files SQLite would keep beside <paramref name="path"/> while it is open, whether or not they are there.</summary>
-    public static IEnumerable<string> CompanionsOf(string path) => CompanionSuffixes.Select(suffix => path + suffix);
+    /// <summary>The names SQLite gives the files it keeps beside a database called <paramref name="name"/> while it is open.</summary>
+    public static IEnumerable<string> CompanionNamesOf(string name) => CompanionSuffixes.Select(suffix => name + suffix);
 
     /// <summary>
-    /// Whether <paramref name="path"/> opens with the SQLite header and has no journal beside it.
-    /// A file that cannot be read, or a companion Windows would not describe, is not confirmed.
+    /// Whether <paramref name="path"/> opens with the SQLite header and has no journal beside it. A
+    /// file that cannot be read is not confirmed.
     /// </summary>
-    public static bool IsIdleDatabase(string path)
+    /// <param name="listedBeside">
+    /// Whether a whole listing of the folder holding <paramref name="path"/> found an entry of the name
+    /// given. The caller has listed that folder to find the database, so a companion is not described
+    /// again one by one, and a folder that could not be listed in full is never examined.
+    /// </param>
+    public static bool IsIdleDatabase(string path, Func<string, bool> listedBeside)
     {
-        if (CompanionsOf(path).Any(companion => LongPath.ProbeFile(companion) is not PathPresence.Absent))
+        if (CompanionNamesOf(Path.GetFileName(path)).Any(listedBeside))
         {
             return false;
         }

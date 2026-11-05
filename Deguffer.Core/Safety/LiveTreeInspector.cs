@@ -289,6 +289,9 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
     /// <para><b>A lock file Windows will not describe sets <paramref name="anyRefused"/>.</b> It may
     /// be there and held, so dropping it as absent would pass a project open in its editor as
     /// dormant. The caller reports the answer incomplete instead.</para>
+    ///
+    /// <para>A list the provider read from listings it just made is passed whole, because each listing
+    /// has described every file in it already (<see cref="LiveTreeQuery.LockFilesListed"/>).</para>
     /// </summary>
     private static IReadOnlyList<string> ExistingLockFiles(LiveTreeQuery candidate, out bool anyRefused)
     {
@@ -297,6 +300,11 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
         if (candidate.LockFileNames.Count == 0)
         {
             return [];
+        }
+
+        if (candidate.LockFilesListed)
+        {
+            return [.. candidate.LockFileNames.Select(name => Path.Combine(candidate.Directory, name))];
         }
 
         var present = new List<string>(candidate.LockFileNames.Count);

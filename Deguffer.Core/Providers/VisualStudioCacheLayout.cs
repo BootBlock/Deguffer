@@ -25,7 +25,8 @@ internal enum VisualStudioLevel
 /// <param name="Description">What it is, as a noun phrase that completes "… for MySolution".</param>
 /// <param name="Reason">Why it can go, written for the user.</param>
 /// <param name="Evidence">
-/// Whether an entry of this name holds what the cache holds. See <see cref="VisualStudioCacheEvidence"/>.
+/// Whether an entry of this name, in the listing of the folder holding it, holds what the cache holds,
+/// read from that one reading. See <see cref="VisualStudioCacheEvidence"/>.
 /// </param>
 internal sealed record VisualStudioCache(
     string Name,
@@ -33,7 +34,7 @@ internal sealed record VisualStudioCache(
     TargetKind Kind,
     string Description,
     string Reason,
-    Func<string, bool> Evidence);
+    Func<VisualStudioListing, VisualStudioEntry, bool> Evidence);
 
 /// <summary>
 /// §5.2 for a <c>.vs</c> folder: the caches Visual Studio rebuilds by itself, and nothing else in it.
