@@ -84,7 +84,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// </param>
     /// <param name="volumes">
     /// Asked every other path a folder is reachable at, by the checks this provider makes of a folder a
-    /// setting names and by the executor's last check before a removal, the same instance for both.
+    /// setting names, through <see cref="Volumes"/>, and by the executor's last check before a removal.
     /// Defaulted to the machine's own, because it only reads.
     /// </param>
     protected CleanupProviderBase(
@@ -102,7 +102,8 @@ public abstract class CleanupProviderBase : ICleanupProvider
         IUserProfiles? profiles = null)
     {
         Environment = environment;
-        Volumes = volumes ?? VolumeInventory.Current;
+        var machine = volumes ?? VolumeInventory.Current;
+        _volumes = new RememberedMountPoints(machine);
         Inspector = inspector;
         Scanner = scanner ?? DirectoryScanner.For(environment);
         _refusals = RefusalRecord.For(environment);
@@ -112,14 +113,23 @@ public abstract class CleanupProviderBase : ICleanupProvider
         Servicing = servicing ?? WindowsServicing.Current;
         _executor = new PlanExecutor(
             runner, Scanner, _refusals, emptier, cloud, handlers, Servicing, inspector, time, environment,
-            protection: protection, volumes: Volumes, profiles: profiles);
+            protection: protection, volumes: machine, profiles: profiles);
         Runner = runner;
     }
 
     protected IUserEnvironment Environment { get; }
 
-    /// <summary>What the machine has mounted. See the constructor's parameter.</summary>
-    protected IVolumeInventory Volumes { get; }
+    /// <summary>
+    /// What the machine has mounted, with where each drive is mounted remembered for the pass
+    /// <see cref="Reach"/> keeps each folder for, and dropped with it by <see cref="InvalidateCaches"/>.
+    /// See <see cref="RememberedMountPoints"/> and the constructor's parameter.
+    ///
+    /// <para>Not the executor's: a clean runs long after the pass that planned it, so its last check
+    /// before a removal asks the volumes the constructor was given.</para>
+    /// </summary>
+    protected IVolumeInventory Volumes => _volumes;
+
+    private readonly RememberedMountPoints _volumes;
 
     private readonly ConcurrentDictionary<string, ReachedFolder> _reached = new(StringComparer.OrdinalIgnoreCase);
 
@@ -180,6 +190,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         Inspector.Invalidate();
         Scanner.Invalidate();
         _reached.Clear();
+        _volumes.Forget();
     }
 
     public virtual PassHold HoldCaches() => Scanner.Hold();

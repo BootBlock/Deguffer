@@ -18,7 +18,7 @@ public sealed class FakeVolumeInventory : IVolumeInventory
     private readonly List<LocalVolume> _volumes = [];
 
     /// <summary>
-    /// Guards <see cref="MountPointQueries"/>. The policy is asked from a background thread as well
+    /// Guards <see cref="MountPointQueries"/> and <see cref="MountPointsQueries"/>. The policy is asked from a background thread as well
     /// as the window's, because the Explore page's Files layout states a refusal on every row.
     /// </summary>
     private readonly Lock _gate = new();
@@ -141,11 +141,24 @@ public sealed class FakeVolumeInventory : IVolumeInventory
     /// Every mount point of the volume here that is mounted at <paramref name="mountPoint"/>, as the
     /// volumes stand at the call, or none where no volume is mounted there.
     /// </summary>
-    public IReadOnlyList<string> MountPointsOf(string mountPoint) =>
-        _volumes.FirstOrDefault(volume => volume.MountPoints.Any(known => HostVolume.IsMountPoint(known, mountPoint)))
+    public IReadOnlyList<string> MountPointsOf(string mountPoint)
+    {
+        lock (_gate)
+        {
+            MountPointsQueries.Add(mountPoint);
+        }
+
+        return _volumes.FirstOrDefault(volume => volume.MountPoints.Any(known => HostVolume.IsMountPoint(known, mountPoint)))
             is { RootPath: not null } held
             ? [.. held.MountPoints]
             : [];
+    }
+
+    /// <summary>
+    /// Every mount point <see cref="MountPointsOf"/> was asked about, in the form it arrived in, so a
+    /// test can count how often the machine would have been asked where a drive is mounted.
+    /// </summary>
+    public List<string> MountPointsQueries { get; } = [];
 
     /// <summary>
     /// Pretend <c>subst</c> made the drive letter <paramref name="driveRoot"/> stand for

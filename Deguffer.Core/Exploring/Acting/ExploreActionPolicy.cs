@@ -92,10 +92,14 @@ public sealed class ExploreActionPolicy
         ArgumentNullException.ThrowIfNull(toolRoots);
         ArgumentNullException.ThrowIfNull(volumes);
 
+        // Where each drive is mounted is asked once for the policy's life, as each region and root is
+        // followed once. The item at each question is still answered with the mount point it is
+        // under now, which is what keeps a volume mounted since covered (RememberedMountPoints).
+        _volumes = new RememberedMountPoints(volumes);
         _fileSystem = fileSystem ?? WindowsFileSystem.Default;
-        _finalPlaces = new FinalPlaces(_fileSystem, volumes);
+        _finalPlaces = new FinalPlaces(_fileSystem, _volumes);
 
-        _regions = new RegionTable(regions, volumes, _finalPlaces);
+        _regions = new RegionTable(regions, _volumes, _finalPlaces);
         _toolRoots = DeclaredRoot.Follow(toolRoots, _finalPlaces);
         _probedRoots = DeclaredRoot.Follow(probedRoots ?? [], _finalPlaces);
 
@@ -106,8 +110,6 @@ public sealed class ExploreActionPolicy
                 .. _toolRoots.Concat(_probedRoots).Select(root => (root.Root.Reason, root.Folder)),
             ],
             _fileSystem);
-
-        _volumes = volumes;
     }
 
     /// <summary>

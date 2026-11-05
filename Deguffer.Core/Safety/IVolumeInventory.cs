@@ -256,6 +256,16 @@ public interface IVolumeInventory
     /// a refusal written about <c>C:\Windows</c> holds for the same folder reached through another
     /// mount of the system volume. A list remembered from before that mount was made would name
     /// nothing and refuse nothing.</para>
+    ///
+    /// <para><b>Remembered per mount point by the owners that already remember each path's
+    /// answer</b>, through <see cref="RememberedMountPoints"/>, for no longer than they do: a
+    /// provider's pass, one reading of the process table, one §5.6 verification, and one Explore
+    /// policy. Nearly every path is on one of a few drives, and this costs two mount-manager calls.
+    /// The executor's last check before a removal still asks at the removal. That stays live in the sense above, because <see cref="MountPointOf"/> does:
+    /// a path under a mount point made since is answered with that mount point, which is asked here
+    /// afresh. Never remembered in <see cref="VolumeInventory.Current"/>, which lives as long as the
+    /// app. Remembering until the mount manager reports a change was set aside: how reliably and
+    /// cheaply its epoch can be read is unmeasured, and the window above already closes on its own.</para>
     /// </summary>
     /// <param name="mountPoint">A mount point, as <see cref="MountPointOf"/> answers one.</param>
     IReadOnlyList<string> MountPointsOf(string mountPoint);
@@ -268,6 +278,9 @@ public interface IVolumeInventory
     /// <para>For <see cref="VolumeRoot.Places"/>, for the reason <see cref="MountPointsOf"/> is: a
     /// letter standing for <c>C:\Users\testuser</c> reaches that profile's application data, and
     /// Windows names no volume for such a letter, so no mount point leads back to it.</para>
+    ///
+    /// <para>Not remembered, unlike <see cref="MountPointsOf"/>: one <c>QueryDosDevice</c> costs about
+    /// two microseconds, so remembering it would save almost nothing (#513).</para>
     /// </summary>
     /// <param name="driveRoot">The root of a path, as <see cref="Path.GetPathRoot(string)"/> answers it.</param>
     string? SubstituteOf(string driveRoot);
