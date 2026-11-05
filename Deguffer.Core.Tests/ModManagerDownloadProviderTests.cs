@@ -168,6 +168,88 @@ public sealed class ModManagerDownloadProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The archives' records are read while the download folders are measured, not after: with a
+    /// measurement held until the records' read has started, the plan still finishes, and its figures are
+    /// the records'. A plan that read them only once the measurement ended would wait forever, which the
+    /// timeout turns into a failure.
+    /// </summary>
+    [Fact]
+    public async Task AnInstancesRecordsAreReadWhileItsDownloadsAreMeasured()
+    {
+        var downloads = Path.Combine(Instance("Skyrim"), "downloads");
+        Archive(downloads, "SkyUI.7z", 300, "installed=true");
+        Archive(downloads, "Old.zip", 5000, "uninstalled=true");
+
+        var scanner = new MeasureHeldUntilReadStarts(new FakeDirectoryScanner());
+        var provider = new ModManagerDownloadProvider(
+            _system, _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, scanner, new FakeVolumeInventory());
+
+        // The read is the plan's only crew before the measurement, which the scanner holds. See WorkerCrew.Made.
+        WorkerCrew.Made.Value = _ => scanner.ReadStarted();
+
+        CleanupPlan plan;
+
+        try
+        {
+            plan = await provider.PlanAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        }
+        finally
+        {
+            WorkerCrew.Made.Value = null;
+            scanner.ReadStarted();
+        }
+
+        Assert.True(scanner.Held);
+        Assert.Contains(
+            $"Of that, {FreeSpace.Format(300L)} is archives Mod Organizer 2 lists as installed, and "
+            + $"{FreeSpace.Format(5000L)} archives it lists as uninstalled.",
+            Messages(plan),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A folder of many archives, whose records are read several at once and finish in no set order, gives
+    /// the totals each record's own figure adds up to. An archive with no record, a record Windows will not
+    /// let be read, a record that is a folder and a paused download are each counted in neither, as Mod
+    /// Organizer 2 lists them.
+    /// </summary>
+    [Fact]
+    public async Task ManyRecordsReadAtOnceGiveTheTotalsTheirArchivesAddUpTo()
+    {
+        var downloads = Path.Combine(Instance("Skyrim"), "downloads");
+        string?[] marks = ["installed=true", "uninstalled=true", "installed=true\r\nremoved=true", "installed=true\r\npaused=true", null];
+        long installed = 0, uninstalled = 0, hidden = 0;
+
+        for (var i = 0; i < 250; i++)
+        {
+            var bytes = 100 + i;
+            var mark = marks[i % marks.Length];
+            Archive(downloads, $"Mod{i}.7z", bytes, mark);
+
+            switch (i % marks.Length)
+            {
+                case 0: installed += bytes; break;
+                case 1: uninstalled += bytes; break;
+                case 2: hidden += bytes; break;
+            }
+        }
+
+        var unreadable = Archive(downloads, "Unreadable.7z", 7000, "installed=true");
+        using var denied = DeniedDirectory.WithUnreadableContent(unreadable + ModOrganizerArchives.MetaExtension);
+        Archive(downloads, "Folder.7z", 11000, meta: null);
+        Directory.CreateDirectory(Path.Combine(downloads, "Folder.7z" + ModOrganizerArchives.MetaExtension));
+
+        var plan = await Provider().PlanAsync();
+
+        Assert.Contains(
+            $"Of that, {FreeSpace.Format(installed)} is archives Mod Organizer 2 lists as installed, and "
+            + $"{FreeSpace.Format(uninstalled)} archives it lists as uninstalled. {FreeSpace.Format(hidden)} is archives it "
+            + "hides from its download list",
+            Messages(plan),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A folder in <c>%LOCALAPPDATA%\ModOrganizer</c> without <c>ModOrganizer.ini</c> is not an instance,
     /// as Mod Organizer 2's instance manager decides, and the download handler's record is not one either.
     /// </summary>
@@ -395,5 +477,51 @@ public sealed class ModManagerDownloadProviderTests : IDisposable
 
         Assert.Empty(await Provider().CleanedPlacesAsync());
         Assert.Contains(shipped.Providers, provider => provider is ModManagerDownloadProvider);
+    }
+
+    /// <summary>A scanner whose every list of folders waits to be measured until the records' read has started.</summary>
+    private sealed class MeasureHeldUntilReadStarts(FakeDirectoryScanner inner) : IDirectoryScanner
+    {
+        private readonly TaskCompletionSource _readStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _held;
+
+        /// <summary>Whether a measurement was asked for, and so held.</summary>
+        public bool Held => Volatile.Read(ref _held) > 0;
+
+        public void ReadStarted() => _readStarted.TrySetResult();
+
+        public async ValueTask<IReadOnlyList<ScanResult>> MeasureManyAsync(
+            IReadOnlyList<ScanRequest> asked,
+            MinimumAge keep = default,
+            CancellationToken ct = default)
+        {
+            Interlocked.Increment(ref _held);
+            await _readStarted.Task.WaitAsync(ct).ConfigureAwait(false);
+            return await inner.MeasureManyAsync(asked, keep, ct).ConfigureAwait(false);
+        }
+
+        public ValueTask<ScanResult> MeasureAsync(
+            string path,
+            MinimumAge keep = default,
+            ScanBounds bounds = default,
+            IProgress<ScanSize>? progress = null,
+            CancellationToken ct = default) =>
+            inner.MeasureAsync(path, keep, bounds, progress, ct);
+
+        public ValueTask<AgedScan> MeasureAgedAsync(string path, MinimumAge age, CancellationToken ct = default) =>
+            inner.MeasureAgedAsync(path, age, ct);
+
+        public ValueTask<IReadOnlyList<ScanResult>> MeasureFromDiskAsync(IReadOnlyList<ScanRequest> asked, CancellationToken ct = default) =>
+            inner.MeasureFromDiskAsync(asked, ct);
+
+        public ValueTask<IReadOnlyList<string>?> TryFindDirectoriesAsync(
+            DirectorySearch search,
+            string root,
+            CancellationToken ct = default) =>
+            inner.TryFindDirectoriesAsync(search, root, ct);
+
+        public void Invalidate() => inner.Invalidate();
+
+        public PassHold Hold() => inner.Hold();
     }
 }
