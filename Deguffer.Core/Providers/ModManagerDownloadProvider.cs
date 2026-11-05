@@ -135,20 +135,22 @@ public sealed class ModManagerDownloadProvider : CleanupProviderBase
 
         paths.AddRange(instanceFolders.Where(folder => !paths.Contains(folder, StringComparer.OrdinalIgnoreCase)));
 
-        var batch = paths.Count > 0 ? await MeasureAllAsync(paths, ct).ConfigureAwait(false) : null;
+        // The records need nothing from the measurement, so they are read while it runs. Where the
+        // measurement walks, both list the same folders, and whichever lists one first leaves it warm.
+        var reading = ModOrganizerArchives.OfAllAsync(instanceFolders, ct);
+        var measuring = MeasureAsync();
+
+        // Both awaited together, so neither one's failure leaves the other unobserved.
+        await Task.WhenAll(reading, measuring).ConfigureAwait(false);
+
+        var archives = await reading.ConfigureAwait(false);
+        var batch = await measuring.ConfigureAwait(false);
 
         var measured = new Dictionary<string, MeasuredFolder>(StringComparer.OrdinalIgnoreCase);
 
         for (var i = 0; i < paths.Count; i++)
         {
             measured[paths[i]] = new MeasuredFolder(batch!.Sizes[i], batch.Reached[i]);
-        }
-
-        var archives = new Dictionary<string, ModOrganizerArchives>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var folder in instanceFolders)
-        {
-            archives[folder] = ModOrganizerArchives.Of(folder, ct);
         }
 
         List<PlanNote> notes =
@@ -174,6 +176,9 @@ public sealed class ModManagerDownloadProvider : CleanupProviderBase
             ReportsOnly = true,
             Notes = notes,
         };
+
+        async Task<ScanBatch?> MeasureAsync() =>
+            paths.Count > 0 ? await MeasureAllAsync(paths, ct).ConfigureAwait(false) : null;
     }
 
     /// <summary>A folder nothing inside may go from, which is a root that recognises no child.</summary>
