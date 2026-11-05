@@ -1,8 +1,7 @@
+using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using System.Security;
 using Deguffer.Core.Safety;
-using Microsoft.Win32;
-using Windows.Management.Deployment;
 
 namespace Deguffer.Core.Startup;
 
@@ -37,34 +36,39 @@ public interface IPackagedStartupTasks
 
 /// <inheritdoc />
 /// <remarks>
-/// <para><b>The list is documented, and the state is not.</b> The packages come from
-/// <c>PackageManager.FindPackagesForUser</c> and the tasks from each one's manifest, both documented
-/// (§7.5). The state is the <c>State</c> value Windows keeps under this user's <c>SystemAppData</c>
-/// key for the package and the task, whose numbers are <c>StartupTaskState</c>'s documented ones and
-/// whose location is not, so it is only ever read here, and a number outside the enumeration reads as
-/// unknown.</para>
+/// <para><b>A manifest is read once per package version.</b> A package's files are fixed for
+/// its full name, which includes its version, and an update installs a new full name in a new
+/// folder, so the tasks a manifest declares are kept for the life of the process. The folder they are
+/// inside is asked for at every reading, because moving an app to another drive keeps its full
+/// name and changes where its files are. A package registered in development mode is
+/// never kept, because its folder is the developer's own and can change in place. The state is read
+/// at every reading, because that is what an enable or disable changes.</para>
+/// <para>A package whose folder or manifest is missing is not kept, so a package caught part-way
+/// through being installed is read again next time rather than remembered as declaring nothing.</para>
 /// </remarks>
-public sealed class WindowsPackagedStartupTasks : IPackagedStartupTasks
+public sealed class PackagedStartupTasks : IPackagedStartupTasks
 {
-    public static WindowsPackagedStartupTasks Default { get; } = new();
+    public static PackagedStartupTasks Default { get; } = new(WindowsInstalledPackages.Default);
 
-    private const string StateKey =
-        @"Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\SystemAppData";
+    private const string ManifestName = "AppxManifest.xml";
 
-    private WindowsPackagedStartupTasks()
+    private readonly IInstalledPackages packages;
+
+    /// <summary>The tasks each manifest already read declares, by package full name. The Memory and Startup pages read at once.</summary>
+    private readonly ConcurrentDictionary<string, IReadOnlyList<DeclaredStartupTask>> known = new(StringComparer.Ordinal);
+
+    internal PackagedStartupTasks(IInstalledPackages packages)
     {
+        this.packages = packages;
     }
 
     public PackagedTasksRead Read(CancellationToken ct)
     {
-        List<Windows.ApplicationModel.Package> packages;
+        IReadOnlyList<IInstalledPackage> installed;
 
         try
         {
-            // The empty user is the calling user, which is the one whose tasks start at its sign-in.
-            // Listed here rather than as the loop runs, because the list is fetched as it is walked
-            // and a refusal part-way is a refusal of the list.
-            packages = [.. new PackageManager().FindPackagesForUserWithPackageTypes(string.Empty, PackageTypes.Main)];
+            installed = packages.List();
         }
         catch (Exception ex) when (ex is COMException or UnauthorizedAccessException)
         {
@@ -74,54 +78,31 @@ public sealed class WindowsPackagedStartupTasks : IPackagedStartupTasks
         var tasks = new List<PackagedTask>();
         var complete = true;
 
-        // A key Windows would not open leaves every state unread, which each row shows as unknown.
-        using var states = OpenStates();
+        using var states = packages.OpenStates();
 
-        foreach (var package in packages)
+        foreach (var package in installed)
         {
             ct.ThrowIfCancellationRequested();
 
             try
             {
-                if (FolderOf(package) is not { } folder)
+                if (package.Folder() is not { } folder
+                    || DeclaredBy(package, folder) is not { Count: > 0 } declared)
                 {
                     continue;
                 }
 
-                var manifest = Path.Combine(folder, "AppxManifest.xml");
-
-                switch (LongPath.ProbeFile(manifest))
-                {
-                    case PathPresence.Absent:
-                        continue;
-
-                    case PathPresence.Present:
-                        break;
-
-                    default:
-                        // Windows would not say, so this package may declare a task the list lacks.
-                        complete = false;
-                        continue;
-                }
-
-                var declared = StartupTaskManifest.Read(File.ReadAllText(LongPath.Extended(manifest)));
-
-                if (declared.Count == 0)
-                {
-                    continue;
-                }
-
-                var family = package.Id.FamilyName;
+                var family = package.FamilyName;
 
                 foreach (var task in declared)
                 {
                     tasks.Add(new PackagedTask(
                         family,
                         task.TaskId,
-                        task.DisplayName ?? Text(package.DisplayName) ?? package.Id.Name,
+                        task.DisplayName ?? Text(package.DisplayName) ?? package.Name,
                         Text(package.PublisherDisplayName),
                         task.Executable is { } executable ? Path.GetFullPath(Path.Combine(folder, executable)) : null,
-                        StateOf(states, family, task.TaskId)));
+                        states.StateOf(family, task.TaskId)));
                 }
             }
             catch (Exception ex) when (ex is COMException or UnauthorizedAccessException or SecurityException or IOException or ArgumentException)
@@ -136,46 +117,40 @@ public sealed class WindowsPackagedStartupTasks : IPackagedStartupTasks
     }
 
     /// <summary>
-    /// The package's folder, or null where Windows says it is not there: a package registered from a
-    /// folder that has since been deleted is still listed, and with no manifest it starts nothing, so
-    /// it is not a gap in the list.
+    /// The tasks the manifest in <paramref name="folder"/> declares, or null where there is no
+    /// manifest, so the package starts nothing.
     /// </summary>
-    private static string? FolderOf(Windows.ApplicationModel.Package package)
+    private IReadOnlyList<DeclaredStartupTask>? DeclaredBy(IInstalledPackage package, string folder)
     {
+        var fullName = package.FullName;
+        var fixedFiles = !package.IsDevelopmentMode;
+
+        if (fixedFiles && known.TryGetValue(fullName, out var seen))
+        {
+            return seen;
+        }
+
+        string text;
+
         try
         {
-            return package.InstalledLocation.Path;
+            text = packages.ReadManifest(LongPath.Extended(Path.Combine(folder, ManifestName)));
         }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
         {
+            // Opening the file answers whether it is there. Any other refusal is left to the caller,
+            // which marks the list incomplete, because this package may declare a task the list lacks.
             return null;
         }
-    }
 
-    private static RegistryKey? OpenStates()
-    {
-        try
-        {
-            return Registry.CurrentUser.OpenSubKey(StateKey);
-        }
-        catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
-        {
-            return null;
-        }
-    }
+        var declared = StartupTaskManifest.Read(text);
 
-    private static int? StateOf(RegistryKey? states, string family, string taskId)
-    {
-        try
+        if (fixedFiles)
         {
-            using var task = states?.OpenSubKey(family + @"\" + taskId);
+            known[fullName] = declared;
+        }
 
-            return task?.GetValue("State") is int number && task.GetValueKind("State") is RegistryValueKind.DWord ? number : null;
-        }
-        catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
-        {
-            return null;
-        }
+        return declared;
     }
 
     private static string? Text(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
