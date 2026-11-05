@@ -5,7 +5,7 @@ namespace Deguffer.Core.Execution;
 /// <summary>
 /// The shell interfaces <see cref="ShellRecycleBin"/> calls, declared no further than it needs.
 ///
-/// <para>Every method of <c>IFileOperation</c> is declared even though four are used, because a COM
+/// <para>Every method of <c>IFileOperation</c> is declared even though three are used, because a COM
 /// interface is a vtable: the runtime calls the slot at the declared position, so an omitted method
 /// does not fail to compile — it silently shifts every method after it onto the wrong slot. That is
 /// the failure this file exists to make impossible, so the unused members are declared in order with
@@ -86,9 +86,8 @@ internal interface IShellItem
 }
 
 /// <summary>
-/// The shell's file-operation engine. <c>Advise</c>, <c>SetOperationFlags</c>, <c>DeleteItem</c>,
-/// <c>PerformOperations</c> and <c>GetAnyOperationsAborted</c> are called; the rest hold their
-/// vtable slots.
+/// The shell's file-operation engine. <c>SetOperationFlags</c>, <c>DeleteItem</c> and
+/// <c>PerformOperations</c> are called; the rest hold their vtable slots.
 /// </summary>
 [ComImport]
 [Guid("947aab5f-0a5c-4c13-b4d6-4bf7836fc9f8")]
@@ -125,7 +124,8 @@ internal interface IFileOperation
 
     void CopyItems(IntPtr items, IShellItem destination);
 
-    void DeleteItem(IShellItem item, IntPtr sink);
+    /// <param name="sink">Told about this item alone, so a batch can say what became of each item in it.</param>
+    void DeleteItem(IShellItem item, IFileOperationProgressSink sink);
 
     void DeleteItems(IntPtr items);
 

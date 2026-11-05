@@ -194,7 +194,8 @@ public sealed class DuplicateRemovalRunTests : DuplicateRemovalScene
     /// <summary>
     /// Windows deleting a copy outright when asked to move it to the bin stops the run, and the copy
     /// is said to be gone and not in the bin, never moved there or still in place. §5.6 does not count
-    /// it as a loss beside it, since the report names it.
+    /// it as a loss beside it, since the report names it. The copy after it in the same batch is not
+    /// reached: Windows deletes outright what its bin cannot take, and the cause may be the same.
     /// </summary>
     [Fact]
     public void ACopyWindowsDeletedOutrightStopsTheRunAndIsNotSaidToBeInTheBin()
@@ -219,11 +220,159 @@ public sealed class DuplicateRemovalRunTests : DuplicateRemovalScene
         Assert.Same(first, report.StoppedAt);
         Assert.Contains("outright", first.Message);
         Assert.Equal(RemovalCheck.NotReached, report.Copies.Single(outcome => outcome != first).Check);
+        Assert.Equal([copy.Path], bin.Paths);
+        Assert.True(File.Exists(copyB.Path));
         Assert.Empty(report.Removed);
         Assert.DoesNotContain(first, report.Kept);
         Assert.True(report.Verification.Passed);
         Assert.DoesNotContain("Moved", report.Summary);
         Assert.DoesNotContain("Nothing was removed", report.Summary);
+    }
+
+    /// <summary>
+    /// A copy that stops the run stops its batch at that copy: the rest of the batch is never reached,
+    /// and the batch after it is never handed to the bin. Each such copy is where it was.
+    /// </summary>
+    [Fact]
+    public void ACopyThatStopsTheRunStopsItsBatchThereAndNoBatchFollows()
+    {
+        List<DuplicateCandidate[]> groups = [];
+
+        for (var i = 0; i <= IRecycleBin.LargestBatch; i++)
+        {
+            var content = Content(length: 1024, seed: i + 1);
+            groups.Add([
+                Found(Write(Path.Combine(Documents, $"{i}.bin"), content)),
+                Found(Write(Path.Combine(Downloads, $"{i}.bin"), content))]);
+        }
+
+        var marks = Marks([.. groups]);
+        Mark(marks, [.. groups.Select(group => group[1])]);
+        var first = groups[1][1];
+        var moving = FakeRecycleBin.MovingTo(Bin);
+        var bin = new FakeRecycleBin(path =>
+        {
+            if (path != first.Path)
+            {
+                return moving.Recycle([path])[0];
+            }
+
+            File.Delete(path);
+            return new RecycleOutcome(Removed: true, "Deleted outright.") { DeletedOutright = true };
+        });
+
+        var report = Remove(marks, ExploreRemovalMode.RecycleBin, bin: bin);
+
+        Assert.Equal(first, report.StoppedAt?.Copy);
+        Assert.Equal([IRecycleBin.LargestBatch], bin.Batches.Select(batch => batch.Count));
+        Assert.Equal([groups[0][1].Path, first.Path], bin.Paths);
+        Assert.Equal(groups[0][1], Assert.Single(report.Removed).Copy);
+        var unreached = report.Copies.Where(outcome => outcome.Check == RemovalCheck.NotReached).ToList();
+        Assert.Equal(groups.Skip(2).Select(group => group[1]), unreached.Select(outcome => outcome.Copy));
+        Assert.All(unreached, outcome => Assert.True(File.Exists(outcome.Copy.Path)));
+        Assert.True(report.Verification.Passed);
+    }
+
+    /// <summary>
+    /// A copy compared and waiting for the rest of its batch is hidden before the batch goes. It is
+    /// described again as the batch goes, so it stays and is never handed to the bin, and the copy
+    /// beside it in the batch goes.
+    /// </summary>
+    [Fact]
+    public void ACopyThatChangesWhileItWaitsForItsBatchStaysAndTheRestGo()
+    {
+        var keptA = Found(Write(Path.Combine(Documents, "a.bin"), Content(seed: 1)));
+        var copyA = Found(Write(Path.Combine(Downloads, "a.bin"), Content(seed: 1)));
+        var keptB = Found(Write(Path.Combine(Documents, "b.bin"), Content(seed: 2)));
+        var copyB = Found(Write(Path.Combine(Downloads, "b.bin"), Content(seed: 2)));
+        var marks = Marks([keptA, copyA], [keptB, copyB]);
+        Mark(marks, copyA, copyB);
+        var bin = FakeRecycleBin.MovingTo(Bin);
+
+        var report = Remove(marks, ExploreRemovalMode.RecycleBin, bin: bin, open: (extended, use) =>
+        {
+            // The second copy is opened once the first has been compared and is waiting.
+            if (use is HeldFor.Removing && extended == LongPath.Extended(copyB.Path))
+            {
+                File.SetAttributes(copyA.Path, File.GetAttributes(copyA.Path) | FileAttributes.Hidden);
+            }
+
+            return FileInformation.OpenHeld(extended, use);
+        });
+
+        Assert.Equal(RemovalCheck.Changed, report.Copies.Single(outcome => outcome.Copy == copyA).Check);
+        Assert.True(File.Exists(copyA.Path));
+        Assert.Equal(RemovalCheck.Removed, report.Copies.Single(outcome => outcome.Copy == copyB).Check);
+        Assert.Equal([[copyB.Path]], bin.Batches);
+        Assert.True(report.Verification.Passed);
+    }
+
+    /// <summary>
+    /// The removal is cancelled as the first copy of a batch goes. The bin stops at the next copy,
+    /// which is reported not reached and is where it was, and the run is reported cancelled with the
+    /// first copy moved and verified.
+    /// </summary>
+    [Fact]
+    public void ARemovalCancelledPartWayThroughABatchReportsWhatWent()
+    {
+        var keptA = Found(Write(Path.Combine(Documents, "a.bin"), Content(seed: 1)));
+        var copyA = Found(Write(Path.Combine(Downloads, "a.bin"), Content(seed: 1)));
+        var keptB = Found(Write(Path.Combine(Documents, "b.bin"), Content(seed: 2)));
+        var copyB = Found(Write(Path.Combine(Downloads, "b.bin"), Content(seed: 2)));
+        var marks = Marks([keptA, copyA], [keptB, copyB]);
+        Mark(marks, copyA, copyB);
+        using var cts = new CancellationTokenSource();
+        var bin = FakeRecycleBin.MovingTo(Bin, _ => cts.Cancel());
+        var confirmation = RemovalConfirmation.For(marks, marks.Keeping, ExploreRemovalMode.RecycleBin, _ => null, _ => null);
+        var (plan, dropped) = DuplicateRemover.Plan(marks.Groups, confirmation.Copies, marks.Keeping);
+
+        var report = Remover(bin).Remove(plan, dropped, marks.Keeping, confirmation.Mode, cts.Token);
+
+        Assert.True(report.Cancelled);
+        Assert.Equal([[copyA.Path, copyB.Path]], bin.Batches);
+        Assert.Equal(RemovalCheck.Removed, report.Copies.Single(outcome => outcome.Copy == copyA).Check);
+        Assert.Equal(RemovalCheck.NotReached, report.Copies.Single(outcome => outcome.Copy == copyB).Check);
+        Assert.True(File.Exists(copyB.Path));
+        Assert.True(report.Verification.Passed);
+    }
+
+    /// <summary>
+    /// The copy a group keeps stays held until that group's copies have gone, though the run has
+    /// moved on to another group by then: the bin, moving the second group's copy in the same batch,
+    /// cannot delete the copy the first group keeps.
+    /// </summary>
+    [Fact]
+    public void TheCopyAGroupKeepsIsHeldUntilItsBatchHasGone()
+    {
+        var keptA = Found(Write(Path.Combine(Documents, "a.bin"), Content(seed: 1)));
+        var copyA = Found(Write(Path.Combine(Downloads, "a.bin"), Content(seed: 1)));
+        var keptB = Found(Write(Path.Combine(Documents, "b.bin"), Content(seed: 2)));
+        var copyB = Found(Write(Path.Combine(Downloads, "b.bin"), Content(seed: 2)));
+        var marks = Marks([keptA, copyA], [keptB, copyB]);
+        Mark(marks, copyA, copyB);
+        var refused = false;
+
+        var report = Remove(marks, ExploreRemovalMode.RecycleBin, bin: FakeRecycleBin.MovingTo(Bin, path =>
+        {
+            if (path != copyB.Path)
+            {
+                return;
+            }
+
+            try
+            {
+                File.Delete(keptA.Path);
+            }
+            catch (IOException)
+            {
+                refused = true;
+            }
+        }));
+
+        Assert.True(refused);
+        Assert.True(File.Exists(keptA.Path));
+        Assert.All(report.Copies, outcome => Assert.Equal(RemovalCheck.Removed, outcome.Check));
+        Assert.True(report.Verification.Passed);
     }
 
     /// <summary>

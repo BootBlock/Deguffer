@@ -19,7 +19,7 @@ public sealed class StartupReader(
         StartupFolderReader.Current,
         ShellShortcutReader.Default,
         WindowsProgramFiles.Default,
-        WindowsPackagedStartupTasks.Default);
+        PackagedStartupTasks.Default);
 
     private const string ShortcutExtension = ".lnk";
 

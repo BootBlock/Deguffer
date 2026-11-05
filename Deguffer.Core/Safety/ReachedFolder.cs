@@ -17,9 +17,16 @@ namespace Deguffer.Core.Safety;
 /// </summary>
 public sealed class ReachedFolder
 {
-    private ReachedFolder(IReadOnlyList<string> places, bool isVolumeTop)
+    /// <summary>
+    /// <see cref="Places"/> as an array, which <see cref="PathTo(ReachedFolder)"/> and
+    /// <see cref="IsSameAs"/> walk without allocating an enumerator. The in-use check asks them for
+    /// every pair of a directory and a running program, hundreds of thousands of times in one row.
+    /// </summary>
+    private readonly string[] _places;
+
+    private ReachedFolder(List<string> places, bool isVolumeTop)
     {
-        Places = places;
+        _places = [.. places];
         IsVolumeTop = isVolumeTop;
     }
 
@@ -33,7 +40,7 @@ public sealed class ReachedFolder
     /// the same way, expanded later, would otherwise match it nowhere. Each spelling names the same
     /// folder, so keeping both can only find a match the comparison of text found before.</para>
     /// </summary>
-    public IReadOnlyList<string> Places { get; }
+    public IReadOnlyList<string> Places => _places;
 
     /// <summary>
     /// Whether the path asked about is the top of a drive, a share or a volume, which is never removed
@@ -90,9 +97,9 @@ public sealed class ReachedFolder
     /// </summary>
     public string? PathTo(ReachedFolder inner)
     {
-        foreach (var outer in Places)
+        foreach (var outer in _places)
         {
-            foreach (var place in inner.Places)
+            foreach (var place in inner._places)
             {
                 if (LongPath.Contains(outer, place))
                 {
@@ -163,8 +170,21 @@ public sealed class ReachedFolder
         relative == "." ? 0 : relative.Split(Path.DirectorySeparatorChar).Length;
 
     /// <summary>Whether this folder and <paramref name="other"/> are one folder reached two ways.</summary>
-    public bool IsSameAs(ReachedFolder other) =>
-        Places.Any(place => other.Places.Contains(place, StringComparer.OrdinalIgnoreCase));
+    public bool IsSameAs(ReachedFolder other)
+    {
+        foreach (var place in _places)
+        {
+            foreach (var otherPlace in other._places)
+            {
+                if (string.Equals(place, otherPlace, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// This folder at every path it is reachable at and every path <paramref name="other"/> is, for a
