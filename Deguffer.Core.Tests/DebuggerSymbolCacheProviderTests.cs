@@ -201,13 +201,16 @@ public sealed class DebuggerSymbolCacheProviderTests : IDisposable
 
     /// <summary>
     /// An entry is dated by <see cref="DirectoryAge"/>'s rule, the newest of its own time and its index
-    /// folders', from the listings that recognised it. The examination is the pass's, so an index folder
-    /// written after it, within the same pass, is not seen: nothing lists the entry again to date it.
+    /// folders', from the listings that recognised it, whichever half is the newer. The examination is the
+    /// pass's, so the entry or an index folder written after it, within the same pass, is not seen:
+    /// nothing lists the entry again to date it.
     /// </summary>
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task DatesEachEntryFromTheListingsThatRecognisedIt(bool twoLevel)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task DatesEachEntryFromTheListingsThatRecognisedIt(bool twoLevel, bool ownTimeNewest)
     {
         SymbolPath($"srv*{Store}*{Microsoft}");
 
@@ -225,13 +228,13 @@ public sealed class DebuggerSymbolCacheProviderTests : IDisposable
         var newest = now - TimeSpan.FromDays(10);
 
         Directory.SetLastWriteTimeUtc(older, now - TimeSpan.FromDays(40));
-        Directory.SetLastWriteTimeUtc(newer, newest);
-        Directory.SetLastWriteTimeUtc(entry, now - TimeSpan.FromDays(30));
+        Directory.SetLastWriteTimeUtc(newer, ownTimeNewest ? now - TimeSpan.FromDays(30) : newest);
+        Directory.SetLastWriteTimeUtc(entry, ownTimeNewest ? newest : now - TimeSpan.FromDays(30));
 
         var (microsoft, _) = CreateRows();
         await microsoft.DiscoverToolRootsAsync();
 
-        Directory.SetLastWriteTimeUtc(newer, now);
+        Directory.SetLastWriteTimeUtc(ownTimeNewest ? entry : newer, now);
 
         var step = Assert.Single((await microsoft.PlanAsync()).Steps);
 

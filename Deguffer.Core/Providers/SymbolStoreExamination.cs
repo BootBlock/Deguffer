@@ -43,8 +43,9 @@ internal sealed record SymbolStoreEntry(string Path, string Parent, SymbolStore 
 internal sealed class SymbolStoreExamination
 {
     /// <summary>
-    /// How many entries are looked inside at once. Each look is two or three small listings that wait on
-    /// the disk rather than the processor, and the planner already plans several rows at once.
+    /// How many entries are looked inside at once. Each look lists the entry and then each index folder in
+    /// it, small listings that wait on the disk rather than the processor, and the planner already plans
+    /// several rows at once.
     /// </summary>
     private const int EntriesAtOnce = 8;
 
