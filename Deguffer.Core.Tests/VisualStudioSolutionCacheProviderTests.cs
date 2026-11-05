@@ -133,6 +133,9 @@ public sealed class VisualStudioSolutionCacheProviderTests : IDisposable
     [InlineData("index-merges-other-file")]
     [InlineData("headers-other-file")]
     [InlineData("headers-not-automatic")]
+    [InlineData("headers-link")]
+    [InlineData("design-time-link")]
+    [InlineData("index-link")]
     [InlineData("database-not-sqlite")]
     [InlineData("database-with-log")]
     [InlineData("database-with-journal")]
@@ -152,6 +155,9 @@ public sealed class VisualStudioSolutionCacheProviderTests : IDisposable
             "index-merges-other-file" => Spoil(folder.FileContentIndex, () => VisualStudioFolderFixture.Write(Path.Combine(folder.FileContentIndex, "merges", "notes.txt"), "mine")),
             "headers-other-file" => Spoil(folder.PrecompiledHeaders, () => VisualStudioFolderFixture.Write(Path.Combine(folder.PrecompiledHeaders, "AutoPCH", "5820ba93e90ae8c8", "notes.txt"), "mine")),
             "headers-not-automatic" => Spoil(folder.PrecompiledHeaders, () => Directory.Move(Path.Combine(folder.PrecompiledHeaders, "AutoPCH"), Path.Combine(folder.PrecompiledHeaders, "Mine"))),
+            "headers-link" => Spoil(folder.PrecompiledHeaders, () => Junction.ToDirectory(Path.Combine(folder.PrecompiledHeaders, "AutoPCH", "elsewhere"), Elsewhere("MAIN.ipch"))),
+            "design-time-link" => Spoil(folder.DesignTimeBuild, () => Junction.ToDirectory(Path.Combine(folder.DesignTimeBuild, "elsewhere"), Elsewhere(".dtbcache.v2"))),
+            "index-link" => Spoil(folder.FileContentIndex, () => Junction.ToDirectory(Path.Combine(folder.FileContentIndex, "merges", "elsewhere"), Elsewhere("0f8fad5b-d9cb-469f-a165-70867728950e.vsidx"))),
             "database-not-sqlite" => Spoil(folder.BrowseDatabase, () => File.WriteAllText(folder.BrowseDatabase, "not a database")),
             "database-with-log" => Spoil(folder.BrowseDatabase, () => VisualStudioFolderFixture.WriteBytes(folder.BrowseDatabase + "-wal")),
             "database-with-journal" => Spoil(folder.BrowseDatabase, () => VisualStudioFolderFixture.WriteBytes(folder.BrowseDatabase + "-journal")),
@@ -178,6 +184,15 @@ public sealed class VisualStudioSolutionCacheProviderTests : IDisposable
         {
             spoil();
             return path;
+        }
+
+        // A folder outside the .vs folder holding only what the cache allows, so the link alone is
+        // what declines it.
+        string Elsewhere(string file)
+        {
+            var target = Path.Combine(_temp.Path, "elsewhere");
+            VisualStudioFolderFixture.WriteBytes(Path.Combine(target, file));
+            return target;
         }
     }
 
@@ -255,11 +270,16 @@ public sealed class VisualStudioSolutionCacheProviderTests : IDisposable
         Assert.True((await provider.VerifyAsync(plan)).Passed);
     }
 
-    /// <summary>The veto asks Windows about every file the caches were proved by, and about the solution folder.</summary>
+    /// <summary>
+    /// The veto asks Windows about every file the caches were proved by, and about the solution folder.
+    /// Every file named was listed, so the query says so, and an SQLite companion is named only where
+    /// the listing found one: a name nothing listed would be a guess the inspector has to probe.
+    /// </summary>
     [Fact]
     public async Task TheVetoIsAskedAboutTheSolutionFolderAndEveryCacheFile()
     {
         var folder = VisualStudioFolderFixture.Create(Path.Combine(ApproveRoot(), "App"));
+        VisualStudioFolderFixture.WriteBytes(folder.BrowseDatabase + "-wal");
         var inspector = FakeLiveTreeInspector.NothingLive;
 
         await CreateProvider(live: inspector).PlanAsync();
@@ -267,6 +287,9 @@ public sealed class VisualStudioSolutionCacheProviderTests : IDisposable
         var asked = Assert.Single(inspector.Asked);
         Assert.Equal(folder.Vs, asked.Directory);
         Assert.Equal(folder.SolutionFolder, asked.Project);
+        Assert.True(asked.LockFilesListed);
+        Assert.DoesNotContain(folder.BrowseDatabase + "-journal", asked.LockFileNames);
+        Assert.DoesNotContain(folder.SolutionDatabase + "-wal", asked.LockFileNames);
         Assert.Contains(folder.IndexFile, asked.LockFileNames);
         Assert.Contains(folder.BrowseDatabase, asked.LockFileNames);
         Assert.Contains(Path.Combine(folder.ProjectEvaluation, "app.projects.v10.bin"), asked.LockFileNames);
@@ -277,6 +300,147 @@ public sealed class VisualStudioSolutionCacheProviderTests : IDisposable
         Assert.Contains(folder.BrowseDatabase + "-wal", asked.LockFileNames);
         Assert.DoesNotContain(Path.Combine(folder.Version, ".suo"), asked.LockFileNames);
         Assert.DoesNotContain(asked.LockFileNames, file => file.Contains("copilot-chat", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// A preview lists each folder in a <c>.vs</c> folder once, before the measurement walks the
+    /// targets: the veto's lock files, every cache's evidence and every target's age read the same
+    /// listing. A C++ solution's <c>ipch\AutoPCH</c> holds one folder per header, each of which was
+    /// listed four times, so it has several here.
+    /// </summary>
+    [Fact]
+    public async Task APreviewListsEachFolderInTheVsFolderOnce()
+    {
+        var folder = VisualStudioFolderFixture.Create(Path.Combine(ApproveRoot(), "App"));
+        var automatic = Path.Combine(folder.PrecompiledHeaders, "AutoPCH");
+        string[] headers = [Path.Combine(automatic, "5820ba93e90ae8c8"), Path.Combine(automatic, "a1b2c3d4e5f60718"), Path.Combine(automatic, "0f0e0d0c0b0a0908")];
+        VisualStudioFolderFixture.WriteBytes(Path.Combine(headers[1], "PCH.ipch"));
+        VisualStudioFolderFixture.WriteBytes(Path.Combine(headers[2], "STDAFX.ipch"));
+        VisualStudioFolderFixture.WriteBytes(Path.Combine(headers[2], "MAIN.ipch"));
+
+        var listed = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var reader = new VisualStudioCacheReader(directory =>
+        {
+            listed[directory] = listed.GetValueOrDefault(directory) + 1;
+            return VisualStudioCacheReader.List(directory);
+        });
+
+        var plan = await CreateProvider(reader: reader).PlanAsync();
+
+        Assert.Equal([.. folder.Caches.Order(StringComparer.OrdinalIgnoreCase)], [.. plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase)]);
+        Assert.All(listed, entry => Assert.True(entry.Value == 1, $"{entry.Key} was listed {entry.Value} times"));
+
+        string[] read =
+        [
+            folder.Vs, folder.Solution, folder.Version, folder.ProjectEvaluation, folder.FileContentIndex,
+            Path.Combine(folder.FileContentIndex, "merges"), folder.DesignTimeBuild, folder.PrecompiledHeaders,
+            automatic, .. headers,
+        ];
+
+        Assert.All(read, directory => Assert.True(listed.ContainsKey(directory), $"{directory} was not read through the reading"));
+    }
+
+    /// <summary>
+    /// Every decision is taken from the one reading rather than from the disk again: the evidence, a
+    /// database's companions, the lock files and the age. The reading here differs from the disk, so a
+    /// decision that read the disk again would come out the other way.
+    /// </summary>
+    [Fact]
+    public async Task TheCachesAreJudgedAskedAboutAndDatedFromTheOneReading()
+    {
+        var folder = VisualStudioFolderFixture.Create(Path.Combine(ApproveRoot(), "App"));
+        var header = Path.Combine(folder.PrecompiledHeaders, "AutoPCH", "5820ba93e90ae8c8");
+        var written = new DateTime(2021, 3, 4, 5, 6, 7, DateTimeKind.Utc);
+
+        // Later than anything on the disk, so the age can only be the reading's.
+        var future = new DateTime(2099, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+        var inspector = FakeLiveTreeInspector.NothingLive;
+
+        var reader = new VisualStudioCacheReader(directory =>
+        {
+            var entries = VisualStudioCacheReader.List(directory);
+
+            return entries is null
+                ? null
+                : directory.Equals(header, StringComparison.OrdinalIgnoreCase)
+                    ? [.. entries, new VisualStudioEntry("notes.txt", Path.Combine(directory, "notes.txt"), FileAttributes.Normal, written)]
+                    : directory.Equals(folder.Version, StringComparison.OrdinalIgnoreCase)
+                        ? [.. entries, new VisualStudioEntry("Browse.VC.db-wal", folder.BrowseDatabase + "-wal", FileAttributes.Normal, written)]
+                        : directory.Equals(folder.DesignTimeBuild, StringComparison.OrdinalIgnoreCase)
+                            ? [.. entries.Select(entry => entry with { LastWriteTimeUtc = future })]
+                            : entries;
+        });
+
+        var provider = CreateProvider(live: inspector, reader: reader);
+        var plan = await provider.PlanAsync();
+
+        Assert.DoesNotContain(folder.PrecompiledHeaders, plan.TargetedPaths);
+        Assert.DoesNotContain(folder.BrowseDatabase, plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == folder.PrecompiledHeaders);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == folder.BrowseDatabase);
+        Assert.Contains(folder.BrowseDatabase + "-wal", Assert.Single(inspector.Asked).LockFileNames);
+        Assert.Contains(Path.Combine(header, "notes.txt"), Assert.Single(inspector.Asked).LockFileNames);
+
+        var designTime = Assert.Single(plan.Steps.OfType<DeleteStep>(), step => step.Path == folder.DesignTimeBuild);
+        Assert.Equal(future, designTime.LastWritten);
+
+        // §5.6 on the same reading: what it declined survives the clean, and the rest goes.
+        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
+        Assert.True(Directory.Exists(header));
+        Assert.True(File.Exists(folder.BrowseDatabase));
+        Assert.False(Directory.Exists(folder.DesignTimeBuild));
+        Assert.True((await provider.VerifyAsync(plan)).Passed);
+    }
+
+    /// <summary>
+    /// The header files are counted from the listing that proved each header folder holds them alone.
+    /// The reading here finds the one header folder empty, so the cache holds no header and proves
+    /// nothing, while a count that listed the folder again would find one on the disk.
+    /// </summary>
+    [Fact]
+    public async Task PrecompiledHeadersAreCountedFromTheListingThatProvedThem()
+    {
+        var folder = VisualStudioFolderFixture.Create(Path.Combine(ApproveRoot(), "App"));
+        var header = Path.Combine(folder.PrecompiledHeaders, "AutoPCH", "5820ba93e90ae8c8");
+        var reader = new VisualStudioCacheReader(directory =>
+            directory.Equals(header, StringComparison.OrdinalIgnoreCase) ? [] : VisualStudioCacheReader.List(directory));
+
+        var plan = await CreateProvider(reader: reader).PlanAsync();
+
+        Assert.DoesNotContain(folder.PrecompiledHeaders, plan.TargetedPaths);
+        Assert.Equal(folder.Caches.Count - 1, plan.TargetedPaths.Count);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == folder.PrecompiledHeaders);
+    }
+
+    /// <summary>
+    /// §5.2 in a case-sensitive folder, where <c>FileContentIndex</c> and <c>fileContentIndex</c> are
+    /// two folders. Each is judged by its own listing: the index is offered, the folder beside it that
+    /// holds a file of the user's is not, and both are asked about. Judged by one listing for both,
+    /// one of them would be offered or declined on the other's contents, whichever was listed last.
+    /// </summary>
+    [Fact]
+    public async Task FoldersWhoseNamesDifferOnlyInCaseAreJudgedApart()
+    {
+        var solutionFolder = Path.Combine(ApproveRoot(), "App");
+        CaseSensitiveFolder.Create(Path.Combine(solutionFolder, ".vs", "App"));
+        var folder = VisualStudioFolderFixture.Create(solutionFolder);
+        var decoy = Path.Combine(folder.Solution, "fileContentIndex");
+        VisualStudioFolderFixture.WriteBytes(Path.Combine(decoy, "0f8fad5b-d9cb-469f-a165-70867728950e.vsidx"));
+        VisualStudioFolderFixture.Write(Path.Combine(decoy, "notes.txt"), "mine");
+        var inspector = FakeLiveTreeInspector.NothingLive;
+
+        var provider = CreateProvider(live: inspector);
+        var plan = await provider.PlanAsync();
+
+        Assert.Contains(folder.FileContentIndex, plan.TargetedPaths);
+        Assert.DoesNotContain(decoy, plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == decoy);
+        Assert.Contains(Path.Combine(decoy, "notes.txt"), Assert.Single(inspector.Asked).LockFileNames);
+
+        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
+        Assert.True(File.Exists(Path.Combine(decoy, "notes.txt")));
+        Assert.False(Directory.Exists(folder.FileContentIndex));
+        Assert.True((await provider.VerifyAsync(plan)).Passed);
     }
 
     /// <summary>"Could not tell" is not "nothing is using it", so an answer that is not whole offers nothing.</summary>
@@ -403,12 +567,16 @@ public sealed class VisualStudioSolutionCacheProviderTests : IDisposable
         return root;
     }
 
-    private VisualStudioSolutionCacheProvider CreateProvider(FakeProcessRunner? runner = null, FakeLiveTreeInspector? live = null)
+    private VisualStudioSolutionCacheProvider CreateProvider(
+        FakeProcessRunner? runner = null,
+        FakeLiveTreeInspector? live = null,
+        VisualStudioCacheReader? reader = null)
     {
         var scanner = new FakeDirectoryScanner();
 
         return new VisualStudioSolutionCacheProvider(
             _roots,
+            reader ?? VisualStudioCacheReader.Default,
             new SourceDirectoryDiscovery(scanner, new FakeVolumeInventory()),
             live ?? FakeLiveTreeInspector.NothingLive,
             _environment,

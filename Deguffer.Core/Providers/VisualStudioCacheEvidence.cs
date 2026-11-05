@@ -25,18 +25,22 @@ internal static partial class VisualStudioCacheEvidence
     private static readonly ContentSignature DesignTimeBuildFiles = new(DesignTimeBuildFile());
 
     /// <summary><c>ProjectEvaluation</c>: the evaluation files, and nothing else.</summary>
-    public static bool ProjectEvaluation(string directory) => EvaluationFiles.Matches(directory);
+    public static bool ProjectEvaluation(VisualStudioListing folder, VisualStudioEntry cache) =>
+        Matches(EvaluationFiles, folder.Inside(cache));
 
     /// <summary><c>DesignTimeBuild</c>: <c>.dtbcache.v&lt;n&gt;</c>, and nothing else.</summary>
-    public static bool DesignTimeBuild(string directory) => DesignTimeBuildFiles.Matches(directory);
+    public static bool DesignTimeBuild(VisualStudioListing folder, VisualStudioEntry cache) =>
+        Matches(DesignTimeBuildFiles, folder.Inside(cache));
 
     /// <summary>
     /// <c>FileContentIndex</c>: at least one <c>&lt;guid&gt;.vsidx</c>, an optional <c>read.lock</c>,
     /// and an optional <c>merges</c> folder holding only index files.
     /// </summary>
-    public static bool FileContentIndex(string directory)
+    public static bool FileContentIndex(VisualStudioListing folder, VisualStudioEntry cache)
     {
-        if (FolderEntries.Of(directory) is not { } entries)
+        var index = folder.Inside(cache);
+
+        if (index.Entries is not { } entries)
         {
             return false;
         }
@@ -45,20 +49,20 @@ internal static partial class VisualStudioCacheEvidence
 
         foreach (var entry in entries)
         {
-            if (IsLink(entry))
+            if (entry.IsLink)
             {
                 return false;
             }
 
-            if (entry is FileInfo && IndexFile().IsMatch(entry.Name))
+            if (entry.Kind == TargetKind.File && IndexFile().IsMatch(entry.Name))
             {
                 indexes++;
             }
 
             // Empty on every machine measured, so an empty one is allowed. It proves nothing on its
             // own, and the index files beside it are what the rule requires.
-            else if (!(entry is DirectoryInfo && entry.Name.Equals("merges", StringComparison.OrdinalIgnoreCase) && HoldsOnly(entry.FullName, IndexFile()))
-                && !(entry is FileInfo && entry.Name.Equals("read.lock", StringComparison.OrdinalIgnoreCase)))
+            else if (!(entry.Kind == TargetKind.Directory && entry.Name.Equals("merges", StringComparison.OrdinalIgnoreCase) && HoldsOnly(index.Inside(entry), IndexFile()))
+                && !(entry.Kind == TargetKind.File && entry.Name.Equals("read.lock", StringComparison.OrdinalIgnoreCase)))
             {
                 return false;
             }
@@ -69,13 +73,16 @@ internal static partial class VisualStudioCacheEvidence
 
     /// <summary>
     /// <c>ipch</c>: one <c>AutoPCH</c> folder of folders, each holding only <c>.ipch</c> files, with at
-    /// least one <c>.ipch</c> among them.
+    /// least one <c>.ipch</c> among them. Each header folder is counted from the listing that proved
+    /// what it holds.
     /// </summary>
-    public static bool PrecompiledHeaders(string directory)
+    public static bool PrecompiledHeaders(VisualStudioListing folder, VisualStudioEntry cache)
     {
-        if (FolderEntries.Of(directory) is not [DirectoryInfo automatic] || IsLink(automatic)
+        var ipch = folder.Inside(cache);
+
+        if (ipch.Entries is not [{ Kind: TargetKind.Directory, IsLink: false } automatic]
             || !automatic.Name.Equals("AutoPCH", StringComparison.OrdinalIgnoreCase)
-            || FolderEntries.Of(automatic.FullName) is not { } headers)
+            || ipch.Inside(automatic) is not { Entries: { } headers } listed)
         {
             return false;
         }
@@ -84,30 +91,33 @@ internal static partial class VisualStudioCacheEvidence
 
         foreach (var header in headers)
         {
-            if (header is not DirectoryInfo || IsLink(header) || !HoldsOnly(header.FullName, HeaderFile()))
+            if (header.Kind != TargetKind.Directory || header.IsLink || listed.Inside(header) is not { Entries: { } files } inner
+                || !HoldsOnly(inner, HeaderFile()))
             {
                 return false;
             }
 
-            compiled += FolderEntries.Of(header.FullName)?.Count ?? 0;
+            compiled += files.Count;
         }
 
         return compiled > 0;
     }
 
     /// <summary><c>Browse.VC.db</c> and <c>Solution.VC.db</c>: an SQLite database with no journal beside it.</summary>
-    public static bool Database(string file) => SqliteDatabaseSignature.IsIdleDatabase(file);
+    public static bool Database(VisualStudioListing folder, VisualStudioEntry cache) =>
+        SqliteDatabaseSignature.IsIdleDatabase(cache.Path, folder.Holds);
+
+    private static bool Matches(ContentSignature signature, VisualStudioListing cache) =>
+        cache.Entries is { } entries && signature.Matches(entries.Select(entry => (entry.Name, entry.Attributes)));
 
     /// <summary>
-    /// Whether <paramref name="directory"/> holds files alone, each matching <paramref name="permitted"/>,
+    /// Whether <paramref name="listing"/> holds files alone, each matching <paramref name="permitted"/>,
     /// or nothing at all. <see cref="ContentSignature"/> is the same rule for a folder that must hold a
     /// file, and these two folders are empty as often as not.
     /// </summary>
-    private static bool HoldsOnly(string directory, Regex permitted) =>
-        FolderEntries.Of(directory) is { } entries
-        && entries.All(entry => entry is FileInfo && !IsLink(entry) && permitted.IsMatch(entry.Name));
-
-    private static bool IsLink(FileSystemInfo entry) => entry.Attributes.HasFlag(FileAttributes.ReparsePoint);
+    private static bool HoldsOnly(VisualStudioListing listing, Regex permitted) =>
+        listing.Entries is { } entries
+        && entries.All(entry => entry.Kind == TargetKind.File && !entry.IsLink && permitted.IsMatch(entry.Name));
 
     [GeneratedRegex(@"^[^\/]+\.(?:projects|metadata|strings)\.v\d+(?:\.\d+)?(?:\.bin)?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex EvaluationFile();
