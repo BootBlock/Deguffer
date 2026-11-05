@@ -57,6 +57,36 @@ public sealed class ExploreRemoverTests : IDisposable
     }
 
     /// <summary>
+    /// The items go to the bin together, a folder closing its batch so that its look is the last thing
+    /// taken before the batch goes, and each is reported in the order it was picked.
+    /// </summary>
+    [Fact]
+    public async Task TheItemsGoToTheBinInBatchesThatAFolderCloses()
+    {
+        var first = _temp.CreateFile(16, "profile", "Downloads", "first.bin");
+        var folder = _temp.CreateDirectory("profile", "Downloads", "folder");
+        _temp.CreateFile(16, "profile", "Downloads", "folder", "inside.bin");
+        var last = _temp.CreateFile(16, "profile", "Downloads", "last.bin");
+        var bystander = _temp.CreateFile(16, "profile", "Downloads", "keep.txt");
+        var bin = new FakeRecycleBin();
+
+        var report = await ExploreRemover.RemoveAsync(
+            [
+                new ExploreItem(first, IsDirectory: false, Bytes: 16, LowerBound: false),
+                new ExploreItem(folder, IsDirectory: true, Bytes: 16, LowerBound: false),
+                new ExploreItem(last, IsDirectory: false, Bytes: 16, LowerBound: false),
+            ],
+            ExploreRemovalMode.RecycleBin,
+            _policy,
+            bin);
+
+        Assert.Equal([[first, folder], [last]], bin.Batches);
+        Assert.Equal([first, folder, last], report.Removed.Select(item => item.Path));
+        Assert.True(LongPath.FileExists(bystander));
+        Assert.True(report.Verification.Passed);
+    }
+
+    /// <summary>
     /// An item Windows deleted outright when asked to move it to the bin is said to be gone and not in
     /// the bin, so the user does not look for it there, while one the bin took is still said to be in it.
     /// </summary>
@@ -212,11 +242,7 @@ public sealed class ExploreRemoverTests : IDisposable
 
         var handed = new List<string>();
         var bin = new ShellRecycleBin(
-            path =>
-            {
-                handed.Add(path);
-                return new RecycleOutcome(Removed: false, "The shell was asked.");
-            },
+            StandInShell.NeverAsked(handed),
             new RecycleBinReach(new FakeVolumeInventory(), new RecycleBinRooms(_ => null, _environment)));
 
         var report = await ExploreRemover.RemoveAsync(
@@ -387,13 +413,12 @@ public sealed class ExploreRemoverTests : IDisposable
 
     /// <summary>
     /// A removal cancelled between items stops before the next one, says so, and still proves what
-    /// should have survived did (§5.6).
+    /// should have survived did (§5.6). Both items are in one batch, so the bin stops it at the
+    /// second, which is not reported at all, as an item after the batch is not.
     ///
     /// <para>Cancelled as the first item goes, not before the call: the listing taken before anything
     /// is deleted runs on a token that is already cancelled and throws first, so a test cancelling up
-    /// front never reaches the catch that turns a cancel into a verified report. The bin route is the
-    /// one where nothing but the check between items notices the cancel, because the shell is not
-    /// handed the token.</para>
+    /// front never reaches the catch that turns a cancel into a verified report.</para>
     /// </summary>
     [Fact]
     public async Task ARemovalCancelledBetweenItemsStopsAndStillVerifies()
@@ -421,7 +446,9 @@ public sealed class ExploreRemoverTests : IDisposable
         Assert.StartsWith("Stopped part-way.", report.Summary);
 
         Assert.Equal(first, Assert.Single(report.Removed).Path);
+        Assert.Empty(report.Refused);
         Assert.Equal([first], bin.Paths);
+        Assert.Equal([[first, second]], bin.Batches);
         Assert.False(File.Exists(first));
         Assert.True(File.Exists(second));
         Assert.True(File.Exists(bystander));

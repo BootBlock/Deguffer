@@ -34,6 +34,7 @@ public sealed class FakeRecycleBin : IRecycleBin
 
     public FakeRecycleBin(Func<string, RecycleOutcome> behaviour) => _behaviour = behaviour;
 
+    /// <summary>Every path the bin reached, in the order it reached them, across every batch.</summary>
     public List<string> Paths { get; } = [];
 
     /// <summary>
@@ -97,12 +98,45 @@ public sealed class FakeRecycleBin : IRecycleBin
         return CannotTake(path);
     }
 
-    public RecycleOutcome Recycle(string path)
-    {
-        Paths.Add(path);
+    /// <summary>Every batch handed to <see cref="Recycle"/>, as it was handed.</summary>
+    public List<IReadOnlyList<string>> Batches { get; } = [];
 
-        return CannotTake(path) is { } why
-            ? new RecycleOutcome(Removed: false, why)
-            : _behaviour(path);
+    /// <summary>
+    /// Takes each item in turn as the shell does: refused where <see cref="CannotTake"/> says, and
+    /// otherwise handed to the behaviour. A cancel, or the caller's rule, stops it before the next
+    /// item, as the shell's sink does, so that item and every one after it are not reached and are not
+    /// recorded in <see cref="Paths"/>.
+    /// </summary>
+    public IReadOnlyList<RecycleOutcome> Recycle(
+        IReadOnlyList<string> paths, CancellationToken ct = default, Func<int, RecycleOutcome, bool>? stopsAfter = null)
+    {
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(paths.Count, IRecycleBin.LargestBatch, nameof(paths));
+        Batches.Add([.. paths]);
+
+        var outcomes = new List<RecycleOutcome>(paths.Count);
+        var stopped = false;
+
+        for (var i = 0; i < paths.Count; i++)
+        {
+            if (ct.IsCancellationRequested || stopped)
+            {
+                outcomes.Add(ct.IsCancellationRequested ? RecycleOutcome.NotReached : RecycleOutcome.StoppedBefore);
+                continue;
+            }
+
+            Paths.Add(paths[i]);
+
+            if (CannotTake(paths[i]) is { } why)
+            {
+                outcomes.Add(new RecycleOutcome(Removed: false, why));
+                continue;
+            }
+
+            var outcome = _behaviour(paths[i]);
+            outcomes.Add(outcome);
+            stopped = stopsAfter?.Invoke(i, outcome) == true;
+        }
+
+        return outcomes;
     }
 }
