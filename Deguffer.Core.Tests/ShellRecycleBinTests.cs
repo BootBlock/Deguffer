@@ -119,7 +119,7 @@ public sealed class ShellRecycleBinTests : IDisposable
     {
         var files = Files("a.bin", "b.bin", "c.bin");
         List<string> reached = [];
-        List<int> asked = [];
+        List<(int Index, int Reached)> asked = [];
         var bin = Bin(StandInShell.Telling(path =>
         {
             reached.Add(path);
@@ -127,14 +127,15 @@ public sealed class ShellRecycleBinTests : IDisposable
             return ShellTold.DeletedOutright;
         }));
 
+        // Recorded rather than asserted: the rule runs on the bin's own thread, where a throw would
+        // end the test process.
         var outcomes = bin.Recycle(files, stopsAfter: (index, outcome) =>
         {
-            asked.Add(index);
-            Assert.Equal([files[0]], reached);
+            asked.Add((index, reached.Count));
             return outcome.DeletedOutright;
         });
 
-        Assert.Equal([0], asked);
+        Assert.Equal([(0, 1)], asked);
         Assert.Equal([files[0]], reached);
         Assert.True(outcomes[0].DeletedOutright);
         Assert.All(outcomes.Skip(1), outcome => Assert.Same(RecycleOutcome.StoppedBefore, outcome));
