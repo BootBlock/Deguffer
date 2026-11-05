@@ -187,7 +187,7 @@ public sealed class SteamLibraryArtworkProvider : CleanupProviderBase
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         // The list of libraries is read from the install, so each is there exactly when the other is.
-        if (_discovery.Install.Root is not { } install || _discovery.Libraries is not { } libraries)
+        if (_discovery.Install.Root is not { } install || _discovery.Manifests is not { } manifests)
         {
             return PlanWithoutAnInstall();
         }
@@ -214,7 +214,6 @@ public sealed class SteamLibraryArtworkProvider : CleanupProviderBase
             return UnreadableRootPlan(container);
         }
 
-        var manifests = new SteamAppManifests(libraries);
         var examination = Examine(entries, manifests, ct);
 
         if (examination.Targets.Count == 0 && examination.Declined.Count == 0)
@@ -222,7 +221,7 @@ public sealed class SteamLibraryArtworkProvider : CleanupProviderBase
             return EmptyPlan("Steam is keeping no library artwork on this machine.");
         }
 
-        examination.Notes.AddRange(manifests.UnreachedLibraryNotes(refusalsNamed: false));
+        examination.Notes.AddRange(manifests.UnreachedLibraryNotes(examination.Games, refusalsNamed: false));
 
         var (steps, measured) = await PlanDeletionsAsync(examination.Targets, keep, ct).ConfigureAwait(false);
 
@@ -334,7 +333,7 @@ public sealed class SteamLibraryArtworkProvider : CleanupProviderBase
             {
                 case Kind.GameFolder:
                 {
-                    var app = manifests.Describe(entry.Name);
+                    var app = examination.Describe(manifests, entry.Name);
 
                     examination.Targets.Add(Target(
                         app,
@@ -347,7 +346,7 @@ public sealed class SteamLibraryArtworkProvider : CleanupProviderBase
 
                 case Kind.FlatArtwork:
                 {
-                    var app = manifests.Describe(FlatArtworkAppId(entry.Name)!);
+                    var app = examination.Describe(manifests, FlatArtworkAppId(entry.Name)!);
 
                     examination.Targets.Add(Target(
                         app,
@@ -418,8 +417,18 @@ public sealed class SteamLibraryArtworkProvider : CleanupProviderBase
     {
         public List<DeletionTarget> Targets { get; } = [];
 
+        /// <summary>Each game this row described, which decides the libraries its plan names.</summary>
+        public List<SteamApp> Games { get; } = [];
+
         public List<(string Path, string Reason)> Declined { get; } = [];
 
         public List<PlanNote> Notes { get; } = [];
+
+        public SteamApp Describe(SteamAppManifests manifests, string id)
+        {
+            var app = manifests.Describe(id);
+            Games.Add(app);
+            return app;
+        }
     }
 }

@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.IO.Enumeration;
 using System.Text;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
@@ -9,8 +11,8 @@ namespace Deguffer.Core.Providers;
 /// <param name="Name">The name Steam shows for it, or null where no manifest said.</param>
 /// <param name="IsInstalled">
 /// Whether any library holds the game's manifest. Null where that cannot be said: a library the list
-/// did not name, a library that could not be reached, or a manifest Windows would not describe, may
-/// hold it.
+/// did not name, a library that could not be reached, or a library whose records Windows would not
+/// list, may hold it.
 /// </param>
 public sealed record SteamApp(string Id, string? Name, bool? IsInstalled)
 {
@@ -41,141 +43,142 @@ public sealed record SteamApp(string Id, string? Name, bool? IsInstalled)
 /// Steam's record that the game is installed, so it is never a target: the provider that asks here
 /// names it as a survivor instead.</para>
 ///
-/// <para>Memoised per id for the life of one planning pass (G4), because a game's cache can sit in
-/// more than one library and each library is asked about the same game.</para>
+/// <para><b>One per planning pass, shared by every Steam row</b> through
+/// <see cref="SteamDiscovery.Manifests"/> (G4). The artwork row asks about every game Steam has shown
+/// in the library, often a thousand or two, and the shader row asks about every game with a cache,
+/// mostly the same installed games. Each library's <c>steamapps</c> is listed once, so "which games
+/// does this library hold" is a set lookup rather than a probe per game per library, and each manifest
+/// the listings show is read once. The rows plan concurrently, so every answer is worked out once
+/// however many threads ask for it.</para>
 ///
 /// <para><b>"Not installed" is a claim about every library.</b> A library on a drive that is not
 /// connected answers "no manifest here" for every game, because Windows reads a missing drive as an
-/// absent path. So a library that could not be reached is never searched and never counted as
-/// saying no: a game whose manifest is not found elsewhere is then of unknown standing, and
-/// <see cref="UnreachedLibraryNotes"/> names the library that made it so.</para>
+/// absent path. So a library that could not be reached, or whose <c>steamapps</c> Windows would not
+/// list, is never counted as saying no: a game whose manifest is not found elsewhere is then of
+/// unknown standing, and <see cref="UnreachedLibraryNotes"/> names the library that made it so.</para>
 /// </summary>
-internal sealed class SteamAppManifests(SteamLibraries libraries)
+internal sealed class SteamAppManifests
 {
     /// <summary>Far past any manifest Steam writes, which run to a few kilobytes.</summary>
     private const int MaximumBytes = 256 * 1024;
 
+    private const string ManifestPrefix = "appmanifest_";
+
+    private const string ManifestExtension = ".acf";
+
     /// <summary>Every character a single folder name cannot hold, the separators among them.</summary>
     private static readonly char[] NotInAFolderName = Path.GetInvalidFileNameChars();
 
-    private readonly Dictionary<string, SteamApp> _described = new(StringComparer.Ordinal);
+    private readonly SteamLibraries _libraries;
 
-    /// <summary>Each library that left at least one game's standing unknown, in list order.</summary>
-    private readonly List<SteamLibrary> _unreached = [];
+    /// <summary>
+    /// The ids of the manifests in each library's <c>steamapps</c>, by the library's place in the list.
+    /// Null where Windows would not list it. Listed on first ask, so a library nobody asks about is
+    /// never listed.
+    /// </summary>
+    private readonly Lazy<IReadOnlySet<string>?>[] _held;
 
-    /// <summary>The manifest's name, relative to a library, for the application <paramref name="id"/>.</summary>
-    public static string RelativePath(string id) => Path.Combine("steamapps", $"appmanifest_{id}.acf");
+    private readonly ConcurrentDictionary<string, Lazy<Standing>> _described = new(StringComparer.Ordinal);
 
-    public SteamApp Describe(string id)
+    /// <summary>Each manifest read, by its library's place in the list and the game's id.</summary>
+    private readonly ConcurrentDictionary<(int Library, string Id), Lazy<AppManifest?>> _read = new();
+
+    private int _listings;
+    private int _reads;
+
+    public SteamAppManifests(SteamLibraries libraries)
     {
-        if (_described.TryGetValue(id, out var known))
-        {
-            return known;
-        }
-
-        var unknowable = !libraries.IsComplete;
-        List<SteamLibrary>? unreached = null;
-
-        foreach (var library in libraries.Folders)
-        {
-            if (library.Presence is not PathPresence.Present)
-            {
-                (unreached ??= []).Add(library);
-                continue;
-            }
-
-            var manifest = Path.Combine(library.Folder, RelativePath(id));
-
-            switch (LongPath.ProbeFile(manifest))
-            {
-                case PathPresence.Present:
-                    return _described[id] = new SteamApp(id, NameIn(manifest), IsInstalled: true);
-
-                case PathPresence.Refused:
-                    unknowable = true;
-                    break;
-            }
-        }
-
-        foreach (var library in unreached ?? [])
-        {
-            if (!_unreached.Contains(library))
-            {
-                _unreached.Add(library);
-            }
-        }
-
-        return _described[id] = new SteamApp(
-            id, Name: null, IsInstalled: unknowable || unreached is not null ? null : false);
+        _libraries = libraries;
+        _held = [.. libraries.Folders.Select(library => new Lazy<IReadOnlySet<string>?>(() => ManifestsIn(library.Folder)))];
     }
 
     /// <summary>
-    /// The sentence owed about each library that could not be reached while some game's manifest was
-    /// found in no other library, so a reader filtering on "Installed" learns why that game carries
-    /// no answer. Information rather than a warning: nothing is removed because of it.
+    /// How many <c>steamapps</c> folders were listed, for the tests that hold a pass to one listing
+    /// per library.
     /// </summary>
+    internal int Listings => Volatile.Read(ref _listings);
+
+    /// <summary>How many manifests were read, for the tests that hold a pass to one read per manifest.</summary>
+    internal int Reads => Volatile.Read(ref _reads);
+
+    /// <summary>The manifest's name, relative to a library, for the application <paramref name="id"/>.</summary>
+    public static string RelativePath(string id) => Path.Combine("steamapps", $"{ManifestPrefix}{id}{ManifestExtension}");
+
+    public SteamApp Describe(string id) => StandingOf(id).App;
+
+    /// <summary>
+    /// The sentence owed about each library that could not be looked in while one of
+    /// <paramref name="described"/> was found in no other library, so a reader filtering on
+    /// "Installed" learns why that game carries no answer. Information rather than a warning: nothing
+    /// is removed because of it.
+    ///
+    /// <para>Asked about the games the calling row described, rather than every game this pass
+    /// described, because the object is shared: a row names only the libraries that decided something
+    /// about its own games.</para>
+    /// </summary>
+    /// <param name="described">The games the calling row described here.</param>
     /// <param name="refusalsNamed">
     /// Whether the caller already names each library Windows would not describe, as the shader row
-    /// does with <see cref="UnreadableRoot.UnreachedNote"/>, so only absent libraries are left to name.
+    /// does with <see cref="UnreadableRoot.UnreachedNote"/>, so those are left out.
     /// </param>
-    public IReadOnlyList<PlanNote> UnreachedLibraryNotes(bool refusalsNamed) =>
-    [
-        .. _unreached
-            .Where(library => !refusalsNamed || library.Presence is PathPresence.Absent)
-            .Select(library => new PlanNote(PlanNoteSeverity.Information, WhyUnreached(library))),
-    ];
-
-    private static string WhyUnreached(SteamLibrary library)
+    public IReadOnlyList<PlanNote> UnreachedLibraryNotes(IEnumerable<SteamApp> described, bool refusalsNamed)
     {
-        var folder = LongPath.Display(library.Folder);
-        var consequence = "Its games may still be installed, so a game Deguffer found in no other library "
-            + "is not called uninstalled.";
+        var decided = new bool[_held.Length];
 
-        return library.Presence is PathPresence.Absent
-            ? $"Steam lists a game library at '{folder}', and it is not there. A drive that is not connected, "
-                + $"a network share that is offline and a library moved without telling Steam all do that. {consequence}"
-            : $"Windows would not say what is at '{folder}', a game library Steam lists, so Deguffer could not "
-                + $"look in it. {UnreadableRoot.Causes} {consequence}";
+        foreach (var app in described)
+        {
+            foreach (var library in StandingOf(app.Id).Unreached)
+            {
+                decided[library] = true;
+            }
+        }
+
+        return
+        [
+            .. Enumerable.Range(0, decided.Length)
+                .Where(i => decided[i] && !(refusalsNamed && _libraries.Folders[i].Presence is PathPresence.Refused))
+                .Select(i => new PlanNote(PlanNoteSeverity.Information, WhyUnreached(_libraries.Folders[i]))),
+        ];
     }
 
     /// <summary>
     /// The folder each library holding the application's manifest installed it in,
     /// <c>steamapps\common\&lt;installdir&gt;</c>, with the library it was built from, and the
-    /// manifests Windows would not describe or that could not be read. Not memoised: it is asked once
-    /// a pass, about one application.
+    /// manifests that could not be looked for or read.
     /// </summary>
-    /// <remarks>
-    /// An <c>installdir</c> that is not one plain folder name is not taken, because Steam writes only
-    /// a folder name there and anything else would lead out of the library.
-    /// </remarks>
     public (IReadOnlyList<(string Library, string Folder)> Folders, IReadOnlyList<string> Unread) InstallFoldersOf(string id)
     {
         List<(string Library, string Folder)> folders = [];
         List<string> unread = [];
 
-        foreach (var (library, presence) in libraries.Folders)
+        for (var i = 0; i < _held.Length; i++)
         {
+            var (library, presence) = _libraries.Folders[i];
             var manifest = Path.Combine(library, RelativePath(id));
 
-            switch (presence is PathPresence.Present ? LongPath.ProbeFile(manifest) : presence)
+            if (presence is PathPresence.Absent)
             {
-                case PathPresence.Absent:
-                    continue;
-
-                case PathPresence.Refused:
-                    unread.Add(manifest);
-                    continue;
+                continue;
             }
 
-            if (!AppStateOf(manifest, out var appState))
+            if (presence is PathPresence.Refused || _held[i].Value is not { } held)
             {
                 unread.Add(manifest);
                 continue;
             }
 
-            if (appState?.Child("installdir")?.Value?.Trim() is { Length: > 0 } installDir
-                && installDir is not ("." or "..")
-                && installDir.IndexOfAny(NotInAFolderName) < 0)
+            if (!held.Contains(id))
+            {
+                continue;
+            }
+
+            if (ManifestOf(i, id) is not { } read)
+            {
+                unread.Add(manifest);
+                continue;
+            }
+
+            if (read.InstallDir is { } installDir)
             {
                 folders.Add((library, Path.Combine(library, "steamapps", "common", installDir)));
             }
@@ -184,34 +187,119 @@ internal sealed class SteamAppManifests(SteamLibraries libraries)
         return (folders, unread);
     }
 
-    /// <summary>The <c>name</c> under the manifest's <c>AppState</c> block, or null.</summary>
-    private static string? NameIn(string manifest)
+    private Standing StandingOf(string id) =>
+        _described.GetOrAdd(id, static (key, self) => new Lazy<Standing>(() => self.Stand(key)), this).Value;
+
+    private Standing Stand(string id)
     {
-        if (!AppStateOf(manifest, out var appState))
+        List<int>? unreached = null;
+
+        for (var i = 0; i < _held.Length; i++)
         {
-            return null;
+            if (_libraries.Folders[i].Presence is not PathPresence.Present || _held[i].Value is not { } held)
+            {
+                (unreached ??= []).Add(i);
+                continue;
+            }
+
+            if (held.Contains(id))
+            {
+                return new Standing(new SteamApp(id, ManifestOf(i, id)?.Name, IsInstalled: true), []);
+            }
         }
 
-        var name = appState?.Child("name")?.Value;
+        var installed = !_libraries.IsComplete || unreached is not null ? (bool?)null : false;
 
-        return string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+        return new Standing(new SteamApp(id, Name: null, installed), unreached ?? []);
+    }
+
+    private AppManifest? ManifestOf(int library, string id) =>
+        _read.GetOrAdd(
+                (library, id),
+                static (key, self) => new Lazy<AppManifest?>(
+                    () => self.Read(Path.Combine(self._libraries.Folders[key.Library].Folder, RelativePath(key.Id)))),
+                this)
+            .Value;
+
+    /// <summary>
+    /// The ids of the manifests directly inside the library's <c>steamapps</c>, empty where there is no
+    /// <c>steamapps</c>, and null where Windows would not list it.
+    /// </summary>
+    private IReadOnlySet<string>? ManifestsIn(string library)
+    {
+        Interlocked.Increment(ref _listings);
+
+        var ids = FolderEntries.Of(
+            Path.Combine(library, "steamapps"),
+            static (ref FileSystemEntry entry) => entry.IsDirectory ? null : IdOf(entry.FileName));
+
+        return ids?.OfType<string>().ToHashSet(StringComparer.Ordinal);
     }
 
     /// <summary>
-    /// The manifest's <c>AppState</c> block, which is null where the manifest has none. False where the
+    /// The id in a manifest's file name, or null for any other name. Matched without regard to case,
+    /// as the probe by full name this replaced matched it.
+    /// </summary>
+    private static string? IdOf(ReadOnlySpan<char> name) =>
+        name.Length > ManifestPrefix.Length + ManifestExtension.Length
+        && name.StartsWith(ManifestPrefix, StringComparison.OrdinalIgnoreCase)
+        && name.EndsWith(ManifestExtension, StringComparison.OrdinalIgnoreCase)
+            ? name[ManifestPrefix.Length..^ManifestExtension.Length].ToString()
+            : null;
+
+    private static string WhyUnreached(SteamLibrary library)
+    {
+        var folder = LongPath.Display(library.Folder);
+        var consequence = "Its games may still be installed, so a game Deguffer found in no other library "
+            + "is not called uninstalled.";
+
+        return library.Presence switch
+        {
+            PathPresence.Absent =>
+                $"Steam lists a game library at '{folder}', and it is not there. A drive that is not connected, "
+                + $"a network share that is offline and a library moved without telling Steam all do that. {consequence}",
+            PathPresence.Refused =>
+                $"Windows would not say what is at '{folder}', a game library Steam lists, so Deguffer could not "
+                + $"look in it. {UnreadableRoot.Causes} {consequence}",
+            _ =>
+                $"Windows would not let Deguffer list '{LongPath.Display(Path.Combine(library.Folder, "steamapps"))}', "
+                + $"where Steam records the games installed in one of your libraries, so Deguffer could not look "
+                + $"for those records. {consequence}",
+        };
+    }
+
+    /// <summary>
+    /// The name and install folder under the manifest's <c>AppState</c> block, or null where the
     /// manifest could not be read or parsed at all.
     /// </summary>
-    private static bool AppStateOf(string manifest, out SteamKeyValue? appState)
+    /// <remarks>
+    /// An <c>installdir</c> that is not one plain folder name is not taken, because Steam writes only
+    /// a folder name there and anything else would lead out of the library.
+    /// </remarks>
+    private AppManifest? Read(string manifest)
     {
-        appState = null;
+        Interlocked.Increment(ref _reads);
 
         if (BoundedFile.Read(manifest, MaximumBytes) is not { } content
             || SteamKeyValues.Parse(Encoding.UTF8.GetString(content.Span)) is not { } entries)
         {
-            return false;
+            return null;
         }
 
-        appState = entries.FirstOrDefault(e => string.Equals(e.Key, "AppState", StringComparison.OrdinalIgnoreCase));
-        return true;
+        var appState = entries.FirstOrDefault(e => string.Equals(e.Key, "AppState", StringComparison.OrdinalIgnoreCase));
+        var name = appState?.Child("name")?.Value;
+        var installDir = appState?.Child("installdir")?.Value?.Trim();
+
+        return new AppManifest(
+            string.IsNullOrWhiteSpace(name) ? null : name.Trim(),
+            installDir is { Length: > 0 } and not ("." or "..") && installDir.IndexOfAny(NotInAFolderName) < 0
+                ? installDir
+                : null);
     }
+
+    /// <summary>A game's answer, and the libraries, by place in the list, that left it unknown.</summary>
+    private sealed record Standing(SteamApp App, IReadOnlyList<int> Unreached);
+
+    /// <summary>What is taken from one manifest.</summary>
+    private sealed record AppManifest(string? Name, string? InstallDir);
 }
