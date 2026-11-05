@@ -28,7 +28,6 @@ public sealed class PackagedStartupTasksTests
         var second = reader.Read(CancellationToken.None);
 
         Assert.Equal(2, packages.ManifestsRead.Count);
-        Assert.Equal(2, packages.FolderLookups);
         Assert.Equal(first.Tasks, second.Tasks);
         Assert.True(second.Complete);
         Assert.Equal(Path.Combine(Folder(ToolV1), @"Tool\Tool.exe"), Assert.Single(second.Tasks).Program);
@@ -48,6 +47,21 @@ public sealed class PackagedStartupTasksTests
         Assert.Equal("ToolStartupV2", task.TaskId);
         Assert.Equal(Path.Combine(Folder(ToolV2), @"Tool\Tool2.exe"), task.Program);
         Assert.Equal(2, packages.ManifestsRead.Count);
+    }
+
+    /// <summary>Moving an app to another drive keeps its full name and changes where its program is.</summary>
+    [Fact]
+    public void AMovedPackageNamesTheProgramInItsNewFolder()
+    {
+        packages.Add(ToolV1, Manifest("ToolStartup", @"Tool\Tool.exe"));
+        var reader = new PackagedStartupTasks(packages);
+        reader.Read(CancellationToken.None);
+
+        var moved = Path.Combine(@"D:\WindowsApps", ToolV1);
+        packages.Move(ToolV1, moved);
+        var task = Assert.Single(reader.Read(CancellationToken.None).Tasks);
+
+        Assert.Equal(Path.Combine(moved, @"Tool\Tool.exe"), task.Program);
     }
 
     [Fact]
@@ -192,16 +206,16 @@ public sealed class PackagedStartupTasksTests
 
         public List<string> ManifestsRead { get; } = [];
 
-        public int FolderLookups { get; private set; }
-
         public Exception? ListRefusal { get; set; }
 
         public void Add(string fullName, string manifest, bool developmentMode = false) =>
-            installed.Add(new FakePackage(this, fullName, developmentMode) { Manifest = manifest });
+            installed.Add(new FakePackage(fullName, developmentMode) { Manifest = manifest, Location = Folder(fullName) });
 
         public void Remove(string fullName) => installed.RemoveAll(p => p.FullName == fullName);
 
         public void Rewrite(string fullName, string manifest) => installed.Single(p => p.FullName == fullName).Manifest = manifest;
+
+        public void Move(string fullName, string folder) => installed.Single(p => p.FullName == fullName).Location = folder;
 
         public void Refuse(string fullName, Exception refusal) => refusals[ManifestPath(fullName)] = refusal;
 
@@ -218,7 +232,7 @@ public sealed class PackagedStartupTasksTests
                 throw refusal;
             }
 
-            return installed.SingleOrDefault(p => ManifestPath(p.FullName) == path)?.Manifest
+            return installed.SingleOrDefault(p => @"\\?\" + Path.Combine(p.Location, "AppxManifest.xml") == path)?.Manifest
                 ?? throw new FileNotFoundException(null, path);
         }
 
@@ -226,9 +240,11 @@ public sealed class PackagedStartupTasksTests
 
         private static string ManifestPath(string fullName) => @"\\?\" + Path.Combine(Folder(fullName), "AppxManifest.xml");
 
-        private sealed class FakePackage(FakeInstalledPackages owner, string fullName, bool developmentMode) : IInstalledPackage
+        private sealed class FakePackage(string fullName, bool developmentMode) : IInstalledPackage
         {
             public string Manifest { get; set; } = "";
+
+            public string Location { get; set; } = "";
 
             public string FullName => fullName;
 
@@ -242,12 +258,7 @@ public sealed class PackagedStartupTasksTests
 
             public string? PublisherDisplayName => "Contoso";
 
-            public string? Folder()
-            {
-                owner.FolderLookups++;
-
-                return PackagedStartupTasksTests.Folder(fullName);
-            }
+            public string? Folder() => Location;
         }
 
         private sealed class FakeStates(Dictionary<(string Family, string TaskId), int> states) : IStartupTaskStates

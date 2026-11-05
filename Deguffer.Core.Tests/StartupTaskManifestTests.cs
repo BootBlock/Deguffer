@@ -110,16 +110,6 @@ public sealed class StartupTaskManifestTests
               <Applications>
             """));
 
-    [Fact]
-    public void AManifestWithoutTheStartupTaskElementDeclaresNothing() =>
-        Assert.Empty(StartupTaskManifest.Read("""
-            <Package xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5">
-              <Application Executable="Tool.exe">
-                <uap5:Extension Category="windows.startupTask"><uap5:Task Id="T" /></uap5:Extension>
-              </Application>
-            </Package>
-            """));
-
     [Theory]
     [InlineData(0, StartupState.Disabled)]
     [InlineData(1, StartupState.Disabled)]

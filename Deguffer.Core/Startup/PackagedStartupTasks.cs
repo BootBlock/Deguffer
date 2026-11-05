@@ -36,12 +36,13 @@ public interface IPackagedStartupTasks
 
 /// <inheritdoc />
 /// <remarks>
-/// <para><b>A manifest is read once per package version.</b> A package's files are fixed for its full
-/// name, which includes its version, and an update installs a new full name in a new folder, so the
-/// tasks a manifest declares and the folder they are inside are kept for the life of the process. A
-/// package registered in development mode is the exception, because its folder is the developer's
-/// own and can change in place. The state is read at every reading, because that is what an enable
-/// or disable changes.</para>
+/// <para><b>A manifest is read once per package version.</b> A package's files are fixed for
+/// its full name, which includes its version, and an update installs a new full name in a new
+/// folder, so the tasks a manifest declares are kept for the life of the process. The folder they are
+/// inside is asked for at every reading, because moving an app to another drive keeps its full
+/// name and changes where its files are. A package registered in development mode is
+/// never kept, because its folder is the developer's own and can change in place. The state is read
+/// at every reading, because that is what an enable or disable changes.</para>
 /// <para>A package whose folder or manifest is missing is not kept, so a package caught part-way
 /// through being installed is read again next time rather than remembered as declaring nothing.</para>
 /// </remarks>
@@ -53,8 +54,8 @@ public sealed class PackagedStartupTasks : IPackagedStartupTasks
 
     private readonly IInstalledPackages packages;
 
-    /// <summary>The manifests already read, by package full name. The Memory and Startup pages read at once.</summary>
-    private readonly ConcurrentDictionary<string, KnownManifest> known = new(StringComparer.Ordinal);
+    /// <summary>The tasks each manifest already read declares, by package full name. The Memory and Startup pages read at once.</summary>
+    private readonly ConcurrentDictionary<string, IReadOnlyList<DeclaredStartupTask>> known = new(StringComparer.Ordinal);
 
     internal PackagedStartupTasks(IInstalledPackages packages)
     {
@@ -85,21 +86,22 @@ public sealed class PackagedStartupTasks : IPackagedStartupTasks
 
             try
             {
-                if (ManifestOf(package) is not { Tasks.Count: > 0 } manifest)
+                if (package.Folder() is not { } folder
+                    || DeclaredBy(package, folder) is not { Count: > 0 } declared)
                 {
                     continue;
                 }
 
                 var family = package.FamilyName;
 
-                foreach (var task in manifest.Tasks)
+                foreach (var task in declared)
                 {
                     tasks.Add(new PackagedTask(
                         family,
                         task.TaskId,
                         task.DisplayName ?? Text(package.DisplayName) ?? package.Name,
                         Text(package.PublisherDisplayName),
-                        task.Executable is { } executable ? Path.GetFullPath(Path.Combine(manifest.Folder, executable)) : null,
+                        task.Executable is { } executable ? Path.GetFullPath(Path.Combine(folder, executable)) : null,
                         states.StateOf(family, task.TaskId)));
                 }
             }
@@ -115,10 +117,10 @@ public sealed class PackagedStartupTasks : IPackagedStartupTasks
     }
 
     /// <summary>
-    /// The package's folder and the tasks its manifest declares, or null where it has no manifest and
-    /// so starts nothing.
+    /// The tasks the manifest in <paramref name="folder"/> declares, or null where there is no
+    /// manifest, so the package starts nothing.
     /// </summary>
-    private KnownManifest? ManifestOf(IInstalledPackage package)
+    private IReadOnlyList<DeclaredStartupTask>? DeclaredBy(IInstalledPackage package, string folder)
     {
         var fullName = package.FullName;
         var fixedFiles = !package.IsDevelopmentMode;
@@ -126,11 +128,6 @@ public sealed class PackagedStartupTasks : IPackagedStartupTasks
         if (fixedFiles && known.TryGetValue(fullName, out var seen))
         {
             return seen;
-        }
-
-        if (package.Folder() is not { } folder)
-        {
-            return null;
         }
 
         string text;
@@ -146,17 +143,15 @@ public sealed class PackagedStartupTasks : IPackagedStartupTasks
             return null;
         }
 
-        var manifest = new KnownManifest(folder, StartupTaskManifest.Read(text));
+        var declared = StartupTaskManifest.Read(text);
 
         if (fixedFiles)
         {
-            known[fullName] = manifest;
+            known[fullName] = declared;
         }
 
-        return manifest;
+        return declared;
     }
 
     private static string? Text(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-
-    private sealed record KnownManifest(string Folder, IReadOnlyList<DeclaredStartupTask> Tasks);
 }
