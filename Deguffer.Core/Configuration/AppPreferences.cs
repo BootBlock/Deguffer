@@ -12,14 +12,13 @@ public enum AppTheme
 }
 
 /// <summary>
-/// How much of each finding row the Storage page draws. <see cref="Compact"/> is the shipped view:
-/// the list is a set of rows to choose between, and a screen that shows all of them beats one that
-/// shows six and explains each.
+/// How much of each finding row the Storage page draws. <see cref="Standard"/> is the shipped view:
+/// §7's "what happens on next use" sentence is written out under every name, so a first look at the
+/// list says what each removal costs without the reader having to ask any row.
 ///
-/// Compact hides §7's "what happens on next use" sentence rather than retiring it. The sentence is
-/// on the row's tooltip and inside its disclosure, alongside the plan, the per-step figures and
-/// §5.2's "what was left alone" notes. <see cref="Standard"/> is the same list with that sentence
-/// written out under every name.
+/// <see cref="Compact"/> hides that sentence rather than retiring it, for a reader who would rather
+/// see the whole list at once. The sentence is on the row's tooltip and inside its disclosure,
+/// alongside the plan, the per-step figures and §5.2's "what was left alone" notes.
 /// </summary>
 public enum ViewDensity
 {
@@ -394,7 +393,7 @@ public enum ExploreScheme
 /// </param>
 public sealed record AppPreferences(
     AppTheme Theme = AppTheme.System,
-    ViewDensity View = ViewDensity.Compact,
+    ViewDensity View = ViewDensity.Standard,
     ExploreView Explore = ExploreView.Treemap,
     ExploreColouring ExploreColours = ExploreColouring.Branch,
     ExploreSpacing TreemapSpacing = ExploreSpacing.Comfortable,

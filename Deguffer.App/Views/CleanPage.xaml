@@ -629,7 +629,7 @@
                          row's container. -->
                     <ListView x:Name="FindingsList"
                               ItemsSource="{x:Bind ViewModel.Listed}"
-                              ItemTemplate="{StaticResource CompactFinding}"
+                              ItemTemplate="{StaticResource StandardFinding}"
                               SelectionMode="None"
                               IsItemClickEnabled="False"
                               TabNavigation="Local"
