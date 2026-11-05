@@ -135,8 +135,8 @@ public sealed class ModManagerDownloadProvider : CleanupProviderBase
 
         paths.AddRange(instanceFolders.Where(folder => !paths.Contains(folder, StringComparer.OrdinalIgnoreCase)));
 
-        // The records need nothing from the measurement, so they are read while it runs. Both list the
-        // same folders, and whichever lists one first leaves it warm for the other.
+        // The records need nothing from the measurement, so they are read while it runs. Where the
+        // measurement walks, both list the same folders, and whichever lists one first leaves it warm.
         var reading = ModOrganizerArchives.OfAllAsync(instanceFolders, ct);
         var measuring = MeasureAsync();
 

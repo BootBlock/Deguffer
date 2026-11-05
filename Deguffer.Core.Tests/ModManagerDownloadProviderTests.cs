@@ -168,10 +168,11 @@ public sealed class ModManagerDownloadProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The archives' records are read while the download folders are measured, not after: with a
-    /// measurement held until the records' read has started, the plan still finishes, and its figures are
-    /// the records'. A plan that read them only once the measurement ended would wait forever, which the
-    /// timeout turns into a failure.
+    /// The archives' records are read while the download folders are measured, neither before nor after:
+    /// the measurement is held until the read has started, and the read until the measurement is asked
+    /// for. The plan still finishes, with the records' figures. A plan that read the records only once the
+    /// measurement ended would wait forever, which the timeout turns into a failure, and one that read
+    /// them before measuring would leave the read waiting out its patience.
     /// </summary>
     [Fact]
     public async Task AnInstancesRecordsAreReadWhileItsDownloadsAreMeasured()
@@ -180,12 +181,13 @@ public sealed class ModManagerDownloadProviderTests : IDisposable
         Archive(downloads, "SkyUI.7z", 300, "installed=true");
         Archive(downloads, "Old.zip", 5000, "uninstalled=true");
 
-        var scanner = new MeasureHeldUntilReadStarts(new FakeDirectoryScanner());
+        var scanner = new HeldUntilReadAndMeasurementBothStart(new FakeDirectoryScanner());
         var provider = new ModManagerDownloadProvider(
             _system, _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, scanner, new FakeVolumeInventory());
 
-        // The read is the plan's only crew before the measurement, which the scanner holds. See WorkerCrew.Made.
-        WorkerCrew.Made.Value = _ => scanner.ReadStarted();
+        // The read's crew is the plan's only one before the measurement walks, and it is made on the read's
+        // own thread before the first record is read. See WorkerCrew.Made.
+        WorkerCrew.Made.Value = _ => scanner.ReadStarting();
 
         CleanupPlan plan;
 
@@ -196,10 +198,10 @@ public sealed class ModManagerDownloadProviderTests : IDisposable
         finally
         {
             WorkerCrew.Made.Value = null;
-            scanner.ReadStarted();
+            scanner.Release();
         }
 
-        Assert.True(scanner.Held);
+        Assert.True(scanner.ReadMetMeasurement);
         Assert.Contains(
             $"Of that, {FreeSpace.Format(300L)} is archives Mod Organizer 2 lists as installed, and "
             + $"{FreeSpace.Format(5000L)} archives it lists as uninstalled.",
@@ -479,23 +481,57 @@ public sealed class ModManagerDownloadProviderTests : IDisposable
         Assert.Contains(shipped.Providers, provider => provider is ModManagerDownloadProvider);
     }
 
-    /// <summary>A scanner whose every list of folders waits to be measured until the records' read has started.</summary>
-    private sealed class MeasureHeldUntilReadStarts(FakeDirectoryScanner inner) : IDirectoryScanner
+    /// <summary>
+    /// A scanner that measures a list of folders only once the records' read has started, and a read that
+    /// waits, before its first record, for a measurement to be asked for: so each gets under way only
+    /// while the other is.
+    /// </summary>
+    private sealed class HeldUntilReadAndMeasurementBothStart(FakeDirectoryScanner inner) : IDirectoryScanner
     {
+        /// <summary>How long the read waits for the measurement. A read made to wait this long ran first.</summary>
+        private static readonly TimeSpan ReadPatience = TimeSpan.FromSeconds(10);
+
         private readonly TaskCompletionSource _readStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private int _held;
+        private readonly TaskCompletionSource _measurementAsked = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _readMetMeasurement;
+        private int _crewsSeen;
 
-        /// <summary>Whether a measurement was asked for, and so held.</summary>
-        public bool Held => Volatile.Read(ref _held) > 0;
+        /// <summary>Whether the read, once started, saw a measurement asked for within its patience.</summary>
+        public bool ReadMetMeasurement => Volatile.Read(ref _readMetMeasurement) == 1;
 
-        public void ReadStarted() => _readStarted.TrySetResult();
+        /// <summary>
+        /// On the read's own thread, before its first record: say it has started, then wait for the
+        /// measurement. Only the first crew is the read's: the measurement's walk makes one too, and can
+        /// only once this has let it go.
+        /// </summary>
+        public void ReadStarting()
+        {
+            if (Interlocked.Exchange(ref _crewsSeen, 1) == 1)
+            {
+                return;
+            }
+
+            _readStarted.TrySetResult();
+
+            if (_measurementAsked.Task.Wait(ReadPatience))
+            {
+                Interlocked.Exchange(ref _readMetMeasurement, 1);
+            }
+        }
+
+        /// <summary>Let both go, so a plan the test gave up on does not stay held.</summary>
+        public void Release()
+        {
+            _readStarted.TrySetResult();
+            _measurementAsked.TrySetResult();
+        }
 
         public async ValueTask<IReadOnlyList<ScanResult>> MeasureManyAsync(
             IReadOnlyList<ScanRequest> asked,
             MinimumAge keep = default,
             CancellationToken ct = default)
         {
-            Interlocked.Increment(ref _held);
+            _measurementAsked.TrySetResult();
             await _readStarted.Task.WaitAsync(ct).ConfigureAwait(false);
             return await inner.MeasureManyAsync(asked, keep, ct).ConfigureAwait(false);
         }
