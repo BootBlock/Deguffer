@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace Deguffer.Core.Execution;
@@ -9,14 +10,21 @@ namespace Deguffer.Core.Execution;
 /// account's <c>$Recycle.Bin</c> folder on the same volume, with the file ID the file had before,
 /// because the move is a rename on that volume.
 ///
-/// <para><b>It stops the batch when the removal is cancelled.</b> <c>PreDeleteItem</c> answers
-/// <c>ERROR_CANCELLED</c> once the token is cancelled. Measured on 2026-11-05: the shell then tells
-/// this item it was cancelled, leaves it where it was, and reaches no item after it.</para>
+/// <para><b>It stops the batch at this item</b> when the removal is cancelled, or when the batch was
+/// stopped at an earlier item: <c>PreDeleteItem</c> answers <c>ERROR_CANCELLED</c>. Measured on
+/// 2026-11-05: the shell then tells this item it was cancelled, leaves it where it was, and reaches
+/// no item after it.</para>
 ///
 /// <para>Every other notification is answered with <c>S_OK</c> and ignored.</para>
 /// </summary>
+/// <param name="stop">Shared by every sink of the batch: set once the batch is to stop, so the next item's sink stops it.</param>
+/// <param name="heard">
+/// Asked once the shell has told this item what became of it, before the shell reaches the next
+/// item; where it answers true, <paramref name="stop"/> is set.
+/// </param>
 [ComVisible(true)]
-internal sealed class BinnedItem(CancellationToken ct) : IFileOperationProgressSink
+internal sealed class BinnedItem(CancellationToken ct, StrongBox<bool>? stop = null, Func<BinnedItem, bool>? heard = null)
+    : IFileOperationProgressSink
 {
     /// <summary><c>SIGDN_FILESYSPATH</c>: the item's path in the file system.</summary>
     private const uint FileSystemPath = 0x8005_8000;
@@ -39,6 +47,9 @@ internal sealed class BinnedItem(CancellationToken ct) : IFileOperationProgressS
     /// <summary>Whether this sink stopped the batch at this item because the removal was cancelled.</summary>
     public bool StoppedHere { get; private set; }
 
+    /// <summary>Whether this sink stopped the batch at this item because it was stopped at an earlier one.</summary>
+    public bool HeldBack { get; private set; }
+
     /// <summary>The <c>HRESULT</c> the shell reported failing to move the item with, or null.</summary>
     public int? Failure { get; private set; }
 
@@ -50,27 +61,52 @@ internal sealed class BinnedItem(CancellationToken ct) : IFileOperationProgressS
 
     public int PreDeleteItem(uint flags, IShellItem item)
     {
-        if (!ct.IsCancellationRequested)
+        if (ct.IsCancellationRequested)
         {
-            return 0;
+            StoppedHere = true;
+            return Cancelled;
         }
 
-        StoppedHere = true;
-        return Cancelled;
+        if (stop?.Value == true)
+        {
+            HeldBack = true;
+            return Cancelled;
+        }
+
+        return 0;
     }
 
     public int PostDeleteItem(uint flags, IShellItem item, int result, IShellItem? created)
     {
+        Record(result, created);
+
+        // The shell tells an item this sink stopped that it was cancelled. Nothing was done to it, so
+        // the caller is not asked about it.
+        if (StoppedHere || HeldBack)
+        {
+            return 0;
+        }
+
+        if (heard?.Invoke(this) == true && stop is not null)
+        {
+            stop.Value = true;
+        }
+
+        return 0;
+    }
+
+    private void Record(int result, IShellItem? created)
+    {
         if (result < 0)
         {
             Failure = result;
-            return 0;
+            return;
         }
 
         if (created is null)
         {
             DeletedOutright = true;
-            return 0;
+            return;
         }
 
         Moved = true;
@@ -79,7 +115,7 @@ internal sealed class BinnedItem(CancellationToken ct) : IFileOperationProgressS
         // move it cannot confirm, never as one it can.
         if (created.GetDisplayName(FileSystemPath, out var name) < 0)
         {
-            return 0;
+            return;
         }
 
         try
@@ -90,8 +126,6 @@ internal sealed class BinnedItem(CancellationToken ct) : IFileOperationProgressS
         {
             Marshal.FreeCoTaskMem(name);
         }
-
-        return 0;
     }
 
     public int StartOperations() => 0;
@@ -109,7 +143,6 @@ internal sealed class BinnedItem(CancellationToken ct) : IFileOperationProgressS
     public int PreCopyItem(uint flags, IShellItem item, IShellItem destination, IntPtr newName) => 0;
 
     public int PostCopyItem(uint flags, IShellItem item, IShellItem destination, IntPtr newName, int result, IShellItem? created) => 0;
-
 
     public int PreNewItem(uint flags, IShellItem destination, IntPtr newName) => 0;
 

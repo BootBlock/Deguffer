@@ -103,29 +103,38 @@ public sealed class FakeRecycleBin : IRecycleBin
 
     /// <summary>
     /// Takes each item in turn as the shell does: refused where <see cref="CannotTake"/> says, and
-    /// otherwise handed to the behaviour. A cancel stops it before the next item, as the shell's sink
-    /// does, so that item and every one after it are not reached and are not recorded in
-    /// <see cref="Paths"/>.
+    /// otherwise handed to the behaviour. A cancel, or the caller's rule, stops it before the next
+    /// item, as the shell's sink does, so that item and every one after it are not reached and are not
+    /// recorded in <see cref="Paths"/>.
     /// </summary>
-    public IReadOnlyList<RecycleOutcome> Recycle(IReadOnlyList<string> paths, CancellationToken ct = default)
+    public IReadOnlyList<RecycleOutcome> Recycle(
+        IReadOnlyList<string> paths, CancellationToken ct = default, Func<int, RecycleOutcome, bool>? stopsAfter = null)
     {
         ArgumentOutOfRangeException.ThrowIfGreaterThan(paths.Count, IRecycleBin.LargestBatch, nameof(paths));
         Batches.Add([.. paths]);
 
         var outcomes = new List<RecycleOutcome>(paths.Count);
+        var stopped = false;
 
-        foreach (var path in paths)
+        for (var i = 0; i < paths.Count; i++)
         {
-            if (ct.IsCancellationRequested)
+            if (ct.IsCancellationRequested || stopped)
             {
-                outcomes.Add(RecycleOutcome.NotReached);
+                outcomes.Add(ct.IsCancellationRequested ? RecycleOutcome.NotReached : RecycleOutcome.StoppedBefore);
                 continue;
             }
 
-            Paths.Add(path);
-            outcomes.Add(CannotTake(path) is { } why
-                ? new RecycleOutcome(Removed: false, why)
-                : _behaviour(path));
+            Paths.Add(paths[i]);
+
+            if (CannotTake(paths[i]) is { } why)
+            {
+                outcomes.Add(new RecycleOutcome(Removed: false, why));
+                continue;
+            }
+
+            var outcome = _behaviour(paths[i]);
+            outcomes.Add(outcome);
+            stopped = stopsAfter?.Invoke(i, outcome) == true;
         }
 
         return outcomes;

@@ -109,6 +109,39 @@ public sealed class ShellRecycleBinTests : IDisposable
         Assert.True(File.Exists(files[2]));
     }
 
+    /// <summary>
+    /// The caller's rule answers that the first item stops the batch. The rule is asked before the
+    /// shell reaches the second item, the shell reaches nothing after the first, and each item after
+    /// it is reported stopped before and is where it was, never as cancelled or refused.
+    /// </summary>
+    [Fact]
+    public void ACallersRuleStopsTheBatchAtTheItemItAnswersFor()
+    {
+        var files = Files("a.bin", "b.bin", "c.bin");
+        List<string> reached = [];
+        List<int> asked = [];
+        var bin = Bin(StandInShell.Telling(path =>
+        {
+            reached.Add(path);
+            File.Delete(path);
+            return ShellTold.DeletedOutright;
+        }));
+
+        var outcomes = bin.Recycle(files, stopsAfter: (index, outcome) =>
+        {
+            asked.Add(index);
+            Assert.Equal([files[0]], reached);
+            return outcome.DeletedOutright;
+        });
+
+        Assert.Equal([0], asked);
+        Assert.Equal([files[0]], reached);
+        Assert.True(outcomes[0].DeletedOutright);
+        Assert.All(outcomes.Skip(1), outcome => Assert.Same(RecycleOutcome.StoppedBefore, outcome));
+        Assert.True(File.Exists(files[1]));
+        Assert.True(File.Exists(files[2]));
+    }
+
     /// <summary>A removal cancelled before the batch goes hands the shell nothing, and every item is not reached.</summary>
     [Fact]
     public void ARemovalCancelledBeforeItsBatchHandsTheShellNothing()

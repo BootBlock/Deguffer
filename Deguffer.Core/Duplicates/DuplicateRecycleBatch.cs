@@ -21,9 +21,10 @@ namespace Deguffer.Core.Duplicates;
 /// lies, and a move into the bin changes it. Where the volume keeps a file's number, the item is
 /// identified by it as well.</para>
 ///
-/// <para><b>A copy that stops the run stops it once its batch has gone.</b> The batch's other copies
-/// were moved in the same operation, and each is identified in the bin as its own copy, so the report
-/// names every copy that went and where any of them cannot be shown to be the file compared.</para>
+/// <para><b>A copy that stops the run stops it there.</b> Each copy is identified as soon as the shell
+/// has dealt with it, before the shell reaches the next, and a copy Windows deleted outright or the
+/// bin cannot be shown to hold stops the batch at that copy (§7.4): the copies after it in the batch
+/// are not reached, as they were not when each copy was an operation of its own.</para>
 /// </summary>
 internal sealed class DuplicateRecycleBatch(IRecycleBin bin, FileInformation files) : IDisposable
 {
@@ -82,14 +83,20 @@ internal sealed class DuplicateRecycleBatch(IRecycleBin bin, FileInformation fil
                 return (false, false);
             }
 
-            var recycled = bin.Recycle([.. going.Select(waiting => DuplicateRemover.BinPath(waiting.Copy.Copy))], ct);
+            // Each copy is identified as soon as the shell has dealt with it, and one that stops the run
+            // stops the batch there, before the shell reaches the next copy.
+            var identified = new CopyRemoval?[going.Count];
+            var recycled = bin.Recycle(
+                [.. going.Select(waiting => DuplicateRemover.BinPath(waiting.Copy.Copy))],
+                ct,
+                (index, outcome) => (identified[index] = Identified(going[index].Copy, outcome)).StopsTheRun);
             var (stopped, cancelled) = (false, false);
 
             for (var i = 0; i < going.Count; i++)
             {
-                var outcome = recycled[i].Cancelled
+                var outcome = recycled[i] is { Cancelled: true } or { Stopped: true }
                     ? DuplicateRemover.NotReached(going[i].Copy.Copy)
-                    : Identified(going[i].Copy, recycled[i]);
+                    : identified[i] ?? Identified(going[i].Copy, recycled[i]);
 
                 outcomes[going[i].Slot] = outcome;
                 cancelled |= recycled[i].Cancelled;

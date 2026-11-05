@@ -35,7 +35,7 @@ internal sealed record PlannedGroup(DuplicateGroup Group, IReadOnlyList<Duplicat
 /// nothing put at the path since is what goes; or to the Recycle Bin, in batches
 /// (<see cref="DuplicateRecycleBatch"/>), each copy described again as its batch goes and the bin's
 /// item for it then identified, which must be the file compared. Where it is not, or that cannot be
-/// told, the run stops once that batch has gone and names what went to the bin, where it can still
+/// told, the run stops there and names what went to the bin, where it can still
 /// be restored. A copy the bin refuses is never deleted outright in its place.</para>
 ///
 /// <para><b>§5.6 afterwards</b>: every copy left in a group is still there by its file ID
@@ -231,7 +231,8 @@ public sealed class DuplicateRemover
             }
         }
 
-        // Copies compared before a cancel or a stop go too, as they would have gone before it one at a time.
+        // The last batch, however the loop ended. After a cancel the bin reaches none of its copies, and
+        // each is reported not reached.
         Go();
 
         HashSet<FileIdentity> removed = [.. outcomes.Where(outcome => outcome.Went).Select(outcome => outcome.Copy.Identity)];

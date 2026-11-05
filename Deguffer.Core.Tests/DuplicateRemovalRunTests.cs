@@ -131,10 +131,8 @@ public sealed class DuplicateRemovalRunTests : DuplicateRemovalScene
         var stopped = Assert.Single(report.Copies, copy => copy.Check == RemovalCheck.BinReceivedAnother);
         Assert.Same(stopped, report.StoppedAt);
         Assert.Contains(stopped.Copy.Path, stopped.Message, StringComparison.Ordinal);
+        Assert.Contains(report.Copies, copy => copy.Check == RemovalCheck.NotReached && File.Exists(copy.Copy.Path));
         Assert.True(File.Exists(aside));
-
-        // The other copy went in the same operation, and is identified in the bin as its own copy.
-        Assert.Equal(RemovalCheck.Removed, Assert.Single(report.Copies, copy => copy != stopped).Check);
     }
 
     /// <summary>
@@ -196,8 +194,8 @@ public sealed class DuplicateRemovalRunTests : DuplicateRemovalScene
     /// <summary>
     /// Windows deleting a copy outright when asked to move it to the bin stops the run, and the copy
     /// is said to be gone and not in the bin, never moved there or still in place. §5.6 does not count
-    /// it as a loss beside it, since the report names it. The copy beside it in the same operation,
-    /// which Windows did move, is reported moved: the outright deletion is that one copy's alone.
+    /// it as a loss beside it, since the report names it. The copy after it in the same batch is not
+    /// reached: Windows deletes outright what its bin cannot take, and the cause may be the same.
     /// </summary>
     [Fact]
     public void ACopyWindowsDeletedOutrightStopsTheRunAndIsNotSaidToBeInTheBin()
@@ -210,14 +208,8 @@ public sealed class DuplicateRemovalRunTests : DuplicateRemovalScene
         Mark(marks, copy);
         Mark(marks, copyB);
 
-        var moving = FakeRecycleBin.MovingTo(Bin);
         var bin = new FakeRecycleBin(path =>
         {
-            if (path != copy.Path)
-            {
-                return moving.Recycle([path])[0];
-            }
-
             File.Delete(path);
             return new RecycleOutcome(Removed: true, "Deleted outright.") { DeletedOutright = true };
         });
@@ -226,20 +218,23 @@ public sealed class DuplicateRemovalRunTests : DuplicateRemovalScene
 
         var first = report.Copies.Single(outcome => outcome.Check is RemovalCheck.DeletedOutright);
         Assert.Same(first, report.StoppedAt);
-        Assert.Equal(copy, first.Copy);
         Assert.Contains("outright", first.Message);
-        Assert.Equal(copyB, Assert.Single(report.Removed).Copy);
+        Assert.Equal(RemovalCheck.NotReached, report.Copies.Single(outcome => outcome != first).Check);
+        Assert.Equal([copy.Path], bin.Paths);
+        Assert.True(File.Exists(copyB.Path));
+        Assert.Empty(report.Removed);
         Assert.DoesNotContain(first, report.Kept);
         Assert.True(report.Verification.Passed);
+        Assert.DoesNotContain("Moved", report.Summary);
         Assert.DoesNotContain("Nothing was removed", report.Summary);
     }
 
     /// <summary>
-    /// A copy that stops the run stops it once its batch has gone. The copies in the batch after it
-    /// are not reached: they are where they were, and nothing hands them to the bin.
+    /// A copy that stops the run stops its batch at that copy: the rest of the batch is never reached,
+    /// and the batch after it is never handed to the bin. Each such copy is where it was.
     /// </summary>
     [Fact]
-    public void ACopyThatStopsTheRunLeavesTheNextBatchUnreached()
+    public void ACopyThatStopsTheRunStopsItsBatchThereAndNoBatchFollows()
     {
         List<DuplicateCandidate[]> groups = [];
 
@@ -253,7 +248,7 @@ public sealed class DuplicateRemovalRunTests : DuplicateRemovalScene
 
         var marks = Marks([.. groups]);
         Mark(marks, [.. groups.Select(group => group[1])]);
-        var first = groups[0][1];
+        var first = groups[1][1];
         var moving = FakeRecycleBin.MovingTo(Bin);
         var bin = new FakeRecycleBin(path =>
         {
@@ -270,9 +265,11 @@ public sealed class DuplicateRemovalRunTests : DuplicateRemovalScene
 
         Assert.Equal(first, report.StoppedAt?.Copy);
         Assert.Equal([IRecycleBin.LargestBatch], bin.Batches.Select(batch => batch.Count));
-        var last = Assert.Single(report.Copies, outcome => outcome.Check == RemovalCheck.NotReached);
-        Assert.Equal(groups[^1][1], last.Copy);
-        Assert.True(File.Exists(last.Copy.Path));
+        Assert.Equal([groups[0][1].Path, first.Path], bin.Paths);
+        Assert.Equal(groups[0][1], Assert.Single(report.Removed).Copy);
+        var unreached = report.Copies.Where(outcome => outcome.Check == RemovalCheck.NotReached).ToList();
+        Assert.Equal(groups.Skip(2).Select(group => group[1]), unreached.Select(outcome => outcome.Copy));
+        Assert.All(unreached, outcome => Assert.True(File.Exists(outcome.Copy.Path)));
         Assert.True(report.Verification.Passed);
     }
 

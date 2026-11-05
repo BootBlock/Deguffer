@@ -23,6 +23,18 @@ public sealed record RecycleOutcome(bool Removed, string? Message = null)
     };
 
     /// <summary>
+    /// The outcome of an item the batch stopped before reaching, because the caller's
+    /// <c>stopsAfter</c> rule stopped it at an earlier item (<see cref="IRecycleBin.Recycle"/>). It is
+    /// where it was.
+    /// </summary>
+    public static RecycleOutcome StoppedBefore { get; } = new(
+        Removed: false,
+        "Deguffer stopped before Windows moved this to the Recycle Bin, so it is still where it was.")
+    {
+        Stopped = true,
+    };
+
+    /// <summary>
     /// Where the bin put the item, as the shell said once it had moved it, or null where the shell
     /// did not say. A duplicate removal identifies what is there, to check that the file the bin
     /// received is the file it compared (§7.4).
@@ -42,6 +54,12 @@ public sealed record RecycleOutcome(bool Removed, string? Message = null)
     /// happened to it.
     /// </summary>
     public bool Cancelled { get; init; }
+
+    /// <summary>
+    /// Whether the batch stopped before the item, at an earlier item the caller's rule stopped it at
+    /// (<see cref="StoppedBefore"/>). Nothing happened to it.
+    /// </summary>
+    public bool Stopped { get; init; }
 
     /// <summary>
     /// What the user is told about an item the bin cannot take, for <paramref name="why"/>
@@ -102,7 +120,15 @@ public interface IRecycleBin
     /// <see cref="RecycleOutcome.NotReached"/>. Never thrown: what was moved before it is answered as
     /// moved, so a caller can report it and verify it.
     /// </param>
-    IReadOnlyList<RecycleOutcome> Recycle(IReadOnlyList<string> paths, CancellationToken ct = default);
+    /// <param name="stopsAfter">
+    /// Asked, with its position, about each item the shell has dealt with, as soon as it has, and
+    /// before the shell reaches the next. Where it answers true the batch stops there: every item
+    /// after it is answered <see cref="RecycleOutcome.StoppedBefore"/>. A duplicate removal stops at
+    /// a copy Windows deleted outright or the bin cannot be shown to hold (§7.4), as it did when each
+    /// copy was an operation of its own. Called on the bin's own thread, so it must not throw.
+    /// </param>
+    IReadOnlyList<RecycleOutcome> Recycle(
+        IReadOnlyList<string> paths, CancellationToken ct = default, Func<int, RecycleOutcome, bool>? stopsAfter = null);
 
     /// <summary>
     /// Why the bin cannot take the item at <paramref name="path"/> as things are now, or null where

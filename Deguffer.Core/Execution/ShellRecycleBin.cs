@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace Deguffer.Core.Execution;
@@ -74,7 +75,8 @@ public sealed class ShellRecycleBin : IRecycleBin
 
     public string? WhyItCannotTake(string path, CancellationToken ct = default) => _reach.WhyNot(path, ct);
 
-    public IReadOnlyList<RecycleOutcome> Recycle(IReadOnlyList<string> paths, CancellationToken ct = default)
+    public IReadOnlyList<RecycleOutcome> Recycle(
+        IReadOnlyList<string> paths, CancellationToken ct = default, Func<int, RecycleOutcome, bool>? stopsAfter = null)
     {
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(paths.Count, IRecycleBin.LargestBatch, nameof(paths));
@@ -91,7 +93,12 @@ public sealed class ShellRecycleBin : IRecycleBin
             return outcomes;
         }
 
-        var sinks = handed.Select(_ => new BinnedItem(ct)).ToArray();
+        // Each item's outcome is put to the caller's rule as soon as the shell has dealt with it, so a
+        // stop takes effect at the next item rather than once the batch has gone.
+        StrongBox<bool> stop = new();
+        var sinks = handed
+            .Select(index => new BinnedItem(ct, stop, stopsAfter is null ? null : sink => stopsAfter(index, Outcome(sink, null, stop, ct))))
+            .ToArray();
         string? failed = "The Recycle Bin operation did not run.";
 
         // The shell's apartment requirement, met on a thread of our own rather than by initialising
@@ -105,7 +112,7 @@ public sealed class ShellRecycleBin : IRecycleBin
 
         for (var i = 0; i < handed.Count; i++)
         {
-            outcomes[handed[i]] = Outcome(sinks[i], failed, ct);
+            outcomes[handed[i]] = Outcome(sinks[i], failed, stop, ct);
         }
 
         return outcomes;
@@ -233,11 +240,12 @@ public sealed class ShellRecycleBin : IRecycleBin
     /// <summary>
     /// What a finished operation did to one item, as its sink heard it. An outright deletion is
     /// answered first, because whatever else the shell says, the item is gone and not in the bin. An
-    /// item the shell never reached is not reached where the removal was cancelled, and otherwise
-    /// takes the operation's own failure.
+    /// item the shell never reached is not reached where the removal was cancelled, stopped before
+    /// where the caller's rule stopped the batch, and otherwise takes the operation's own failure.
     /// </summary>
     /// <param name="failed">Why the operation as a whole failed, or null where it ran.</param>
-    internal static RecycleOutcome Outcome(BinnedItem sink, string? failed, CancellationToken ct) => sink switch
+    /// <param name="stop">Whether the caller's rule stopped the batch at an earlier item.</param>
+    internal static RecycleOutcome Outcome(BinnedItem sink, string? failed, StrongBox<bool> stop, CancellationToken ct) => sink switch
     {
         { DeletedOutright: true } => new RecycleOutcome(
             Removed: true,
@@ -247,9 +255,11 @@ public sealed class ShellRecycleBin : IRecycleBin
         },
         { Moved: true } => new RecycleOutcome(Removed: true) { Binned = sink.Path },
         { StoppedHere: true } => RecycleOutcome.NotReached,
+        { HeldBack: true } => RecycleOutcome.StoppedBefore,
         { Failure: { } result } => new RecycleOutcome(Removed: false, Refused(result)),
         { Refusal: { } why } => new RecycleOutcome(Removed: false, why),
         _ when ct.IsCancellationRequested => RecycleOutcome.NotReached,
+        _ when stop.Value => RecycleOutcome.StoppedBefore,
         _ => new RecycleOutcome(Removed: false, failed ?? "Windows stopped before moving this to the Recycle Bin."),
     };
 }

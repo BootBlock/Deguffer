@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Testing;
@@ -256,7 +257,7 @@ public sealed class RecycleBinReachTests : IDisposable
         var sink = new BinnedItem(CancellationToken.None);
         sink.PostDeleteItem(flags: 0, item: null!, result: 0, created: null);
 
-        var outcome = ShellRecycleBin.Outcome(sink, failed: null, CancellationToken.None);
+        var outcome = ShellRecycleBin.Outcome(sink, failed: null, new StrongBox<bool>(), CancellationToken.None);
 
         Assert.True(outcome.DeletedOutright);
         Assert.True(outcome.Removed);
@@ -271,7 +272,7 @@ public sealed class RecycleBinReachTests : IDisposable
         var sink = new BinnedItem(CancellationToken.None);
         sink.PostDeleteItem(flags: 0, item: null!, result: unchecked((int)0x80070020), created: null);
 
-        var outcome = ShellRecycleBin.Outcome(sink, failed: null, CancellationToken.None);
+        var outcome = ShellRecycleBin.Outcome(sink, failed: null, new StrongBox<bool>(), CancellationToken.None);
 
         Assert.False(outcome.DeletedOutright);
         Assert.False(outcome.Removed);
