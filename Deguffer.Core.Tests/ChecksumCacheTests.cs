@@ -311,16 +311,18 @@ public sealed class ChecksumCacheTests : IDisposable
     }
 
     /// <summary>
-    /// The searcher the page builds, from the app's one cache, reads through that cache and stores
-    /// what it read once the search ends, so the next search, or the next launch, can use it.
+    /// The searcher the page builds, from the app's one cache, reads through that cache and starts
+    /// storing what it read as the search ends, so the next search, or the next launch, can use it.
     /// </summary>
     [Fact]
     public async Task ThePagesSearcherReadsThroughTheCacheAndStoresWhatItRead()
     {
         var (a, _) = WriteTree();
-        var searcher = new DuplicateSearcher(_tree.Finder(), new VolumeMediaCache(new FakeStorageQueries()), new ChecksumCache(Store, _clock));
+        var cache = new ChecksumCache(Store, _clock);
+        var searcher = new DuplicateSearcher(_tree.Finder(), new VolumeMediaCache(new FakeStorageQueries()), cache);
 
         await searcher.SearchAsync(new DuplicateSearch(MatchCriteria.Content, [new SearchLocation(Path.Combine(_tree.Top, "Data"))]), _tree.Policy());
+        await cache.WhenStoredAsync(default);
 
         var stored = new ChecksumCache(Store, _clock);
         Assert.NotNull(stored.Find(Describe(a), ContentPart.Ends, ChecksumAlgorithm.XxHash128));
@@ -382,9 +384,192 @@ public sealed class ChecksumCacheTests : IDisposable
                 return reading;
             },
             cache).SearchAsync(new DuplicateSearch(MatchCriteria.Content, [new SearchLocation(Path.Combine(_tree.Top, "Data"))]), _tree.Policy(), ct: stop.Token);
+        await cache.WhenStoredAsync(default);
 
         Assert.True(result.Stopped);
         Assert.NotNull(new ChecksumCache(Store, _clock).Find(Describe(read[0]), ContentPart.Ends, ChecksumAlgorithm.XxHash128));
+    }
+
+    /// <summary>
+    /// A search answers while the store it started writing is still being written, so a full store's
+    /// write never stands between the last group confirmed and the result shown; the write still
+    /// lands once it ends.
+    /// </summary>
+    [Fact]
+    public async Task ASearchAnswersWhileItsStoreIsStillBeingWritten()
+    {
+        var (a, _) = WriteTree();
+        using var store = new HeldStore(held: true);
+        var cache = new ChecksumCache(Store, _clock, store: store.Write);
+
+        var result = await AnswerAsync(_tree, cache, Reader(cache).Read).WaitAsync(TimeSpan.FromSeconds(10));
+        await store.Started.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(2, result.Groups.Count);
+        Assert.False(File.Exists(Store), "The store was written before the held write was released.");
+
+        store.Release();
+        await cache.WhenStoredAsync(default);
+
+        Assert.NotNull(new ChecksumCache(Store, _clock).Find(Describe(a), ContentPart.Whole, ChecksumAlgorithm.XxHash128));
+    }
+
+    /// <summary>
+    /// A search started while the last one's store is being written reads nothing until that write
+    /// ends, and then uses every value the last search read; no two writes ever run at once.
+    /// </summary>
+    [Fact]
+    public async Task ASearchStartedWhileTheStoreIsWrittenWaitsForItAndUsesEveryValue()
+    {
+        WriteTree();
+        using var store = new HeldStore(held: true);
+        var cache = new ChecksumCache(Store, _clock, store: store.Write);
+        var first = await AnswerAsync(_tree, cache, Reader(cache).Read).WaitAsync(TimeSpan.FromSeconds(10));
+        await store.Started.WaitAsync(TimeSpan.FromSeconds(10));
+
+        _read = 0;
+        var readWhileHeld = false;
+        var reachedContent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var counted = Counted(Reader(cache));
+        var searching = _tree.Searcher(
+            (file, part, checksum, ct) =>
+            {
+                readWhileHeld |= !store.IsReleased;
+
+                return counted(file, part, checksum, ct);
+            },
+            cache).SearchAsync(
+                new DuplicateSearch(MatchCriteria.Content, [new SearchLocation(Path.Combine(_tree.Top, "Data"))]),
+                _tree.Policy(),
+                candidatesFound: (_, _) =>
+                {
+                    reachedContent.TrySetResult();
+                    return Task.CompletedTask;
+                });
+
+        // Long enough for the second search's reads to start, were it not waiting for the write.
+        await reachedContent.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await Task.Delay(TimeSpan.FromMilliseconds(500));
+
+        Assert.False(searching.IsCompleted, "The second search answered while the last one's store was still being written.");
+
+        store.Release();
+        var second = await searching.WaitAsync(TimeSpan.FromSeconds(10));
+        await cache.WhenStoredAsync(default);
+
+        Assert.False(readWhileHeld, "The second search read a file while the last one's store was being written.");
+        Assert.Equal(0, _read);
+        Assert.Equal(Described(first), Described(second));
+        Assert.Equal(1, store.Writes);
+        Assert.False(store.Overlapped, "Two writes of the store ran at once.");
+    }
+
+    /// <summary>
+    /// A search that read nothing new, only using remembered values on a new day, does not write the
+    /// store again; the next search with a new value writes those days with it, and a save, as the
+    /// app's close makes, writes days that no search has.
+    /// </summary>
+    [Fact]
+    public async Task NewLastUsedDaysAloneWaitForTheNextNewValueOrTheClose()
+    {
+        WriteTree();
+        using var store = new HeldStore(held: false);
+        var cache = new ChecksumCache(Store, _clock, store: store.Write);
+        await SearchAsync(cache);
+        var firstDay = Today;
+        Assert.Equal(1, store.Writes);
+
+        _clock.Advance(TimeSpan.FromDays(1));
+        _read = 0;
+        await SearchAsync(cache);
+
+        Assert.Equal(0, _read);
+        Assert.Equal(1, store.Writes);
+        Assert.All(StoredDays(), day => Assert.Equal(firstDay, day));
+
+        var content = Random(6000, 30);
+        _tree.File(content, "Data", "new.bin");
+        _tree.File(content, "Data", "Other", "new.bin");
+        await SearchAsync(cache);
+
+        Assert.Equal(2, store.Writes);
+        Assert.All(StoredDays(), day => Assert.Equal(Today, day));
+
+        _clock.Advance(TimeSpan.FromDays(1));
+        await SearchAsync(cache);
+        Assert.Equal(2, store.Writes);
+
+        Assert.True(cache.Save());
+
+        Assert.Equal(3, store.Writes);
+        Assert.All(StoredDays(), day => Assert.Equal(Today, day));
+    }
+
+    /// <summary>
+    /// A write the disk refuses answers false and leaves the cache marked changed, so the next save
+    /// writes what the refused one would have.
+    /// </summary>
+    [Fact]
+    public void AWriteThatFailsIsMadeAgainByTheNextSave()
+    {
+        var description = State();
+        var value = Value(ChecksumAlgorithm.XxHash128, 6);
+        var refusals = 1;
+        var cache = new ChecksumCache(Store, _clock, store: (file, write) =>
+        {
+            if (refusals-- > 0)
+            {
+                throw new IOException("The disk is full.");
+            }
+
+            StoreFile.Replace(file, write);
+        });
+        cache.Remember(description, ContentPart.Whole, value);
+
+        Assert.False(cache.Save());
+        Assert.False(File.Exists(Store));
+
+        Assert.True(cache.Save());
+        Assert.Equal(value, new ChecksumCache(Store, _clock).Find(description, ContentPart.Whole, ChecksumAlgorithm.XxHash128));
+    }
+
+    /// <summary>
+    /// A write that fails in a way no write expects reaches whoever waits on it, the save that
+    /// started it and the next search, and no one after them: that search's end writes the store
+    /// again though it read nothing new, and every wait and save after it succeeds. The write that
+    /// faults is one only a new last-used day started, as the close's can be.
+    /// </summary>
+    [Fact]
+    public async Task AWriteThatFaultsReachesTheNextSearchAndNoOneAfterIt()
+    {
+        var description = State();
+        var value = Value(ChecksumAlgorithm.XxHash128, 7);
+        var writes = 0;
+        var cache = new ChecksumCache(Store, _clock, store: (file, write) =>
+        {
+            if (++writes == 2)
+            {
+                throw new InvalidOperationException("A write no store write expects.");
+            }
+
+            StoreFile.Replace(file, write);
+        });
+        cache.Remember(description, ContentPart.Whole, value);
+        Assert.True(cache.Save());
+
+        _clock.Advance(TimeSpan.FromDays(1));
+        Assert.Equal(value, cache.Find(description, ContentPart.Whole, ChecksumAlgorithm.XxHash128));
+
+        Assert.Throws<InvalidOperationException>(() => cache.Save());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => cache.WhenStoredAsync(default));
+
+        cache.StoreInBackground();
+        await cache.WhenStoredAsync(default);
+
+        Assert.Equal(3, writes);
+        Assert.All(StoredDays(), day => Assert.Equal(Today, day));
+        Assert.True(cache.Save());
+        await cache.WhenStoredAsync(default);
     }
 
     /// <summary>
@@ -409,9 +594,25 @@ public sealed class ChecksumCacheTests : IDisposable
 
     private Task<DuplicateSearchResult> SearchAsync(ChecksumCache cache) => SearchAsync(_tree, cache);
 
-    private Task<DuplicateSearchResult> SearchAsync(DuplicateTree tree, ChecksumCache cache) =>
-        tree.Searcher(Counted(Reader(cache)), cache).SearchAsync(
+    /// <summary>A content search through <paramref name="cache"/>, once the store write it started has ended.</summary>
+    private async Task<DuplicateSearchResult> SearchAsync(DuplicateTree tree, ChecksumCache cache)
+    {
+        var result = await AnswerAsync(tree, cache, Counted(Reader(cache)));
+        await cache.WhenStoredAsync(default);
+
+        return result;
+    }
+
+    /// <summary>A content search through <paramref name="cache"/>, as soon as it answers.</summary>
+    private static Task<DuplicateSearchResult> AnswerAsync(DuplicateTree tree, ChecksumCache cache, ReadContent read) =>
+        tree.Searcher(read, cache).SearchAsync(
             new DuplicateSearch(MatchCriteria.Content, [new SearchLocation(Path.Combine(tree.Top, "Data"))]), tree.Policy());
+
+    /// <summary>Every last-used day the store holds.</summary>
+    private IReadOnlyList<int> StoredDays() =>
+        [.. ChecksumStoreFormat.Read(File.ReadAllBytes(Store))!.Values.Select(value => value.LastUsedDay)];
+
+    private int Today => (int)(_clock.GetUtcNow().UtcDateTime - DateTime.UnixEpoch).TotalDays;
 
     /// <summary>A reader using <paramref name="cache"/>.</summary>
     private static ContentReader Reader(ChecksumCache cache) =>
@@ -537,6 +738,58 @@ public sealed class ChecksumCacheTests : IDisposable
         }
 
         public override ContentChecksum Finish() => inner.Finish();
+    }
+
+    /// <summary>
+    /// Writes the store as the app does, but only once released where it starts held, counting the
+    /// writes and noting any two that run at once.
+    /// </summary>
+    private sealed class HeldStore(bool held) : IDisposable
+    {
+        private readonly ManualResetEventSlim _released = new(!held);
+        private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _running;
+        private int _writes;
+
+        /// <summary>Completes as the first write starts.</summary>
+        public Task Started => _started.Task;
+
+        public bool IsReleased => _released.IsSet;
+
+        public int Writes => Volatile.Read(ref _writes);
+
+        public bool Overlapped { get; private set; }
+
+        public void Release() => _released.Set();
+
+        public void Write(string file, Action<Stream> write)
+        {
+            Overlapped |= Interlocked.Increment(ref _running) > 1;
+            Interlocked.Increment(ref _writes);
+            _started.TrySetResult();
+
+            try
+            {
+                // Past any wait a test makes for the answer, so a search that waits for the write fails
+                // that wait rather than hanging.
+                if (!_released.Wait(TimeSpan.FromSeconds(60)))
+                {
+                    throw new TimeoutException("The held store write was never released.");
+                }
+
+                StoreFile.Replace(file, write);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _running);
+            }
+        }
+
+        public void Dispose()
+        {
+            _released.Set();
+            _released.Dispose();
+        }
     }
 
     /// <summary>An XXH128 checksum that runs <paramref name="first"/> as the first bytes arrive.</summary>
