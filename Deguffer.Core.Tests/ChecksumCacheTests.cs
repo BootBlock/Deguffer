@@ -311,8 +311,8 @@ public sealed class ChecksumCacheTests : IDisposable
     }
 
     /// <summary>
-    /// The searcher the page builds, from the app's one cache, reads through that cache and stores
-    /// what it read once the search ends, so the next search, or the next launch, can use it.
+    /// The searcher the page builds, from the app's one cache, reads through that cache and starts
+    /// storing what it read as the search ends, so the next search, or the next launch, can use it.
     /// </summary>
     [Fact]
     public async Task ThePagesSearcherReadsThroughTheCacheAndStoresWhatItRead()
@@ -531,6 +531,45 @@ public sealed class ChecksumCacheTests : IDisposable
 
         Assert.True(cache.Save());
         Assert.Equal(value, new ChecksumCache(Store, _clock).Find(description, ContentPart.Whole, ChecksumAlgorithm.XxHash128));
+    }
+
+    /// <summary>
+    /// A write that fails in a way no write expects reaches whoever waits on it, the save that
+    /// started it and the next search, and no one after them: that search's end writes the store
+    /// again though it read nothing new, and every wait and save after it succeeds. The write that
+    /// faults is one only a new last-used day started, as the close's can be.
+    /// </summary>
+    [Fact]
+    public async Task AWriteThatFaultsReachesTheNextSearchAndNoOneAfterIt()
+    {
+        var description = State();
+        var value = Value(ChecksumAlgorithm.XxHash128, 7);
+        var writes = 0;
+        var cache = new ChecksumCache(Store, _clock, store: (file, write) =>
+        {
+            if (++writes == 2)
+            {
+                throw new InvalidOperationException("A write no store write expects.");
+            }
+
+            StoreFile.Replace(file, write);
+        });
+        cache.Remember(description, ContentPart.Whole, value);
+        Assert.True(cache.Save());
+
+        _clock.Advance(TimeSpan.FromDays(1));
+        Assert.Equal(value, cache.Find(description, ContentPart.Whole, ChecksumAlgorithm.XxHash128));
+
+        Assert.Throws<InvalidOperationException>(() => cache.Save());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => cache.WhenStoredAsync(default));
+
+        cache.StoreInBackground();
+        await cache.WhenStoredAsync(default);
+
+        Assert.Equal(3, writes);
+        Assert.All(StoredDays(), day => Assert.Equal(Today, day));
+        Assert.True(cache.Save());
+        await cache.WhenStoredAsync(default);
     }
 
     /// <summary>

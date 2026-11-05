@@ -211,8 +211,9 @@ public sealed class ChecksumCache
 
             _writing = Task.Run(async () =>
             {
-                // Only for its end: a write that failed put its reasons back, so this copy covers it.
-                await previous.ConfigureAwait(false);
+                // Only for its end, so one write that faulted fails what waited on it and not every
+                // write after it. A write that failed put its reasons back, and this copy covers them.
+                await ((Task)previous).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
                 return Write(copy, today, reasons);
             });
@@ -252,27 +253,40 @@ public sealed class ChecksumCache
             }
         }
 
+        var outcome = WriteOutcome.Faulted;
+
         try
         {
             _store(_file, stream => ChecksumStoreFormat.Write(stream, kept));
+            outcome = WriteOutcome.Written;
 
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // A full disk, a folder refused, or another copy of Deguffer writing the store. The
-            // reasons to write stand, so the next write tries again.
-            if (reasons.NewValue)
-            {
-                Volatile.Write(ref _newValue, 1);
-            }
-
-            if (reasons.NewDay)
-            {
-                Volatile.Write(ref _newDay, 1);
-            }
+            // A full disk, a folder refused, or another copy of Deguffer writing the store.
+            outcome = WriteOutcome.Refused;
 
             return false;
+        }
+        finally
+        {
+            // The reasons to write stand, so the next write tries again. A write that faulted is
+            // owed whatever it was started for: the next search learns of the fault as it waits,
+            // and the write its end starts must replace the faulted one, or every search after it
+            // would learn of the same fault again.
+            if (outcome is not WriteOutcome.Written)
+            {
+                if (reasons.NewValue || outcome is WriteOutcome.Faulted)
+                {
+                    Volatile.Write(ref _newValue, 1);
+                }
+
+                if (reasons.NewDay)
+                {
+                    Volatile.Write(ref _newDay, 1);
+                }
+            }
         }
     }
 
@@ -301,4 +315,15 @@ public sealed class ChecksumCache
 
     /// <summary>What a write was started for, put back where the write fails.</summary>
     private readonly record struct WriteReasons(bool NewValue, bool NewDay);
+
+    private enum WriteOutcome
+    {
+        Written,
+
+        /// <summary>Refused by the disk or the folder, as a write can expect to be.</summary>
+        Refused,
+
+        /// <summary>Failed in a way no write expects, which reaches whoever waits on it.</summary>
+        Faulted,
+    }
 }
