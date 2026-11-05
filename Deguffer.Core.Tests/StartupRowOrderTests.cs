@@ -3,8 +3,8 @@ using Deguffer.Core.Startup;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// §7.5 lists the Startup page in name order unless the user chose another, and never by the memory
-/// a program uses.
+/// §7.5 lists the Startup page with the entries that start first unless the user chose another order,
+/// and never by the memory a program uses.
 /// </summary>
 public sealed class StartupRowOrderTests
 {
@@ -37,7 +37,7 @@ public sealed class StartupRowOrderTests
         Assert.Equal("Mike,Echo,Zulu,Alpha,Bravo", Names(StartupOrder.Publisher, StartupOrderDirection.Descending));
     }
 
-    /// <summary>The shipped order is the order a reading arrives in, so choosing it moves nothing.</summary>
+    /// <summary>A tie in name goes by source, in the order the page reads the sources, whichever way round the names run.</summary>
     [Fact]
     public void TwoEntriesOfOneTitleGoBySourceAsTheReadingPutsThem()
     {
@@ -50,14 +50,15 @@ public sealed class StartupRowOrderTests
 
     /// <summary>
     /// The preferences file allows numbers for an enum, so a hand-edited value no member names arrives
-    /// and is shown as the shipped order, name A to Z.
+    /// and is shown as the shipped order: the entries that start, then the disabled ones, then the
+    /// unknown.
     /// </summary>
     [Fact]
     public void AValueNoOrderIsNamedForIsTheShippedOrder()
     {
-        Assert.Equal(StartupOrder.Name, StartupRowOrder.Known((StartupOrder)9));
+        Assert.Equal(StartupOrder.State, StartupRowOrder.Known((StartupOrder)9));
         Assert.Equal(StartupOrderDirection.Ascending, StartupRowOrder.Known((StartupOrderDirection)9));
-        Assert.Equal("Alpha,Bravo,Echo,Mike,Zulu", Names((StartupOrder)9, (StartupOrderDirection)9));
+        Assert.Equal("Bravo,Zulu,Alpha,Echo,Mike", Names((StartupOrder)9, (StartupOrderDirection)9));
     }
 
     /// <summary>§2: nothing on the page is ordered by what its program costs, so no order is named for memory.</summary>

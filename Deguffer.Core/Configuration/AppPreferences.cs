@@ -243,8 +243,8 @@ public enum ExploreScheme
 /// deleted.
 /// </param>
 /// <param name="StartupOrder">
-/// How the Startup page orders its entries. By name by default, as §7.5 ships it. Presentation only:
-/// it changes where an entry stands, never what is read or what a change writes.
+/// How the Startup page orders its entries. By whether each starts by default, as §7.5 ships it.
+/// Presentation only: it changes where an entry stands, never what is read or what a change writes.
 /// </param>
 /// <param name="StartupOrderDirection">
 /// Which way round <paramref name="StartupOrder"/> runs. Ascending by default.
@@ -406,7 +406,7 @@ public sealed record AppPreferences(
     bool ShowNotInstalled = false,
     bool ShowAlreadyClear = false,
     StorageOrder StorageOrder = StorageOrder.Size,
-    Startup.StartupOrder StartupOrder = Startup.StartupOrder.Name,
+    Startup.StartupOrder StartupOrder = Startup.StartupOrder.State,
     Startup.StartupOrderDirection StartupOrderDirection = Startup.StartupOrderDirection.Ascending,
     bool BackdropEnabled = true,
     bool ConfirmBeforeCleaning = true,

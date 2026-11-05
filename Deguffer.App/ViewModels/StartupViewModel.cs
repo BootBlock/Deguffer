@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Deguffer.App.Shell;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Startup;
 using Deguffer.Core.Viewing;
@@ -10,8 +11,8 @@ using Microsoft.UI.Xaml.Controls;
 namespace Deguffer.App.ViewModels;
 
 /// <summary>
-/// The Startup page (§7.5): the reading, the one entry the user picked, its one change, and the
-/// offers to reopen elevated and to open Windows' own Startup page. Every decision is Core's: what may
+/// The Startup page (§7.5): the reading, the one entry the user picked, its one change, its row menu,
+/// and the offers to reopen elevated and to open Windows' own Startup page. Every decision is Core's: what may
 /// change is <see cref="StartupChangePolicy"/>'s, what a row says is <see cref="StartupMarks"/>', and
 /// what a change did is <see cref="StartupSwitcher"/>'s.
 /// </summary>
@@ -31,9 +32,9 @@ public sealed partial class StartupViewModel : ObservableObject
     private readonly RunningActions _running;
     private readonly BusyWork _work;
     private StartupView _view = StartupView.Empty;
-    private StartupOrder _order;
+    private StartupOrder _order = StartupOrder.State;
     private StartupOrderDirection _direction;
-    private IComparer<StartupEntry> _comparer = StartupRowOrder.Comparer(StartupOrder.Name, StartupOrderDirection.Ascending);
+    private IComparer<StartupEntry> _comparer = StartupRowOrder.Comparer(StartupOrder.State, StartupOrderDirection.Ascending);
     private CancellationTokenSource? _reads;
 
     /// <summary>An entry a link asked for, picked once a reading holds it.</summary>
@@ -44,6 +45,8 @@ public sealed partial class StartupViewModel : ObservableObject
     /// <param name="relaunch">Starts an elevated replacement, returning false where the user declined.</param>
     /// <param name="openSettings">Opens Windows' own Startup page, returning false where Windows would not.</param>
     /// <param name="running">What is changing the machine on every page, which the relaunch waits for.</param>
+    /// <param name="folderOf">Where a Startup folder is, for the row menu, or null where Windows would not say.</param>
+    /// <param name="shell">The row menu's hand-offs to Windows.</param>
     public StartupViewModel(
         Func<CancellationToken, StartupView> read,
         Func<StartupEntry, StartupChangeReport> change,
@@ -51,7 +54,9 @@ public sealed partial class StartupViewModel : ObservableObject
         Func<ElevationRequest, bool> relaunch,
         Func<Task<bool>> openSettings,
         RunningActions running,
-        BusyWork work)
+        BusyWork work,
+        Func<StartupSource, string?> folderOf,
+        ShellHandoff shell)
     {
         _read = read;
         _switch = change;
@@ -61,12 +66,16 @@ public sealed partial class StartupViewModel : ObservableObject
         _running = running;
         _work = work;
         CanElevate = ElevationOffer.ShouldOffer(isElevated);
+        Menu = new StartupRowMenu(folderOf, shell, (sentence, severity) => Show(sentence, severity));
 
         // A change on this page, or a clean or a removal on another, ends with this process.
         _running.Changed += (_, _) => ElevateCommand.NotifyCanExecuteChanged();
     }
 
     public ObservableCollection<StartupRow> Rows { get; } = [];
+
+    /// <summary>The picked row's context menu, apart from its one change, which is <see cref="ChangeCommand"/>.</summary>
+    public StartupRowMenu Menu { get; }
 
     [ObservableProperty]
     public partial string Headline { get; private set; } = "Reading what starts at sign-in…";
@@ -186,6 +195,7 @@ public sealed partial class StartupViewModel : ObservableObject
         // A pick the user makes, or the one a link asked for, ends that link's wait: an entry the
         // link named that arrives later must never move a pick made by hand (§7.5).
         _wanted = null;
+        Menu.Row = value;
         Decide();
     }
 

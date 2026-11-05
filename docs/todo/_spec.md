@@ -1362,9 +1362,11 @@ code.
     place. A process of that name that will not say which program it runs is never read as "not
     this one": where no process is confirmed, whether the program runs is unknown, and where some
     are, the row says there may be more.
-- **The list is in name order unless the reader chooses another**: whether the entry starts, where it
-  comes from, or its publisher, either way round, with ties in name order and an entry with no known
-  publisher last. The choice is kept between sessions. Nothing is ordered, marked or offered by how
+- **The list opens with the entries that start, then the disabled ones, then those whose state is
+  unknown, unless the reader chooses another order**: the name, where the entry comes from, or its
+  publisher, either way round, with ties in name order and an entry with no known publisher last. A
+  new install opens in the first order, because which entries start is the question the page is
+  opened to answer. The choice is kept between sessions. Nothing is ordered, marked or offered by how
   much memory it uses (§2). The memory figure answers "what is this costing now", which is Memory's
   question, and it is never a reason the page gives to stop anything starting.
 
@@ -1411,6 +1413,21 @@ code.
 - **No confirmation dialog.** The change removes nothing and the same page undoes it in one step, and
   the result says how. The confirmation §7 asks for exists because a deletion cannot be undone, and
   this is not one.
+
+**The row menu**
+
+- **Every row has a context menu, by right-click, the context-menu key or Shift+F10**, and the row it
+  opens on is selected first, so the menu never acts on a row other than the one it was opened on.
+  From the keyboard that row is the one holding focus, and a key pressed with focus outside the rows
+  does nothing to any of them.
+- **It offers the one change and four things that change nothing**: Disable or Enable, as the accent
+  button names it and with the same refusals; open the program's file location in File Explorer;
+  for a Startup folder entry, show its item in the Startup folder; the program's Windows properties;
+  and copy what the entry runs. Task Manager's own menu also offers a web search, which this page
+  does not: it would send the entry's name to a search engine the user did not choose here.
+- **A file that cannot be shown is a sentence, not a disabled item**, as a refused change is: a
+  program Deguffer cannot name, or one Windows says is not there, is reported rather than handed to
+  File Explorer, which would open some other folder instead of saying so.
 
 **§5.6, for one value**
 

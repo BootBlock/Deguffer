@@ -43,7 +43,7 @@ public sealed class StartupReader(
         ReadPackaged(entries, notes, ct);
 
         // The shipped order (§7.5), so a page showing it moves nothing as the reading arrives.
-        entries.Sort(StartupRowOrder.Comparer(StartupOrder.Name, StartupOrderDirection.Ascending));
+        entries.Sort(StartupRowOrder.Comparer(StartupOrder.State, StartupOrderDirection.Ascending));
 
         return new StartupReading(entries, notes);
     }

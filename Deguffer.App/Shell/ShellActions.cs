@@ -6,7 +6,8 @@ namespace Deguffer.App.Shell;
 
 /// <summary>
 /// The three things Explore does with an item that are not a deletion: open it, show it where it
-/// lives, and put the Windows properties sheet on it.
+/// lives, and put the Windows properties sheet on it. The Startup page's row menu shows a file and
+/// opens its properties through the same two (see <see cref="ShellHandoff"/>).
 ///
 /// <para>None of them changes anything on disk, which is why none of them is behind
 /// <see cref="Deguffer.Core.Exploring.Acting.ExploreActionPolicy"/>. §7.1 constrains what Explore

@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Runtime.InteropServices;
 using Deguffer.App.Controls;
 using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
@@ -13,7 +12,6 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
-using Windows.ApplicationModel.DataTransfer;
 
 namespace Deguffer.App.Views;
 
@@ -356,32 +354,12 @@ public sealed partial class CleanPage : Page
     }
 
     /// <summary>
-    /// Put the last run's report on the clipboard, and say on the card whether it went.
-    ///
-    /// <para>Flushed, so the report is still there to paste after Deguffer closes, which is when a
-    /// user filing an issue is most likely to paste it.</para>
+    /// Put the last run's report on the clipboard, and say on the card whether it went. It stays on
+    /// the clipboard after Deguffer closes, which is when a user filing an issue is most likely to
+    /// paste it.
     /// </summary>
-    /// <summary>CLIPBRD_E_CANT_OPEN: Windows' answer while another program holds the clipboard open.</summary>
-    private const int ClipboardCannotOpen = unchecked((int)0x800401D0);
-
-    private void OnCopyRunDiagnostics(object sender, RoutedEventArgs e)
-    {
-        var package = new DataPackage();
-        package.SetText(ViewModel.RunDiagnostics);
-
-        try
-        {
-            Clipboard.SetContent(package);
-            Clipboard.Flush();
-            CopyRunDiagnosticsResult.Text = "Copied. Paste it into a GitHub issue.";
-        }
-        catch (COMException ex) when (ex.HResult == ClipboardCannotOpen)
-        {
-            // Another program has the clipboard open. It lets go within moments, so the answer is to
-            // try again rather than to give up.
-            CopyRunDiagnosticsResult.Text = "Another program is using the clipboard. Try again.";
-        }
-    }
+    private void OnCopyRunDiagnostics(object sender, RoutedEventArgs e) =>
+        CopyRunDiagnosticsResult.Text = ClipboardText.Put(ViewModel.RunDiagnostics) ?? "Copied. Paste it into a GitHub issue.";
 
     /// <summary>
     /// Put the item list the view-model names on the card, or take it off and give the keyboard back

@@ -1,10 +1,14 @@
+using System.Windows.Input;
 using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
 using Deguffer.Core.Memory;
 using Deguffer.Core.Startup;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Navigation;
+using Windows.Foundation;
 using Windows.System;
 
 namespace Deguffer.App.Views;
@@ -41,7 +45,9 @@ public sealed partial class StartupPage : Page
             ElevatedRelaunch.TryRelaunch,
             async () => await Launcher.LaunchUriAsync(SettingsStartup),
             App.Running,
-            App.Work);
+            App.Work,
+            StartupFolderReader.Current.FolderOf,
+            ShellHandoff.Windows);
 
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
         ViewModel.PropertyChanged += (_, changed) =>
@@ -70,6 +76,15 @@ public sealed partial class StartupPage : Page
         ViewModel.Direction = _direction.Stored;
 
         ListAnimation.Play(EntryList, SystemMotion.Current);
+
+        // Past the handled flag, because a ListViewItem marks the right-tap handled on its way past
+        // and an ordinary handler on the list never runs.
+        EntryList.AddHandler(UIElement.RightTappedEvent, new RightTappedEventHandler(OnEntryRightTapped), handledEventsToo: true);
+        Accelerate(VirtualKey.Application, VirtualKeyModifiers.None, OnMenuKeyInvoked);
+        Accelerate(VirtualKey.F10, VirtualKeyModifiers.Shift, OnMenuKeyInvoked);
+        Accelerate(VirtualKey.Enter, VirtualKeyModifiers.Control, ViewModel.Menu.RevealProgramCommand);
+        Accelerate(VirtualKey.Enter, VirtualKeyModifiers.Menu, ViewModel.Menu.PropertiesCommand);
+        Accelerate(VirtualKey.C, VirtualKeyModifiers.Control, ViewModel.Menu.CopyCommand);
 
         NavigationCacheMode = NavigationCacheMode.Required;
 
@@ -118,4 +133,72 @@ public sealed partial class StartupPage : Page
         _direction.Choose(ViewModel.IsDescending ? StartupOrderDirection.Ascending : StartupOrderDirection.Descending);
 
     private void OnReportClosed(InfoBar sender, object args) => ViewModel.DismissReportCommand.Execute(null);
+
+    /// <summary>
+    /// Open the row menu on the row the pointer landed on, picking that row first, so the menu never
+    /// acts on a row other than the one it was opened on (§7.5). A right-tap on the list's background
+    /// or on a row's own button opens nothing.
+    /// </summary>
+    private void OnEntryRightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        if (ListSelectionGuard.Row(e.OriginalSource) is not { Content: StartupRow row } container)
+        {
+            return;
+        }
+
+        EntryList.SelectedItem = row;
+        container.Focus(FocusState.Programmatic);
+        EntryMenu.ShowAt(EntryList, new FlyoutShowOptions { Position = e.GetPosition(EntryList) });
+        e.Handled = true;
+    }
+
+    /// <summary>The context-menu key and Shift+F10 open the row menu on the focused row, placed on the row rather than at the pointer.</summary>
+    private void OnMenuKeyInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        if (PickFocusedRow() is { } container)
+        {
+            EntryMenu.ShowAt(container);
+            args.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// A key that runs <paramref name="command"/> on the focused row, handled only where it ran, so a
+    /// key that does not apply goes on.
+    /// </summary>
+    private void Accelerate(VirtualKey key, VirtualKeyModifiers modifiers, ICommand command) =>
+        Accelerate(key, modifiers, (_, args) => args.Handled = PickFocusedRow() is not null && command.TryExecute());
+
+    /// <summary>
+    /// Pick the row the keyboard focus is inside, a button on the row included, and return its container,
+    /// or null where focus is in no row of this list.
+    ///
+    /// <para>The accelerators are heard wherever focus is on the page, as Explore's are, so a key must
+    /// not act at all from outside the rows: Ctrl+C in the change report's selectable text copies that
+    /// text, not a row's command. Inside the rows it acts on the row the reader can see is focused,
+    /// never on one picked earlier and out of view, because focus and selection part whenever focus
+    /// moves without selecting, as Ctrl with an arrow key does (§7.5).</para>
+    /// </summary>
+    private ListViewItem? PickFocusedRow()
+    {
+        if (FocusManager.GetFocusedElement(XamlRoot) is not DependencyObject focused
+            || VisualTree.FromSelf(focused).OfType<ListViewItem>().FirstOrDefault() is not { } container
+            || EntryList.ItemFromContainer(container) is not StartupRow row)
+        {
+            return null;
+        }
+
+        EntryList.SelectedItem = row;
+        return container;
+    }
+
+    private void Accelerate(
+        VirtualKey key,
+        VirtualKeyModifiers modifiers,
+        TypedEventHandler<KeyboardAccelerator, KeyboardAcceleratorInvokedEventArgs> invoked)
+    {
+        var accelerator = new KeyboardAccelerator { Key = key, Modifiers = modifiers };
+        accelerator.Invoked += invoked;
+        EntryList.KeyboardAccelerators.Add(accelerator);
+    }
 }
