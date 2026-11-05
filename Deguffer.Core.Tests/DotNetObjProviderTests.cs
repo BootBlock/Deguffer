@@ -871,6 +871,49 @@ public sealed class DotNetObjProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A shell working in one project, listed last in a table of a hundred programs, holds that
+    /// project's <c>obj</c> back through the real inspector, which compares every project with programs
+    /// it followed once for the whole row. The other projects' are removed, and §5.6 proves the held
+    /// one survived the run.
+    /// </summary>
+    [Fact]
+    public async Task AnObjOfAProjectTheLastProgramInTheTableIsWorkingInSurvivesTheRun()
+    {
+        var root = ApproveRoot();
+        List<string> objs =
+        [
+            .. Enumerable.Range(0, 5).Select(i =>
+                ProjectFixture.CreateProject(Path.Combine(root, $"Project{i}"), $"Project{i}")),
+        ];
+        var calls = new FakeProcessTableCalls().With(FakeProcessTableCalls.Own);
+
+        for (var id = 5000; id < 5100; id++)
+        {
+            calls.With(new FakeListedProcess { Id = id, Name = $"tool{id}", ImagePath = $@"C:\Program Files\Tool{id}\tool.exe" });
+        }
+
+        calls.With(new FakeListedProcess
+        {
+            Id = 5100,
+            Name = "pwsh",
+            CommandLine = "pwsh.exe",
+            Memory = FakeProcessMemory.Native(Path.Combine(root, "Project4") + @"\", "pwsh.exe"),
+        });
+
+        var provider = CreateProvider(liveTrees: new LiveTreeInspector(calls, new FakeVolumeInventory()));
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(objs[..4].Order(StringComparer.OrdinalIgnoreCase), plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == objs[4]);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("pwsh is working in Project4", StringComparison.Ordinal));
+
+        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
+        Assert.True(LongPath.DirectoryExists(objs[4]));
+        Assert.All(objs[..4], obj => Assert.False(LongPath.DirectoryExists(obj)));
+        Assert.True((await provider.VerifyAsync(plan)).Passed);
+    }
+
+    /// <summary>
     /// A folder above a project is not evidence on its own. A terminal there, with no solution beside
     /// it, is where a shell at the root of a repository sits, and it is using none of the projects
     /// below.
