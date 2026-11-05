@@ -147,6 +147,14 @@ public partial class App : Application
     internal static void RememberScanEstimates() => ScanEstimateCache.For(UserEnvironment.Current).Save();
 
     /// <summary>
+    /// Get the checksums duplicate searches read onto disk now, once the write a search left running
+    /// has ended, with the days values were last used, which no search writes alone: the window
+    /// closing, or <see cref="ElevatedRelaunch"/>, whose replacement may search before this process
+    /// has gone.
+    /// </summary>
+    internal static void RememberChecksums() => Checksums.Save();
+
+    /// <summary>
     /// This instance has been replaced and is about to exit, so the windows closing with it are the
     /// application's going rather than the reader closing them. See
     /// <see cref="Deguffer.App.MainWindow.Leave"/>.
@@ -175,6 +183,7 @@ public partial class App : Application
         _shell.Closed += (_, _) =>
         {
             RememberScanEstimates();
+            RememberChecksums();
             Exit();
         };
 
