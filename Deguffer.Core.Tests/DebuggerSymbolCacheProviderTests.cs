@@ -200,6 +200,110 @@ public sealed class DebuggerSymbolCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// An entry is dated by <see cref="DirectoryAge"/>'s rule, the newest of its own time and its index
+    /// folders', from the listings that recognised it, whichever half is the newer. The examination is the
+    /// pass's, so the entry or an index folder written after it, within the same pass, is not seen:
+    /// nothing lists the entry again to date it.
+    /// </summary>
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task DatesEachEntryFromTheListingsThatRecognisedIt(bool twoLevel, bool ownTimeNewest)
+    {
+        SymbolPath($"srv*{Store}*{Microsoft}");
+
+        var parent = Store;
+        if (twoLevel)
+        {
+            WriteFile(Path.Combine(Store, SymbolStoreLayout.TwoLevelFile), 0);
+            parent = Path.Combine(Store, "nt");
+        }
+
+        var entry = Entry(parent, "ntdll.pdb");
+        var older = Path.Combine(entry, PdbIndex);
+        var newer = Path.GetDirectoryName(WriteFile(Path.Combine(entry, "4844DBB920174967BE7AA4A2C20430FA2", "ntdll.pdb")))!;
+        var now = DateTime.UtcNow;
+        var newest = now - TimeSpan.FromDays(10);
+
+        Directory.SetLastWriteTimeUtc(older, now - TimeSpan.FromDays(40));
+        Directory.SetLastWriteTimeUtc(newer, ownTimeNewest ? now - TimeSpan.FromDays(30) : newest);
+        Directory.SetLastWriteTimeUtc(entry, ownTimeNewest ? newest : now - TimeSpan.FromDays(30));
+
+        var (microsoft, _) = CreateRows();
+        await microsoft.DiscoverToolRootsAsync();
+
+        Directory.SetLastWriteTimeUtc(ownTimeNewest ? entry : newer, now);
+
+        var step = Assert.Single((await microsoft.PlanAsync()).Steps);
+
+        Assert.Equal(newest, step.LastWritten);
+    }
+
+    /// <summary>
+    /// §5.2 and §5.6 across a store of many entries, which are recognised several at a time: every entry
+    /// shaped like a downloaded copy is offered, and the store, its markers, its two-letter folders and
+    /// every entry of any other shape, an index that is a link included, survive the run and are asserted.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OffersEveryCopyInAStoreOfManyEntriesAndEverythingElseSurvives(bool twoLevel)
+    {
+        SymbolPath($"srv*{Store}*{Microsoft}");
+
+        var ping = Ping(Store);
+        string[] markers = twoLevel ? [ping, WriteFile(Path.Combine(Store, SymbolStoreLayout.TwoLevelFile), 0)] : [ping];
+        var parent = twoLevel ? Path.Combine(Store, "mo") : Store;
+        List<string> offered = [];
+        List<string> unrecognised = [];
+
+        for (var i = 0; i < 60; i++)
+        {
+            var name = $"module{i:D2}.pdb";
+
+            switch (i % 6)
+            {
+                case 1:
+                    unrecognised.Add(Entry(parent, name, index: "latest"));
+                    break;
+
+                case 3:
+                    var stranger = Entry(parent, name);
+                    WriteFile(Path.Combine(stranger, PdbIndex, "readme.txt"));
+                    unrecognised.Add(stranger);
+                    break;
+
+                case 5:
+                    var linked = Path.Combine(parent, name);
+                    Directory.CreateDirectory(linked);
+                    DirectoryLink.Create(DirectoryLinkKind.Junction, Path.Combine(linked, PdbIndex), Entry(Path.Combine(_temp.Path, "elsewhere"), name));
+                    unrecognised.Add(linked);
+                    break;
+
+                default:
+                    offered.Add(Entry(parent, name));
+                    break;
+            }
+        }
+
+        var (microsoft, _) = CreateRows();
+        var plan = await microsoft.PlanAsync();
+
+        Assert.Equal(offered.Order(StringComparer.OrdinalIgnoreCase), plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
+        AssertProtected(plan, [Store, .. markers, .. unrecognised, .. twoLevel ? [parent] : Array.Empty<string>()]);
+
+        var result = await microsoft.ExecuteAsync(plan);
+
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+        Assert.All(offered, entry => Assert.False(Directory.Exists(entry), $"{entry} was offered and is still there"));
+        Assert.All(unrecognised, entry => Assert.True(Directory.Exists(entry), $"{entry} was not recognised and was taken"));
+        Assert.All(markers, marker => Assert.True(File.Exists(marker)));
+        Assert.True(Directory.Exists(parent));
+    }
+
+    /// <summary>
     /// §5.2's hard refusal: a store holding <c>000Admin</c> is one SymStore built, so nothing in it is
     /// offered, however much it looks like a cache, and Explore refuses all of it.
     /// </summary>
