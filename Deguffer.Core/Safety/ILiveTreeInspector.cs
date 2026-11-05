@@ -42,6 +42,20 @@ public sealed record LiveTreeQuery(string Directory, string Project, IReadOnlyLi
     public IReadOnlyList<string> Workspaces { get; init; } = [];
 
     /// <summary>
+    /// Whether every one of <see cref="LockFileNames"/> was found as a file by a whole listing of its
+    /// folder, made for this question, so Windows has described each already and is not asked about
+    /// each one again before the Restart Manager is.
+    ///
+    /// <para>Only for a list read entirely from such listings, never one holding a name the provider
+    /// expects: an expected name may be absent, a folder, or refused, which only a probe tells apart. A
+    /// file removed after the listing is still safe to ask about, because the Restart Manager reports
+    /// nothing for a path that is not there. A file replaced by a folder since, or one nobody may open,
+    /// is refused by the Restart Manager, which leaves the answer incomplete and the directory held
+    /// back, as the probe would.</para>
+    /// </summary>
+    public bool LockFilesListed { get; init; }
+
+    /// <summary>
     /// The programs that write <see cref="Directory"/> from outside it, and when it was last
     /// written, or null where no program does.
     ///

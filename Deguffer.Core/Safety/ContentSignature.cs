@@ -49,15 +49,8 @@ public sealed class ContentSignature
             {
                 ct.ThrowIfCancellationRequested();
 
-                // A subdirectory, a reparse point, or a file we do not recognise all mean this is
-                // not the shape being looked for. Stop at the first one rather than reading the
-                // rest of a directory that has already disqualified itself.
-                if (entry is not FileInfo file || entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
-                {
-                    return false;
-                }
-
-                if (!_permitted.IsMatch(file.Name))
+                // Stop at the first entry that disqualifies it rather than reading the rest.
+                if (!Admits(entry.Name, entry.Attributes))
                 {
                     return false;
                 }
@@ -75,4 +68,38 @@ public sealed class ContentSignature
         // is not the same as "recognised".
         return sawFile;
     }
+
+    /// <summary>
+    /// Whether <paramref name="listing"/>, one whole listing of a directory, matches this signature, on
+    /// the terms of <see cref="Matches(string, CancellationToken)"/>, for a caller that has listed the
+    /// directory already and must not list it again. A directory that could not be listed in full is
+    /// the caller's to decline.
+    /// </summary>
+    public bool Matches(IEnumerable<(string Name, FileAttributes Attributes)> listing)
+    {
+        ArgumentNullException.ThrowIfNull(listing);
+
+        var sawFile = false;
+
+        foreach (var (name, attributes) in listing)
+        {
+            if (!Admits(name, attributes))
+            {
+                return false;
+            }
+
+            sawFile = true;
+        }
+
+        return sawFile;
+    }
+
+    /// <summary>
+    /// Whether one entry fits. A subdirectory, a reparse point, or a file we do not recognise all mean
+    /// this is not the shape being looked for.
+    /// </summary>
+    private bool Admits(string name, FileAttributes attributes) =>
+        !attributes.HasFlag(FileAttributes.Directory)
+        && !attributes.HasFlag(FileAttributes.ReparsePoint)
+        && _permitted.IsMatch(name);
 }

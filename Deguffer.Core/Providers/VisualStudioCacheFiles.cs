@@ -4,81 +4,81 @@ namespace Deguffer.Core.Providers;
 
 /// <summary>
 /// Every file Visual Studio may hold open in the caches of one <c>.vs</c> folder, for the live-tree
-/// check to ask Windows about.
+/// check to ask Windows about, taken from one <see cref="VisualStudioCacheReader"/> reading.
 ///
-/// <para><b>Read by name and level alone, never by the evidence.</b> The check is asked at the preview
-/// and again at the clean, and a cache that changed in between is the likeliest to be in use: a
-/// <c>DevHub.exe</c> still writing the index can leave a file in it the evidence does not allow. A
-/// question built from the evidence would then name none of that index's files and answer that
-/// nothing holds it, while the step planned at the preview still runs. So every entry at a cache's
-/// name and level is read, under any folder at the solution and version levels, whether or not a
-/// solution beside the <c>.vs</c> folder still names it.</para>
+/// <para><b>By name and level alone, never by the evidence</b>, for the reason the reading is: every
+/// file below a folder at a cache's name and level, and every file at a file cache's, with each
+/// SQLite companion the same listing found beside a database.</para>
+///
+/// <para><b>Every file named was listed</b>, so the query says so and the inspector does not ask
+/// Windows about each one again (<see cref="LiveTreeQuery.LockFilesListed"/>). A companion is named
+/// only where the listing found it for that reason: SQLite holds the database itself open while any
+/// companion is in use, so the database's own name is the question.</para>
 ///
 /// <para>A folder Windows will not list adds nothing. Removing it needs the same listing, so the step
 /// fails rather than deleting anything nobody asked about.</para>
 /// </summary>
 internal static class VisualStudioCacheFiles
 {
-    public static IReadOnlyList<string> Of(string vs, CancellationToken ct = default)
+    /// <summary>The live-tree query for <paramref name="candidate"/>, from <paramref name="reading"/> of its <c>.vs</c> folder.</summary>
+    public static LiveTreeQuery Query(RecognisedBuildDirectory candidate, VisualStudioListing reading) =>
+        new(candidate.Path, candidate.Project, Of(reading)) { LockFilesListed = true };
+
+    public static IReadOnlyList<string> Of(VisualStudioListing reading)
     {
         var files = new List<string>();
 
-        Read(vs, VisualStudioLevel.Folder);
+        Level(reading, VisualStudioLevel.Folder);
 
         return files;
 
-        void Read(string directory, VisualStudioLevel level)
+        void Level(VisualStudioListing listing, VisualStudioLevel level)
         {
-            ct.ThrowIfCancellationRequested();
-
-            foreach (var entry in FolderEntries.Of(directory) ?? [])
+            foreach (var entry in listing.Entries ?? [])
             {
-                if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                if (entry.IsLink)
                 {
                     continue;
                 }
 
-                var path = Path.Combine(directory, entry.Name);
-                var kind = entry is DirectoryInfo ? TargetKind.Directory : TargetKind.File;
-
-                if (VisualStudioCacheLayout.CacheNamed(level, entry.Name, kind) is not null)
+                if (VisualStudioCacheLayout.CacheNamed(level, entry.Name, entry.Kind) is not null)
                 {
-                    Collect(path, kind);
+                    if (entry.Kind == TargetKind.File)
+                    {
+                        files.Add(entry.Path);
+                        files.AddRange(
+                            SqliteDatabaseSignature.CompanionNamesOf(entry.Name)
+                                .Where(listing.Holds)
+                                .Select(companion => Path.Combine(listing.Path, companion)));
+                    }
+                    else
+                    {
+                        Whole(listing.Inside(entry));
+                    }
                 }
-                else if (kind == TargetKind.Directory && level != VisualStudioLevel.Version)
+                else if (entry.Kind == TargetKind.Directory && level != VisualStudioLevel.Version)
                 {
-                    Read(path, level + 1);
+                    Level(listing.Inside(entry), level + 1);
                 }
             }
         }
 
-        void Collect(string path, TargetKind kind)
+        void Whole(VisualStudioListing listing)
         {
-            ct.ThrowIfCancellationRequested();
-
-            if (kind == TargetKind.File)
+            foreach (var entry in listing.Entries ?? [])
             {
-                files.Add(path);
-                files.AddRange(SqliteDatabaseSignature.CompanionsOf(path));
-                return;
-            }
-
-            foreach (var entry in FolderEntries.Of(path) ?? [])
-            {
-                if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                if (entry.IsLink)
                 {
                     continue;
                 }
 
-                var inner = Path.Combine(path, entry.Name);
-
-                if (entry is DirectoryInfo)
+                if (entry.Kind == TargetKind.Directory)
                 {
-                    Collect(inner, TargetKind.Directory);
+                    Whole(listing.Inside(entry));
                 }
                 else
                 {
-                    files.Add(inner);
+                    files.Add(entry.Path);
                 }
             }
         }

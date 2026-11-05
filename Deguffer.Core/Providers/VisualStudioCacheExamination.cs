@@ -7,7 +7,11 @@ namespace Deguffer.Core.Providers;
 /// <param name="Path">The folder or file a step removes.</param>
 /// <param name="Cache">Which cache it is.</param>
 /// <param name="Solution">The solution it belongs to, by the name the user knows.</param>
-internal sealed record VisualStudioCacheFound(string Path, VisualStudioCache Cache, string Solution);
+/// <param name="Age">
+/// When it was last written, by <see cref="DirectoryAge"/>'s rule for a folder and its own last write
+/// for a file, read from the listings that proved it, or null where those listings could not date it.
+/// </param>
+internal sealed record VisualStudioCacheFound(string Path, VisualStudioCache Cache, string Solution, DateTime? Age);
 
 /// <summary>What one <c>.vs</c> folder came to.</summary>
 /// <param name="Caches">The caches confirmed, ready to be measured.</param>
@@ -31,7 +35,9 @@ internal sealed record VisualStudioCacheContents(
     bool Unreadable);
 
 /// <summary>
-/// §5.2 applied inside one <c>.vs</c> folder, by <see cref="VisualStudioCacheLayout"/>.
+/// §5.2 applied inside one <c>.vs</c> folder, by <see cref="VisualStudioCacheLayout"/>, from the one
+/// <see cref="VisualStudioCacheReader"/> reading the live-tree check was asked from, so nothing in it
+/// is listed again.
 ///
 /// <para><see cref="CacheLevelWalk"/> is not used, for two reasons it cannot meet without changing
 /// what every other provider's table means. Two of the caches are files, and that walk reads
@@ -43,7 +49,7 @@ internal sealed record VisualStudioCacheContents(
 /// </summary>
 internal static class VisualStudioCacheExamination
 {
-    public static VisualStudioCacheContents Of(VisualStudioSolutionFolder folder, CancellationToken ct = default)
+    public static VisualStudioCacheContents Of(VisualStudioSolutionFolder folder, VisualStudioListing reading, CancellationToken ct = default)
     {
         var caches = new List<VisualStudioCacheFound>();
         var kept = new List<(string Path, string Reason)>();
@@ -51,50 +57,47 @@ internal static class VisualStudioCacheExamination
         var notes = new List<PlanNote>();
         var unreadable = false;
 
-        Walk(folder.Path, VisualStudioLevel.Folder, folder.Name);
+        Walk(reading, VisualStudioLevel.Folder, folder.Name);
 
         return new VisualStudioCacheContents(caches, kept, containers, notes, unreadable);
 
-        void Walk(string directory, VisualStudioLevel level, string solution)
+        void Walk(VisualStudioListing listing, VisualStudioLevel level, string solution)
         {
             ct.ThrowIfCancellationRequested();
-            containers.Add(directory);
+            containers.Add(listing.Path);
 
-            if (FolderEntries.Of(directory) is not { } entries)
+            if (listing.Entries is not { } entries)
             {
-                notes.Add(UnreadableRoot.Note(directory));
+                notes.Add(UnreadableRoot.Note(listing.Path));
                 unreadable = true;
                 return;
             }
 
             foreach (var entry in entries)
             {
-                var path = Path.Combine(directory, entry.Name);
-                var kind = entry is DirectoryInfo ? TargetKind.Directory : TargetKind.File;
-
-                if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                if (entry.IsLink)
                 {
-                    notes.Add(CacheLevelWalk.Note(path));
-                    kept.Add((path, CacheLevelWalk.LinkReason));
+                    notes.Add(CacheLevelWalk.Note(entry.Path));
+                    kept.Add((entry.Path, CacheLevelWalk.LinkReason));
                 }
-                else if (VisualStudioCacheLayout.CacheNamed(level, entry.Name, kind) is { } cache)
+                else if (VisualStudioCacheLayout.CacheNamed(level, entry.Name, entry.Kind) is { } cache)
                 {
-                    if (cache.Evidence(path))
+                    if (cache.Evidence(listing, entry))
                     {
-                        caches.Add(new VisualStudioCacheFound(path, cache, solution));
+                        caches.Add(new VisualStudioCacheFound(entry.Path, cache, solution, AgeOf(listing, entry)));
                     }
                     else
                     {
-                        kept.Add((path, VisualStudioCacheLayout.NotConfirmedReason(cache)));
+                        kept.Add((entry.Path, VisualStudioCacheLayout.NotConfirmedReason(cache)));
                     }
                 }
-                else if (kind == TargetKind.Directory && Inner(level, entry.Name) is { } inner)
+                else if (entry.Kind == TargetKind.Directory && Inner(level, entry.Name) is { } inner)
                 {
-                    Walk(path, inner.Level, inner.Solution);
+                    Walk(listing.Inside(entry), inner.Level, inner.Solution);
                 }
                 else
                 {
-                    kept.Add((path, Reason(level, entry.Name, kind)));
+                    kept.Add((entry.Path, Reason(level, entry.Name, entry.Kind)));
                 }
             }
 
@@ -106,6 +109,19 @@ internal static class VisualStudioCacheExamination
             };
         }
     }
+
+    /// <summary>
+    /// A file's own last write, and a folder's by <see cref="DirectoryAge"/>'s rule from the listings
+    /// that proved it: its own last write from the folder holding it, and its entries' from its own.
+    /// Every folder rule declines a folder it could not list, so a confirmed one has its entries, and
+    /// one without them has no age, as <see cref="DirectoryAge"/> answers for a refusal.
+    /// </summary>
+    private static DateTime? AgeOf(VisualStudioListing folder, VisualStudioEntry cache) =>
+        cache.Kind == TargetKind.File
+            ? cache.LastWriteTimeUtc
+            : folder.Inside(cache).Entries is { } entries
+                ? DirectoryAge.Of(cache.LastWriteTimeUtc, entries.Select(entry => entry.LastWriteTimeUtc))
+                : null;
 
     private static string Reason(VisualStudioLevel level, string name, TargetKind kind) => (level, kind) switch
     {

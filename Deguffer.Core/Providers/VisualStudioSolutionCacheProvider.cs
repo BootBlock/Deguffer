@@ -36,11 +36,27 @@ public sealed class VisualStudioSolutionCacheProvider : CleanupProviderBase
     private readonly SourceDirectoryDiscovery _discovery;
     private readonly ILiveTreeInspector _liveTrees;
     private readonly TrackedFileCheck _tracked;
+    private readonly VisualStudioCacheReader _reader;
 
     private readonly PassMemo<IReadOnlyList<SourceRoot>> _approved = new();
 
     public VisualStudioSolutionCacheProvider(
         SourceRootStore roots,
+        SourceDirectoryDiscovery? discovery = null,
+        ILiveTreeInspector? liveTrees = null,
+        IUserEnvironment? environment = null,
+        IProcessRunner? runner = null,
+        IProcessInspector? inspector = null,
+        IDirectoryScanner? scanner = null,
+        IVolumeInventory? volumes = null)
+        : this(roots, VisualStudioCacheReader.Default, discovery, liveTrees, environment, runner, inspector, scanner, volumes)
+    {
+    }
+
+    /// <param name="reader">How a <c>.vs</c> folder is read: from the disk everywhere but a test, which counts the listings.</param>
+    internal VisualStudioSolutionCacheProvider(
+        SourceRootStore roots,
+        VisualStudioCacheReader reader,
         SourceDirectoryDiscovery? discovery = null,
         ILiveTreeInspector? liveTrees = null,
         IUserEnvironment? environment = null,
@@ -58,6 +74,7 @@ public sealed class VisualStudioSolutionCacheProvider : CleanupProviderBase
         ArgumentNullException.ThrowIfNull(roots);
 
         _roots = roots;
+        _reader = reader;
         _liveTrees = liveTrees ?? LiveTreeInspector.Default;
         _discovery = discovery ?? new SourceDirectoryDiscovery(Scanner, Volumes);
         _discovery.Include(DirectoryNames);
@@ -186,22 +203,27 @@ public sealed class VisualStudioSolutionCacheProvider : CleanupProviderBase
             declined.Add(overruled.Path);
         }
 
+        // One reading of each folder, which the veto's question and the examination both read, so the
+        // preview lists nothing in it twice. The check at the clean reads it again (Questions).
+        var readings = recognised.ToDictionary(folder => folder.Path, folder => _reader.Read(folder.Path, ct), StringComparer.OrdinalIgnoreCase);
+
         var live = LiveTreeVeto.Apply(
             _liveTrees,
             [.. recognised.Select(folder => new RecognisedBuildDirectory(folder.Path, folder.Folder))],
+            new LiveTreeQuestion(candidate => VisualStudioCacheFiles.Query(candidate, readings[candidate.Path])),
             Questions,
             ct);
 
         var cleared = live.Cleared.ToDictionary(c => c.Path, StringComparer.OrdinalIgnoreCase);
         var examined = recognised.Where(folder => cleared.ContainsKey(folder.Path)).ToList();
-        var contents = examined.ToDictionary(folder => folder.Path, folder => VisualStudioCacheExamination.Of(folder, ct), StringComparer.OrdinalIgnoreCase);
+        var contents = examined.ToDictionary(folder => folder.Path, folder => VisualStudioCacheExamination.Of(folder, readings[folder.Path], ct), StringComparer.OrdinalIgnoreCase);
 
         var (steps, measured) = await PlanDeletionsAsync(
             [
                 .. examined.SelectMany(folder => contents[folder.Path].Caches.Select(found => new DeletionTarget(
                     found.Path,
                     $"{found.Cache.Description} for {found.Solution}",
-                    found.Cache.Kind == TargetKind.File ? FileAge(found.Path) : DirectoryAge.Of(found.Path, ct),
+                    found.Age,
                     found.Cache.Kind,
                     Facets: [new ItemFacet("Solution", found.Solution)],
                     Group: ApprovedRootHeading.For(ApprovedRoots, found.Path),
@@ -256,18 +278,11 @@ public sealed class VisualStudioSolutionCacheProvider : CleanupProviderBase
     /// <summary>
     /// What the veto asks about a <c>.vs</c> folder in one reading of the machine: its solution
     /// folder, and every file in its caches, read from the disk as it is now. The same question at the
-    /// preview, at the clean and for Explore.
+    /// preview, at the clean and for Explore. The preview asks it of the reading its examination
+    /// reads, and the clean and Explore of a new one, because what is open can change after the preview.
     /// </summary>
-    private static LiveTreeQuestion Questions(CancellationToken ct) =>
-        LiveTreeQuestion.ForLockFiles(candidate => VisualStudioCacheFiles.Of(candidate.Path, ct));
-
-    /// <summary>The file's last write, or null where it has gone, as <see cref="DirectoryAge"/> answers.</summary>
-    private static DateTime? FileAge(string path)
-    {
-        var info = new FileInfo(LongPath.Extended(path));
-
-        return info.Exists ? info.LastWriteTimeUtc : null;
-    }
+    private LiveTreeQuestion Questions(CancellationToken ct) =>
+        new(candidate => VisualStudioCacheFiles.Query(candidate, _reader.Read(candidate.Path, ct)));
 
     /// <summary>
     /// §5.6. Around every <c>.vs</c> folder a cache was taken from: the solution folder and its

@@ -260,6 +260,69 @@ public sealed class LiveTreeInspectorTests : IDisposable
     }
 
     /// <summary>
+    /// A lock file the provider read from a listing it just made is asked about as it stands: the
+    /// listing described it, so the Restart Manager is asked without a probe of each file first, and a
+    /// file held open still makes the directory live.
+    /// </summary>
+    [Fact]
+    public void AListedLockFileHeldOpenMakesADirectoryLive()
+    {
+        var project = _temp.CreateDirectory("solution");
+        var vs = _temp.CreateDirectory("solution", ".vs");
+        var index = Path.Combine(vs, "index.vsidx");
+        File.WriteAllText(index, string.Empty);
+
+        using var holder = File.Open(index, FileMode.Open, FileAccess.Read, FileShare.None);
+
+        var findings = new LiveTreeInspector().FindLive(
+            [new LiveTreeQuery(vs, project, [index]) { LockFilesListed = true }]);
+
+        Assert.True(findings.Complete);
+        Assert.True(findings.IsLive(vs));
+    }
+
+    /// <summary>
+    /// Skipping the probe keeps the refusal exact: a listed file Windows will not let anyone open is
+    /// refused by the Restart Manager itself, so the answer is still incomplete, as it is for the same
+    /// file named in advance (<see cref="ALockFileWindowsWillNotDescribeIsAnUnansweredQuestion"/>).
+    /// </summary>
+    [Fact]
+    public void AListedLockFileWindowsWillNotDescribeIsStillAnUnansweredQuestion()
+    {
+        var project = _temp.CreateDirectory("solution");
+        var vs = _temp.CreateDirectory("solution", ".vs");
+        var index = Path.Combine(vs, "index.vsidx");
+        File.WriteAllText(index, string.Empty);
+
+        using var denied = DeniedDirectory.WithUnreadableFile(index);
+
+        var findings = new LiveTreeInspector().FindLive(
+            [new LiveTreeQuery(vs, project, [index]) { LockFilesListed = true }]);
+
+        Assert.False(findings.Complete);
+        Assert.False(findings.IsAnswered(vs));
+    }
+
+    /// <summary>
+    /// A listed lock file is not probed again. The probe drops a name that is now a folder, as
+    /// <see cref="ADeclaredLockFileThatIsADirectoryIsNeverAsked"/> shows, so a listed file replaced
+    /// by a folder after its listing reaches the Restart Manager instead, which refuses it, and the
+    /// answer errs toward holding the directory back.
+    /// </summary>
+    [Fact]
+    public void AListedLockFileIsNotProbedAgain()
+    {
+        var project = _temp.CreateDirectory("solution");
+        var vs = _temp.CreateDirectory("solution", ".vs");
+        var replaced = _temp.CreateDirectory("solution", ".vs", "index.vsidx");
+
+        var inspector = new LiveTreeInspector();
+
+        Assert.True(inspector.FindLive([new LiveTreeQuery(vs, project, [replaced])]).Complete);
+        Assert.False(inspector.FindLive([new LiveTreeQuery(vs, project, [replaced]) { LockFilesListed = true }]).Complete);
+    }
+
+    /// <summary>
     /// A declared lock-file name that turns out to be a directory is never handed to the Restart
     /// Manager, which refuses a directory outright with an access-denied result. Passing one would
     /// turn an ordinary project into "Deguffer could not check whether this is in use" — a warning
