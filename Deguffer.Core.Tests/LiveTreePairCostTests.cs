@@ -50,6 +50,24 @@ public sealed class LiveTreePairCostTests
     }
 
     /// <summary>
+    /// The programs followed for one reading are kept for that reading alone. Asked about a newer
+    /// table, the rule follows its programs rather than answering with the old reading's, which would
+    /// miss a program started since and offer the directory it is working in (§5.6).
+    /// </summary>
+    [Fact]
+    public void ProgramsFollowedForOneReadingAreNotReusedForAnother()
+    {
+        var match = new LiveTreeMatch(new FakeVolumeInventory());
+        var earlier = Table(new RunningProcess(5000, "tool", @"C:\Program Files\Tool\tool.exe", null, []));
+        var later = Table(new RunningProcess(5001, "pwsh", null, @"C:\Users\testuser\src\app\", []));
+
+        Assert.Equal("tool", Assert.Single(match.Programs(earlier)).Name);
+        Assert.Equal("pwsh", Assert.Single(match.Programs(later)).Name);
+    }
+
+    private static ProcessTable Table(RunningProcess process) => new([process], true, true, true);
+
+    /// <summary>
     /// Every candidate names a project, a workspace and writer folders, so every rule is asked of every
     /// pair, and none of them matches but the last program's.
     /// </summary>
