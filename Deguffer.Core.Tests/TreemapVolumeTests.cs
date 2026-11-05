@@ -436,6 +436,10 @@ public sealed class TreemapVolumeTests
 
         public IReadOnlyList<string> MountPointsOf(string mountPoint) => machine.MountPointsOf(mountPoint);
 
+        public string? VolumeNameOf(string mountPoint) => machine.VolumeNameOf(mountPoint);
+
+        public IReadOnlyList<string> MountPointsOfVolume(string volumeName) => machine.MountPointsOfVolume(volumeName);
+
         public string? SubstituteOf(string driveRoot) => machine.SubstituteOf(driveRoot);
 
         public (long Total, long Free)? SpaceOf(string path) => machine.SpaceOf(path);

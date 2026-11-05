@@ -257,18 +257,38 @@ public interface IVolumeInventory
     /// mount of the system volume. A list remembered from before that mount was made would name
     /// nothing and refuse nothing.</para>
     ///
-    /// <para><b>Remembered per mount point by the owners that already remember each path's
-    /// answer</b>, through <see cref="RememberedMountPoints"/>, for no longer than they do: a
-    /// provider's pass, one reading of the process table, one §5.6 verification, and one Explore
-    /// policy. Nearly every path is on one of a few drives, and this costs two mount-manager calls.
-    /// The executor's last check before a removal still asks at the removal. That stays live in the sense above, because <see cref="MountPointOf"/> does:
-    /// a path under a mount point made since is answered with that mount point, which is asked here
-    /// afresh. Never remembered in <see cref="VolumeInventory.Current"/>, which lives as long as the
-    /// app. Remembering until the mount manager reports a change was set aside: how reliably and
-    /// cheaply its epoch can be read is unmeasured, and the window above already closes on its own.</para>
+    /// <para><b>Remembered per volume by the owners that already remember each path's answer</b>,
+    /// through <see cref="RememberedMountPoints"/>, for no longer than they do: a provider's pass, one
+    /// reading of the process table, one §5.6 verification, one reading of the installed programs,
+    /// one comparison of a clean's locations, and one Explore policy. Nearly every path is on one of a
+    /// few drives. <see cref="VolumeNameOf"/> stays live there, so a letter or folder given to another
+    /// volume is answered with that volume's places, and <see cref="MountPointOf"/> stays live, so a
+    /// path under a mount point made since is answered with every place. The executor's last check
+    /// before a removal asks at the removal. Never remembered in
+    /// <see cref="VolumeInventory.Current"/>, which lives as long as the app. Remembering until the
+    /// mount manager reports a change was set aside: how reliably and cheaply its epoch can be read is
+    /// unmeasured, and the window above already closes on its own.</para>
     /// </summary>
     /// <param name="mountPoint">A mount point, as <see cref="MountPointOf"/> answers one.</param>
     IReadOnlyList<string> MountPointsOf(string mountPoint);
+
+    /// <summary>
+    /// The <c>\\?\Volume{GUID}\</c> name of the volume mounted at <paramref name="mountPoint"/> now,
+    /// asked of the machine at the moment of the call, or null where Windows will not say, which is
+    /// a share, a letter standing for somewhere else, and a folder nothing is mounted at. The first
+    /// half of <see cref="MountPointsOf"/>.
+    /// </summary>
+    /// <param name="mountPoint">A mount point, with or without its trailing separator.</param>
+    string? VolumeNameOf(string mountPoint);
+
+    /// <summary>
+    /// Every place the volume named <paramref name="volumeName"/> is mounted, the one callers act on
+    /// first, asked of the machine at the moment of the call. Empty where it is mounted nowhere or
+    /// will not say. The second half of <see cref="MountPointsOf"/>, and the half
+    /// <see cref="RememberedMountPoints"/> remembers.
+    /// </summary>
+    /// <param name="volumeName">A name <see cref="VolumeNameOf"/> answered.</param>
+    IReadOnlyList<string> MountPointsOfVolume(string volumeName);
 
     /// <summary>
     /// The folder the drive letter <paramref name="driveRoot"/> stands for, where <c>subst</c> made

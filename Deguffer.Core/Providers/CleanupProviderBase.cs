@@ -103,6 +103,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
     {
         Environment = environment;
         var machine = volumes ?? VolumeInventory.Current;
+        _machine = machine;
         _volumes = new RememberedMountPoints(machine);
         Inspector = inspector;
         Scanner = scanner ?? DirectoryScanner.For(environment);
@@ -124,12 +125,15 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// <see cref="Reach"/> keeps each folder for, and dropped with it by <see cref="InvalidateCaches"/>.
     /// See <see cref="RememberedMountPoints"/> and the constructor's parameter.
     ///
-    /// <para>Not the executor's: a clean runs long after the pass that planned it, so its last check
-    /// before a removal asks the volumes the constructor was given.</para>
+    /// <para>Not the clean's: a clean runs long after the pass that planned it, so the executor's last
+    /// check before a removal and the §5.6 verification after it ask <see cref="_machine"/>.</para>
     /// </summary>
     protected IVolumeInventory Volumes => _volumes;
 
     private readonly RememberedMountPoints _volumes;
+
+    /// <summary>The volumes the constructor was given, asked at the call. See <see cref="Volumes"/>.</summary>
+    private readonly IVolumeInventory _machine;
 
     private readonly ConcurrentDictionary<string, ReachedFolder> _reached = new(StringComparer.OrdinalIgnoreCase);
 
@@ -300,7 +304,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         RunReach? runReach = null,
         RunResidue? residue = null,
         CancellationToken ct = default) =>
-        Task.FromResult(PlanVerifier.Verify(plan, runReach, residue, ct, _cloud, _protection, Volumes, _profiles));
+        Task.FromResult(PlanVerifier.Verify(plan, runReach, residue, ct, _cloud, _protection, _machine, _profiles));
 
     /// <summary>A plan with nothing to do, and the reason the user is shown.</summary>
     protected CleanupPlan EmptyPlan(string why) => new()

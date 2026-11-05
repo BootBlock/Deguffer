@@ -48,13 +48,15 @@ public static class RunChanges
 
         var ranIds = removing.Select(f => f.Provider.Id).ToHashSet(StringComparer.Ordinal);
 
-        // Each location followed once, however many rows name it (G4).
+        // Each location followed once, however many rows name it, and each drive asked where it is
+        // mounted once, however many locations share it (G4).
         var followed = new Dictionary<string, ReachedFolder>(StringComparer.OrdinalIgnoreCase);
+        var remembered = new RememberedMountPoints(volumes);
 
         IReadOnlyList<ReachedFolder> LocationsOf(RunReach reach) =>
         [
             .. reach.TargetedPaths.Concat(reach.ProbedPaths).Select(path =>
-                followed.TryGetValue(path, out var folder) ? folder : followed[path] = ReachedFolder.At(path, volumes)),
+                followed.TryGetValue(path, out var folder) ? folder : followed[path] = ReachedFolder.At(path, remembered)),
         ];
 
         var changed = LocationsOf(RunReach.Of([.. removing.Select(f => f.Plan!)]));

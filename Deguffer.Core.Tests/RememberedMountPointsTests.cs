@@ -30,7 +30,7 @@ public sealed class RememberedMountPointsTests
             .Select(index => ReachedFolder.At($@"{Profile}\src\project{index}", remembered))
             .ToList();
 
-        Assert.Equal([@"C:\"], _volumes.MountPointsQueries);
+        Assert.Single(_volumes.MountPointsQueries);
         Assert.All(folders, (folder, index) => Assert.Contains($@"Q:\SysMount\Users\testuser\src\project{index}", folder.Places));
     }
 
@@ -72,17 +72,48 @@ public sealed class RememberedMountPointsTests
         Assert.Contains(@"C:\", top.Places);
     }
 
-    /// <summary>A mount point with and without its trailing separator is one directory, asked about once.</summary>
+    /// <summary>
+    /// Every mount point of one volume, in either spelling, names the same volume, which is asked
+    /// where it is mounted once.
+    /// </summary>
     [Fact]
-    public void BothSpellingsOfAMountPointShareOneAnswer()
+    public void EveryMountPointOfOneVolumeSharesOneAnswer()
     {
         var remembered = new RememberedMountPoints(_volumes);
 
         var named = remembered.MountPointsOf(@"Q:\SysMount");
         var separated = remembered.MountPointsOf(@"Q:\SysMount\");
+        var letter = remembered.MountPointsOf(@"C:\");
 
         Assert.Single(_volumes.MountPointsQueries);
+        Assert.Equal([@"C:\", @"Q:\SysMount\"], named);
         Assert.Equal(named, separated);
+        Assert.Equal(named, letter);
+    }
+
+    /// <summary>
+    /// A drive letter given to another volume after it was asked about is answered with the new
+    /// volume's places, so a tool's folder written at the new volume's folder mount is refused when
+    /// reached through the letter (§5.2).
+    /// </summary>
+    [Fact]
+    public void ALetterGivenToAnotherVolumeIsAnsweredWithThatVolumesPlaces()
+    {
+        var volumes = new FakeVolumeInventory()
+            .With(@"C:\", volumeName: @"\\?\Volume{system}\")
+            .With(@"C:\Dev\", volumeName: @"\\?\Volume{development}\")
+            .With(@"E:\", DriveType.Removable, volumeName: @"\\?\Volume{stick}\");
+        var remembered = new RememberedMountPoints(volumes);
+
+        Assert.Equal([@"E:\"], remembered.MountPointsOf(@"E:\"));
+
+        volumes.Without(@"E:\").Without(@"C:\Dev\")
+            .With(@"C:\Dev\", alsoMountedAt: [@"E:\"], volumeName: @"\\?\Volume{development}\");
+
+        var places = VolumeRoot.Places(remembered, @"E:\cargo");
+
+        Assert.NotNull(places);
+        Assert.Contains(places, place => place.Path == @"C:\Dev\cargo");
     }
 
     /// <summary>

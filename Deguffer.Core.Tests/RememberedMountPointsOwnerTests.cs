@@ -40,7 +40,7 @@ public sealed class RememberedMountPointsOwnerTests : IDisposable
         Assert.False(inspector.FindLive(candidates).IsLive(candidates[0].Directory));
         inspector.FindLive(candidates);
 
-        Assert.Equal([@"C:\"], _volumes.MountPointsQueries);
+        Assert.Single(_volumes.MountPointsQueries);
 
         _volumes.Without(@"C:\").With(@"C:\", alsoMountedAt: [@"Q:\SysMount\"]);
         calls.With(new FakeListedProcess
@@ -56,7 +56,7 @@ public sealed class RememberedMountPointsOwnerTests : IDisposable
 
         Assert.True(findings.IsLive(candidates[0].Directory));
         Assert.False(findings.IsLive(candidates[1].Directory));
-        Assert.Equal(2, _volumes.MountPointsQueries.Count(asked => asked == @"C:\"));
+        Assert.Equal(2, _volumes.MountPointsQueries.Count);
         Assert.Contains(@"Q:\SysMount\Users\testuser\src\project1", inspector.Reach($@"{Source}\project1").Places);
     }
 
@@ -72,7 +72,7 @@ public sealed class RememberedMountPointsOwnerTests : IDisposable
         provider.Reached($@"{Source}\first");
         provider.Reached($@"{Source}\second");
 
-        Assert.Equal([@"C:\"], _volumes.MountPointsQueries);
+        Assert.Single(_volumes.MountPointsQueries);
 
         _volumes.Without(@"C:\").With(@"C:\", alsoMountedAt: [@"Q:\SysMount\"]);
         provider.InvalidateCaches();
