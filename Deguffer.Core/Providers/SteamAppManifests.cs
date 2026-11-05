@@ -238,7 +238,7 @@ internal sealed class SteamAppManifests
 
     /// <summary>
     /// The id in a manifest's file name, or null for any other name. Matched without regard to case,
-    /// as the probe by full name this replaced matched it.
+    /// because Windows opens the file whatever the case of its name, so Steam reads it that way too.
     /// </summary>
     private static string? IdOf(ReadOnlySpan<char> name) =>
         name.Length > ManifestPrefix.Length + ManifestExtension.Length

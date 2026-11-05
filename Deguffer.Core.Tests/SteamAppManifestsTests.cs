@@ -293,10 +293,52 @@ public sealed class SteamAppManifestsTests : IDisposable
         Manifest(InstallRoot, "730", "Counter-Strike 2");
 
         Assert.False(GameIn(await row.PlanAsync(), "730").IsInstalled);
+        Assert.Equal(1, steam.Manifests!.Listings);
 
         row.InvalidateCaches();
 
         Assert.Equal(new SteamApp("730", "Counter-Strike 2", true), GameIn(await row.PlanAsync(), "730"));
+    }
+
+    /// <summary>
+    /// The rows plan concurrently, so many threads ask about the same games at once. Released together
+    /// at a barrier, they still list each library once and read each manifest once, and agree on
+    /// every answer.
+    /// </summary>
+    [Fact]
+    public async Task ThreadsAskingAtOnceListAndReadOnce()
+    {
+        var first = Path.Combine(_temp.Path, "first", "SteamLibrary");
+        var second = Path.Combine(_temp.Path, "second", "SteamLibrary");
+        string[] ids = ["440", "570", "730", "1000"];
+        Manifest(first, "440", "Team Fortress 2");
+        Manifest(second, "570", "Dota 2");
+        Manifest(second, "730", "Counter-Strike 2");
+
+        const int threads = 16;
+
+        for (var round = 0; round < 20; round++)
+        {
+            var reader = new SteamAppManifests(Libraries(
+                new SteamLibrary(first, PathPresence.Present),
+                new SteamLibrary(second, PathPresence.Present)));
+
+            using var barrier = new Barrier(threads);
+
+            var answers = await Task.WhenAll(Enumerable.Range(0, threads).Select(thread => Task.Factory.StartNew(
+                () =>
+                {
+                    barrier.SignalAndWait();
+                    return ids.Select((_, i) => reader.Describe(ids[(i + thread) % ids.Length])).OrderBy(a => a.Id).ToList();
+                },
+                CancellationToken.None,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default)));
+
+            Assert.Equal(2, reader.Listings);
+            Assert.Equal(3, reader.Reads);
+            Assert.All(answers, answer => Assert.Equal(answers[0], answer));
+        }
     }
 
     private SteamLibraries Libraries(params SteamLibrary[] folders) =>
