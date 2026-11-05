@@ -35,6 +35,7 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
         }
 
         var (table, match) = Snapshot(ct);
+        var programs = match.Programs(table);
         var live = new List<LiveTree>();
         var unanswered = new List<string>();
 
@@ -42,22 +43,14 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
         {
             ct.ThrowIfCancellationRequested();
 
+            var reached = match.Candidate(candidate);
             var holders = new List<string>();
             var writerUnknown = false;
 
-            foreach (var process in table.Processes)
+            foreach (var program in programs)
             {
-                foreach (var holder in match.Holders(candidate, process.Name, process.ImagePath, process.CurrentDirectory))
-                {
-                    Add(holders, holder);
-                }
-
-                if (match.Writer(candidate, process.Name, process.ImagePath, process.Started, out var unknown) is { } writer)
-                {
-                    Add(holders, writer);
-                }
-
-                writerUnknown |= unknown;
+                LiveTreeMatch.AddHolders(reached, program, holders);
+                writerUnknown |= !LiveTreeMatch.AddWriter(reached, program, holders);
             }
 
             var locks = ExistingLockFiles(candidate, out var anyRefused);
@@ -71,7 +64,7 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
 
                 foreach (var holder in held.Holders)
                 {
-                    Add(holders, $"{holder} has it open");
+                    LiveTreeMatch.Add(holders, $"{holder} has it open");
                 }
             }
 
@@ -192,7 +185,7 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
             holders[key] = found = [];
         }
 
-        Add(found, holder);
+        LiveTreeMatch.Add(found, holder);
     }
 
     private static LiveTreeFindings Findings(Dictionary<string, List<string>> holders, bool complete) =>
@@ -326,14 +319,5 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
         }
 
         return present;
-    }
-
-    private static void Add(List<string> holders, string holder)
-    {
-        // One editor is several processes, and several of them can answer for the same directory.
-        if (!holders.Contains(holder, StringComparer.Ordinal))
-        {
-            holders.Add(holder);
-        }
     }
 }
