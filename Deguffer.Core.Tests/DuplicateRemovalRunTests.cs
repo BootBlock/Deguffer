@@ -311,6 +311,35 @@ public sealed class DuplicateRemovalRunTests : DuplicateRemovalScene
     }
 
     /// <summary>
+    /// The removal is cancelled as the first copy of a batch goes. The bin stops at the next copy,
+    /// which is reported not reached and is where it was, and the run is reported cancelled with the
+    /// first copy moved and verified.
+    /// </summary>
+    [Fact]
+    public void ARemovalCancelledPartWayThroughABatchReportsWhatWent()
+    {
+        var keptA = Found(Write(Path.Combine(Documents, "a.bin"), Content(seed: 1)));
+        var copyA = Found(Write(Path.Combine(Downloads, "a.bin"), Content(seed: 1)));
+        var keptB = Found(Write(Path.Combine(Documents, "b.bin"), Content(seed: 2)));
+        var copyB = Found(Write(Path.Combine(Downloads, "b.bin"), Content(seed: 2)));
+        var marks = Marks([keptA, copyA], [keptB, copyB]);
+        Mark(marks, copyA, copyB);
+        using var cts = new CancellationTokenSource();
+        var bin = FakeRecycleBin.MovingTo(Bin, _ => cts.Cancel());
+        var confirmation = RemovalConfirmation.For(marks, marks.Keeping, ExploreRemovalMode.RecycleBin, _ => null, _ => null);
+        var (plan, dropped) = DuplicateRemover.Plan(marks.Groups, confirmation.Copies, marks.Keeping);
+
+        var report = Remover(bin).Remove(plan, dropped, marks.Keeping, confirmation.Mode, cts.Token);
+
+        Assert.True(report.Cancelled);
+        Assert.Equal([[copyA.Path, copyB.Path]], bin.Batches);
+        Assert.Equal(RemovalCheck.Removed, report.Copies.Single(outcome => outcome.Copy == copyA).Check);
+        Assert.Equal(RemovalCheck.NotReached, report.Copies.Single(outcome => outcome.Copy == copyB).Check);
+        Assert.True(File.Exists(copyB.Path));
+        Assert.True(report.Verification.Passed);
+    }
+
+    /// <summary>
     /// The copy a group keeps stays held until that group's copies have gone, though the run has
     /// moved on to another group by then: the bin, moving the second group's copy in the same batch,
     /// cannot delete the copy the first group keeps.
