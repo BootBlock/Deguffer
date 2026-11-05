@@ -1,5 +1,6 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -26,10 +27,13 @@ public sealed class RecycleBinReachTests : IDisposable
 
     /// <summary>What the bin on the volume the scratch tree is on can take, as <paramref name="settings"/> say.</summary>
     /// <param name="held">What the bin holds, or null where Windows will not say; empty where not given.</param>
-    private RecycleBinReach Reach(FakeUserEnvironment settings, Func<string, long?>? held = null) =>
+    /// <param name="fs">What a folder is listed through; the real filesystem where not given.</param>
+    private RecycleBinReach Reach(FakeUserEnvironment settings, Func<string, long?>? held = null, IFileSystem? fs = null) =>
         new(
             new FakeVolumeInventory().With(_temp.Path + Path.DirectorySeparatorChar, volumeName: VolumeName),
-            new RecycleBinRooms(held ?? (_ => 0), settings));
+            new RecycleBinRooms(held ?? (_ => 0), settings),
+            fs ?? WindowsFileSystem.Default,
+            new WalkTuning(threads: 4, WalkTuning.MinimumListingBuffer));
 
     private static FakeUserEnvironment Limit(int megabytes, bool keepsNothing = false) =>
         new FakeUserEnvironment(Path.GetTempPath())
@@ -113,6 +117,7 @@ public sealed class RecycleBinReachTests : IDisposable
     {
         var folder = _temp.CreateDirectory("folder");
         FileOfLength(RecycleBinReach.LongestPath, Path.Combine("folder", "deep"));
+        LongNamedFile(folder, RecycleBinReach.LongestPath);
 
         Assert.Null(_reach.WhyNot(folder));
     }
@@ -148,9 +153,12 @@ public sealed class RecycleBinReachTests : IDisposable
         var folder = _temp.CreateDirectory("folder");
         var target = _temp.CreateDirectory("target");
         FileOfLength(RecycleBinReach.LongestPath + 40, Path.Combine("target", "deep"));
-        Junction.ToDirectory(Path.Combine(folder, "link"), target);
+        var link = Path.Combine(folder, "link");
+        Junction.ToDirectory(link, target);
+        var fs = new RecordingFileSystem(WindowsFileSystem.Default);
 
-        Assert.Null(_reach.WhyNot(folder));
+        Assert.Null(Reach(Limit(megabytes: 1024), fs: fs).WhyNot(folder));
+        Assert.DoesNotContain(fs.Listed, listed => LongPath.Display(listed).StartsWith(link, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>The shell deletes outright a file longer than its drive's bin can hold, and compares the length.</summary>
@@ -177,6 +185,18 @@ public sealed class RecycleBinReachTests : IDisposable
         Assert.Contains("more than this drive's Recycle Bin can hold", reach.WhyNot(folder));
     }
 
+    /// <summary>A folder whose files together are exactly as long as its bin's limit is taken, in whatever folders they are.</summary>
+    [Fact]
+    public void AFolderWhoseFilesTogetherAreAsLongAsItsBinsLimitIsTaken()
+    {
+        var folder = _temp.CreateDirectory("folder");
+        _temp.CreateFile(512 * 1024, "folder", "a.bin");
+        _temp.CreateFile(256 * 1024, "folder", "inner", "b.bin");
+        _temp.CreateFile(256 * 1024, "folder", "other", "c.bin");
+
+        Assert.Null(Reach(Limit(megabytes: 1)).WhyNot(folder));
+    }
+
     /// <summary>
     /// Where nothing shows what the bin can take, the item is refused: a bin with no limit Windows
     /// will say, a drive with no bin Windows will describe (a removable drive has none), and a drive
@@ -190,7 +210,137 @@ public sealed class RecycleBinReachTests : IDisposable
 
         Assert.Contains("would not say how much", Reach(noSettings).WhyNot(file));
         Assert.Contains("or the drive has none", Reach(Limit(megabytes: 1024), held: _ => null).WhyNot(file));
-        Assert.Contains("cannot tell which drive", new RecycleBinReach(new FakeVolumeInventory(), new RecycleBinRooms(_ => 0, Limit(1024))).WhyNot(file));
+        Assert.Contains(
+            "cannot tell which drive",
+            new RecycleBinReach(new FakeVolumeInventory(), new RecycleBinRooms(_ => 0, Limit(1024)), WindowsFileSystem.Default, WalkTuning.Default)
+                .WhyNot(file));
+    }
+
+    /// <summary>
+    /// A bin that refuses the item whatever it holds is asked about before the walk, so a folder of any
+    /// size is refused without one listing.
+    /// </summary>
+    [Theory]
+    [InlineData("no limit")]
+    [InlineData("no bin")]
+    [InlineData("keeps nothing")]
+    [InlineData("no drive")]
+    public void AFolderABinRefusesWhateverItHoldsIsRefusedWithoutBeingListed(string bin)
+    {
+        var folder = _temp.CreateDirectory("folder");
+        _temp.CreateFile(10, "folder", "inner", "a.bin");
+        var fs = new RecordingFileSystem(WindowsFileSystem.Default);
+
+        var reach = bin switch
+        {
+            "no limit" => Reach(new FakeUserEnvironment(Path.GetTempPath()), fs: fs),
+            "no bin" => Reach(Limit(megabytes: 1024), held: _ => null, fs: fs),
+            "keeps nothing" => Reach(Limit(megabytes: 1024, keepsNothing: true), fs: fs),
+            _ => new RecycleBinReach(new FakeVolumeInventory(), new RecycleBinRooms(_ => 0, Limit(1024)), fs, WalkTuning.Default),
+        };
+
+        Assert.NotNull(reach.WhyNot(folder));
+        Assert.Empty(fs.Listed);
+    }
+
+    /// <summary>
+    /// The walk stops once the folder's files together pass the bin's limit, so a folder larger than
+    /// its bin is not read to its last file. The first listing passes it here, and the folders it holds
+    /// are never listed.
+    /// </summary>
+    [Fact]
+    public void TheWalkOfAFolderStopsOnceItsFilesPassTheBinsLimit()
+    {
+        var folder = _temp.CreateDirectory("folder");
+        _temp.CreateFile(600 * 1024, "folder", "a.bin");
+        _temp.CreateFile(600 * 1024, "folder", "b.bin");
+
+        for (var i = 0; i < 20; i++)
+        {
+            _temp.CreateFile(10, "folder", $"inner{i}", "c.bin");
+        }
+
+        var fs = new RecordingFileSystem(WindowsFileSystem.Default);
+
+        Assert.Contains("more than this drive's Recycle Bin can hold", Reach(Limit(megabytes: 1), fs: fs).WhyNot(folder));
+        Assert.Single(fs.Listed);
+    }
+
+    /// <summary>
+    /// The walk stops at the first path too long for the bin, so the folders beside it are never
+    /// listed.
+    /// </summary>
+    [Fact]
+    public void TheWalkOfAFolderStopsAtAPathTooLongForTheBin()
+    {
+        var folder = _temp.CreateDirectory("folder");
+        LongNamedFile(folder, RecycleBinReach.LongestPath + 1);
+
+        for (var i = 0; i < 20; i++)
+        {
+            _temp.CreateFile(10, "folder", $"inner{i}", "c.bin");
+        }
+
+        var fs = new RecordingFileSystem(WindowsFileSystem.Default);
+
+        Assert.Contains("whose path is 260 characters long", Reach(Limit(megabytes: 1024), fs: fs).WhyNot(folder));
+        Assert.Single(fs.Listed);
+    }
+
+    /// <summary>
+    /// Where one listing both holds a path too long and takes the folder past the bin's limit, the
+    /// path is given. The folder is refused either way: which reason is given where two apply in
+    /// different folders depends on which the walk meets first.
+    /// </summary>
+    [Fact]
+    public void AListingHoldingBothAPathTooLongAndTooMuchGivesThePath()
+    {
+        var folder = _temp.CreateDirectory("folder");
+        _temp.CreateFile(1024 * 1024 + 1, "folder", "a.bin");
+        LongNamedFile(folder, RecycleBinReach.LongestPath + 1);
+
+        Assert.Contains("whose path is 260 characters long", Reach(Limit(megabytes: 1)).WhyNot(folder));
+    }
+
+    /// <summary>A folder, not only a file, whose path is too long for the bin refuses the folder holding it.</summary>
+    [Fact]
+    public void AFolderHoldingAFolderWhosePathIsTooLongForTheBinIsRefused()
+    {
+        var folder = _temp.CreateDirectory("folder");
+        var inner = Path.Combine(folder, new string('d', RecycleBinReach.LongestPath + 1 - folder.Length - 1));
+        Directory.CreateDirectory(LongPath.Extended(inner));
+
+        Assert.Contains("whose path is 260 characters long", _reach.WhyNot(folder));
+    }
+
+    /// <summary>
+    /// A folder Windows refuses to list, wholly or part-way through, refuses the folder holding it with
+    /// the folder named, as a listing that threw did.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AFolderTheListingRefusesIsNamedInTheRefusal(bool partWay)
+    {
+        var folder = _temp.CreateDirectory("folder");
+        var inner = _temp.CreateDirectory("folder", "inner");
+        _temp.CreateFile(10, "folder", "inner", "a.bin");
+        var reach = Reach(Limit(megabytes: 1024), fs: new UnlistableFileSystem(WindowsFileSystem.Default, inner, partWay));
+
+        Assert.StartsWith($"Windows would not list '{inner}'", reach.WhyNot(folder), StringComparison.Ordinal);
+    }
+
+    /// <summary>§6.3: every folder is listed in the extended form, so a path past MAX_PATH is not cut short.</summary>
+    [Fact]
+    public void EveryFolderIsListedInTheExtendedForm()
+    {
+        var folder = _temp.CreateDirectory("folder");
+        _temp.CreateFile(10, "folder", "inner", "a.bin");
+        var fs = new RecordingFileSystem(WindowsFileSystem.Default);
+
+        Assert.Null(Reach(Limit(megabytes: 1024), fs: fs).WhyNot(folder));
+        Assert.Equal(2, fs.Listed.Count);
+        Assert.All(fs.Listed, listed => Assert.StartsWith(@"\\?\", listed, StringComparison.Ordinal));
     }
 
     /// <summary>A folder Windows will not list all the way down may hold a path the bin cannot take, so it is refused.</summary>
@@ -268,6 +418,14 @@ public sealed class RecycleBinReachTests : IDisposable
         sink.PostDeleteItem(flags: 0, item: null!, result: unchecked((int)0x80070020), created: null);
 
         Assert.False(ShellRecycleBin.Outcome(aborted: true, sink).DeletedOutright);
+    }
+
+    /// <summary>A file directly in <paramref name="folder"/> whose full path is exactly <paramref name="length"/> characters.</summary>
+    private static void LongNamedFile(string folder, int length)
+    {
+        var file = Path.Combine(folder, new string('z', length - folder.Length - 1 - ".bin".Length) + ".bin");
+        Assert.Equal(length, file.Length);
+        File.WriteAllBytes(LongPath.Extended(file), new byte[10]);
     }
 
     /// <summary>A file under <paramref name="folder"/> whose full path, in display form, is exactly <paramref name="length"/> characters.</summary>

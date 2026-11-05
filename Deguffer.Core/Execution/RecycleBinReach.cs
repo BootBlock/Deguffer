@@ -38,22 +38,31 @@ internal sealed class RecycleBinReach
     /// <summary>The longest path the shell moves to the bin: <c>MAX_PATH</c> less its terminator.</summary>
     internal const int LongestPath = 259;
 
-    public static RecycleBinReach Default { get; } = new(VolumeInventory.Current, RecycleBinRooms.Default);
+    internal const string DeletesWhatItCannotTake = "Windows deletes outright what its bin cannot take.";
 
-    private static readonly string TakesNoLongerPath =
+    internal static readonly string TakesNoLongerPath =
         $"Windows' Recycle Bin takes nothing whose path is longer than {LongestPath}";
 
-    private const string DeletesWhatItCannotTake = "Windows deletes outright what its bin cannot take.";
+    // The walk a removal makes of its tree is on the default tuning too (RemovalWalk), and this walk is
+    // of the tree that removal would move.
+    public static RecycleBinReach Default { get; } =
+        new(VolumeInventory.Current, RecycleBinRooms.Default, WindowsFileSystem.Default, WalkTuning.Default);
 
     private readonly IVolumeInventory _volumes;
     private readonly RecycleBinRooms _rooms;
+    private readonly IFileSystem _fs;
+    private readonly WalkTuning _tuning;
 
     /// <param name="volumes">Which volume holds an item, whose bin is the one it would go to.</param>
     /// <param name="rooms">What each volume's bin may hold.</param>
-    internal RecycleBinReach(IVolumeInventory volumes, RecycleBinRooms rooms)
+    /// <param name="fs">What a folder is listed through, which a test observes and refuses through.</param>
+    /// <param name="tuning">How many of a folder's folders are listed at once.</param>
+    internal RecycleBinReach(IVolumeInventory volumes, RecycleBinRooms rooms, IFileSystem fs, WalkTuning tuning)
     {
         _volumes = volumes;
         _rooms = rooms;
+        _fs = fs;
+        _tuning = tuning;
     }
 
     /// <summary>
@@ -76,13 +85,19 @@ internal sealed class RecycleBinReach
             return $"Its path is {path.Length:N0} characters long. {TakesNoLongerPath}, and deletes it outright instead.";
         }
 
-        FileSystemInfo item;
+        string extended;
+        FileAttributes attributes;
+        long length = 0;
 
         try
         {
-            var extended = LongPath.Extended(path);
-            var attributes = File.GetAttributes(extended);
-            item = attributes.HasFlag(FileAttributes.Directory) ? new DirectoryInfo(extended) : new FileInfo(extended);
+            extended = LongPath.Extended(path);
+            attributes = File.GetAttributes(extended);
+
+            if (!attributes.HasFlag(FileAttributes.Directory))
+            {
+                length = new FileInfo(extended).Length;
+            }
         }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
         {
@@ -95,9 +110,25 @@ internal sealed class RecycleBinReach
                 + $"whole, and {DeletesWhatItCannotTake}";
         }
 
-        var (length, inside) = item is DirectoryInfo folder ? Walk(path, folder, ct) : (((FileInfo)item).Length, null);
+        // Before the walk, because a bin that refuses the item whatever it holds is answered without
+        // reading a folder of any size.
+        if (WhyTheBinTakesNothing(path, out var limit) is { } refused)
+        {
+            return refused;
+        }
 
-        return inside ?? WhyTheBinCannotHold(path, length);
+        if (!attributes.HasFlag(FileAttributes.Directory))
+        {
+            return length > limit
+                ? $"It is {FreeSpace.Format(length)} long, more than this drive's Recycle Bin can hold "
+                  + $"({FreeSpace.Format(limit)}), and Windows deletes outright what is larger than its bin."
+                : null;
+        }
+
+        // A folder that is itself a link is moved as a link, and nothing on its far side goes with it.
+        return attributes.HasFlag(FileAttributes.ReparsePoint)
+            ? null
+            : RecycleBinFolderWalk.WhyNot(extended, limit, _fs, _tuning, ct);
     }
 
     /// <summary>
@@ -129,63 +160,15 @@ internal sealed class RecycleBinReach
     }
 
     /// <summary>
-    /// The length of every file in <paramref name="folder"/>, or why the bin cannot take it whatever
-    /// its length. A link inside is moved as a link, and nothing on its far side goes with it, so it is
-    /// not looked through; a folder that is itself a link is moved the same way.
+    /// Why the bin of the volume holding <paramref name="path"/> takes nothing whatever the item holds,
+    /// or cannot be shown to take anything; or null, with the most it may hold in
+    /// <paramref name="limit"/>.
     /// </summary>
-    private static (long Length, string? WhyNot) Walk(string path, DirectoryInfo folder, CancellationToken ct)
-    {
-        if (folder.Attributes.HasFlag(FileAttributes.ReparsePoint))
-        {
-            return (0, null);
-        }
-
-        long length = 0;
-        Stack<string> folders = new([folder.FullName]);
-
-        while (folders.TryPop(out var next))
-        {
-            ct.ThrowIfCancellationRequested();
-
-            try
-            {
-                foreach (var entry in new DirectoryInfo(next).EnumerateFileSystemInfos())
-                {
-                    var shown = LongPath.Display(entry.FullName);
-
-                    if (shown.Length > LongestPath)
-                    {
-                        return (length, $"It holds '{shown[(path.Length + 1)..]}', whose path is {shown.Length:N0} characters long. "
-                            + $"{TakesNoLongerPath}, and deletes the whole folder outright instead.");
-                    }
-
-                    if (entry is FileInfo file)
-                    {
-                        length += file.Length;
-                    }
-                    else if (!entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
-                    {
-                        folders.Push(entry.FullName);
-                    }
-                }
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SecurityException)
-            {
-                return (length, $"Windows would not list '{LongPath.Display(next)}', so Deguffer cannot tell whether "
-                    + $"the Recycle Bin can take the folder whole, and {DeletesWhatItCannotTake}");
-            }
-        }
-
-        return (length, null);
-    }
-
-    /// <summary>
-    /// Why the bin of the volume holding <paramref name="path"/> cannot hold <paramref name="length"/>
-    /// bytes, or cannot be shown to, or null where it can.
-    /// </summary>
-    private string? WhyTheBinCannotHold(string path, long length)
+    private string? WhyTheBinTakesNothing(string path, out long limit)
     {
         const string Unknown = $", so nothing shows the Recycle Bin can take it, and {DeletesWhatItCannotTake}";
+
+        limit = 0;
 
         if (HostVolume.For(_volumes, path) is not { } volume)
         {
@@ -203,14 +186,12 @@ internal sealed class RecycleBinReach
                 + "delete this outright.";
         }
 
-        if (room.Limit is not { } limit)
+        if (room.Limit is not { } most)
         {
             return "Windows would not say how much this drive's Recycle Bin may hold" + Unknown;
         }
 
-        return length > limit
-            ? $"It is {FreeSpace.Format(length)} long, more than this drive's Recycle Bin can hold "
-              + $"({FreeSpace.Format(limit)}), and Windows deletes outright what is larger than its bin."
-            : null;
+        limit = most;
+        return null;
     }
 }

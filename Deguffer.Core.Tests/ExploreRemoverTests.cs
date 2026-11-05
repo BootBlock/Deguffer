@@ -217,7 +217,7 @@ public sealed class ExploreRemoverTests : IDisposable
                 handed.Add(path);
                 return new RecycleOutcome(Removed: false, "The shell was asked.");
             },
-            new RecycleBinReach(new FakeVolumeInventory(), new RecycleBinRooms(_ => null, _environment)));
+            new RecycleBinReach(new FakeVolumeInventory(), new RecycleBinRooms(_ => null, _environment), WindowsFileSystem.Default, WalkTuning.Default));
 
         var report = await ExploreRemover.RemoveAsync(
             [new ExploreItem(item, IsDirectory: false, Bytes: 16, LowerBound: false)],
