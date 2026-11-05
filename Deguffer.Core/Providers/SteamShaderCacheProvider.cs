@@ -172,12 +172,12 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
-        if (_discovery.Libraries is not { } libraries)
+        if (_discovery.Libraries is not { } libraries || _discovery.Manifests is not { } manifests)
         {
             return PlanWithoutAnInstall();
         }
 
-        var examination = new Examination(new SteamAppManifests(libraries));
+        var examination = new Examination(manifests);
 
         if (ListingNote(libraries) is { } listingNote)
         {
@@ -190,7 +190,7 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
             Collect(library, examination, ct);
         }
 
-        examination.Notes.AddRange(examination.Manifests.UnreachedLibraryNotes(refusalsNamed: true));
+        examination.Notes.AddRange(examination.Manifests.UnreachedLibraryNotes(examination.Games, refusalsNamed: true));
 
         if (examination.Targets.Count == 0
             && examination.Declined.Count == 0
@@ -414,7 +414,7 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
                 continue;
             }
 
-            var app = examination.Manifests.Describe(child.Name);
+            var app = examination.Describe(child.Name);
 
             examination.Targets.Add(new DeletionTarget(
                 path,
@@ -467,6 +467,9 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
 
         public List<DeletionTarget> Targets { get; } = [];
 
+        /// <summary>Each game this row described, which decides the libraries its plan names.</summary>
+        public List<SteamApp> Games { get; } = [];
+
         public List<(string Path, string Reason)> Declined { get; } = [];
 
         public List<(string Path, string Reason)> Survivors { get; } = [];
@@ -474,5 +477,12 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
         public List<PlanNote> Notes { get; } = [];
 
         public bool Unreadable { get; set; }
+
+        public SteamApp Describe(string id)
+        {
+            var app = Manifests.Describe(id);
+            Games.Add(app);
+            return app;
+        }
     }
 }
