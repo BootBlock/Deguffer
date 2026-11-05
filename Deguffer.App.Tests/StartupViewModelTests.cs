@@ -1,7 +1,9 @@
 using System.Collections.Specialized;
+using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Memory;
+using Deguffer.Core.Safety;
 using Deguffer.Core.Startup;
 using Deguffer.Core.Working;
 using Deguffer.Testing;
@@ -32,6 +34,7 @@ public sealed class StartupViewModelTests : IDisposable
     private readonly RunningActions _running = new();
     private readonly BusyWork _work = new();
     private readonly List<ElevationRequest> _relaunches = [];
+    private readonly List<string> _handed = [];
     private readonly FakeUserEnvironment _user;
     private readonly FakeSystemDirectories _system;
     private ProcessMemoryTable _processes = new([], ProcessFigures.Checked, Complete: true);
@@ -241,6 +244,39 @@ public sealed class StartupViewModelTests : IDisposable
         Assert.Same(page.Rows[0], page.SelectedRow);
     });
 
+    /// <summary>
+    /// The row menu acts on the row the user picked and on no other, finds a Startup folder item where
+    /// the page's own folder reader says the folder is, and puts a refusal on the page's report.
+    /// </summary>
+    [Fact]
+    public void TheRowMenuFollowsThePickAndReportsOnThePage() => UiThread.Run(async () =>
+    {
+        var folder = Directory.CreateDirectory(_user.StartupFolder!).FullName;
+        File.WriteAllText(Path.Combine(folder, "Notes.cmd"), "@echo off");
+        _registry.WithRun(StartupSource.UserRun, "Gone", @"C:\Program Files\Gone\gone.exe");
+        _programs.With(@"C:\Program Files\Gone\gone.exe", presence: PathPresence.Absent);
+        var page = Page();
+        page.Order = StartupOrder.Source;
+        await page.RefreshAsync();
+        var (gone, notes) = (page.Rows[0], page.Rows[1]);
+
+        Assert.Null(page.Menu.Row);
+
+        page.SelectedRow = notes;
+        Assert.Same(notes, page.Menu.Row);
+        Assert.True(page.Menu.HasItem);
+        page.Menu.RevealItemCommand.Execute(null);
+        Assert.Equal([Path.Combine(folder, "Notes.cmd")], _handed);
+
+        page.SelectedRow = gone;
+        page.Menu.RevealProgramCommand.Execute(null);
+
+        Assert.Single(_handed);
+        Assert.True(page.HasReport);
+        Assert.Equal(@"Windows says C:\Program Files\Gone\gone.exe is not there, so there is no file to show.", page.Report);
+        Assert.Equal(InfoBarSeverity.Informational, page.ReportSeverity);
+    });
+
     [Fact]
     public void ReopeningElevatedAsksForThisPage()
     {
@@ -272,7 +308,18 @@ public sealed class StartupViewModelTests : IDisposable
             },
             () => Task.FromResult(true),
             _running,
-            _work);
+            _work,
+            folders.FolderOf,
+            new ShellHandoff(
+                path => Hand(path),
+                path => Hand(path),
+                text => Hand(text)));
+    }
+
+    private string? Hand(string value)
+    {
+        _handed.Add(value);
+        return null;
     }
 
     /// <summary>A process table a test wrote, with the rest of the snapshot the fake source gives.</summary>

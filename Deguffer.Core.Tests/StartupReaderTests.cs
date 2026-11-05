@@ -1,3 +1,4 @@
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Startup;
 using Deguffer.Testing;
@@ -82,6 +83,26 @@ public sealed class StartupReaderTests : IDisposable
         Assert.Equal(StartupState.Disabled, states["BySettings"]);
         Assert.Equal(StartupState.Starts, states["Enabled"]);
         Assert.Equal(StartupState.Starts, states["NeverTouched"]);
+    }
+
+    /// <summary>
+    /// A reading arrives in the page's shipped order, the entries that start first and then by name, so
+    /// the page shows its first reading without moving a row.
+    /// </summary>
+    [Fact]
+    public void AReadingArrivesInTheShippedOrder()
+    {
+        _registry
+            .WithRun(StartupSource.UserRun, "Alpha", Tool)
+            .WithRun(StartupSource.UserRun, "Bravo", Tool)
+            .WithRun(StartupSource.UserRun, "Charlie", Tool)
+            .WithApproval(StartupSource.UserRun, "Alpha", 3);
+        _programs.With(Tool);
+
+        var entries = Reader().Read(CancellationToken.None).Entries;
+
+        Assert.Equal(["Bravo", "Charlie", "Alpha"], entries.Select(e => e.Key.Name));
+        Assert.Equal(entries, entries.Order(StartupRowOrder.Comparer(AppPreferences.Default.StartupOrder, AppPreferences.Default.StartupOrderDirection)));
     }
 
     /// <summary>
