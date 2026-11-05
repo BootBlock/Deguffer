@@ -56,7 +56,12 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         Filters = new DuplicateFiltersViewModel(preferences);
         Filters.Changed += (_, _) => Judge();
         Marking = new DuplicateMarkingViewModel(actions, Groups, work);
-        Groups.CollectionChanged += (_, _) => SaveCsvCommand.NotifyCanExecuteChanged();
+        Groups.CollectionChanged += (_, _) =>
+        {
+            SaveCsvCommand.NotifyCanExecuteChanged();
+            OnPropertyChanged(nameof(HasGroups));
+            OnPropertyChanged(nameof(HasNoGroups));
+        };
 
         // A new search would take the groups from under a rule or a removal reading them.
         Marking.PropertyChanged += (_, changed) =>
@@ -87,10 +92,25 @@ public sealed partial class DuplicatesViewModel : ObservableObject
 
     public DuplicateMarkingViewModel Marking { get; }
 
+    /// <summary>The figures over the groups found so far.</summary>
+    public DuplicateTotalsViewModel Totals { get; } = new();
+
+    /// <summary>
+    /// Whether the search settings are shown. Open until a search starts, then folded to their one
+    /// line so the results have the page, and open again whenever the user asks.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsSetupOpen { get; set; } = true;
+
+    /// <summary>The search as the settings stand, in one line (<see cref="DuplicateSearchSummary"/>).</summary>
+    [ObservableProperty]
+    public partial string SetupSummary { get; private set; } = string.Empty;
+
     /// <summary>Why the search cannot run as it stands, or an empty string where it can.</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SearchCommand))]
     [NotifyPropertyChangedFor(nameof(SearchStatus))]
+    [NotifyPropertyChangedFor(nameof(HasSearchStatus))]
     public partial string WhyCannotSearch { get; private set; } = string.Empty;
 
     [ObservableProperty]
@@ -98,15 +118,23 @@ public sealed partial class DuplicatesViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(StopCommand))]
     [NotifyCanExecuteChangedFor(nameof(SaveCsvCommand))]
     [NotifyPropertyChangedFor(nameof(SearchStatus))]
+    [NotifyPropertyChangedFor(nameof(HasSearchStatus))]
+    [NotifyPropertyChangedFor(nameof(IsIdle))]
     public partial bool IsSearching { get; private set; }
+
+    /// <summary>Whether no search runs, so the page offers Search rather than Stop.</summary>
+    public bool IsIdle => !IsSearching;
 
     /// <summary>The stage the search has reached, in words.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SearchStatus))]
+    [NotifyPropertyChangedFor(nameof(HasSearchStatus))]
     public partial string Stage { get; private set; } = string.Empty;
 
     /// <summary>The line beside the Search button: the stage while a search runs, and otherwise why it cannot.</summary>
     public string SearchStatus => IsSearching ? Stage : WhyCannotSearch;
+
+    public bool HasSearchStatus => SearchStatus.Length > 0;
 
     /// <summary>How far the stage has got, from 0 to 100, where it can say.</summary>
     [ObservableProperty]
@@ -135,6 +163,11 @@ public sealed partial class DuplicatesViewModel : ObservableObject
     /// so the reader's place in the list holds while a search runs.
     /// </summary>
     public ObservableCollection<DuplicateGroupRow> Groups { get; } = [];
+
+    public bool HasGroups => Groups.Count > 0;
+
+    /// <summary>Whether the page shows its sentence about the search in place of the groups.</summary>
+    public bool HasNoGroups => Groups.Count == 0;
 
     /// <summary>What the search did not look at, or left out.</summary>
     public ObservableCollection<string> Notes { get; } = [];
@@ -182,6 +215,8 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         NotesHeading = string.Empty;
         CsvOutcome = string.Empty;
         Marks = null;
+        Totals.Clear();
+        IsSetupOpen = false;
         Marking.Started(search.Asked);
         IsSearching = true;
         Headline = "Searching…";
@@ -267,7 +302,11 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         }
     }
 
-    private void Judge() => WhyCannotSearch = Filters.Current.WhyRefused(Locations.Chosen) ?? string.Empty;
+    private void Judge()
+    {
+        WhyCannotSearch = Filters.Current.WhyRefused(Locations.Chosen) ?? string.Empty;
+        SetupSummary = DuplicateSearchSummary.Of(Locations.Chosen, Filters.Current);
+    }
 
     private void Found(Search search, CandidateFinding finding)
     {
@@ -297,8 +336,10 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         var marks = search.MarksMade;
         Marking.Made(marks);
         var (added, index) = marks.Add(group);
-        Groups.Insert(index, new DuplicateGroupRow(added, marks.Keeping, Marking.Toggle, Marking.MayMark));
-        Headline = $"Searching… {Groups.Count:N0} {(Groups.Count == 1 ? "group" : "groups")} so far.";
+        var row = new DuplicateGroupRow(added, marks.Keeping, Marking.Toggle, Marking.MayMark);
+        Groups.Insert(index, row);
+        Totals.Add(row);
+        Headline = "Searching. Each group appears as soon as it is confirmed, in order of the space it could free.";
     }
 
     private void Reached(Search search, BusySpan work, DuplicateSearchProgress progress)
@@ -339,10 +380,9 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         Marks = marks;
         ShowNotes(DuplicateSearchNotes.Of(result));
 
-        var freeable = Groups.Sum(row => row.Marks.FreeableSpace(marks.Keeping));
         var found = Groups.Count == 0
             ? "No duplicates found."
-            : $"{Groups.Count:N0} {(Groups.Count == 1 ? "group" : "groups")}. Copies that could go occupy {FreeSpace.Format(freeable)}.";
+            : "Mark the copies to remove, by hand or with a rule from Mark. Nothing goes until you confirm the list.";
 
         Headline = result.Stopped ? "Stopped. " + found : found;
     }

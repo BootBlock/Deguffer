@@ -62,6 +62,7 @@ public sealed partial class DuplicatesPage : Page
         ListAnimation.Play(LocationsList, SystemMotion.Current);
         ListAnimation.Play(NotesList, SystemMotion.Current);
         ListAnimation.Play(GroupsList, SystemMotion.Current);
+        FillRuleMenu();
 
         NavigationCacheMode = NavigationCacheMode.Required;
         Loaded += OnLoaded;
@@ -104,13 +105,43 @@ public sealed partial class DuplicatesPage : Page
         ViewModel.Locations.AddFolder(picked);
     }
 
-    private async void OnChooseRuleFolder(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// One item a rule, in the order the view-model names them. A rule about a folder says so with an
+    /// ellipsis, because choosing it opens the folder picker before it marks anything.
+    /// </summary>
+    private void FillRuleMenu()
     {
-        if (App.MainWindow is not { } window || await FolderDialog.ChooseAsync(window) is not { } picked)
+        for (var i = 0; i < DuplicateMarkingViewModel.RuleNames.Count; i++)
         {
-            return;
+            var item = new MenuFlyoutItem
+            {
+                Text = DuplicateMarkingViewModel.RuleNames[i] + (DuplicateMarkingViewModel.RuleAsksForFolder(i) ? "…" : string.Empty),
+                Tag = i,
+            };
+            item.Click += OnRuleChosen;
+            RuleMenu.Items.Add(item);
+        }
+    }
+
+    /// <summary>
+    /// Run the rule chosen, asking first for the folder a folder rule is about. A picker closed
+    /// without a folder runs nothing, rather than the rule about whatever folder was chosen last.
+    /// </summary>
+    private async void OnRuleChosen(object sender, RoutedEventArgs e)
+    {
+        var marking = ViewModel.Marking;
+        marking.RuleIndex = (int)((MenuFlyoutItem)sender).Tag;
+
+        if (marking.RuleNeedsFolder)
+        {
+            if (App.MainWindow is not { } window || await FolderDialog.ChooseAsync(window) is not { } picked)
+            {
+                return;
+            }
+
+            marking.RuleFolder = picked;
         }
 
-        ViewModel.Marking.RuleFolder = picked;
+        await marking.RunRuleCommand.ExecuteAsync(null);
     }
 }
