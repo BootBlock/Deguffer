@@ -28,12 +28,13 @@ public sealed class RecycleBinReachTests : IDisposable
     /// <summary>What the bin on the volume the scratch tree is on can take, as <paramref name="settings"/> say.</summary>
     /// <param name="held">What the bin holds, or null where Windows will not say; empty where not given.</param>
     /// <param name="fs">What a folder is listed through; the real filesystem where not given.</param>
-    private RecycleBinReach Reach(FakeUserEnvironment settings, Func<string, long?>? held = null, IFileSystem? fs = null) =>
+    /// <param name="threads">How many folders are listed at once.</param>
+    private RecycleBinReach Reach(FakeUserEnvironment settings, Func<string, long?>? held = null, IFileSystem? fs = null, int threads = 4) =>
         new(
             new FakeVolumeInventory().With(_temp.Path + Path.DirectorySeparatorChar, volumeName: VolumeName),
             new RecycleBinRooms(held ?? (_ => 0), settings),
             fs ?? WindowsFileSystem.Default,
-            new WalkTuning(threads: 4, WalkTuning.MinimumListingBuffer));
+            new WalkTuning(threads, WalkTuning.MinimumListingBuffer));
 
     private static FakeUserEnvironment Limit(int megabytes, bool keepsNothing = false) =>
         new FakeUserEnvironment(Path.GetTempPath())
@@ -267,14 +268,14 @@ public sealed class RecycleBinReachTests : IDisposable
     }
 
     /// <summary>
-    /// The walk stops at the first path too long for the bin, so the folders beside it are never
-    /// listed.
+    /// The walk stops at the first path too long for the bin, so the folders beside the one holding it
+    /// are never listed. On one thread, which lists the first folder found first, so the count is exact.
     /// </summary>
     [Fact]
     public void TheWalkOfAFolderStopsAtAPathTooLongForTheBin()
     {
         var folder = _temp.CreateDirectory("folder");
-        LongNamedFile(folder, RecycleBinReach.LongestPath + 1);
+        LongNamedFile(_temp.CreateDirectory("folder", "a"), RecycleBinReach.LongestPath + 1);
 
         for (var i = 0; i < 20; i++)
         {
@@ -283,8 +284,8 @@ public sealed class RecycleBinReachTests : IDisposable
 
         var fs = new RecordingFileSystem(WindowsFileSystem.Default);
 
-        Assert.Contains("whose path is 260 characters long", Reach(Limit(megabytes: 1024), fs: fs).WhyNot(folder));
-        Assert.Single(fs.Listed);
+        Assert.Contains("whose path is 260 characters long", Reach(Limit(megabytes: 1024), fs: fs, threads: 1).WhyNot(folder));
+        Assert.Equal(2, fs.Listed.Count);
     }
 
     /// <summary>
