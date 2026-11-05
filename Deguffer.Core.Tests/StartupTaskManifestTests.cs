@@ -57,6 +57,69 @@ public sealed class StartupTaskManifestTests
             <Package><Extension Category="&x;"><StartupTask TaskId="T" /></Extension></Package>
             """));
 
+    /// <summary>Only the element names must be written literally, so the category is read as XML reads it.</summary>
+    [Fact]
+    public void ACategoryWrittenWithCharacterReferencesIsStillAStartupTask() =>
+        Assert.Equal(
+            [new DeclaredStartupTask("ToolStartup", "Tool", @"Tool\Tool.exe")],
+            StartupTaskManifest.Read("""
+                <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+                         xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10">
+                  <Application Executable="Tool\Tool.exe">
+                    <desktop:Extension Category="&#119;indows.&#x73;tartup&#84;ask">
+                      <desktop:StartupTask TaskId="ToolStartup" DisplayName="Tool" />
+                    </desktop:Extension>
+                  </Application>
+                </Package>
+                """));
+
+    /// <summary>An extension takes the program of the application it is inside, and none outside one.</summary>
+    [Fact]
+    public void EachExtensionTakesTheProgramOfItsOwnApplication() =>
+        Assert.Equal(
+            [
+                new DeclaredStartupTask("First", null, @"First\First.exe"),
+                new DeclaredStartupTask("Second", null, @"Second\Second.exe"),
+                new DeclaredStartupTask("Outside", null, null),
+            ],
+            StartupTaskManifest.Read("""
+                <Package xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5">
+                  <Applications>
+                    <Application Id="First" Executable="First\First.exe">
+                      <uap5:Extension Category="windows.startupTask"><uap5:StartupTask TaskId="First" /></uap5:Extension>
+                    </Application>
+                    <Application Id="Empty" Executable="Empty\Empty.exe" />
+                    <Application Id="Second" Executable="Second\Second.exe">
+                      <Extensions>
+                        <uap5:Extension Category="windows.startupTask"><uap5:StartupTask TaskId="Second" /></uap5:Extension>
+                      </Extensions>
+                    </Application>
+                  </Applications>
+                  <uap5:Extension Category="windows.startupTask"><uap5:StartupTask TaskId="Outside" /></uap5:Extension>
+                </Package>
+                """));
+
+    /// <summary>A task read before the fault does not make a broken manifest a partial one.</summary>
+    [Fact]
+    public void AManifestThatBreaksAfterItsTaskDeclaresNothing() =>
+        Assert.Empty(StartupTaskManifest.Read("""
+            <Package xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5">
+              <Application Executable="Tool.exe">
+                <uap5:Extension Category="windows.startupTask"><uap5:StartupTask TaskId="T" /></uap5:Extension>
+              </Application>
+              <Applications>
+            """));
+
+    [Fact]
+    public void AManifestWithoutTheStartupTaskElementDeclaresNothing() =>
+        Assert.Empty(StartupTaskManifest.Read("""
+            <Package xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5">
+              <Application Executable="Tool.exe">
+                <uap5:Extension Category="windows.startupTask"><uap5:Task Id="T" /></uap5:Extension>
+              </Application>
+            </Package>
+            """));
+
     [Theory]
     [InlineData(0, StartupState.Disabled)]
     [InlineData(1, StartupState.Disabled)]
