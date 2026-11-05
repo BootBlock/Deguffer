@@ -491,11 +491,10 @@ Deliberate points, and the traps that come with them:
   ticked or removed, and a row that a kept item or a clean shrinks still stays where it stands.
 - **Every row states what happens on next use, and reaches it without a pointer**: "re-downloads on
   next build (~10 GB)" is more useful than a checkbox. The list has two densities, and the shipped
-  one is **Compact**, which trades the sentence off the row for the whole list being on screen at
-  once — a set of rows to choose between is the thing the first screen is for, and six rows with a
-  paragraph each is not that set. Compact keeps the sentence one activation away: on the row's
-  tooltip for a pointer, and inside the row's own disclosure for a keyboard, a screen reader or a
-  finger. **Standard** writes it out under every name. What is not negotiable in either is that no
+  one is **Standard**, which writes the sentence out under every name, so the first screen says what
+  each removal costs without being asked. **Compact** trades the sentence off the row for the whole
+  list being on screen at once, and keeps it one activation away: on the row's tooltip for a
+  pointer, and inside the row's own disclosure for a keyboard, a screen reader or a finger. What is not negotiable in either is that no
   row may be offered for deletion without its sentence being reachable *from that row*, by whatever
   the reader is using.
 - **A row that is absent says which kind of absent it is.** "The tool is not on this machine" and

@@ -21,7 +21,7 @@ public class PreferenceStoreTests
 
         Assert.True(store.Save(new AppPreferences(
             AppTheme.Dark,
-            ViewDensity.Standard,
+            ViewDensity.Compact,
             ExploreView.List,
             ExploreColouring.Age,
             ExploreSpacing.Spacious,
@@ -63,7 +63,10 @@ public class PreferenceStoreTests
         var loaded = store.Load();
 
         Assert.Equal(AppTheme.Dark, loaded.Theme);
-        Assert.Equal(ViewDensity.Standard, loaded.View);
+
+        // Not the default, deliberately: Standard is zero, so asserting the default here would pass
+        // just as well with the preference deleted from the record altogether.
+        Assert.Equal(ViewDensity.Compact, loaded.View);
 
         // Not the default, deliberately: Treemap is zero, so asserting the default here would pass
         // just as well with the preference deleted from the record altogether.
@@ -161,12 +164,12 @@ public class PreferenceStoreTests
     /// absent key must land on that preference's declared default rather than on whatever the JSON
     /// reader picks for a missing value.
     ///
-    /// <c>ConfirmBeforeCleaning</c> and <c>View</c> are what prove it here. Their declared defaults,
-    /// <c>true</c> and <c>Compact</c>, differ from <c>default(bool)</c> and
-    /// <c>default(ViewDensity)</c>, so the two answers differ and the assertions have something to
-    /// catch. Asserting the same thing about <c>RequireTypedConfirmation</c>,
-    /// <c>ShowNotInstalled</c> or <c>ShowAlreadyClear</c> would prove nothing: for all three, both
-    /// answers are <c>false</c>.
+    /// <c>ConfirmBeforeCleaning</c> and <c>MinimumTemporaryFileAgeDays</c> are what prove it here.
+    /// Their declared defaults, <c>true</c> and <c>7</c>, differ from <c>default(bool)</c> and
+    /// <c>default(int)</c>, so the two answers differ and the assertions have something to catch.
+    /// Asserting the same thing about <c>View</c>, <c>RequireTypedConfirmation</c>,
+    /// <c>ShowNotInstalled</c> or <c>ShowAlreadyClear</c> would prove nothing: for each, both answers
+    /// are the same, <c>Standard</c> or <c>false</c>.
     ///
     /// <c>BackdropEnabled</c> could prove it too, and is spent instead as the parse guard below.
     /// One preference has to be a key the file actually carries, or a wholesale fall through to the
@@ -195,7 +198,8 @@ public class PreferenceStoreTests
         Assert.False(loaded.BackdropEnabled);
 
         Assert.True(loaded.ConfirmBeforeCleaning);
-        Assert.Equal(ViewDensity.Compact, loaded.View);
+        Assert.Equal(7, loaded.MinimumTemporaryFileAgeDays);
+        Assert.Equal(ViewDensity.Standard, loaded.View);
         Assert.False(loaded.RequireTypedConfirmation);
         Assert.False(loaded.ShowNotInstalled);
         Assert.False(loaded.ShowAlreadyClear);
@@ -263,10 +267,10 @@ public class PreferenceStoreTests
 
     /// <summary>
     /// What the Storage list looks like on a machine nobody has configured: one row per decision
-    /// the user actually has to make, and nothing else. The three defaults are the same judgement
-    /// reached from three directions — a location this machine does not have and a location with
-    /// nothing left to reclaim both offer nothing to decide, and the rows that do are worth more of
-    /// the screen than either.
+    /// the user actually has to make, each saying what it costs, and nothing else. A location this
+    /// machine does not have and a location with nothing left to reclaim both offer nothing to
+    /// decide, and the rows that do are worth more of the screen than either. Each listed row is
+    /// drawn Standard, with §7's "what happens on next use" sentence written out under its name.
     ///
     /// Neither filter is a claim that the hidden row is uninteresting. Each is still scanned, still
     /// counted, and one switch away from being listed.
@@ -274,7 +278,7 @@ public class PreferenceStoreTests
     [Fact]
     public void TheShippedDefaultsListOnlyTheRowsThatCarryADecision()
     {
-        Assert.Equal(ViewDensity.Compact, AppPreferences.Default.View);
+        Assert.Equal(ViewDensity.Standard, AppPreferences.Default.View);
         Assert.False(AppPreferences.Default.ShowNotInstalled);
         Assert.False(AppPreferences.Default.ShowAlreadyClear);
         Assert.Equal(StorageOrder.Size, AppPreferences.Default.StorageOrder);

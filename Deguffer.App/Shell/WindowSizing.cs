@@ -20,7 +20,7 @@ namespace Deguffer.App.Shell;
 /// The minimum size needs a window procedure because <see cref="AppWindow"/> exposes no such
 /// property; below it the rail and the command bar start colliding.
 ///
-/// The minimum width is set by the compact finding row, which is the shipped view. That row puts
+/// The minimum width is set by the compact finding row. That row puts
 /// the name, the tier chip and the size on one line, and the name is the only part with no fixed
 /// demand, so it is what gives way. At the old 720 the rail, the card and the right-hand columns
 /// left it about seventy pixels and every name trimmed to an ellipsis — a list of rows that no
