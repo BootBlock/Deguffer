@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using Deguffer.Core.Duplicates;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring.Acting;
+using Deguffer.Core.Scanning;
 using Deguffer.Core.Working;
 
 namespace Deguffer.App.ViewModels;
@@ -32,8 +33,6 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
         "These groups describe the disk as it was before the removal. Search again to mark and remove more.";
 
     private const string Busy = "Wait for the rule or the removal to finish.";
-
-    private const string ChooseFolder = "Choose the folder the rule is about.";
 
     private readonly DuplicateActions _actions;
     private readonly IReadOnlyList<DuplicateGroupRow> _groups;
@@ -71,13 +70,12 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
     /// <summary>The folder a folder rule is about, as the folder picker returned it, or an empty string.</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(RunRuleCommand))]
-    [NotifyPropertyChangedFor(nameof(RuleFolderShown))]
     public partial string RuleFolder { get; set; } = string.Empty;
 
-    /// <summary>The folder a folder rule is about, or what to do where none is chosen.</summary>
-    public string RuleFolderShown => RuleFolder.Length > 0 ? RuleFolder : ChooseFolder;
+    public bool RuleNeedsFolder => RuleAsksForFolder(RuleIndex);
 
-    public bool RuleNeedsFolder => RuleIndex >= 3;
+    /// <summary>Whether a rule, by its place in <see cref="RuleNames"/>, is about a folder the user chooses.</summary>
+    public static bool RuleAsksForFolder(int index) => index >= 3;
 
     /// <summary>Whether a rule, a confirmation or a removal is running, so the page waits for it.</summary>
     [ObservableProperty]
@@ -96,13 +94,23 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
     /// <summary>Why nothing can be marked, ruled or removed now, or an empty string where something can.</summary>
     public string WhyClosed => WhyCannotAct ?? _marks?.WhyRulesCannotMark ?? string.Empty;
 
-    /// <summary>How many copies are marked, in words, or an empty string where none are.</summary>
-    public string MarkedSummary => Marked switch
+    public bool HasWhyClosed => WhyClosed.Length > 0;
+
+    /// <summary>Whether a rule may mark now, given a folder where it asks for one, which the page's rule menu asks.</summary>
+    public bool CanMarkByRule => WhyCannotAct is null && _marks!.WhyRulesCannotMark is null && _groups.Count > 0;
+
+    /// <summary>
+    /// How many copies are marked, and what the marks that stand occupy, which a removal may free less
+    /// than, or "None" where nothing is marked.
+    /// </summary>
+    public string MarkedFigure => Marked switch
     {
-        0 => string.Empty,
-        1 => "1 copy marked.",
-        var count => $"{count:N0} copies marked.",
+        0 => "None",
+        1 => $"1 copy, {FreeSpace.Format(MarkedSpace)}",
+        var count => $"{count:N0} copies, {FreeSpace.Format(MarkedSpace)}",
     };
+
+    private long MarkedSpace => _groups.Sum(group => group.MarkedSpace);
 
     private int Marked => _groups.Sum(group => group.Marks.MarkedCount);
 
@@ -168,6 +176,7 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
             refused = row.Group.Mark(row.Copy, marks.Keeping);
         }
 
+        row.Owner.Recount(marks.Keeping);
         Counted();
 
         return refused;
@@ -176,8 +185,7 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
     /// <summary>Whether marks may change now, which each copy's check box asks.</summary>
     internal bool MayMark() => _mayMark;
 
-    private bool CanRunRule() =>
-        WhyCannotAct is null && _marks!.WhyRulesCannotMark is null && _groups.Count > 0 && (!RuleNeedsFolder || RuleFolder.Length > 0);
+    private bool CanRunRule() => CanMarkByRule && (!RuleNeedsFolder || RuleFolder.Length > 0);
 
     [RelayCommand(CanExecute = nameof(CanRunRule))]
     private async Task RunRuleAsync()
@@ -213,17 +221,7 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
                     "The rule stopped part-way. The marks it made before it stopped stay, and each can be undone."));
             }
 
-            var untouched = outcome?.Untouched.ToDictionary(pair => pair.Group, pair => pair.Reason) ?? [];
-
-            foreach (var group in _groups)
-            {
-                group.Noted(untouched.GetValueOrDefault(group.Marks) ?? group.Marks.WhyNothingCanBeKept(marks.Keeping));
-
-                foreach (var copy in group.Copies)
-                {
-                    copy.MarksChanged();
-                }
-            }
+            await ShowMarkedAsync(marks.Keeping, outcome?.Untouched.ToDictionary(pair => pair.Group, pair => pair.Reason) ?? []);
         });
     }
 
@@ -241,11 +239,7 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
         foreach (var group in _groups)
         {
             group.Marks.Clear();
-
-            foreach (var copy in group.Copies)
-            {
-                copy.MarksChanged();
-            }
+            group.MarksChanged(markedSpace: 0);
         }
 
         Outcome.Say(StatusLine.Empty);
@@ -330,10 +324,11 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
 
         // Not stopped by the page's Stop: it shows a judgement already made, and rows left half
         // updated would show some copies as the machine was and others as it is.
-        var (standings, notes) = await Task.Run(
+        var (standings, notes, spaces) = await Task.Run(
             () => (
                 copies.Select(row => keeping.Standing(row.Copy)).ToList(),
-                groups.Select(group => group.Marks.WhyNothingCanBeKept(keeping)).ToList()),
+                groups.Select(group => group.Marks.WhyNothingCanBeKept(keeping)).ToList(),
+                groups.Select(group => group.CountMarked(keeping)).ToList()),
             CancellationToken.None);
 
         for (var i = 0; i < copies.Count; i++)
@@ -344,8 +339,35 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
         for (var i = 0; i < groups.Count; i++)
         {
             groups[i].Noted(notes[i]);
+            groups[i].Counted(spaces[i]);
         }
     }
+
+    /// <summary>
+    /// Show every group's marks after a rule changed them: why the rule left a group as it was, from
+    /// <paramref name="untouched"/>, or else why no copy there can be kept, and what its marks occupy.
+    /// Asked off this thread, as <see cref="ShowJudgedAsync"/> is, since it asks the policy of every
+    /// copy, and not stopped by the page's Stop, which would leave some groups showing marks undone.
+    /// </summary>
+    private async Task ShowMarkedAsync(CopyKeeping keeping, Dictionary<GroupMarks, string> untouched)
+    {
+        List<DuplicateGroupRow> groups = [.. _groups];
+
+        var shown = await Task.Run(
+            () => groups
+                .Select(group => (
+                    Note: untouched.GetValueOrDefault(group.Marks) ?? group.Marks.WhyNothingCanBeKept(keeping),
+                    Space: group.CountMarked(keeping)))
+                .ToList(),
+            CancellationToken.None);
+
+        for (var i = 0; i < groups.Count; i++)
+        {
+            groups[i].Noted(shown[i].Note);
+            groups[i].MarksChanged(shown[i].Space);
+        }
+    }
+
 
     /// <summary>Run <paramref name="action"/> with every mark, rule and removal held until it ends, and Stop open meanwhile.</summary>
     private async Task StoppableAsync(Func<CancellationToken, BusySpan, Task> action)
@@ -387,7 +409,7 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
 
     private void Counted()
     {
-        OnPropertyChanged(nameof(MarkedSummary));
+        OnPropertyChanged(nameof(MarkedFigure));
         Refresh();
     }
 
@@ -395,6 +417,8 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
     private void Refresh()
     {
         OnPropertyChanged(nameof(WhyClosed));
+        OnPropertyChanged(nameof(HasWhyClosed));
+        OnPropertyChanged(nameof(CanMarkByRule));
         RunRuleCommand.NotifyCanExecuteChanged();
         ClearMarksCommand.NotifyCanExecuteChanged();
         MoveToRecycleBinCommand.NotifyCanExecuteChanged();

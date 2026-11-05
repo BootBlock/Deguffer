@@ -7,27 +7,27 @@ namespace Deguffer.App.ViewModels;
 
 /// <summary>
 /// One copy in a group: where it is, cut where its path differs from the others', what it is, whether
-/// it is marked, and why it may not be marked or counted on as the copy kept.
+/// it is marked or stays, and why it may not be marked or counted on as the copy kept.
 /// </summary>
 public sealed partial class DuplicateCopyRow : ObservableObject
 {
     private readonly Func<DuplicateCopyRow, string?> _toggle;
     private readonly Func<bool> _mayMark;
 
-    /// <param name="group">The marks on the copy's group, which say whether it is marked.</param>
+    /// <param name="owner">The copy's group, whose marks say whether it is marked.</param>
     /// <param name="keeping">The keeping rule as last judged, which says why it may not be marked or kept.</param>
     /// <param name="toggle">Marks or unmarks the copy, answering Core's refusal, or null where it was done.</param>
     /// <param name="mayMark">Whether the page lets any mark change now.</param>
     public DuplicateCopyRow(
         DuplicateCandidate copy,
         PathParts path,
-        GroupMarks group,
+        DuplicateGroupRow owner,
         CopyKeeping keeping,
         Func<DuplicateCopyRow, string?> toggle,
         Func<bool> mayMark)
     {
         Copy = copy;
-        Group = group;
+        Owner = owner;
         _toggle = toggle;
         _mayMark = mayMark;
         Same = path.Same;
@@ -43,7 +43,10 @@ public sealed partial class DuplicateCopyRow : ObservableObject
 
     public DuplicateCandidate Copy { get; }
 
-    public GroupMarks Group { get; }
+    /// <summary>The group the copy is listed in, which shows its marks again when one of them changes.</summary>
+    public DuplicateGroupRow Owner { get; }
+
+    public GroupMarks Group => Owner.Marks;
 
     /// <summary>The start of the path, which another copy's path starts with too.</summary>
     public string Same { get; }
@@ -70,6 +73,12 @@ public sealed partial class DuplicateCopyRow : ObservableObject
 
     /// <summary>Whether the copy is marked, as its group's marks say.</summary>
     public bool IsMarked => Group.IsMarked(Copy);
+
+    /// <summary>
+    /// Whether the row says the copy stays: it is unmarked in a group where another copy is marked.
+    /// An unmarked copy is never removed, so this holds whatever the keeping rule says of it.
+    /// </summary>
+    public bool Stays => !IsMarked && Group.MarkedCount > 0;
 
     /// <summary>Why the copy is never marked or is refused, as last judged, or an empty string.</summary>
     [ObservableProperty]
@@ -99,14 +108,16 @@ public sealed partial class DuplicateCopyRow : ObservableObject
     public bool HasNote => Note.Length > 0;
 
     /// <summary>
-    /// Everything the row shows, for a screen reader: what the copy is, then each sentence under it
-    /// once, so a refusal that repeats why the copy is never marked is not read twice.
+    /// Everything the row shows, for a screen reader: what the copy is and whether it is marked or
+    /// stays, then each sentence under it once, so a refusal that repeats why the copy is never
+    /// marked is not read twice.
     /// </summary>
     public string Description => string.Join(
         " ",
         new[]
         {
             $"{Copy.Path}, {Size}, last modified {Modified}{(IsReference ? ", in a reference location" : string.Empty)}.",
+            IsMarked ? "Marked for removal." : Stays ? "Stays." : string.Empty,
             Names,
             WhyNotMarked,
             WhyNotKept,
@@ -124,7 +135,10 @@ public sealed partial class DuplicateCopyRow : ObservableObject
     private void Toggle()
     {
         Note = _toggle(this) ?? string.Empty;
-        OnPropertyChanged(nameof(IsMarked));
+
+        // Told again even where the group showed its marks: a refusal before any mark changed shows
+        // nothing there, and the check box has already drawn the mark it was clicked to make.
+        MarksShown();
     }
 
     private bool CanToggle() => _mayMark();
@@ -136,11 +150,15 @@ public sealed partial class DuplicateCopyRow : ObservableObject
         WhyNotKept = standing.WhyNotKept ?? string.Empty;
     }
 
-    /// <summary>Show the copy's mark again, after a rule or a clear changed the marks, dropping a refusal it no longer answers.</summary>
-    internal void MarksChanged()
+    /// <summary>Drop the refusal or removal the row says, after a rule or a clear changed the marks it answered.</summary>
+    internal void ClearNote() => Note = string.Empty;
+
+    /// <summary>Show the copy's mark, and whether it stays, as its group's marks say now.</summary>
+    internal void MarksShown()
     {
-        Note = string.Empty;
         OnPropertyChanged(nameof(IsMarked));
+        OnPropertyChanged(nameof(Stays));
+        OnPropertyChanged(nameof(Description));
     }
 
     /// <summary>Show what a removal did with the copy.</summary>
@@ -148,5 +166,4 @@ public sealed partial class DuplicateCopyRow : ObservableObject
 
     /// <summary>Whether the page lets marks change has changed.</summary>
     internal void GateChanged() => ToggleCommand.NotifyCanExecuteChanged();
-
 }

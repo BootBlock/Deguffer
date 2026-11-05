@@ -4,6 +4,7 @@ using Deguffer.Core.Duplicates;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 using Deguffer.Testing;
 
 namespace Deguffer.App.Tests;
@@ -462,14 +463,14 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
         var page = PageWithPhotos(Finds(group));
         await page.SearchCommand.ExecuteAsync(null);
         Toggle(page, group.Files[1]);
-        Assert.Equal("1 copy marked.", page.Marking.MarkedSummary);
+        Assert.Equal($"1 copy, {FreeSpace.Format(group.Files[1].SizeOnDisk)}", page.Marking.MarkedFigure);
         List<string?> told = [];
         page.Marking.PropertyChanged += (_, changed) => told.Add(changed.PropertyName);
 
         await page.SearchCommand.ExecuteAsync(null);
 
-        Assert.Contains(nameof(DuplicateMarkingViewModel.MarkedSummary), told);
-        Assert.Equal(string.Empty, page.Marking.MarkedSummary);
+        Assert.Contains(nameof(DuplicateMarkingViewModel.MarkedFigure), told);
+        Assert.Equal("None", page.Marking.MarkedFigure);
     });
 
     /// <summary>

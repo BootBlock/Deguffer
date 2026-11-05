@@ -331,10 +331,13 @@ Content is compared by a checksum of your choice, XXH128 by default. Checksums a
 second search only reads the files that have changed. You can set a location as a reference, so that
 its files are matched but never marked for removal.
 
-In this search, the "Keep the newest copy" rule has marked the older copies of each photo, and the
-part of each path that differs from the others in its group is highlighted:
+In this search, the "Keep the copy with the shortest path" rule from the Mark menu has marked every
+copy but one in each group. The figures at the top say how much the copies that could go occupy,
+each group is named by its file and says how many of its copies are marked, each copy says whether
+it is marked or stays, and the part of each path that differs from the others in its group is
+highlighted. The search settings fold to one line once a search starts:
 
-![The Duplicates page with a content search finished, showing a group of three identical photos with two copies marked for removal](assets/screenshots/duplicates.png)
+![The Duplicates page with a content search finished: the figures over five groups, then a video and a group of four identical photos, with every copy but one in each marked for removal and the copy that stays labelled](assets/screenshots/duplicates.png)
 
 Nothing is marked when a search finishes. You mark copies yourself or with a named rule, and every
 group always keeps at least one copy that can be relied on. That means a copy on an internal drive,

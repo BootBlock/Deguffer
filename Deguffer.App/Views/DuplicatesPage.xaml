@@ -5,105 +5,196 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:views="using:Deguffer.App.Views"
     xmlns:vm="using:Deguffer.App.ViewModels"
+    xmlns:controls="using:Deguffer.App.Controls"
     Background="Transparent">
 
     <Page.Resources>
+        <!-- The date and size columns, one width each down the whole list, so the figures of every
+             copy in every group line up however wide each one is. See WidthGroup. -->
+        <controls:WidthGroup x:Key="ModifiedWidths" />
+        <controls:WidthGroup x:Key="SizeWidths" />
+
+        <!-- What happens to a copy, on the tier chip's shape: marked in the critical colour, because
+             a marked copy is what a removal takes, and staying in the success colour. The words say
+             it, so the colour only reinforces them (§6.5). -->
+        <Style x:Key="MarkedChip" TargetType="ContentControl" BasedOn="{StaticResource TierChipBase}">
+            <Setter Property="Background" Value="{ThemeResource SystemFillColorCriticalBackgroundBrush}" />
+            <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+        </Style>
+
+        <Style x:Key="StaysChip" TargetType="ContentControl" BasedOn="{StaticResource TierChipBase}">
+            <Setter Property="Background" Value="{ThemeResource SystemFillColorSuccessBackgroundBrush}" />
+            <Setter Property="Foreground" Value="{ThemeResource SystemFillColorSuccessBrush}" />
+        </Style>
+
+        <!-- A small glyph before a line of reasons or a note, so a row that says something stands
+             out from one that does not before either is read. -->
+        <Style x:Key="LineGlyph" TargetType="FontIcon">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Margin" Value="0,3,0,0" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="AutomationProperties.AccessibilityView" Value="Raw" />
+        </Style>
+
         <!-- One copy: its mark, then its path, with what differs from the other copies' paths picked
              out by weight and an underline as well as colour, so it reads in high contrast and
-             without colour; then its size and time, and what kind of copy it is. Under it, why it
-             may not be marked or kept, and why a mark was refused or what a removal did, as text
-             rather than a tooltip, so pointer, keyboard and screen reader all reach it. -->
+             without colour; then whether it is marked or stays, what kind of copy it is, its time
+             and size. A marked copy's row is tinted as well as labelled. Under it, why it may not be
+             marked or kept, and why a mark was refused or what a removal did, as text rather than a
+             tooltip, so pointer, keyboard and screen reader all reach it. -->
         <DataTemplate x:Key="CopyTemplate" x:DataType="vm:DuplicateCopyRow">
-            <Grid Padding="0,3" ColumnSpacing="12" ColumnDefinitions="Auto,*,Auto,Auto,Auto" RowDefinitions="Auto,Auto,Auto"
-                  AutomationProperties.Name="{x:Bind Description, Mode=OneWay}">
-                <!-- The check box shows the copy's mark as Core holds it, and asks Core to change
-                     it: a refused mark never shows as made. -->
-                <CheckBox MinWidth="0" Padding="0" VerticalAlignment="Center"
-                          IsChecked="{x:Bind IsMarked, Mode=OneWay}"
-                          Command="{x:Bind ToggleCommand}"
-                          AutomationProperties.Name="{x:Bind MarkName}"
-                          AutomationProperties.HelpText="{x:Bind Description, Mode=OneWay}" />
+            <Grid AutomationProperties.Name="{x:Bind Description, Mode=OneWay}">
+                <Border Background="{ThemeResource SystemFillColorCriticalBackgroundBrush}" CornerRadius="4"
+                        Visibility="{x:Bind IsMarked, Mode=OneWay}" />
 
-                <TextBlock Grid.Column="1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" IsTextSelectionEnabled="True"
-                           ToolTipService.ToolTip="{x:Bind Copy.Path}">
-                    <Run Text="{x:Bind Same}" /><Run Text="{x:Bind Differs}" FontWeight="Bold"
-                         TextDecorations="Underline"
-                         Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" /><Run Text="{x:Bind SameEnd}" />
-                </TextBlock>
+                <Grid Padding="8,4,12,4" ColumnSpacing="12" ColumnDefinitions="Auto,*,Auto,Auto,Auto" RowDefinitions="Auto,Auto,Auto">
+                    <!-- The check box shows the copy's mark as Core holds it, and asks Core to change
+                         it: a refused mark never shows as made. -->
+                    <CheckBox MinWidth="0" Padding="0" VerticalAlignment="Center"
+                              IsChecked="{x:Bind IsMarked, Mode=OneWay}"
+                              Command="{x:Bind ToggleCommand}"
+                              AutomationProperties.Name="{x:Bind MarkName}"
+                              AutomationProperties.HelpText="{x:Bind Description, Mode=OneWay}" />
 
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                    <ContentControl Content="Reference" Style="{StaticResource StandingChip}"
-                                    Visibility="{x:Bind IsReference}"
-                                    ToolTipService.ToolTip="In a reference location: matched, and never marked or removed."
-                                    AutomationProperties.AccessibilityView="Raw" />
-                    <ContentControl Content="Several names" Style="{StaticResource StandingChip}"
-                                    Visibility="{x:Bind HasSeveralNames}"
-                                    ToolTipService.ToolTip="Removing one name of a file with several frees nothing, so none is marked."
-                                    AutomationProperties.AccessibilityView="Raw" />
-                </StackPanel>
+                    <TextBlock Grid.Column="1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" IsTextSelectionEnabled="True"
+                               ToolTipService.ToolTip="{x:Bind Copy.Path}">
+                        <Run Text="{x:Bind Same}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" /><Run Text="{x:Bind Differs}" FontWeight="SemiBold"
+                             TextDecorations="Underline"
+                             Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" /><Run Text="{x:Bind SameEnd}" />
+                    </TextBlock>
 
-                <TextBlock Grid.Column="3" VerticalAlignment="Center" Text="{x:Bind Modified}" Style="{StaticResource SecondaryText}"
-                           AutomationProperties.AccessibilityView="Raw" />
-                <TextBlock Grid.Column="4" VerticalAlignment="Center" MinWidth="72" TextAlignment="Right" Text="{x:Bind Size}"
-                           AutomationProperties.AccessibilityView="Raw" />
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <ContentControl Content="Marked" Style="{StaticResource MarkedChip}"
+                                        Visibility="{x:Bind IsMarked, Mode=OneWay}"
+                                        ToolTipService.ToolTip="A removal takes this copy, once you confirm the list, and only if its bytes still match a copy that stays."
+                                        AutomationProperties.AccessibilityView="Raw" />
+                        <ContentControl Content="Stays" Style="{StaticResource StaysChip}"
+                                        Visibility="{x:Bind Stays, Mode=OneWay}"
+                                        ToolTipService.ToolTip="Unmarked, so no removal takes this copy."
+                                        AutomationProperties.AccessibilityView="Raw" />
+                        <ContentControl Content="Reference" Style="{StaticResource StandingChip}"
+                                        Visibility="{x:Bind IsReference}"
+                                        ToolTipService.ToolTip="In a reference location: matched, and never marked or removed."
+                                        AutomationProperties.AccessibilityView="Raw" />
+                        <ContentControl Content="Several names" Style="{StaticResource StandingChip}"
+                                        Visibility="{x:Bind HasSeveralNames}"
+                                        ToolTipService.ToolTip="Removing one name of a file with several frees nothing, so none is marked."
+                                        AutomationProperties.AccessibilityView="Raw" />
+                    </StackPanel>
 
-                <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="4" TextWrapping="Wrap"
-                           Text="{x:Bind Reasons, Mode=OneWay}" Style="{StaticResource SecondaryText}"
-                           Visibility="{x:Bind HasReasons, Mode=OneWay}"
-                           AutomationProperties.AccessibilityView="Raw" />
-                <TextBlock Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="4" TextWrapping="Wrap"
-                           Text="{x:Bind Note, Mode=OneWay}"
-                           Foreground="{ThemeResource SystemFillColorCautionBrush}"
-                           Visibility="{x:Bind HasNote, Mode=OneWay}"
-                           AutomationProperties.LiveSetting="Polite" />
+                    <Border Grid.Column="3" controls:WidthGroup.Group="{StaticResource ModifiedWidths}">
+                        <TextBlock VerticalAlignment="Center" HorizontalAlignment="Right" Text="{x:Bind Modified}"
+                                   Style="{StaticResource SecondaryText}" TextWrapping="NoWrap"
+                                   AutomationProperties.AccessibilityView="Raw" />
+                    </Border>
+                    <Border Grid.Column="4" MinWidth="64" controls:WidthGroup.Group="{StaticResource SizeWidths}">
+                        <TextBlock VerticalAlignment="Center" HorizontalAlignment="Right" Text="{x:Bind Size}"
+                                   AutomationProperties.AccessibilityView="Raw" />
+                    </Border>
+
+                    <Grid Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="4" ColumnSpacing="6" ColumnDefinitions="Auto,*"
+                          Visibility="{x:Bind HasReasons, Mode=OneWay}">
+                        <FontIcon Glyph="&#xE946;" Style="{StaticResource LineGlyph}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Grid.Column="1" TextWrapping="Wrap" Text="{x:Bind Reasons, Mode=OneWay}"
+                                   Style="{StaticResource SecondaryText}" FontSize="12"
+                                   AutomationProperties.AccessibilityView="Raw" />
+                    </Grid>
+                    <Grid Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="4" ColumnSpacing="6" ColumnDefinitions="Auto,*"
+                          Visibility="{x:Bind HasNote, Mode=OneWay}">
+                        <FontIcon Glyph="&#xE7BA;" Style="{StaticResource LineGlyph}" Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                        <TextBlock Grid.Column="1" TextWrapping="Wrap" Text="{x:Bind Note, Mode=OneWay}"
+                                   Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                   AutomationProperties.LiveSetting="Polite" />
+                    </Grid>
+                </Grid>
             </Grid>
         </DataTemplate>
 
-        <!-- One group: what it could free and what matched it, the sentence a name, size or time
-             match carries, then every copy. -->
+        <!-- One group, on a card of its own so where one ends and the next begins needs no reading:
+             what kind of file it is and its name, how many copies of what size and what matched
+             them, what its copies that could go occupy, how many are marked, the checksum, the
+             sentences a name, size or time match and a rule carry, then every copy. -->
         <DataTemplate x:Key="GroupTemplate" x:DataType="vm:DuplicateGroupRow">
-            <StackPanel Padding="0,10" Spacing="4"
-                        BorderThickness="0,0,0,1" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
-                <Grid ColumnSpacing="12" ColumnDefinitions="*,Auto"
-                      AutomationProperties.Name="{x:Bind Description, Mode=OneWay}">
-                    <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" />
-                    <TextBlock Grid.Column="1" Text="{x:Bind Freeable}" Style="{StaticResource SecondaryText}" />
-                </Grid>
+            <Border Style="{StaticResource CardStyle}" Padding="16,14,16,10" Margin="0,0,0,10">
+                <StackPanel Spacing="8">
+                    <Grid ColumnSpacing="14" ColumnDefinitions="Auto,*,Auto"
+                          AutomationProperties.Name="{x:Bind Description, Mode=OneWay}">
+                        <Border Width="40" Height="40" CornerRadius="6" VerticalAlignment="Top"
+                                Background="{ThemeResource ControlAltFillColorSecondaryBrush}">
+                            <FontIcon Glyph="{x:Bind Glyph}" FontSize="20"
+                                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                      AutomationProperties.AccessibilityView="Raw" />
+                        </Border>
 
-                <TextBlock Text="{x:Bind Matched}" Style="{StaticResource SecondaryText}"
-                           TextTrimming="CharacterEllipsis" IsTextSelectionEnabled="True"
-                           AutomationProperties.AccessibilityView="Raw" />
+                        <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBlock Text="{x:Bind Name}" Style="{StaticResource BodyStrongTextBlockStyle}" FontSize="15"
+                                           TextTrimming="CharacterEllipsis" IsTextSelectionEnabled="True"
+                                           AutomationProperties.AccessibilityView="Raw" />
+                                <ContentControl Content="{x:Bind MarkedCount, Mode=OneWay}" Style="{StaticResource MarkedChip}"
+                                                Visibility="{x:Bind HasMarks, Mode=OneWay}"
+                                                AutomationProperties.AccessibilityView="Raw" />
+                                <ContentControl Content="May differ" Style="{StaticResource StandingChipUnproven}"
+                                                Visibility="{x:Bind HasMayDiffer}"
+                                                AutomationProperties.AccessibilityView="Raw" />
+                            </StackPanel>
+                            <TextBlock Text="{x:Bind Summary}" Style="{StaticResource SecondaryText}"
+                                       AutomationProperties.AccessibilityView="Raw" />
+                        </StackPanel>
 
-                <TextBlock Text="{x:Bind MayDiffer}" TextWrapping="Wrap"
-                           Foreground="{ThemeResource SystemFillColorCautionBrush}"
-                           Visibility="{x:Bind HasMayDiffer}"
-                           AutomationProperties.AccessibilityView="Raw" />
+                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                            <TextBlock Text="{x:Bind Freeable}" Style="{StaticResource Figure}" FontSize="16" HorizontalAlignment="Right"
+                                       AutomationProperties.AccessibilityView="Raw" />
+                            <TextBlock Text="in copies that could go" Style="{StaticResource FieldLabel}" HorizontalAlignment="Right"
+                                       AutomationProperties.AccessibilityView="Raw" />
+                        </StackPanel>
+                    </Grid>
 
-                <!-- Why no copy here can be kept, or why the last rule left the group as it was. -->
-                <TextBlock Text="{x:Bind Note, Mode=OneWay}" TextWrapping="Wrap"
-                           Foreground="{ThemeResource SystemFillColorCautionBrush}"
-                           Visibility="{x:Bind HasNote, Mode=OneWay}"
-                           AutomationProperties.AccessibilityView="Raw" />
+                    <TextBlock Text="{x:Bind Checksum}" Visibility="{x:Bind HasChecksum}" Margin="54,0,0,0"
+                               FontFamily="Cascadia Mono, Consolas" FontSize="11"
+                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                               TextTrimming="CharacterEllipsis" IsTextSelectionEnabled="True"
+                               AutomationProperties.AccessibilityView="Raw" />
 
-                <ItemsControl ItemsSource="{x:Bind Copies}" ItemTemplate="{StaticResource CopyTemplate}"
-                              IsTabStop="False" />
-            </StackPanel>
+                    <Grid Margin="54,0,0,0" ColumnSpacing="6" ColumnDefinitions="Auto,*" Visibility="{x:Bind HasMayDiffer}">
+                        <FontIcon Glyph="&#xE7BA;" Style="{StaticResource LineGlyph}" Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                        <TextBlock Grid.Column="1" Text="{x:Bind MayDiffer}" TextWrapping="Wrap"
+                                   Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                   AutomationProperties.AccessibilityView="Raw" />
+                    </Grid>
+
+                    <!-- Why no copy here can be kept, or why the last rule left the group as it was. -->
+                    <Grid Margin="54,0,0,0" ColumnSpacing="6" ColumnDefinitions="Auto,*" Visibility="{x:Bind HasNote, Mode=OneWay}">
+                        <FontIcon Glyph="&#xE7BA;" Style="{StaticResource LineGlyph}" Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                        <TextBlock Grid.Column="1" Text="{x:Bind Note, Mode=OneWay}" TextWrapping="Wrap"
+                                   Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                   AutomationProperties.AccessibilityView="Raw" />
+                    </Grid>
+
+                    <Border Style="{StaticResource Divider}" />
+
+                    <ItemsControl ItemsSource="{x:Bind Copies}" ItemTemplate="{StaticResource CopyTemplate}"
+                                  IsTabStop="False" />
+                </StackPanel>
+            </Border>
         </DataTemplate>
 
         <Style x:Key="GroupContainer" TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="0" />
         </Style>
     </Page.Resources>
 
-    <Grid Padding="20,12,20,16" RowSpacing="10" RowDefinitions="Auto,Auto,Auto,Auto,Auto,*">
+    <!-- Laid out as the Storage page is: the title, then a card for each stage of the work. The
+         search settings fold to one line once a search starts, so the results have the page; the
+         figures say what was found before any group is read; and what marks and removes sits in a
+         bar under the list, as Clean does on Storage. Layout roots stay transparent so the §6.5
+         material shows through. -->
+    <Grid Padding="28,8,28,0" RowSpacing="12" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
 
         <Grid Grid.Row="0" ColumnSpacing="12" ColumnDefinitions="*,Auto">
-            <StackPanel Spacing="4">
-                <TextBlock Text="Duplicates" Style="{StaticResource SubtitleTextBlockStyle}" />
-                <TextBlock Text="{x:Bind ViewModel.Headline, Mode=OneWay}" TextWrapping="Wrap"
-                           Style="{StaticResource SecondaryText}" />
-            </StackPanel>
+            <TextBlock Text="Duplicates" Style="{StaticResource PageTitle}" VerticalAlignment="Center" />
 
             <Button Grid.Column="1" Content="Reopen as administrator" VerticalAlignment="Center"
                     Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
@@ -111,200 +202,314 @@
                     ToolTipService.ToolTip="As administrator, a search reads each drive's file table, which is much faster than walking its folders." />
         </Grid>
 
-        <!-- Where to search, beside what makes a match. Each control writes straight through: a
-             location to the list, a criterion or a filter to the preferences. -->
-        <Grid Grid.Row="1" ColumnSpacing="24" ColumnDefinitions="*,*">
-            <!-- Held while a rule or a removal runs: a location or role changed then would change
-                 what the marks mean under a removal the user has already confirmed. -->
-            <ContentControl IsTabStop="False" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
-                            IsEnabled="{x:Bind ViewModel.Marking.IsIdle, Mode=OneWay}">
-            <StackPanel Spacing="8">
-                <TextBlock Text="Where to search" Style="{StaticResource BodyStrongTextBlockStyle}" />
+        <!-- The search: one line that says what it will search and how, the button that starts it,
+             and the settings under it, folded once a search starts. -->
+        <Border Grid.Row="1" Style="{StaticResource CardStyle}" Padding="0">
+            <StackPanel>
+                <Grid Padding="16,12" ColumnSpacing="12" ColumnDefinitions="Auto,*,Auto,Auto">
+                    <FontIcon Glyph="&#xE721;" FontSize="20" VerticalAlignment="Center"
+                              Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                              AutomationProperties.AccessibilityView="Raw" />
 
-                <Grid ColumnSpacing="8" ColumnDefinitions="Auto,Auto,Auto">
-                    <ComboBox MinWidth="88"
-                              ItemsSource="{x:Bind ViewModel.Locations.Drives}"
-                              SelectedItem="{x:Bind ViewModel.Locations.SelectedDrive, Mode=TwoWay}"
-                              ItemTemplateSelector="{StaticResource DriveEntry}"
-                              DropDownOpened="OnDriveListOpened"
-                              AutomationProperties.Name="Drive to add" />
-                    <Button Grid.Column="1" Content="Add drive" Command="{x:Bind ViewModel.Locations.AddDriveCommand}" />
-                    <Button Grid.Column="2" Content="Add folder…" Click="OnAddFolder"
-                            AutomationProperties.Name="Choose a folder to add" />
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Text="Search" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock Text="{x:Bind ViewModel.SetupSummary, Mode=OneWay}" Style="{StaticResource SecondaryText}"
+                                   FontSize="12" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                   ToolTipService.ToolTip="{x:Bind ViewModel.SetupSummary, Mode=OneWay}" />
+                    </StackPanel>
+
+                    <ToggleButton Grid.Column="2" VerticalAlignment="Center"
+                                  IsChecked="{x:Bind ViewModel.IsSetupOpen, Mode=TwoWay}"
+                                  AutomationProperties.Name="Show the search settings">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE713;" FontSize="14" />
+                            <TextBlock Text="Settings" />
+                        </StackPanel>
+                    </ToggleButton>
+
+                    <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Content="Search" MinWidth="96" Style="{StaticResource AccentButtonStyle}"
+                                Command="{x:Bind ViewModel.SearchCommand}"
+                                Visibility="{x:Bind ViewModel.IsIdle, Mode=OneWay}" />
+                        <Button Content="Stop" MinWidth="96" Command="{x:Bind ViewModel.StopCommand}"
+                                Visibility="{x:Bind ViewModel.IsSearching, Mode=OneWay}"
+                                AutomationProperties.Name="Stop searching"
+                                ToolTipService.ToolTip="Stop searching. The groups already confirmed stay." />
+                    </StackPanel>
                 </Grid>
 
-                <TextBlock Text="{x:Bind ViewModel.Locations.Note, Mode=OneWay}" TextWrapping="Wrap"
-                           Foreground="{ThemeResource SystemFillColorCautionBrush}" />
-
-                <ListView x:Name="LocationsList" MaxHeight="150" SelectionMode="None"
-                          AutomationProperties.Name="Locations to search"
-                          ItemsSource="{x:Bind ViewModel.Locations.Rows}">
-                    <ListView.ItemTemplate>
-                        <DataTemplate x:DataType="vm:LocationRow">
-                            <Grid ColumnSpacing="12" ColumnDefinitions="*,Auto,Auto"
-                                  AutomationProperties.Name="{x:Bind Description, Mode=OneWay}">
-                                <TextBlock Text="{x:Bind Path}" VerticalAlignment="Center"
-                                           TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{x:Bind Path}" />
-                                <ToggleSwitch Grid.Column="1" OnContent="Reference" OffContent="Search"
-                                              MinWidth="0"
-                                              IsOn="{x:Bind IsReference, Mode=TwoWay}"
-                                              AutomationProperties.Name="{x:Bind SwitchName}"
-                                              ToolTipService.ToolTip="A reference is searched and matched, and its copies are never marked or removed." />
-                                <Button Grid.Column="2" Command="{x:Bind RemoveCommand}"
-                                        AutomationProperties.Name="Remove this location">
-                                    <FontIcon Glyph="&#xE711;" FontSize="12" />
-                                </Button>
-                            </Grid>
-                        </DataTemplate>
-                    </ListView.ItemTemplate>
-                </ListView>
-            </StackPanel>
-            </ContentControl>
-
-            <StackPanel Grid.Column="1" Spacing="8">
-                <TextBlock Text="What makes a match" Style="{StaticResource BodyStrongTextBlockStyle}" />
-
-                <StackPanel Orientation="Horizontal" Spacing="16">
-                    <CheckBox Content="Name" IsChecked="{x:Bind ViewModel.Filters.MatchName, Mode=TwoWay}" />
-                    <CheckBox Content="Size" IsChecked="{x:Bind ViewModel.Filters.MatchSize, Mode=TwoWay}" />
-                    <CheckBox Content="Last modified" IsChecked="{x:Bind ViewModel.Filters.MatchModified, Mode=TwoWay}" />
-                    <CheckBox Content="Content" IsChecked="{x:Bind ViewModel.Filters.MatchContent, Mode=TwoWay}" />
+                <!-- While a search runs, the stage it has reached; otherwise why it cannot run. -->
+                <StackPanel Padding="16,0,16,12" Spacing="6" Visibility="{x:Bind ViewModel.HasSearchStatus, Mode=OneWay}">
+                    <TextBlock Text="{x:Bind ViewModel.SearchStatus, Mode=OneWay}" TextWrapping="Wrap"
+                               Style="{StaticResource SecondaryText}" AutomationProperties.LiveSetting="Polite" />
+                    <ProgressBar Visibility="{x:Bind ViewModel.IsSearching, Mode=OneWay}"
+                                 IsIndeterminate="{x:Bind ViewModel.StageProgressIsUnknown, Mode=OneWay}"
+                                 Value="{x:Bind ViewModel.StageProgress, Mode=OneWay}"
+                                 AutomationProperties.Name="Search progress" />
                 </StackPanel>
 
-                <Grid ColumnSpacing="12" RowSpacing="8" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto">
-                    <TextBlock Text="Checksum" VerticalAlignment="Center" />
-                    <ComboBox Grid.Column="1" MinWidth="140"
-                              ItemsSource="{x:Bind ViewModel.Filters.AlgorithmNames}"
-                              SelectedIndex="{x:Bind ViewModel.Filters.AlgorithmIndex, Mode=TwoWay}"
-                              IsEnabled="{x:Bind ViewModel.Filters.MatchContent, Mode=OneWay}"
-                              AutomationProperties.Name="Checksum"
-                              ToolTipService.ToolTip="What a content match groups by. Every copy is compared byte for byte before it is removed, whichever this is." />
+                <!-- Where to search, beside what makes a match. Each control writes straight through:
+                     a location to the list, a criterion or a filter to the preferences. -->
+                <StackPanel Visibility="{x:Bind ViewModel.IsSetupOpen, Mode=OneWay}">
+                    <Border Style="{StaticResource Divider}" />
 
-                    <TextBlock Grid.Row="1" Text="Sizes" VerticalAlignment="Center" />
-                    <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                        <NumberBox Width="96" PlaceholderText="Smallest" Minimum="0"
-                                   Value="{x:Bind ViewModel.Filters.SmallestAmount, Mode=TwoWay}"
-                                   AutomationProperties.Name="Smallest size" />
-                        <ComboBox ItemsSource="{x:Bind ViewModel.Filters.UnitNames}"
-                                  SelectedIndex="{x:Bind ViewModel.Filters.SmallestUnitIndex, Mode=TwoWay}"
-                                  AutomationProperties.Name="Unit of the smallest size" />
-                        <TextBlock Text="to" VerticalAlignment="Center" />
-                        <NumberBox Width="96" PlaceholderText="Largest" Minimum="0"
-                                   Value="{x:Bind ViewModel.Filters.LargestAmount, Mode=TwoWay}"
-                                   AutomationProperties.Name="Largest size" />
-                        <ComboBox ItemsSource="{x:Bind ViewModel.Filters.UnitNames}"
-                                  SelectedIndex="{x:Bind ViewModel.Filters.LargestUnitIndex, Mode=TwoWay}"
-                                  AutomationProperties.Name="Unit of the largest size" />
-                    </StackPanel>
+                    <Grid Padding="16,14,16,16" ColumnSpacing="32" ColumnDefinitions="*,*">
+                        <!-- Held while a rule or a removal runs: a location or role changed then would
+                             change what the marks mean under a removal the user has already confirmed. -->
+                        <ContentControl IsTabStop="False" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
+                                        IsEnabled="{x:Bind ViewModel.Marking.IsIdle, Mode=OneWay}">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Where to search" Style="{StaticResource BodyStrongTextBlockStyle}" />
 
-                    <TextBlock Grid.Row="2" Text="Extensions" VerticalAlignment="Center" />
-                    <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                        <ComboBox ItemsSource="{x:Bind ViewModel.Filters.ExtensionModeNames}"
-                                  SelectedIndex="{x:Bind ViewModel.Filters.ExtensionModeIndex, Mode=TwoWay}"
-                                  AutomationProperties.Name="Which extensions to search" />
-                        <TextBox MinWidth="160" PlaceholderText="jpg, png"
-                                 Text="{x:Bind ViewModel.Filters.Extensions, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                 IsEnabled="{x:Bind ViewModel.Filters.ReadsExtensions, Mode=OneWay}"
-                                 AutomationProperties.Name="Extensions" />
-                    </StackPanel>
+                                <Grid ColumnSpacing="8" ColumnDefinitions="Auto,Auto,Auto">
+                                    <ComboBox MinWidth="88"
+                                              ItemsSource="{x:Bind ViewModel.Locations.Drives}"
+                                              SelectedItem="{x:Bind ViewModel.Locations.SelectedDrive, Mode=TwoWay}"
+                                              ItemTemplateSelector="{StaticResource DriveEntry}"
+                                              DropDownOpened="OnDriveListOpened"
+                                              AutomationProperties.Name="Drive to add" />
+                                    <Button Grid.Column="1" Command="{x:Bind ViewModel.Locations.AddDriveCommand}"
+                                            AutomationProperties.Name="Add drive">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <FontIcon Glyph="&#xEDA2;" FontSize="14" />
+                                            <TextBlock Text="Add drive" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Grid.Column="2" Click="OnAddFolder"
+                                            AutomationProperties.Name="Choose a folder to add">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <FontIcon Glyph="&#xE8F4;" FontSize="14" />
+                                            <TextBlock Text="Add folder…" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
 
-                    <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="16">
-                        <CheckBox Content="Hidden files" IsChecked="{x:Bind ViewModel.Filters.SearchHidden, Mode=TwoWay}" />
-                        <CheckBox Content="System files" IsChecked="{x:Bind ViewModel.Filters.SearchSystem, Mode=TwoWay}" />
-                        <CheckBox Content="Program and Windows folders"
-                                  IsChecked="{x:Bind ViewModel.Filters.SearchPassedOverPlaces, Mode=TwoWay}"
-                                  ToolTipService.ToolTip="Search the places passed over by default: Windows, program folders, other accounts and every Recycle Bin. A copy found there is matched, and never removed." />
-                    </StackPanel>
-                </Grid>
+                                <TextBlock Text="{x:Bind ViewModel.Locations.Note, Mode=OneWay}" TextWrapping="Wrap"
+                                           Foreground="{ThemeResource SystemFillColorCautionBrush}" />
 
-                <TextBlock Text="Your choices could not be saved, so they will not be remembered next time."
-                           Foreground="{ThemeResource SystemFillColorCautionBrush}" TextWrapping="Wrap"
-                           Visibility="{x:Bind ViewModel.Filters.SaveFailed, Mode=OneWay}" />
+                                <ListView x:Name="LocationsList" MaxHeight="168" SelectionMode="None"
+                                          AutomationProperties.Name="Locations to search"
+                                          ItemsSource="{x:Bind ViewModel.Locations.Rows}">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:LocationRow">
+                                            <Grid ColumnSpacing="12" ColumnDefinitions="Auto,*,Auto,Auto"
+                                                  AutomationProperties.Name="{x:Bind Description, Mode=OneWay}">
+                                                <FontIcon Glyph="&#xE8B7;" FontSize="14" VerticalAlignment="Center"
+                                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                          AutomationProperties.AccessibilityView="Raw" />
+                                                <TextBlock Grid.Column="1" Text="{x:Bind Path}" VerticalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{x:Bind Path}" />
+                                                <ToggleSwitch Grid.Column="2" OnContent="Reference" OffContent="Search"
+                                                              MinWidth="0"
+                                                              IsOn="{x:Bind IsReference, Mode=TwoWay}"
+                                                              AutomationProperties.Name="{x:Bind SwitchName}"
+                                                              ToolTipService.ToolTip="A reference is searched and matched, and its copies are never marked or removed." />
+                                                <Button Grid.Column="3" Command="{x:Bind RemoveCommand}"
+                                                        Style="{StaticResource SubtleButtonStyle}"
+                                                        AutomationProperties.Name="Remove this location"
+                                                        ToolTipService.ToolTip="Remove this location from the search">
+                                                    <FontIcon Glyph="&#xE711;" FontSize="12" />
+                                                </Button>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                            </StackPanel>
+                        </ContentControl>
+
+                        <StackPanel Grid.Column="1" Spacing="8">
+                            <TextBlock Text="What makes a match" Style="{StaticResource BodyStrongTextBlockStyle}" />
+
+                            <StackPanel Orientation="Horizontal" Spacing="16">
+                                <CheckBox Content="Name" MinWidth="0" IsChecked="{x:Bind ViewModel.Filters.MatchName, Mode=TwoWay}" />
+                                <CheckBox Content="Size" MinWidth="0" IsChecked="{x:Bind ViewModel.Filters.MatchSize, Mode=TwoWay}" />
+                                <CheckBox Content="Last modified" MinWidth="0" IsChecked="{x:Bind ViewModel.Filters.MatchModified, Mode=TwoWay}" />
+                                <CheckBox Content="Content" MinWidth="0" IsChecked="{x:Bind ViewModel.Filters.MatchContent, Mode=TwoWay}" />
+                            </StackPanel>
+
+                            <Grid ColumnSpacing="12" RowSpacing="8" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                                <TextBlock Text="Checksum" VerticalAlignment="Center" />
+                                <ComboBox Grid.Column="1" MinWidth="140"
+                                          ItemsSource="{x:Bind ViewModel.Filters.AlgorithmNames}"
+                                          SelectedIndex="{x:Bind ViewModel.Filters.AlgorithmIndex, Mode=TwoWay}"
+                                          IsEnabled="{x:Bind ViewModel.Filters.MatchContent, Mode=OneWay}"
+                                          AutomationProperties.Name="Checksum"
+                                          ToolTipService.ToolTip="What a content match groups by. Every copy is compared byte for byte before it is removed, whichever this is." />
+
+                                <TextBlock Grid.Row="1" Text="Sizes" VerticalAlignment="Center" />
+                                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                    <NumberBox Width="96" PlaceholderText="Smallest" Minimum="0"
+                                               Value="{x:Bind ViewModel.Filters.SmallestAmount, Mode=TwoWay}"
+                                               AutomationProperties.Name="Smallest size" />
+                                    <ComboBox ItemsSource="{x:Bind ViewModel.Filters.UnitNames}"
+                                              SelectedIndex="{x:Bind ViewModel.Filters.SmallestUnitIndex, Mode=TwoWay}"
+                                              AutomationProperties.Name="Unit of the smallest size" />
+                                    <TextBlock Text="to" VerticalAlignment="Center" />
+                                    <NumberBox Width="96" PlaceholderText="Largest" Minimum="0"
+                                               Value="{x:Bind ViewModel.Filters.LargestAmount, Mode=TwoWay}"
+                                               AutomationProperties.Name="Largest size" />
+                                    <ComboBox ItemsSource="{x:Bind ViewModel.Filters.UnitNames}"
+                                              SelectedIndex="{x:Bind ViewModel.Filters.LargestUnitIndex, Mode=TwoWay}"
+                                              AutomationProperties.Name="Unit of the largest size" />
+                                </StackPanel>
+
+                                <TextBlock Grid.Row="2" Text="Extensions" VerticalAlignment="Center" />
+                                <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                    <ComboBox ItemsSource="{x:Bind ViewModel.Filters.ExtensionModeNames}"
+                                              SelectedIndex="{x:Bind ViewModel.Filters.ExtensionModeIndex, Mode=TwoWay}"
+                                              AutomationProperties.Name="Which extensions to search" />
+                                    <TextBox MinWidth="160" PlaceholderText="jpg, png"
+                                             Text="{x:Bind ViewModel.Filters.Extensions, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                             IsEnabled="{x:Bind ViewModel.Filters.ReadsExtensions, Mode=OneWay}"
+                                             AutomationProperties.Name="Extensions" />
+                                </StackPanel>
+
+                                <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="16">
+                                    <CheckBox Content="Hidden files" MinWidth="0" IsChecked="{x:Bind ViewModel.Filters.SearchHidden, Mode=TwoWay}" />
+                                    <CheckBox Content="System files" MinWidth="0" IsChecked="{x:Bind ViewModel.Filters.SearchSystem, Mode=TwoWay}" />
+                                    <CheckBox Content="Program and Windows folders" MinWidth="0"
+                                              IsChecked="{x:Bind ViewModel.Filters.SearchPassedOverPlaces, Mode=TwoWay}"
+                                              ToolTipService.ToolTip="Search the places passed over by default: Windows, program folders, other accounts and every Recycle Bin. A copy found there is matched, and never removed." />
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock Text="Your choices could not be saved, so they will not be remembered next time."
+                                       Foreground="{ThemeResource SystemFillColorCautionBrush}" TextWrapping="Wrap"
+                                       Visibility="{x:Bind ViewModel.Filters.SaveFailed, Mode=OneWay}" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
             </StackPanel>
-        </Grid>
+        </Border>
 
-        <Grid Grid.Row="2" ColumnSpacing="12" RowSpacing="6" ColumnDefinitions="Auto,Auto,*" RowDefinitions="Auto,Auto">
-            <Button Content="Search" Style="{StaticResource AccentButtonStyle}" Command="{x:Bind ViewModel.SearchCommand}" />
-            <Button Grid.Column="1" Content="Stop" Command="{x:Bind ViewModel.StopCommand}"
-                    ToolTipService.ToolTip="Stop searching. The groups already confirmed stay." />
-            <TextBlock Grid.Column="2" VerticalAlignment="Center" TextWrapping="Wrap"
-                       Text="{x:Bind ViewModel.SearchStatus, Mode=OneWay}" />
+        <!-- What the page has to say about the search and the marks, each in a bar of its own so it
+             is told apart from the results: what the search did not look at, so a search that
+             skipped a place never reads as one that found nothing there (§7.4); why nothing can be
+             marked or removed now; and what the last rule or removal did, with each §5.6 check it
+             could not pass. -->
+        <StackPanel Grid.Row="2" Spacing="8">
+            <Border Style="{StaticResource CardStyle}" Padding="0"
+                    Visibility="{x:Bind ViewModel.HasNotes, Mode=OneWay}">
+                <Expander HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                          Background="Transparent" BorderThickness="0"
+                          AutomationProperties.Name="{x:Bind ViewModel.NotesHeading, Mode=OneWay}">
+                    <Expander.Header>
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <FontIcon Glyph="&#xE946;" FontSize="16" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                      AutomationProperties.AccessibilityView="Raw" />
+                            <TextBlock Text="{x:Bind ViewModel.NotesHeading, Mode=OneWay}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Expander.Header>
+                    <ListView x:Name="NotesList" MaxHeight="180" SelectionMode="None" ItemsSource="{x:Bind ViewModel.Notes}"
+                              AutomationProperties.Name="Notes on what the search did not look at">
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="x:String">
+                                <TextBlock Text="{x:Bind}" TextWrapping="Wrap" Padding="0,4" IsTextSelectionEnabled="True" />
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </Expander>
+            </Border>
 
-            <ProgressBar Grid.Row="1" Grid.ColumnSpan="3"
-                         Visibility="{x:Bind ViewModel.IsSearching, Mode=OneWay}"
-                         IsIndeterminate="{x:Bind ViewModel.StageProgressIsUnknown, Mode=OneWay}"
-                         Value="{x:Bind ViewModel.StageProgress, Mode=OneWay}"
-                         AutomationProperties.Name="Search progress" />
-        </Grid>
+            <InfoBar Severity="Warning" IsClosable="False"
+                     IsOpen="{x:Bind ViewModel.Marking.HasWhyClosed, Mode=OneWay}"
+                     Message="{x:Bind ViewModel.Marking.WhyClosed, Mode=OneWay}" />
 
-        <!-- What the search did not look at, so a search that skipped a place never reads as one
-             that found nothing there (§7.4). -->
-        <Expander Grid.Row="3" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
-                  Header="{x:Bind ViewModel.NotesHeading, Mode=OneWay}"
-                  AutomationProperties.Name="{x:Bind ViewModel.NotesHeading, Mode=OneWay}"
-                  Visibility="{x:Bind ViewModel.HasNotes, Mode=OneWay}">
-            <ListView x:Name="NotesList" MaxHeight="180" SelectionMode="None" ItemsSource="{x:Bind ViewModel.Notes}"
-                      AutomationProperties.Name="Notes on what the search did not look at">
-                <ListView.ItemTemplate>
-                    <DataTemplate x:DataType="x:String">
-                        <TextBlock Text="{x:Bind}" TextWrapping="Wrap" Padding="0,4" IsTextSelectionEnabled="True" />
-                    </DataTemplate>
-                </ListView.ItemTemplate>
-            </ListView>
-        </Expander>
-
-        <!-- Marking and removing. A rule marks and never removes; every mark it makes is listed in
-             the confirmation before anything goes, and any mark can be undone (§7.4). -->
-        <Grid Grid.Row="4" ColumnSpacing="8" RowSpacing="6" ColumnDefinitions="Auto,Auto,Auto,Auto,*" RowDefinitions="Auto,Auto,Auto">
-            <ComboBox MinWidth="220"
-                      ItemsSource="{x:Bind vm:DuplicateMarkingViewModel.RuleNames}"
-                      SelectedIndex="{x:Bind ViewModel.Marking.RuleIndex, Mode=TwoWay}"
-                      AutomationProperties.Name="Marking rule" />
-            <Button Grid.Column="1" Content="Run rule" Command="{x:Bind ViewModel.Marking.RunRuleCommand}"
-                    ToolTipService.ToolTip="Mark copies in every group by the rule. It never removes anything, and every group keeps a copy that can be kept." />
-            <Button Grid.Column="2" Content="Choose folder…" Click="OnChooseRuleFolder"
-                    Visibility="{x:Bind ViewModel.Marking.RuleNeedsFolder, Mode=OneWay}"
-                    AutomationProperties.Name="Choose the folder the rule is about" />
-            <TextBlock Grid.Column="3" Grid.ColumnSpan="2" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                       Text="{x:Bind ViewModel.Marking.RuleFolderShown, Mode=OneWay}"
-                       Visibility="{x:Bind ViewModel.Marking.RuleNeedsFolder, Mode=OneWay}" />
-
-            <Button Grid.Row="1" Content="Move marked to Recycle Bin…" Style="{StaticResource AccentButtonStyle}"
-                    Command="{x:Bind ViewModel.Marking.MoveToRecycleBinCommand}"
-                    ToolTipService.ToolTip="Lists every marked copy that would go, and moves them only once you confirm. Each is compared byte for byte with a copy that stays first." />
-            <Button Grid.Row="1" Grid.Column="1" Content="Delete permanently…"
-                    Command="{x:Bind ViewModel.Marking.DeletePermanentlyCommand}"
-                    ToolTipService.ToolTip="Deletes the marked copies outright rather than moving them to the Recycle Bin, once you confirm the list. They cannot be restored." />
-            <Button Grid.Row="1" Grid.Column="2" Content="Clear marks" Command="{x:Bind ViewModel.Marking.ClearMarksCommand}" />
-            <Button Grid.Row="1" Grid.Column="3" Content="Stop" Command="{x:Bind ViewModel.Marking.StopCommand}"
-                    AutomationProperties.Name="Stop the rule or the removal"
-                    ToolTipService.ToolTip="Stop the rule, keeping the marks it made, or the removal at the next copy. What has gone is reported and checked." />
-            <TextBlock Grid.Row="1" Grid.Column="4" VerticalAlignment="Center" Text="{x:Bind ViewModel.Marking.MarkedSummary, Mode=OneWay}" />
-
-            <StackPanel Grid.Row="2" Grid.ColumnSpan="5" Spacing="4">
-                <TextBlock Text="{x:Bind ViewModel.Marking.WhyClosed, Mode=OneWay}" TextWrapping="Wrap"
-                           Foreground="{ThemeResource SystemFillColorCautionBrush}" />
-                <TextBlock Text="{x:Bind ViewModel.Marking.Outcome.Sentence, Mode=OneWay}" TextWrapping="Wrap" IsTextSelectionEnabled="True"
-                           AutomationProperties.LiveSetting="Polite" />
-
-                <!-- Each check the sentence above counts as not passed, by the copy or folder it is
-                     about and what it found, because a count alone does not say which to look at. -->
-                <views:VerificationCheckList Checks="{x:Bind ViewModel.Marking.Outcome.Checks}"
+            <InfoBar Severity="Informational" IsClosable="False"
+                     IsOpen="{x:Bind ViewModel.Marking.Outcome.HasSentence, Mode=OneWay}"
+                     Message="{x:Bind ViewModel.Marking.Outcome.Sentence, Mode=OneWay}"
+                     AutomationProperties.LiveSetting="Polite">
+                <!-- Each check the sentence counts as not passed, by the copy or folder it is about and
+                     what it found, because a count alone does not say which to look at. -->
+                <views:VerificationCheckList Margin="0,0,0,12" Checks="{x:Bind ViewModel.Marking.Outcome.Checks}"
                                              Visibility="{x:Bind ViewModel.Marking.Outcome.HasChecks, Mode=OneWay}"
                                              AutomationProperties.Name="The checks on what should have survived that did not pass" />
-            </StackPanel>
-        </Grid>
+            </InfoBar>
+        </StackPanel>
 
-        <Grid Grid.Row="5" RowSpacing="6" ColumnSpacing="12" RowDefinitions="Auto,Auto,*" ColumnDefinitions="*,Auto">
-            <TextBlock Text="{x:Bind ViewModel.SpaceNote}" TextWrapping="Wrap" VerticalAlignment="Center" Style="{StaticResource SecondaryText}" />
-            <Button Grid.Column="1" Content="Save results…" Command="{x:Bind ViewModel.SaveCsvCommand}"
-                    ToolTipService.ToolTip="Save every group as a CSV file where you choose: one row a copy, with its group, path, size, last-modified time and checksum. Deguffer keeps no other copy." />
-            <TextBlock Grid.Row="1" Grid.ColumnSpan="2" TextWrapping="Wrap" IsTextSelectionEnabled="True"
+        <!-- What the search found, before any group is read: the space its copies that could go
+             occupy, how many groups and files, what the search came to, and what the space figures
+             are, because a removal may free less (§7.4). -->
+        <Border Grid.Row="3" Style="{StaticResource CardStyle}" Visibility="{x:Bind ViewModel.HasGroups, Mode=OneWay}"
+                AutomationProperties.Name="{x:Bind ViewModel.Totals.Description, Mode=OneWay}">
+            <Grid ColumnSpacing="28" ColumnDefinitions="Auto,Auto,Auto,Auto,*">
+                <StackPanel Spacing="2">
+                    <TextBlock Text="{x:Bind ViewModel.Totals.Freeable, Mode=OneWay}" Style="{StaticResource HeroFigure}"
+                               AutomationProperties.AccessibilityView="Raw" />
+                    <TextBlock Text="in copies that could go" Style="{StaticResource FieldLabel}"
+                               AutomationProperties.AccessibilityView="Raw" />
+                </StackPanel>
+
+                <Border Grid.Column="1" Width="1" Margin="0,4" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="28" VerticalAlignment="Center">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="{x:Bind ViewModel.Totals.Groups, Mode=OneWay}" Style="{StaticResource Figure}" FontSize="24"
+                                   AutomationProperties.AccessibilityView="Raw" />
+                        <TextBlock Text="{x:Bind ViewModel.Totals.GroupsLabel, Mode=OneWay}" Style="{StaticResource FieldLabel}"
+                                   AutomationProperties.AccessibilityView="Raw" />
+                    </StackPanel>
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="{x:Bind ViewModel.Totals.Files, Mode=OneWay}" Style="{StaticResource Figure}" FontSize="24"
+                                   AutomationProperties.AccessibilityView="Raw" />
+                        <TextBlock Text="files in them" Style="{StaticResource FieldLabel}"
+                                   AutomationProperties.AccessibilityView="Raw" />
+                    </StackPanel>
+                </StackPanel>
+
+                <Border Grid.Column="3" Width="1" Margin="0,4" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                <StackPanel Grid.Column="4" Spacing="4" VerticalAlignment="Center">
+                    <TextBlock Text="{x:Bind ViewModel.Headline, Mode=OneWay}" Style="{StaticResource CardStatement}"
+                               Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                    <TextBlock Text="{x:Bind ViewModel.SpaceNote}" Style="{StaticResource SecondaryText}" FontSize="12" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- The groups, under the commands that work on all of them, or, where there are none yet,
+             what the search came to and what to do next. -->
+        <Grid Grid.Row="4" RowSpacing="8" RowDefinitions="Auto,Auto,*">
+            <Grid ColumnSpacing="8" ColumnDefinitions="Auto,Auto,*,Auto" Visibility="{x:Bind ViewModel.HasGroups, Mode=OneWay}">
+                <!-- A rule marks and never removes; every mark it makes is listed in the confirmation
+                     before anything goes, and any mark can be undone (§7.4). Its items are the rules
+                     Core offers, filled in from code-behind; one about a folder asks for it first. -->
+                <DropDownButton x:Name="MarkButton"
+                                IsEnabled="{x:Bind ViewModel.Marking.CanMarkByRule, Mode=OneWay}"
+                                AutomationProperties.Name="Mark copies by a rule"
+                                ToolTipService.ToolTip="Mark copies in every group by a rule. It never removes anything, and every group keeps a copy that can be kept.">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE73A;" FontSize="14" />
+                        <TextBlock Text="Mark" />
+                    </StackPanel>
+                    <DropDownButton.Flyout>
+                        <MenuFlyout x:Name="RuleMenu" Placement="BottomEdgeAlignedLeft" />
+                    </DropDownButton.Flyout>
+                </DropDownButton>
+                <Button Grid.Column="1" Command="{x:Bind ViewModel.Marking.ClearMarksCommand}"
+                        AutomationProperties.Name="Clear marks">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE8E6;" FontSize="14" />
+                        <TextBlock Text="Clear marks" />
+                    </StackPanel>
+                </Button>
+                <Button Grid.Column="3" Command="{x:Bind ViewModel.SaveCsvCommand}"
+                        AutomationProperties.Name="Save results…"
+                        ToolTipService.ToolTip="Save every group as a CSV file where you choose: one row a copy, with its group, path, size, last-modified time and checksum. Deguffer keeps no other copy.">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE74E;" FontSize="14" />
+                        <TextBlock Text="Save results…" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+
+            <TextBlock Grid.Row="1" TextWrapping="Wrap" IsTextSelectionEnabled="True" Style="{StaticResource SecondaryText}"
                        Text="{x:Bind ViewModel.CsvOutcome, Mode=OneWay}" AutomationProperties.LiveSetting="Polite" />
 
             <!-- Groups arrive while the reader reads, each inserted where its space puts it. Keeping
                  the items in view holds the rows on screen still while one goes in above them. -->
-            <ListView x:Name="GroupsList" Grid.Row="2" Grid.ColumnSpan="2" SelectionMode="None"
+            <ListView x:Name="GroupsList" Grid.Row="2" SelectionMode="None" Padding="0"
+                      Visibility="{x:Bind ViewModel.HasGroups, Mode=OneWay}"
                       AutomationProperties.Name="Duplicate groups"
                       ItemsSource="{x:Bind ViewModel.Groups}"
                       ItemTemplate="{StaticResource GroupTemplate}"
@@ -315,6 +520,52 @@
                     </ItemsPanelTemplate>
                 </ListView.ItemsPanel>
             </ListView>
+
+            <StackPanel Grid.Row="2" Spacing="12" MaxWidth="460" Margin="0,24,0,0"
+                        HorizontalAlignment="Center" VerticalAlignment="Top"
+                        Visibility="{x:Bind ViewModel.HasNoGroups, Mode=OneWay}">
+                <FontIcon Glyph="&#xE8C8;" FontSize="44" HorizontalAlignment="Center"
+                          Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                          AutomationProperties.AccessibilityView="Raw" />
+                <TextBlock Text="{x:Bind ViewModel.Headline, Mode=OneWay}" Style="{StaticResource BodyStrongTextBlockStyle}"
+                           FontSize="16" TextAlignment="Center" TextWrapping="Wrap"
+                           AutomationProperties.LiveSetting="Polite" />
+            </StackPanel>
+        </Grid>
+
+        <!-- What is marked, and the two ways to remove it. Neither carries the accent: removing is
+             the deliberate second step after the search, as Clean is on Storage, and both list
+             every copy that would go before anything does. -->
+        <Grid Grid.Row="5" ColumnSpacing="12" Padding="0,4,0,20" ColumnDefinitions="Auto,*,Auto"
+              Visibility="{x:Bind ViewModel.HasGroups, Mode=OneWay}">
+            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                <ProgressRing IsActive="{x:Bind ViewModel.Marking.IsBusy, Mode=OneWay}"
+                              Width="18" Height="18" VerticalAlignment="Center" />
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Marked" Style="{StaticResource FieldLabel}" />
+                    <TextBlock Text="{x:Bind ViewModel.Marking.MarkedFigure, Mode=OneWay}" Style="{StaticResource Figure}" FontSize="16" />
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Button Content="Stop" Command="{x:Bind ViewModel.Marking.StopCommand}"
+                        Visibility="{x:Bind ViewModel.Marking.IsBusy, Mode=OneWay}"
+                        AutomationProperties.Name="Stop the rule or the removal"
+                        ToolTipService.ToolTip="Stop the rule, keeping the marks it made, or the removal at the next copy. What has gone is reported and checked." />
+                <Button Command="{x:Bind ViewModel.Marking.DeletePermanentlyCommand}"
+                        AutomationProperties.Name="Delete permanently…"
+                        ToolTipService.ToolTip="Deletes the marked copies outright rather than moving them to the Recycle Bin, once you confirm the list. They cannot be restored.">
+                    <TextBlock Text="Delete permanently…" />
+                </Button>
+                <Button Command="{x:Bind ViewModel.Marking.MoveToRecycleBinCommand}"
+                        AutomationProperties.Name="Move marked to Recycle Bin…"
+                        ToolTipService.ToolTip="Lists every marked copy that would go, and moves them only once you confirm. Each is compared byte for byte with a copy that stays first.">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE74D;" FontSize="14" />
+                        <TextBlock Text="Move marked to Recycle Bin…" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
         </Grid>
     </Grid>
 </Page>
