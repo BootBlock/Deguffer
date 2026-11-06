@@ -4,7 +4,8 @@ namespace Deguffer.Core.Scanning.Mft;
 /// A raw volume whose boot sector <see cref="VolumeMftSource"/> has read, holding it until the table
 /// is read or the volume is closed.
 /// </summary>
-internal sealed class OpenedVolume(IRawVolume volume, NtfsBootSector geometry) : IMftVolume
+/// <param name="timings">Where the open was timed, so finding the table is timed after it, or null.</param>
+internal sealed class OpenedVolume(IRawVolume volume, NtfsBootSector geometry, MftOpenTimings? timings) : IMftVolume
 {
     // Taken by whichever comes first, the read of the table or the close, so the handle has exactly
     // one owner at every moment: this, then the source, or nobody once it is closed.
@@ -15,7 +16,8 @@ internal sealed class OpenedVolume(IRawVolume volume, NtfsBootSector geometry) :
             Interlocked.Exchange(ref _volume, null)
                 ?? throw new InvalidOperationException("The table of this volume was read already, or the volume was closed."),
             geometry,
-            out reason);
+            out reason,
+            timings);
 
     public void Dispose() => Interlocked.Exchange(ref _volume, null)?.Dispose();
 }

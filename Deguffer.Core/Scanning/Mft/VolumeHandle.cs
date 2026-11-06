@@ -3,7 +3,7 @@ using Microsoft.Win32.SafeHandles;
 namespace Deguffer.Core.Scanning.Mft;
 
 /// <summary>
-/// A raw volume handle, opened by <see cref="VolumeMftSource.TryOpen(char, out FallbackReason)"/>
+/// A raw volume handle, opened by <see cref="VolumeMftSource.TryOpen(char, out FallbackReason, MftOpenTimings?)"/>
 /// for overlapped I/O.
 ///
 /// <para>Overlapped because Windows serialises the reads on a handle opened without it, however

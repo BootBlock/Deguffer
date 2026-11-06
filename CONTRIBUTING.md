@@ -153,9 +153,8 @@ ending: the time the list reads add after the first pass. The mean read is the b
 over the reads of records: a table in many pieces, or with many runs of free records, reads in
 smaller pieces.
 
-The indented rows split each run into the stages it ran, in order: opening the volume (its handle
-and boot sector), finding its table (record 0 and `$MFT`'s own extent map, whose first read makes
-NTFS flush the volume, #544), reading the bitmap, the first pass (reads and parse together), the attribute lists kept outside the table, the records held back
+The indented rows split each run into the stages it ran, in order: opening the volume (its boot
+sector and `$MFT`'s own extent map), reading the bitmap, the first pass (reads and parse together), the attribute lists kept outside the table, the records held back
 for them, and then, for the index and Explore, placing each file's other names and building the
 index's child links or Explore's tree. The last three run once the drive has
 finished, so a slow one is work, not the drive. "Records deferred" and "links placed" are

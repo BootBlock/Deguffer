@@ -118,6 +118,15 @@ public interface IUserEnvironment
     string DomainName { get; }
 
     /// <summary>
+    /// Whether this process runs elevated, with an administrator's rights, which an unelevated process
+    /// of an administrator's account does not have.
+    ///
+    /// <para>For the work worth starting only where it can be answered: DISM refuses every other
+    /// account at once, so starting it early for one is a process launch for a known refusal.</para>
+    /// </summary>
+    bool IsAdministrator { get; }
+
+    /// <summary>
     /// Opens this machine's volume file tables, for §5.5's fast route, where the process is allowed to.
     ///
     /// <para>Part of the machine rather than of the scanner, so a scanner built for an environment reads
@@ -422,6 +431,8 @@ public sealed partial class UserEnvironment : IUserEnvironment
     public string MachineName { get; } = Environment.MachineName;
 
     public string DomainName { get; } = Environment.UserDomainName;
+
+    public bool IsAdministrator => Environment.IsPrivilegedProcess;
 
     public IMftSourceFactory VolumeTables => VolumeMftSourceFactory.Default;
 

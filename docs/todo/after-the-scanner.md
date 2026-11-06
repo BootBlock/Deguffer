@@ -562,8 +562,8 @@ On the source folder (224,834 entries), in three alternating pairs of six runs e
 build, every run complete, warm. Not measured: the same cold, and the walk alone
 through the scan route. The flush still happens: its cost is now the build's, and the next walk
 of the volume pays its checkpoint. A probe that started a walk beside the flush rather than after it
-saved 0.3 to 1.1 s in each of eight rounds. This also accounts for part of the open's cost in #543,
-which timed the table's first read as part of the open.
+saved 0.3 to 1.1 s in each of eight rounds. #543, which timed the open's steps, found the same flush
+in its read of record 0, and #545 asked for this change.
 
 ## 8. Let a root probe tell "not there" from "I was refused" ✅ done
 

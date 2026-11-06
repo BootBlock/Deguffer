@@ -77,7 +77,7 @@ public sealed class TableReadBesideTheWalkTests
 
     private sealed class OneVolume(char letter, IMftVolume volume) : IMftSourceFactory
     {
-        public IMftVolume? TryOpen(char driveLetter, out FallbackReason reason)
+        public IMftVolume? TryOpen(char driveLetter, out FallbackReason reason, MftOpenTimings? timings = null)
         {
             reason = driveLetter == letter ? FallbackReason.None : FallbackReason.NotNtfsVolume;
 

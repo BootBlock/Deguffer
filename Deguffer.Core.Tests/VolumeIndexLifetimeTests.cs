@@ -191,7 +191,7 @@ public sealed class VolumeIndexLifetimeTests
 
         public int CloseCount => Volatile.Read(ref _closed);
 
-        public IMftVolume? TryOpen(char driveLetter, out FallbackReason reason)
+        public IMftVolume? TryOpen(char driveLetter, out FallbackReason reason, MftOpenTimings? timings = null)
         {
             reason = FallbackReason.None;
 

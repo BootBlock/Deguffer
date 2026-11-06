@@ -42,8 +42,13 @@ public sealed partial class VolumeMftSource : IMftSource
     /// failure — §5.5 requires the fallback to be observable, so "could not" always comes with
     /// "because".
     /// </summary>
-    public static IMftVolume? TryOpen(char driveLetter, out FallbackReason reason)
+    /// <param name="timings">
+    /// Where each step of the open is timed, and those of finding the table after it, or null where
+    /// nothing measures it.
+    /// </param>
+    public static IMftVolume? TryOpen(char driveLetter, out FallbackReason reason, MftOpenTimings? timings = null)
     {
+        timings?.Start();
         var handle = OpenOverlapped($@"\\.\{char.ToUpperInvariant(driveLetter)}:");
 
         if (handle.IsInvalid)
@@ -60,7 +65,8 @@ public sealed partial class VolumeMftSource : IMftSource
             return null;
         }
 
-        return TryOpen(new VolumeHandle(handle), out reason);
+        timings?.End(MftOpenStep.VolumeHandle);
+        return TryOpen(new VolumeHandle(handle), out reason, timings);
     }
 
     /// <summary>
@@ -81,13 +87,17 @@ public sealed partial class VolumeMftSource : IMftSource
     /// <para>Reads nothing past <see cref="BootReadBytes"/>, which NTFS serves without the flush the
     /// table's first read costs (<see cref="IMftVolume"/>).</para>
     /// </summary>
-    internal static IMftVolume? TryOpen(IRawVolume volume, out FallbackReason reason)
+    /// <param name="timings">
+    /// Where each step after the handle is timed, from the clock the caller started, or null. The
+    /// volume keeps it for the steps of finding the table.
+    /// </param>
+    internal static IMftVolume? TryOpen(IRawVolume volume, out FallbackReason reason, MftOpenTimings? timings = null)
     {
         IMftVolume? opened = null;
 
         try
         {
-            opened = ReadBootSector(volume, out reason);
+            opened = ReadBootSector(volume, out reason, timings);
             return opened;
         }
         catch (IOException)
@@ -105,12 +115,13 @@ public sealed partial class VolumeMftSource : IMftSource
         }
     }
 
-    private static OpenedVolume? ReadBootSector(IRawVolume volume, out FallbackReason reason)
+    private static OpenedVolume? ReadBootSector(IRawVolume volume, out FallbackReason reason, MftOpenTimings? timings)
     {
         // Sized to the largest sector, not to the 512 bytes the boot sector occupies, because the
         // sector size is not known until this read has succeeded. Microsoft's rules for an unbuffered
         // read ask for a whole number of sectors, which 512 bytes is not on a 4,096-byte-sector disk.
         using var boot = new VolumeReadBuffer(BootReadBytes);
+        timings?.Read();
 
         if (volume.Read(boot.Span, 0) != boot.Length
             || !NtfsBootSector.TryParse(boot.Span, out var geometry))
@@ -119,23 +130,26 @@ public sealed partial class VolumeMftSource : IMftSource
             return null;
         }
 
+        timings?.End(MftOpenStep.BootSector);
         reason = FallbackReason.None;
-        return new OpenedVolume(volume, geometry);
+        return new OpenedVolume(volume, geometry, timings);
     }
 
     /// <summary>
     /// Read enough of the table of <paramref name="volume"/>, whose boot sector gave
     /// <paramref name="geometry"/>, to serve records, taking ownership of the volume as
-    /// <see cref="TryOpen(IRawVolume, out FallbackReason)"/> does: disposed here on every exit that
-    /// does not hand it to a source.
+    /// <see cref="TryOpen(IRawVolume, out FallbackReason, MftOpenTimings?)"/> does: disposed here on
+    /// every exit that does not hand it to a source.
     /// </summary>
-    internal static VolumeMftSource? TryReadTable(IRawVolume volume, NtfsBootSector geometry, out FallbackReason reason)
+    /// <param name="timings">Where each step of finding the table is timed, as the open's were, or null.</param>
+    internal static VolumeMftSource? TryReadTable(
+        IRawVolume volume, NtfsBootSector geometry, out FallbackReason reason, MftOpenTimings? timings = null)
     {
         VolumeMftSource? source = null;
 
         try
         {
-            source = ReadExtents(volume, geometry, out reason);
+            source = ReadExtents(volume, geometry, out reason, timings);
             return source;
         }
         catch (IOException)
@@ -152,19 +166,35 @@ public sealed partial class VolumeMftSource : IMftSource
         }
     }
 
-    private static VolumeMftSource? ReadExtents(IRawVolume volume, NtfsBootSector geometry, out FallbackReason reason)
+    private static VolumeMftSource? ReadExtents(
+        IRawVolume volume, NtfsBootSector geometry, out FallbackReason reason, MftOpenTimings? timings)
     {
         // Record 0 is read in whole clusters rather than as one record, which can be shorter than
         // a sector. $MFT's extension records are read through the same volume, before the source
         // that would otherwise serve them exists.
-        ClusterReader read = (first, destination) => ReadClusters(volume, geometry.BytesPerCluster, first, destination);
+        ClusterReader read = (first, destination) =>
+        {
+            timings?.Read();
+            return ReadClusters(volume, geometry.BytesPerCluster, first, destination);
+        };
+
         var clusters = (geometry.BytesPerFileRecord + geometry.BytesPerCluster - 1) / geometry.BytesPerCluster;
 
         using var start = new VolumeReadBuffer(clusters * geometry.BytesPerCluster);
         var record0 = start.Span[..geometry.BytesPerFileRecord];
 
-        if (!read(geometry.MftStartCluster, start.Span)
-            || !MftExtentMapReader.TryRead(record0, geometry.BytesPerCluster, read, out var extents, out var bitmap))
+        // The slow step on a busy volume: the first read past the volume's first 8 KiB, which NTFS
+        // serves by flushing the volume (IMftVolume). Neither a handle for FILE_READ_DATA alone nor
+        // extended DASD I/O avoids it.
+        if (!read(geometry.MftStartCluster, start.Span))
+        {
+            reason = FallbackReason.MasterFileTableIncomplete;
+            return null;
+        }
+
+        timings?.End(MftOpenStep.FirstRecord);
+
+        if (!MftExtentMapReader.TryRead(record0, geometry.BytesPerCluster, read, out var extents, out var bitmap, timings))
         {
             reason = FallbackReason.MasterFileTableIncomplete;
             return null;

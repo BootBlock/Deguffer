@@ -18,15 +18,19 @@ public interface IMftSourceFactory
     /// without reading it. Null with the reason where it cannot: not elevated, not addressable, or
     /// not NTFS.
     /// </summary>
-    IMftVolume? TryOpen(char driveLetter, out FallbackReason reason);
+    /// <param name="timings">
+    /// Where each step of the open is timed, the table's steps included, or null where nothing
+    /// measures it.
+    /// </param>
+    IMftVolume? TryOpen(char driveLetter, out FallbackReason reason, MftOpenTimings? timings = null);
 
     /// <summary>
     /// <see cref="TryOpen"/> and <see cref="IMftVolume.TryReadTable"/> together, for a caller that
     /// reads the table as soon as it has opened the volume.
     /// </summary>
-    public IMftSource? TryOpenTable(char driveLetter, out FallbackReason reason)
+    public IMftSource? TryOpenTable(char driveLetter, out FallbackReason reason, MftOpenTimings? timings = null)
     {
-        using var volume = TryOpen(driveLetter, out reason);
+        using var volume = TryOpen(driveLetter, out reason, timings);
 
         return volume?.TryReadTable(out reason);
     }
@@ -37,6 +41,6 @@ public sealed class VolumeMftSourceFactory : IMftSourceFactory
 {
     public static readonly VolumeMftSourceFactory Default = new();
 
-    public IMftVolume? TryOpen(char driveLetter, out FallbackReason reason) =>
-        VolumeMftSource.TryOpen(driveLetter, out reason);
+    public IMftVolume? TryOpen(char driveLetter, out FallbackReason reason, MftOpenTimings? timings = null) =>
+        VolumeMftSource.TryOpen(driveLetter, out reason, timings);
 }

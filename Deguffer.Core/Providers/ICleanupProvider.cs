@@ -91,6 +91,26 @@ public interface ICleanupProvider
     PassHold HoldCaches();
 
     /// <summary>
+    /// Start the slow answer this provider's plan will wait on, and return without waiting for it, so
+    /// it runs while the planner works through the providers ahead of this one. Called by the planner
+    /// after <see cref="HoldCaches"/> and before any provider plans, and only on the providers the pass
+    /// plans, so nothing is started that no plan will await.
+    ///
+    /// <para>What is started must be the answer the plan awaits, remembered for the pass, so it still
+    /// runs once. Any check the plan makes before asking is made here first, and a provider that is not
+    /// present starts nothing.</para>
+    /// </summary>
+    /// <param name="ct">
+    /// The pass's, which the planner cancels when the pass ends, fails or is cancelled.
+    /// </param>
+    /// <returns>
+    /// The work started, which ends once nothing it started is still running, whether it answered or
+    /// was cancelled. The planner awaits it before the pass returns, so nothing started here outlives
+    /// the pass. A completed task where nothing was started.
+    /// </returns>
+    Task BeginPass(CancellationToken ct);
+
+    /// <summary>
     /// Exact paths and commands, with sizes measured. Never executed here.
     ///
     /// The §6.2 sketch also had an <c>EstimateBytesAsync</c>; it is deliberately absent. Producing

@@ -169,7 +169,7 @@ internal static class Report
         run.Tally.Race ?? throw new InvalidOperationException("Every run of the race route carries its parts.");
 
     /// <summary>
-    /// Where a table route's time went: opening the volume, finding its table, each stage in the order the first run ran
+    /// Where a table route's time went: opening the volume, each stage in the order the first run ran
     /// them, and what neither covers, so the rows add up to the elapsed time. Then the counts that
     /// size the stages run on one thread after the drive has finished. A stage a run stopped before
     /// reads as zero.
@@ -182,7 +182,7 @@ internal static class Report
         }
 
         Row(text, "  volume open", Duration(first.Tally.OpenTime.TotalSeconds), Over(later, r => r.Tally.OpenTime.TotalSeconds, Duration));
-        Row(text, "  table found", Duration(first.Tally.TableOpenTime.TotalSeconds), Over(later, r => r.Tally.TableOpenTime.TotalSeconds, Duration));
+        OpenRows(text, first, later);
 
         foreach (var timed in stages.Stages)
         {
@@ -200,11 +200,49 @@ internal static class Report
     }
 
     /// <summary>
-    /// The run's time outside the open, the finding of the table and the stages: what the route does before the first stage
+    /// Each step of the open, in the order the first run ran them, and under each step that read the
+    /// volume, how many reads it asked for. The steps add up to the open less the moments around it.
+    /// None where the volume was opened by something that does not time its steps, and a step a run
+    /// stopped before reads as zero.
+    /// </summary>
+    private static void OpenRows(StringBuilder text, RunSample first, RunSample[] later)
+    {
+        if (first.Tally.Open is not { } open)
+        {
+            return;
+        }
+
+        foreach (var timed in open.Steps)
+        {
+            var step = timed.Step;
+            Row(text, OpenStepName(step), Duration(timed.Elapsed.TotalSeconds), Over(later, r => OpenStep(r, step).Elapsed.TotalSeconds, Duration));
+
+            if (timed.Reads > 0)
+            {
+                Row(text, "      reads", Count(timed.Reads), Over(later, r => OpenStep(r, step).Reads, Count));
+            }
+        }
+    }
+
+    private static MftOpenStepTime OpenStep(RunSample run, MftOpenStep step) => run.Tally.Open?.Of(step) ?? default;
+
+    private static string OpenStepName(MftOpenStep step) => step switch
+    {
+        MftOpenStep.VolumeHandle => "    handle",
+        MftOpenStep.BootSector => "    boot sector",
+        MftOpenStep.FirstRecord => "    record 0",
+        MftOpenStep.AttributeList => "    list",
+        MftOpenStep.ExtensionRecords => "    extensions",
+        MftOpenStep.BitmapPlacement => "    bitmap pieces",
+        _ => throw new ArgumentOutOfRangeException(nameof(step), step, "Not a step of opening a table."),
+    };
+
+    /// <summary>
+    /// The run's time outside the open and the stages: what the route does before the first stage
     /// and after the last, such as allocating the index's columns, and closing the volume.
     /// </summary>
     private static double Rest(RunSample run) =>
-        (run.Elapsed - run.Tally.OpenTime - run.Tally.TableOpenTime - StagesOf(run).Stages.Aggregate(TimeSpan.Zero, (sum, timed) => sum + timed.Elapsed)).TotalSeconds;
+        (run.Elapsed - run.Tally.OpenTime - StagesOf(run).Stages.Aggregate(TimeSpan.Zero, (sum, timed) => sum + timed.Elapsed)).TotalSeconds;
 
     private static double StageSeconds(RunSample run, MftBuildStage stage) => StagesOf(run).Of(stage).TotalSeconds;
 

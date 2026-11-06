@@ -28,7 +28,7 @@ public sealed class FakeMftSourceFactory : IMftSourceFactory
     public static FakeMftSourceFactory Serving(char driveLetter, MftFixture fixture) =>
         new(letter => letter == driveLetter ? fixture.Build() : null, FallbackReason.NotNtfsVolume);
 
-    public IMftVolume? TryOpen(char driveLetter, out FallbackReason reason)
+    public IMftVolume? TryOpen(char driveLetter, out FallbackReason reason, MftOpenTimings? timings = null)
     {
         OpenCount++;
 
