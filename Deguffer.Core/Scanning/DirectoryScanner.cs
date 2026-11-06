@@ -21,6 +21,8 @@ public sealed class DirectoryScanner : IDirectoryScanner
     private readonly ParallelEnumerationScanner _fallback;
     private readonly ScanTuner _tuner;
 
+    public ScanTuner Tuning => _tuner;
+
     /// <param name="sources">
     /// Opens each volume's table. Never defaulted, so no scanner reads this machine's tables unless
     /// it was handed them, as <see cref="CreateDefault"/> hands it an environment's.

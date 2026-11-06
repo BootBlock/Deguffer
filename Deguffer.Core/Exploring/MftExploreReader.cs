@@ -193,8 +193,11 @@ internal static class MftExploreReader
                     total,
                     BytesSeen: 0,
                     // None from the report that the whole table has been dealt with: the finished
-                    // tree is assembled next, and replaces it.
-                    done < total ? snapshots?.Take() : null)),
+                    // tree is assembled next, and replaces it. None from the report at nought
+                    // either, which has nothing to draw: a snapshot is a pass over every slot, and
+                    // one started there would push the first that can draw something back by the
+                    // snapshot interval at least, and on a large table by a multiple of that pass.
+                    0 < done && done < total ? snapshots?.Take() : null)),
                 ct);
         }
         finally

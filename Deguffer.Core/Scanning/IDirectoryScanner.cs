@@ -13,6 +13,12 @@ namespace Deguffer.Core.Scanning;
 public interface IDirectoryScanner
 {
     /// <summary>
+    /// What this scanner's walks run with on each volume, so a listing a provider makes beside its
+    /// measurement keeps to the same number of listings at once as the measurement does.
+    /// </summary>
+    ScanTuner Tuning { get; }
+
+    /// <summary>
     /// Measure <paramref name="path"/>, reporting running subtotals as they accumulate.
     ///
     /// §5.5: never block on a complete scan. <paramref name="progress"/> receives partial totals so

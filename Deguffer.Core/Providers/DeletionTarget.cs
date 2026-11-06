@@ -73,6 +73,14 @@ public enum TargetKind
 /// Entries of a folder emptied in place that hold somebody's work, left standing and left out on the
 /// same terms. Null for none. See <see cref="Execution.ClearDirectoryStep.UserWork"/>.
 /// </param>
+/// <param name="DatedOneLevelDown">
+/// Whether §7's age is <see cref="DirectoryAge"/>'s answer for <paramref name="Path"/>, which
+/// <see cref="CleanupProviderBase"/> reads for every such target of a plan in one bounded step, beside
+/// the measurement, rather than the provider reading it one target after another as it builds the
+/// list. <paramref name="LastWritten"/> is null then, because nothing has been read yet: a provider
+/// whose decision depends on the age dates its candidates itself, with
+/// <see cref="DirectoryAge.OfEach"/>. A directory's only, removed outright or emptied in place.
+/// </param>
 public readonly record struct DeletionTarget(
     string Path,
     string Reason,
@@ -87,4 +95,5 @@ public readonly record struct DeletionTarget(
     IReadOnlyList<string>? IndexedBy = null,
     IReadOnlyList<string>? Spared = null,
     IReadOnlyList<string>? OwnedElsewhere = null,
-    IReadOnlyList<string>? UserWork = null);
+    IReadOnlyList<string>? UserWork = null,
+    bool DatedOneLevelDown = false);

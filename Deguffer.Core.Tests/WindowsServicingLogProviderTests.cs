@@ -596,6 +596,39 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The one row Windows' cleanup clears is as old as the newest of its three directories, each
+    /// dated by the newest write one level down, as every other row here is dated.
+    /// </summary>
+    [Fact]
+    public async Task TheResetLogsAreAsOldAsTheNewestOfTheirDirectories()
+    {
+        var logs = AtTheTop(Path.Combine("$SysReset", "Logs"));
+        var oldLogs = AtTheTop(Path.Combine("$SysReset", "OldOSLogs"));
+        var pbr = Populate(Path.Combine("Logs", "PBR"), file: "PBR.log");
+
+        var longAgo = DateTime.UtcNow.AddDays(-400);
+        var appended = DateTime.UtcNow.AddDays(-20);
+
+        foreach (var directory in new[] { logs, oldLogs, pbr })
+        {
+            foreach (var file in Directory.EnumerateFiles(directory))
+            {
+                File.SetLastWriteTimeUtc(file, longAgo);
+            }
+
+            Directory.SetLastWriteTimeUtc(directory, longAgo);
+        }
+
+        File.SetLastWriteTimeUtc(Path.Combine(oldLogs, "setupact.log"), appended);
+
+        var plan = await CreateProvider(FakeDiskCleanupHandlers.Windows()).PlanAsync();
+
+        var step = Assert.IsType<DiskCleanupStep>(Assert.Single(plan.Steps));
+        Assert.NotNull(step.LastWritten);
+        Assert.Equal(appended, step.LastWritten!.Value, TimeSpan.FromSeconds(1));
+    }
+
+    /// <summary>
     /// Where Windows does not register that cleanup, the reset logs stay rather than being deleted by
     /// hand, and the logs removed by path are still offered beside them.
     /// </summary>

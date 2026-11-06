@@ -247,7 +247,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
                 .. targets.Select(t => new DeletionTarget(
                     t.Path,
                     $"Intermediate build output for {t.Project.ProjectName}",
-                    DirectoryAge.Of(t.Path, ct),
+                    DatedOneLevelDown: true,
                     Facets: [new ItemFacet("Project", t.Project.ProjectName)],
                     Group: ApprovedRootHeading.For(ApprovedRoots, t.Path),
                     UseCheck: stillUnused[t.Path])),

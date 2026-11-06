@@ -206,8 +206,9 @@ public sealed class WalkExploreReaderTests : IDisposable
     /// The finished tree is built straight after it and replaces any picture of the walk so far, so
     /// a snapshot started there would be a pass over the whole tree for nothing.
     ///
-    /// <para>Every report moves the clock a whole snapshot interval, so every report the walk makes
-    /// while running finds a snapshot due, and the last would too if it were asked.</para>
+    /// <para>The first report finds the first snapshot due, and every report moves the clock a whole
+    /// snapshot interval, so every later report the walk makes while running finds one due too, and
+    /// the last would if it were asked.</para>
     /// </summary>
     [Fact]
     public void StartsNoSnapshotFromTheReportMadeOnceTheWalkIsOver()
@@ -238,7 +239,8 @@ public sealed class WalkExploreReaderTests : IDisposable
             });
 
         Assert.Equal(4, reports.Count);
-        Assert.Equal([1, 2], startedAtReport);
+        Assert.Equal([0, 1, 2], startedAtReport);
+        Assert.NotNull(reports[1].Snapshot);
         Assert.NotNull(reports[2].Snapshot);
         Assert.Null(reports[3].Snapshot);
     }

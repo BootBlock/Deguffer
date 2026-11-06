@@ -36,6 +36,8 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner
 
     private readonly ScanTuner _tuner;
 
+    public ScanTuner Tuning => _tuner;
+
     private readonly FallbackReason _reason;
 
     /// <param name="tuner">What each walk runs with, asked as the walk starts.</param>

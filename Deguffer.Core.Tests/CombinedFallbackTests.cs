@@ -55,6 +55,8 @@ public sealed class CombinedFallbackTests : IDisposable
     /// <summary>Answers every path with an empty folder, by the route the test names for it.</summary>
     private sealed class ScriptedScanner(IReadOnlyDictionary<string, FallbackReason> reasons) : IDirectoryScanner
     {
+        public ScanTuner Tuning => ScanTuner.Shipped;
+
         public ValueTask<ScanResult> MeasureAsync(
             string path,
             MinimumAge keep = default,
@@ -87,52 +89,6 @@ public sealed class CombinedFallbackTests : IDisposable
         public PassHold Hold() => PassHold.Nothing;
     }
 
-    /// <summary>A provider that plans exactly the targets it is handed, measured by the given scanner.</summary>
-    private sealed class TargetsProvider(IUserEnvironment environment, IDirectoryScanner scanner, params DeletionTarget[] targets)
-        : CleanupProviderBase(environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, scanner)
-    {
-        public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<CleanedPlace>>([]);
-
-        public override string Id => "targets";
-
-        public override string Name => "Targets";
-
-        public override SafetyTier Tier => SafetyTier.RegenerableCache;
-
-        public override StepGrain Grain => StepGrain.Parts;
-
-        public override string WhatHappensOnNextUse => "Nothing a test cares about.";
-
-        public override ProviderBasis Basis => ProviderBasis.Observed;
-
-        public override ProviderDescription Description { get; } = new()
-        {
-            Category = ProviderCategory.TemporaryFiles,
-            Application = "a test",
-            Publisher = "the suite",
-            Purpose = "Plans the targets it is handed.",
-            Recommendation = "None.",
-        };
-
-        public override Task<bool> IsPresentAsync(CancellationToken ct = default) => Task.FromResult(true);
-
-        protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
-        {
-            var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct);
-
-            return new CleanupPlan
-            {
-                ProviderId = Id,
-                ProviderName = Name,
-                Tier = Tier,
-                WhatHappensOnNextUse = WhatHappensOnNextUse,
-                Steps = steps,
-                Notes = measured.Note is { } note ? [note] : [],
-                Fallback = measured.Fallback,
-            };
-        }
-    }
     /// <summary>
     /// A plan's targets are measured in one call, so a walking scanner reads them all in one walk, and
     /// each step still carries its own target's figure rather than a neighbour's.
