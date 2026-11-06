@@ -55,7 +55,7 @@ internal sealed class PassedOverBelow(UnresolvedReferences unresolved, PassedOve
             _unresolved?.WhyPassedOver(child) ?? _below?.WhyPassedOver(child, childName);
 
         /// <summary>Whether the child named <paramref name="childName"/> is passed over, building its path only where that is needed.</summary>
-        public bool PassesOver(string childName) =>
+        public bool PassesOver(ReadOnlySpan<char> childName) =>
             MayPassOver(childName) && WhyPassedOver(Path.Join(_parent, childName), childName) is not null;
     }
 }
