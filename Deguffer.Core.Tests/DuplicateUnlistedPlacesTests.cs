@@ -48,10 +48,10 @@ public sealed class DuplicateUnlistedPlacesTests : IDisposable
                 {
                     lock (asked)
                     {
-                        asked.Add((parent, name));
+                        asked.Add((parent, name.ToString()));
                     }
 
-                    return name == "Skip";
+                    return name is "Skip";
                 };
             }],
             progress: null,

@@ -21,11 +21,13 @@ public readonly struct FileNames
 {
     private readonly Keeping _keeping;
     private readonly string? _alsoNamed;
+    private readonly bool _lends;
 
-    private FileNames(Keeping keeping, string? alsoNamed)
+    private FileNames(Keeping keeping, string? alsoNamed, bool lends = false)
     {
         _keeping = keeping;
         _alsoNamed = alsoNamed;
+        _lends = lends;
     }
 
     /// <summary>Every file, each with its name. Also what a default value means.</summary>
@@ -43,8 +45,19 @@ public readonly struct FileNames
     /// </summary>
     public static FileNames StoresAnd(string name) => new(Keeping.Stores, name);
 
+    /// <summary>
+    /// Every file, and every name, files' and folders' alike, lent from the listing worker's memory
+    /// rather than built as a string (<see cref="ListedName"/>). Each can be read only while the caller
+    /// holds the directory's contents, so this is for a walk that copies every name elsewhere at
+    /// once, as the Explore walk copies each into its tree's name pool.
+    /// </summary>
+    public static FileNames AllLent => new(Keeping.All, null, lends: true);
+
     /// <summary>Whether files are listed at all.</summary>
     public bool KeepsFiles => _keeping is not Keeping.None;
+
+    /// <summary>Whether the names kept are lent from the listing's memory (<see cref="AllLent"/>).</summary>
+    internal bool Lends => _lends;
 
     /// <summary>Whether a kept file called <paramref name="name"/> keeps its name.</summary>
     public bool Names(ReadOnlySpan<char> name) =>

@@ -3,41 +3,6 @@ using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Exploring;
 
-/// <summary>One entry to record, as the thing that found it saw it.</summary>
-/// <param name="Name">The leaf name, with no path.</param>
-/// <param name="Size">
-/// The bytes a file occupies on the disk, which is what the picture draws. Zero for a directory: a
-/// directory's own bytes are its children's, and they are recorded separately, so anything counted
-/// here would be counted twice.
-/// </param>
-/// <param name="Created">When the entry was made, or unknown where nothing established it.</param>
-/// <param name="LastWritten">
-/// When the entry itself was last written. A directory's own timestamp is meant here, not its
-/// contents' — <see cref="ExploreTree.ModifiedOf"/> is what combines the two, and it can only do
-/// that if what it is given is the node's own.
-/// </param>
-/// <param name="Length">
-/// The file's length, where it is not <paramref name="Size"/>. Null where the two are one figure,
-/// which is every file a listing alone describes.
-/// </param>
-/// <param name="Storage">Why <paramref name="Size"/> is less than the length, where anything says.</param>
-/// <param name="SizeUnknown">
-/// Whether the file system would not say what the file occupies, so <paramref name="Size"/> is a
-/// lower bound and so is every total above it.
-/// </param>
-/// <param name="Visibility">Whether the entry is hidden or a system file, as its attributes say.</param>
-public readonly record struct ExploreChild(
-    string Name,
-    bool IsDirectory,
-    bool IsLink,
-    long Size,
-    ExploreTimestamp Created = default,
-    ExploreTimestamp LastWritten = default,
-    long? Length = null,
-    FileStorage Storage = FileStorage.Plain,
-    bool SizeUnknown = false,
-    FileVisibility Visibility = FileVisibility.Shown);
-
 /// <summary>
 /// Accumulates nodes as something discovers them, then hands over the finished
 /// <see cref="ExploreTree"/>.
@@ -130,14 +95,14 @@ public sealed class ExploreTreeBuilder
         {
             for (var i = 0; i < byName.Length; i++)
             {
-                byName[i] = new NameKey(children[i].Name, i);
+                byName[i] = new NameKey(children[i].KeptName, i);
             }
 
             // The keys carry their names, so the comparison captures nothing and the sort allocates
             // nothing. Ties go by index within the batch, which is the tree's own tie-break: a batch
             // is numbered consecutively, so index order is node-number order.
             byName.Sort(static (left, right) =>
-                ExploreTree.CompareByName(left.Name, left.Index, right.Name, right.Index));
+                ExploreTree.CompareByName(left.Name.Span, left.Index, right.Name.Span, right.Index));
 
             lock (_gate)
             {
@@ -155,7 +120,7 @@ public sealed class ExploreTreeBuilder
                 {
                     _nodes.Add() = new Node
                     {
-                        Name = _names.Intern(child.Name),
+                        Name = _names.Intern(child.KeptName.Span),
                         Parent = parent,
                         Size = child.Size,
                         Length = child.Length ?? child.Size,
@@ -179,14 +144,15 @@ public sealed class ExploreTreeBuilder
         }
         finally
         {
-            // Cleared, because a key holds its name and the pool would otherwise keep it alive.
+            // Cleared, because a key holds its name, and the pool would otherwise keep it alive, or
+            // the listing memory a lent name is read from.
             byName.Clear();
             ArrayPool<NameKey>.Shared.Return(rented);
         }
     }
 
     /// <summary>One child's name and its index in the batch, which is what the name sort compares.</summary>
-    private readonly record struct NameKey(string Name, int Index);
+    private readonly record struct NameKey(ListedName Name, int Index);
 
     /// <summary>
     /// Say that this node's size cannot be established, so every total above it is a lower bound.

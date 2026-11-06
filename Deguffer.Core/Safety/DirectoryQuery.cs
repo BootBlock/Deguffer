@@ -170,11 +170,11 @@ internal static unsafe partial class DirectoryQuery
                 return Ended(status, whileReading: true);
             }
 
-            Parse(buffer, directory, request.Files, into);
+            Parse(buffer, directory, request, into);
         }
     }
 
-    private static void Parse(byte* buffer, string directory, FileNames files, List<WalkEntry> into)
+    private static void Parse(byte* buffer, string directory, ListingRequest request, List<WalkEntry> into)
     {
         var entry = (FileFullDirInformation*)buffer;
 
@@ -184,11 +184,11 @@ internal static unsafe partial class DirectoryQuery
             var attributes = (FileAttributes)entry->FileAttributes;
             var isDirectory = attributes.HasFlag(FileAttributes.Directory);
 
-            if (!IsSelfOrParent(name) && (isDirectory || files.KeepsFiles))
+            if (!IsSelfOrParent(name) && (isDirectory || request.Files.KeepsFiles))
             {
                 into.Add(new WalkEntry(
                     directory,
-                    isDirectory || files.Names(name) ? new string(name) : null,
+                    request.NameOf(name, isDirectory),
                     attributes,
                     isDirectory ? 0 : entry->EndOfFile,
                     DateTime.FromFileTimeUtc(entry->CreationTime),

@@ -12,4 +12,21 @@ namespace Deguffer.Core.Scanning;
 /// the child's path.
 /// </param>
 /// <param name="Files">What the listing keeps of each file.</param>
-public readonly record struct ListingRequest(ListingMemory Memory, int BufferBytes, bool FollowsLink, FileNames Files);
+public readonly record struct ListingRequest(ListingMemory Memory, int BufferBytes, bool FollowsLink, FileNames Files)
+{
+    /// <summary>
+    /// The name kept for an entry called <paramref name="name"/>, as <see cref="Files"/> asks: none for
+    /// a file kept without one, lent from <see cref="Memory"/> where the listing lends its names, and
+    /// otherwise a string of its own. One place, so a listing from the disk and one a test makes keep
+    /// names alike.
+    /// </summary>
+    internal ListedName NameOf(ReadOnlySpan<char> name, bool isDirectory)
+    {
+        if (!isDirectory && !Files.Names(name))
+        {
+            return default;
+        }
+
+        return Files.Lends ? Memory.Names.Lend(name) : ListedName.Own(new string(name));
+    }
+}
