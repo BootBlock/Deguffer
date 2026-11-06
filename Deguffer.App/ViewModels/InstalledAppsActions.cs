@@ -31,7 +31,7 @@ public sealed partial class InstalledAppsActions : ObservableObject
     private readonly BackupRestorer _restorer;
     private readonly ProgramUninstaller _uninstaller;
     private readonly UninstallQueue _queue;
-    private readonly RegistryBackups _backups;
+    private readonly Func<CancellationToken, IReadOnlyList<RegistryBackupFile>> _listBackups;
     private readonly Func<IInstalledAppsConfirmation> _confirmation;
     private readonly PreferenceService _preferences;
     private readonly bool _isElevated;
@@ -41,13 +41,17 @@ public sealed partial class InstalledAppsActions : ObservableObject
     private IReadOnlyList<InstalledEntry> _installed = [];
     private bool _anyUninstallable;
     private CancellationTokenSource? _watching;
+    private CancellationTokenSource? _listing;
 
+    /// <param name="backupFolder">Where backups are kept, in display form.</param>
+    /// <param name="listBackups">Lists the backups in <paramref name="backupFolder"/>: <see cref="RegistryBackups.List"/>, which reads files, so it is called off the UI thread.</param>
     /// <param name="running">What is changing the machine on every page, where each action is recorded while it runs.</param>
     public InstalledAppsActions(
         EntryRemover remover,
         BackupRestorer restorer,
         ProgramUninstaller uninstaller,
-        RegistryBackups backups,
+        string backupFolder,
+        Func<CancellationToken, IReadOnlyList<RegistryBackupFile>> listBackups,
         Func<IInstalledAppsConfirmation> confirmation,
         PreferenceService preferences,
         bool isElevated,
@@ -58,7 +62,8 @@ public sealed partial class InstalledAppsActions : ObservableObject
         _restorer = restorer;
         _uninstaller = uninstaller;
         _queue = new UninstallQueue(uninstaller, confirmation);
-        _backups = backups;
+        BackupFolder = backupFolder;
+        _listBackups = listBackups;
         _confirmation = confirmation;
         _preferences = preferences;
         _isElevated = isElevated;
@@ -87,7 +92,7 @@ public sealed partial class InstalledAppsActions : ObservableObject
         }
     }
 
-    public string BackupFolder => _backups.Folder;
+    public string BackupFolder { get; }
 
     /// <summary>Why some of the selected stale entries will be left, or empty.</summary>
     [ObservableProperty]
@@ -144,9 +149,36 @@ public sealed partial class InstalledAppsActions : ObservableObject
     partial void OnSelectedBackupChanged(BackupRow? value) =>
         RestoreNote = value is null ? string.Empty : _restorer.MayRestore(value.File, _isElevated).Reason;
 
-    /// <summary>Read the backup folder again.</summary>
-    public void ShowBackups() =>
-        LiveList.Show(Backups, [.. _backups.List().Select(BackupRow.For)], row => row.File.Path);
+    /// <summary>Read the backup folder again, off the UI thread. A listing already running is abandoned for this one.</summary>
+    public async Task ShowBackupsAsync()
+    {
+        _listing?.Cancel();
+        using var listing = new CancellationTokenSource();
+        _listing = listing;
+
+        try
+        {
+            var rows = await Task.Run(() => _listBackups(listing.Token).Select(BackupRow.For).ToList(), listing.Token);
+
+            // A newer listing may have started after this one's last check, and its rows are the
+            // ones the list must show.
+            if (!listing.IsCancellationRequested)
+            {
+                LiveList.Show(Backups, rows, row => row.File.Path);
+            }
+        }
+        catch (OperationCanceledException) when (listing.IsCancellationRequested)
+        {
+            // Replaced by a newer listing, which shows its own rows.
+        }
+        finally
+        {
+            if (ReferenceEquals(_listing, listing))
+            {
+                _listing = null;
+            }
+        }
+    }
 
     private bool CanRemove() => _stale.Count > 0 && !IsActing;
 
@@ -172,31 +204,36 @@ public sealed partial class InstalledAppsActions : ObservableObject
         IsActing = true;
 
         // Each action here is held in RunningActions until its report is on screen, so neither the
-        // window nor an Elevate button ends the process before it has said what it did.
-        using var running = _running.Begin(RunningAction.EntryRemoval);
-        var work = _work.Begin();
-
-        try
+        // window nor an Elevate button ends the process before it has said what it did. The backup
+        // listing after it changes nothing, so it does not hold the window open.
+        using (_running.Begin(RunningAction.EntryRemoval))
         {
-            var report = await Task.Run(() => _remover.RemoveAsync(selection.Removable, backUp, _isElevated, CancellationToken.None));
+            var work = _work.Begin();
 
-            Show(
-                string.Join(Environment.NewLine, [report.Summary, .. report.Details]),
-                report.IsComplete ? InfoBarSeverity.Success : report.Verification.Passed ? InfoBarSeverity.Warning : InfoBarSeverity.Error);
-
-            if (!report.Verification.Passed)
+            try
             {
-                work.Fail();
+                var report = await Task.Run(() => _remover.RemoveAsync(selection.Removable, backUp, _isElevated, CancellationToken.None));
+
+                Show(
+                    string.Join(Environment.NewLine, [report.Summary, .. report.Details]),
+                    report.IsComplete ? InfoBarSeverity.Success : report.Verification.Passed ? InfoBarSeverity.Warning : InfoBarSeverity.Error);
+
+                if (!report.Verification.Passed)
+                {
+                    work.Fail();
+                }
+            }
+            finally
+            {
+                IsActing = false;
+                work.Dispose();
             }
         }
-        finally
-        {
-            IsActing = false;
-            work.Dispose();
-        }
 
-        ShowBackups();
+        // The entries are read again while the backups are listed, rather than after.
+        var listing = ShowBackupsAsync();
         EntriesChanged?.Invoke(this, EventArgs.Empty);
+        await listing;
     }
 
     private bool CanUninstall() => _anyUninstallable && !IsActing;

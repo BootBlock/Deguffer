@@ -38,7 +38,7 @@ public sealed class RegistryBackupsTests : IDisposable
         var exported = await backups.ExportAsync(keyPath, "Tool", CancellationToken.None);
         Assert.True(exported.Succeeded, exported.Message);
 
-        var file = Assert.Single(backups.List());
+        var file = Assert.Single(backups.List(CancellationToken.None));
         Assert.Equal(keyPath, file.KeyPath);
         Assert.Equal("Tool \"Pro\" \\ Edition", file.DisplayName);
 
@@ -60,7 +60,7 @@ public sealed class RegistryBackupsTests : IDisposable
         var exported = await backups.ExportAsync(@"HKEY_CURRENT_USER\Software\Deguffer.Tests.Missing\Nothing", "Nothing", CancellationToken.None);
 
         Assert.False(exported.Succeeded);
-        Assert.Empty(backups.List());
+        Assert.Empty(backups.List(CancellationToken.None));
     }
 
     [Fact]
@@ -100,7 +100,7 @@ public sealed class RegistryBackupsTests : IDisposable
             return null;
         });
 
-        var imported = await backups.ImportAsync(Assert.Single(backups.List()), CancellationToken.None);
+        var imported = await backups.ImportAsync(Assert.Single(backups.List(CancellationToken.None)), CancellationToken.None);
 
         Assert.True(imported.Succeeded, imported.Message);
         Assert.Equal(["write refused", "delete refused"], attempts);
