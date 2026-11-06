@@ -55,8 +55,9 @@ dotnet-trace collect --providers Deguffer-Shell -o "$env:TEMP\deguffer-shell.net
 
 To compare one build with another, add `--explore "--explore-folder=<folder>"` after the
 executable. The app opens on Explore already scanning that folder, so every run scans the same
-tree. Use a small folder of invented files. The first launch after a build is slower: on the
-fixture below it took 2.3 s, and the next two took 1.4 s each, so discard it.
+tree. Use a small folder of invented files. Over four launches of one build on the fixture below,
+launch to first frame ran from 792 ms to 866 ms and scan end to first map from 149 ms to 183 ms, so
+compare the medians of three runs or more, not one run with another.
 
 To record an app already running, attach to it by its process ID. There is no `Launch` pair:
 
@@ -76,29 +77,28 @@ runtime did inside a span.
 dotnet run scripts/shell-trace.cs -- "$env:TEMP\deguffer-shell.nettrace"
 ```
 
-For the first launch after a build, on a fixture of two folders (one holding a third) and four
-files, opened on Explore and then into one folder, it printed:
+For a launch on a fixture of two folders (one holding a third) and four files, opened on Explore
+and then into one folder, it printed:
 
 ```text
-Launch to first frame: 2254.3 ms
-  main window and first page: 1892.4 ms
-  tool windows reopened:      0.5 ms
+Launch to first frame: 866.3 ms
+  main window and first page: 555.2 ms
 
 Explore shows (UI thread held), by cause:
   cause     count    median   longest      rows selection   handoff  longest at nodes, rows
-  Finished      1   68.9 ms   68.9 ms   17.5 ms    5.2 ms   30.4 ms  8, 3
-  Step          1    7.2 ms    7.2 ms    0.9 ms    0.4 ms    4.5 ms  8, 2
+  Finished      1   51.4 ms   51.4 ms   12.8 ms    3.8 ms   28.0 ms  8, 3
+  Step          1    7.5 ms    7.5 ms    1.5 ms    0.4 ms    4.1 ms  8, 2
 
 Map pictures: 2 handed, 2 reached the screen, 0 superseded first, 0 still waiting when the trace ended.
-  hand-off to first drawing on screen: median 180.0 ms, longest 180.0 ms, first 180.0 ms
+  hand-off to first drawing on screen: median 125.2 ms, longest 125.2 ms, first 125.2 ms
 
-Scan end to first map: 219.0 ms (8 nodes)
+Scan end to first map: 149.1 ms (8 nodes)
 ```
 
-It gives launch to first frame with the main window's part of it, the tool window reopened after it, each `Show` cause with its count, median and
-longest time and the parts of the longest, the wait for each picture, the time from each scan's end
-to its first map, and the time spent applying duplicate groups. Its output names nothing from the
-machine, as the trace does not.
+It gives launch to first frame with the main window's part of it, the tool window reopened after it,
+each `Show` cause with its count, median and longest time and the parts of the longest, the wait for
+each picture, the time from each scan's end to its first map, and the time spent applying duplicate
+groups. Its output names nothing from the machine, as the trace does not.
 
 The trace also opens in [PerfView](https://github.com/microsoft/perfview). Its **Events** view lists
 every event with its time and payload (filter on `Deguffer-Shell`). Each pair is a task with a

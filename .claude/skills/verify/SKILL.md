@@ -101,8 +101,8 @@ slower with every test still green. For such a change, record a trace before and
    `window --pid <pid> --action list`), which ends the trace, and
    run `dotnet run scripts/shell-trace.cs -- <file>`.
 4. Report **launch to first frame** and **scan end to first map** from both builds, with the longest
-   `Show` where Explore changed. The first launch after a build is slower: 2.3 s against 1.4 s for
-   the next two on a three-folder fixture. Discard it, take three more, and give the median.
+   `Show` where Explore changed. Four launches of one build on a three-folder fixture ranged from
+   792 ms to 866 ms and from 149 ms to 183 ms, so take three runs of each build and give the medians.
 
 ## Before you screenshot anything
 
