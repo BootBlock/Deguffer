@@ -326,6 +326,66 @@ public sealed class ReportTests
         Assert.Equal("links placed       12              12 (12 to 12)", Line(text, "links placed"));
     }
 
+    /// <summary>
+    /// Where the open's time went, step by step under the open, so a slow open reads as the handle,
+    /// record 0 or the extension records. A step that read the volume says how many reads it made,
+    /// and a step that read nothing has no count, rather than a count of zero.
+    /// </summary>
+    [Fact]
+    public void ATableRouteReportsEachStepOfTheOpenUnderIt()
+    {
+        var text = Render(Route.Table, Opened(firstRecord: 0.5), Opened(firstRecord: 0.3), Opened(firstRecord: 0.4));
+
+        var lines = text.Split('\n');
+        var open = Array.FindIndex(lines, line => line.StartsWith("  volume open ", StringComparison.Ordinal));
+        Assert.Equal(
+            [
+                "    handle         2.0 ms          2.0 ms (2.0 ms to 2.0 ms)",
+                "    boot sector    0.0 ms          0.0 ms (0.0 ms to 0.0 ms)",
+                "      reads        1               1 (1 to 1)",
+                "    record 0       500.0 ms        350.0 ms (300.0 ms to 400.0 ms)",
+                "      reads        1               1 (1 to 1)",
+                "    list           0.0 ms          0.0 ms (0.0 ms to 0.0 ms)",
+                "    extensions     0.0 ms          0.0 ms (0.0 ms to 0.0 ms)",
+                "      reads        40              40 (40 to 40)",
+                "    bitmap pieces  0.0 ms          0.0 ms (0.0 ms to 0.0 ms)",
+                "  bitmap read      1.0 ms          1.0 ms (1.0 ms to 1.0 ms)",
+            ],
+            lines[(open + 1)..(open + 11)]);
+    }
+
+    /// <summary>
+    /// A run whose open is timed step by step by a clock this test moves: the handle two
+    /// milliseconds, record 0 as given, forty reads of extension records that take no time, and
+    /// every other step nothing.
+    /// </summary>
+    private static RunSample Opened(double firstRecord)
+    {
+        var clock = new ManualTimeProvider();
+        var open = new MftOpenTimings(clock);
+
+        open.Start();
+        clock.Advance(TimeSpan.FromMilliseconds(2));
+        open.End(MftOpenStep.VolumeHandle);
+        open.Read();
+        open.End(MftOpenStep.BootSector);
+        clock.Advance(TimeSpan.FromSeconds(firstRecord));
+        open.Read();
+        open.End(MftOpenStep.FirstRecord);
+        open.End(MftOpenStep.AttributeList);
+
+        for (var i = 0; i < 40; i++)
+        {
+            open.Read();
+        }
+
+        open.End(MftOpenStep.ExtensionRecords);
+        open.End(MftOpenStep.BitmapPlacement);
+
+        var run = Staged(firstPass: 1, deferred: 0, links: 0, deferredCount: 0, linkStages: false);
+        return run with { Tally = run.Tally with { Open = open } };
+    }
+
     /// <summary>The table route places no links, so it shows no count of them rather than a count of zero.</summary>
     [Fact]
     public void OnlyARouteThatPlacesLinksReportsHowManyItPlaced()

@@ -35,7 +35,7 @@ each of them for.
 | #476 | A benchmark route that runs several walks of one volume at once. |
 | #477 | The experiment that separates the two causes of the half-speed raced walk (`after-the-scanner.md` item 7). Done: neither cause holds warm; a read through the volume's handle does (#544). |
 | #479 | Timing of each stage of an index build, to explain the system volume's slow read per record. |
-| #543 | Timing of the steps of opening a volume's table, which #479 found costs the system volume 0.3 to 1.5 s. |
+| #543 | Timing of the steps of opening a volume's table, which #479 found costs the system volume 0.3 to 1.5 s. Done: the cost is an NTFS flush of the volume before a handle's first read past the boot file, which neither a narrower handle nor extended DASD I/O skips (#545). |
 | #466 | A `FakeProcessRunner` that can prove queries overlap. Stage 3 needs it for every test. |
 
 ### 1. Correctness
@@ -100,6 +100,7 @@ Each needs #466 for its test.
 | #481 | One subtree traversal for every age guard. |
 | #483 | A string decoded for each hard link's name and almost never kept. |
 | #544 | A read through a volume's handle slows the next walk of that volume without reading the drive: the cause #477 found. |
+| #545 | A busy volume's open waits 0.3 to 1.5 s on an NTFS flush on the thread that asked for its index, so the raced walk starts late. Move record 0's read to the build's thread. |
 | #482 | Directory names in a name pool. #477 found collections are not the cause, so this cuts allocation only. |
 
 ### 7. Memory churn in providers

@@ -27,8 +27,16 @@ internal static class MftExtentMapReader
     /// Where <c>$MFT</c>'s <c>$BITMAP</c> is, or null where it could not be located. Meaningful only
     /// where the map was read.
     /// </param>
+    /// <param name="timings">
+    /// Where the open times the list, the extension records and the bitmap's placement, or null.
+    /// </param>
     public static bool TryRead(
-        Span<byte> record0, int bytesPerCluster, ClusterReader read, out MftExtentMap map, out MftBitmapPlacement? bitmap)
+        Span<byte> record0,
+        int bytesPerCluster,
+        ClusterReader read,
+        out MftExtentMap map,
+        out MftBitmapPlacement? bitmap,
+        MftOpenTimings? timings = null)
     {
         map = default!;
         bitmap = null;
@@ -51,12 +59,15 @@ internal static class MftExtentMapReader
             return false;
         }
 
+        timings?.End(MftOpenStep.AttributeList);
         var dataSize = pieces[first].DataSize;
 
         if (list is not null && !TryFollow(list, self, record0.Length, bytesPerCluster, dataSize, read, pieces, bitmapPieces, visited))
         {
             return false;
         }
+
+        timings?.End(MftOpenStep.ExtensionRecords);
 
         pieces.Sort(static (a, b) => a.LowestVcn.CompareTo(b.LowestVcn));
         var (runs, clusters, whole) = Join(pieces);
@@ -69,6 +80,7 @@ internal static class MftExtentMapReader
 
         map = new MftExtentMap(dataSize, runs);
         bitmap = bitmapPieces.Locate(map, self, record0.Length, read, visited, listed: list is not null);
+        timings?.End(MftOpenStep.BitmapPlacement);
         return true;
     }
 

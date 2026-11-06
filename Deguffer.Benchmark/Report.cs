@@ -182,6 +182,7 @@ internal static class Report
         }
 
         Row(text, "  volume open", Duration(first.Tally.OpenTime.TotalSeconds), Over(later, r => r.Tally.OpenTime.TotalSeconds, Duration));
+        OpenRows(text, first, later);
 
         foreach (var timed in stages.Stages)
         {
@@ -197,6 +198,44 @@ internal static class Report
             Row(text, "links placed", Count(stages.LinksPlaced), Over(later, r => StagesOf(r).LinksPlaced, Count));
         }
     }
+
+    /// <summary>
+    /// Each step of the open, in the order the first run ran them, and under each step that read the
+    /// volume, how many reads it asked for. The steps add up to the open less the moments around it.
+    /// None where the volume was opened by something that does not time its steps, and a step a run
+    /// stopped before reads as zero.
+    /// </summary>
+    private static void OpenRows(StringBuilder text, RunSample first, RunSample[] later)
+    {
+        if (first.Tally.Open is not { } open)
+        {
+            return;
+        }
+
+        foreach (var timed in open.Steps)
+        {
+            var step = timed.Step;
+            Row(text, OpenStepName(step), Duration(timed.Elapsed.TotalSeconds), Over(later, r => OpenStep(r, step).Elapsed.TotalSeconds, Duration));
+
+            if (timed.Reads > 0)
+            {
+                Row(text, "      reads", Count(timed.Reads), Over(later, r => OpenStep(r, step).Reads, Count));
+            }
+        }
+    }
+
+    private static MftOpenStepTime OpenStep(RunSample run, MftOpenStep step) => run.Tally.Open?.Of(step) ?? default;
+
+    private static string OpenStepName(MftOpenStep step) => step switch
+    {
+        MftOpenStep.VolumeHandle => "    handle",
+        MftOpenStep.BootSector => "    boot sector",
+        MftOpenStep.FirstRecord => "    record 0",
+        MftOpenStep.AttributeList => "    list",
+        MftOpenStep.ExtensionRecords => "    extensions",
+        MftOpenStep.BitmapPlacement => "    bitmap pieces",
+        _ => throw new ArgumentOutOfRangeException(nameof(step), step, "Not a step of opening a table."),
+    };
 
     /// <summary>
     /// The run's time outside the open and the stages: what the route does before the first stage
