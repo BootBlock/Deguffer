@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Mft;
@@ -57,14 +58,19 @@ internal static class TableRoutes
             throw new ArgumentException("A table route reads a volume, so its target has a drive letter.", nameof(target));
         }
 
+        // Timed apart from the stages, which the read times, because opening reads the boot sector
+        // and $MFT's own extent map, and a system volume's $MFT can be in many pieces.
+        var opening = Stopwatch.GetTimestamp();
+
         // Opened above moments before, so a failure here is the volume going away mid-benchmark.
         using var source = new CountingMftSource(
             volumes.TryOpen(place.DriveLetter, out var reason)
             ?? throw new IOException($"The volume could not be opened again: {reason}."));
 
+        var openTime = Stopwatch.GetElapsedTime(opening);
         var timings = new MftStageTimings();
 
-        return route switch
+        var tally = route switch
         {
             Route.Table => Tally(source, ReadOnly(source, Count(source), tuning, timings, ct), timings),
             Route.Index => Tally(source, MftVolumeIndexBuilder.TryBuild(source, tuning, out _, ct, timings), timings),
@@ -72,6 +78,8 @@ internal static class TableRoutes
             Route.ExploreFolder => Explore(source, place.FullPath, place.Components, tuning, timings, ct),
             _ => throw new ArgumentOutOfRangeException(nameof(route), route, "Not a route that reads the table."),
         };
+
+        return tally with { OpenTime = openTime };
     }
 
     /// <summary>

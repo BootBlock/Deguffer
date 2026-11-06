@@ -309,12 +309,17 @@ public sealed class ReportTests
             Staged(firstPass: 2, deferred: 0.1, links: 12, deferredCount: 4_051),
             Staged(firstPass: 3, deferred: 0.3, links: 12, deferredCount: 4_051));
 
-        string[] stages = ["  bitmap read", "  first pass", "  extension lists", "  deferred records", "  link placing", "  child links"];
+        string[] stages =
+        [
+            "  volume open", "  bitmap read", "  first pass", "  extension lists", "  deferred records", "  link placing", "  child links", "  the rest",
+        ];
         var lines = text.Split('\n');
         Assert.Equal(stages, lines.Where(line => stages.Any(stage => line.StartsWith(stage + " ", StringComparison.Ordinal))).Select(line => line[..19].TrimEnd()));
 
         Assert.Equal("  first pass       4.000 s         2.500 s (2.000 s to 3.000 s)", Line(text, "  first pass"));
         Assert.Equal("  deferred records 500.0 ms        200.0 ms (100.0 ms to 300.0 ms)", Line(text, "  deferred records"));
+        Assert.Equal("  volume open      500.0 ms        500.0 ms (500.0 ms to 500.0 ms)", Line(text, "  volume open"));
+        Assert.Equal("  the rest         250.0 ms        250.0 ms (250.0 ms to 250.0 ms)", Line(text, "  the rest"));
         Assert.Equal("records deferred   4,051           4,051 (4,051 to 4,051)", Line(text, "records deferred"));
         Assert.Equal("links placed       12              12 (12 to 12)", Line(text, "links placed"));
     }
@@ -341,8 +346,9 @@ public sealed class ReportTests
     }
 
     /// <summary>
-    /// A run whose stages are timed by a clock this test moves: the bitmap a millisecond, the first
-    /// pass and the deferred records as given, everything else nothing.
+    /// A run whose stages are timed by a clock this test moves: the open half a second, the bitmap a
+    /// millisecond, the first pass and the deferred records as given, every other stage nothing, and
+    /// a quarter of a second outside them all.
     /// </summary>
     private static RunSample Staged(double firstPass, double deferred, int links, int deferredCount, bool linkStages = true)
     {
@@ -364,8 +370,8 @@ public sealed class ReportTests
             timings.End(MftBuildStage.ChildLinks);
         }
 
-        var run = Run(firstPass + deferred);
-        return run with { Tally = run.Tally with { Stages = timings } };
+        var run = Run(0.5 + 0.001 + firstPass + deferred + 0.25);
+        return run with { Tally = run.Tally with { Stages = timings, OpenTime = TimeSpan.FromSeconds(0.5) } };
     }
 
     private static RunSample Run(

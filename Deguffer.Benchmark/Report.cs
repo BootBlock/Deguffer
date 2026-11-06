@@ -109,9 +109,10 @@ internal static class Report
     }
 
     /// <summary>
-    /// Where a table route's time went, stage by stage in the order the first run ran them, and the
-    /// counts that size the stages run on one thread after the drive has finished. A stage a run
-    /// stopped before reads as zero.
+    /// Where a table route's time went: opening the volume, each stage in the order the first run ran
+    /// them, and what neither covers, so the rows add up to the elapsed time. Then the counts that
+    /// size the stages run on one thread after the drive has finished. A stage a run stopped before
+    /// reads as zero.
     /// </summary>
     private static void StageRows(StringBuilder text, RunSample first, RunSample[] later)
     {
@@ -120,12 +121,15 @@ internal static class Report
             return;
         }
 
+        Row(text, "  volume open", Duration(first.Tally.OpenTime.TotalSeconds), Over(later, r => r.Tally.OpenTime.TotalSeconds, Duration));
+
         foreach (var timed in stages.Stages)
         {
             var stage = timed.Stage;
             Row(text, StageName(stage), Duration(timed.Elapsed.TotalSeconds), Over(later, r => StageSeconds(r, stage), Duration));
         }
 
+        Row(text, "  the rest", Duration(Rest(first)), Over(later, Rest, Duration));
         Row(text, "records deferred", Count(stages.DeferredRecords), Over(later, r => StagesOf(r).DeferredRecords, Count));
 
         if (stages.Stages.Any(timed => timed.Stage == MftBuildStage.LinkPlacement))
@@ -133,6 +137,13 @@ internal static class Report
             Row(text, "links placed", Count(stages.LinksPlaced), Over(later, r => StagesOf(r).LinksPlaced, Count));
         }
     }
+
+    /// <summary>
+    /// The run's time outside the open and the stages: what the route does before the first stage
+    /// and after the last, such as allocating the index's columns, and closing the volume.
+    /// </summary>
+    private static double Rest(RunSample run) =>
+        (run.Elapsed - run.Tally.OpenTime - StagesOf(run).Stages.Aggregate(TimeSpan.Zero, (sum, timed) => sum + timed.Elapsed)).TotalSeconds;
 
     private static double StageSeconds(RunSample run, MftBuildStage stage) => StagesOf(run).Of(stage).TotalSeconds;
 

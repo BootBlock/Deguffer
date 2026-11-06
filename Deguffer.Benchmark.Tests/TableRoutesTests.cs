@@ -118,6 +118,7 @@ public sealed class TableRoutesTests
         Assert.Equal(stages.Split(',').Select(Enum.Parse<MftBuildStage>), timed.Stages.Select(stage => stage.Stage));
         Assert.Equal(1, timed.DeferredRecords);
         Assert.Equal(linksPlaced, timed.LinksPlaced);
+        Assert.True(tally.OpenTime > TimeSpan.Zero);
     }
 
     /// <summary>

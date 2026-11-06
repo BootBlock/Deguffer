@@ -127,13 +127,15 @@ ending: the time the list reads add after the first pass. The mean read is the b
 over the reads of records: a table in many pieces, or with many runs of free records, reads in
 smaller pieces.
 
-The indented rows split each run into the stages it ran, in order: reading the bitmap, the first
-pass (reads and parse together), the attribute lists kept outside the table, the records held back
+The indented rows split each run into the stages it ran, in order: opening the volume (its boot
+sector and `$MFT`'s own extent map), reading the bitmap, the first pass (reads and parse together), the attribute lists kept outside the table, the records held back
 for them, and then, for the index and Explore, placing each file's other names and building the
 index's child links or Explore's tree. The last three run once the drive has
 finished, so a slow one is work, not the drive. "Records deferred" and "links placed" are
 the counts those stages scale with. A stage the first run stopped before is not listed, and one
-a later run stopped before reads as zero.
+a later run stopped before reads as zero. "The rest" is the run's time outside all of them, such as
+allocating the index's columns and closing the volume, so the indented rows add up to the elapsed
+time.
 
 To report a result, open an issue and paste the output as it stands. It names the drive letter and
 the file system, and never a path, a volume label, a user or a machine. Add the kind of drive
