@@ -284,7 +284,7 @@ internal sealed record BenchmarkRequest(
             if (!accepted)
             {
                 error =
-                    $"--runs takes a number from 1 to {MaximumRuns}. For walk, measure, explorewalk and sources, --threads takes a number from " +
+                    $"--runs takes a number from 1 to {MaximumRuns}. For walk, measure, explorewalk, sources and race, --threads takes a number from " +
                     $"{WalkTuning.MinimumThreads} to {WalkTuning.MaximumThreads} and --listing-buffer from " +
                     $"{WalkTuning.MinimumListingBuffer / 1024} to {WalkTuning.MaximumListingBuffer / 1024}. " +
                     $"For the table routes, --read-size takes a number from " +

@@ -67,7 +67,8 @@ internal static class Report
 
         if (route is Route.Race)
         {
-            // A round is four parts, so its time is the rate of nothing. The parts are below.
+            // A round is four timed parts and the untimed walks before two of them, so its time is the
+            // rate of nothing. The parts are below.
             Row(text, "round", Duration(first.Elapsed.TotalSeconds), Over(later, r => r.Elapsed.TotalSeconds, Duration));
             RaceRows(text, first, later);
         }
@@ -105,15 +106,21 @@ internal static class Report
             Row(text, "folders at once", Count(first.Tally.PeakListings), Over(later, r => r.Tally.PeakListings, Count));
         }
 
-        Row(text, "processors busy", Share(first.ProcessorsBusy), Over(later, r => r.ProcessorsBusy, Share));
-        Row(text, "allocated", Bytes(first.AllocatedBytes), Over(later, r => r.AllocatedBytes, Bytes));
-
-        if (route.KeepsResult())
+        // Over a race's whole round these would count its untimed walks and the collections it forces
+        // between parts, so the race reports them for each walk instead (RaceRows).
+        if (route is not Route.Race)
         {
-            Row(text, "kept", Bytes(first.KeptBytes), Over(later, r => r.KeptBytes, Bytes));
+            Row(text, "processors busy", Share(first.ProcessorsBusy), Over(later, r => r.ProcessorsBusy, Share));
+            Row(text, "allocated", Bytes(first.AllocatedBytes), Over(later, r => r.AllocatedBytes, Bytes));
+
+            if (route.KeepsResult())
+            {
+                Row(text, "kept", Bytes(first.KeptBytes), Over(later, r => r.KeptBytes, Bytes));
+            }
+
+            Row(text, "full collections", Count(first.FullCollections), Over(later, r => r.FullCollections, Count));
         }
 
-        Row(text, "full collections", Count(first.FullCollections), Over(later, r => r.FullCollections, Count));
         Row(text, "peak working set", Bytes(first.PeakWorkingSet), later.Length > 0 ? Bytes(later.Max(r => r.PeakWorkingSet)) : string.Empty);
         Row(text, itemName, Count(first.Tally.Items), Over(later, r => r.Tally.Items, Count));
 

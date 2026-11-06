@@ -102,7 +102,7 @@ public sealed class RaceRouteTests : IDisposable
     public void TheCommandGivenRunsBeforeEveryPart()
     {
         var log = new ConcurrentQueue<string>();
-        var route = Logging(log, () => log.Enqueue("command"));
+        var route = Logging(log, _ => log.Enqueue("command"));
 
         route.Run(CancellationToken.None);
         var parts = Drain(log);
@@ -192,7 +192,7 @@ public sealed class RaceRouteTests : IDisposable
         Assert.Equal(3, File.ReadAllLines(marker).Length);
     }
 
-    private static RaceRoute Logging(ConcurrentQueue<string> log, Action? beforePart) =>
+    private static RaceRoute Logging(ConcurrentQueue<string> log, Action<CancellationToken>? beforePart) =>
         new(
             Route.Walk,
             _ =>

@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using Deguffer.Core.Safety;
 
 namespace Deguffer.Benchmark;
 
@@ -8,56 +8,49 @@ namespace Deguffer.Benchmark;
 /// what a cold result means.
 ///
 /// <para>Deguffer never empties a memory list itself (§2), so the command is the person's own tool,
-/// run through <c>cmd.exe</c> as they would type it. It is waited for, and a command that fails
-/// stops the run, so a part is never reported as having followed a command that did not do its
-/// work.</para>
+/// run through <c>cmd.exe</c> as they would type it, in the folder they ran the benchmark from. It is
+/// started through <see cref="IProcessRunner"/>, so <c>cmd.exe</c> is found by its full path,
+/// cancelling the run ends the command and whatever it started, and a command that fails stops the
+/// run: a part is never reported as having followed a command that did not do its work.</para>
 /// </summary>
-internal static class PartCommand
+internal sealed class PartCommand
 {
+    private readonly IProcessRunner _runner;
+    private readonly string _shell;
+    private readonly string _command;
+
+    /// <param name="runner">What starts the shell.</param>
+    /// <param name="shell"><c>cmd.exe</c>, by its full path.</param>
+    /// <param name="command">The command as the person typed it.</param>
+    public PartCommand(IProcessRunner runner, string shell, string command)
+    {
+        _runner = runner;
+        _shell = shell;
+        _command = command;
+    }
+
+    /// <summary><paramref name="command"/> on this machine, run from the current folder.</summary>
+    public static PartCommand For(string command) => new(
+        new ProcessRunner(Environment.CurrentDirectory),
+        NativeSystemTool.In(SystemDirectories.Current, "cmd.exe"),
+        command);
+
     /// <exception cref="PartCommandFailedException">The command could not be started, or ended with an exit code other than 0.</exception>
-    public static void Run(string command)
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> was cancelled, and the command was ended.</exception>
+    public void Run(CancellationToken ct)
     {
         // /d skips the AutoRun commands the registry can add to every cmd.exe, so only the command
         // given runs. /s makes cmd.exe remove the outer pair of quotes added here and nothing else,
-        // so the quotes inside reach it as typed. ArgumentList would escape them with backslashes,
-        // which cmd.exe does not read.
-        var start = new ProcessStartInfo("cmd.exe", $"/d /s /c \"{command}\"")
+        // so the quotes inside reach it as typed.
+        var outcome = _runner
+            .RunAsync(_shell, $"/d /s /c \"{_command}\"", ToolRun.Command(CancelledCommand.Ended), ct)
+            .GetAwaiter()
+            .GetResult();
+
+        // What the command wrote is dropped: it can name paths, and a result names none.
+        if (!outcome.Succeeded)
         {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
-
-        Process? process;
-
-        try
-        {
-            process = Process.Start(start);
-        }
-        catch (System.ComponentModel.Win32Exception ex)
-        {
-            throw new PartCommandFailedException($"cmd.exe could not be started: error {ex.NativeErrorCode}.");
-        }
-
-        using (process)
-        {
-            if (process is null)
-            {
-                throw new PartCommandFailedException("cmd.exe could not be started.");
-            }
-
-            // Read to the end, both at once, so a command that writes a lot never blocks on a full
-            // pipe. What it writes is dropped: it can name paths, and a result names none.
-            var output = process.StandardOutput.ReadToEndAsync();
-            var errors = process.StandardError.ReadToEndAsync();
-            process.WaitForExit();
-            Task.WaitAll(output, errors);
-
-            if (process.ExitCode != 0)
-            {
-                throw new PartCommandFailedException($"The command run before each part ended with exit code {process.ExitCode}.");
-            }
+            throw new PartCommandFailedException($"The command run before each part ended with exit code {outcome.ExitCode}.");
         }
     }
 }

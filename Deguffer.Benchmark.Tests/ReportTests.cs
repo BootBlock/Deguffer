@@ -378,7 +378,7 @@ public sealed class ReportTests
 
     /// <summary>
     /// A race reports each part of its rounds and how many times as long each took raced, and what
-    /// the collector did while each walk ran. A round is four parts, so it has no rate, and the race
+    /// the collector did while each walk ran. A round is several parts, so it has no rate, and the race
     /// lists no folders of its own beside the walk's count.
     /// </summary>
     [Fact]
@@ -407,6 +407,8 @@ public sealed class ReportTests
         Assert.DoesNotContain("elapsed", text, StringComparison.Ordinal);
         Assert.DoesNotContain("folders at once", text, StringComparison.Ordinal);
         Assert.DoesNotContain("MiB/s read", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("full collections", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("processors busy", text, StringComparison.Ordinal);
     }
 
     /// <summary>Two results are comparable only under the same collector, so every result names it.</summary>

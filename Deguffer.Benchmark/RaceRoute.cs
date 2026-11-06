@@ -26,14 +26,14 @@ internal sealed class RaceRoute
     private readonly Route _racer;
     private readonly Func<CancellationToken, RunTally> _walk;
     private readonly Func<CancellationToken, RunTally> _build;
-    private readonly Action? _beforePart;
+    private readonly Action<CancellationToken>? _beforePart;
     private int _rounds;
 
     /// <param name="racer">The route <paramref name="walk"/> runs, named in the result.</param>
     /// <param name="walk">The walk, timed alone and raced.</param>
     /// <param name="build">The index build, timed alone and raced.</param>
     /// <param name="beforePart">Runs before each part, outside its time, or null for nothing.</param>
-    public RaceRoute(Route racer, Func<CancellationToken, RunTally> walk, Func<CancellationToken, RunTally> build, Action? beforePart)
+    public RaceRoute(Route racer, Func<CancellationToken, RunTally> walk, Func<CancellationToken, RunTally> build, Action<CancellationToken>? beforePart)
     {
         _racer = racer;
         _walk = walk;
@@ -68,7 +68,7 @@ internal sealed class RaceRoute
             racer,
             walker,
             ct => TableRoutes.Run(Route.Index, volumes, $@"{buildDrive}:\", table, ct),
-            beforePart is null ? null : () => PartCommand.Run(beforePart));
+            beforePart is null ? null : PartCommand.For(beforePart).Run);
     }
 
     /// <returns>The walk alone's count, complete only where every part was.</returns>
@@ -111,7 +111,7 @@ internal sealed class RaceRoute
     /// <summary>
     /// Walk the folder once, untimed, before a timed walk. A read through a volume's handle, which
     /// every build makes, slows the next walk of that volume by about half a second without reading
-    /// the drive (#477), and the part before a timed walk can be a build. A scan's walk does not follow
+    /// the drive (#544), and the part before a timed walk can be a build. A scan's walk does not follow
     /// a build of its own volume, so neither timed walk may: each then measures only what the other
     /// part beside it costs.
     /// </summary>
@@ -119,7 +119,7 @@ internal sealed class RaceRoute
 
     private RacePart Alone(Func<CancellationToken, RunTally> part, CancellationToken ct)
     {
-        Settle();
+        Settle(ct);
 
         return Measure(part, ct);
     }
@@ -127,7 +127,7 @@ internal sealed class RaceRoute
     private (RacePart Walk, RacePart Build) Raced(CancellationToken ct)
     {
         Prime(ct);
-        Settle();
+        Settle(ct);
 
         using var start = new Barrier(2);
 
@@ -157,13 +157,13 @@ internal sealed class RaceRoute
     /// Collect what the last part left, then run the command given: in that order, so a command that
     /// empties the cache runs last before the part.
     /// </summary>
-    private void Settle()
+    private void Settle(CancellationToken ct)
     {
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
-        _beforePart?.Invoke();
+        _beforePart?.Invoke(ct);
     }
 
     private static RacePart Measure(Func<CancellationToken, RunTally> part, CancellationToken ct)

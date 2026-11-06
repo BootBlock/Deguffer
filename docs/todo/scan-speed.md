@@ -33,7 +33,7 @@ each of them for.
 | --- | --- |
 | #443 | Per-provider planning time, and a benchmark route that times a whole planning pass. |
 | #476 | A benchmark route that runs several walks of one volume at once. |
-| #477 | The experiment that separates the two causes of the half-speed raced walk (`after-the-scanner.md` item 7). |
+| #477 | The experiment that separates the two causes of the half-speed raced walk (`after-the-scanner.md` item 7). Done: neither cause holds warm; a read through the volume's handle does (#544). |
 | #479 | Timing of each stage of an index build, to explain the system volume's slow read per record. |
 | #543 | Timing of the steps of opening a volume's table, which #479 found costs the system volume 0.3 to 1.5 s. |
 | #466 | A `FakeProcessRunner` that can prove queries overlap. Stage 3 needs it for every test. |
@@ -96,10 +96,11 @@ Each needs #466 for its test.
 
 | Issue | Note |
 | --- | --- |
-| #478 | Low I/O priority for a raced build. Only if #477 shows the disk queue is the cause. |
+| #478 | Low I/O priority for a raced build. #477 found the disk queue a cause only cold, for a build of another volume on the walk's disk. |
 | #481 | One subtree traversal for every age guard. |
 | #483 | A string decoded for each hard link's name and almost never kept. |
-| #482 | Directory names in a name pool. Helps #477 only if collections are the cause. |
+| #544 | A read through a volume's handle slows the next walk of that volume without reading the drive: the cause #477 found. |
+| #482 | Directory names in a name pool. #477 found collections are not the cause, so this cuts allocation only. |
 
 ### 7. Memory churn in providers
 
