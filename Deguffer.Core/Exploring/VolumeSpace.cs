@@ -80,40 +80,16 @@ public readonly record struct VolumeSpace(
     /// <para>Asked of that one volume through <see cref="IVolumeInventory.SpaceOf"/>, never by reading
     /// the list again. The page shows what is left as the removal reports it, on the UI thread, and a
     /// fresh list there would wait on every volume the machine has mounted (#181). That this space is not
-    /// <see cref="None"/> already says the scan covered the whole of the volume.</para>
+    /// <see cref="None"/> already says the scan covered the whole of the volume. A finished scan's
+    /// free space is read the same way (<see cref="ScannedVolume.SpaceAsync"/>), for the same reason.</para>
+    ///
+    /// <para>Asked of the folder a <c>subst</c> letter stands for, as <see cref="Of"/> is: a letter made
+    /// for the top of a volume is mounted nowhere itself, and the volume is the one it leads to.</para>
     /// </summary>
     public VolumeSpace Remeasured(IVolumeInventory volumes, string scannedRoot) =>
-        this != None && volumes.SpaceOf(scannedRoot) is { } now
+        this != None && volumes.SpaceOf(VolumeRoot.Followed(volumes, scannedRoot)) is { } now
             ? this with { TotalBytes = now.Total, FreeBytes = now.Free }
             : None;
-
-    /// <summary>
-    /// <see cref="Of"/> for a finished scan of <paramref name="scannedRoot"/>, with what Windows
-    /// states about the space no folder accounts for, read once from <paramref name="hidden"/>.
-    /// Nothing is asked of Windows where the scan did not cover a whole volume, because nothing is
-    /// drawn beside it.
-    /// </summary>
-    /// <param name="tree">What the scan found, which says whether it counted the shadow copy storage.</param>
-    public static async Task<VolumeSpace> ReadAsync(
-        IVolumeInventory volumes,
-        IHiddenSpaceSource hidden,
-        string scannedRoot,
-        ExploreTree tree,
-        CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(hidden);
-        ArgumentNullException.ThrowIfNull(tree);
-
-        var space = Of(volumes, scannedRoot);
-
-        return space == None
-            ? None
-            : space with
-            {
-                Hidden = await hidden.ReadAsync(LongPath.Display(scannedRoot), ct).ConfigureAwait(false),
-                CountedSystemVolumeInformation = Counted(tree),
-            };
-    }
 
     /// <summary>
     /// What is drawn beside a scan that counted <paramref name="scannedBytes"/>: the space the volume
@@ -175,7 +151,7 @@ public readonly record struct VolumeSpace(
     /// could draw what it read twice, and leaving it in the unaccounted block only leaves Windows'
     /// figure to that block's note and to the folder's own description.</para>
     /// </summary>
-    private static bool Counted(ExploreTree tree)
+    internal static bool Counted(ExploreTree tree)
     {
         foreach (var child in tree.ChildrenOf(tree.RootNode))
         {

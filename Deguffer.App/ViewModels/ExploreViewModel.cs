@@ -459,7 +459,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         // Read once, at the start. The scope can be changed while a scan runs, and a sentence
         // written afterwards would then describe the next scan rather than this one's result.
         var scoped = Targeting.IsScopedToFolder;
-        var scanned = Begin(target);
+        var (scanned, volume) = Begin(target, ct);
 
         // Next to the try, so nothing can throw between the two and leave the taskbar busy.
         var work = _work.Begin();
@@ -476,7 +476,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
                 ct);
             scanned.TrySetResult(scan);
 
-            await FinishAsync(scan, target, scoped, ct);
+            await FinishAsync(scan, volume, scoped);
         }
         catch (OperationCanceledException)
         {
@@ -501,13 +501,14 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
 
     /// <summary>
     /// Set the page up for a scan of <paramref name="target"/>: busy, with nothing compared, the
-    /// refusal set re-read and the elevation offer back to what is known before anything is measured.
+    /// refusal set re-read, the volume being read beside the scan, and the elevation offer back to what
+    /// is known before anything is measured.
     /// </summary>
     /// <returns>
     /// What the refusal set waits on, which the scan completes with what it found, or with null where
-    /// it ends without a scan.
+    /// it ends without a scan; and the reading of the volume the scan is taken of.
     /// </returns>
-    private TaskCompletionSource<ExploreScan?> Begin(string target)
+    private (TaskCompletionSource<ExploreScan?> Scanned, ScannedVolume Volume) Begin(string target, CancellationToken ct)
     {
         IsBusy = true;
         Progress = null;
@@ -524,41 +525,42 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         var scanned = new TaskCompletionSource<ExploreScan?>(TaskCreationOptions.RunContinuationsAsynchronously);
         Selection.Reconsider(ProtectionScope.Scanned(target, scanned.Task, _volumes));
 
+        // Started with the scan so it runs while the scan does, rather than between its end and the map.
+        var volume = ScannedVolume.Start(_volumes, _hidden, target, ct);
+
         // The previous scan's fallback reason is about to be replaced, and a cancelled or failed scan
         // never reaches the offer FinishAsync makes.
         Elevation.Offer(null, default);
 
         Status.Say(StatusLine.Said($"Scanning {target}…"));
 
-        return scanned;
+        return (scanned, volume);
     }
 
     /// <summary>
     /// Show what a finished scan found, with the volume it was taken of, and clear the status line.
     /// </summary>
+    /// <param name="volume">The reading of that volume, started with the scan.</param>
     /// <param name="scoped">Whether the scan was started on a folder rather than a drive.</param>
-    private async Task FinishAsync(ExploreScan scan, string target, bool scoped, CancellationToken ct)
+    private async Task FinishAsync(ExploreScan scan, ScannedVolume volume, bool scoped)
     {
-        // Read afresh and handed to Show, which is what draws the map, because the space figures
-        // the drive picker holds are from whenever it last opened. Read off the UI thread, since
-        // the reading asks every volume the machine has mounted.
-        await _volumes.RefreshAsync(ct);
-
-        var volume = await VolumeSpace.ReadAsync(_volumes, _hidden, target, scan.Tree, ct);
+        var space = await volume.SpaceAsync(scan.Tree);
 
         // Before the tree is shown, because the pointer can describe the new map from then on.
         _strategy = scan.Strategy;
 
-        Show(scan.Tree, _position.CarriedTo(Tree, scan.Tree), volume, ShowCause.Finished);
+        Show(scan.Tree, _position.CarriedTo(Tree, scan.Tree), space, ShowCause.Finished);
 
         Notes.RouteNote = scan.RouteNote;
-        Elevation.Offer(scan.Fallback, volume.Hidden);
-
-        await RecordAsync(scan, target, scoped);
+        Elevation.Offer(scan.Fallback, space.Hidden);
 
         // The progress sentence goes, and nothing replaces it: the map, its readout and its rows
-        // state the figures, and each one that is a lower bound is marked "≥".
+        // state the figures, and each one that is a lower bound is marked "≥". Before the scan is
+        // kept, which waits for the list of volumes read beside it, so the sentence does not go on
+        // describing a scan whose map is already drawn.
         Status.Say(StatusLine.Empty);
+
+        await RecordAsync(scan, volume, scoped);
     }
 
     /// <summary>
@@ -591,11 +593,12 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     /// in memory and one small file, and a cancel arriving during it would otherwise throw away the
     /// finished scan along with it.</para>
     /// </summary>
+    /// <param name="scanned">The reading of the volume the scan was taken of, which names it.</param>
     /// <param name="scoped">Whether the scan was started on a folder rather than a drive.</param>
-    private async Task RecordAsync(ExploreScan scan, string target, bool scoped)
+    private async Task RecordAsync(ExploreScan scan, ScannedVolume scanned, bool scoped)
     {
-        var volume = HostVolume.For(_volumes, target)?.VolumeName;
         var space = Volume;
+        var volume = await scanned.NameAsync();
         var taken = _time.GetUtcNow().UtcDateTime;
 
         var record = await Task.Run(() => _history.Record(scan, volume, space, scoped, taken));
