@@ -32,7 +32,7 @@ public sealed class CushionRendererTests : IDisposable
     private readonly CushionRenderer _renderer;
 
     public CushionRendererTests() =>
-        _renderer = CushionRenderer.For(_device) ?? throw new InvalidOperationException("WARP cannot run the cushion shaders.");
+        _renderer = CushionRenderer.For(_device, CushionShaders.Default) ?? throw new InvalidOperationException("WARP cannot run the cushion shaders.");
 
     public void Dispose()
     {
