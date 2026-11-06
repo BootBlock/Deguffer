@@ -162,26 +162,32 @@ public sealed class MftVolumeIndexGuardsTests
     /// <summary>
     /// A mail store and an entry left out stay under every guard, so each keeps its folders standing
     /// in every reading. The store is named once, for all of them (§9).
+    ///
+    /// <para>Each sits alone in a folder of its own, so that folder stands for no other reason, and a
+    /// reading that took it would show the store or the entry marking fewer guards than all.</para>
     /// </summary>
     [Fact]
     public void KeepsAMailStoreAndAnEntryLeftOutStandingUnderEveryGuard()
     {
         const uint Mail = 14;
-        const uint Skipped = 15;
+        const uint Holding = 15;
+        const uint Skipped = 16;
 
         var index = Build(Tree()
             .AddFile(20, Cache, "old.bin", allocated: 100, logical: 100, created: Old, lastWritten: Old)
             .AddFile(21, Cache, "recent.bin", allocated: 200, logical: 200, created: Old, lastWritten: Recent)
             .AddDirectory(Mail, Cache, "mail", created: Old, lastWritten: Old)
             .AddFile(22, Mail, "archive.pst", allocated: 1_048_576, logical: 1_000_000, created: Old, lastWritten: Old)
-            .AddDirectory(Skipped, Cache, "skipped", created: Old, lastWritten: Old)
+            .AddDirectory(Holding, Cache, "holding", created: Old, lastWritten: Old)
+            .AddDirectory(Skipped, Holding, "skipped", created: Old, lastWritten: Old)
             .AddFile(23, Skipped, "kept.bin", allocated: 400, logical: 400, created: Old, lastWritten: Old));
 
-        var leftOut = index.TryPlace(CachePath, [["skipped"]], NoFileIsDescribed)!;
+        var leftOut = index.TryPlace(CachePath, [["holding", "skipped"]], NoFileIsDescribed)!;
 
         var measured = index.TryMeasure(CachePath, [MinimumAge.Off, Guard], keepRoot: false, leftOut)!;
 
-        // Off: both files. The cache and mail stay for the store, and skipped is never entered.
+        // Off: both files. Mail and the cache stay for the store, holding stays for skipped, and
+        // skipped is never entered.
         Assert.Equal(new MftReading(new ScanSize(300, 300, Entries: 2), WithheldRecent: false), measured.Readings[0]);
 
         // The guard: old.bin alone.

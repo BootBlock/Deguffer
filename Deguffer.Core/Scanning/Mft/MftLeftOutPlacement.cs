@@ -18,7 +18,7 @@ internal sealed class MftLeftOutPlacement(
 {
     /// <summary>
     /// The node of each entry of <paramref name="leftOut"/>, given as components below
-    /// <paramref name="root"/>, for <see cref="MftVolumeIndex.TryMeasure(IReadOnlyList{string}, MinimumAge, bool, IReadOnlySet{uint}, out bool, out IReadOnlyList{IReadOnlyList{string}})"/>
+    /// <paramref name="root"/>, for <see cref="MftVolumeIndex.TryMeasure(IReadOnlyList{string}, IReadOnlyList{MinimumAge}, bool, IReadOnlySet{uint})"/>
     /// to leave out. Null where an entry the subtree holds cannot be placed, which sends the caller to
     /// the walk: a total that counted an entry it was told to leave out would promise what the
     /// removal will not take.

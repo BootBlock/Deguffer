@@ -142,7 +142,7 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
 
     /// <summary>
     /// The node of each entry of <paramref name="leftOut"/>, given as components below
-    /// <paramref name="root"/>, for <see cref="TryMeasure(IReadOnlyList{string}, MinimumAge, bool, IReadOnlySet{uint}, out bool, out IReadOnlyList{IReadOnlyList{string}})"/>
+    /// <paramref name="root"/>, for <see cref="TryMeasure(IReadOnlyList{string}, IReadOnlyList{MinimumAge}, bool, IReadOnlySet{uint})"/>
     /// to leave out, or null where one cannot be placed. See <see cref="MftLeftOutPlacement"/>.
     /// </summary>
     /// <param name="describe">
