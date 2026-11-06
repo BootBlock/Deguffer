@@ -39,14 +39,15 @@ public sealed class ComponentStoreEarlyStartTests : IDisposable
     private string Dism => NativeSystemTool.In(_system, "Dism.exe");
 
     /// <summary>Both component store rows over one analysis, as the planner builds them.</summary>
-    private ICleanupProvider[] Rows(IProcessRunner runner)
+    private ICleanupProvider[] Rows(IProcessRunner runner, FakeUserEnvironment? environment = null)
     {
+        environment ??= _environment;
         var analysis = new ComponentStoreAnalysis(_system, runner, new OwnServicingCalls());
 
         return
         [
-            new ComponentStoreCleanupProvider(_environment, runner, FakeProcessInspector.NothingRunning, _system, _servicing, analysis),
-            new ComponentStoreResetBaseProvider(_environment, runner, FakeProcessInspector.NothingRunning, _system, _servicing, analysis),
+            new ComponentStoreCleanupProvider(environment, runner, FakeProcessInspector.NothingRunning, _system, _servicing, analysis),
+            new ComponentStoreResetBaseProvider(environment, runner, FakeProcessInspector.NothingRunning, _system, _servicing, analysis),
         ];
     }
 
@@ -180,6 +181,59 @@ public sealed class ComponentStoreEarlyStartTests : IDisposable
         var returnedEarly = await ReturnsBeforeDismExits(pass, dism);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => pass.WaitAsync(Deadline));
+        Assert.False(returnedEarly, "the pass returned while DISM was still exiting");
+    }
+
+    /// <summary>
+    /// A plan that fails while the rows wait on the analysis the pass started ends the analysis, and
+    /// the pass returns once DISM has exited. Stopping only the slots would leave the rows waiting on
+    /// DISM's answer, and the pass open until it came.
+    /// </summary>
+    [Fact]
+    public async Task APlanThatFailsWhileTheRowsWaitEndsTheAnalysisBeforeThePassReturns()
+    {
+        var dism = new SlowToExitDism();
+        var broken = new FakeCleanupProvider("broken")
+        {
+            WhilePlanning = () => dism.Started.Wait(Deadline),
+            PlanFailure = new InvalidOperationException("The plan failed."),
+        };
+
+        var planner = new CleanupPlanner([broken, .. Rows(dism)]);
+
+        var pass = planner.PlanAllAsync();
+        var returnedEarly = await ReturnsBeforeDismExits(pass, dism);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => pass.WaitAsync(Deadline));
+        Assert.False(returnedEarly, "the pass returned while DISM was still exiting");
+    }
+
+    /// <summary>
+    /// An analysis a row starts at its own turn, as for an account that is not an administrator, is
+    /// waited out too: a cancelled pass returns only once DISM has exited.
+    /// </summary>
+    [Fact]
+    public async Task AnAnalysisARowStartedEndsBeforeACancelledPassReturns()
+    {
+        var dism = new SlowToExitDism();
+        using var cts = new CancellationTokenSource();
+        var cancelling = new FakeCleanupProvider("cancelling")
+        {
+            WhilePlanning = () =>
+            {
+                if (dism.Started.Wait(Deadline))
+                {
+                    cts.Cancel();
+                }
+            },
+        };
+
+        var planner = new CleanupPlanner([cancelling, .. Rows(dism, new FakeUserEnvironment(_temp.Path))]);
+
+        var pass = planner.PlanAllAsync(ct: cts.Token);
+        var returnedEarly = await ReturnsBeforeDismExits(pass, dism);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pass.WaitAsync(Deadline));
         Assert.False(returnedEarly, "the pass returned while DISM was still exiting");
     }
 

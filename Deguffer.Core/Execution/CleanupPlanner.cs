@@ -499,7 +499,7 @@ public sealed class CleanupPlanner
             // Before any row plans, so every plan in the pass is held to the same set.
             var registered = await RegisteredStorage.ReadAsync(registrars, _volumes, ct).ConfigureAwait(false);
 
-            return await PlanHeldAsync(providers, registered, _volumes, keep, status, found, ct).ConfigureAwait(false);
+            return await PlanHeldAsync(providers, registered, _volumes, keep, status, found, pass, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -507,7 +507,9 @@ public sealed class CleanupPlanner
 
             // Until each has ended, not only been told to: a tool ends after its cancellation is asked
             // for, and the next pass may start its own the moment this one returns. How each ended is
-            // its plan's to report, which awaited it, so it is not thrown a second time here.
+            // not thrown here. A plan that awaited it reported it, a plan that asked after it failed
+            // asked again and reported its own answer, and a pass that ended before any plan asked
+            // reports why it ended, which is the answer its caller is owed.
             await Task.WhenAll(started).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
             foreach (var hold in holds)
@@ -524,6 +526,7 @@ public sealed class CleanupPlanner
         MinimumAge keep,
         IProgress<string>? status,
         IProgress<Finding>? found,
+        CancellationTokenSource pass,
         CancellationToken ct)
     {
         // In the providers' order, whatever order they finish in, so the sort below breaks a tie the
@@ -539,17 +542,27 @@ public sealed class CleanupPlanner
             var provider = providers[index];
 
             Finding finding;
+            var planned = false;
             checking.Started(provider);
 
             try
             {
                 finding = await PlanOneAsync(provider, registered, volumes, keep, token).ConfigureAwait(false);
+                planned = true;
             }
             finally
             {
                 // A provider that failed or was stopped is no longer being checked, and the line
                 // must not go on naming it while the rest of the pass ends.
                 checking.Ended(provider);
+
+                // A failure ends the whole pass at once, the work started at its top included. The
+                // slots' own token stops only the slots, and a plan waiting on that work would hold
+                // the pass open until the work answered.
+                if (!planned)
+                {
+                    await pass.CancelAsync().ConfigureAwait(false);
+                }
             }
 
             findings[index] = finding;

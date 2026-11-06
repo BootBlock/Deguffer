@@ -49,18 +49,10 @@ public sealed class ComponentStoreAnalysis(
     /// What the store held when this planning pass first asked, asked once per pass.
     ///
     /// <para>The analysis runs under the token of whoever asked first, which is the whole pass's where
-    /// <see cref="ComponentStoreProviderBase.BeginPass"/> started it. Each caller stops waiting on its
-    /// own token, so a plan the pass stops does not wait out an analysis the pass then ends.</para>
+    /// <see cref="ComponentStoreProviderBase.BeginPass"/> started it, and every caller waits until DISM
+    /// has ended, cancelled or not, so none returns while it is still running.</para>
     /// </summary>
-    public Task<ComponentStoreReading> ReadingAsync(CancellationToken ct) => Reading(ct).WaitAsync(ct);
-
-    /// <summary>
-    /// Starts this pass's analysis, or finds it started, and returns it whole: it ends only once DISM
-    /// has, which is what a pass that cancels it waits for before it returns.
-    /// </summary>
-    public Task<ComponentStoreReading> StartReading(CancellationToken ct) => Reading(ct);
-
-    private Task<ComponentStoreReading> Reading(CancellationToken ct) => _reading.Get(() => ReadAsync(ct));
+    public Task<ComponentStoreReading> ReadingAsync(CancellationToken ct) => _reading.Get(() => ReadAsync(ct));
 
     /// <summary>Forgets the last pass's reading, for a planning pass that starts afresh.</summary>
     public void Invalidate() => _reading.Forget();

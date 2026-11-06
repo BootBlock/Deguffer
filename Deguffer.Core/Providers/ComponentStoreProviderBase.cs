@@ -107,7 +107,7 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
         || !LongPath.DirectoryMayExist(_store)
         || UnfinishedUpdate.HoldsEverything(Servicing, Inspector, _servicingCalls) is not null
             ? Task.CompletedTask
-            : _analysis.StartReading(ct);
+            : _analysis.ReadingAsync(ct);
 
     /// <summary>The store's folder. DISM is part of every Windows that has one.</summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
