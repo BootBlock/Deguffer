@@ -8,7 +8,7 @@ internal delegate FileHolders FileHolderQuery(IReadOnlyList<string> files, Cance
 /// answer allows it.
 ///
 /// <para><b>Each session has a cost of its own.</b> Forty candidates of eight files each took
-/// 324-441 ms in a session apiece and 80-117 ms in one session of all 320, so every candidate's
+/// 313-441 ms in a session apiece and 63-117 ms in one session of all 320, so every candidate's
 /// files are asked about together first. A set of files no process holds has no subset a process
 /// holds, so where that one session names nobody, it is every candidate's answer.</para>
 ///
@@ -20,12 +20,12 @@ internal delegate FileHolders FileHolderQuery(IReadOnlyList<string> files, Cance
 /// refuses the whole registration) falls back the same way, so one unusual path does not make every
 /// candidate "could not tell".</para>
 ///
-/// <para><b>Not halved to find the holder.</b> A session with a held file in it costs about
-/// 100-250 ms where one without costs under 10, so the cost is the number of sessions a held file
-/// is in. Halving puts the held file in a session at every level: one held among forty measured
+/// <para><b>Not halved to find the holder.</b> A session of 100 files with one held measured 198 ms,
+/// and the same session with none held 28 ms, so the cost is the number of sessions a held file is
+/// in. Halving puts the held file in a session at every level: one held among forty measured
 /// 631-702 ms halved. Asking one at a time after the shared session puts it in two, and measured
 /// 532-636 ms against 348-430 ms with no shared session. That one extra session is what a held lock
-/// file costs, for the five-fold saving when none is.</para>
+/// file costs, for a saving of about four-fold when none is.</para>
 ///
 /// <para>Not split into batches by size: one session registered 20,000 files and answered.</para>
 /// </summary>
