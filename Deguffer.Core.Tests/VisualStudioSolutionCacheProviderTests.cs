@@ -271,6 +271,39 @@ public sealed class VisualStudioSolutionCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// Every solution's cache files are asked about in one Restart Manager session first, and a shared
+    /// session that names a holder is asked again one solution at a time. The open solution among
+    /// eight is the only one held back and named in the plan, it survives the run whole, and the other
+    /// seven are cleaned (§5.6).
+    /// </summary>
+    [Fact]
+    public async Task OneOpenSolutionAmongManyAskedTogetherIsTheOnlyOneHeldBack()
+    {
+        var root = ApproveRoot();
+        var folders = Enumerable.Range(0, 8)
+            .Select(i => VisualStudioFolderFixture.Create(Path.Combine(root, $"App{i}")))
+            .ToList();
+        var open = folders[5];
+        var holders = new FakeFileHolders().Holding(open.IndexFile, "DevHub");
+        var live = new LiveTreeInspector(
+            new FakeProcessTableCalls().With(FakeProcessTableCalls.Own), new FakeVolumeInventory(), holdersOf: holders.Query);
+
+        var provider = CreateProvider(live: live);
+        var plan = await provider.PlanAsync();
+
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == open.Vs);
+        Assert.Contains(plan.Notes, n => n.Message.StartsWith("Left .vs in App5", StringComparison.Ordinal) && n.Message.Contains("DevHub", StringComparison.Ordinal));
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("App4", StringComparison.Ordinal) || n.Message.Contains("App6", StringComparison.Ordinal));
+        Assert.All(folders, folder => Assert.Contains(folder.IndexFile, holders.Sessions[0]));
+
+        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
+        Assert.All(open.Caches, cache => Assert.True(LongPath.EntryExists(cache), $"{cache} was removed"));
+        Assert.All(folders.Except([open]).SelectMany(folder => folder.Caches), cache => Assert.False(LongPath.EntryExists(cache), $"{cache} was not removed"));
+        Assert.All(folders.SelectMany(folder => folder.Kept), kept => Assert.True(LongPath.EntryExists(kept), $"{kept} was removed"));
+        Assert.True((await provider.VerifyAsync(plan)).Passed);
+    }
+
+    /// <summary>
     /// The veto asks Windows about every file the caches were proved by, and about the solution folder.
     /// Every file named was listed, so the query says so, and an SQLite companion is named only where
     /// the listing found one: a name nothing listed would be a guess the inspector has to probe.
@@ -569,7 +602,7 @@ public sealed class VisualStudioSolutionCacheProviderTests : IDisposable
 
     private VisualStudioSolutionCacheProvider CreateProvider(
         FakeProcessRunner? runner = null,
-        FakeLiveTreeInspector? live = null,
+        ILiveTreeInspector? live = null,
         VisualStudioCacheReader? reader = null)
     {
         var scanner = new FakeDirectoryScanner();

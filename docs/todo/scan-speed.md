@@ -206,6 +206,7 @@ Each keeps what it proves and proves it more cheaply. All are `safety`.
 | #505 | Candidates identified one at a time on one thread. Measured at 52-63 µs a file on one thread. |
 | #508 | The first stage uses the chosen checksum where XXH128 gives the same order. |
 | #507 | One dispatcher post per confirmed group, each copy judged three or four times there. |
+| #539 | Found measuring #507: each copy judged asked where its volume is mounted. 20,000 groups confirmed in 62-68 s before, 10-12 s after. |
 | #537 | The result waits for the whole checksum store to be sorted and written. |
 | #510 | Measure a solid-state disk's reader bound for the first stage, which waits on opens. |
 
