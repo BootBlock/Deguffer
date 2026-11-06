@@ -73,10 +73,13 @@ public sealed class CleanupPlannerTests
 
         var findings = await planner.PlanAsync([third, first], MinimumAge.Off, status: null, found, CancellationToken.None);
 
-        // Planned together, so in no fixed order, but each only once its cache had gone and was held.
-        Assert.Equal(["invalidate:third", "invalidate:first", "hold:third", "hold:first"], journal.Take(4));
-        Assert.Equal(["plan:first", "plan:third"], journal.Skip(4).Take(2).Order());
-        Assert.Equal(["release:third", "release:first"], journal.Skip(6));
+        // Planned together, so in no fixed order, but each only once its cache had gone and was held,
+        // and once every provider being planned had started what its plan waits on.
+        Assert.Equal(
+            ["invalidate:third", "invalidate:first", "hold:third", "hold:first", "begin:third", "begin:first"],
+            journal.Take(6));
+        Assert.Equal(["plan:first", "plan:third"], journal.Skip(6).Take(2).Order());
+        Assert.Equal(["release:third", "release:first"], journal.Skip(8));
         Assert.Equal(["first", "third"], found.Reports.Select(f => f.Provider.Id).Order());
         Assert.Equal(["third", "first"], findings.Select(f => f.Provider.Id));
     }
@@ -516,9 +519,9 @@ public sealed class CleanupPlannerTests
 
         await planner.PlanAllAsync();
 
-        Assert.Equal(["invalidate:a", "invalidate:b", "hold:a", "hold:b"], journal.Take(4));
-        Assert.Equal(["plan:a", "plan:b"], journal.Skip(4).Take(2).Order());
-        Assert.Equal(["release:a", "release:b"], journal.Skip(6));
+        Assert.Equal(["invalidate:a", "invalidate:b", "hold:a", "hold:b", "begin:a", "begin:b"], journal.Take(6));
+        Assert.Equal(["plan:a", "plan:b"], journal.Skip(6).Take(2).Order());
+        Assert.Equal(["release:a", "release:b"], journal.Skip(8));
     }
 
     /// <summary>
@@ -551,7 +554,51 @@ public sealed class CleanupPlannerTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => planner.PlanAllAsync(ct: new CancellationToken(canceled: true)));
 
-        Assert.Equal(["invalidate:a", "invalidate:b", "hold:a", "hold:b", "release:a", "release:b"], journal);
+        Assert.Equal(["invalidate:a", "invalidate:b", "hold:a", "hold:b", "begin:a", "begin:b", "release:a", "release:b"], journal);
+    }
+
+    /// <summary>
+    /// What a provider starts at the top of a pass ends with the pass, however it ends: finished,
+    /// failed or cancelled. A tool started early and left running would run beside the next pass's own.
+    /// </summary>
+    [Theory]
+    [InlineData(PassEnding.Finished)]
+    [InlineData(PassEnding.Failed)]
+    [InlineData(PassEnding.Cancelled)]
+    public async Task WhatAProviderStartsEarlyEndsWithThePass(PassEnding ending)
+    {
+        using var cts = new CancellationTokenSource();
+        var early = new StubProvider("early", 1);
+        var other = ending == PassEnding.Failed
+            ? new StubProvider("other", 2, planFails: new InvalidOperationException("The plan failed."))
+            : new StubProvider("other", 2);
+        var planner = new CleanupPlanner([early, other]);
+
+        if (ending == PassEnding.Cancelled)
+        {
+            await cts.CancelAsync();
+        }
+
+        var pass = planner.PlanAllAsync(ct: cts.Token);
+
+        if (ending == PassEnding.Finished)
+        {
+            await pass;
+        }
+        else
+        {
+            await Assert.ThrowsAnyAsync<Exception>(() => pass);
+        }
+
+        Assert.True(early.PassToken!.Value.IsCancellationRequested, $"a pass that ended {ending} left the early start's token live");
+    }
+
+    /// <summary>How a pass ended.</summary>
+    public enum PassEnding
+    {
+        Finished,
+        Failed,
+        Cancelled,
     }
 
     /// <summary>
@@ -1086,6 +1133,15 @@ public sealed class CleanupPlannerTests
             Note($"hold:{id}");
 
             return new PassHold(() => Note($"release:{id}"));
+        }
+
+        /// <summary>The token the planner started this provider's early work under, once it has.</summary>
+        public CancellationToken? PassToken { get; private set; }
+
+        public void BeginPass(CancellationToken ct)
+        {
+            Note($"begin:{id}");
+            PassToken = ct;
         }
 
         public string Id => id;

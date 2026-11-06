@@ -57,6 +57,10 @@ internal sealed class DeclaringRow(
 
     public PassHold HoldCaches() => PassHold.Nothing;
 
+    public void BeginPass(CancellationToken ct)
+    {
+    }
+
     public Task<CleanupPlan> PlanAsync(MinimumAge keep = default, CancellationToken ct = default) =>
         throw new NotSupportedException("This stub exists only to carry a declaration.");
 

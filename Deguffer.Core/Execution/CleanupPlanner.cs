@@ -477,11 +477,22 @@ public sealed class CleanupPlanner
         // the next pass drops it before it plans, so keeping it while the app sits idle buys nothing.
         var holds = new List<PassHold>(providers.Count);
 
+        // What a provider starts at the top of the pass ends with it, however it ends: a pass that
+        // fails or is cancelled must not leave a tool running beside the next pass's own.
+        using var pass = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
         try
         {
             foreach (var provider in providers)
             {
                 holds.Add(provider.HoldCaches());
+            }
+
+            // Before any slot is handed out, so a slow answer a row near the end of the list waits on
+            // runs while the rows ahead of it plan, rather than starting only when its turn comes.
+            foreach (var provider in providers)
+            {
+                provider.BeginPass(pass.Token);
             }
 
             // Before any row plans, so every plan in the pass is held to the same set.
@@ -491,6 +502,8 @@ public sealed class CleanupPlanner
         }
         finally
         {
+            await pass.CancelAsync().ConfigureAwait(false);
+
             foreach (var hold in holds)
             {
                 hold.Dispose();

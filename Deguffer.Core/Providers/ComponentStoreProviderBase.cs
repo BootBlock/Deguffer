@@ -87,6 +87,28 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
         base.InvalidateCaches();
     }
 
+    /// <summary>
+    /// The analysis, started when an administrator's pass starts rather than when this row's turn
+    /// comes. It takes a minute or more, and these rows stand near the end of the planner's list, so
+    /// started at their turn it began only once most of the pass had finished.
+    ///
+    /// <para>On the terms <see cref="BuildPlanAsync"/> asks: not where there is no store, and not while
+    /// an update holds it, because the analysis waits on the servicing stack. Not for any other account,
+    /// which DISM refuses at once, so the row's own turn costs nothing there.</para>
+    /// </summary>
+    public override void BeginPass(CancellationToken ct)
+    {
+        if (!Environment.IsAdministrator
+            || !LongPath.DirectoryMayExist(_store)
+            || UnfinishedUpdate.HoldsEverything(Servicing, Inspector, _servicingCalls) is not null)
+        {
+            return;
+        }
+
+        // Not awaited here: the plan awaits the same remembered task, and reports what it ended with.
+        _ = _analysis.ReadingAsync(ct);
+    }
+
     /// <summary>The store's folder. DISM is part of every Windows that has one.</summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(LongPath.DirectoryMayExist(_store));

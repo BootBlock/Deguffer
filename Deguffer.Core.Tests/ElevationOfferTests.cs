@@ -229,6 +229,10 @@ public sealed class ElevationOfferTests
 
         public PassHold HoldCaches() => PassHold.Nothing;
 
+        public void BeginPass(CancellationToken ct)
+        {
+        }
+
         public Task<bool> IsPresentAsync(CancellationToken ct = default) => Task.FromResult(true);
 
         // These tests hand the offer a plan directly; nothing here is ever planned, run or verified.
