@@ -559,7 +559,8 @@ table can be read, and the build reads where the table is, so the flush runs bes
 benchmark's `scan` route measures a folder as a scan does the first time it asks about its volume.
 On the source folder (224,834 entries), in three alternating pairs of six runs each, the scan took
 1.02 to 1.09 s (medians) with the table found in the open and 0.15 to 0.18 s with it found in the
-build, every run complete. The flush still happens: its cost is now the build's, and the next walk
+build, every run complete, warm. Not measured: the same cold, and the walk alone
+through the scan route. The flush still happens: its cost is now the build's, and the next walk
 of the volume pays its checkpoint. A probe that started a walk beside the flush rather than after it
 saved 0.3 to 1.1 s in each of eight rounds. This also accounts for part of the open's cost in #543,
 which timed the table's first read as part of the open.

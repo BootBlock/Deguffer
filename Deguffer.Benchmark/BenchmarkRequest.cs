@@ -263,13 +263,13 @@ internal sealed record BenchmarkRequest(
                     TryNumber(value, WalkTuning.MinimumThreads, WalkTuning.MaximumThreads, out threads),
                 "--listing-buffer" when route.TakesWalkTuning() => TryNumber(
                     value, WalkTuning.MinimumListingBuffer / 1024, WalkTuning.MaximumListingBuffer / 1024, out bufferKiB),
-                "--read-size" when route.ReadsTable() => TryNumber(
+                "--read-size" when route.TakesTableTuning() => TryNumber(
                     value, TableTuning.MinimumReadBytes / 1024, TableTuning.MaximumReadBytes / 1024, out readKiB),
-                "--reads-in-flight" when route.ReadsTable() => TryNumber(
+                "--reads-in-flight" when route.TakesTableTuning() => TryNumber(
                     value, TableTuning.MinimumReadsInFlight, TableTuning.MaximumReadsInFlight, out readsInFlight),
-                "--parse-threads" when route.ReadsTable() => TryNumber(
+                "--parse-threads" when route.TakesTableTuning() => TryNumber(
                     value, TableTuning.MinimumParseThreads, TableTuning.MaximumParseThreads, out parseThreads),
-                "--list-reads-in-flight" when route.ReadsTable() => TryNumber(
+                "--list-reads-in-flight" when route.TakesTableTuning() => TryNumber(
                     value, TableTuning.MinimumListReadsInFlight, TableTuning.MaximumListReadsInFlight, out listReadsInFlight),
                 "--snapshots" when route is Route.ExploreWalk => TryOnOff(value, out snapshots),
                 "--read-by" when route is Route.Links => TryReadBy(value, out readBy),

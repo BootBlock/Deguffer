@@ -120,6 +120,12 @@ internal static class RouteFacts
         route.ReadsTable() && route is not (Route.ExploreFolder or Route.Race or Route.Scan);
 
     /// <summary>
+    /// Whether the route reads the table with the values given on the command line. The scan route
+    /// reads it with what a scan uses, because what it times is the scan.
+    /// </summary>
+    public static bool TakesTableTuning(this Route route) => route.ReadsTable() && route is not Route.Scan;
+
+    /// <summary>
     /// Whether the route reads the table itself, so its reads and the stages of its build are what it
     /// reports. The race and the scan report what the walk beside the build took instead.
     /// </summary>

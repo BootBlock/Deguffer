@@ -15,8 +15,10 @@ namespace Deguffer.Core.Scanning.Mft;
 /// before it starts: a walk that happened to finish first would otherwise hide the reason, and with
 /// it the offer of administrator rights. The read of where the table is, which the open leaves to
 /// <see cref="IMftVolume.TryReadTable"/>, is deferred: its first read makes NTFS flush the whole
-/// volume, which takes a second or more after a walk, and the walk raced against the build would
-/// otherwise wait for it before it started.</para>
+/// volume, which took 0.8 to 1.6 s after a walk where it was measured (#544), and the walk raced against the build would
+/// otherwise wait for it before it started. A table that cannot be found is then a failure of the
+/// build, as one that cannot be parsed whole already is: a walk that answers before it is known says
+/// nothing, and every question after it carries the reason.</para>
 ///
 /// <para>A build belongs to the scan, not to whichever caller started it. A caller that stops
 /// waiting, because the walk answered first, leaves the build running for the questions after it.

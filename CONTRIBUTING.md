@@ -56,6 +56,7 @@ Deguffer.Benchmark folders C:\Users\<user>\Pictures D:\Photos
 Deguffer.Benchmark remove D:\benchmark --files 100000 --depth 15 --fanout 2 --read-only
 Deguffer.Benchmark clean D:\benchmark --trees 500 --files-per-tree 100
 Deguffer.Benchmark race C:\Users\<user>\source --build D --reads-in-flight 2
+Deguffer.Benchmark scan C:\Users\<user>\source --runs 6
 ```
 
 - `walk <folder>` walks a folder as an unelevated scan does. Run it from an ordinary prompt.
@@ -112,6 +113,12 @@ Deguffer.Benchmark race C:\Users\<user>\source --build D --reads-in-flight 2
   list itself (§2 of the specification). Unlike the other table routes, it walks and builds with what
   a scan uses for each drive's kind, and the table and walk options still override that. Every result
   names the garbage collector, so a run under `DOTNET_gcServer=1` or `DOTNET_GCgen0size` is told apart.
+- `scan <folder>` measures a folder as an elevated scan does the first time it asks about the
+  folder's volume: through the scanner, with a new one each run, so each run opens the volume,
+  finds its table and races the walk against the build, and the first to answer is the answer.
+  Each run follows an untimed walk of the folder. It times what the `race` route leaves out: the
+  open, which a scan makes before it starts the walk. It needs an elevated prompt, and it walks and
+  reads with what a scan uses for the drive's kind, so it takes none of the walk or table options.
 - `remove` and `clean` refuse a folder that already exists, and its parent must exist. After each
   run they check that a file they keep beside the trees, and every project, is still there, and
   stop if one is not. They remove the folder when they finish, even when cancelled. The tree is
@@ -146,8 +153,9 @@ ending: the time the list reads add after the first pass. The mean read is the b
 over the reads of records: a table in many pieces, or with many runs of free records, reads in
 smaller pieces.
 
-The indented rows split each run into the stages it ran, in order: opening the volume (its boot
-sector and `$MFT`'s own extent map), reading the bitmap, the first pass (reads and parse together), the attribute lists kept outside the table, the records held back
+The indented rows split each run into the stages it ran, in order: opening the volume (its handle
+and boot sector), finding its table (record 0 and `$MFT`'s own extent map, whose first read makes
+NTFS flush the volume, #544), reading the bitmap, the first pass (reads and parse together), the attribute lists kept outside the table, the records held back
 for them, and then, for the index and Explore, placing each file's other names and building the
 index's child links or Explore's tree. The last three run once the drive has
 finished, so a slow one is work, not the drive. "Records deferred" and "links placed" are

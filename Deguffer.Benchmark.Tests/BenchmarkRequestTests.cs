@@ -93,6 +93,7 @@ public sealed class BenchmarkRequestTests
         Assert.False(request.Route.TargetsVolume());
         Assert.False(request.Route.ReportsTableReads());
         Assert.Null(BenchmarkRequest.Parse(["scan", @"C:\Users\testuser", "--threads", "8"], out _));
+        Assert.Null(BenchmarkRequest.Parse(["scan", @"C:\Users\testuser", "--read-size", "64"], out _));
     }
 
     /// <summary>By name only. Enum parsing would read a number or a list of names as a route.</summary>

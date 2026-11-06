@@ -7,7 +7,7 @@ namespace Deguffer.Core.Tests;
 /// <summary>
 /// A volume's index cache opens the volume where it is asked, and reads where its table is on the
 /// build's thread. The first read of a table through a volume handle makes NTFS flush and purge what it
-/// has cached for every file on the volume, which takes a second or more after a walk (#544), so a
+/// has cached for every file on the volume, which took 0.8 to 1.6 s after a walk where it was measured (#544), so a
 /// cache that read it in the open would make the walk raced against the build wait for the flush
 /// before it started.
 /// </summary>
