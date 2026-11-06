@@ -54,12 +54,12 @@ public sealed class TempToolCacheProviderTests : IDisposable
         var flutter = Entry(2048, "flutter_tools.1a2b3c", "app.dill");
         var firefox = Entry(1024, "mozilla-temp-files", "mozilla-temp-41");
 
-        File.SetLastWriteTimeUtc(flutter, longAgo.AddDays(10));
-        File.SetLastWriteTimeUtc(firefox, longAgo.AddDays(200));
+        EntryTime.Set(flutter, longAgo.AddDays(10));
+        EntryTime.Set(firefox, longAgo.AddDays(200));
 
         foreach (var file in new[] { flutter, firefox })
         {
-            Directory.SetLastWriteTimeUtc(Path.GetDirectoryName(file)!, longAgo);
+            EntryTime.Set(Path.GetDirectoryName(file)!, longAgo);
         }
 
         var plan = await CreateProvider().PlanAsync();

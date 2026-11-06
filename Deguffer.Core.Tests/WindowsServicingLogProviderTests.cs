@@ -258,8 +258,8 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
         var cbs = Populate(Path.Combine("Logs", "CBS"), file: "CBS.log");
 
         var appended = DateTime.UtcNow.AddMinutes(-3);
-        File.SetLastWriteTimeUtc(Path.Combine(cbs, "CBS.log"), appended);
-        Directory.SetLastWriteTimeUtc(cbs, DateTime.UtcNow.AddDays(-240));
+        EntryTime.Set(Path.Combine(cbs, "CBS.log"), appended);
+        EntryTime.Set(cbs, DateTime.UtcNow.AddDays(-240));
 
         var step = Assert.Single((await CreateProvider().PlanAsync()).Steps);
 
@@ -613,13 +613,13 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
         {
             foreach (var file in Directory.EnumerateFiles(directory))
             {
-                File.SetLastWriteTimeUtc(file, longAgo);
+                EntryTime.Set(file, longAgo);
             }
 
-            Directory.SetLastWriteTimeUtc(directory, longAgo);
+            EntryTime.Set(directory, longAgo);
         }
 
-        File.SetLastWriteTimeUtc(Path.Combine(oldLogs, "setupact.log"), appended);
+        EntryTime.Set(Path.Combine(oldLogs, "setupact.log"), appended);
 
         var plan = await CreateProvider(FakeDiskCleanupHandlers.Windows()).PlanAsync();
 

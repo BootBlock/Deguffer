@@ -34,7 +34,7 @@ internal sealed class VisualStudioCacheReader(Func<string, IReadOnlyList<VisualS
                 entry.FileName.ToString(),
                 LongPath.Display(entry.ToFullPath()),
                 entry.Attributes,
-                entry.LastWriteTimeUtc.UtcDateTime));
+                MinimumAge.NewestFileTimeOf(entry.CreationTimeUtc.UtcDateTime, entry.LastWriteTimeUtc.UtcDateTime)));
 
     /// <summary>The <c>.vs</c> folder at <paramref name="vs"/>, read as it is now.</summary>
     public VisualStudioListing Read(string vs, CancellationToken ct = default) =>

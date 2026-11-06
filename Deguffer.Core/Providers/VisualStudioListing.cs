@@ -4,12 +4,15 @@ namespace Deguffer.Core.Providers;
 /// <param name="Name">The entry's own name.</param>
 /// <param name="Path">The entry's path as the plan names it, without the long-path prefix.</param>
 /// <param name="Attributes">Whether it is a folder, and whether it is a link, are read from these.</param>
-/// <param name="LastWriteTimeUtc">When it was last written, which dates a cache without reading it again.</param>
+/// <param name="NewestFileTime">
+/// The newer of its creation and last-write times as a FILETIME, which dates a cache without reading it
+/// again. See <see cref="DirectoryAge"/>.
+/// </param>
 internal readonly record struct VisualStudioEntry(
     string Name,
     string Path,
     FileAttributes Attributes,
-    DateTime LastWriteTimeUtc)
+    long NewestFileTime)
 {
     public bool IsLink => Attributes.HasFlag(FileAttributes.ReparsePoint);
 

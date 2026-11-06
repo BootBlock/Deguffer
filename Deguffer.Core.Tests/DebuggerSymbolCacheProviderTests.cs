@@ -227,14 +227,14 @@ public sealed class DebuggerSymbolCacheProviderTests : IDisposable
         var now = DateTime.UtcNow;
         var newest = now - TimeSpan.FromDays(10);
 
-        Directory.SetLastWriteTimeUtc(older, now - TimeSpan.FromDays(40));
-        Directory.SetLastWriteTimeUtc(newer, ownTimeNewest ? now - TimeSpan.FromDays(30) : newest);
-        Directory.SetLastWriteTimeUtc(entry, ownTimeNewest ? newest : now - TimeSpan.FromDays(30));
+        EntryTime.Set(older, now - TimeSpan.FromDays(40));
+        EntryTime.Set(newer, ownTimeNewest ? now - TimeSpan.FromDays(30) : newest);
+        EntryTime.Set(entry, ownTimeNewest ? newest : now - TimeSpan.FromDays(30));
 
         var (microsoft, _) = CreateRows();
         await microsoft.DiscoverToolRootsAsync();
 
-        Directory.SetLastWriteTimeUtc(ownTimeNewest ? entry : newer, now);
+        EntryTime.Set(ownTimeNewest ? entry : newer, now);
 
         var step = Assert.Single((await microsoft.PlanAsync()).Steps);
 

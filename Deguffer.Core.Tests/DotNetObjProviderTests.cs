@@ -614,13 +614,13 @@ public sealed class DotNetObjProviderTests : IDisposable
         var stale = DateTime.UtcNow.AddDays(-400);
         foreach (var entry in new DirectoryInfo(obj).EnumerateFileSystemInfos())
         {
-            entry.LastWriteTimeUtc = stale;
+            EntryTime.Set(entry.FullName, stale);
         }
 
-        Directory.SetLastWriteTimeUtc(obj, stale);
+        EntryTime.Set(obj, stale);
 
         var rebuilt = DateTime.UtcNow.AddDays(-30);
-        File.SetLastWriteTimeUtc(Path.Combine(obj, "project.assets.json"), rebuilt);
+        EntryTime.Set(Path.Combine(obj, "project.assets.json"), rebuilt);
 
         var plan = await CreateProvider().PlanAsync();
         var step = Assert.Single(plan.Steps.OfType<DeleteDirectoryStep>());

@@ -75,9 +75,10 @@ public enum TargetKind
 /// </param>
 /// <param name="DatedOneLevelDown">
 /// Whether §7's age is <see cref="DirectoryAge"/>'s answer for <paramref name="Path"/>, which
-/// <see cref="CleanupProviderBase"/> reads for every such target of a plan in one bounded step, beside
-/// the measurement, rather than the provider reading it one target after another as it builds the
-/// list. <paramref name="LastWritten"/> is null then, because nothing has been read yet: a provider
+/// <see cref="CleanupProviderBase"/> takes from the target's own measurement
+/// (<see cref="Scanning.ScanResult.LastWritten"/>), so the target's top level is read once, for its size
+/// and its age together, rather than the provider listing it again as it builds the list.
+/// <paramref name="LastWritten"/> is null then, because nothing has been read yet: a provider
 /// whose decision depends on the age dates its candidates itself, with
 /// <see cref="DirectoryAge.OfEach"/>. A directory's only, removed outright or emptied in place.
 /// </param>

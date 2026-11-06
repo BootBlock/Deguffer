@@ -158,13 +158,16 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner
         var results = new ScanResult[asked.Count][];
         var directories = new List<int>(asked.Count);
 
+        // Each directory's own time, from the read that found it, which dates it with its listing.
+        var owns = new long[asked.Count];
+
         for (var i = 0; i < asked.Count; i++)
         {
             ct.ThrowIfCancellationRequested();
 
             var path = asked[i].Path;
 
-            switch (LongPath.ProbeDirectory(path))
+            switch (LongPath.ProbeDirectoryTime(path, out owns[i]))
             {
                 case PathPresence.Present:
                     directories.Add(i);
@@ -188,7 +191,7 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner
         foreach (var walk in directories.GroupBy(i => _tuner.For(asked[i].Path).Walk))
         {
             var each = walk.ToList();
-            var walked = Measure([.. each.Select(i => asked[i])], keeps, walk.Key, progress, ct);
+            var walked = Measure([.. each.Select(i => asked[i])], [.. each.Select(i => owns[i])], keeps, walk.Key, progress, ct);
 
             for (var j = 0; j < each.Count; j++)
             {
@@ -204,11 +207,15 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner
         {
             MailStores = measured.MailStores,
             Root = measured.Root,
+            LastWritten = measured.LastWritten,
         };
 
-    /// <summary>What the walk found, and whether it reached the root to find it.</summary>
+    /// <summary>
+    /// What the walk found, whether it reached the root to find it, and the root's age where it is a
+    /// directory listed to the end. See <see cref="ScanResult.LastWritten"/>.
+    /// </summary>
     private readonly record struct Walked(
-        ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores, RootReach Root);
+        ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores, RootReach Root, DateTime? LastWritten = null);
 
     /// <summary>
     /// Walk every directory in <paramref name="asked"/> at once, each to a figure of its own for each
@@ -219,14 +226,20 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner
     /// the walk's threads meet on them once a directory rather than once a file. Progress reads the
     /// shared totals, which then trail by at most the directory each thread is adding up.</para>
     /// </summary>
+    /// <param name="owns">
+    /// Each root's own time, from the attribute read that found it, as
+    /// <see cref="LongPath.ProbeDirectoryTime(string, out long)"/> gives it, in the order of
+    /// <paramref name="asked"/>.
+    /// </param>
     private static Walked[][] Measure(
         IReadOnlyList<ScanRequest> asked,
+        IReadOnlyList<long> owns,
         MinimumAge[] keeps,
         WalkTuning tuning,
         IProgress<ScanSize>? progress,
         CancellationToken ct)
     {
-        var roots = asked.Select(question => new RootTally(question.Bounds.KeepRoot, keeps)).ToArray();
+        var roots = asked.Select((question, i) => new RootTally(question.Bounds.KeepRoot, owns[i], keeps)).ToArray();
 
         // Every tally at once: what a removal leaves standing whatever the guard, which marks a
         // folder for all of them.
@@ -265,6 +278,13 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner
                     {
                         measured.RootRefused = true;
                     }
+                }
+
+                // The root's age, from the listing the measurement needed anyway, by the same lone
+                // writer. Every entry dates it, those the figure leaves out included.
+                if (holder is null)
+                {
+                    measured.Newest = OneLevelAge.Of(measured.Own, contents);
                 }
 
                 foreach (var entry in contents.Entries)

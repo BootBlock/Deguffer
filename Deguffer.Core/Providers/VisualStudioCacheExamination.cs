@@ -1,5 +1,6 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Providers;
 
@@ -111,16 +112,16 @@ internal static class VisualStudioCacheExamination
     }
 
     /// <summary>
-    /// A file's own last write, and a folder's by <see cref="DirectoryAge"/>'s rule from the listings
-    /// that proved it: its own last write from the folder holding it, and its entries' from its own.
+    /// A file's own time, and a folder's by <see cref="DirectoryAge"/>'s rule from the listings
+    /// that proved it: its own time from the folder holding it, and its entries' from its own.
     /// Every folder rule declines a folder it could not list, so a confirmed one has its entries, and
     /// one without them has no age, as <see cref="DirectoryAge"/> answers for a refusal.
     /// </summary>
     private static DateTime? AgeOf(VisualStudioListing folder, VisualStudioEntry cache) =>
         cache.Kind == TargetKind.File
-            ? cache.LastWriteTimeUtc
+            ? OneLevelAge.ToUtc(cache.NewestFileTime)
             : folder.Inside(cache).Entries is { } entries
-                ? DirectoryAge.Of(cache.LastWriteTimeUtc, entries.Select(entry => entry.LastWriteTimeUtc))
+                ? DirectoryAge.Of(cache.NewestFileTime, entries.Select(entry => entry.NewestFileTime))
                 : null;
 
     private static string Reason(VisualStudioLevel level, string name, TargetKind kind) => (level, kind) switch

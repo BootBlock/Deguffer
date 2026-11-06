@@ -60,10 +60,26 @@ internal static partial class FileAttributeRead
     /// <param name="attributes">What Windows reported, or default where it reported nothing.</param>
     /// <param name="length">Its length in bytes, which Windows gives a folder as zero; zero where it reported nothing.</param>
     /// <returns><c>0</c>, or the Win32 error that the framework would have thrown for.</returns>
-    public static int Read(string path, out FileAttributes attributes, out long length)
+    public static int Read(string path, out FileAttributes attributes, out long length) =>
+        Read(path, out attributes, out length, out _);
+
+    /// <summary>
+    /// Read the attributes, the length and the newer of the creation and last-write times of
+    /// <paramref name="path"/>, which the one call answers together.
+    /// </summary>
+    /// <param name="path">A fully qualified path. The caller decides whether it is extended.</param>
+    /// <param name="attributes">What Windows reported, or default where it reported nothing.</param>
+    /// <param name="length">Its length in bytes, which Windows gives a folder as zero; zero where it reported nothing.</param>
+    /// <param name="newestFileTime">
+    /// The newer of its creation and last-write times as a FILETIME, by
+    /// <see cref="MinimumAge.NewestFileTimeOf(long, long)"/>; zero where Windows reported nothing.
+    /// </param>
+    /// <returns><c>0</c>, or the Win32 error that the framework would have thrown for.</returns>
+    public static int Read(string path, out FileAttributes attributes, out long length, out long newestFileTime)
     {
         attributes = default;
         length = 0;
+        newestFileTime = 0;
 
         var trimmed = Path.TrimEndingDirectorySeparator(path);
 
@@ -75,6 +91,7 @@ internal static partial class FileAttributeRead
             {
                 attributes = (FileAttributes)data.Attributes;
                 length = Length(data.SizeHigh, data.SizeLow);
+                newestFileTime = MinimumAge.NewestFileTimeOf(data.Created.Value, data.Written.Value);
                 return Success;
             }
 
@@ -96,6 +113,7 @@ internal static partial class FileAttributeRead
 
             attributes = (FileAttributes)found.Attributes;
             length = Length(found.SizeHigh, found.SizeLow);
+            newestFileTime = MinimumAge.NewestFileTimeOf(found.Created.Value, found.Written.Value);
             return Success;
         }
         finally
@@ -139,7 +157,8 @@ internal static partial class FileAttributeRead
     }
 
     /// <summary>
-    /// <c>WIN32_FIND_DATAW</c>. Only the attributes and the length are read, but the call writes all 592 bytes.
+    /// <c>WIN32_FIND_DATAW</c>. Only the attributes, the length and two of the times are read, but the
+    /// call writes all 592 bytes.
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     private struct FindData
@@ -165,6 +184,9 @@ internal static partial class FileAttributeRead
     {
         public uint Low;
         public uint High;
+
+        /// <summary>The two halves as one FILETIME.</summary>
+        public readonly long Value => (long)(((ulong)High << 32) | Low);
     }
 
     /// <summary>

@@ -33,15 +33,21 @@ public sealed partial class ParallelEnumerationScanner
     }
 
     /// <summary>One root's readings, one <see cref="Tally"/> for each guard, added to from every thread the walk runs on.</summary>
-    private sealed class RootTally(bool keepRoot, MinimumAge[] keeps)
+    /// <param name="own">The root's own time, from the read that found it. See <see cref="OneLevelAge.Of"/>.</param>
+    private sealed class RootTally(bool keepRoot, long own, MinimumAge[] keeps)
     {
         public readonly bool KeepRoot = keepRoot;
+
+        public readonly long Own = own;
 
         public readonly Tally[] Tallies = [.. keeps.Select((keep, i) => new Tally(keep, 1 << i))];
 
         public readonly ConcurrentBag<string> Stores = [];
 
         public bool RootRefused;
+
+        /// <summary>The root's age, written by its own listing alone, as <see cref="RootRefused"/> is.</summary>
+        public long Newest = OneLevelAge.Unknown;
 
         /// <summary>The readings, read once the walk has ended.</summary>
         public Walked[] Readings(MinimumAge[] keeps)
@@ -52,12 +58,14 @@ public sealed partial class ParallelEnumerationScanner
             }
 
             IReadOnlyList<string> found = [.. Stores.Order(StringComparer.OrdinalIgnoreCase)];
+            var age = OneLevelAge.ToUtc(Newest);
 
             return [.. Tallies.Select(tally => new Walked(
                 new ScanSize(tally.Total, tally.Total, Entries: tally.Entries),
                 tally.WithheldRecent,
                 found,
-                RootReach.Reached))];
+                RootReach.Reached,
+                age))];
         }
 
         /// <summary>Count one more folder left standing for each tally in <paramref name="tallies"/>.</summary>
