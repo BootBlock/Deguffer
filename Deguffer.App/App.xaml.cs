@@ -189,7 +189,7 @@ public partial class App : Application
 
         _shell.Activate();
 
-        // After the main window is on screen, because a tool window opens beside it and stays above it.
+        // After the main window, because a tool window opens beside it and stays above it.
         _shell.ReopenToolWindows();
     }
 }

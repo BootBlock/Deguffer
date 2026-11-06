@@ -15,9 +15,9 @@ namespace Deguffer.App.Views;
 ///
 /// <para>Modeless and owned by the main window, so the reader can keep it open, move it clear of the
 /// map, and watch each change land. It opens where it was left, and with the application where it was
-/// left open. See <see cref="ToolWindowPlacement"/> and <see cref="MapAppearanceOpener"/>.</para>
+/// left open. See <see cref="ToolWindowPlacement"/> and <see cref="ToolWindowOpener"/>.</para>
 /// </summary>
-public sealed partial class MapAppearanceWindow : Window
+public sealed partial class MapAppearanceWindow : Window, IToolWindow
 {
     private const int OpenWidth = 560;
     private const int OpenHeight = 860;
@@ -98,7 +98,7 @@ public sealed partial class MapAppearanceWindow : Window
     public void Remember(bool isOpen) => _placement.Remember(isOpen);
 
     /// <summary>
-    /// Put the window on screen without moving the focus to it. See <see cref="MapAppearanceOpener.Reopen"/>.
+    /// Put the window on screen without moving the focus to it. See <see cref="ToolWindowOpener.Reopen"/>.
     ///
     /// <para>The bindings are started here, because a window's compiled bindings start on its first
     /// activation, and a window shown without one would open with every bound box and line empty

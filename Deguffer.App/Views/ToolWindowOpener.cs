@@ -1,23 +1,24 @@
-using Deguffer.App.ViewModels;
+using Deguffer.App.Controls;
+using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 using Microsoft.UI.Xaml;
 
 namespace Deguffer.App.Views;
 
 /// <summary>
-/// The map appearance window's one place in the application: it opens the window, or brings forward
-/// the one already open, and opens it again at launch where the last session closed with it open.
+/// A tool window's one place in the application: it opens the window, or brings forward the one
+/// already open, and opens it again at launch where the last session closed with it open.
 ///
-/// <para>Held by the main window, which owns the appearance window and outlives it, rather than by the
-/// Explore page: the window reopens with the application, before the page has been built.</para>
+/// <para>Held by the main window, which owns the tool window and outlives it, rather than by the page
+/// it serves: the window reopens with the application, before that page has been built.</para>
 /// </summary>
-public sealed class MapAppearanceOpener
+internal sealed class ToolWindowOpener
 {
-    private readonly Window _owner;
-    private readonly MapAppearanceViewModel _appearance;
+    private readonly Func<IToolWindow> _create;
     private readonly WindowPlacementStore<ToolWindowMetrics> _store;
+    private readonly IFrameClock _frames;
 
-    private MapAppearanceWindow? _window;
+    private IToolWindow? _window;
 
     /// <summary>
     /// Whether the application is on its way out, so the window closing with it is not the reader
@@ -25,33 +26,35 @@ public sealed class MapAppearanceOpener
     /// </summary>
     private bool _leaving;
 
-    public MapAppearanceOpener(Window owner, MapAppearanceViewModel appearance, WindowPlacementStore<ToolWindowMetrics> store)
+    /// <param name="create">Build the window, which is done only when it is first opened.</param>
+    /// <param name="store">Where the window was left, and whether it was open.</param>
+    /// <param name="frames">The frames the main window draws, which <see cref="Reopen"/> waits on.</param>
+    public ToolWindowOpener(Func<IToolWindow> create, WindowPlacementStore<ToolWindowMetrics> store, IFrameClock frames)
     {
-        ArgumentNullException.ThrowIfNull(owner);
-        ArgumentNullException.ThrowIfNull(appearance);
-        ArgumentNullException.ThrowIfNull(store);
-
-        _owner = owner;
-        _appearance = appearance;
+        _create = create;
         _store = store;
+        _frames = frames;
     }
 
     /// <summary>Open the window and give it the focus, or bring forward the one already open.</summary>
     public void Show() => Open().Activate();
 
     /// <summary>
-    /// Open the window again where the last session closed with it open. Shown without taking the
-    /// focus, which stays with the main window the reader started: the appearance window belongs to it
-    /// and comes forward with it, and a launch that put the keyboard in a tool window would be a launch
-    /// into the wrong place.
+    /// Open the window again where the last session closed with it open, once the main window has
+    /// drawn its first frame: built before then, in the launch turn that frame waits for, its whole
+    /// tree would put that frame back by the time it takes to build.
+    ///
+    /// <para>Shown without taking the focus, which stays with the main window the reader started: the
+    /// tool window belongs to it and comes forward with it, and a launch that put the keyboard in a
+    /// tool window would be a launch into the wrong place.</para>
     /// </summary>
-    public void Reopen()
+    public void Reopen() => AfterFirstFrame.Run(_frames, () =>
     {
         if (_store.Load() is { IsOpen: true })
         {
             Open().ShowWithoutFocus();
         }
-    }
+    });
 
     /// <summary>
     /// Write down whether the window is open and where it is, now, without waiting for a close. For an
@@ -69,11 +72,11 @@ public sealed class MapAppearanceOpener
         Remember();
     }
 
-    private MapAppearanceWindow Open()
+    private IToolWindow Open()
     {
         if (_window is null)
         {
-            _window = new MapAppearanceWindow(_appearance, _owner, _store);
+            _window = _create();
             _window.Closed += OnClosed;
         }
 
