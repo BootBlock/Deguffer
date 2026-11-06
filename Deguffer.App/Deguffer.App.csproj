@@ -166,8 +166,8 @@
 
         <Manifest Include="$(ApplicationManifest)" />
 
-        <!-- Compiled when the map first shades a canvas, by the d3dcompiler_47 every Windows 10 and 11
-             carries: see CushionRenderer. -->
+        <!-- Compiled on a worker as the first map's graphics are made, by the d3dcompiler_47 every
+             Windows 10 and 11 carries: see CushionShaders. -->
         <EmbeddedResource Include="Controls\Cushions.hlsl" />
 
         <!-- The window icon is set from the file at runtime, so it has to reach the output. -->
