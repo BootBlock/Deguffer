@@ -442,6 +442,7 @@ copies with links.
 
 - [What Deguffer cleans, and what it costs you](docs/cache-locations.md): each location in detail
 - [Specification](docs/todo/_spec.md): the safety model and the evidence behind it
+- [Timing the shell with a trace](docs/tracing-the-shell.md): how long the window, Explore and Duplicates take, from a recorded trace
 - [CONTRIBUTING.md](CONTRIBUTING.md): how to ask for a change (pull requests are not accepted)
 - [SECURITY.md](SECURITY.md): how to report a vulnerability privately
 

@@ -91,6 +91,31 @@ public sealed class ToolWindowOpenerTests : IDisposable
         Assert.Equal(1, window.Activated);
     }
 
+    /// <summary>
+    /// For a trace, the reopen is one span around building and showing the window, after the first
+    /// frame and so outside the launch, and a window left closed raises none.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AReopenedWindowIsOneSpanAndOneLeftClosedIsNone(bool open)
+    {
+        LeaveTheWindow(open);
+        using var recorder = new ShellEventRecorder();
+
+        _opener.Reopen();
+        _frames.Step(Refresh);
+
+        Assert.Empty(recorder.Events);
+
+        _frames.Step(Refresh);
+
+        string[] spans = open ? ["ToolWindowsStart", "ToolWindowsStop"] : [];
+
+        Assert.Equal(spans, recorder.Names);
+        Assert.Equal(open ? 1 : 0, _built.Count);
+    }
+
     private IToolWindow Build()
     {
         var window = new RecordedToolWindow();

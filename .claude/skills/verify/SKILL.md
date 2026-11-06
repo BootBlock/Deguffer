@@ -86,6 +86,24 @@ ends.
   directory drifts between calls, so a capture can land under the primary checkout rather than your
   worktree. Pass an absolute path.
 
+## Timing a change to the shell
+
+A change to the window's start-up, a page, the Explore map or the Duplicates list can make the app
+slower with every test still green. For such a change, record a trace before and after it, as
+[docs/tracing-the-shell.md](../../../docs/tracing-the-shell.md) describes, and compare the two:
+
+1. Build, then launch through `dotnet-trace collect --providers Deguffer-Shell -o <file outside the
+   tree> -- "<worktree>\!Distribution\Deguffer.App.exe" --explore "--explore-folder=<fixture>"`. The
+   two arguments open Explore already scanning the fixture, the same small invented folder each
+   time, so the traces compare like with like.
+2. Find the PID with `discover`, and drive that process through what the change touches.
+3. Close the window (`window --pid <pid> --action close --window-handle <handle>`, the handle from
+   `window --pid <pid> --action list`), which ends the trace, and
+   run `dotnet run scripts/shell-trace.cs -- <file>`.
+4. Report **launch to first frame** and **scan end to first map** from both builds, with the longest
+   `Show` where Explore changed. Four launches of one build on a three-folder fixture ranged from
+   792 ms to 866 ms and from 149 ms to 183 ms, so take three runs of each build and give the medians.
+
 ## Before you screenshot anything
 
 A capture of the preview flow shows the real cache paths and the real profile name of whoever took

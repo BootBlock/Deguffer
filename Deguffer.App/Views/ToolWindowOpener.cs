@@ -1,4 +1,5 @@
 using Deguffer.App.Controls;
+using Deguffer.App.Diagnostics;
 using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 using Microsoft.UI.Xaml;
@@ -52,7 +53,9 @@ internal sealed class ToolWindowOpener
     {
         if (_store.Load() is { IsOpen: true })
         {
+            ShellEvents.Log.ToolWindowsStart();
             Open().ShowWithoutFocus();
+            ShellEvents.Log.ToolWindowsStop();
         }
     });
 
