@@ -52,7 +52,7 @@ public sealed class DuplicateActionsTests : DuplicateRemovalScene
 
         Assert.Throws<InvalidOperationException>(() => marks.Run(new MarkingRule.KeepNewest()));
         await Assert.ThrowsAsync<InvalidOperationException>(() => marks.RejudgeAsync(protections));
-        Assert.Throws<InvalidOperationException>(() => RemovalConfirmation.For(marks, marks.Keeping, ExploreRemovalMode.RecycleBin, _ => null, _ => null));
+        Assert.Throws<InvalidOperationException>(() => RemovalConfirmation.For(marks, marks.Keeping, ExploreRemovalMode.RecycleBin, _ => null, BinAnswers.TakesEvery));
         // Refused on the calling thread, before the rule goes to another.
         Assert.Throws<InvalidOperationException>(() => { _ = Actions(new FakeDuplicateConfirmation(true)).RunAsync(marks, new MarkingRule.KeepNewest()); });
         await Assert.ThrowsAsync<InvalidOperationException>(() => Actions(new FakeDuplicateConfirmation(true)).RemoveAsync(marks, ExploreRemovalMode.RecycleBin, () => null));
@@ -60,7 +60,7 @@ public sealed class DuplicateActionsTests : DuplicateRemovalScene
         marks.Complete();
 
         Assert.Equal(1, marks.Run(new MarkingRule.KeepNewest()).Marked);
-        Assert.Equal([files[0]], (await RemovalConfirmation.ForAsync(marks, protections, ExploreRemovalMode.RecycleBin, _ => null, _ => null)).Copies);
+        Assert.Equal([files[0]], (await RemovalConfirmation.ForAsync(marks, protections, ExploreRemovalMode.RecycleBin, _ => null, BinAnswers.TakesEvery)).Copies);
     }
 
     /// <summary>Once the search has said it ended, a group arriving after it is a broken contract, never a group added under a rule's feet.</summary>
@@ -187,10 +187,11 @@ public sealed class DuplicateActionsTests : DuplicateRemovalScene
         Assert.Equal([going], Assert.Single(prompt.Asked).Copies);
         Assert.Equal(staying, Assert.Single(answer.Confirmation.Staying).Copy);
 
-        // Asked of each marked copy in the form the shell is handed, never the extended form (§6.3).
+        // Asked of every marked copy in one question, in the form the shell is handed, never the
+        // extended form (§6.3).
         Assert.Equal(
             new[] { going.Path, staying.Path }.Order(),
-            bin.Asked.Order());
+            Assert.Single(bin.Questions).Order());
         Assert.All(bin.Asked, path => Assert.False(path.StartsWith(@"\\?\", StringComparison.Ordinal)));
         Assert.DoesNotContain(bin.Paths, path => path.StartsWith(usb, StringComparison.OrdinalIgnoreCase));
         Assert.Equal(going, Assert.Single(answer.Report!.Copies).Copy);

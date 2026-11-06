@@ -63,15 +63,16 @@ public sealed record RemovalConfirmation(
     /// <param name="protections">Built afresh for this confirmation, so Explore's policy is read now.</param>
     /// <param name="room">The room in a volume's Recycle Bin, or null where Windows would not say.</param>
     /// <param name="binCannotTake">
-    /// Why the Recycle Bin the removal will use cannot take a copy, or null where nothing shows it
-    /// cannot (<see cref="DuplicateRemover.WhyTheBinCannotTake"/>). Asked only for a removal to the bin.
+    /// Why the Recycle Bin the removal will use cannot take each copy it is given, in the same order,
+    /// with null for each where nothing shows it cannot (<see cref="DuplicateRemover.WhyTheBinCannotTake"/>).
+    /// Asked once, of every copy that stands, and only for a removal to the bin.
     /// </param>
     public static async Task<RemovalConfirmation> ForAsync(
         DuplicateMarks marks,
         MachineProtections protections,
         ExploreRemovalMode mode,
         Func<LocalVolume, RecycleBinRoom?> room,
-        Func<DuplicateCandidate, string?> binCannotTake,
+        Func<IReadOnlyList<DuplicateCandidate>, IReadOnlyList<string?>> binCannotTake,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(marks);
@@ -87,21 +88,29 @@ public sealed record RemovalConfirmation(
         CopyKeeping keeping,
         ExploreRemovalMode mode,
         Func<LocalVolume, RecycleBinRoom?> room,
-        Func<DuplicateCandidate, string?> binCannotTake)
+        Func<IReadOnlyList<DuplicateCandidate>, IReadOnlyList<string?>> binCannotTake)
     {
         marks.ThrowUnlessOpen();
 
         var toBin = mode == ExploreRemovalMode.RecycleBin;
+        List<IReadOnlyList<DuplicateCandidate>> standing = [.. marks.Groups.Select(group => group.Standing(keeping))];
+        List<DuplicateCandidate> marked = [.. standing.SelectMany(copies => copies)];
+        var cannotTake = toBin ? binCannotTake(marked) : null;
+
         List<StayingCopy> staying = [];
         List<IReadOnlyList<DuplicateCandidate>> byGroup = [];
+        var position = 0;
 
-        foreach (var standing in marks.Groups.Select(group => group.Standing(keeping)))
+        foreach (var group in standing)
         {
             List<DuplicateCandidate> going = [];
 
-            foreach (var copy in standing)
+            foreach (var copy in group)
             {
-                if (toBin && binCannotTake(copy) is { } why)
+                var why = cannotTake?[position];
+                position++;
+
+                if (why is not null)
                 {
                     staying.Add(new StayingCopy(copy, why));
                 }

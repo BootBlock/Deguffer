@@ -328,13 +328,14 @@ public static class ExploreRemover
         CancellationToken ct)
     {
         var bin = recycleBin ?? ShellRecycleBin.Default;
+        var cannotTake = bin.WhyItCannotTake([.. allowed.Select(BinPath)], ct);
         var refused = new List<ExploreItemOutcome>();
 
-        foreach (var item in allowed)
+        for (var i = 0; i < allowed.Count; i++)
         {
-            if (bin.WhyItCannotTake(BinPath(item), ct) is { } why)
+            if (cannotTake[i] is { } why)
             {
-                refused.Add(new ExploreItemOutcome(item.Path, Removed: false, Bytes: 0, RecycleOutcome.CannotTake(why)));
+                refused.Add(new ExploreItemOutcome(allowed[i].Path, Removed: false, Bytes: 0, RecycleOutcome.CannotTake(why)));
             }
         }
 

@@ -323,7 +323,7 @@ public sealed class DuplicateRemovalRunTests : DuplicateRemovalScene
         Mark(marks, copyA, copyB);
         using var cts = new CancellationTokenSource();
         var bin = FakeRecycleBin.MovingTo(Bin, _ => cts.Cancel());
-        var confirmation = RemovalConfirmation.For(marks, marks.Keeping, ExploreRemovalMode.RecycleBin, _ => null, _ => null);
+        var confirmation = RemovalConfirmation.For(marks, marks.Keeping, ExploreRemovalMode.RecycleBin, _ => null, BinAnswers.TakesEvery);
         var (plan, dropped) = DuplicateRemover.Plan(marks.Groups, confirmation.Copies, marks.Keeping);
 
         var report = Remover(bin).Remove(plan, dropped, marks.Keeping, confirmation.Mode, cts.Token);
@@ -431,7 +431,7 @@ public sealed class DuplicateRemovalRunTests : DuplicateRemovalScene
         var copy = Found(Write(Path.Combine(Downloads, "a.bin"), Content()));
         var marks = Marks([kept, copy]);
         Mark(marks, copy);
-        var confirmation = RemovalConfirmation.For(marks, KeepingWithDocumentsCleaned(kept), ExploreRemovalMode.Permanent, _ => null, _ => null);
+        var confirmation = RemovalConfirmation.For(marks, KeepingWithDocumentsCleaned(kept), ExploreRemovalMode.Permanent, _ => null, BinAnswers.TakesEvery);
         Assert.Empty(confirmation.Copies);
 
         var (plan, dropped) = DuplicateRemover.Plan(marks.Groups, confirmation.Copies, marks.Keeping);
@@ -449,7 +449,7 @@ public sealed class DuplicateRemovalRunTests : DuplicateRemovalScene
         var copy = Found(Write(Path.Combine(Downloads, "a.bin"), Content()));
         var marks = Marks([kept, copy]);
         Mark(marks, copy);
-        var confirmation = RemovalConfirmation.For(marks, marks.Keeping, ExploreRemovalMode.Permanent, _ => null, _ => null);
+        var confirmation = RemovalConfirmation.For(marks, marks.Keeping, ExploreRemovalMode.Permanent, _ => null, BinAnswers.TakesEvery);
 
         var later = KeepingWithDocumentsCleaned(kept);
         var (plan, dropped) = DuplicateRemover.Plan(marks.Groups, confirmation.Copies, later);

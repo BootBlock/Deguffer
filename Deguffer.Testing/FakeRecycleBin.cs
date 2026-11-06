@@ -88,14 +88,25 @@ public sealed class FakeRecycleBin : IRecycleBin
     /// </summary>
     public Func<string, string?> CannotTake { get; set; } = _ => null;
 
-    /// <summary>Every path the bin was asked whether it can take.</summary>
+    /// <summary>Every path the bin was asked whether it can take, across every question.</summary>
     public List<string> Asked { get; } = [];
 
-    public string? WhyItCannotTake(string path, CancellationToken ct = default)
+    /// <summary>Every list the bin was asked about, as it was asked.</summary>
+    public List<IReadOnlyList<string>> Questions { get; } = [];
+
+    public IReadOnlyList<string?> WhyItCannotTake(IReadOnlyList<string> paths, CancellationToken ct = default)
     {
-        ct.ThrowIfCancellationRequested();
-        Asked.Add(path);
-        return CannotTake(path);
+        Questions.Add([.. paths]);
+        var answers = new string?[paths.Count];
+
+        for (var i = 0; i < paths.Count; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            Asked.Add(paths[i]);
+            answers[i] = CannotTake(paths[i]);
+        }
+
+        return answers;
     }
 
     /// <summary>Every batch handed to <see cref="Recycle"/>, as it was handed.</summary>

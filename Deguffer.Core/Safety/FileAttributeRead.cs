@@ -50,9 +50,20 @@ internal static partial class FileAttributeRead
     /// <param name="path">A fully qualified path. The caller decides whether it is extended.</param>
     /// <param name="attributes">What Windows reported, or default where it reported nothing.</param>
     /// <returns><c>0</c>, or the Win32 error that the framework would have thrown for.</returns>
-    public static int Read(string path, out FileAttributes attributes)
+    public static int Read(string path, out FileAttributes attributes) => Read(path, out attributes, out _);
+
+    /// <summary>
+    /// Read the attributes and the length of <paramref name="path"/>, which the one call answers
+    /// together, so a caller that needs both does not ask Windows twice.
+    /// </summary>
+    /// <param name="path">A fully qualified path. The caller decides whether it is extended.</param>
+    /// <param name="attributes">What Windows reported, or default where it reported nothing.</param>
+    /// <param name="length">Its length in bytes, which Windows gives a folder as zero; zero where it reported nothing.</param>
+    /// <returns><c>0</c>, or the Win32 error that the framework would have thrown for.</returns>
+    public static int Read(string path, out FileAttributes attributes, out long length)
     {
         attributes = default;
+        length = 0;
 
         var trimmed = Path.TrimEndingDirectorySeparator(path);
 
@@ -63,6 +74,7 @@ internal static partial class FileAttributeRead
             if (GetFileAttributesEx(trimmed, GetFileExInfoStandard, out var data))
             {
                 attributes = (FileAttributes)data.Attributes;
+                length = Length(data.SizeHigh, data.SizeLow);
                 return Success;
             }
 
@@ -83,6 +95,7 @@ internal static partial class FileAttributeRead
             FindClose(handle);
 
             attributes = (FileAttributes)found.Attributes;
+            length = Length(found.SizeHigh, found.SizeLow);
             return Success;
         }
         finally
@@ -93,6 +106,8 @@ internal static partial class FileAttributeRead
             }
         }
     }
+
+    private static long Length(uint high, uint low) => (long)(((ulong)high << 32) | low);
 
     /// <summary>
     /// The errors after which the framework does not ask <c>FindFirstFileExW</c>, because they say
@@ -124,7 +139,7 @@ internal static partial class FileAttributeRead
     }
 
     /// <summary>
-    /// <c>WIN32_FIND_DATAW</c>. Only the attributes are read, but the call writes all 592 bytes.
+    /// <c>WIN32_FIND_DATAW</c>. Only the attributes and the length are read, but the call writes all 592 bytes.
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     private struct FindData
