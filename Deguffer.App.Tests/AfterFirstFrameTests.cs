@@ -3,8 +3,8 @@ using Deguffer.App.Shell;
 namespace Deguffer.App.Tests;
 
 /// <summary>
-/// A tool window left open at the last close is opened again after the main window's first frame,
-/// not in the launch turn that frame is waiting for, and only once.
+/// Work deferred past the first frame runs at the tick after the first, not in the turn that asks for
+/// it nor at the first tick, and only once.
 /// </summary>
 public sealed class AfterFirstFrameTests
 {
