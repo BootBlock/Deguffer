@@ -96,8 +96,8 @@ internal static class DirectoryAge
     /// <para><b>Several at once, bounded by the disk's own number</b> (G4). One row dates hundreds of
     /// targets — a source root's <c>obj</c> folders, its <c>node_modules</c> — and each date is a
     /// directory opened and listed, which waits on the disk. One after another, a row paid every wait
-    /// in turn. Here the list is worked by as many threads as a walk of the busiest volume asked about
-    /// runs (<see cref="WalkTuning.Threads"/>), and each listing takes a slot in
+    /// in turn. Here the list is worked by as many threads as a walk runs on whichever volume asked
+    /// about is tuned for the most (<see cref="WalkTuning.Threads"/>), and each listing takes a slot in
     /// <see cref="ListingBudget.Shared"/> under its own volume's number, so dating shares a disk with
     /// the walks of the rows planned beside it rather than adding to them. A spinning disk tuned to one
     /// thread is still read one directory at a time.</para>

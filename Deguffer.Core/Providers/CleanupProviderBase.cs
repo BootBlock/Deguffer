@@ -567,8 +567,8 @@ public abstract class CleanupProviderBase : ICleanupProvider
             throw new ArgumentException($"Only a folder emptied in place can leave entries standing: {unbounded}.", nameof(targets));
         }
 
-        // Dated beside the measurement rather than before it: both are listings of the same targets,
-        // and each keeps to the disk's number through the listing budget, so neither waits for the other.
+        // Dated beside the measurement rather than before it, so neither waits for the other. Dating
+        // keeps to the disk's number through the listing budget, as a measurement's walk does.
         var dating = DatedAsync(targets, ct);
 
         // An index is removed with the directory it indexes, so it is measured with it. A folder
