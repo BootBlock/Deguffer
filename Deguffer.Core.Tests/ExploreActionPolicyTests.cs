@@ -2280,6 +2280,27 @@ public sealed class ExploreActionPolicyTests : IDisposable
     private ToolRoot Gradle() =>
         ToolRoot.Of(GradleRoot, "Gradle's own folder.", GradleCacheProvider.DisposableChildren);
 
+    /// <summary>
+    /// A tool's folder named at a folder a volume is mounted at only after the policy was built is
+    /// still refused when the item is named through the volume's own letter, which the policy had
+    /// already asked about. Each item is asked where its volume is mounted at the question, not from
+    /// what the policy remembered while it followed its rules (§5.2). The rest of the volume stays
+    /// ordinary (§5.6).
+    /// </summary>
+    [Fact]
+    public void AToolsFolderReachedThroughAMountMadeSinceThePolicyIsRefused()
+    {
+        _volumes.With(Drive).With(Other);
+        var policy = Policy(VendorTool(Path.Join(Mount, "tool")));
+
+        Assert.True(policy.MayRemove(Path.Combine(Other, "tool")).IsAllowed);
+
+        _volumes.Without(Other).With(Other, alsoMountedAt: [Mount + Path.DirectorySeparatorChar]);
+
+        Assert.False(policy.MayRemove(Path.Combine(Other, "tool")).IsAllowed);
+        Assert.True(policy.MayRemove(Path.Combine(Other, "beside")).IsAllowed);
+    }
+
     private static ToolRoot VendorTool(string path) => new(path, "A vendor tool's own folder.", static _ => false);
 
     /// <summary>

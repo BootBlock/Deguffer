@@ -247,18 +247,55 @@ public interface IVolumeInventory
     string? MountPointOf(string path);
 
     /// <summary>
-    /// Every place the volume mounted at <paramref name="mountPoint"/> is mounted, that one among
-    /// them, asked of the machine at the moment of the call. Empty where Windows will not say, which
-    /// is a share, a letter standing for somewhere else, and a folder nothing is mounted at.
+    /// Every place the volume mounted at <paramref name="mountPoint"/> now is mounted, that one among
+    /// them: <see cref="VolumeNameOf"/>, then <see cref="MountPointsOfVolume"/>. Empty where Windows
+    /// will not say, which is a share, a letter standing for somewhere else, and a folder nothing is
+    /// mounted at.
     ///
-    /// <para>Live for the reason <see cref="MountPointOf"/> is. Its caller is
+    /// <para>Composed here once, so every implementation asks which volume a mount point names before
+    /// it answers with that volume's places, and none can answer a moved letter with the volume it
+    /// used to name.</para>
+    ///
+    /// <para>Live, or remembered for no longer than one operation as described below, for the reason
+    /// <see cref="MountPointOf"/> is live. Its caller is
     /// <see cref="VolumeRoot.Places"/>, which finds every other path an item is reachable at, so that
     /// a refusal written about <c>C:\Windows</c> holds for the same folder reached through another
     /// mount of the system volume. A list remembered from before that mount was made would name
     /// nothing and refuse nothing.</para>
+    ///
+    /// <para><b>Remembered per volume by the owners that already remember each path's answer</b>,
+    /// through <see cref="RememberedMountPoints"/>, for no longer than they do: a provider's pass, one
+    /// reading of the process table, one §5.6 verification, one reading of the installed programs,
+    /// one comparison of a clean's locations, and the building of one Explore policy. Nearly every
+    /// path is on one of a few drives. <see cref="VolumeNameOf"/> stays live there, so a letter or folder given to another
+    /// volume is answered with that volume's places, and <see cref="MountPointOf"/> stays live, so a
+    /// path under a mount point made since is answered with every place. The executor's last check
+    /// before a removal asks at the removal. Never remembered in
+    /// <see cref="VolumeInventory.Current"/>, which lives as long as the app. Remembering until the
+    /// mount manager reports a change was set aside: how reliably and cheaply its epoch can be read is
+    /// unmeasured, and the window above already closes on its own.</para>
     /// </summary>
     /// <param name="mountPoint">A mount point, as <see cref="MountPointOf"/> answers one.</param>
-    IReadOnlyList<string> MountPointsOf(string mountPoint);
+    IReadOnlyList<string> MountPointsOf(string mountPoint) =>
+        VolumeNameOf(mountPoint) is { } name ? MountPointsOfVolume(name) : [];
+
+    /// <summary>
+    /// The <c>\\?\Volume{GUID}\</c> name of the volume mounted at <paramref name="mountPoint"/> now,
+    /// asked of the machine at the moment of the call, or null where Windows will not say, which is
+    /// a share, a letter standing for somewhere else, and a folder nothing is mounted at. The first
+    /// half of <see cref="MountPointsOf"/>.
+    /// </summary>
+    /// <param name="mountPoint">A mount point, with or without its trailing separator.</param>
+    string? VolumeNameOf(string mountPoint);
+
+    /// <summary>
+    /// Every place the volume named <paramref name="volumeName"/> is mounted, the one callers act on
+    /// first, asked of the machine at the moment of the call. Empty where it is mounted nowhere or
+    /// will not say. The second half of <see cref="MountPointsOf"/>, and the half
+    /// <see cref="RememberedMountPoints"/> remembers.
+    /// </summary>
+    /// <param name="volumeName">A name <see cref="VolumeNameOf"/> answered.</param>
+    IReadOnlyList<string> MountPointsOfVolume(string volumeName);
 
     /// <summary>
     /// The folder the drive letter <paramref name="driveRoot"/> stands for, where <c>subst</c> made
@@ -268,6 +305,9 @@ public interface IVolumeInventory
     /// <para>For <see cref="VolumeRoot.Places"/>, for the reason <see cref="MountPointsOf"/> is: a
     /// letter standing for <c>C:\Users\testuser</c> reaches that profile's application data, and
     /// Windows names no volume for such a letter, so no mount point leads back to it.</para>
+    ///
+    /// <para>Not remembered, unlike <see cref="MountPointsOf"/>: one <c>QueryDosDevice</c> costs about
+    /// two microseconds, so remembering it would save almost nothing (#513).</para>
     /// </summary>
     /// <param name="driveRoot">The root of a path, as <see cref="Path.GetPathRoot(string)"/> answers it.</param>
     string? SubstituteOf(string driveRoot);

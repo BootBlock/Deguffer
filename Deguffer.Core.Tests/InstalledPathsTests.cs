@@ -15,6 +15,25 @@ public sealed class InstalledPathsTests
     private InstalledPaths Paths(ISystemDirectories? system = null, IVolumeInventory? volumes = null) =>
         new(_probe, system ?? FixedSystemDirectories.Standard, volumes ?? new FakeVolumeInventory());
 
+    /// <summary>
+    /// Every entry and every system and program folder is on one drive, which one reading asks where
+    /// it is mounted once. An entry named through the drive's other mount point is still asked about
+    /// in every view (#513).
+    /// </summary>
+    [Fact]
+    public void OneReadingAsksWhereADriveIsMountedOnce()
+    {
+        var volumes = new FakeVolumeInventory().With(@"C:\", alsoMountedAt: [@"Q:\SysMount\"]);
+        var paths = Paths(volumes: volumes);
+
+        paths.ViewsOf(@"C:\Program Files\First");
+        paths.ViewsOf(@"C:\Program Files\Second");
+        paths.ViewsOf(@"C:\Users\testuser\Apps\Third");
+
+        Assert.Contains(@"C:\Program Files (x86)\Tool", paths.ViewsOf(@"Q:\SysMount\Program Files\Tool"));
+        Assert.Single(volumes.MountPointsQueries);
+    }
+
     [Fact]
     public void ASystemFolderPathIsAskedAboutInAllThreeOfItsNames()
     {

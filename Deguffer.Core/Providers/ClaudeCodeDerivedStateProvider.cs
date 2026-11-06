@@ -179,7 +179,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
         _system = system ?? SystemDirectories.Current;
         _declarations = declarations ?? new RowDeclarations();
         _projects = projects ?? new ClaudeCodeProjectsDiscovery(Environment, _system, Volumes);
-        _sessions = sessions ?? new ClaudeCodeSessionRegistry(Environment, Inspector, _system, Volumes);
+        _sessions = sessions ?? new ClaudeCodeSessionRegistry(Environment, Inspector, _system, LiveVolumes);
     }
 
     public override string Id => "claude-code-leftovers";

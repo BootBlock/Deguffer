@@ -44,14 +44,16 @@ public sealed class VolumeInventory : IVolumeInventory
 
     public string? MountPointOf(string path) => VolumeCalls.MountPointOf(path);
 
-    public IReadOnlyList<string> MountPointsOf(string mountPoint)
+    public string? VolumeNameOf(string mountPoint)
     {
         // GetVolumeNameForVolumeMountPoint answers only for a mount point named with its trailing
         // separator, and a caller holding C:\Mount means the same directory.
         var named = Path.EndsInDirectorySeparator(mountPoint) ? mountPoint : mountPoint + Path.DirectorySeparatorChar;
 
-        return VolumeCalls.VolumeNameOf(named, out _) is { } name ? Ordered(VolumeCalls.MountPointsOf(name)) : [];
+        return VolumeCalls.VolumeNameOf(named, out _);
     }
+
+    public IReadOnlyList<string> MountPointsOfVolume(string volumeName) => Ordered(VolumeCalls.MountPointsOf(volumeName));
 
     public string? SubstituteOf(string driveRoot) => VolumeCalls.SubstituteOf(driveRoot);
 

@@ -92,12 +92,21 @@ public sealed class ExploreActionPolicy
         ArgumentNullException.ThrowIfNull(toolRoots);
         ArgumentNullException.ThrowIfNull(volumes);
 
+        _volumes = volumes;
         _fileSystem = fileSystem ?? WindowsFileSystem.Default;
         _finalPlaces = new FinalPlaces(_fileSystem, volumes);
 
-        _regions = new RegionTable(regions, volumes, _finalPlaces);
-        _toolRoots = DeclaredRoot.Follow(toolRoots, _finalPlaces);
-        _probedRoots = DeclaredRoot.Follow(probedRoots ?? [], _finalPlaces);
+        // Where each volume is mounted is asked once while every region and root is followed, which
+        // is once each for the policy's life. Never for the items: a rule followed before a volume
+        // gained a mount point matches an item named through the volume's old place only through
+        // the new place, which the item's live answer names and a remembered one would not
+        // (RememberedMountPoints).
+        var remembered = new RememberedMountPoints(volumes);
+        var following = new FinalPlaces(_fileSystem, remembered);
+
+        _regions = new RegionTable(regions, remembered, following);
+        _toolRoots = DeclaredRoot.Follow(toolRoots, following);
+        _probedRoots = DeclaredRoot.Follow(probedRoots ?? [], following);
 
         // A permitting region protects nothing, and a root that will not resolve names nothing.
         _held = new HeldLocations(
@@ -106,8 +115,6 @@ public sealed class ExploreActionPolicy
                 .. _toolRoots.Concat(_probedRoots).Select(root => (root.Root.Reason, root.Folder)),
             ],
             _fileSystem);
-
-        _volumes = volumes;
     }
 
     /// <summary>

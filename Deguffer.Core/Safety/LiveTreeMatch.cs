@@ -17,7 +17,10 @@ namespace Deguffer.Core.Safety;
 ///
 /// <para><b>Each path is followed once.</b> Following one asks the machine where its volume is
 /// mounted, and one program is many processes started with the same paths (G4). The answers are kept
-/// for the life of this instance, which is one reading of the process table.</para>
+/// for the life of this instance, which is one reading of the process table, and so is where each
+/// drive is mounted, which nearly every path shares (<see cref="RememberedMountPoints"/>).
+/// <see cref="LiveTreeInspector.DiscardOlderThan"/> drops both with the reading, so where a path is
+/// reachable is never older than the table it is compared with.</para>
 ///
 /// <para><b>Each program and each candidate is reached once, not once per pair.</b> A row asks about
 /// hundreds of directories against hundreds of processes, so a lookup or an allocation per pair is
@@ -28,6 +31,8 @@ internal sealed class LiveTreeMatch(IVolumeInventory volumes)
 {
     private readonly ConcurrentDictionary<string, ReachedFolder> _reached = new(StringComparer.OrdinalIgnoreCase);
     private ProgramsReached? _programs;
+
+    private readonly RememberedMountPoints _volumes = new(volumes);
 
     /// <summary>
     /// The programs in <paramref name="table"/>, each followed once and kept until this instance is
@@ -201,7 +206,7 @@ internal sealed class LiveTreeMatch(IVolumeInventory volumes)
 
     /// <summary>The folder at <paramref name="path"/>, followed the first time it is asked about.</summary>
     public ReachedFolder Reach(string path) =>
-        _reached.GetOrAdd(path, static (key, inventory) => ReachedFolder.At(key, inventory), volumes);
+        _reached.GetOrAdd(path, static (key, inventory) => ReachedFolder.At(key, inventory), _volumes);
 
     /// <summary>The programs of one table, kept together so a reader never pairs one with the other's.</summary>
     private sealed record ProgramsReached(ProcessTable Table, ImmutableArray<ReachedProgram> Programs);
