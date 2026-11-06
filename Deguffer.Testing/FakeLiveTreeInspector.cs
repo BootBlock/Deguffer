@@ -123,10 +123,12 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
         Asked = candidates;
 
         var unknown = new List<string>();
+        ReachedProgram[] programs =
+            [.. _programs.Select(p => _match.Program(p.Name, p.Executable, p.WorkingDirectory, p.Started))];
 
         return Answer(
             [.. candidates
-                .Select(c => new LiveTree(c.Directory, HoldersOf(c, unknown)))
+                .Select(c => new LiveTree(c.Directory, HoldersOf(c, programs, unknown)))
                 .Where(tree => tree.Holders.Count > 0)],
             [.. candidates.Select(c => c.Directory)],
             unknown);
@@ -150,7 +152,7 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     /// What makes <paramref name="candidate"/> live, adding it to <paramref name="unknown"/> where a
     /// writer's start or its last write could not be compared, as the real inspector does.
     /// </summary>
-    private List<string> HoldersOf(LiveTreeQuery candidate, List<string> unknown)
+    private List<string> HoldersOf(LiveTreeQuery candidate, ReachedProgram[] programs, List<string> unknown)
     {
         var holders = new List<string>();
 
@@ -169,16 +171,14 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
             }
         }
 
-        foreach (var program in _programs)
+        var reached = _match.Candidate(candidate);
+
+        foreach (var program in programs)
         {
-            holders.AddRange(_match.Holders(candidate, program.Name, program.Executable, program.WorkingDirectory));
+            LiveTreeMatch.AddHolders(reached, program, holders);
 
-            if (_match.Writer(candidate, program.Name, program.Executable, program.Started, out var cannotTell) is { } writer)
-            {
-                holders.Add(writer);
-            }
-
-            if (cannotTell && !unknown.Contains(candidate.Directory, StringComparer.OrdinalIgnoreCase))
+            if (!LiveTreeMatch.AddWriter(reached, program, holders)
+                && !unknown.Contains(candidate.Directory, StringComparer.OrdinalIgnoreCase))
             {
                 unknown.Add(candidate.Directory);
             }

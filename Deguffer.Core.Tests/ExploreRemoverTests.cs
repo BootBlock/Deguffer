@@ -243,7 +243,7 @@ public sealed class ExploreRemoverTests : IDisposable
         var handed = new List<string>();
         var bin = new ShellRecycleBin(
             StandInShell.NeverAsked(handed),
-            new RecycleBinReach(new FakeVolumeInventory(), new RecycleBinRooms(_ => null, _environment)));
+            new RecycleBinReach(new FakeVolumeInventory(), new RecycleBinRooms(_ => null, _environment), WindowsFileSystem.Default, WalkTuning.Default));
 
         var report = await ExploreRemover.RemoveAsync(
             [new ExploreItem(item, IsDirectory: false, Bytes: 16, LowerBound: false)],

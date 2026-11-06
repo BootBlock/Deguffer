@@ -70,6 +70,7 @@ public sealed class SteamDiscovery(IUserEnvironment environment)
 
     private readonly PassMemo<SteamInstall> _install = new();
     private readonly PassMemo<SteamLibraries> _libraries = new();
+    private readonly PassMemo<SteamAppManifests> _manifests = new();
 
     /// <summary>Steam's folder in the profile. Known outright, and independent of the install.</summary>
     public string LocalRoot { get; } =
@@ -90,13 +91,23 @@ public sealed class SteamDiscovery(IUserEnvironment environment)
         Install.Root is { } root ? _libraries.Get(() => SteamLibraryFolders.Of(root)) : null;
 
     /// <summary>
-    /// Drop the memoised answers, so a Steam installed, or a library added, while the app was open is
-    /// seen.
+    /// What Steam's manifests say about the games in <see cref="Libraries"/>, memoised with it: one
+    /// reader for every row that names games. The artwork and shader rows ask about many of the same
+    /// games in the same pass, and between them each library's records are listed once and each
+    /// manifest is read once.
+    /// </summary>
+    internal SteamAppManifests? Manifests =>
+        Libraries is { } libraries ? _manifests.Get(() => new SteamAppManifests(libraries)) : null;
+
+    /// <summary>
+    /// Drop the memoised answers, so a Steam installed, or a library or game added, while the app was
+    /// open is seen.
     /// </summary>
     public void Invalidate()
     {
         _install.Forget();
         _libraries.Forget();
+        _manifests.Forget();
     }
 
     /// <summary>
