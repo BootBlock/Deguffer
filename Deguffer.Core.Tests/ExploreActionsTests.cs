@@ -330,7 +330,8 @@ public sealed class ExploreActionsTests : IDisposable
 
         Assert.Equal([goes], told);
         Assert.Equal(ExploreRemovalPrompt.For(ExploreRemovalMode.RecycleBin, [goes]), Assert.Single(prompt.Asked));
-        Assert.Equal([stays.Path, goes.Path], _recycleBin.Asked);
+        // One question of the whole selection, so each drive's bin is read once for the prompt.
+        Assert.Equal([stays.Path, goes.Path], Assert.Single(_recycleBin.Questions));
         Assert.All(_recycleBin.Asked, path => Assert.False(path.StartsWith(@"\\?\", StringComparison.Ordinal), path));
         Assert.Equal(goes.Path, Assert.Single(report!.Removed).Path);
         Assert.Equal(stays.Path, Assert.Single(report.Refused).Path);

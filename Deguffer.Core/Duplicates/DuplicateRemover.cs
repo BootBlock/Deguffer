@@ -337,11 +337,13 @@ public sealed class DuplicateRemover
     }
 
     /// <summary>
-    /// Why this remover's Recycle Bin cannot take <paramref name="copy"/> as things are now, or null
-    /// where nothing shows it cannot: the question its removal refuses on, asked of the same bin with
-    /// the same path, so a confirmation lists for the bin only what the bin will take.
+    /// Why this remover's Recycle Bin cannot take each of <paramref name="copies"/> as things are now,
+    /// in the same order, with null for each where nothing shows it cannot: the question its removal
+    /// refuses on, asked of the same bin with the same paths, so a confirmation lists for the bin only
+    /// what the bin will take.
     /// </summary>
-    internal string? WhyTheBinCannotTake(DuplicateCandidate copy) => _bin.WhyItCannotTake(BinPath(copy));
+    internal IReadOnlyList<string?> WhyTheBinCannotTake(IReadOnlyList<DuplicateCandidate> copies) =>
+        _bin.WhyItCannotTake([.. copies.Select(BinPath)]);
 
     /// <summary>
     /// The display form, normalised: the shell namespace refuses the extended-length prefix §6.3

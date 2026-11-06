@@ -131,12 +131,14 @@ public interface IRecycleBin
         IReadOnlyList<string> paths, CancellationToken ct = default, Func<int, RecycleOutcome, bool>? stopsAfter = null);
 
     /// <summary>
-    /// Why the bin cannot take the item at <paramref name="path"/> as things are now, or null where
-    /// nothing shows it cannot. The answer <see cref="Recycle"/> refuses on, asked before a
-    /// confirmation so it promises the bin only for what the bin will take; <see cref="Recycle"/>
-    /// asks again, because the item or the bin can change while the user reads.
+    /// Why the bin cannot take each of <paramref name="paths"/> as things are now, in the same order,
+    /// with null for each where nothing shows it cannot. The answer <see cref="Recycle"/> refuses on,
+    /// asked before a confirmation so it promises the bin only for what the bin will take;
+    /// <see cref="Recycle"/> asks again, because the item or the bin can change while the user reads.
+    /// Asked of a whole list, because each volume's bin is read once for the list rather than once an
+    /// item.
     /// </summary>
-    /// <param name="path">In the form <see cref="Recycle"/> takes.</param>
-    /// <param name="ct">Stops the walk a folder needs, which is of everything inside it.</param>
-    string? WhyItCannotTake(string path, CancellationToken ct = default);
+    /// <param name="paths">In the form <see cref="Recycle"/> takes, and as many as the caller has.</param>
+    /// <param name="ct">Stops before the next item, and stops the walk a folder needs, which is of everything inside it.</param>
+    IReadOnlyList<string?> WhyItCannotTake(IReadOnlyList<string> paths, CancellationToken ct = default);
 }

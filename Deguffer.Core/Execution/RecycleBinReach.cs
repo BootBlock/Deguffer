@@ -31,6 +31,12 @@ namespace Deguffer.Core.Execution;
 /// changes between this and the shell's move, or a reason this does not know, is caught after the
 /// fact (<see cref="RecycleOutcome.DeletedOutright"/>), which can report the loss and not undo it.</para>
 ///
+/// <para><b>Asked of a list, and each volume's bin read once for it.</b> Reading a bin is a
+/// <c>SHQueryRecycleBin</c> call, which sums what the bin holds, and two reads of the account's
+/// registry, and every item on a volume is answered from the same reading. A list is asked
+/// immediately before it is used (a confirmation's whole list, and each batch the shell is handed),
+/// so a setting changed while the user read the confirmation is read again at the move.</para>
+///
 /// <para>Stateless apart from its collaborators, so one instance serves the process (G5).</para>
 /// </summary>
 internal sealed class RecycleBinReach
@@ -39,6 +45,9 @@ internal sealed class RecycleBinReach
     internal const int LongestPath = 259;
 
     internal const string DeletesWhatItCannotTake = "Windows deletes outright what its bin cannot take.";
+
+    private const string Undescribed =
+        $"Windows would not describe it, so Deguffer cannot tell whether the Recycle Bin can take it whole, and {DeletesWhatItCannotTake}";
 
     internal static readonly string TakesNoLongerPath =
         $"Windows' Recycle Bin takes nothing whose path is longer than {LongestPath}";
@@ -66,13 +75,29 @@ internal sealed class RecycleBinReach
     }
 
     /// <summary>
-    /// Why the bin cannot take the item at <paramref name="path"/>, or null where it can: the reason
-    /// alone, which a confirmation states before anything is asked and a refusal after, each adding
-    /// what became of the item.
+    /// Why the bin cannot take each of <paramref name="paths"/>, in the same order, with null for each
+    /// it can: the reason alone, which a confirmation states before anything is asked and a refusal
+    /// after, each adding what became of the item.
     /// </summary>
-    /// <param name="path">The item in display form, as the shell is handed it.</param>
-    /// <param name="ct">Stops the walk of a folder, which is of everything inside it.</param>
-    internal string? WhyNot(string path, CancellationToken ct = default)
+    /// <param name="paths">The items in display form, as the shell is handed them.</param>
+    /// <param name="ct">Stops before the next item, and stops the walk of a folder, which is of everything inside it.</param>
+    internal IReadOnlyList<string?> WhyNot(IReadOnlyList<string> paths, CancellationToken ct = default)
+    {
+        // Keyed as RecycleBinRooms names the bin it reads, so two mount points of one volume share it.
+        var rooms = new Dictionary<string, RecycleBinRoom?>(StringComparer.OrdinalIgnoreCase);
+        var answers = new string?[paths.Count];
+
+        for (var i = 0; i < paths.Count; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            answers[i] = WhyNot(paths[i], rooms, ct);
+        }
+
+        return answers;
+    }
+
+    /// <param name="rooms">Each volume's bin as this question read it, so it is read once for the list.</param>
+    private string? WhyNot(string path, Dictionary<string, RecycleBinRoom?> rooms, CancellationToken ct)
     {
         if (NameTheShellRereads(path) is { } name)
         {
@@ -86,33 +111,32 @@ internal sealed class RecycleBinReach
         }
 
         string extended;
-        FileAttributes attributes;
-        long length = 0;
 
         try
         {
             extended = LongPath.Extended(path);
-            attributes = File.GetAttributes(extended);
-
-            if (!attributes.HasFlag(FileAttributes.Directory))
-            {
-                length = new FileInfo(extended).Length;
-            }
-        }
-        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
-        {
-            // Nothing there to lose; the shell reports it gone in its own words.
-            return null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SecurityException)
         {
-            return "Windows would not describe it, so Deguffer cannot tell whether the Recycle Bin can take it "
-                + $"whole, and {DeletesWhatItCannotTake}";
+            return Undescribed;
+        }
+
+        switch (FileAttributeRead.Read(extended, out var attributes, out var length))
+        {
+            case 0:
+                break;
+
+            case FileAttributeRead.FileNotFound or FileAttributeRead.PathNotFound:
+                // Nothing there to lose; the shell reports it gone in its own words.
+                return null;
+
+            default:
+                return Undescribed;
         }
 
         // Before the walk, because a bin that refuses the item whatever it holds is answered without
         // reading a folder of any size.
-        if (WhyTheBinTakesNothing(path, out var limit) is { } refused)
+        if (WhyTheBinTakesNothing(path, rooms, out var limit) is { } refused)
         {
             return refused;
         }
@@ -164,7 +188,8 @@ internal sealed class RecycleBinReach
     /// or cannot be shown to take anything; or null, with the most it may hold in
     /// <paramref name="limit"/>.
     /// </summary>
-    private string? WhyTheBinTakesNothing(string path, out long limit)
+    /// <param name="rooms">Each volume's bin as the question read it, which this adds to.</param>
+    private string? WhyTheBinTakesNothing(string path, Dictionary<string, RecycleBinRoom?> rooms, out long limit)
     {
         const string Unknown = $", so nothing shows the Recycle Bin can take it, and {DeletesWhatItCannotTake}";
 
@@ -175,7 +200,15 @@ internal sealed class RecycleBinReach
             return "Deguffer cannot tell which drive this is on" + Unknown;
         }
 
-        if (_rooms.Of(volume) is not { } room)
+        var bin = RecycleBinRooms.BinOf(volume);
+
+        if (!rooms.TryGetValue(bin, out var read))
+        {
+            read = _rooms.Of(volume);
+            rooms.Add(bin, read);
+        }
+
+        if (read is not { } room)
         {
             return "Windows would not say what this drive's Recycle Bin holds, or the drive has none" + Unknown;
         }

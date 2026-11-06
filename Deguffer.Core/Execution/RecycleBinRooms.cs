@@ -58,9 +58,7 @@ public sealed class RecycleBinRooms
     /// <summary>The room in <paramref name="volume"/>'s bin, or null where Windows would not say what it holds.</summary>
     public RecycleBinRoom? Of(LocalVolume volume)
     {
-        // By the volume's own name where it has one, because a folder a volume is mounted at is a
-        // folder on another volume, and names that volume's bin.
-        if (_held(volume.VolumeName ?? volume.RootPath) is not { } held)
+        if (_held(BinOf(volume)) is not { } held)
         {
             return null;
         }
@@ -77,6 +75,13 @@ public sealed class RecycleBinRooms
 
         return new RecycleBinRoom(held, limit, _environment.ReadCurrentUserRegistryNumber(key, "NukeOnDelete") is 1);
     }
+
+    /// <summary>
+    /// The name <paramref name="volume"/>'s bin is asked by, which is one name for every mount point
+    /// of the volume: its own name where it has one, because a folder a volume is mounted at is a
+    /// folder on another volume, and names that volume's bin.
+    /// </summary>
+    internal static string BinOf(LocalVolume volume) => volume.VolumeName ?? volume.RootPath;
 
     /// <summary>The <c>{GUID}</c> of a <c>\\?\Volume{GUID}\</c> name, or null where there is none.</summary>
     private static string? VolumeGuid(string? volumeName)

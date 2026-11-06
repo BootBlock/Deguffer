@@ -185,7 +185,7 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
             .ExecuteAsync(null);
 
         var asked = Assert.Single(Prompt.Asked);
-        var core = await RemovalConfirmation.ForAsync(page.Marks!, await _scene.ProtectionsAsync(), mode, _ => null, _ => null);
+        var core = await RemovalConfirmation.ForAsync(page.Marks!, await _scene.ProtectionsAsync(), mode, _ => null, BinAnswers.TakesEvery);
 
         Assert.Equal(mode, asked.Mode);
         Assert.Equal([group.Files[1]], asked.Copies);

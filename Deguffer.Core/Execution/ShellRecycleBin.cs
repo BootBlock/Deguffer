@@ -73,7 +73,8 @@ public sealed class ShellRecycleBin : IRecycleBin
         _reach = reach;
     }
 
-    public string? WhyItCannotTake(string path, CancellationToken ct = default) => _reach.WhyNot(path, ct);
+    public IReadOnlyList<string?> WhyItCannotTake(IReadOnlyList<string> paths, CancellationToken ct = default) =>
+        _reach.WhyNot(paths, ct);
 
     public IReadOnlyList<RecycleOutcome> Recycle(
         IReadOnlyList<string> paths, CancellationToken ct = default, Func<int, RecycleOutcome, bool>? stopsAfter = null)
@@ -119,38 +120,36 @@ public sealed class ShellRecycleBin : IRecycleBin
     }
 
     /// <summary>
-    /// Asks of each item whether the bin can take it, immediately before the batch goes, refusing in
-    /// <paramref name="outcomes"/> each it cannot, and answers the positions of those to hand the
-    /// shell. A cancel while asking hands it nothing, so every item not refused is not reached.
+    /// Asks of the batch whether the bin can take each item, immediately before the batch goes,
+    /// refusing in <paramref name="outcomes"/> each it cannot, and answers the positions of those to
+    /// hand the shell. A cancel while asking hands it nothing, so every item is not reached.
     /// </summary>
     private List<int> Asked(IReadOnlyList<string> paths, RecycleOutcome[] outcomes, CancellationToken ct)
     {
-        List<int> handed = [];
+        IReadOnlyList<string?> cannotTake;
 
         try
         {
-            for (var i = 0; i < paths.Count; i++)
-            {
-                ct.ThrowIfCancellationRequested();
-
-                if (WhyItCannotTake(paths[i], ct) is { } cannotTake)
-                {
-                    outcomes[i] = new RecycleOutcome(Removed: false, RecycleOutcome.CannotTake(cannotTake));
-                }
-                else
-                {
-                    handed.Add(i);
-                }
-            }
+            cannotTake = WhyItCannotTake(paths, ct);
         }
         catch (OperationCanceledException)
         {
-            for (var i = 0; i < paths.Count; i++)
-            {
-                outcomes[i] ??= RecycleOutcome.NotReached;
-            }
-
+            Array.Fill(outcomes, RecycleOutcome.NotReached);
             return [];
+        }
+
+        List<int> handed = [];
+
+        for (var i = 0; i < paths.Count; i++)
+        {
+            if (cannotTake[i] is { } why)
+            {
+                outcomes[i] = new RecycleOutcome(Removed: false, RecycleOutcome.CannotTake(why));
+            }
+            else
+            {
+                handed.Add(i);
+            }
         }
 
         return handed;
