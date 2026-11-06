@@ -226,6 +226,63 @@ public class VolumeMftSourceTests
     }
 
     /// <summary>
+    /// A table that cannot be found closes the handle on the way out, because nothing else holds it
+    /// then, and says why. A leaked raw handle keeps the volume open until finalisation.
+    /// </summary>
+    [Fact]
+    public void ATableThatCannotBeFoundClosesItsHandle()
+    {
+        var volume = new RecordingVolume(Tree(1024).BuildVolume(bytesPerSector: 4096, bytesPerCluster: 4096), refusedFrom: 8192);
+        var opened = VolumeMftSource.TryOpen(volume, out _)!;
+
+        Assert.Null(opened.TryReadTable(out var reason));
+        opened.Dispose();
+
+        Assert.Equal(FallbackReason.MasterFileTableIncomplete, reason);
+        Assert.Equal(1, volume.Closed);
+    }
+
+    /// <summary>The same where the driver refuses the table's first read rather than serving nothing.</summary>
+    [Fact]
+    public void ATableTheDriverRefusesClosesItsHandle()
+    {
+        var volume = new RecordingVolume(
+            Tree(1024).BuildVolume(bytesPerSector: 4096, bytesPerCluster: 4096), refusedFrom: 8192, refusalThrows: true);
+        var opened = VolumeMftSource.TryOpen(volume, out _)!;
+
+        Assert.Null(opened.TryReadTable(out var reason));
+        opened.Dispose();
+
+        Assert.Equal(FallbackReason.VolumeNotAddressable, reason);
+        Assert.Equal(1, volume.Closed);
+    }
+
+    /// <summary>A volume whose boot sector is not NTFS hands its handle to nothing, so the open closes it.</summary>
+    [Fact]
+    public void AVolumeThatIsNotNtfsClosesItsHandle()
+    {
+        var volume = new RecordingVolume(new SectorStrictVolume(new byte[64 * 1024], bytesPerSector: 512));
+
+        Assert.Null(VolumeMftSource.TryOpen(volume, out var reason));
+
+        Assert.Equal(FallbackReason.NotNtfsVolume, reason);
+        Assert.Equal(1, volume.Closed);
+    }
+
+    /// <summary>The same where the driver refuses the boot sector's read.</summary>
+    [Fact]
+    public void ABootSectorTheDriverRefusesClosesItsHandle()
+    {
+        var volume = new RecordingVolume(
+            Tree(1024).BuildVolume(bytesPerSector: 4096, bytesPerCluster: 4096), refusedFrom: 0, refusalThrows: true);
+
+        Assert.Null(VolumeMftSource.TryOpen(volume, out var reason));
+
+        Assert.Equal(FallbackReason.VolumeNotAddressable, reason);
+        Assert.Equal(1, volume.Closed);
+    }
+
+    /// <summary>
     /// The image has to refuse what the disk refuses, or every test above passes against a reader
     /// that reads one record at a time from wherever it likes.
     /// </summary>
@@ -256,7 +313,11 @@ public class VolumeMftSourceTests
         .AddFile(22, Nested, "b.tgz", allocated: 8192, logical: 8000);
 
     /// <summary>A volume that notes where each read it serves starts and ends, and how often it was closed.</summary>
-    private sealed class RecordingVolume(IRawVolume inner) : IRawVolume
+    /// <param name="refusedFrom">
+    /// The offset from which a read is refused: it serves nothing, or throws as a driver's refusal
+    /// does where <paramref name="refusalThrows"/>.
+    /// </param>
+    private sealed class RecordingVolume(IRawVolume inner, long refusedFrom = long.MaxValue, bool refusalThrows = false) : IRawVolume
     {
         public List<(long Offset, long End)> Reads { get; } = [];
 
@@ -265,13 +326,23 @@ public class VolumeMftSourceTests
         public int Read(Span<byte> destination, long offset)
         {
             Reads.Add((offset, offset + destination.Length));
-            return inner.Read(destination, offset);
+            return IsRefused(offset) ? 0 : inner.Read(destination, offset);
         }
 
         public ValueTask<int> ReadAsync(Memory<byte> destination, long offset, CancellationToken ct)
         {
             Reads.Add((offset, offset + destination.Length));
-            return inner.ReadAsync(destination, offset, ct);
+            return IsRefused(offset) ? ValueTask.FromResult(0) : inner.ReadAsync(destination, offset, ct);
+        }
+
+        private bool IsRefused(long offset)
+        {
+            if (offset < refusedFrom)
+            {
+                return false;
+            }
+
+            return refusalThrows ? throw new IOException("The device is not ready.") : true;
         }
 
         public void Dispose()
