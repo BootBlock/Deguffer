@@ -35,7 +35,7 @@ internal static partial class VolumeCalls
 
     /// <summary>
     /// The longest path an extended-length name can be, 32,767 characters, and a terminator. What
-    /// <see cref="MountPointOf"/> allocates, since its answer can be longer than its question.
+    /// <see cref="VolumePathNameOf"/> allocates, since its answer can be longer than its question.
     /// </summary>
     private const uint LongestPath = 32_768;
 

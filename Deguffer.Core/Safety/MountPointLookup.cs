@@ -12,17 +12,17 @@ internal delegate int AttributeReader(string extendedPath, out FileAttributes at
 /// with on this machine.
 ///
 /// <para><b>Why not Windows every time.</b> <c>GetVolumePathNameW</c> asks the mount manager about
-/// every prefix of the path, so it costs from a tenth of a millisecond for <c>C:\Windows</c> to more
-/// than one for a folder nine levels down, and the in-use check, the executor's last guard and the
-/// policies that refuse a volume's top ask it about every path they follow (#512). Reading the
-/// attributes of the same nine folders costs about thirty microseconds.</para>
+/// every prefix of the path, so its cost grows with the path's depth to about a millisecond for a
+/// folder nine levels down, and the in-use check, the executor's last guard and the policies that
+/// refuse a volume's top ask it about every path they follow (#512). Reading the attributes of the
+/// same folders costs a fraction of that, one read for each.</para>
 ///
 /// <para><b>What the folders prove.</b> Windows answers with the deepest prefix of the path that is
 /// a mount point, read through any link on the way. A folder is a mount point, or leads to another
 /// volume, only where it is a reparse point. So where the path starts at a local volume's own drive
 /// letter, and every folder from that root down is there and is no reparse point, nothing on the way
 /// is a mount point and the answer is the root. A folder that is not there ends the proof early:
-/// nothing below it exists to be one. Everything else is asked of Windows exactly as before: a
+/// nothing below it exists to be one. Everything else is asked of Windows, and its answer returned unchanged: a
 /// reparse point at any level (a junction, a symbolic link, a volume mounted at a folder, a cloud
 /// placeholder), a level that would not be read, a <c>subst</c> letter, a mapped share, a share named
 /// by its server and a volume named by its GUID.</para>

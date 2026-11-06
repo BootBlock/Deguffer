@@ -232,8 +232,14 @@ public class MountPointLookupTests
         Junction.ToDirectory(link, Path.GetDirectoryName(target)!);
 
         var asked = new List<string>();
+        var reported = new Dictionary<string, FileAttributes>(StringComparer.OrdinalIgnoreCase);
         var lookup = new MountPointLookup(
-            FileAttributeRead.Read,
+            (string extended, out FileAttributes attributes) =>
+            {
+                var error = FileAttributeRead.Read(extended, out attributes);
+                reported[extended] = attributes;
+                return error;
+            },
             VolumeCalls.DeviceOf,
             extended =>
             {
@@ -256,6 +262,16 @@ public class MountPointLookupTests
         }
 
         Assert.Contains(LongPath.Extended(Path.Join(link, "inner")), asked);
+
+        // The folders this test made are read as what they are, by the read the app uses: the junction
+        // as a reparse point, and the plain folder as none, answered without Windows. That needs the
+        // temporary folder on a local volume's own letter with no link above it, as a test machine has.
+        Assert.True(
+            reported.TryGetValue(LongPath.Extended(target), out var plain),
+            $"The walk never reached {target}: its drive is not a local volume's own letter, or a folder above it is a link.");
+        Assert.False(plain.HasFlag(FileAttributes.ReparsePoint));
+        Assert.True(reported[LongPath.Extended(link)].HasFlag(FileAttributes.ReparsePoint));
+        Assert.DoesNotContain(LongPath.Extended(target), asked);
     }
 
     /// <summary>
