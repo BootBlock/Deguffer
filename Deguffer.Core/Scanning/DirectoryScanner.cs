@@ -433,38 +433,31 @@ public sealed class DirectoryScanner : IDirectoryScanner
     /// guards, or null where there is no index, or it cannot answer for the path or place an entry the
     /// bounds leave out.
     ///
-    /// <para>All or nothing: one reading the table declines sends every reading to the walk, which
-    /// answers them all in the one pass it would have made for the first.</para>
+    /// <para>All or nothing, from one pass over the path's subtree for every guard: one reading the
+    /// table declines sends every reading to the walk, which answers them all in the one pass it would
+    /// have made for the first.</para>
     /// </summary>
     private static ScanResult[]? FromIndex(MftVolumeIndex? index, Asked asked)
     {
         var volume = asked.Volume;
 
-        if (index is null || LeftOutNodes(index, asked) is not { } leftOut)
+        if (index is null
+            || LeftOutNodes(index, asked) is not { } leftOut
+            || index.TryMeasure(volume.Components, asked.Keeps, asked.Bounds.KeepRoot, leftOut) is not { } measured)
         {
             return null;
         }
 
-        var readings = new ScanResult[asked.Keeps.Length];
-
-        // One age for every reading: a guard changes what is counted, never what the directory holds.
+        // One age and one set of stores for every reading: a guard changes what is counted, never
+        // what the directory holds.
         var age = OneLevelAge.ToUtc(index.AgeOf(volume.Components));
+        IReadOnlyList<string> stores = [.. measured.MailStores.Select(s => PathOf(volume.DriveLetter, s)).Order(StringComparer.OrdinalIgnoreCase)];
 
-        for (var i = 0; i < readings.Length; i++)
+        return [.. measured.Readings.Select(reading => ScanResult.Fast(reading.Size, reading.WithheldRecent) with
         {
-            if (index.TryMeasure(volume.Components, asked.Keeps[i], asked.Bounds.KeepRoot, leftOut, out var withheldRecent, out var stores) is not { } size)
-            {
-                return null;
-            }
-
-            readings[i] = ScanResult.Fast(size, withheldRecent) with
-            {
-                MailStores = [.. stores.Select(s => PathOf(volume.DriveLetter, s)).Order(StringComparer.OrdinalIgnoreCase)],
-                LastWritten = age,
-            };
-        }
-
-        return readings;
+            MailStores = stores,
+            LastWritten = age,
+        })];
     }
 
     /// <summary>

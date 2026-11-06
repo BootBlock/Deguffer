@@ -78,6 +78,10 @@ internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list, File
         _links.Clear();
         _reparseFiles.Clear();
 
+        // The last directory's contents are over with once this is called, and so are the names its
+        // listing lent.
+        _memory.Names.Recall();
+
         var bytes = buffer.Bytes;
         var end = list(directory, new ListingRequest(_memory, bytes, followsLink, files), _entries);
 
@@ -86,6 +90,7 @@ internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list, File
             // Started again rather than continued: a listing cannot be resumed part-way, and keeping
             // what the first attempt read would hand those entries back twice.
             _entries.Clear();
+            _memory.Names.Recall();
 
             var retried = list(directory, new ListingRequest(_memory, smaller, followsLink, files), _entries);
             if (retried.Presence is PathPresence.Present)
