@@ -42,7 +42,7 @@ public sealed class VolumeInventory : IVolumeInventory
         }
     }
 
-    public string? MountPointOf(string path) => VolumeCalls.MountPointOf(path);
+    public string? MountPointOf(string path) => MountPointLookup.Machine.MountPointOf(path);
 
     public string? VolumeNameOf(string mountPoint)
     {
@@ -58,7 +58,7 @@ public sealed class VolumeInventory : IVolumeInventory
     public string? SubstituteOf(string driveRoot) => VolumeCalls.SubstituteOf(driveRoot);
 
     public (long Total, long Free)? SpaceOf(string path) =>
-        VolumeCalls.MountPointOf(path) is { } mountPoint ? VolumeCalls.SpaceOf(mountPoint) : null;
+        MountPointLookup.Machine.MountPointOf(path) is { } mountPoint ? VolumeCalls.SpaceOf(mountPoint) : null;
 
     public void Invalidate()
     {

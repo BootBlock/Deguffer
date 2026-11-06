@@ -52,7 +52,7 @@ internal delegate string? FinalPathReader(SafeFileHandle handle);
 /// <c>GetFileInformationByHandleEx</c> for every class Deguffer reads, the older
 /// <c>GetFileInformationByHandle</c>, <c>GetFinalPathNameByHandle</c>, <c>FindFirstFileNameW</c>,
 /// which lists a file's names, each from the top of its volume as
-/// <see cref="VolumeCalls.MountPointOf"/> gives it, and <c>OpenFileById</c>, which opens a file
+/// <see cref="MountPointLookup.MountPointOf"/> gives it, and <c>OpenFileById</c>, which opens a file
 /// described here by its number rather than its path. The cloud files, the occupancy probe and the
 /// hard-link scanner open and read through the members here rather than declaring their own.</para>
 ///
@@ -378,7 +378,7 @@ internal sealed unsafe partial class FileInformation
     /// </summary>
     public IReadOnlyList<string>? NamesOf(string path)
     {
-        if (VolumeCalls.MountPointOf(path) is not { } top || _listNames(LongPath.Extended(path)) is not { } names)
+        if (MountPointLookup.Machine.MountPointOf(path) is not { } top || _listNames(LongPath.Extended(path)) is not { } names)
         {
             return null;
         }

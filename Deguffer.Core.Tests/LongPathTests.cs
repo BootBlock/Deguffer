@@ -289,7 +289,7 @@ public class LongPathTests
         using var temp = new TempDirectory();
         var run = temp.CreateDirectory("Run-Folder-Long");
         var asNamed = ShortPath.Of(run) ?? run;
-        var mount = VolumeCalls.MountPointOf(run)!;
+        var mount = VolumeInventory.Current.MountPointOf(run)!;
         var volume = VolumeCalls.Names().First(name =>
             VolumeCalls.MountPointsOf(name).Contains(mount, StringComparer.OrdinalIgnoreCase));
 
