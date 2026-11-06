@@ -53,10 +53,12 @@ app's assemblies cannot reach them.
 
 ## If this is reopened
 
-- Application code has its own AOT work outstanding, independent of the above: every
-  reflection-based `JsonSerializer` call in Core raises IL2026/IL3050, and each wants a
-  `JsonSerializerContext` source-generator. That is worth doing on its own merits and is a
-  prerequisite, not a fix for the startup crash.
+- Application code had its own AOT work outstanding, independent of the above: every
+  reflection-based `JsonSerializer` call in Core raised IL2026/IL3050. Since #518 every store but
+  `PreferenceStore` reads through a generated `JsonSerializerContext`, and Core builds with the
+  trim analyzer, so a new reflection call fails the build. `PreferenceStore` stays on reflection
+  under a scoped suppression until the generator keeps the default of an `init` member a file
+  omits (dotnet/runtime#124650). Moving it is a prerequisite, not a fix for the startup crash.
 - The remaining unknown is which Windows App SDK types the trimmer removes. Answering it needs a
   trim-analysis pass over the SDK assemblies and the trimmer roots to match, which is a larger
   piece of work than this evaluation.

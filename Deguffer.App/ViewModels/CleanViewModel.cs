@@ -870,8 +870,13 @@ public sealed partial class CleanViewModel : ObservableObject
         // HasPreview drops here rather than being reassigned at the end.
         _barShowsPreviewSummary = false;
 
+        // Read on a worker from launch, and nearly always long before a scan gets here. Waited for
+        // before the first row is built, so no row starts at its tier default because the file was
+        // still being read.
+        var memory = await _selections.Memory.WaitAsync(ct);
+
         var progress = new Progress<string>(message => Report(message));
-        var found = new Progress<Finding>(AddRowInOrder);
+        var found = new Progress<Finding>(finding => AddRowInOrder(finding, memory));
 
         // Fixed here, once, for the whole pass. See KeepFilesChangedWithinHours.
         var keep = MinimumAge.WithinHours(KeepFilesChangedWithinHours, DateTime.UtcNow);
@@ -911,6 +916,9 @@ public sealed partial class CleanViewModel : ObservableObject
         CanElevate = ElevationOffer.ShouldOffer(_isElevated);
         _barShowsPreviewSummary = false;
 
+        // Read before the preview built the rows this re-plans, so this does not wait.
+        var memory = await _selections.Memory.WaitAsync(ct);
+
         // Each finding is written over the row its provider had when the pass began, found by the
         // provider: the one instance the planner reports it by. Looked up in this map rather than
         // searched for in the list as each finding lands, so a finding with no row is passed over. A
@@ -924,7 +932,7 @@ public sealed partial class CleanViewModel : ObservableObject
         {
             if (rows.TryGetValue(finding.Provider, out var row))
             {
-                ReplanRow(row, finding);
+                ReplanRow(row, finding, memory);
             }
         });
 
@@ -984,7 +992,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// Write one new finding over its row, and bring the page's figures up to date with it at once
     /// rather than at the end of the pass, which a cancelled or failed re-plan never reaches.
     /// </summary>
-    private void ReplanRow(FindingViewModel row, Finding finding)
+    private void ReplanRow(FindingViewModel row, Finding finding, SelectionMemory memory)
     {
         // Closed as its steps are replaced, not once before the pass: the rows stay on the page while
         // it runs, so a row's list can be opened after the pass began. Left open, its ticks would land
@@ -994,7 +1002,7 @@ public sealed partial class CleanViewModel : ObservableObject
             CloseItems();
         }
 
-        row.Replan(finding, _selections.Memory, _keeps.Current);
+        row.Replan(finding, memory, _keeps.Current);
         row.IsListed = IsListed(row);
         Sizes.Show(row);
         ScanChoice.Missing.Record(finding.Provider, row.Status);
@@ -1042,9 +1050,9 @@ public sealed partial class CleanViewModel : ObservableObject
     /// list ordered while it is still filling, rather than letting it reshuffle under the user once
     /// the last provider lands.
     /// </summary>
-    private void AddRowInOrder(Finding finding)
+    private void AddRowInOrder(Finding finding, SelectionMemory memory)
     {
-        var row = new FindingViewModel(finding, _selections.Memory, _keeps.Current, _isElevated);
+        var row = new FindingViewModel(finding, memory, _keeps.Current, _isElevated);
 
         // Rows arrive as their providers finish, so each one is filtered as it lands rather than in a
         // pass at the end that a cancelled scan would never reach.

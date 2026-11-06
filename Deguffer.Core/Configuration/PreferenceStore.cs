@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Deguffer.Core.Safety;
@@ -10,9 +11,20 @@ namespace Deguffer.Core.Configuration;
 /// This lives in Core rather than the app so it can be tested against a fake environment: the
 /// interesting behaviour is what happens to a file that is missing, truncated or hand-edited into
 /// nonsense, and none of that is reachable through the WinUI shell.
+///
+/// <para><b>The one store still read by reflection.</b> Every other store reads through a contract
+/// generated at build time (see <see cref="IndentedStoreJson"/>). The generator in .NET 10 builds a
+/// type with <c>init</c> members in one object initialiser, so a member the file leaves out is set to
+/// null or zero rather than keeping its initialiser: a file from before the scan settings existed would
+/// read with no scan settings at all. Most of <see cref="AppPreferences"/>' groups are such members.
+/// This file moves to a generated contract once the runtime sets only the members a file names
+/// (dotnet/runtime#124650), and <c>PreferenceStoreTests</c> are what tell the two apart.</para>
 /// </summary>
 public sealed class PreferenceStore
 {
+    private const string ReflectionJustification =
+        "Deguffer is never trimmed, and the generated contract loses the default of every init member a file omits.";
+
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         WriteIndented = true,
@@ -37,6 +49,7 @@ public sealed class PreferenceStore
     /// failing a launch over, and a tool whose premise is trustworthiness around deletion must not
     /// be blocked from starting by a stray byte in a cosmetic preference.
     /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = ReflectionJustification)]
     public AppPreferences Load()
     {
         try
@@ -56,6 +69,7 @@ public sealed class PreferenceStore
     /// cares can tell the user their choice will not survive a restart, rather than silently
     /// implying it was saved.
     /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = ReflectionJustification)]
     public bool Save(AppPreferences preferences)
     {
         try

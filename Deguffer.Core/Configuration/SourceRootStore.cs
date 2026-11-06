@@ -31,8 +31,6 @@ public sealed class SourceRootStore
 
     private const string ApprovedProperty = "remoteStorageApproved";
 
-    private static readonly JsonSerializerOptions SerializerOptions = new() { WriteIndented = true };
-
     private readonly string _file;
 
     public SourceRootStore(IUserEnvironment environment)
@@ -55,7 +53,7 @@ public sealed class SourceRootStore
         try
         {
             var json = File.ReadAllText(LongPath.Extended(_file));
-            var stored = JsonSerializer.Deserialize<JsonElement[]>(json, SerializerOptions);
+            var stored = JsonSerializer.Deserialize(json, IndentedStoreJson.Default.SourceRootEntries);
 
             if (stored is null)
             {
@@ -93,7 +91,7 @@ public sealed class SourceRootStore
                 _file,
                 JsonSerializer.Serialize(
                     stored.Select(root => new StoredRoot(root.Path, root.RemoteStorageApproved)),
-                    SerializerOptions));
+                    IndentedStoreJson.Default.SourceRoots));
 
             return true;
         }
@@ -188,7 +186,7 @@ public sealed class SourceRootStore
     /// <see cref="ApprovedProperty"/> rather than taking whatever <see cref="SourceRoot"/>'s members
     /// happen to be called.
     /// </summary>
-    private sealed record StoredRoot(
+    internal sealed record StoredRoot(
         [property: JsonPropertyName(PathProperty)] string Path,
         [property: JsonPropertyName(ApprovedProperty)] bool RemoteStorageApproved);
 }

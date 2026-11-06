@@ -27,8 +27,6 @@ namespace Deguffer.Core.Configuration;
 /// </summary>
 public sealed class KeepStore
 {
-    private static readonly JsonSerializerOptions SerializerOptions = new() { WriteIndented = true };
-
     private readonly string _file;
 
     private bool _refusesToSave;
@@ -94,7 +92,7 @@ public sealed class KeepStore
 
         try
         {
-            StoreFile.Replace(_file, JsonSerializer.Serialize(list.Items, SerializerOptions));
+            StoreFile.Replace(_file, JsonSerializer.Serialize(list.Items, IndentedStoreJson.Default.KeptItems));
 
             return true;
         }

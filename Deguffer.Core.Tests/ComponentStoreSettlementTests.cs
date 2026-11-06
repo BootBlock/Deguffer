@@ -69,6 +69,7 @@ public sealed class ComponentStoreSettlementTests : IDisposable
     [InlineData("{ \"format\": 1, \"left\": { \"Cleanup\": { \"explorerSize\": 1, \"actualSize\": 1, \"sharedWithWindows\": 0, \"backupsAndDisabledFeatures\": 0, \"cacheAndTemporaryData\": 0, \"reclaimablePackages\": 0 }, \"1\": { \"explorerSize\": 1, \"actualSize\": 1, \"sharedWithWindows\": 0, \"backupsAndDisabledFeatures\": 0, \"cacheAndTemporaryData\": 0, \"reclaimablePackages\": 0 } } }")]
     [InlineData("{ \"format\": 1, \"left\": { \"Cleanup\": { \"explorerSize\": 1, \"actualSize\": 1, \"sharedWithWindows\": 0, \"backupsAndDisabledFeatures\": 0, \"cacheAndTemporaryData\": 0, \"reclaimablePackages\": 0 }, \"ResetBase\": { \"explorerSize\": 1, \"actualSize\": -1, \"sharedWithWindows\": 0, \"backupsAndDisabledFeatures\": 0, \"cacheAndTemporaryData\": 0, \"reclaimablePackages\": 0 } } }")]
     [InlineData("{ \"format\": 1, \"left\": { \"Cleanup\": null } }")]
+    [InlineData("{ \"format\": 1, \"left\": { \"Cleanup\": { \"explorerSize\": 1, \"actualSize\": 1, \"sharedWithWindows\": 0, \"backupsAndDisabledFeatures\": 0, \"cacheAndTemporaryData\": 0, \"reclaimablePackages\": 0, \"pendingReboot\": true } } }")]
     public void AFileThisStoreWouldNotWriteIsNoRecord(string contents)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(_file)!);
