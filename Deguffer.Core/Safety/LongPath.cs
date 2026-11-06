@@ -254,7 +254,7 @@ public static partial class LongPath
     /// below is right everywhere the question is only "is there something here to walk", because a
     /// refusal there is met again by the walk itself.</para>
     /// </summary>
-    public static PathPresence ProbeDirectory(string path) => Probe(path, EntryKind.Directory, out _);
+    public static PathPresence ProbeDirectory(string path) => Probe(path, EntryKind.Directory, out _, out _);
 
     /// <summary>
     /// The same answer, with whether the path is a link taken from the same attribute read rather
@@ -273,7 +273,7 @@ public static partial class LongPath
     /// </summary>
     public static PathPresence ProbeDirectory(string path, out bool? isLink)
     {
-        var presence = Probe(path, EntryKind.Directory, out var described);
+        var presence = Probe(path, EntryKind.Directory, out var described, out _);
 
         isLink = described?.HasFlag(FileAttributes.ReparsePoint);
 
@@ -283,7 +283,7 @@ public static partial class LongPath
     /// <summary>
     /// The same three-state answer for a file. See <see cref="ProbeDirectory"/>.
     /// </summary>
-    public static PathPresence ProbeFile(string path) => Probe(path, EntryKind.File, out _);
+    public static PathPresence ProbeFile(string path) => Probe(path, EntryKind.File, out _, out _);
 
     /// <summary>
     /// The same three-state answer for a path that may be either kind, which is what §5.6 asks of a
@@ -294,21 +294,39 @@ public static partial class LongPath
     /// <para>One attribute read answers for either kind, because planning asks this of every
     /// candidate it holds.</para>
     /// </summary>
-    public static PathPresence ProbeEntry(string path) => Probe(path, EntryKind.Either, out _);
+    public static PathPresence ProbeEntry(string path) => Probe(path, EntryKind.Either, out _, out _);
 
     /// <summary>
     /// The same answer, with which kind the entry is taken from the same attribute read, for a caller
     /// that treats a file and a directory differently. Null where Windows described nothing, as
     /// <see cref="ProbeDirectory(string, out bool?)"/> gives its link answer.
     /// </summary>
-    public static PathPresence ProbeEntry(string path, out bool? isDirectory)
+    public static PathPresence ProbeEntry(string path, out bool? isDirectory) =>
+        ProbeEntry(path, out isDirectory, out _);
+
+    /// <summary>
+    /// The same answer, with the newer of the entry's creation and last-write times from the same
+    /// attribute read, for a measurement that dates the directory it is about to list (see
+    /// <see cref="Scanning.ScanResult.LastWritten"/>).
+    /// </summary>
+    /// <param name="newestFileTime">
+    /// The newer of the two times as a FILETIME, or zero where Windows described nothing.
+    /// </param>
+    public static PathPresence ProbeEntry(string path, out bool? isDirectory, out long newestFileTime)
     {
-        var presence = Probe(path, EntryKind.Either, out var described);
+        var presence = Probe(path, EntryKind.Either, out var described, out newestFileTime);
 
         isDirectory = described?.HasFlag(FileAttributes.Directory);
 
         return presence;
     }
+
+    /// <summary>
+    /// <see cref="ProbeDirectory(string)"/>'s answer, with the directory's own time as
+    /// <see cref="ProbeEntry(string, out bool?, out long)"/> gives it, from the same attribute read.
+    /// </summary>
+    public static PathPresence ProbeDirectoryTime(string path, out long newestFileTime) =>
+        Probe(path, EntryKind.Directory, out _, out newestFileTime);
 
     /// <summary>
     /// Whether a directory may be at <paramref name="path"/>: true unless Windows said nothing is.
@@ -416,9 +434,14 @@ public static partial class LongPath
     /// is the question that was put.
     /// </param>
     /// <param name="described">What Windows described, or null for every answer but present.</param>
-    private static PathPresence Probe(string path, EntryKind expected, out FileAttributes? described)
+    /// <param name="newestFileTime">
+    /// The newer of the entry's creation and last-write times as a FILETIME, or zero for every answer
+    /// but present.
+    /// </param>
+    private static PathPresence Probe(string path, EntryKind expected, out FileAttributes? described, out long newestFileTime)
     {
         described = null;
+        newestFileTime = 0;
 
         // Exactly where the two-state form has always had it. A value Windows will not accept at all
         // throws from here, as it did before, rather than being reported as something about the
@@ -433,7 +456,7 @@ public static partial class LongPath
             return PathPresence.Absent;
         }
 
-        var error = FileAttributeRead.Read(extended, out var attributes);
+        var error = FileAttributeRead.Read(extended, out var attributes, out _, out var newest);
 
         if (error != 0)
         {
@@ -459,6 +482,7 @@ public static partial class LongPath
         }
 
         described = attributes;
+        newestFileTime = newest;
 
         return PathPresence.Present;
     }

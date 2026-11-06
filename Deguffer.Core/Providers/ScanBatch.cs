@@ -30,12 +30,17 @@ namespace Deguffer.Core.Providers;
 /// One entry per path, saying whether the measurement reached it. A path not reached measures zero, so
 /// a provider that reports a figure for each path needs this to tell "empty" from "not looked into".
 /// </param>
+/// <param name="LastWritten">
+/// One entry per path: its age one level down, read by its measurement. See
+/// <see cref="ScanResult.LastWritten"/>.
+/// </param>
 public sealed record ScanBatch(
     IReadOnlyList<ScanSize> Sizes,
     FallbackReason Fallback,
     IReadOnlyList<bool> WithheldRecent,
     IReadOnlyList<IReadOnlyList<string>> MailStores,
-    IReadOnlyList<bool> Reached)
+    IReadOnlyList<bool> Reached,
+    IReadOnlyList<DateTime?> LastWritten)
 {
     public ScanSize Total => TotalOf(..);
 

@@ -363,11 +363,11 @@ public sealed class VisualStudioSolutionCacheProviderTests : IDisposable
             return entries is null
                 ? null
                 : directory.Equals(header, StringComparison.OrdinalIgnoreCase)
-                    ? [.. entries, new VisualStudioEntry("notes.txt", Path.Combine(directory, "notes.txt"), FileAttributes.Normal, written)]
+                    ? [.. entries, new VisualStudioEntry("notes.txt", Path.Combine(directory, "notes.txt"), FileAttributes.Normal, written.ToFileTimeUtc())]
                     : directory.Equals(folder.Version, StringComparison.OrdinalIgnoreCase)
-                        ? [.. entries, new VisualStudioEntry("Browse.VC.db-wal", folder.BrowseDatabase + "-wal", FileAttributes.Normal, written)]
+                        ? [.. entries, new VisualStudioEntry("Browse.VC.db-wal", folder.BrowseDatabase + "-wal", FileAttributes.Normal, written.ToFileTimeUtc())]
                         : directory.Equals(folder.DesignTimeBuild, StringComparison.OrdinalIgnoreCase)
-                            ? [.. entries.Select(entry => entry with { LastWriteTimeUtc = future })]
+                            ? [.. entries.Select(entry => entry with { NewestFileTime = future.ToFileTimeUtc() })]
                             : entries;
         });
 

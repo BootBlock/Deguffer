@@ -58,21 +58,7 @@ public sealed class TempDirectory : IDisposable
     /// </summary>
     public static string Age(string path, TimeSpan by)
     {
-        var when = DateTime.UtcNow - by;
-        var extended = LongPath.Extended(path);
-
-        // A directory's own times matter to a provider that judges an empty folder by them, and
-        // the File calls refuse a directory.
-        if (Directory.Exists(extended))
-        {
-            Directory.SetCreationTimeUtc(extended, when);
-            Directory.SetLastWriteTimeUtc(extended, when);
-        }
-        else
-        {
-            File.SetCreationTimeUtc(extended, when);
-            File.SetLastWriteTimeUtc(extended, when);
-        }
+        EntryTime.Set(path, DateTime.UtcNow - by);
 
         return path;
     }

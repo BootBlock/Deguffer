@@ -105,12 +105,15 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
         var results = new ScanResult[asked.Count][];
         var directories = new List<int>(asked.Count);
 
+        // Each directory's own time, from the read that found it, which dates it with its listing.
+        var owns = new long[asked.Count];
+
         for (var i = 0; i < asked.Count; i++)
         {
             ct.ThrowIfCancellationRequested();
 
             var path = asked[i].Path;
-            var presence = LongPath.ProbeEntry(path, out var isDirectory);
+            var presence = LongPath.ProbeEntry(path, out var isDirectory, out owns[i]);
 
             if (isDirectory is true)
             {
@@ -137,7 +140,7 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
         foreach (var walk in directories.GroupBy(i => _tuner.For(asked[i].Path).Walk))
         {
             var each = walk.ToList();
-            var walked = Measure([.. each.Select(i => asked[i])], keeps, walk.Key, _files, progress, ct);
+            var walked = Measure([.. each.Select(i => asked[i])], [.. each.Select(i => owns[i])], keeps, walk.Key, _files, progress, ct);
 
             for (var j = 0; j < each.Count; j++)
             {
@@ -178,15 +181,20 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
     /// each such file and changes no figure. No provider measuring with this scanner asks about a path
     /// inside another.</para>
     /// </summary>
+    /// <param name="owns">
+    /// Each root's own time, from the attribute read that found it, in the order of
+    /// <paramref name="asked"/>. See <see cref="ScanResult.LastWritten"/>.
+    /// </param>
     private static ScanResult[][] Measure(
         IReadOnlyList<ScanRequest> asked,
+        IReadOnlyList<long> owns,
         MinimumAge[] keeps,
         WalkTuning tuning,
         FileInformation files,
         IProgress<ScanSize>? progress,
         CancellationToken ct)
     {
-        var roots = asked.Select(_ => new RootTally(keeps)).ToArray();
+        var roots = asked.Select((_, i) => new RootTally(owns[i], keeps)).ToArray();
         var route = new ByNameRoute();
 
         // Every name, because each file counted is opened by its path to ask what else links it.
@@ -207,6 +215,12 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
                 if (holder is null && contents.WasRefused)
                 {
                     measured.RootRefused = true;
+                }
+
+                // The root's age, from its own listing alone, every entry included. See ScanResult.LastWritten.
+                if (holder is null)
+                {
+                    measured.Newest = OneLevelAge.Of(measured.Own, contents);
                 }
 
                 foreach (var file in contents.Entries)
@@ -279,13 +293,19 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
     }
 
     /// <summary>One root's readings, one <see cref="Tally"/> for each guard.</summary>
-    private sealed class RootTally(MinimumAge[] keeps)
+    /// <param name="own">The root's own time, from the read that found it. See <see cref="OneLevelAge.Of"/>.</param>
+    private sealed class RootTally(long own, MinimumAge[] keeps)
     {
+        public readonly long Own = own;
+
         public readonly Tally[] Tallies = [.. keeps.Select(keep => new Tally(keep))];
 
         public readonly ConcurrentBag<string> Stores = [];
 
         public bool RootRefused;
+
+        /// <summary>The root's age, written by its own listing alone, as <see cref="RootRefused"/> is.</summary>
+        public long Newest = OneLevelAge.Unknown;
 
         /// <summary>The readings, read once the walk has ended.</summary>
         public ScanResult[] Results(MinimumAge[] keeps)
@@ -298,7 +318,9 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
 
             IReadOnlyList<string> found = [.. Stores.Order(StringComparer.OrdinalIgnoreCase)];
 
-            return [.. Tallies.Select(tally => ScanResult.ByChoice(tally.Size, tally.WithheldRecent) with { MailStores = found })];
+            var age = OneLevelAge.ToUtc(Newest);
+
+            return [.. Tallies.Select(tally => ScanResult.ByChoice(tally.Size, tally.WithheldRecent) with { MailStores = found, LastWritten = age })];
         }
     }
 

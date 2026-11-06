@@ -317,7 +317,7 @@ internal sealed class SymbolStoreExamination
             }
         }
 
-        return DirectoryAge.Of(candidate.Written, indexes.Select(index => index.LastWriteTimeUtc));
+        return DirectoryAge.Of(candidate.Written, indexes.Select(MinimumAge.NewestFileTimeOf));
     }
 
     /// <summary>
@@ -363,8 +363,10 @@ internal sealed class SymbolStoreExamination
     }
 
     /// <summary>A folder named like an entry, to be looked inside.</summary>
-    /// <param name="Written">Its own last write, from its parent's listing.</param>
-    private readonly record struct Candidate(string Path, string Name, string Parent, DateTime Written);
+    /// <param name="Written">
+    /// The newer of its own creation and last-write times as a FILETIME, from its parent's listing.
+    /// </param>
+    private readonly record struct Candidate(string Path, string Name, string Parent, long Written);
 
     /// <summary>
     /// Everything one store's listings found, in their order, and the folders named like entries among
@@ -386,7 +388,7 @@ internal sealed class SymbolStoreExamination
         {
             if (SymbolStoreLayout.IsEntryName(folder.Name) && (level is null || SymbolStoreLayout.BelongsUnder(level, folder.Name)))
             {
-                Candidates.Add(new Candidate(path, folder.Name, parent, folder.LastWriteTimeUtc));
+                Candidates.Add(new Candidate(path, folder.Name, parent, MinimumAge.NewestFileTimeOf(folder)));
                 Saw(Seen.Candidate, path);
             }
             else

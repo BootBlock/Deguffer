@@ -198,12 +198,12 @@ public sealed class VsCodeCppToolsCacheProviderTests : IDisposable
         var workspace = CreateWorkspaceDatabase(root, "aaaabbbbccccddddeeeeffff00001111");
 
         var recently = DateTime.UtcNow.AddDays(-3);
-        File.SetLastWriteTimeUtc(Path.Combine(workspace, ".BROWSE.VC.DB"), recently);
-        File.SetLastWriteTimeUtc(Path.Combine(workspace, ".BROWSE.VC.DB-shm"), DateTime.UtcNow.AddDays(-400));
+        EntryTime.Set(Path.Combine(workspace, ".BROWSE.VC.DB"), recently);
+        EntryTime.Set(Path.Combine(workspace, ".BROWSE.VC.DB-shm"), DateTime.UtcNow.AddDays(-400));
 
         // The directory itself was last touched when its entries were created, which is now — the
         // point being that the answer must not come from here.
-        Directory.SetLastWriteTimeUtc(workspace, DateTime.UtcNow.AddDays(-400));
+        EntryTime.Set(workspace, DateTime.UtcNow.AddDays(-400));
 
         var plan = await CreateProvider().PlanAsync();
         var step = Assert.Single(plan.Steps.OfType<DeleteDirectoryStep>());

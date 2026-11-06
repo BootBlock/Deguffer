@@ -105,6 +105,31 @@ public sealed class MftVolumeIndex(MftVolumeTree tree, MftChildLinks links)
         TryMeasure(relativePath, MinimumAge.Off, out _);
 
     /// <summary>
+    /// The age of the directory at <paramref name="relativePath"/> one level down, by
+    /// <see cref="OneLevelAge"/>'s rule, from its own record and every child the walk would list there:
+    /// each file once for each of its names in the directory, and each link by its own record. A file,
+    /// a path the index does not hold, and a path through a link have no age here, as
+    /// <see cref="TryMeasure(IReadOnlyList{string})"/> has no size for the last two.
+    /// </summary>
+    /// <returns>A FILETIME, or <see cref="OneLevelAge.Unknown"/>.</returns>
+    public long AgeOf(IReadOnlyList<string> relativePath)
+    {
+        if (TryResolve(relativePath) is not { } record || !tree.IsDirectory(record))
+        {
+            return OneLevelAge.Unknown;
+        }
+
+        var newest = tree.NewestOf(record);
+
+        for (var i = links.Start[record]; i < links.Start[record + 1]; i++)
+        {
+            newest = OneLevelAge.With(newest, tree.NewestOf(links.Children[i]));
+        }
+
+        return newest;
+    }
+
+    /// <summary>
     /// The node of each entry of <paramref name="leftOut"/>, given as components below
     /// <paramref name="root"/>, for <see cref="TryMeasure(IReadOnlyList{string}, MinimumAge, bool, IReadOnlySet{uint}, out bool, out IReadOnlyList{IReadOnlyList{string}})"/>
     /// to leave out, or null where one cannot be placed. See <see cref="MftLeftOutPlacement"/>.
