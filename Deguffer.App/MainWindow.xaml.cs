@@ -1,3 +1,4 @@
+using Deguffer.App.Controls;
 using Deguffer.App.Shell;
 using Deguffer.App.Views;
 using Deguffer.Core.Configuration;
@@ -110,8 +111,11 @@ public sealed partial class MainWindow : Window
     /// <summary>Open the map appearance window, or bring forward the one already open.</summary>
     public void ShowMapAppearance() => _mapAppearance.Show();
 
-    /// <summary>Open again the tool windows the last session closed with open. Once, after this window is first shown.</summary>
-    public void ReopenToolWindows() => _mapAppearance.Reopen();
+    /// <summary>
+    /// Open again the tool windows the last session closed with open. Once, after this window has drawn
+    /// its first frame: a tool window built before then is built in the turn that frame waits for.
+    /// </summary>
+    public void ReopenToolWindows() => AfterFirstFrame.Run(RenderingClock.Current, _mapAppearance.Reopen);
 
     /// <summary>
     /// Close once nothing is running, through the same guard the close button goes through, so a
