@@ -122,6 +122,19 @@ public sealed class FakeUserEnvironment : IUserEnvironment
     public string DomainName { get; } = Domain;
 
     /// <summary>
+    /// Not an administrator unless a test says so, so whether the suite runs elevated changes nothing
+    /// a test measures.
+    /// </summary>
+    public bool IsAdministrator { get; private set; }
+
+    /// <summary>Pretend the process runs with an administrator's rights.</summary>
+    public FakeUserEnvironment AsAdministrator()
+    {
+        IsAdministrator = true;
+        return this;
+    }
+
+    /// <summary>
     /// No table to read, as an unelevated process finds, unless a test sets one, so whether the suite
     /// runs elevated changes nothing a test measures.
     /// </summary>

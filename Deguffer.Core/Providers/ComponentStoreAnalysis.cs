@@ -45,7 +45,13 @@ public sealed class ComponentStoreAnalysis(
     /// <summary>DISM, as Windows ships it for this machine's architecture.</summary>
     public string Dism { get; } = NativeSystemTool.In(system, "Dism.exe");
 
-    /// <summary>What the store held when this planning pass first asked, asked once per pass.</summary>
+    /// <summary>
+    /// What the store held when this planning pass first asked, asked once per pass.
+    ///
+    /// <para>The analysis runs under the token of whoever asked first, which is the whole pass's where
+    /// <see cref="ComponentStoreProviderBase.BeginPass"/> started it, and every caller waits until DISM
+    /// has ended, cancelled or not, so none returns while it is still running.</para>
+    /// </summary>
     public Task<ComponentStoreReading> ReadingAsync(CancellationToken ct) => _reading.Get(() => ReadAsync(ct));
 
     /// <summary>Forgets the last pass's reading, for a planning pass that starts afresh.</summary>

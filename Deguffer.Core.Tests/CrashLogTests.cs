@@ -197,6 +197,8 @@ public class CrashLogTests
 
         public string DomainName => string.Empty;
 
+        public bool IsAdministrator => false;
+
         public IMftSourceFactory VolumeTables { get; } = FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated);
 
         public string? FindExecutable(string command) => null;

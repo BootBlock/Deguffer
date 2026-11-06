@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Security.Principal;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Safety;
 
 namespace Deguffer.App.Shell;
 
@@ -22,8 +22,7 @@ namespace Deguffer.App.Shell;
 /// </summary>
 public static class ElevatedRelaunch
 {
-    public static bool IsElevated { get; } =
-        new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
+    public static bool IsElevated => UserEnvironment.Current.IsAdministrator;
 
     /// <summary>
     /// What this instance was started by <see cref="TryRelaunch"/> to do, or null for an ordinary

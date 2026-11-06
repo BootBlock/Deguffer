@@ -87,6 +87,28 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
         base.InvalidateCaches();
     }
 
+    /// <summary>
+    /// The analysis, started when an administrator's pass starts rather than when this row's turn
+    /// comes. It takes a minute or more, and these rows stand near the end of the planner's list, so
+    /// started at their turn it began only once most of the pass had finished.
+    ///
+    /// <para>On the terms <see cref="BuildPlanAsync"/> asks: not where there is no store, and not while
+    /// an update holds it, because the analysis waits on the servicing stack. Not for any other account,
+    /// which DISM refuses at once, so the row's own turn costs nothing there.</para>
+    ///
+    /// <para><b>The hold is asked before DISM starts, and that also serves the rows that remove an
+    /// update's leftovers by path.</b> Their hold takes any servicing stack for an update, Deguffer's own
+    /// included, and Windows wakes the stack for the analysis. Asking reads the process table the
+    /// providers share for the pass, so it is read before the stack wakes, and those rows read the
+    /// machine as it was before the analysis began.</para>
+    /// </summary>
+    public override Task BeginPass(CancellationToken ct) =>
+        !Environment.IsAdministrator
+        || !LongPath.DirectoryMayExist(_store)
+        || UnfinishedUpdate.HoldsEverything(Servicing, Inspector, _servicingCalls) is not null
+            ? Task.CompletedTask
+            : _analysis.ReadingAsync(ct);
+
     /// <summary>The store's folder. DISM is part of every Windows that has one.</summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(LongPath.DirectoryMayExist(_store));
