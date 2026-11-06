@@ -105,15 +105,22 @@ public sealed partial class ClaudeCodeSessionRegistry
 
     private readonly PassMemo<ClaudeCodeSessionList> _list = new();
 
+    // The clean's reading, kept apart from the planning pass's: a preview can sit on screen
+    // indefinitely, and its reading is the stale answer a clean's check exists to replace.
+    private readonly Lock _cleanGate = new();
+    private readonly TimedReading<ClaudeCodeSessionList> _clean;
+
     /// <param name="system">
     /// The directories Windows is built out of, which the folder Claude Code is configured to use must not
     /// be or hold. The machine's own by default.
     /// </param>
+    /// <param name="time">What the age of a clean's reading is measured by. The system clock by default.</param>
     public ClaudeCodeSessionRegistry(
         IUserEnvironment environment,
         IProcessInspector inspector,
         ISystemDirectories? system = null,
-        IVolumeInventory? volumes = null)
+        IVolumeInventory? volumes = null,
+        TimeProvider? time = null)
     {
         ArgumentNullException.ThrowIfNull(environment);
         ArgumentNullException.ThrowIfNull(inspector);
@@ -122,6 +129,7 @@ public sealed partial class ClaudeCodeSessionRegistry
         _inspector = inspector;
         _system = system ?? SystemDirectories.Current;
         _volumes = volumes ?? VolumeInventory.Current;
+        _clean = new(time ?? TimeProvider.System);
     }
 
     /// <summary>
@@ -130,17 +138,48 @@ public sealed partial class ClaudeCodeSessionRegistry
     /// when the list is read, so a session that ends during the pass is still listed — the direction
     /// that leaves its files alone.
     /// </summary>
-    public ClaudeCodeSessionList Read(CancellationToken ct = default) => _list.Get(() => ReadAfresh(ct));
-
-    /// <summary>Drop the memoised list, so a session that started or ended is seen by the next pass.</summary>
-    public void Invalidate() => _list.Forget();
+    public ClaudeCodeSessionList Read(CancellationToken ct = default) => _list.Get(() => ReadNow(ct));
 
     /// <summary>
-    /// The list as it is now, read and asked about without touching the planning pass's copy. For the
-    /// question a clean asks again, whose whole point is that the pass's answer may be out of date. See
-    /// <see cref="ClaudeCodeSessionCheck"/>.
+    /// Drop the memoised list and the clean's reading, so a session that started or ended is seen by the
+    /// next pass and the next clean.
     /// </summary>
-    public ClaudeCodeSessionList ReadAfresh(CancellationToken ct = default)
+    public void Invalidate()
+    {
+        _list.Forget();
+
+        lock (_cleanGate)
+        {
+            _clean.Forget();
+        }
+    }
+
+    /// <summary>
+    /// The list as it was no longer than <paramref name="maxAge"/> ago, measured from when its reading
+    /// began, for the question a clean asks again: a clean's use check passes
+    /// <see cref="Execution.IUseCheck.ReadingLimit"/>. See <see cref="ClaudeCodeSessionCheck"/>.
+    ///
+    /// <para><b>Never the planning pass's reading.</b> <see cref="Read"/>'s answer is as old as the
+    /// preview, so a clean reads for itself, and every check of the clean within the bound answers
+    /// from that one reading. A list that could not be read in full is a reading like any other, so
+    /// every check within the bound holds its step back on it.</para>
+    ///
+    /// <para>The read runs under the lock, so checks asking at once share one reading rather than each
+    /// taking their own. The read waits on no lock but those inside the environment and the volume
+    /// inventory it was given, and neither asks this registry anything while holding one, so no thread
+    /// can hold one of them and wait here.</para>
+    /// </summary>
+    public ClaudeCodeSessionList ReadNoOlderThan(TimeSpan maxAge, CancellationToken ct = default)
+    {
+        lock (_cleanGate)
+        {
+            _clean.ForgetOlderThan(maxAge);
+            return _clean.Get(() => ReadNow(ct));
+        }
+    }
+
+    /// <summary>The list as it is now, read and asked about.</summary>
+    private ClaudeCodeSessionList ReadNow(CancellationToken ct)
     {
         if (ClaudeCodeHome.Resolve(_environment, _system, _volumes) is not { } home)
         {

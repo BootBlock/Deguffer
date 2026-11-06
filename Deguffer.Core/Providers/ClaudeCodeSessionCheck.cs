@@ -12,7 +12,11 @@ namespace Deguffer.Core.Providers;
 /// folders it left. The plan's answer is as old as the preview, and a preview can sit on screen
 /// indefinitely.</para>
 ///
-/// <para>The list is read afresh for every question and asked by the rules the plan applied, so the
+/// <para>The list is the clean's own reading, never the preview's, and no older than
+/// <see cref="IUseCheck.ReadingLimit"/>, the bound every check of what is running keeps: a session
+/// starting is a program starting, and its process writes its entry as it starts. A clean of the
+/// Claude Code rows is thousands of steps, and one reading per step would repeat the list's every
+/// read and process probe that many times. The list is asked by the rules the plan applied, so the
 /// clean holds back nothing the preview would have offered, and offers nothing it would have
 /// refused. A list that cannot be read in full holds the step back, as it would have kept the step
 /// out of the plan.</para>
@@ -112,7 +116,7 @@ internal sealed class ClaudeCodeSessionCheck : IUseCheck
 
     public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
     {
-        var list = _sessions.ReadAfresh(ct);
+        var list = _sessions.ReadNoOlderThan(IUseCheck.ReadingLimit, ct);
 
         return (list.Complete ? _inUse(list, ct) : UnreadableReason) is { } reason
             ? [new InUseNow(step.Path, reason)]
