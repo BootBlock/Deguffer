@@ -33,6 +33,20 @@ namespace Deguffer.Benchmark;
 /// builds any.
 /// </param>
 /// <param name="Trees">How many trees the clean route builds. One for every other route.</param>
+/// <param name="Drive">
+/// For a route that reads the table, the volume it reads: the letter of <paramref name="Path"/>, or
+/// for <see cref="Route.Race"/> the volume whose index is built beside the walk. Meaningless for
+/// every other route.
+/// </param>
+/// <param name="Racer">
+/// For <see cref="Route.Race"/>, the route that walks: <see cref="Route.Sources"/>, as discovery
+/// walks, or <see cref="Route.Walk"/>. No other route reads it.
+/// </param>
+/// <param name="BeforePart">
+/// For <see cref="Route.Race"/>, the command run before each part, such as one that empties the
+/// system file cache, or null for none. No other route reads it. Never printed: see
+/// <see cref="PartCommand"/>.
+/// </param>
 internal sealed record BenchmarkRequest(
     Route Route,
     string Path,
@@ -43,7 +57,10 @@ internal sealed record BenchmarkRequest(
     LinkRead ReadBy,
     IReadOnlyList<string> Folders,
     TreeShape Tree,
-    int Trees)
+    int Trees,
+    char Drive,
+    Route Racer,
+    string? BeforePart)
 {
     public const int DefaultRuns = 5;
 
@@ -69,6 +86,7 @@ internal sealed record BenchmarkRequest(
         Usage: Deguffer.Benchmark <route> <target> [--runs N] [options]
                Deguffer.Benchmark folders <folder> [<folder>...] [--runs N]
                Deguffer.Benchmark remove|clean <new folder> [--runs N] [options]
+               Deguffer.Benchmark race <folder> [--build <drive>] [--runs N] [options]
 
         Routes:
           table <drive>     Read the volume's file table end to end, parse only. Elevated.
@@ -99,12 +117,17 @@ internal sealed record BenchmarkRequest(
                             Create the folder, build many small build folders in it before
                             each run, and remove them as one plan, as a clean of the obj
                             row does: what each step costs around its removal.
+          race <folder>     Walk the folder while the index of its volume is built, both
+                            started at the same moment, as Auto races them in a scan, and
+                            each of the two alone, alternating the order every round. The
+                            slowdown of each is what the other costs it. Elevated.
 
         --runs N               How many times to run the route, 1 to 1000. The default is 5. The
                                first run is reported apart from the others.
-        --threads N            Walk, measure, explorewalk and sources only. How many folders
-                               are listed at once, 1 to 64. The default is what a scan uses.
-        --listing-buffer KiB   Walk, measure, explorewalk and sources only. How many KiB of
+        --threads N            Walk, measure, explorewalk, sources and race only. How many
+                               folders are listed at once, 1 to 64. The default is what a scan
+                               uses.
+        --listing-buffer KiB   Walk, measure, explorewalk, sources and race only. How many KiB of
                                entries each listing asks Windows for, 4 to 1024. The default
                                is what a scan uses.
         --read-by name|handle  Links only. Whether each file is read by name, as a scan does
@@ -131,23 +154,41 @@ internal sealed record BenchmarkRequest(
         --list-reads-in-flight N
                                Table routes only. How many attribute lists kept outside the
                                table are read at once, 1 to 32.
+        --build <drive>        Race only. The volume whose index is built beside the walk.
+                               The default is the folder's own.
+        --racer sources|walk   Race only. Whether the folder is searched for build outputs, as
+                               discovery searches it, or walked whole. The default is sources.
+        --before-part <command>
+                               Race only. A command run through cmd.exe before each part and
+                               outside its time, such as one that empties the system file
+                               cache so every part lists from the drive. A command that fails
+                               stops the run. Deguffer never empties the cache itself.
 
-        A table route's defaults are what a scan uses on a drive of unknown kind. The Explore
-        routes also report what the finished tree keeps on the managed heap.
+        A table route's defaults are what a scan uses on a drive of unknown kind, except the
+        race's: it walks and builds with what a scan uses for each drive's kind, under the
+        shipped settings, as the race it reproduces does. The Explore routes also report what
+        the finished tree keeps on the managed heap.
 
         Every route but remove and clean only reads: nothing on the drive is written, moved or
         deleted. Those two refuse a folder that already exists, create it, write and delete only
         inside it, and remove it when they finish.
         """;
 
-    /// <summary>The volume's drive letter. Meaningful only for a route that reads the table.</summary>
-    public char Drive => Path[0];
+    /// <summary>
+    /// Read <paramref name="args"/>, or return null with what was wrong in
+    /// <paramref name="error"/>, with every drive of unknown kind.
+    /// </summary>
+    public static BenchmarkRequest? Parse(IReadOnlyList<string> args, out string? error) => Parse(args, ScanTuner.Shipped, out error);
 
     /// <summary>
     /// Read <paramref name="args"/>, or return null with what was wrong in
     /// <paramref name="error"/>.
     /// </summary>
-    public static BenchmarkRequest? Parse(IReadOnlyList<string> args, out string? error)
+    /// <param name="tuner">
+    /// What the race walks and builds with for each drive's kind where it is told nothing else. No
+    /// other route asks it.
+    /// </param>
+    public static BenchmarkRequest? Parse(IReadOnlyList<string> args, ScanTuner tuner, out string? error)
     {
         error = null;
 
@@ -166,7 +207,7 @@ internal sealed record BenchmarkRequest(
 
         if (named is not { } route)
         {
-            error = "The route must be table, index, explore, explorefolder, walk, measure, explorewalk, sources, links, folders, remove or clean.";
+            error = "The route must be table, index, explore, explorefolder, walk, measure, explorewalk, sources, links, folders, remove, clean or race.";
             return null;
         }
 
@@ -185,6 +226,16 @@ internal sealed record BenchmarkRequest(
         var readOnly = false;
         var trees = route is Route.Clean ? DefaultTrees : 1;
         var filesPerTree = DefaultFilesPerTree;
+        char? build = null;
+        var racer = Route.Sources;
+        string? beforePart = null;
+
+        // Before the options, because the race's defaults depend on the drives it walks and builds
+        // on, and a value an option sets has to win over them.
+        if (route is Route.Race && RaceDefaults(args, tuner) is { } race)
+        {
+            (threads, bufferKiB, readKiB, readsInFlight, parseThreads, listReadsInFlight) = race;
+        }
 
         // Only the folders route takes more than one target, so for it the options start at the
         // first argument that is one.
@@ -224,6 +275,9 @@ internal sealed record BenchmarkRequest(
                 "--fanout" when route is Route.Remove => TryNumber(value, 1, TreeShape.MaximumFanout, out fanout),
                 "--trees" when route is Route.Clean => TryNumber(value, 1, MaximumTrees, out trees),
                 "--files-per-tree" when route is Route.Clean => TryNumber(value, 0, MaximumFilesPerTree, out filesPerTree),
+                "--build" when route is Route.Race => TryDrive(value, out build),
+                "--racer" when route is Route.Race => TryRacer(value, out racer),
+                "--before-part" when route is Route.Race => TryCommand(value, out beforePart),
                 _ => false,
             };
 
@@ -243,6 +297,7 @@ internal sealed record BenchmarkRequest(
                     $"For remove, --files takes a number from 0 to {TreeShape.MaximumFiles}, --depth from 0 to " +
                     $"{TreeShape.MaximumDepth} and --fanout from 1 to {TreeShape.MaximumFanout}, and --read-only takes nothing. " +
                     $"For clean, --trees takes a number from 1 to {MaximumTrees} and --files-per-tree from 0 to {MaximumFilesPerTree}. " +
+                    "For race, --build takes a drive letter, --racer takes sources or walk, and --before-part a command. " +
                     "Nothing else is accepted after the target.";
                 return null;
             }
@@ -286,7 +341,59 @@ internal sealed record BenchmarkRequest(
             readBy,
             [.. folders.Select(folder => folder!)],
             route is Route.Clean ? CleanRoute.Shape(filesPerTree) : new TreeShape(files, depth, fanout, readOnly),
-            trees);
+            trees,
+            build ?? path[0],
+            racer,
+            beforePart);
+    }
+
+    /// <summary>
+    /// What a scan walks the race's folder and builds its volume's index with, for the kinds of the
+    /// two drives under the shipped settings, or null where the arguments name no folder or drive the
+    /// race can use, which the parse then refuses with the reason.
+    /// </summary>
+    private static (int Threads, int BufferKiB, int ReadKiB, int ReadsInFlight, int ParseThreads, int ListReadsInFlight)? RaceDefaults(
+        IReadOnlyList<string> args,
+        ScanTuner tuner)
+    {
+        var folder = Folder(args[1]);
+        var build = folder?[0];
+
+        for (var i = 2; i + 1 < args.Count; i++)
+        {
+            if (args[i] is "--build" && TryDrive(args[i + 1], out var named))
+            {
+                build = named;
+            }
+        }
+
+        if (folder is null || !VolumePath.TryParse(folder, out _) || build is not { } drive)
+        {
+            return null;
+        }
+
+        var walk = tuner.For(folder).Walk;
+        var table = tuner.ForVolume(drive).Table;
+
+        return (walk.Threads, walk.ListingBufferBytes / 1024, table.ReadBytes / 1024, table.ReadsInFlight, table.ParseThreads, table.ListReadsInFlight);
+    }
+
+    private static bool TryDrive(string? text, out char? drive)
+    {
+        drive = text is null ? null : VolumeRoot(text)?[0];
+        return drive is not null;
+    }
+
+    private static bool TryCommand(string? text, out string? command)
+    {
+        command = string.IsNullOrWhiteSpace(text) ? null : text;
+        return command is not null;
+    }
+
+    private static bool TryRacer(string? text, out Route racer)
+    {
+        racer = text is "walk" ? Route.Walk : Route.Sources;
+        return text is "sources" or "walk";
     }
 
     /// <summary>The index of the first argument after the route that is an option, or the count where none is.</summary>

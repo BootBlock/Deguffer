@@ -11,7 +11,8 @@ internal sealed record MachineFacts(
     Version Runtime,
     Architecture Architecture,
     bool Elevated,
-    bool DebugBuild)
+    bool DebugBuild,
+    CollectorFacts Collector)
 {
     public static MachineFacts Current { get; } = new(
         Environment.ProcessorCount,
@@ -25,5 +26,6 @@ internal sealed record MachineFacts(
 #else
             false
 #endif
-        );
+        ,
+        CollectorFacts.Current);
 }

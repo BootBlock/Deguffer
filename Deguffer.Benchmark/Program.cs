@@ -1,12 +1,18 @@
 using Deguffer.Benchmark;
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Scanning.Media;
 using Deguffer.Core.Scanning.Mft;
 
 // The result goes to standard output and nothing else does, so it can be redirected to a file and
 // pasted as it stands. Progress and errors go to standard error, and name no path either.
 
-var request = BenchmarkRequest.Parse(args, out var error);
+// Asks each device what kind of drive it is, as the app's tuner does, and only for the race, whose
+// values are a scan's for each drive's kind.
+var tuner = new ScanTuner(DefaultPreferences.Instance, new VolumeMediaCache(StorageQueries.Machine), VolumeInventory.Current);
+
+var request = BenchmarkRequest.Parse(args, tuner, out var error);
 if (request is null)
 {
     Console.Error.WriteLine(error);
@@ -31,6 +37,12 @@ if (request.Route.ReadsTable())
         });
         return 2;
     }
+
+    if (request.Route is Route.Race && LongPath.ProbeDirectory(request.Path) is not PathPresence.Present)
+    {
+        Console.Error.WriteLine("The folder does not exist, or it cannot be read.");
+        return 2;
+    }
 }
 else if (request.Route.Removes())
 {
@@ -51,7 +63,7 @@ else if (request.Folders.Any(folder => LongPath.ProbeDirectory(folder) is not Pa
 
 try
 {
-    return Benchmark(request, site, census);
+    return Benchmark(request, tuner, site, census);
 }
 finally
 {
@@ -63,7 +75,7 @@ finally
     }
 }
 
-static int Benchmark(BenchmarkRequest request, RemovalSite? site, TableCensus? census)
+static int Benchmark(BenchmarkRequest request, ScanTuner tuner, RemovalSite? site, TableCensus? census)
 {
     var route = request.Route switch
     {
@@ -76,6 +88,8 @@ static int Benchmark(BenchmarkRequest request, RemovalSite? site, TableCensus? c
         Route.Remove => new RemoveRoute(site!, request.Tree).Timed,
         Route.Clean => new CleanRoute(
             site!, request.Trees, request.Tree, UserEnvironment.Current, SystemDirectories.Current, VolumeInventory.Current).Timed,
+        Route.Race => RaceRoute.On(
+            VolumeMftSourceFactory.Default, request.Path, request.Racer, request.Walk, request.Drive, request.Table, request.BeforePart).Timed,
         _ => new RouteRun(ct => TableRoutes.Run(request.Route, VolumeMftSourceFactory.Default, request.Path, request.Table, ct)),
     };
 
@@ -120,6 +134,12 @@ static int Benchmark(BenchmarkRequest request, RemovalSite? site, TableCensus? c
         Console.Error.WriteLine(ex.Message);
         return 2;
     }
+    catch (PartCommandFailedException ex)
+    {
+        // The parts after it would not have been measured as asked. Its message names no path.
+        Console.Error.WriteLine(ex.Message);
+        return 2;
+    }
     catch (InvalidOperationException ex) when (site is not null)
     {
         // A removal route found something gone beside what it removed. Its message names no path.
@@ -127,10 +147,20 @@ static int Benchmark(BenchmarkRequest request, RemovalSite? site, TableCensus? c
         return 4;
     }
 
+    var built = $@"{request.Drive}:\";
+
     Console.Out.Write(Report.Render(
         request.Route,
-        Tuning.Describe(request.Route, request.Walk, request.Table, request.Snapshots, request.ReadBy, request.Tree, request.Trees),
-        [.. request.Folders.Select(MeasuredPlace.Of).Distinct()],
+        request.Route is Route.Race
+            ? Tuning.DescribeRace(
+                request.Racer,
+                request.Walk,
+                request.Drive,
+                DiskRelations.Of(request.Path[0], tuner.StorageOf(request.Path), request.Drive, tuner.StorageOf(built)),
+                request.Table,
+                request.BeforePart is not null)
+            : Tuning.Describe(request.Route, request.Walk, request.Table, request.Snapshots, request.ReadBy, request.Tree, request.Trees),
+        [.. request.Folders.Concat(request.Route is Route.Race ? [built] : []).Select(MeasuredPlace.Of).Distinct()],
         MachineFacts.Current,
         runs,
         census));

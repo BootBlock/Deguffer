@@ -75,6 +75,14 @@ internal enum Route
     /// as a clean of the <c>obj</c> row does: what each step costs around its removal.
     /// </summary>
     Clean,
+
+    /// <summary>
+    /// Walk one folder, through the walk route or the sources route, while the index of a volume is
+    /// built, started at the same moment, as Auto races the two in a scan, and each of the two alone,
+    /// so the result says how much each slows the other. The build is of the folder's own volume
+    /// unless another is named.
+    /// </summary>
+    Race,
 }
 
 internal static class RouteFacts
@@ -94,13 +102,14 @@ internal static class RouteFacts
     /// Whether the route walks with the values given on the command line. The links route walks with
     /// the values a scan ships with, because what it compares is the read of each file.
     /// </summary>
-    public static bool TakesWalkTuning(this Route route) => route is Route.Walk or Route.Measure or Route.ExploreWalk or Route.Sources;
+    public static bool TakesWalkTuning(this Route route) =>
+        route is Route.Walk or Route.Measure or Route.ExploreWalk or Route.Sources or Route.Race;
 
     /// <summary>
     /// Whether the route's target is a volume rather than a folder. A folder read from the table is
-    /// still read from the whole of its volume's.
+    /// still read from the whole of its volume's, and the race walks a folder beside a volume's build.
     /// </summary>
-    public static bool TargetsVolume(this Route route) => route.ReadsTable() && route is not Route.ExploreFolder;
+    public static bool TargetsVolume(this Route route) => route.ReadsTable() && route is not (Route.ExploreFolder or Route.Race);
 
     /// <summary>
     /// Whether the route builds what a scan keeps on screen, so what it holds once built is part of

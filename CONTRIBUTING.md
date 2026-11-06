@@ -55,6 +55,7 @@ Deguffer.Benchmark explorewalk C:\Users\<user>\source --snapshots off
 Deguffer.Benchmark folders C:\Users\<user>\Pictures D:\Photos
 Deguffer.Benchmark remove D:\benchmark --files 100000 --depth 15 --fanout 2 --read-only
 Deguffer.Benchmark clean D:\benchmark --trees 500 --files-per-tree 100
+Deguffer.Benchmark race C:\Users\<user>\source --build D --reads-in-flight 2
 ```
 
 - `walk <folder>` walks a folder as an unelevated scan does. Run it from an ordinary prompt.
@@ -93,6 +94,22 @@ Deguffer.Benchmark clean D:\benchmark --trees 500 --files-per-tree 100
   step, the use checks, the looks and the work apart, and the removals' passes summed over the
   plan. The use checks ask fakes rather than this machine's running programs, so the result is
   what a step costs with nothing running.
+- `race <folder>` walks a folder while the index of a volume is built, both started at the same
+  moment, as Auto races them in a scan, and times each of the two alone as well. Each round walks
+  alone, builds alone, then races the two, and every other round runs them in the reverse order,
+  so a cache one part warms favours neither walk. It reports each part, how many times as long each
+  took raced, and what the garbage collector did while each walk ran: the time it held the process
+  paused, the collections of each generation and the bytes allocated, process-wide, because a
+  collection suspends every thread. It needs an elevated prompt. `--build <drive>` names the volume
+  whose index is built (default: the folder's own), so a build of another volume on the same disk,
+  or on another disk, separates a cost the drive imposes from one the process imposes on itself.
+  `--racer sources|walk` sets whether the folder is searched for build outputs, as discovery
+  searches it (the default), or walked whole. `--before-part <command>` runs a command through
+  `cmd.exe` before each part, outside its time, and stops the run if the command fails: give it a
+  tool that empties the system file cache to time every part cold. Deguffer never empties a memory
+  list itself (§2 of the specification). Unlike the other table routes, it walks and builds with what
+  a scan uses for each drive's kind, and the table and walk options still override that. Every result
+  names the garbage collector, so a run under `DOTNET_gcServer=1` or `DOTNET_GCgen0size` is told apart.
 - `remove` and `clean` refuse a folder that already exists, and its parent must exist. After each
   run they check that a file they keep beside the trees, and every project, is still there, and
   stop if one is not. They remove the folder when they finish, even when cancelled. The tree is
@@ -100,7 +117,7 @@ Deguffer.Benchmark clean D:\benchmark --trees 500 --files-per-tree 100
 - `--runs N` runs the route N times. The default is 5.
 - `--threads N` and `--listing-buffer KiB` set how many folders the walk lists at once (1 to 64) and
   how many KiB of entries each listing asks Windows for (4 to 1024). Both default to what a scan
-  uses, and only `walk`, `measure`, `explorewalk` and `sources` take them.
+  uses, and only `walk`, `measure`, `explorewalk`, `sources` and `race` take them.
 - `--read-size KiB`, `--reads-in-flight N`, `--parse-threads N` and `--list-reads-in-flight N` set
   how many KiB of records each read of the file table asks for (4 to 16384), how many reads are
   outstanding at once (1 to 32), how many threads parse what arrives (1 to 64), and how many of the

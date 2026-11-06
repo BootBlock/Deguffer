@@ -47,6 +47,7 @@ internal static class Report
         Field(text, places.Count == 1 ? "place" : "places", string.Join(", ", places));
         Field(text, "tuning", tuning);
         Field(text, "machine", Describe(machine));
+        Field(text, "collector", machine.Collector.ToString());
         Field(text, "runs", $"{runs.Count} ({runs.Count(r => r.Tally.Complete)} complete)");
 
         if (route.ReadsTable())
@@ -62,10 +63,21 @@ internal static class Report
         Line(text);
         Row(text, string.Empty, "first run", later.Length > 0 ? "later runs: median (min to max)" : string.Empty);
 
-        Row(text, "elapsed", Duration(first.Elapsed.TotalSeconds), Over(later, r => r.Elapsed.TotalSeconds, Duration));
-        Row(text, $"{route.ItemName()}/s", Count(first.ItemsPerSecond), Over(later, r => r.ItemsPerSecond, Count));
+        var itemName = first.Tally.Race is { } race ? race.Racer.ItemName() : route.ItemName();
 
-        if (route.ReadsTable())
+        if (route is Route.Race)
+        {
+            // A round is four parts, so its time is the rate of nothing. The parts are below.
+            Row(text, "round", Duration(first.Elapsed.TotalSeconds), Over(later, r => r.Elapsed.TotalSeconds, Duration));
+            RaceRows(text, first, later);
+        }
+        else
+        {
+            Row(text, "elapsed", Duration(first.Elapsed.TotalSeconds), Over(later, r => r.Elapsed.TotalSeconds, Duration));
+            Row(text, $"{itemName}/s", Count(first.ItemsPerSecond), Over(later, r => r.ItemsPerSecond, Count));
+        }
+
+        if (route.ReadsTable() && route is not Route.Race)
         {
             Row(text, "MiB/s read", Rate(first.MegabytesPerSecond), Over(later, r => r.MegabytesPerSecond, Rate));
             Row(text, "reads", Count(first.Tally.Reads), Over(later, r => r.Tally.Reads, Count));
@@ -88,7 +100,7 @@ internal static class Report
         {
             RemovalRows(text, first, later);
         }
-        else
+        else if (route is not Route.Race)
         {
             Row(text, "folders at once", Count(first.Tally.PeakListings), Over(later, r => r.Tally.PeakListings, Count));
         }
@@ -103,10 +115,51 @@ internal static class Report
 
         Row(text, "full collections", Count(first.FullCollections), Over(later, r => r.FullCollections, Count));
         Row(text, "peak working set", Bytes(first.PeakWorkingSet), later.Length > 0 ? Bytes(later.Max(r => r.PeakWorkingSet)) : string.Empty);
-        Row(text, route.ItemName(), Count(first.Tally.Items), Over(later, r => r.Tally.Items, Count));
+        Row(text, itemName, Count(first.Tally.Items), Over(later, r => r.Tally.Items, Count));
 
         return text.ToString();
     }
+
+    /// <summary>
+    /// Each part of a race's rounds: the walk and the build alone and raced, and how many times as long
+    /// each took raced. Then what the collector did while each walk ran, process-wide: a collection the
+    /// build's allocations start suspends the walk's threads too, so the time paused while the walk
+    /// ran is time the walk could not use, and the collections say which generations it went on.
+    /// </summary>
+    private static void RaceRows(StringBuilder text, RunSample first, RunSample[] later)
+    {
+        var race = RaceOf(first);
+
+        Row(text, "walk alone", Duration(race.WalkAlone.Elapsed.TotalSeconds), Over(later, r => RaceOf(r).WalkAlone.Elapsed.TotalSeconds, Duration));
+        Row(text, "walk raced", Duration(race.WalkRaced.Elapsed.TotalSeconds), Over(later, r => RaceOf(r).WalkRaced.Elapsed.TotalSeconds, Duration));
+        Row(text, "  times as long", Times(race.Slowdown), Over(later, r => RaceOf(r).Slowdown, Times));
+        Row(text, "build alone", Duration(race.BuildAlone.Elapsed.TotalSeconds), Over(later, r => RaceOf(r).BuildAlone.Elapsed.TotalSeconds, Duration));
+        Row(text, "build raced", Duration(race.BuildRaced.Elapsed.TotalSeconds), Over(later, r => RaceOf(r).BuildRaced.Elapsed.TotalSeconds, Duration));
+        Row(text, "  times as long", Times(race.BuildSlowdown), Over(later, r => RaceOf(r).BuildSlowdown, Times));
+
+        HeapRows(text, "walk alone", first, later, static times => times.WalkAlone.Heap);
+        HeapRows(text, "walk raced", first, later, static times => times.WalkRaced.Heap);
+    }
+
+    /// <summary>What the collector did while one part ran, under a heading naming the part.</summary>
+    private static void HeapRows(StringBuilder text, string part, RunSample first, RunSample[] later, Func<RaceTimes, HeapCounters> heap)
+    {
+        var counters = heap(RaceOf(first));
+
+        Line(text, part);
+        Row(text, "  paused", Duration(counters.Paused.TotalSeconds), Over(later, r => heap(RaceOf(r)).Paused.TotalSeconds, Duration));
+        Row(text, "  gen 0 only", Count(counters.Gen0Only), Over(later, r => heap(RaceOf(r)).Gen0Only, Count));
+        Row(text, "  gen 1 only", Count(counters.Gen1Only), Over(later, r => heap(RaceOf(r)).Gen1Only, Count));
+        Row(text, "  gen 2", Count(counters.Gen2), Over(later, r => heap(RaceOf(r)).Gen2, Count));
+        Row(text, "  allocated", Bytes(counters.Allocated), Over(later, r => heap(RaceOf(r)).Allocated, Bytes));
+    }
+
+    /// <summary>
+    /// A run's race. Every round of the race route is timed part by part, so a run without its parts
+    /// was not measured as the others were, and no median of them holds.
+    /// </summary>
+    private static RaceTimes RaceOf(RunSample run) =>
+        run.Tally.Race ?? throw new InvalidOperationException("Every run of the race route carries its parts.");
 
     /// <summary>
     /// Where a table route's time went: opening the volume, each stage in the order the first run ran
@@ -221,6 +274,8 @@ internal static class Report
         : string.Create(Invariant, $"{seconds:N3} s");
 
     private static string Count(double value) => string.Create(Invariant, $"{value:N0}");
+
+    private static string Times(double ratio) => string.Create(Invariant, $"{ratio:N2}x");
 
     private static string Share(double processors) => string.Create(Invariant, $"{processors:N2}");
 
