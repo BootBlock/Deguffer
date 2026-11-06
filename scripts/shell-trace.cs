@@ -115,10 +115,12 @@ static Dictionary<int, (Raised Start, Raised? Stop)> Pictures(List<Raised> raise
     }
 
     var shown = pictures.Values.Where(p => p.Stop is { } stop && IsShown(stop.Payload[1])).ToList();
+    var superseded = pictures.Values.Count(p => p.Stop is { } stop && !IsShown(stop.Payload[1]));
+    var waiting = pictures.Values.Count(p => p.Stop is null);
 
     if (pictures.Count > 0)
     {
-        Console.WriteLine($"Map pictures: {pictures.Count} handed, {shown.Count} reached the screen, the rest superseded first.");
+        Console.WriteLine($"Map pictures: {pictures.Count} handed, {shown.Count} reached the screen, {superseded} superseded first, {waiting} still waiting when the trace ended.");
 
         if (shown.Count > 0)
         {

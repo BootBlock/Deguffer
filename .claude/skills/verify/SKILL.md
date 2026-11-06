@@ -97,7 +97,8 @@ slower with every test still green. For such a change, record a trace before and
    two arguments open Explore already scanning the fixture, the same small invented folder each
    time, so the traces compare like with like.
 2. Find the PID with `discover`, and drive that process through what the change touches.
-3. Close the window (`window --action close --window-handle <handle>`), which ends the trace, and
+3. Close the window (`window --pid <pid> --action close --window-handle <handle>`, the handle from
+   `window --pid <pid> --action list`), which ends the trace, and
    run `dotnet run scripts/shell-trace.cs -- <file>`.
 4. Report **launch to first frame** and **scan end to first map** from both builds, with the longest
    `Show` where Explore changed. The first launch after a build is slower: 2.3 s against 1.4 s for

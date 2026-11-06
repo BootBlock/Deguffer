@@ -380,12 +380,10 @@ public sealed partial class DuplicatesViewModel : ObservableObject
             Headline = "Searching. Each group appears as soon as it is confirmed, in order of the space it could free.";
         }
 
-        // A batch whose every group threw before it was counted opened no span to close.
-        if (search.Applying > 0)
-        {
-            ShellEvents.Log.GroupsStop(search.Applying);
-            search.Applying = 0;
-        }
+        // A batch is posted only with a group queued, and Confirmed counts each one first, so the
+        // span Confirmed opened is always there to close.
+        ShellEvents.Log.GroupsStop(search.Applying);
+        search.Applying = 0;
     }
 
     private void Reached(Search search, BusySpan work, DuplicateSearchProgress progress)

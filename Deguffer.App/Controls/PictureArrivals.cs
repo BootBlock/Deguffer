@@ -16,15 +16,21 @@ namespace Deguffer.App.Controls;
 /// </summary>
 internal sealed class PictureArrivals(IFrameClock clock)
 {
+    /// <summary>
+    /// The number of the last picture any map was handed. One count for the process rather than one per
+    /// map, because Explore, Memory and the appearance previews each have a map, and a trace pairs each
+    /// stop with its start by this number alone.
+    /// </summary>
+    private static int s_handed;
+
     /// <summary>The number of the picture waiting for its first drawing, or null where none is.</summary>
     private int? _waiting;
 
     /// <summary>
-    /// The map was handed <paramref name="asked"/>, its <paramref name="number"/>th new picture. One
-    /// still waiting for a drawing will never have one now. A picture of no tree has nothing to draw,
-    /// so it is not timed.
+    /// The map was handed <paramref name="asked"/>, a new picture. One still waiting for a drawing will
+    /// never have one now. A picture of no tree has nothing to draw, so it is not timed.
     /// </summary>
-    public void Handed(int number, MapPicture asked)
+    public void Handed(MapPicture asked)
     {
         if (_waiting is { } earlier)
         {
@@ -36,6 +42,8 @@ internal sealed class PictureArrivals(IFrameClock clock)
         {
             return;
         }
+
+        var number = Interlocked.Increment(ref s_handed);
 
         ShellEvents.Log.PictureStart(number, asked.View);
         _waiting = number;

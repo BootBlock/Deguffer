@@ -28,10 +28,13 @@ public sealed class PictureArrivalsTests
         var arrivals = new PictureArrivals(_clock);
         using var recorder = new ShellEventRecorder();
 
-        arrivals.Handed(1, Picture(ExploreView.Sunburst));
+        arrivals.Handed(Picture(ExploreView.Sunburst));
 
         Assert.Equal(["PictureStart"], recorder.Names);
-        Assert.Equal([1, (int)ExploreView.Sunburst], recorder.Events[0].Numbers);
+
+        var picture = recorder.Events[0].Numbers.First();
+
+        Assert.Equal([picture, (int)ExploreView.Sunburst], recorder.Events[0].Numbers);
 
         arrivals.Presented();
 
@@ -43,7 +46,7 @@ public sealed class PictureArrivalsTests
         _clock.Step(Frame);
 
         Assert.Equal(["PictureStart", "PictureStop"], recorder.Names);
-        Assert.Equal([1, (int)PictureOutcome.Shown], recorder.Events[1].Numbers);
+        Assert.Equal([picture, (int)PictureOutcome.Shown], recorder.Events[1].Numbers);
         Assert.False(_clock.IsTicking);
     }
 
@@ -54,12 +57,39 @@ public sealed class PictureArrivalsTests
         var arrivals = new PictureArrivals(_clock);
         using var recorder = new ShellEventRecorder();
 
-        arrivals.Handed(1, Picture(ExploreView.Treemap));
-        arrivals.Handed(2, Picture(ExploreView.Treemap));
+        arrivals.Handed(Picture(ExploreView.Treemap));
+        arrivals.Handed(Picture(ExploreView.Treemap));
 
         Assert.Equal(["PictureStart", "PictureStop", "PictureStart"], recorder.Names);
-        Assert.Equal([1, (int)PictureOutcome.Superseded], recorder.Events[1].Numbers);
-        Assert.Equal(2, recorder.Events[2].Numbers.First());
+
+        var first = recorder.Events[0].Numbers.First();
+
+        Assert.Equal([first, (int)PictureOutcome.Superseded], recorder.Events[1].Numbers);
+        Assert.NotEqual(first, recorder.Events[2].Numbers.First());
+    }
+
+    /// <summary>
+    /// Pictures handed to two maps, as Explore and Memory each have one, are numbered apart, and each
+    /// stop names the picture of its own map, so a trace never pairs one map's stop with the other's start.
+    /// </summary>
+    [Fact]
+    public void PicturesOfTwoMapsAreNumberedApart()
+    {
+        var explore = new PictureArrivals(_clock);
+        var memory = new PictureArrivals(_clock);
+        using var recorder = new ShellEventRecorder();
+
+        explore.Handed(Picture(ExploreView.Treemap));
+        memory.Handed(Picture(ExploreView.Treemap));
+        memory.Presented();
+        _clock.Step(Frame);
+
+        Assert.Equal(["PictureStart", "PictureStart", "PictureStop"], recorder.Names);
+
+        var (ofExplore, ofMemory) = (recorder.Events[0].Numbers.First(), recorder.Events[1].Numbers.First());
+
+        Assert.NotEqual(ofExplore, ofMemory);
+        Assert.Equal([ofMemory, (int)PictureOutcome.Shown], recorder.Events[2].Numbers);
     }
 
     /// <summary>A picture of no tree has nothing to draw, so it is not timed, though it does end the one before.</summary>
@@ -69,8 +99,8 @@ public sealed class PictureArrivalsTests
         var arrivals = new PictureArrivals(_clock);
         using var recorder = new ShellEventRecorder();
 
-        arrivals.Handed(1, Picture(ExploreView.Treemap));
-        arrivals.Handed(2, new MapPicture(null, 0, ExploreView.Treemap, VolumeSpace.None));
+        arrivals.Handed(Picture(ExploreView.Treemap));
+        arrivals.Handed(new MapPicture(null, 0, ExploreView.Treemap, VolumeSpace.None));
         arrivals.Presented();
 
         Assert.Equal(["PictureStart", "PictureStop"], recorder.Names);
@@ -85,7 +115,7 @@ public sealed class PictureArrivalsTests
 
         Assert.False(ShellEvents.Log.IsEnabled());
 
-        arrivals.Handed(1, Picture(ExploreView.Treemap));
+        arrivals.Handed(Picture(ExploreView.Treemap));
         arrivals.Presented();
 
         Assert.False(_clock.IsTicking);

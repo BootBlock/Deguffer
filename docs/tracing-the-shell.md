@@ -27,7 +27,7 @@ parameter that is not a number or an enum.
 | `Selection` | inside `Show`: what is picked is about to be carried to the tree or cleared | done | none |
 | `Rows` | inside `Show`: the rows are about to be brought up to date or rebuilt | done | stop: rows listed |
 | `Handoff` | inside `Show`: the page is about to hand the tree to the map | the map has taken it and asked for its drawing, and the list has marked what is picked again | none |
-| `Picture` | the map is handed a new picture (another tree, folder or view) | the first frame composed after a drawing of it is on screen, or the next picture is handed over first | start: picture number, view. Stop: picture number, outcome |
+| `Picture` | the map is handed a new picture (another tree, folder or view) | the first frame composed after a drawing of it is on screen, or the next picture is handed over first | start: picture number, view. Stop: picture number, outcome. Every map in the app counts from one shared number |
 | `Groups` | the Duplicates page starts to apply a batch of confirmed groups | the batch and its figures are applied | stop: groups in the batch |
 
 A `Show` cause is `Snapshot` (a partial tree from a scan under way), `Step` (a folder opened or
@@ -55,8 +55,8 @@ dotnet-trace collect --providers Deguffer-Shell -o "$env:TEMP\deguffer-shell.net
 
 To compare one build with another, add `--explore "--explore-folder=<folder>"` after the
 executable. The app opens on Explore already scanning that folder, so every run scans the same
-tree. Use a small folder of invented files. The first launch after a build reads its files from
-disk rather than from the cache, and took 2.3 s where the next two took 1.4 s, so discard it.
+tree. Use a small folder of invented files. The first launch after a build is slower: on the
+fixture below it took 2.3 s, and the next two took 1.4 s each, so discard it.
 
 To record an app already running, attach to it by its process ID. There is no `Launch` pair:
 
@@ -76,22 +76,23 @@ runtime did inside a span.
 dotnet run scripts/shell-trace.cs -- "$env:TEMP\deguffer-shell.nettrace"
 ```
 
-For a launch on a folder of three subfolders, opened on Explore and then into one folder, it printed:
+For the first launch after a build, on a fixture of two folders (one holding a third) and four
+files, opened on Explore and then into one folder, it printed:
 
 ```text
-Launch to first frame: 1421.9 ms
-  main window and first page: 1057.4 ms
+Launch to first frame: 2254.3 ms
+  main window and first page: 1892.4 ms
   tool windows reopened:      0.5 ms
 
 Explore shows (UI thread held), by cause:
   cause     count    median   longest      rows selection   handoff  longest at nodes, rows
-  Finished      1   68.6 ms   68.6 ms   18.4 ms    6.5 ms   31.4 ms  8, 3
+  Finished      1   68.9 ms   68.9 ms   17.5 ms    5.2 ms   30.4 ms  8, 3
   Step          1    7.2 ms    7.2 ms    0.9 ms    0.4 ms    4.5 ms  8, 2
 
-Map pictures: 2 handed, 2 reached the screen, the rest superseded first.
+Map pictures: 2 handed, 2 reached the screen, 0 superseded first, 0 still waiting when the trace ended.
   hand-off to first drawing on screen: median 180.0 ms, longest 180.0 ms, first 180.0 ms
 
-Scan end to first map: 208.0 ms (8 nodes)
+Scan end to first map: 219.0 ms (8 nodes)
 ```
 
 It gives launch to first frame with its two parts, each `Show` cause with its count, median and

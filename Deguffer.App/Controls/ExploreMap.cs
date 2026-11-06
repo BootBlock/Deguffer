@@ -777,7 +777,7 @@ public sealed class ExploreMap : UserControl
         if (change.Another)
         {
             _picturesHanded++;
-            _arrivals.Handed(_picturesHanded, change.Asked);
+            _arrivals.Handed(change.Asked);
 
             // The camera's drag ends with the map's, where it was held, and the new picture is drawn there.
             if (EndDrag())
