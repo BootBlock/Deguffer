@@ -242,6 +242,8 @@ public sealed class PassesRunOffThePoolProviderTests : IDisposable
     /// </summary>
     private sealed class RacingScanner(FakeDirectoryScanner inner) : IDirectoryScanner
     {
+        public ScanTuner Tuning => inner.Tuning;
+
         public bool RacesTheWalk => true;
 
         public ValueTask<ScanResult> MeasureAsync(

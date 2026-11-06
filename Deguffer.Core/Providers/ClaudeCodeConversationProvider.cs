@@ -353,7 +353,8 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
             _sessions.Read(ct),
             _sessions,
             now - ClaudeCodeSessionRegistry.RecentWindow,
-            ClaudeCodeRetention.Of(home));
+            ClaudeCodeRetention.Of(home),
+            Scanner.Tuning);
 
         return new Survey(
             home,

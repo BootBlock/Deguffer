@@ -13,12 +13,14 @@ namespace Deguffer.Core.Providers;
 /// <param name="RetentionDays">
 /// How many days Claude Code keeps a conversation nobody uses, or null where Deguffer cannot tell.
 /// </param>
+/// <param name="Tuning">What the provider's walks run with, under which the session folders are dated.</param>
 internal sealed record ClaudeCodeConversationEvidence(
     ClaudeCodeProjects Projects,
     ClaudeCodeSessionList Sessions,
     ClaudeCodeSessionRegistry Registry,
     DateTime RecentSinceUtc,
-    long? RetentionDays);
+    long? RetentionDays,
+    ScanTuner Tuning);
 
 /// <summary>
 /// Decides which of Claude Code's conversations may be offered, one session at a time.
@@ -123,6 +125,7 @@ internal static class ClaudeCodeConversations
             .SelectMany(folder => folder.Transcripts)
             .ToLookup(transcript => transcript.SessionId, transcript => transcript.Path, StringComparer.OrdinalIgnoreCase);
 
+        var undated = new List<Session>();
         var candidates = new List<Candidate>();
         var running = 0;
 
@@ -174,21 +177,31 @@ internal static class ClaudeCodeConversations
                     RefuseAll(sorting, session.Parts, RunningReason);
                     running++;
                 }
-                else if (LastUsed(session, ct) is not { } lastUsed)
-                {
-                    RefuseAll(sorting, session.Parts, ClaudeCodeClassificationBuilder.UndatedReason);
-                }
-                else if (lastUsed.Latest >= evidence.RecentSinceUtc)
-                {
-                    foreach (var part in session.Parts)
-                    {
-                        sorting.HoldRecent(part);
-                    }
-                }
                 else
                 {
-                    candidates.Add(new Candidate(session, lastUsed.Folders));
+                    undated.Add(session);
                 }
+            }
+        }
+
+        // Every session's folders dated in one bounded step, rather than one session's at a time as
+        // they are met. See DirectoryAge.OfEach.
+        foreach (var (session, lastUsed) in undated.Zip(LastUsed(undated, evidence.Tuning, ct)))
+        {
+            if (lastUsed is null)
+            {
+                RefuseAll(sorting, session.Parts, ClaudeCodeClassificationBuilder.UndatedReason);
+            }
+            else if (lastUsed.Value.Latest >= evidence.RecentSinceUtc)
+            {
+                foreach (var part in session.Parts)
+                {
+                    sorting.HoldRecent(part);
+                }
+            }
+            else
+            {
+                candidates.Add(new Candidate(session, lastUsed.Value.Folders));
             }
         }
 
@@ -264,28 +277,42 @@ internal static class ClaudeCodeConversations
     }
 
     /// <summary>
-    /// When the session was last used, from its conversation's own timestamp and each of its folders',
-    /// or null where a folder would not be listed and so has no age.
+    /// When each of <paramref name="sessions"/> was last used, in their order, from its conversation's
+    /// own timestamp and each of its folders', or null where a folder would not be listed and so has
+    /// no age. Every folder of every session is dated in one step.
     /// </summary>
-    private static (DateTime Latest, IReadOnlyList<(ClaudeCodeSidecar Folder, DateTime Written)> Folders)? LastUsed(
-        Session session,
+    private static IReadOnlyList<(DateTime Latest, IReadOnlyList<(ClaudeCodeSidecar Folder, DateTime Written)> Folders)?> LastUsed(
+        IReadOnlyList<Session> sessions,
+        ScanTuner tuning,
         CancellationToken ct)
     {
-        var latest = session.Transcript.LastWrittenUtc;
-        var folders = new List<(ClaudeCodeSidecar, DateTime)>(session.Folders.Count);
+        var ages = DirectoryAge.OfEach([.. sessions.SelectMany(session => session.Folders.Select(folder => folder.Path))], tuning, ct);
+        var lastUsed = new (DateTime, IReadOnlyList<(ClaudeCodeSidecar, DateTime)>)?[sessions.Count];
+        var next = 0;
 
-        foreach (var folder in session.Folders)
+        for (var index = 0; index < sessions.Count; index++)
         {
-            if (DirectoryAge.Of(folder.Path, ct) is not { } written)
+            var session = sessions[index];
+            var latest = session.Transcript.LastWrittenUtc;
+            var folders = new List<(ClaudeCodeSidecar, DateTime)>(session.Folders.Count);
+            var undated = false;
+
+            foreach (var folder in session.Folders)
             {
-                return null;
+                if (ages[next++] is not { } written)
+                {
+                    undated = true;
+                    continue;
+                }
+
+                folders.Add((folder, written));
+                latest = written > latest ? written : latest;
             }
 
-            folders.Add((folder, written));
-            latest = written > latest ? written : latest;
+            lastUsed[index] = undated ? null : (latest, folders);
         }
 
-        return (latest, folders);
+        return lastUsed;
     }
 
     /// <summary>

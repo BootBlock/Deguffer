@@ -240,7 +240,7 @@ public sealed class AfterEffectsDiskCacheProvider : CleanupProviderBase, ITempor
                         cache.Path,
                         $"The frames After Effects {Path.GetFileName(cache.VersionFolder)} rendered for "
                         + "previews. It renders them again as you preview.",
-                        DirectoryAge.Of(cache.Path, ct),
+                        DatedOneLevelDown: true,
                         Group: cache.VersionFolder,
                         UseCheck: _stillClosed)),
             ],

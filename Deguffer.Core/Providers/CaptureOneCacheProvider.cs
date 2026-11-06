@@ -198,7 +198,7 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
                     return new DeletionTarget(
                         cleared.Path,
                         found.Reason,
-                        DirectoryAge.Of(cleared.Path, ct),
+                        DatedOneLevelDown: true,
                         Facets: [new ItemFacet(OwnerFacet, Path.GetFileName(found.Owner))],
                         Group: found.Owner,
                         UseCheck: cleared.StillUnused);

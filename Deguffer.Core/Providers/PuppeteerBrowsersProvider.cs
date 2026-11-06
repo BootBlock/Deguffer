@@ -215,7 +215,7 @@ public sealed class PuppeteerBrowsersProvider : CleanupProviderBase
 
                 // A build is written once, when it is downloaded, and launching it does not rewrite
                 // its folder, so this says when it arrived.
-                DirectoryAge.Of(cleared.Path, ct),
+                DatedOneLevelDown: true,
 
                 // The browser and the build's own name are the build, wherever the variable puts the
                 // cache, so a kept build stays kept when the user moves it.

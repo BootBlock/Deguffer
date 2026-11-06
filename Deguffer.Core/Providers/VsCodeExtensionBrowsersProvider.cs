@@ -169,7 +169,7 @@ public sealed class VsCodeExtensionBrowsersProvider : CleanupProviderBase
                 + "It downloads the build again the next time it opens a browser.",
 
                 // A build is written once, when it is downloaded, so this says when it arrived.
-                DirectoryAge.Of(cleared.Path, ct),
+                DatedOneLevelDown: true,
 
                 // The editor, the extension and the build are the build, so a kept one stays kept
                 // however many editors hold the same extension.

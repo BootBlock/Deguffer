@@ -179,7 +179,7 @@ public sealed class CapCutSupersededBuildProvider : CleanupProviderBase
              select new DeletionTarget(
                  build.Path,
                  $"{installation.Edition.Name} {build.Name}, a build {installation.Current!.Name} replaced.",
-                 DirectoryAge.Of(build.Path, ct),
+                 DatedOneLevelDown: true,
                  Identity: new ItemIdentity($"{installation.Edition.FolderName}/{build.Name}", $"{installation.Edition.Name} {build.Name}"),
                  Facets: [new ItemFacet("Version", build.Name)],
                  Group: installation.Edition.Name,

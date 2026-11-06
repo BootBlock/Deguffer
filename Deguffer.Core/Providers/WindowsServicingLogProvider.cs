@@ -193,7 +193,9 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var byPath = scan.Targets.Where(t => !resetPaths.Contains(t.Path)).ToList();
-        var resetLogs = scan.Targets.Where(t => resetPaths.Contains(t.Path)).ToList();
+        // Dated here rather than by the plan, because their newest age goes onto the step Windows'
+        // cleanup runs.
+        var resetLogs = await DatedAsync([.. scan.Targets.Where(t => resetPaths.Contains(t.Path))], ct).ConfigureAwait(false);
 
         var (deletions, measured) = await PlanDeletionsAsync(byPath, keep, ct).ConfigureAwait(false);
         var steps = new List<CleanupStep>(deletions);

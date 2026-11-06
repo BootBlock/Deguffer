@@ -488,6 +488,8 @@ public sealed class ModManagerDownloadProviderTests : IDisposable
     /// </summary>
     private sealed class HeldUntilReadAndMeasurementBothStart(FakeDirectoryScanner inner) : IDirectoryScanner
     {
+        public ScanTuner Tuning => inner.Tuning;
+
         /// <summary>How long the read waits for the measurement. A read made to wait this long ran first.</summary>
         private static readonly TimeSpan ReadPatience = TimeSpan.FromSeconds(10);
 

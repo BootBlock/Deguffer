@@ -478,7 +478,7 @@ public sealed class AffinityModelCacheProvider : CleanupProviderBase
             // §7's age. A model file is written when it is downloaded and using it does not rewrite
             // it, so this is when Affinity last fetched a model — which is what separates the version
             // in daily use from the one an uninstall left behind.
-            DirectoryAge.Of(cache.FullName, ct),
+            DatedOneLevelDown: true,
 
             // The version is the item, whichever root this machine keeps it under, so a cache kept
             // for a version somebody still opens stays kept. The root's folder name is in the key

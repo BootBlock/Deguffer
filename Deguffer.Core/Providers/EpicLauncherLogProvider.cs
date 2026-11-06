@@ -215,7 +215,7 @@ public sealed class EpicLauncherLogProvider : CleanupProviderBase
             // §7's age, from the newest write one level down. A log is appended to, which moves the
             // file and leaves the parent alone, so the folder's own timestamp would report a log
             // being written this minute as months old.
-            targets.Add(new DeletionTarget(path, classification.Reason, DirectoryAge.Of(child.FullName, ct)));
+            targets.Add(new DeletionTarget(path, classification.Reason, DatedOneLevelDown: true));
         }
 
         // One note rather than one per spared child. Each is still asserted individually by §5.6,

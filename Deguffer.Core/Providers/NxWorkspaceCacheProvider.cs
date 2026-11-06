@@ -222,7 +222,7 @@ public sealed class NxWorkspaceCacheProvider : CleanupProviderBase
                 .. examined.Select(folder => new DeletionTarget(
                     folder.Cache,
                     $"Nx task cache for {folder.Name}",
-                    DirectoryAge.Of(folder.Cache, ct),
+                    DatedOneLevelDown: true,
                     Facets: [new ItemFacet(WorkspaceFacet, folder.Name)],
                     Group: ApprovedRootHeading.For(ApprovedRoots, folder.Cache),
                     UseCheck: new NxIndexCheck(folder.IndexIn(Environment), absentIsEmpty: false, cleared[folder.Path].StillUnused))),

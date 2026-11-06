@@ -304,7 +304,7 @@ public sealed class ClaudeCodeMcpLogProvider : CleanupProviderBase
                 {
                     // §7's age, from the newest write one level down: a server's log folder gains a file
                     // each run, which moves the folder, and a run's file is appended to, which does not.
-                    targets.Add(new DeletionTarget(entryPath, LogReason, DirectoryAge.Of(entryPath, ct)));
+                    targets.Add(new DeletionTarget(entryPath, LogReason, DatedOneLevelDown: true));
                 }
                 else
                 {

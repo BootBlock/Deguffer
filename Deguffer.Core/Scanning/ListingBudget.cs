@@ -50,18 +50,23 @@ internal sealed class ListingBudget
     {
         return (directory, request, into) =>
         {
-            var volume = VolumeOf(directory);
-            volume.Enter(limit);
-
-            try
-            {
-                return list(directory, request, into);
-            }
-            finally
-            {
-                volume.Leave();
-            }
+            using var slot = Take(directory, limit);
+            return list(directory, request, into);
         };
+    }
+
+    /// <summary>
+    /// A slot for one listing of <paramref name="directory"/>, taken once fewer than
+    /// <paramref name="limit"/> listings are in flight on its volume, and given back as the slot is
+    /// disposed. For a listing that is not a walk's, which shares its volume's number with the walks
+    /// all the same. Held around the listing alone, for the reason a walk's is.
+    /// </summary>
+    /// <param name="limit">The number of listings the volume was tuned for, as <see cref="Around"/> takes it.</param>
+    public Slot Take(string directory, int limit)
+    {
+        var volume = VolumeOf(directory);
+        volume.Enter(limit);
+        return new Slot(volume);
     }
 
     /// <summary>How many listings are in flight on the volume holding <paramref name="path"/>.</summary>
@@ -88,6 +93,16 @@ internal sealed class ListingBudget
             : _volumes.GetOrAdd(root.ToString(), static _ => new Volume());
     }
 
+    /// <summary>One listing's place among its volume's listings in flight, given back on disposal.</summary>
+    public readonly struct Slot : IDisposable
+    {
+        private readonly Volume _volume;
+
+        internal Slot(Volume volume) => _volume = volume;
+
+        public void Dispose() => _volume.Leave();
+    }
+
     /// <summary>
     /// One volume's listings in flight, and the listings waiting, in the order they came, for a slot.
     ///
@@ -104,7 +119,7 @@ internal sealed class ListingBudget
     /// waiter woken already holds its slot and runs a listing, which waits for nothing, then gives the
     /// slot back in its turn. Every wait still ends when the listings in flight end.</para>
     /// </summary>
-    private sealed class Volume
+    internal sealed class Volume
     {
         private readonly Lock _gate = new();
 

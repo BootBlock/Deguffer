@@ -1,5 +1,6 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Providers;
 
@@ -15,12 +16,14 @@ namespace Deguffer.Core.Providers;
 /// Where <paramref name="Sessions"/> came from, for the question the clean asks again. See
 /// <see cref="ClaudeCodeSessionCheck"/>.
 /// </param>
+/// <param name="Tuning">What the provider's walks run with, under which the folders offered are dated.</param>
 internal sealed record ClaudeCodeEvidence(
     string Home,
     ClaudeCodeProjects Projects,
     ClaudeCodeSessionList Sessions,
     DateTime RecentSinceUtc,
-    ClaudeCodeSessionRegistry Registry);
+    ClaudeCodeSessionRegistry Registry,
+    ScanTuner Tuning);
 
 /// <summary>What Deguffer decided about one kind of thing Claude Code leaves behind.</summary>
 /// <param name="Folders">
@@ -63,6 +66,9 @@ internal sealed class ClaudeCodeClassificationBuilder
 {
     private readonly List<string> _folders = [];
     private readonly List<DeletionTarget> _targets = [];
+
+    // Offered by OfferFolderOnceOldEnough, and waiting for DateOffers to date them.
+    private readonly List<DeletionTarget> _undated = [];
     private readonly List<(string Path, string Reason)> _survivors = [];
     private readonly List<(string Path, string Reason)> _recent = [];
     private readonly List<PlanNote> _notes = [];
@@ -144,7 +150,8 @@ internal sealed class ClaudeCodeClassificationBuilder
     public void HoldRecent(string path) => _recent.Add((path, RecentReason));
 
     /// <summary>
-    /// Offer a folder that has passed every other test, unless something wrote to it recently.
+    /// Offer a folder that has passed every other test, unless something wrote to it recently, once
+    /// <see cref="DateOffers"/> has dated it with every other folder offered here.
     ///
     /// <para><b>Dated by the folder, never by the files deep inside it.</b> <see cref="DirectoryAge"/>
     /// reads the newest of the folder's own timestamp and its immediate entries', and NTFS moves the
@@ -156,31 +163,42 @@ internal sealed class ClaudeCodeClassificationBuilder
     /// <para>A folder that would not be listed has no age and is refused: its own timestamp alone is
     /// the half that reads older than the truth.</para>
     /// </summary>
-    /// <param name="recentSinceUtc">Anything written at or after this instant is held back.</param>
     /// <param name="isLeftover">Whether the folder is a leftover. See <see cref="DeleteStep.IsLeftover"/>.</param>
     /// <param name="stillEnded">What the clean asks again before removing it. See <see cref="DeleteStep.UseCheck"/>.</param>
-    public void OfferFolderOnceOldEnough(
-        string path,
-        string reason,
-        DateTime recentSinceUtc,
-        bool isLeftover,
-        IUseCheck stillEnded,
-        CancellationToken ct)
+    public void OfferFolderOnceOldEnough(string path, string reason, bool isLeftover, IUseCheck stillEnded) =>
+        _undated.Add(new DeletionTarget(path, reason, IsLeftover: isLeftover, UseCheck: stillEnded));
+
+    /// <summary>
+    /// Date every folder <see cref="OfferFolderOnceOldEnough"/> was given, in one bounded step
+    /// (<see cref="DirectoryAge.OfEach"/>), and offer, hold back or refuse each by its age, in the order
+    /// it was given. One step rather than one listing as each folder is met, because a kind can hold
+    /// a folder for every session Claude Code has run.
+    /// </summary>
+    /// <param name="recentSinceUtc">Anything written at or after this instant is held back.</param>
+    /// <param name="tuning">What the provider's walks run with. See <see cref="IDirectoryScanner.Tuning"/>.</param>
+    public void DateOffers(DateTime recentSinceUtc, ScanTuner tuning, CancellationToken ct)
     {
-        switch (DirectoryAge.Of(path, ct))
+        var ages = DirectoryAge.OfEach([.. _undated.Select(folder => folder.Path)], tuning, ct);
+
+        foreach (var (folder, age) in _undated.Zip(ages))
         {
-            case null:
-                Refuse(path, UndatedReason);
-                break;
+            switch (age)
+            {
+                case null:
+                    Refuse(folder.Path, UndatedReason);
+                    break;
 
-            case DateTime written when written >= recentSinceUtc:
-                HoldRecent(path);
-                break;
+                case DateTime written when written >= recentSinceUtc:
+                    HoldRecent(folder.Path);
+                    break;
 
-            case DateTime written:
-                Offer(new DeletionTarget(path, reason, written, IsLeftover: isLeftover, UseCheck: stillEnded));
-                break;
+                case DateTime written:
+                    Offer(folder with { LastWritten = written });
+                    break;
+            }
         }
+
+        _undated.Clear();
     }
 
     /// <summary>A link where something recognisable was expected: named, asserted, never followed.</summary>
@@ -215,8 +233,11 @@ internal sealed class ClaudeCodeClassificationBuilder
 
     public void Note(PlanNoteSeverity severity, string message) => _notes.Add(new PlanNote(severity, message));
 
+    /// <exception cref="InvalidOperationException">A folder was offered and never dated.</exception>
     public ClaudeCodeClassification Build() =>
-        new(_folders, _targets, _survivors, _recent, _notes, _unreadable, _refused);
+        _undated.Count > 0
+            ? throw new InvalidOperationException($"{_undated.Count} folders were offered and never dated. Call {nameof(DateOffers)} first.")
+            : new(_folders, _targets, _survivors, _recent, _notes, _unreadable, _refused);
 
     /// <summary>"1 file" or "3 files", for a sentence that has to read correctly on a machine with one.</summary>
     public static string Count(int count, string singular, string plural) =>

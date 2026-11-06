@@ -478,7 +478,8 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
             _projects.Look(ct),
             _sessions.Read(ct),
             looked - ClaudeCodeSessionRegistry.RecentWindow,
-            _sessions);
+            _sessions,
+            Scanner.Tuning);
 
         return new Survey(
             CacheLevelWalk.Under(HomeLevel, home, ct),
