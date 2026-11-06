@@ -7,6 +7,7 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
 
     private readonly IProcessTableCalls _calls;
     private readonly IVolumeInventory _volumes;
+    private readonly FileHolderQuery _holdersOf;
     private readonly Lock _gate = new();
     private readonly TimedReading<ProcessTable> _snapshot;
     private LiveTreeMatch? _match;
@@ -18,11 +19,20 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
 
     /// <param name="volumes">Asked every other path a program's place and a directory are reachable at.</param>
     /// <param name="time">What a snapshot's age is measured by. Defaulted to the system clock.</param>
-    internal LiveTreeInspector(IProcessTableCalls calls, IVolumeInventory volumes, TimeProvider? time = null)
+    /// <param name="holdersOf">
+    /// Asks who holds a set of lock files open, in one session, so a test can count the sessions and
+    /// choose each answer. Defaulted to <see cref="RestartManager.Query"/>.
+    /// </param>
+    internal LiveTreeInspector(
+        IProcessTableCalls calls,
+        IVolumeInventory volumes,
+        TimeProvider? time = null,
+        FileHolderQuery? holdersOf = null)
     {
         _calls = calls;
         _volumes = volumes;
         _snapshot = new(time ?? TimeProvider.System);
+        _holdersOf = holdersOf ?? RestartManager.Query;
     }
 
     public LiveTreeFindings FindLive(IReadOnlyList<LiveTreeQuery> candidates, CancellationToken ct = default)
@@ -36,46 +46,64 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
 
         var (table, match) = Snapshot(ct);
         var programs = match.Programs(table);
-        var live = new List<LiveTree>();
-        var unanswered = new List<string>();
+        var holders = new List<string>[candidates.Count];
+        var answered = new bool[candidates.Count];
+        var locked = new List<int>();
+        var lockSets = new List<IReadOnlyList<string>>();
 
-        foreach (var candidate in candidates)
+        for (var i = 0; i < candidates.Count; i++)
         {
             ct.ThrowIfCancellationRequested();
 
-            var reached = match.Candidate(candidate);
-            var holders = new List<string>();
+            var reached = match.Candidate(candidates[i]);
+            var found = holders[i] = [];
             var writerUnknown = false;
 
             foreach (var program in programs)
             {
-                LiveTreeMatch.AddHolders(reached, program, holders);
-                writerUnknown |= !LiveTreeMatch.AddWriter(reached, program, holders);
+                LiveTreeMatch.AddHolders(reached, program, found);
+                writerUnknown |= !LiveTreeMatch.AddWriter(reached, program, found);
             }
 
-            var locks = ExistingLockFiles(candidate, out var anyRefused);
-            var answered = !anyRefused && !writerUnknown;
+            var locks = ExistingLockFiles(candidates[i], out var anyRefused);
+            answered[i] = !anyRefused && !writerUnknown;
 
             if (locks.Count > 0)
             {
-                var held = RestartManager.Query(locks, ct);
+                locked.Add(i);
+                lockSets.Add(locks);
+            }
+        }
 
-                answered &= held.Answered;
+        // Asked together rather than in the loop above, because each session has a cost of its own.
+        // Each answer is still the candidate's own (LockFileHolders).
+        var held = LockFileHolders.Ask(lockSets, _holdersOf, ct);
 
-                foreach (var holder in held.Holders)
-                {
-                    LiveTreeMatch.Add(holders, $"{holder} has it open");
-                }
+        for (var j = 0; j < locked.Count; j++)
+        {
+            var i = locked[j];
+
+            answered[i] &= held[j].Answered;
+
+            foreach (var holder in held[j].Holders)
+            {
+                LiveTreeMatch.Add(holders[i], $"{holder} has it open");
+            }
+        }
+
+        var live = new List<LiveTree>();
+        var unanswered = new List<string>();
+
+        for (var i = 0; i < candidates.Count; i++)
+        {
+            if (holders[i].Count > 0)
+            {
+                live.Add(new LiveTree(candidates[i].Directory, holders[i]));
             }
 
-            if (holders.Count > 0)
+            if (!answered[i])
             {
-                live.Add(new LiveTree(candidate.Directory, holders));
-            }
-
-            if (!answered)
-            {
-                unanswered.Add(candidate.Directory);
+                unanswered.Add(candidates[i].Directory);
             }
         }
 
