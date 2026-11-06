@@ -3098,8 +3098,9 @@ It removes each session's folder, one step each, and shows when each was last wr
   would look months old.
 - **A session Claude Code lists as running is left alone**, and each entry in that list is checked
   against Windows. If the list cannot be read, no session is offered, and the row says so. The list is
-  read again when you press Clean, immediately before each session's snapshots are removed, so a
-  session you resume after the scan keeps every snapshot it may rewind to.
+  read again when you press Clean, and each session's snapshots are checked against a reading no more
+  than a second old before they are removed, so a session you resume after the scan keeps every
+  snapshot it may rewind to.
 - **Nothing written in the last 7 days is offered**, whatever the list says, and whatever the guard on
   recently changed files is set to. A session can run for days. The same cut-off applies again when you
   press Clean, so a session you resume after the scan keeps the snapshots it has taken since.
@@ -3174,8 +3175,9 @@ can stay. Keeping a session keeps both.
 - **A conversation Deguffer cannot place in a project is not offered.** The format is Claude Code's
   own and changes between versions, and a conversation that cannot be described cannot be chosen.
   The row says how many it left.
-- **The list is read again when you press Clean**, immediately before each item is removed, so a
-  conversation you resume after the scan, or one in a project you open after it, stays.
+- **The list is read again when you press Clean**, and each item is checked against a reading no
+  more than a second old before it is removed, so a conversation you resume after the scan, or one in
+  a project you open after it, stays.
 - **The title, project and date are read from the start and the end of each conversation**, never
   more. The last line of a conversation is the last thing you typed, word for word, and it is never
   shown.
@@ -5804,8 +5806,9 @@ to sessions that had ended, and every one of them was empty.
 - **Anything that names a session** is offered only where Claude Code's own list of running sessions
   (`sessions\<process>.json`) does not list it, and each entry in that list is checked against
   Windows too. If the list cannot be read, nothing that names a session is offered, and the row says
-  so. The list is read again when you press Clean, immediately before each item is removed, so what a
-  session you resume after the scan left behind stays.
+  so. The list is read again when you press Clean, and each item is checked against a reading no more
+  than a second old before it is removed, so what a session you resume after the scan left behind
+  stays.
 - **Whether a session still has a conversation is asked of every project folder at once.** A session's
   folders can sit under a different project folder from its transcript. If any project folder cannot
   be listed, no session is called an orphan.
