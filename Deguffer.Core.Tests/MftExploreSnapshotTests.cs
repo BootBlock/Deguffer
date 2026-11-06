@@ -133,6 +133,25 @@ public sealed class MftExploreSnapshotTests
     }
 
     /// <summary>
+    /// The report at nought starts no snapshot, although the first is due from the start. It has
+    /// dealt with no record, so the pass over every slot it would start draws nothing, and the next
+    /// would then wait the snapshot interval at least, or a multiple of that pass on a large table.
+    /// The first snapshot is started by the first report that has records behind it, here with no
+    /// time passed at all.
+    /// </summary>
+    [Fact]
+    public void StartsTheFirstSnapshotFromTheFirstReportThatHasDealtWithRecords()
+    {
+        using var source = Table().Build();
+
+        var (reports, _) = ReadWithSnapshots(source, Root, [], perReport: TimeSpan.Zero);
+
+        var snapshot = FirstSnapshot(reports);
+
+        Assert.Equal(4096 + 2048, snapshot.SizeOf(At(snapshot, CachePath)));
+    }
+
+    /// <summary>
     /// The report that says the whole table has been dealt with carries no snapshot. The finished
     /// tree is assembled straight after it, so a snapshot then would be a pass over the whole volume
     /// that nobody sees.
@@ -169,14 +188,14 @@ public sealed class MftExploreSnapshotTests
         .WithoutBitmap();
 
     private static (List<ExploreProgress> Reports, MftExploreRead Read) ReadWithSnapshots(
-        IMftSource source, string rootPath, string[] components)
+        IMftSource source, string rootPath, string[] components, TimeSpan? perReport = null)
     {
         var clock = new ManualTimeProvider();
         var reports = new List<ExploreProgress>();
         var progress = new CallbackProgress<ExploreProgress>(report =>
         {
             reports.Add(report);
-            clock.Advance(ScanSnapshots.Interval);
+            clock.Advance(perReport ?? ScanSnapshots.Interval);
         });
 
         var read = MftExploreReader.Read(

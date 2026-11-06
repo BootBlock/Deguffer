@@ -24,11 +24,14 @@ namespace Deguffer.Core.Exploring;
 internal sealed class ScanSnapshots
 {
     /// <summary>
-    /// The least time from the end of one snapshot to the start of the next.
+    /// The least time from the end of one snapshot to the start of the next. It spaces snapshots,
+    /// and is not a wait before the first: that one is due at the scan's first report.
     ///
     /// <para>The reason to take one at all is that a scan of a full drive is long enough that an
-    /// unchanging window reads as a hung one. Three quarters of a second is fast enough to look
-    /// alive.</para>
+    /// unchanging window reads as a hung one. Three quarters of a second apart is often enough to
+    /// look alive. Waiting that long for the first only left the page without a map. A walk's first
+    /// holds what its first folder held, so it costs next to nothing to assemble, and
+    /// <see cref="AssemblingTimes"/> spaces every later snapshot, on either route, by what it cost.</para>
     ///
     /// <para>Every disk tool surveyed for this feature — WinDirStat, KDirStat, QDirStat, Filelight,
     /// Baobab, GrandPerspective, Disk Inventory X — refuses to draw its map until the scan finishes,
@@ -81,7 +84,7 @@ internal sealed class ScanSnapshots
         _clock = clock;
         _start = start;
         _intervalTicks = (long)(Interval.TotalSeconds * clock.TimestampFrequency);
-        _due = clock.GetTimestamp() + _intervalTicks;
+        _due = clock.GetTimestamp();
         _stopped = _stopping.Token;
     }
 
