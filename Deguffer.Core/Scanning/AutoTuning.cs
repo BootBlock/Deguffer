@@ -163,6 +163,20 @@ internal static class AutoTuning
     /// pay there either. The 1.8 TB volume, timed in the same rounds, took 160 to 178 ms from four
     /// threads to sixteen, 169 to 209 ms on two and 164 to 313 ms on one. Nothing measured earns
     /// more than four.</para>
+    ///
+    /// <para>The <c>explore</c> route interned every record's name under one lock shared by the parse
+    /// threads, so the system volume, 2.58 M records in use, was timed again with that lock and with
+    /// no name interned at all, at 1, 2, 4 and 8 threads, 1 MiB reads, one in flight, two rounds of
+    /// five runs, the second in reverse order. Its disk was busy with other work: the <c>table</c>
+    /// route took 6.13 to 8.75 s, about twice its figures above. The medians of the later runs with
+    /// the lock were 6.89, 7.96, 7.71 and 8.18 s in the first round and 9.36, 8.61, 11.25 and
+    /// 14.18 s in the second; with no name interned, 7.05, 7.87, 7.11 and 9.02 s, then 8.56, 8.41,
+    /// 8.53 and 11.68 s. With the lock, 0.52 to 0.77 processors were busy, never the one a lock that
+    /// sets the pace keeps busy. The disk's noise is larger than the difference, so these runs do
+    /// not settle whether the lock costs time on a quiet disk. Timed alone, interning 2.5 million
+    /// names, a third of them distinct, took 194 to 684 ms on one thread under the lock and 274 to
+    /// 737 ms on four, and 92 to 127 ms and 189 to 213 ms through <see cref="Exploring.NamePool"/>,
+    /// which finds a name it holds without a lock.</para>
     /// </summary>
     public static int TableParseThreads() => Math.Min(Environment.ProcessorCount, 4);
 }

@@ -18,7 +18,10 @@ namespace Deguffer.Core.Exploring;
 /// array per column, reallocated at every doubling.</para>
 ///
 /// <para>Not safe for concurrent writes: the caller serialises <see cref="Add"/> and any write
-/// through the indexer.</para>
+/// through the indexer. A reader without the lock may also read a slot through the indexer once it
+/// has learned the slot's index from a release write made after the slot was filled, as
+/// <see cref="NamePool"/> does: everything written before that write, the chunk and the count
+/// included, is then visible to it.</para>
 /// </summary>
 internal sealed class AppendOnlyChunks<T>
 {

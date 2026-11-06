@@ -104,7 +104,6 @@ internal static class MftExploreReader
 
         var columns = new MftExploreColumns(count);
         var names = new NamePool();
-        var namesGate = new Lock();
 
         // Written from several parse threads at once, and only ever to true, so no write can undo
         // another. The stream has finished with every thread before it returns, which is when this
@@ -120,7 +119,7 @@ internal static class MftExploreReader
         // copy of the columns is the assembling's, away from the read.
         var snapshots = progress is not null && assembleSnapshot is not null
             ? new ScanSnapshots(
-                () => stopped => Snapshot(columns, names, namesGate, rootPath, components, count, stopped),
+                () => stopped => Snapshot(columns, names, rootPath, components, count, stopped),
                 clock ?? TimeProvider.System,
                 assembleSnapshot)
             : null;
@@ -183,13 +182,9 @@ internal static class MftExploreReader
                         return true;
                     }
 
-                    // The pool is shared by every parse thread and by a snapshot. What the lock
-                    // covers is a lookup and, for a name not met before, a copy, against a record
-                    // parsed outside it.
-                    lock (namesGate)
-                    {
-                        columns.NameNumbers[number] = names.Intern(name);
-                    }
+                    // The pool is shared by every parse thread and by a snapshot, and finds a name
+                    // it already holds without a lock. See NamePool.
+                    columns.NameNumbers[number] = names.Intern(name);
 
                     columns.Describe((int)number, record, (int)record.ParentRecordNumber);
                     return true;
@@ -289,7 +284,6 @@ internal static class MftExploreReader
     private static ExploreTree? Snapshot(
         MftExploreColumns columns,
         NamePool names,
-        Lock namesGate,
         string rootPath,
         IReadOnlyList<string> components,
         int records,
@@ -299,14 +293,9 @@ internal static class MftExploreReader
 
         // Frozen after the copy, not before. A slot's name was numbered before its flags were
         // released, so every number the copy holds is in a pool frozen once the copy has ended.
-        int rootName;
-        NamePool.Frozen frozen;
-
-        lock (namesGate)
-        {
-            rootName = names.Intern(rootPath);
-            frozen = names.Freeze();
-        }
+        // The root's name is numbered first for the same reason.
+        var rootName = names.Intern(rootPath);
+        var frozen = names.Freeze();
 
         return MftExploreRooting.Assemble(
             copy,
