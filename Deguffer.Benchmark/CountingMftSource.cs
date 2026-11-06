@@ -39,6 +39,13 @@ internal sealed class CountingMftSource(IMftSource inner) : IMftSource
     public long Reads => Interlocked.Read(ref _reads);
 
     /// <summary>
+    /// The bytes of records over the reads of records, or zero where there was none. A read never
+    /// crosses an extent of <c>$MFT</c> and a run of free records ends one, so a table in many pieces
+    /// or with many gaps reads in pieces far smaller than the reads asked for.
+    /// </summary>
+    public double MeanReadBytes => Reads == 0 ? 0 : (double)RecordsRead * BytesPerRecord / Reads;
+
+    /// <summary>
     /// Records and clusters both. A table whose files spill into extension records also reads the
     /// attribute lists kept outside it, and its bitmap is read from clusters too, and those bytes
     /// are as much a part of the run.

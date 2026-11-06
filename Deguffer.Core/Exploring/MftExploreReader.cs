@@ -77,6 +77,11 @@ internal static class MftExploreReader
     /// <see cref="ScanSnapshots"/> for when one is taken, and <see cref="Snapshot"/> for what it holds.
     /// </param>
     /// <param name="clock">What the snapshots' cadence is measured by. The system's where null.</param>
+    /// <param name="timings">
+    /// Told when each of the read's six stages ends: the four of
+    /// <see cref="MftRecordStream.TryReadAll"/>, then <see cref="MftBuildStage.LinkPlacement"/> and
+    /// <see cref="MftBuildStage.TreeAssembly"/>. Null for a read nobody measures, as a scan's is.
+    /// </param>
     public static MftExploreRead Read(
         IMftSource source,
         string rootPath,
@@ -85,7 +90,8 @@ internal static class MftExploreReader
         IProgress<ExploreProgress>? progress,
         CancellationToken ct,
         Func<Action, Task>? assembleSnapshot = null,
-        TimeProvider? clock = null)
+        TimeProvider? clock = null,
+        MftStageTimings? timings = null)
     {
         var total = source.RecordCount;
         var records = (int)Math.Min(total, int.MaxValue);
@@ -193,7 +199,8 @@ internal static class MftExploreReader
                     // one started there would push the first that can draw something back by the
                     // snapshot interval at least, and on a large table by a multiple of that pass.
                     0 < done && done < total ? snapshots?.Take() : null)),
-                ct);
+                ct,
+                timings);
         }
         finally
         {
@@ -223,6 +230,13 @@ internal static class MftExploreReader
             }
         }
 
+        timings?.End(MftBuildStage.LinkPlacement);
+
+        if (timings is not null)
+        {
+            timings.LinksPlaced = links.Length;
+        }
+
         // A record the pass could not place might have been anywhere, this folder included, so the
         // caveat lands on whatever the scan is rooted at. Attributing it only to the volume's root
         // would let a scoped scan report a total as exact on the strength of a record it never read.
@@ -239,6 +253,7 @@ internal static class MftExploreReader
             count,
             new MftExploreRooting.AssembledAs(ExploreChildOrder.BySize, LowerBound: couldNotReadWholeTable || sawUnreadableRecord, MatchCaseOnly: false),
             ct);
+        timings?.End(MftBuildStage.TreeAssembly);
 
         return new MftExploreRead(tree, reason, !couldNotReadWholeTable, !couldNotReadWholeTable && !sawUnreadableRecord);
     }

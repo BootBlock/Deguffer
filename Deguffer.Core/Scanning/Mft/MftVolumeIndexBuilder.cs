@@ -22,8 +22,13 @@ public static class MftVolumeIndexBuilder
     /// distinction between those and a record that could not be read is <see cref="MftParseOutcome"/>'s
     /// whole reason to exist.
     /// </summary>
+    /// <param name="timings">
+    /// Told when each of the build's six stages ends, from <see cref="MftBuildStage.BitmapRead"/> to
+    /// <see cref="MftBuildStage.ChildLinks"/>, and the counts that size them. Null for a build nobody
+    /// measures, as the app's is.
+    /// </param>
     public static bool TryBuild(
-        IMftSource source, TableTuning tuning, out MftVolumeIndex index, CancellationToken ct = default)
+        IMftSource source, TableTuning tuning, out MftVolumeIndex index, CancellationToken ct = default, MftStageTimings? timings = null)
     {
         ArgumentNullException.ThrowIfNull(source);
 
@@ -33,13 +38,23 @@ public static class MftVolumeIndexBuilder
         var tree = new MftVolumeTree(count);
 
         if (!MftRecordStream.TryReadAll(
-                source, count, tuning, (number, outcome, in record, name) => Place(tree, number, outcome, in record, name), onProgress: null, ct))
+                source, count, tuning, (number, outcome, in record, name) => Place(tree, number, outcome, in record, name), onProgress: null, ct, timings))
         {
             return false;
         }
 
         tree.PlaceLinks();
-        index = new MftVolumeIndex(tree, BuildChildLinks(tree));
+        timings?.End(MftBuildStage.LinkPlacement);
+
+        if (timings is not null)
+        {
+            timings.LinksPlaced = tree.NodeCount - tree.Count;
+        }
+
+        var children = BuildChildLinks(tree);
+        timings?.End(MftBuildStage.ChildLinks);
+
+        index = new MftVolumeIndex(tree, children);
         return true;
     }
 
