@@ -15,12 +15,16 @@ namespace Deguffer.Core.Tests;
 /// Every stored type is read and written through a contract generated at build time, where it was once
 /// built by reflection at run time. The files on users' machines were written by the reflection
 /// contract, so the generated one has to read and write exactly what that one did: a member the
-/// generator drops is a setting lost without a word, and one it names differently is a file the next
-/// launch reads as its defaults.
+/// generator drops, or reads as its default, is a setting lost without a word.
 ///
-/// <para>Each case compares the two directly, under the same options: the reflection contract is the
-/// generated context's own options with the reflection resolver put back. Each sample holds a value
-/// away from its default wherever the type allows one, so a member read as its default fails.</para>
+/// <para>Each case compares the two resolvers directly, under the same options: the reflection
+/// contract is the generated context's own options with the reflection resolver put back. Each sample
+/// holds a value away from its default wherever the type allows one, so a member read as its default
+/// fails.</para>
+///
+/// <para>What this cannot see is the options themselves, because both sides take them from the
+/// context. A context whose naming or strictness drifted from what the stores used is caught by each
+/// store's own tests, which read files written out by hand in the stored form.</para>
 /// </summary>
 public class StoreContractTests
 {

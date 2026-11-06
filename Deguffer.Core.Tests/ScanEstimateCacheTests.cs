@@ -99,6 +99,26 @@ public class ScanEstimateCacheTests
     }
 
     /// <summary>
+    /// A file in the form earlier builds wrote, typed out rather than written by this build, so a
+    /// member renamed or recased on the way to the file shows here as a miss. Every figure differs
+    /// from the others and from its default, so one read from another's key fails too.
+    /// </summary>
+    [Fact]
+    public void ReadsAFileInTheStoredForm()
+    {
+        using var temp = new TempDirectory();
+        var environment = new FakeUserEnvironment(temp.Path);
+        var cache = temp.CreateDirectory("npm-cache");
+        var folder = Directory.CreateDirectory(Path.Combine(environment.LocalAppData, "Deguffer")).FullName;
+        var measuredAt = DateTimeOffset.UtcNow.AddHours(-1).ToString("O");
+        File.WriteAllText(
+            Path.Combine(folder, "scan-estimates.json"),
+            $$$"""{"{{{cache.Replace(@"\", @"\\")}}}":{"Allocated":8192,"Logical":5000,"IsApproximate":true,"MeasuredAt":"{{{measuredAt}}}","Entries":7}}""");
+
+        Assert.Equal(new ScanSize(8192, 5000, IsApproximate: true, 7), new ScanEstimateCache(environment).TryGet(cache));
+    }
+
+    /// <summary>
     /// A file damaged by hand or by the disk. A cache that cannot be read is a miss, never a failed
     /// scan.
     /// </summary>
