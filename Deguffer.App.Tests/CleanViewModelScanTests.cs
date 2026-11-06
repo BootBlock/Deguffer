@@ -45,8 +45,7 @@ public class CleanViewModelScanTests
         small.Steps = [Rows.Folder("s", 10)];
         large.Steps = [Rows.Folder("l", 900)];
         medium.Steps = [Rows.Folder("m", 450)];
-        large.WhilePlanning = () => Thread.Sleep(60);
-        medium.WhilePlanning = () => Thread.Sleep(120);
+        page.FinishIn(small, large, medium);
         var placed = new List<int>();
         page.ViewModel.Findings.CollectionChanged += (_, e) =>
         {
@@ -72,8 +71,7 @@ public class CleanViewModelScanTests
     {
         FakeCleanupProvider first = new("first"), second = new("second"), third = new("third");
         using var page = new StoragePage([first, second, third]);
-        first.WhilePlanning = () => Thread.Sleep(120);
-        second.WhilePlanning = () => Thread.Sleep(60);
+        page.FinishIn(third, second, first);
 
         page.Scan();
 

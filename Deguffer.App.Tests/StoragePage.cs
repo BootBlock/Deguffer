@@ -125,6 +125,24 @@ internal sealed class StoragePage : IDisposable
     public void FreeSpaceBecomes(long freeBytes) =>
         Volumes.Without(VolumeRoot).With(VolumeRoot, totalBytes: Capacity, freeBytes: freeBytes);
 
+    /// <summary>
+    /// Make the next scan's providers finish in <paramref name="order"/>, each one held until the row
+    /// of the one before it has landed on the page, so the rows land in that order however busy the
+    /// machine is.
+    /// </summary>
+    public void FinishIn(params IReadOnlyList<FakeCleanupProvider> order)
+    {
+        var finishing = new FinishingOrder(order);
+
+        ViewModel.Findings.CollectionChanged += (_, e) =>
+        {
+            foreach (var row in e.NewItems?.OfType<FindingViewModel>() ?? [])
+            {
+                finishing.Report(row.Finding);
+            }
+        };
+    }
+
     public void Scan() => UiThread.Run(() => ViewModel.PreviewCommand.ExecuteAsync(null));
 
     /// <summary>Scan only the locations chosen in the Scan button's drop-down.</summary>
