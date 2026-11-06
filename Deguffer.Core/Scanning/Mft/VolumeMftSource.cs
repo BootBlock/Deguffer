@@ -139,6 +139,9 @@ public sealed partial class VolumeMftSource : IMftSource
         using var start = new VolumeReadBuffer(clusters * geometry.BytesPerCluster);
         var record0 = start.Span[..geometry.BytesPerFileRecord];
 
+        // The slow step of the open on a busy volume. NTFS flushes the volume before a handle's first
+        // read past the boot file, whatever the read's access or offset, and the flush costs what an
+        // explicit one would: 0.3 to 1.5 s on a busy system volume, milliseconds on an idle one.
         if (!read(geometry.MftStartCluster, start.Span))
         {
             reason = FallbackReason.MasterFileTableIncomplete;
