@@ -110,9 +110,7 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
 
     public PassHold HoldCaches() => PassHold.Nothing;
 
-    public void BeginPass(CancellationToken ct)
-    {
-    }
+    public Task BeginPass(CancellationToken ct) => Task.CompletedTask;
 
     public Task<bool> IsPresentAsync(CancellationToken ct = default) => Task.FromResult(IsPresent);
 

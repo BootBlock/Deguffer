@@ -95,19 +95,19 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
     /// <para>On the terms <see cref="BuildPlanAsync"/> asks: not where there is no store, and not while
     /// an update holds it, because the analysis waits on the servicing stack. Not for any other account,
     /// which DISM refuses at once, so the row's own turn costs nothing there.</para>
+    ///
+    /// <para><b>The hold is asked before DISM starts, and that also serves the rows that remove an
+    /// update's leftovers by path.</b> Their hold takes any servicing stack for an update, Deguffer's own
+    /// included, and Windows wakes the stack for the analysis. Asking reads the process table the
+    /// providers share for the pass, so it is read before the stack wakes, and those rows read the
+    /// machine as it was before the analysis began.</para>
     /// </summary>
-    public override void BeginPass(CancellationToken ct)
-    {
-        if (!Environment.IsAdministrator
-            || !LongPath.DirectoryMayExist(_store)
-            || UnfinishedUpdate.HoldsEverything(Servicing, Inspector, _servicingCalls) is not null)
-        {
-            return;
-        }
-
-        // Not awaited here: the plan awaits the same remembered task, and reports what it ended with.
-        _ = _analysis.ReadingAsync(ct);
-    }
+    public override Task BeginPass(CancellationToken ct) =>
+        !Environment.IsAdministrator
+        || !LongPath.DirectoryMayExist(_store)
+        || UnfinishedUpdate.HoldsEverything(Servicing, Inspector, _servicingCalls) is not null
+            ? Task.CompletedTask
+            : _analysis.StartReading(ct);
 
     /// <summary>The store's folder. DISM is part of every Windows that has one.</summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>

@@ -101,10 +101,14 @@ public interface ICleanupProvider
     /// present starts nothing.</para>
     /// </summary>
     /// <param name="ct">
-    /// The pass's, which the planner cancels when the pass ends, fails or is cancelled, so nothing
-    /// started here outlives it.
+    /// The pass's, which the planner cancels when the pass ends, fails or is cancelled.
     /// </param>
-    void BeginPass(CancellationToken ct);
+    /// <returns>
+    /// The work started, which ends once nothing it started is still running, whether it answered or
+    /// was cancelled. The planner awaits it before the pass returns, so nothing started here outlives
+    /// the pass. A completed task where nothing was started.
+    /// </returns>
+    Task BeginPass(CancellationToken ct);
 
     /// <summary>
     /// Exact paths and commands, with sizes measured. Never executed here.

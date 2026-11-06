@@ -118,8 +118,8 @@ public interface IUserEnvironment
     string DomainName { get; }
 
     /// <summary>
-    /// Whether this process runs with an administrator's rights, which an unelevated process of an
-    /// administrator's account does not have.
+    /// Whether this process runs elevated, with an administrator's rights, which an unelevated process
+    /// of an administrator's account does not have.
     ///
     /// <para>For the work worth starting only where it can be answered: DISM refuses every other
     /// account at once, so starting it early for one is a process launch for a known refusal.</para>
@@ -432,8 +432,7 @@ public sealed partial class UserEnvironment : IUserEnvironment
 
     public string DomainName { get; } = Environment.UserDomainName;
 
-    // Read once, for the reason the identity is: relaunching elevated makes a new process.
-    public bool IsAdministrator { get; } = ReadIsAdministrator();
+    public bool IsAdministrator => Environment.IsPrivilegedProcess;
 
     public IMftSourceFactory VolumeTables => VolumeMftSourceFactory.Default;
 
@@ -775,17 +774,6 @@ public sealed partial class UserEnvironment : IUserEnvironment
 
     /// <summary>Ask Windows where LocalLow is, once, when the environment is constructed.</summary>
     private static string? ResolveLocalLow() => KnownFolder("a520a1a4-1780-4ff6-bd18-167343c5af16");
-
-    /// <summary>
-    /// Whether the token holds the Administrators group enabled. Under UAC an unelevated process of an
-    /// administrator's account holds it only as deny-only, which <see cref="WindowsPrincipal.IsInRole(WindowsBuiltInRole)"/>
-    /// reads as no.
-    /// </summary>
-    private static bool ReadIsAdministrator()
-    {
-        using var identity = WindowsIdentity.GetCurrent();
-        return new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
-    }
 
     /// <summary>
     /// Ask Windows where the account's own folders are, once, when the environment is constructed:

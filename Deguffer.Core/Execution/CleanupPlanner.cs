@@ -480,6 +480,7 @@ public sealed class CleanupPlanner
         // What a provider starts at the top of the pass ends with it, however it ends: a pass that
         // fails or is cancelled must not leave a tool running beside the next pass's own.
         using var pass = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var started = new List<Task>(providers.Count);
 
         try
         {
@@ -492,7 +493,7 @@ public sealed class CleanupPlanner
             // runs while the rows ahead of it plan, rather than starting only when its turn comes.
             foreach (var provider in providers)
             {
-                provider.BeginPass(pass.Token);
+                started.Add(provider.BeginPass(pass.Token));
             }
 
             // Before any row plans, so every plan in the pass is held to the same set.
@@ -503,6 +504,11 @@ public sealed class CleanupPlanner
         finally
         {
             await pass.CancelAsync().ConfigureAwait(false);
+
+            // Until each has ended, not only been told to: a tool ends after its cancellation is asked
+            // for, and the next pass may start its own the moment this one returns. How each ended is
+            // its plan's to report, which awaited it, so it is not thrown a second time here.
+            await Task.WhenAll(started).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
             foreach (var hold in holds)
             {

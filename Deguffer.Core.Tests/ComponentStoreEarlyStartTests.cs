@@ -17,6 +17,9 @@ public sealed class ComponentStoreEarlyStartTests : IDisposable
     /// <summary>Far longer than a fake DISM takes to start, and far shorter than a hung test.</summary>
     private static readonly TimeSpan Deadline = TimeSpan.FromSeconds(10);
 
+    /// <summary>How long a pass that does not wait for DISM is given to return before DISM exits.</summary>
+    private static readonly TimeSpan Settle = TimeSpan.FromSeconds(1);
+
     private readonly TempDirectory _temp = new();
     private readonly FakeUserEnvironment _environment;
     private readonly FakeSystemDirectories _system;
@@ -49,9 +52,10 @@ public sealed class ComponentStoreEarlyStartTests : IDisposable
 
     /// <summary>
     /// Enough providers ahead of the rows to take every slot, each finishing only once the analysis has
-    /// started. Started at the rows' own turn, the analysis would wait for a slot none of them gives up.
+    /// started, and then running <paramref name="then"/>. Started at the rows' own turn, the analysis
+    /// would wait for a slot none of them gives up.
     /// </summary>
-    private static FakeCleanupProvider[] Ahead(Task analysisStarted) =>
+    private static FakeCleanupProvider[] Ahead(Task analysisStarted, Action? then = null) =>
     [
         .. Enumerable.Range(0, CleanupPlanner.ProvidersAtOnce).Select(i => new FakeCleanupProvider($"ahead-{i}")
         {
@@ -61,6 +65,8 @@ public sealed class ComponentStoreEarlyStartTests : IDisposable
                 {
                     throw new TimeoutException("The analysis had not started while the providers ahead of its rows planned.");
                 }
+
+                then?.Invoke();
             },
         }),
     ];
@@ -140,72 +146,85 @@ public sealed class ComponentStoreEarlyStartTests : IDisposable
     }
 
     /// <summary>
-    /// #158: a preview the user cancels ends DISM's analysis, though the pass started it rather than a
-    /// row's plan.
+    /// #158: a preview the user cancels ends the analysis the pass started, before any row reached a
+    /// slot, and the pass returns only once DISM has exited, so a scan started straight after it cannot
+    /// run a second analysis beside it.
     /// </summary>
     [Fact]
-    public async Task ACancelledPassEndsTheAnalysisItStarted()
+    public async Task ACancelledPassEndsTheAnalysisItStartedBeforeItReturns()
     {
-        var dism = new UnansweredDism();
+        var dism = new SlowToExitDism();
         using var cts = new CancellationTokenSource();
-        var ahead = new FakeCleanupProvider("ahead")
-        {
-            WhilePlanning = () =>
-            {
-                if (dism.Started.Wait(Deadline))
-                {
-                    cts.Cancel();
-                }
-            },
-        };
+        var planner = new CleanupPlanner([.. Ahead(dism.Started, cts.Cancel), .. Rows(dism)]);
 
-        var planner = new CleanupPlanner([ahead, .. Rows(dism)]);
+        var pass = planner.PlanAllAsync(ct: cts.Token);
+        var returnedEarly = await ReturnsBeforeDismExits(pass, dism);
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => planner.PlanAllAsync(ct: cts.Token).WaitAsync(Deadline));
-
-        Assert.True(await dism.Ended.WaitAsync(Deadline), "DISM was left analysing after the preview was cancelled");
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pass.WaitAsync(Deadline));
+        Assert.False(returnedEarly, "the pass returned while DISM was still exiting");
     }
 
     /// <summary>
-    /// A pass that fails ends the analysis it started too, and the rows waiting on it stop waiting
-    /// rather than holding the pass open until DISM answers.
+    /// A pass that fails before the rows reach a slot ends the analysis it started too, and returns
+    /// only once DISM has exited. Nothing else would cancel it: the failure stops only the slots.
     /// </summary>
     [Fact]
-    public async Task APassThatFailsEndsTheAnalysisItStarted()
+    public async Task APassThatFailsEndsTheAnalysisItStartedBeforeItReturns()
     {
-        var dism = new UnansweredDism();
-        var broken = new FakeCleanupProvider("broken") { PlanFailure = new InvalidOperationException("The plan failed.") };
-        var planner = new CleanupPlanner([broken, .. Rows(dism)]);
+        var dism = new SlowToExitDism();
+        var ahead = Ahead(dism.Started);
+        ahead[0].PlanFailure = new InvalidOperationException("The plan failed.");
+        var planner = new CleanupPlanner([.. ahead, .. Rows(dism)]);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => planner.PlanAllAsync().WaitAsync(Deadline));
+        var pass = planner.PlanAllAsync();
+        var returnedEarly = await ReturnsBeforeDismExits(pass, dism);
 
-        Assert.True(await dism.Ended.WaitAsync(Deadline), "DISM was left analysing after the pass failed");
+        await Assert.ThrowsAsync<InvalidOperationException>(() => pass.WaitAsync(Deadline));
+        Assert.False(returnedEarly, "the pass returned while DISM was still exiting");
     }
 
-    /// <summary>DISM that never answers, and ends only when its run is cancelled.</summary>
-    private sealed class UnansweredDism : IProcessRunner
+    /// <summary>
+    /// Whether <paramref name="pass"/> returned once DISM was told to stop and before it exited, after
+    /// which DISM is let exit. A pass that waits for DISM cannot return in that window, so this never
+    /// reports early for one. One that does not wait returns at once, well inside <see cref="Settle"/>.
+    /// </summary>
+    private static async Task<bool> ReturnsBeforeDismExits(Task pass, SlowToExitDism dism)
     {
-        private readonly TaskCompletionSource<bool> _ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        await dism.Cancelled.WaitAsync(Deadline);
+        var returnedEarly = await Task.WhenAny(pass, Task.Delay(Settle)) == pass;
+        dism.Exit();
+
+        return returnedEarly;
+    }
+
+    /// <summary>
+    /// DISM that never answers, and once its run is cancelled, exits only when the test lets it, as the
+    /// real one takes a moment to end after it is told to.
+    /// </summary>
+    private sealed class SlowToExitDism : IProcessRunner
+    {
         private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _cancelled = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _exit = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public Task Started => _started.Task;
 
-        /// <summary>True once the run was cancelled.</summary>
-        public Task<bool> Ended => _ended.Task;
+        /// <summary>Completed once the run was told to stop.</summary>
+        public Task Cancelled => _cancelled.Task;
+
+        public void Exit() => _exit.TrySetResult();
 
         public async Task<CommandOutcome> RunAsync(string fileName, string arguments, ToolRun run, CancellationToken ct)
         {
             _started.TrySetResult();
 
-            try
+            await using (ct.Register(() => _cancelled.TrySetResult()))
             {
-                await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false);
-                throw new InvalidOperationException("An infinite delay returned.");
+                await _cancelled.Task.ConfigureAwait(false);
             }
-            finally
-            {
-                _ended.TrySetResult(ct.IsCancellationRequested);
-            }
+
+            await _exit.Task.ConfigureAwait(false);
+            throw new OperationCanceledException(ct);
         }
     }
 }
