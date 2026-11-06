@@ -484,7 +484,7 @@ public sealed class ExploreViewModelTests : IDisposable
         await running;
 
         Assert.Equal([users + 1], page.Selection.Nodes);
-        Assert.Contains(NotifyCollectionChangedAction.Reset, changes);
+        Assert.Equal([NotifyCollectionChangedAction.Add, NotifyCollectionChangedAction.Reset], changes);
         Assert.True(page.Selection.CanAct);
     });
 
@@ -587,6 +587,37 @@ public sealed class ExploreViewModelTests : IDisposable
         Assert.Equal(users, page.CurrentNode);
         Assert.Empty(page.Selection.Nodes);
         Assert.Equal(["testuser"], page.Listing.Rows.Select(row => row.Name));
+    });
+
+    /// <summary>
+    /// A step into another folder is a list about something else, so the rows are replaced and the
+    /// list is told once. Cleared and then filled a row at a time, a step into a folder of thousands
+    /// of entries told the bound list thousands of times in one turn of the UI thread.
+    /// </summary>
+    [Fact]
+    public void AStepIntoAnotherFolderTellsTheListOnce() => UiThread.Run(async () =>
+    {
+        _explore.Volumes.With(@"C:\");
+        var page = _explore.Page();
+        var builder = new ExploreTreeBuilder(@"C:\");
+        var users = builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            ExploreFixture.Folder("Users"),
+            ExploreFixture.File("pagefile.sys", 100),
+        ]);
+
+        builder.AddChildren(users, [
+            ExploreFixture.File("a.bin", 300),
+            ExploreFixture.File("b.bin", 200),
+            ExploreFixture.File("c.bin", 150),
+        ]);
+        await _explore.ScanAsync(page, ExploreScan.Fast(builder.Build(ExploreChildOrder.BySize)));
+
+        var changes = Watch(page.Listing.Rows);
+
+        page.Descend(users);
+
+        Assert.Equal([NotifyCollectionChangedAction.Reset], changes);
+        Assert.Equal(["a.bin", "b.bin", "c.bin"], page.Listing.Rows.Select(row => row.Name));
     });
 
     /// <summary>

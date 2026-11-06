@@ -196,7 +196,7 @@ public sealed class MemoryViewModelTests : IDisposable
 
         page.Descend(page.Tree.Find(Applications)!.Value);
 
-        Assert.Contains(NotifyCollectionChangedAction.Reset, told);
+        Assert.Equal([NotifyCollectionChangedAction.Reset], told);
         Assert.False(page.Selection.HasSelection);
         Assert.True(page.CanAscend);
 
