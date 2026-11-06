@@ -17,6 +17,12 @@ internal sealed class QueuedContext : SynchronizationContext
 
     private readonly BlockingCollection<(SendOrPostCallback Callback, object? State)> _posts = [];
 
+    /// <summary>How many posts wait to be run.</summary>
+    public int Waiting => _posts.Count;
+
+    /// <summary>How many posts have been run, each one a turn of the owner's thread.</summary>
+    public int Ran { get; private set; }
+
     public override void Post(SendOrPostCallback d, object? state) => _posts.Add((d, state));
 
     public override void Send(SendOrPostCallback d, object? state) =>
@@ -36,8 +42,19 @@ internal sealed class QueuedContext : SynchronizationContext
                 throw new TimeoutException($"Still waiting for {waitingFor}.");
             }
 
-            post.Callback(post.State);
+            Run(post);
         }
+    }
+
+    /// <summary>Run the first post waiting, and nothing it posts in turn.</summary>
+    public void RunOne()
+    {
+        if (!_posts.TryTake(out var post))
+        {
+            throw new InvalidOperationException("Nothing is posted to run.");
+        }
+
+        Run(post);
     }
 
     /// <summary>Wait, running nothing, until something has been posted that has not been run.</summary>
@@ -54,7 +71,13 @@ internal sealed class QueuedContext : SynchronizationContext
     {
         while (_posts.TryTake(out var post))
         {
-            post.Callback(post.State);
+            Run(post);
         }
+    }
+
+    private void Run((SendOrPostCallback Callback, object? State) post)
+    {
+        Ran++;
+        post.Callback(post.State);
     }
 }

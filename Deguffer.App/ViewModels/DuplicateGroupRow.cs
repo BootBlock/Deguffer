@@ -11,27 +11,30 @@ namespace Deguffer.App.ViewModels;
 /// </summary>
 public sealed partial class DuplicateGroupRow : ObservableObject
 {
-    /// <param name="keeping">The keeping rule the marks were made under, which says what the group could free.</param>
+    /// <param name="judged">
+    /// The group as the search judged it by the keeping rule the marks were made under, which says
+    /// what it could free and what each copy's row lists, so building the row asks the rule nothing.
+    /// </param>
     /// <param name="toggle">Marks or unmarks a copy, answering Core's refusal, or null where it was done.</param>
     /// <param name="mayMark">Whether the page lets any mark change now.</param>
-    public DuplicateGroupRow(GroupMarks marks, CopyKeeping keeping, Func<DuplicateCopyRow, string?> toggle, Func<bool> mayMark)
+    public DuplicateGroupRow(GroupMarks marks, GroupJudgement judged, Func<DuplicateCopyRow, string?> toggle, Func<bool> mayMark)
     {
         Marks = marks;
 
         var group = marks.Group;
         var paths = PathDifference.Of([.. group.Files.Select(copy => copy.Path)]);
 
-        Copies = [.. group.Files.Select((copy, i) => new DuplicateCopyRow(copy, paths[i], this, keeping, toggle, mayMark))];
+        Copies = [.. group.Files.Select((copy, i) => new DuplicateCopyRow(copy, paths[i], this, judged.Standings[i], toggle, mayMark))];
         Name = NameOf(group);
         Glyph = FileKindGlyph.Of(group.Files[0].Path);
         Summary = group.Length is { } length
             ? $"{group.Files.Count:N0} copies of {FreeSpace.Format(length)}, matched on {group.Criteria.Described()}"
             : $"{group.Files.Count:N0} copies, matched on {group.Criteria.Described()}";
         Checksum = group.Checksum is { } checksum ? $"{checksum.Algorithm.Name()} {checksum.Hex}" : string.Empty;
-        FreeableSpace = marks.FreeableSpace(keeping);
+        FreeableSpace = judged.FreeableSpace;
         Freeable = FreeSpace.Format(FreeableSpace);
         MayDiffer = group.MayDiffer ?? string.Empty;
-        Note = marks.WhyNothingCanBeKept(keeping) ?? string.Empty;
+        Note = judged.WhyNothingCanBeKept ?? string.Empty;
     }
 
     public GroupMarks Marks { get; }

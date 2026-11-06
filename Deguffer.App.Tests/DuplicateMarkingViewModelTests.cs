@@ -84,7 +84,7 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
 
         foreach (var group in groups)
         {
-            core.Add(group);
+            core.Add(core.Judge(group));
         }
 
         core.Complete();
@@ -264,9 +264,9 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
         {
             _searches.Add(search);
             var candidates = DuplicateScene.Finding(group);
-            await Task.Run(() => marksMade(_scene.Marks(candidates)), ct);
+            var marks = await HandOverAsync(candidates, marksMade, ct);
             finding.Report(candidates);
-            found.Report(group);
+            found.Report(marks.Judge(group));
             await ended.Task;
 
             return new DuplicateSearchResult(candidates, [group], default, Stopped: false);

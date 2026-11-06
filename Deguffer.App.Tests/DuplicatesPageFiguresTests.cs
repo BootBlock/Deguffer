@@ -9,7 +9,7 @@ namespace Deguffer.App.Tests;
 /// How the Duplicates page shows what it found and what is marked at a glance: the figures over the
 /// groups, the marked total, which copies stay, each group's name and mark count, and the search
 /// settings folding to their one line. What a group could free and what a mark occupies are Core's
-/// (<see cref="GroupMarks.FreeableSpace"/>, <see cref="GroupMarks.MarkedSpace"/>); these prove the
+/// (<see cref="GroupJudgement.FreeableSpace"/>, <see cref="GroupMarks.MarkedSpace"/>); these prove the
 /// page adds up and shows Core's figures, and keeps them current.
 /// </summary>
 public sealed class DuplicatesPageFiguresTests : DuplicatesPageScene
@@ -26,12 +26,15 @@ public sealed class DuplicatesPageFiguresTests : DuplicatesPageScene
         $"{count} {(count == 1 ? "copy" : "copies")}, {FreeSpace.Format(page.Groups.Sum(row => row.Marks.MarkedSpace(page.Marks!.Keeping)))}";
 
     /// <summary>
-    /// The figures count every group as it arrives, from Core's measure of each, and a new search
-    /// starts them again rather than adding its groups to the last search's.
+    /// The figures count every group as it arrives, from Core's measure of each, and are shown once
+    /// for each batch of groups the page takes, so two groups confirmed together move them once. A new
+    /// search starts them again rather than adding its groups to the last search's.
     /// </summary>
     [Fact]
-    public void TheFiguresCountEveryGroupAsItArrivesAndStartAgainWithANewSearch() => UiThread.Run(async () =>
+    public void TheFiguresCountEveryGroupOncePerBatchAndStartAgainWithANewSearch() => UiThread.Run(async () =>
     {
+        // Held still, so no batch reaches its budget and the two groups are taken in one.
+        Clock = new ManualTimeProvider();
         var three = Group(Copy(_scene.Folder("A"), "c.jpg", 8192), Copy(_scene.Folder("B"), "c.jpg", 8192), Copy(_scene.Folder("C"), "c.jpg", 8192));
         var page = PageWithPhotos(Finds(_scene.Pair("a.jpg", 4096), three));
         List<string> seen = [];
@@ -45,11 +48,11 @@ public sealed class DuplicatesPageFiguresTests : DuplicatesPageScene
 
         await page.SearchCommand.ExecuteAsync(null);
 
-        Assert.Equal(["0", "1", "2"], seen);
+        Assert.Equal(["0", "2"], seen);
         Assert.Equal("2", page.Totals.Groups);
         Assert.Equal("groups", page.Totals.GroupsLabel);
         Assert.Equal("5", page.Totals.Files);
-        Assert.Equal(FreeSpace.Format(page.Groups.Sum(row => row.Marks.FreeableSpace(page.Marks!.Keeping))), page.Totals.Freeable);
+        Assert.Equal(FreeSpace.Format(page.Groups.Sum(row => GroupJudgement.Of(row.Marks.Group, page.Marks!.Keeping).FreeableSpace)), page.Totals.Freeable);
         Assert.True(page.HasGroups);
         Assert.False(page.HasNoGroups);
 

@@ -150,7 +150,7 @@ public abstract class DuplicateMarkingScene : IDisposable
     {
         foreach (var group in result.Groups)
         {
-            marks.Add(group);
+            marks.Add(marks.Judge(group));
         }
 
         marks.Complete();
