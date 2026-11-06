@@ -37,7 +37,7 @@ public sealed class HeapCountersTests
             Route.Walk,
             _ =>
             {
-                if (Interlocked.Increment(ref walks) == 2)
+                if (Interlocked.Increment(ref walks) == 4)
                 {
                     GC.Collect(0, GCCollectionMode.Forced, blocking: true);
                 }

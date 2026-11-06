@@ -22,7 +22,8 @@ public sealed class RaceRouteTests : IDisposable
     public void Dispose() => _temp.Dispose();
 
     /// <summary>
-    /// The second walk and the second build of a first round are the raced pair. Each waits for the
+    /// The fourth walk (after the untimed walk, the walk alone and the second untimed walk) and the second build of a first
+    /// round are the raced pair. Each waits for the
     /// other to start: run one after the other, the first waits out <see cref="Meeting"/> alone.
     /// </summary>
     [Fact]
@@ -39,7 +40,7 @@ public sealed class RaceRouteTests : IDisposable
             Route.Walk,
             _ =>
             {
-                if (Interlocked.Increment(ref walks) == 2)
+                if (Interlocked.Increment(ref walks) == 4)
                 {
                     walking.Set();
                     walkMetBuild = building.Wait(Meeting);
@@ -68,7 +69,8 @@ public sealed class RaceRouteTests : IDisposable
 
     /// <summary>
     /// The first round walks alone, builds alone, then races. The second races first and walks alone
-    /// last, so a cache the first part warms favours each walk in turn.
+    /// last, so a cache the first part warms favours each walk in turn. Each timed walk follows an
+    /// untimed walk, so neither follows a build directly.
     /// </summary>
     [Fact]
     public void EveryOtherRoundRacesFirstAndWalksAloneLast()
@@ -82,17 +84,19 @@ public sealed class RaceRouteTests : IDisposable
         var secondParts = Drain(log);
 
         Assert.False(first.Race!.Reversed);
-        Assert.Equal(new[] { "walk", "build" }, firstParts[..2]);
-        Assert.Equal(new[] { "build", "walk" }, firstParts[2..].Order().ToArray());
+        Assert.Equal(new[] { "walk", "walk", "build", "walk" }, firstParts[..4]);
+        Assert.Equal(new[] { "build", "walk" }, firstParts[4..].Order().ToArray());
 
         Assert.True(second.Race!.Reversed);
-        Assert.Equal(new[] { "build", "walk" }, secondParts[..2].Order().ToArray());
-        Assert.Equal(new[] { "build", "walk" }, secondParts[2..]);
+        Assert.Equal("walk", secondParts[0]);
+        Assert.Equal(new[] { "build", "walk" }, secondParts[1..3].Order().ToArray());
+        Assert.Equal(new[] { "build", "walk", "walk" }, secondParts[3..]);
     }
 
     /// <summary>
     /// The command given runs before the walk alone, before the build alone and before the
-    /// raced pair, and never between the two raced parts, which start together.
+    /// raced pair, and never between the two raced parts, which start together. It runs after the
+    /// untimed walk, so a command that empties the cache leaves the walk alone cold.
     /// </summary>
     [Fact]
     public void TheCommandGivenRunsBeforeEveryPart()
@@ -103,8 +107,8 @@ public sealed class RaceRouteTests : IDisposable
         route.Run(CancellationToken.None);
         var parts = Drain(log);
 
-        Assert.Equal(new[] { "command", "walk", "command", "build", "command" }, parts[..5]);
-        Assert.Equal(new[] { "build", "walk" }, parts[5..].Order().ToArray());
+        Assert.Equal(new[] { "walk", "command", "walk", "command", "build", "walk", "command" }, parts[..7]);
+        Assert.Equal(new[] { "build", "walk" }, parts[7..].Order().ToArray());
     }
 
     [Fact]

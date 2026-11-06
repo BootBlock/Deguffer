@@ -10,7 +10,8 @@ namespace Deguffer.Benchmark;
 ///
 /// <para><b>The order alternates.</b> The first round walks alone, builds alone, then races the two;
 /// the next races first and walks alone last. A part that leaves the cache warm then favours the walk
-/// alone in one round and the walk raced in the next.</para>
+/// alone in one round and the walk raced in the next. Each timed walk follows an untimed walk of its
+/// own, so neither measures what a build before it left behind.</para>
 ///
 /// <para><b>Started at the same moment.</b> The build runs on a thread of its own, as the scan's
 /// does (<see cref="MftVolumeIndexCache"/>), and the walk on the calling thread. Both wait at a
@@ -83,11 +84,11 @@ internal sealed class RaceRoute
         {
             raced = Raced(ct);
             buildAlone = Alone(_build, ct);
-            walkAlone = Alone(_walk, ct);
+            walkAlone = WalkAlone(ct);
         }
         else
         {
-            walkAlone = Alone(_walk, ct);
+            walkAlone = WalkAlone(ct);
             buildAlone = Alone(_build, ct);
             raced = Raced(ct);
         }
@@ -96,6 +97,25 @@ internal sealed class RaceRoute
 
         return new RunTally(walkAlone.Items, BytesRead: 0, times.Complete, Race: times);
     }
+
+    /// <summary>
+    /// The walk alone, after an untimed walk of the same folder (see <see cref="Prime"/>).
+    /// </summary>
+    private RacePart WalkAlone(CancellationToken ct)
+    {
+        Prime(ct);
+
+        return Alone(_walk, ct);
+    }
+
+    /// <summary>
+    /// Walk the folder once, untimed, before a timed walk. A read through a volume's handle, which
+    /// every build makes, slows the next walk of that volume by about half a second without reading
+    /// the drive (#477), and the part before a timed walk can be a build. A scan's walk does not follow
+    /// a build of its own volume, so neither timed walk may: each then measures only what the other
+    /// part beside it costs.
+    /// </summary>
+    private void Prime(CancellationToken ct) => _walk(ct);
 
     private RacePart Alone(Func<CancellationToken, RunTally> part, CancellationToken ct)
     {
@@ -106,6 +126,7 @@ internal sealed class RaceRoute
 
     private (RacePart Walk, RacePart Build) Raced(CancellationToken ct)
     {
+        Prime(ct);
         Settle();
 
         using var start = new Barrier(2);

@@ -97,7 +97,9 @@ Deguffer.Benchmark race C:\Users\<user>\source --build D --reads-in-flight 2
 - `race <folder>` walks a folder while the index of a volume is built, both started at the same
   moment, as Auto races them in a scan, and times each of the two alone as well. Each round walks
   alone, builds alone, then races the two, and every other round runs them in the reverse order,
-  so a cache one part warms favours neither walk. It reports each part, how many times as long each
+  so a cache one part warms favours neither walk. Each timed walk follows an untimed walk of the
+  same folder, because a read through a volume's handle slows the next walk of that volume (#477),
+  and a scan's walk does not follow a build of its own volume. It reports each part, how many times as long each
   took raced, and what the garbage collector did while each walk ran: the time it held the process
   paused, the collections of each generation and the bytes allocated, process-wide, because a
   collection suspends every thread. It needs an elevated prompt. `--build <drive>` names the volume
