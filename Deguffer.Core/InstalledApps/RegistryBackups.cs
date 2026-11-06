@@ -207,7 +207,7 @@ public sealed class RegistryBackups(IProcessRunner runner, string folder, string
     }
 
     /// <summary>Every backup in the folder that names a key, newest first.</summary>
-    /// <remarks>Reads only the files this instance has not read before, or that changed since.</remarks>
+    /// <remarks>Reads only the files this instance has not read, could not read last time, or that changed since.</remarks>
     /// <exception cref="OperationCanceledException">The listing was abandoned.</exception>
     public IReadOnlyList<RegistryBackupFile> List(CancellationToken ct) => _listing.List(ct);
 

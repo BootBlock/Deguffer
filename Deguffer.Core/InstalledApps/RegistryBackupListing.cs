@@ -21,8 +21,11 @@ internal sealed class RegistryBackupListing(string folder)
 
     private readonly Lock _gate = new();
 
-    /// <summary>Every file the last listing read, keyed by its extended path.</summary>
-    private Dictionary<string, Seen> _seen = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>
+    /// Every file the last listing read, keyed by its extended path exactly as the folder listed it.
+    /// Ordinal, because a folder marked case-sensitive can hold two names that differ only in case.
+    /// </summary>
+    private Dictionary<string, Seen> _seen = new(StringComparer.Ordinal);
 
     /// <param name="Backup">What the file restores, or null where it is not a backup.</param>
     private readonly record struct Seen(long Length, DateTime Written, RegistryBackupFile? Backup);

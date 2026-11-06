@@ -180,16 +180,19 @@ public sealed class InstalledAppsViewModelTests : IDisposable
     {
         var window = Environment.CurrentManagedThreadId;
         var listedOn = new List<int>();
+        var shownOn = new List<int>();
         var backup = Backup("Tool");
         var page = Page(listBackups: _ =>
         {
             listedOn.Add(Environment.CurrentManagedThreadId);
             return [backup];
         });
+        page.Actions.Backups.CollectionChanged += (_, _) => shownOn.Add(Environment.CurrentManagedThreadId);
 
         await page.Actions.ShowBackupsAsync();
 
         Assert.NotEqual(window, Assert.Single(listedOn));
+        Assert.Equal([window], shownOn);
         Assert.Same(backup, Assert.Single(page.Actions.Backups).File);
     });
 
