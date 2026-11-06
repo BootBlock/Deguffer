@@ -447,6 +447,9 @@ public sealed class DirectoryScanner : IDirectoryScanner
 
         var readings = new ScanResult[asked.Keeps.Length];
 
+        // One age for every reading: a guard changes what is counted, never what the directory holds.
+        var age = OneLevelAge.ToUtc(index.AgeOf(volume.Components));
+
         for (var i = 0; i < readings.Length; i++)
         {
             if (index.TryMeasure(volume.Components, asked.Keeps[i], asked.Bounds.KeepRoot, leftOut, out var withheldRecent, out var stores) is not { } size)
@@ -457,6 +460,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
             readings[i] = ScanResult.Fast(size, withheldRecent) with
             {
                 MailStores = [.. stores.Select(s => PathOf(volume.DriveLetter, s)).Order(StringComparer.OrdinalIgnoreCase)],
+                LastWritten = age,
             };
         }
 

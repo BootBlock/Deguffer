@@ -35,11 +35,33 @@ public sealed class DirectoryAgeTests : IDisposable
         var directory = _temp.CreateDirectory("obj");
         _temp.CreateFile(16, "obj", "Example.dll");
 
-        Directory.SetLastWriteTimeUtc(directory, LongAgo);
+        EntryTime.Set(directory, LongAgo);
         var rewritten = DateTime.UtcNow.AddDays(-3);
-        File.SetLastWriteTimeUtc(Path.Combine(directory, "Example.dll"), rewritten);
+        EntryTime.Set(Path.Combine(directory, "Example.dll"), created: LongAgo, written: rewritten);
 
         Assert.Equal(rewritten, DirectoryAge.Of(directory)!.Value, TimeSpan.FromSeconds(1));
+    }
+
+    /// <summary>
+    /// An entry copied or extracted in is dated by when it arrived, not by the last write it kept from
+    /// its source.
+    ///
+    /// <para>A package unpacked this morning keeps its publisher's last write, which can be years old,
+    /// and only its creation time says it is new. Read by last write alone, the folder holding it reads
+    /// years older than the truth, the direction that invites a deletion, and older than the
+    /// minimum-age guard, which reads the same pair, judges its files.</para>
+    /// </summary>
+    [Fact]
+    public void ReadsWhenAnEntryWasCopiedInRatherThanTheWriteItKept()
+    {
+        var directory = _temp.CreateDirectory("node_modules");
+        var package = _temp.CreateDirectory("node_modules", "left-pad");
+
+        var arrived = DateTime.UtcNow.AddHours(-2);
+        EntryTime.Set(package, created: arrived, written: LongAgo);
+        EntryTime.Set(directory, LongAgo);
+
+        Assert.Equal(arrived, DirectoryAge.Of(directory)!.Value, TimeSpan.FromSeconds(1));
     }
 
     /// <summary>
@@ -57,11 +79,11 @@ public sealed class DirectoryAgeTests : IDisposable
         _temp.CreateFile(16, "obj", "left-behind.dll");
         _temp.CreateDirectory("obj", "Debug");
 
-        File.SetLastWriteTimeUtc(Path.Combine(directory, "left-behind.dll"), LongAgo);
-        Directory.SetLastWriteTimeUtc(Path.Combine(directory, "Debug"), LongAgo);
+        EntryTime.Set(Path.Combine(directory, "left-behind.dll"), LongAgo);
+        EntryTime.Set(Path.Combine(directory, "Debug"), LongAgo);
 
         var pruned = DateTime.UtcNow.AddMinutes(-5);
-        Directory.SetLastWriteTimeUtc(directory, pruned);
+        EntryTime.Set(directory, created: LongAgo, written: pruned);
 
         Assert.Equal(pruned, DirectoryAge.Of(directory)!.Value, TimeSpan.FromSeconds(1));
     }
@@ -78,7 +100,7 @@ public sealed class DirectoryAgeTests : IDisposable
     {
         var directory = _temp.CreateDirectory("obj");
         var emptied = DateTime.UtcNow.AddHours(-1);
-        Directory.SetLastWriteTimeUtc(directory, emptied);
+        EntryTime.Set(directory, created: LongAgo, written: emptied);
 
         Assert.Equal(emptied, DirectoryAge.Of(directory)!.Value, TimeSpan.FromSeconds(1));
     }
@@ -104,9 +126,9 @@ public sealed class DirectoryAgeTests : IDisposable
 
         var configurationChanged = DateTime.UtcNow.AddDays(-40);
 
-        Directory.SetLastWriteTimeUtc(directory, LongAgo);
-        Directory.SetLastWriteTimeUtc(nested, configurationChanged);
-        File.SetLastWriteTimeUtc(deep, DateTime.UtcNow);
+        EntryTime.Set(directory, LongAgo);
+        EntryTime.Set(nested, configurationChanged);
+        EntryTime.Set(deep, DateTime.UtcNow);
 
         Assert.Equal(configurationChanged, DirectoryAge.Of(directory)!.Value, TimeSpan.FromSeconds(1));
     }
@@ -138,8 +160,8 @@ public sealed class DirectoryAgeTests : IDisposable
         var directory = _temp.CreateDirectory("RtBackup");
         _temp.CreateFile(16, "RtBackup", "trace.etl");
 
-        File.SetLastWriteTimeUtc(Path.Combine(directory, "trace.etl"), DateTime.UtcNow);
-        Directory.SetLastWriteTimeUtc(directory, LongAgo);
+        EntryTime.Set(Path.Combine(directory, "trace.etl"), DateTime.UtcNow);
+        EntryTime.Set(directory, LongAgo);
 
         using var denied = new DeniedDirectory(directory);
 
@@ -164,8 +186,8 @@ public sealed class DirectoryAgeTests : IDisposable
         Assert.True(deep.Length > 260, "the fixture is not long enough to test anything");
 
         var rewritten = DateTime.UtcNow.AddDays(-9);
-        Directory.SetLastWriteTimeUtc(LongPath.Extended(deep), LongAgo);
-        File.SetLastWriteTimeUtc(LongPath.Extended(Path.Combine(deep, "Example.dll")), rewritten);
+        EntryTime.Set(LongPath.Extended(deep), LongAgo);
+        EntryTime.Set(LongPath.Extended(Path.Combine(deep, "Example.dll")), rewritten);
 
         Assert.Equal(rewritten, DirectoryAge.Of(deep)!.Value, TimeSpan.FromSeconds(1));
     }
@@ -230,8 +252,8 @@ public sealed class DirectoryAgeTests : IDisposable
             File.WriteAllBytes(Path.Combine(directories[index], "Example.dll"), new byte[16]);
 
             var written = LongAgo.AddDays(index);
-            File.SetLastWriteTimeUtc(Path.Combine(directories[index], "Example.dll"), written);
-            Directory.SetLastWriteTimeUtc(directories[index], LongAgo);
+            EntryTime.Set(Path.Combine(directories[index], "Example.dll"), written);
+            EntryTime.Set(directories[index], LongAgo);
             expected[index] = index == Refused ? null : written;
         }
 

@@ -543,7 +543,8 @@ public abstract class CleanupProviderBase : ICleanupProvider
         results.Aggregate(FallbackReason.None, (fallback, r) => FallbackReasonText.Prevailing(fallback, r.Fallback)),
         [.. results.Select(r => r.WithheldRecent)],
         [.. results.Select(r => r.MailStores)],
-        [.. results.Select(r => r.WasReached)]);
+        [.. results.Select(r => r.WasReached)],
+        [.. results.Select(r => r.LastWritten)]);
 
     /// <summary>
     /// Measure every target and turn it into the step that will delete it.
@@ -567,28 +568,20 @@ public abstract class CleanupProviderBase : ICleanupProvider
             throw new ArgumentException($"Only a folder emptied in place can leave entries standing: {unbounded}.", nameof(targets));
         }
 
-        // Dated beside the measurement rather than before it, so neither waits for the other. Dating
-        // keeps to the disk's number through the listing budget, as a measurement's walk does.
-        var dating = DatedAsync(targets, ct);
+        ThrowIfMisdated(targets);
 
         // An index is removed with the directory it indexes, so it is measured with it. A folder
         // emptied in place is measured on the terms its removal empties it on, so the figure is
         // already without whatever the removal leaves standing and nothing is measured to be taken off.
-        var measuring = MeasureGroupsAsync(
+        // The target's own path comes first in its group, so the group's age is the target's.
+        var (each, measured) = await MeasureGroupsAsync(
             [.. targets.Select(t => (IReadOnlyList<ScanRequest>)[new ScanRequest(t.Path, BoundsOf(t)), .. Whole(t.IndexedBy ?? [])])],
             keep,
-            ct);
-
-        // Both awaited before either answer is read, so a failure of one never leaves the other running
-        // unobserved.
-        await Task.WhenAll(dating, measuring).ConfigureAwait(false);
-
-        var dated = await dating.ConfigureAwait(false);
-        var (each, measured) = await measuring.ConfigureAwait(false);
+            ct).ConfigureAwait(false);
 
         var steps = new List<CleanupStep>(targets.Count);
 
-        foreach (var (target, group) in dated.Zip(each))
+        foreach (var (target, group) in targets.Zip(each))
         {
             DeleteStep step = target.Kind switch
             {
@@ -606,7 +599,10 @@ public abstract class CleanupProviderBase : ICleanupProvider
             steps.Add(step with
             {
                 Estimated = group.Size,
-                LastWritten = target.LastWritten,
+
+                // Dated by the reading that measured it, which listed its top level anyway, rather
+                // than by a listing of its own. See ScanResult.LastWritten.
+                LastWritten = target.DatedOneLevelDown ? group.LastWritten : target.LastWritten,
                 RequiresElevation = target.RequiresElevation,
                 WithheldRecent = group.WithheldRecent,
                 MailStores = group.MailStores,
@@ -623,20 +619,31 @@ public abstract class CleanupProviderBase : ICleanupProvider
 
     /// <summary>
     /// <paramref name="targets"/> in their order, each that <see cref="DeletionTarget.DatedOneLevelDown"/>
-    /// asks for given its age, in one bounded step. Paired here, once, for the reason
-    /// <see cref="PlanDeletionsAsync"/> pairs a target with its size. A provider that decides by the
-    /// age of a target it did not date itself, such as one a <see cref="DeclaredLocations"/> scan
-    /// found, reads it from what this returns.
+    /// asks for given its age, in one bounded step, before anything is measured. Paired here, once, for
+    /// the reason <see cref="PlanDeletionsAsync"/> pairs a target with its size.
+    ///
+    /// <para>Only for a provider that decides by the age of a target it did not date itself, such as one
+    /// a <see cref="DeclaredLocations"/> scan found, which reads it from what this returns. A target
+    /// whose age is only shown is left for <see cref="PlanDeletionsAsync"/>, which dates it from its
+    /// measurement and so lists it once rather than twice.</para>
     /// </summary>
     protected Task<IReadOnlyList<DeletionTarget>> DatedAsync(IReadOnlyList<DeletionTarget> targets, CancellationToken ct)
     {
-        // Before anything is read, so a target this cannot date fails its plan rather than reading null.
+        ThrowIfMisdated(targets);
+
+        return ReadAgesAsync(targets, ct);
+    }
+
+    /// <summary>
+    /// Before anything is read, so a target that cannot be dated one level down fails its plan rather
+    /// than reading null.
+    /// </summary>
+    private static void ThrowIfMisdated(IReadOnlyList<DeletionTarget> targets)
+    {
         if (targets.FirstOrDefault(t => t.DatedOneLevelDown && (t.LastWritten is not null || t.Kind is not (TargetKind.Directory or TargetKind.DirectoryContents))) is { Path: { } misdated })
         {
             throw new ArgumentException($"Only a directory with no age of its own can be dated one level down: {misdated}.", nameof(targets));
         }
-
-        return ReadAgesAsync(targets, ct);
     }
 
     private async Task<IReadOnlyList<DeletionTarget>> ReadAgesAsync(IReadOnlyList<DeletionTarget> targets, CancellationToken ct)
@@ -738,14 +745,19 @@ public abstract class CleanupProviderBase : ICleanupProvider
             each.Add(new GroupMeasure(
                 span.Aggregate(ScanSize.Zero, (total, i) => total + measured.Sizes[i]),
                 span.Any(i => measured.WithheldRecent[i]),
-                [.. span.SelectMany(i => measured.MailStores[i]).Distinct(StringComparer.OrdinalIgnoreCase)]));
+                [.. span.SelectMany(i => measured.MailStores[i]).Distinct(StringComparer.OrdinalIgnoreCase)],
+                measured.LastWritten[span[0]]));
         }
 
         return (each, measured);
     }
 
     /// <summary>What one step's paths hold together, as <see cref="MeasureGroupsAsync"/> adds them up.</summary>
-    private readonly record struct GroupMeasure(ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores);
+    /// <param name="LastWritten">
+    /// The age of the group's first path, the step's own, which every caller puts first. See
+    /// <see cref="ScanResult.LastWritten"/>.
+    /// </param>
+    private readonly record struct GroupMeasure(ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores, DateTime? LastWritten);
 
     /// <summary>
     /// What the removal of <paramref name="target"/> leaves standing, for its measurement to leave

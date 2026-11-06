@@ -44,6 +44,21 @@ public sealed record ScanResult(
     /// <summary>Whether <see cref="Size"/> describes the path. See <see cref="Root"/>.</summary>
     public bool WasReached => Root is RootReach.Reached;
 
+    /// <summary>
+    /// When the path was last written to one level down, by <see cref="Providers.DirectoryAge"/>'s rule
+    /// (<see cref="OneLevelAge"/>), read from the listing or the table records this measurement read
+    /// anyway. Null where the path is not a directory read to the end: absent, a file, refused, or
+    /// listed part-way, as <see cref="Providers.DirectoryAge.Of(string, CancellationToken)"/> answers.
+    ///
+    /// <para>Here so that a target whose age is only shown is dated by the reading that measured it,
+    /// rather than by a listing of its own beside it. Every route answers it: the walk from the root's
+    /// listing and the attribute read it makes of the root before listing it, and the volume index from
+    /// the root's record and its children's. Whatever the measurement leaves out of
+    /// <see cref="Size"/>, a mail store or an entry its bounds name, still dates the directory, because
+    /// the age describes the directory and not the part of it a removal takes.</para>
+    /// </summary>
+    public DateTime? LastWritten { get; init; }
+
     public static ScanResult Fast(ScanSize size, bool withheldRecent = false) =>
         new(size, ScanStrategy.MasterFileTable, FallbackReason.None, withheldRecent);
 

@@ -37,6 +37,15 @@ namespace Deguffer.Core.Providers;
 /// <see cref="DeclaredLocation.ReportsAge"/> for a Maven repository, whose top level moves only when
 /// a whole new group first appears.</para>
 ///
+/// <para><b>Each time is the newer of creation and last write</b>, the one number
+/// <see cref="MinimumAge"/> judges a file by, for the reason it gives: a file copied or extracted into
+/// a cache keeps its source's last write, which can be years old, while its creation here is now. Last
+/// write alone would date a package unpacked this morning by the day it was published, which reads
+/// older than the truth. One rule for both also keeps the column from calling a row months old while
+/// the guard withholds its files as recent, and it is the number the volume index already keeps for
+/// every record, so a measurement read from the index dates a directory exactly as a walk does
+/// (<see cref="ScanResult.LastWritten"/>, <see cref="OneLevelAge"/>).</para>
+///
 /// <para><b>Not the source beside it either</b>, which is the other tempting answer for build
 /// output. An age is asked in order to price a deletion, and what a deletion costs is a rebuild — so
 /// "when was this last built" is the question and "when was this project last edited" is a different
@@ -45,38 +54,39 @@ namespace Deguffer.Core.Providers;
 internal static class DirectoryAge
 {
     /// <summary>
-    /// Each entry's last write as ticks, read from the listing's own record of the entry. A
+    /// Each entry's time as a FILETIME, read from the listing's own record of the entry. A
     /// <see cref="FileSystemInfo"/> an entry would cost its full path and name strings, for one
     /// timestamp, and a <c>node_modules</c> holds thousands of entries at its top level.
     /// </summary>
-    private static readonly FileSystemEnumerable<long>.FindTransform LastWriteTicks =
-        static (ref FileSystemEntry entry) => entry.LastWriteTimeUtc.UtcTicks;
+    private static readonly FileSystemEnumerable<long>.FindTransform NewestFileTime =
+        static (ref FileSystemEntry entry) =>
+            MinimumAge.NewestFileTimeOf(entry.CreationTimeUtc.ToFileTime(), entry.LastWriteTimeUtc.ToFileTime());
 
     /// <summary>
     /// The age of <paramref name="directory"/>, or null where it is absent, refused, or could not be
     /// listed to the end.
+    ///
+    /// <para>For a caller that decides by the age before anything is measured. A target whose age is
+    /// only shown is dated by its measurement instead (<see cref="DeletionTarget.DatedOneLevelDown"/>),
+    /// which reads the directory's own time by the same attribute read and its entries' from the same
+    /// listing, so the two answer alike.</para>
     /// </summary>
     public static DateTime? Of(string directory, CancellationToken ct = default)
     {
-        var info = new DirectoryInfo(LongPath.Extended(directory));
-
-        if (!info.Exists)
+        // A missing path has no time to read, and a time made up for one would be the Windows epoch:
+        // January 1601 in the age column is the oldest invitation there is to delete something that
+        // has already gone.
+        if (LongPath.ProbeDirectoryTime(directory, out var newest) is not PathPresence.Present)
         {
-            // LastWriteTimeUtc answers for a missing path with the start of the Windows epoch rather
-            // than failing, and January 1601 in the age column is the oldest invitation there is to
-            // delete something that has already gone.
             return null;
         }
 
-        // Read by the attribute read that answered Exists, so it costs nothing more.
-        var newest = info.LastWriteTimeUtc.Ticks;
-
-        using var listing = new DirectoryListing<long>(directory, LastWriteTicks);
+        using var listing = new DirectoryListing<long>(directory, NewestFileTime);
 
         while (listing.MoveNext())
         {
             ct.ThrowIfCancellationRequested();
-            newest = Math.Max(newest, listing.Current);
+            newest = OneLevelAge.With(newest, listing.Current);
         }
 
         // §5.3 makes a refusal ordinary, but it is not an answer. The rule is the newest of the
@@ -86,16 +96,16 @@ internal static class DirectoryAge
         // inside it while the parent's timestamp sits still, and Tier 3 shows that age beside a row
         // whose loss is permanent. So §7's column goes blank, for the reason
         // DeclaredLocation.ReportsAge gives for a location that cannot be dated one level down.
-        return listing.Outcome is PathPresence.Present ? new DateTime(newest, DateTimeKind.Utc) : null;
+        return listing.Outcome is PathPresence.Present ? OneLevelAge.ToUtc(newest) : null;
     }
 
     /// <summary>
     /// The age of each of <paramref name="directories"/>, by <see cref="Of(string, CancellationToken)"/>,
     /// in their order.
     ///
-    /// <para><b>Several at once, bounded by the disk's own number</b> (G4). One row dates hundreds of
-    /// targets — a source root's <c>obj</c> folders, its <c>node_modules</c> — and each date is a
-    /// directory opened and listed, which waits on the disk. One after another, a row paid every wait
+    /// <para><b>Several at once, bounded by the disk's own number</b> (G4). A row that decides by age
+    /// dates every candidate before it measures any, a Claude Code row its session folders among them,
+    /// and each date is a directory opened and listed, which waits on the disk. One after another, a row paid every wait
     /// in turn. Here the list is worked by as many threads as a walk runs on whichever volume asked
     /// about is tuned for the most (<see cref="WalkTuning.Threads"/>), and each listing takes a slot in
     /// <see cref="ListingBudget.Shared"/> under its own volume's number, so dating shares a disk with
@@ -156,22 +166,14 @@ internal static class DirectoryAge
 
     /// <summary>
     /// The same rule, for a caller whose listings have read both halves already: the directory's own
-    /// last write from the listing of its parent, and its entries' from its own listing.
+    /// time from the listing of its parent, and its entries' from its own listing.
     /// </summary>
-    /// <param name="own">The directory's own last write.</param>
-    /// <param name="entries">The last write of each of its immediate entries, from one whole listing.</param>
-    public static DateTime Of(DateTime own, IEnumerable<DateTime> entries)
-    {
-        var newest = own;
-
-        foreach (var written in entries)
-        {
-            if (written > newest)
-            {
-                newest = written;
-            }
-        }
-
-        return newest;
-    }
+    /// <param name="own">
+    /// The newer of the directory's own creation and last-write times as a FILETIME, as
+    /// <see cref="MinimumAge.NewestFileTimeOf(FileSystemInfo)"/> gives it.
+    /// </param>
+    /// <param name="entries">The same time of each of its immediate entries, from one whole listing.</param>
+    /// <returns>The age, or null where any time was never set. See <see cref="OneLevelAge"/>.</returns>
+    public static DateTime? Of(long own, IEnumerable<long> entries) =>
+        OneLevelAge.ToUtc(entries.Aggregate(own, OneLevelAge.With));
 }
