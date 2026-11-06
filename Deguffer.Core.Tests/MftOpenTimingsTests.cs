@@ -45,18 +45,18 @@ public sealed class MftOpenTimingsTests
         Assert.NotNull(source);
         Assert.Equal(
             [
-                (MftOpenStep.BootSector, 1, (long)VolumeMftSource.BootReadBytes),
-                (MftOpenStep.FirstRecord, 1, (long)bytesPerCluster),
-                (MftOpenStep.AttributeList, 0, 0L),
-                (MftOpenStep.ExtensionRecords, 0, 0L),
-                (MftOpenStep.BitmapPlacement, 0, 0L),
+                (MftOpenStep.BootSector, 1),
+                (MftOpenStep.FirstRecord, 1),
+                (MftOpenStep.AttributeList, 0),
+                (MftOpenStep.ExtensionRecords, 0),
+                (MftOpenStep.BitmapPlacement, 0),
             ],
-            timings.Steps.Select(step => (step.Step, step.Reads, step.BytesRead)));
+            timings.Steps.Select(step => (step.Step, step.Reads)));
     }
 
     /// <summary>
     /// Record 16 straddles the first two extents, so it takes a read from each, and record 19 lies in
-    /// one: three reads, and two records' bytes, all against the extension records. The list kept
+    /// one: three reads, all against the extension records. The list kept
     /// outside record 0 is one cluster, read against the list.
     /// </summary>
     [Fact]
@@ -70,11 +70,11 @@ public sealed class MftOpenTimingsTests
 
         Assert.Equal(
             [
-                (MftOpenStep.AttributeList, 1, (long)FragmentedMftVolume.BytesPerCluster),
-                (MftOpenStep.ExtensionRecords, 3, 2L * FragmentedMftVolume.BytesPerRecord),
-                (MftOpenStep.BitmapPlacement, 0, 0L),
+                (MftOpenStep.AttributeList, 1),
+                (MftOpenStep.ExtensionRecords, 3),
+                (MftOpenStep.BitmapPlacement, 0),
             ],
-            timings.Steps.Select(step => (step.Step, step.Reads, step.BytesRead)));
+            timings.Steps.Select(step => (step.Step, step.Reads)));
     }
 
     /// <summary>A step the open stopped before is absent, not zero, so a failed open is not read as a fast one.</summary>
@@ -119,7 +119,7 @@ public sealed class MftOpenTimingsTests
             FragmentedMftVolume.BytesPerCluster,
             (first, destination) =>
             {
-                timings.Read(destination.Length);
+                timings.Read();
                 return volume.TryReadClusters(first, destination);
             },
             out _,

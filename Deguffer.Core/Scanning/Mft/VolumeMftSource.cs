@@ -114,7 +114,7 @@ public sealed partial class VolumeMftSource : IMftSource
         // sector size is not known until this read has succeeded. Microsoft's rules for an unbuffered
         // read ask for a whole number of sectors, which 512 bytes is not on a 4,096-byte-sector disk.
         using var boot = new VolumeReadBuffer(BootReadBytes);
-        timings?.Read(boot.Length);
+        timings?.Read();
 
         if (volume.Read(boot.Span, 0) != boot.Length
             || !NtfsBootSector.TryParse(boot.Span, out var geometry))
@@ -130,7 +130,7 @@ public sealed partial class VolumeMftSource : IMftSource
         // that would otherwise serve them exists.
         ClusterReader read = (first, destination) =>
         {
-            timings?.Read(destination.Length);
+            timings?.Read();
             return ReadClusters(volume, geometry.BytesPerCluster, first, destination);
         };
 
@@ -140,8 +140,9 @@ public sealed partial class VolumeMftSource : IMftSource
         var record0 = start.Span[..geometry.BytesPerFileRecord];
 
         // The slow step of the open on a busy volume. NTFS flushes the volume before a handle's first
-        // read past the boot file, whatever the read's access or offset, and the flush costs what an
-        // explicit one would: 0.3 to 1.5 s on a busy system volume, milliseconds on an idle one.
+        // read past the boot file, whatever the handle's access and wherever the read lands. The flush
+        // costs what an explicit one would: 0.3 to 1.5 s on a busy system volume, milliseconds on an
+        // idle one. Neither a handle for FILE_READ_DATA alone nor extended DASD I/O avoids it.
         if (!read(geometry.MftStartCluster, start.Span))
         {
             reason = FallbackReason.MasterFileTableIncomplete;

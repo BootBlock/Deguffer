@@ -20,8 +20,6 @@ public sealed class MftOpenTimings(TimeProvider? clock = null)
 
     private int _reads;
 
-    private long _bytes;
-
     /// <summary>Each step that ran, in the order it ran.</summary>
     public IReadOnlyList<MftOpenStepTime> Steps => _steps;
 
@@ -42,20 +40,15 @@ public sealed class MftOpenTimings(TimeProvider? clock = null)
     /// <summary>Start the clock for the first step.</summary>
     internal void Start() => _mark = _clock.GetTimestamp();
 
-    /// <summary>Count a read of <paramref name="bytes"/> against the step running now.</summary>
-    internal void Read(int bytes)
-    {
-        _reads++;
-        _bytes += bytes;
-    }
+    /// <summary>Count a read against the step running now.</summary>
+    internal void Read() => _reads++;
 
     /// <summary>Record that <paramref name="step"/> has ended, and start the clock and the counts for the next.</summary>
     internal void End(MftOpenStep step)
     {
         var now = _clock.GetTimestamp();
-        _steps.Add(new MftOpenStepTime(step, _clock.GetElapsedTime(_mark, now), _reads, _bytes));
+        _steps.Add(new MftOpenStepTime(step, _clock.GetElapsedTime(_mark, now), _reads));
         _mark = now;
         _reads = 0;
-        _bytes = 0;
     }
 }

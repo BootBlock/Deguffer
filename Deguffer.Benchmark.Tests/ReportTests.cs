@@ -367,16 +367,16 @@ public sealed class ReportTests
         open.Start();
         clock.Advance(TimeSpan.FromMilliseconds(2));
         open.End(MftOpenStep.VolumeHandle);
-        open.Read(4096);
+        open.Read();
         open.End(MftOpenStep.BootSector);
         clock.Advance(TimeSpan.FromSeconds(firstRecord));
-        open.Read(4096);
+        open.Read();
         open.End(MftOpenStep.FirstRecord);
         open.End(MftOpenStep.AttributeList);
 
         for (var i = 0; i < 40; i++)
         {
-            open.Read(4096);
+            open.Read();
         }
 
         open.End(MftOpenStep.ExtensionRecords);
