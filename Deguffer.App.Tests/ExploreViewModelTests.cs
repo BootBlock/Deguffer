@@ -592,7 +592,7 @@ public sealed class ExploreViewModelTests : IDisposable
     /// <summary>
     /// A step into another folder is a list about something else, so the rows are replaced and the
     /// list is told once. Cleared and then filled a row at a time, a step into a folder of thousands
-    /// of entries told the bound list thousands of times in one turn of the UI thread.
+    /// of entries would tell the bound list thousands of times in one turn of the UI thread.
     /// </summary>
     [Fact]
     public void AStepIntoAnotherFolderTellsTheListOnce() => UiThread.Run(async () =>

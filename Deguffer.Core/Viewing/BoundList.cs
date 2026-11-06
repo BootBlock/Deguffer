@@ -14,8 +14,8 @@ namespace Deguffer.Core.Viewing;
 /// and its scroll position and selection are about content that is no longer there, so it is reset
 /// anyway. <see cref="Collection{T}.Clear"/> followed by an insertion per row gets there through one
 /// reset and then one change per row, each of which crosses into the UI framework and is answered by
-/// the list's item collection and its panel. A step into a folder of twenty thousand entries was
-/// twenty thousand of them in one turn of the UI thread, to arrive where one reset would have.</para>
+/// the list's item collection and its panel. A step into a folder of N entries would be N + 1 of
+/// them in one turn of the UI thread, to arrive where one reset does.</para>
 /// </summary>
 public sealed class BoundList<T> : ObservableCollection<T>
 {
