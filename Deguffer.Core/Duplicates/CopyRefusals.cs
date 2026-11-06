@@ -21,6 +21,11 @@ namespace Deguffer.Core.Duplicates;
 /// every group each time it draws, and the policy asks the machine where each path is mounted. It is
 /// asked from two threads at once: the search judges each group it confirms on its own thread, while
 /// the page marks copies on the page's.</para>
+///
+/// <para>The policy is asked about the copies through <see cref="ExploreActionPolicy.JudgingFiles"/>,
+/// so where a copy's volume is mounted is asked once for each folder the copies are in rather than once
+/// for each copy. A search of a folder holding twenty thousand duplicate pairs spent most of its time
+/// on that question alone (#539).</para>
 /// </summary>
 public sealed class CopyRefusals
 {
@@ -30,12 +35,14 @@ public sealed class CopyRefusals
 
     /// <param name="policy">Explore's policy for this machine, the one the search passed over places by.</param>
     /// <param name="programs">Every folder an installed program's entry names (<see cref="CandidateFinding.ProgramFolders"/>).</param>
-    public CopyRefusals(ExploreActionPolicy policy, IReadOnlyList<ProgramFolder> programs)
+    /// <param name="copies">Every copy this will be asked about. A copy it was not given is still answered, by asking the machine.</param>
+    public CopyRefusals(ExploreActionPolicy policy, IReadOnlyList<ProgramFolder> programs, IEnumerable<DuplicateCandidate> copies)
     {
         ArgumentNullException.ThrowIfNull(policy);
         ArgumentNullException.ThrowIfNull(programs);
+        ArgumentNullException.ThrowIfNull(copies);
 
-        _policy = policy;
+        _policy = policy.JudgingFiles(copies.SelectMany(copy => copy.Names));
         _programs = programs;
     }
 

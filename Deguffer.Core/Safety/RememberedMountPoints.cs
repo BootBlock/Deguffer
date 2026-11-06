@@ -6,7 +6,8 @@ namespace Deguffer.Core.Safety;
 /// The volumes, with every place a volume is mounted asked of the machine once per volume for the
 /// life of its owner, which already keeps where each path it follows is reachable: a provider's pass,
 /// one reading of the process table, one §5.6 verification, one reading of the installed programs,
-/// one comparison of a clean's locations, and the building of one Explore policy. Every other question
+/// one comparison of a clean's locations, the building of one Explore policy, and one judgement of a
+/// duplicate search's copies. Every other question
 /// goes to the volumes it was built over, at the call.
 ///
 /// <para><b>The question is about the drive, not the path.</b> Nearly every path a pass follows is on
@@ -29,7 +30,9 @@ namespace Deguffer.Core.Safety;
 /// was followed before the new place existed and the other is named through an old place: neither
 /// then names the new one. That window is the owner's life, so only owners whose life is one
 /// operation remember. Explore's policy outlives a scan, so it remembers while it follows its rules
-/// and asks about each item live. A comparison with a folder named as text alone, such as the
+/// and asks about each item live. A duplicate search judges its copies through a copy of that policy
+/// that remembers for one judgement, which already keeps each copy's answer, and a confirmation
+/// judges them afresh. A comparison with a folder named as text alone, such as the
 /// account's own folders, has no second followed side, which is why the executor's last check before
 /// a removal asks the machine. A clean runs long after the pass that planned it, so its §5.6
 /// verification remembers for that verification alone, never from the pass.</para>

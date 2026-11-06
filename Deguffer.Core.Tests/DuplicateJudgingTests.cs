@@ -25,8 +25,14 @@ public sealed class DuplicateJudgingTests : DuplicateMarkingScene
     {
         var asked = 0;
         var nowhere = ResolvedPlaces.Resolve([], _tree.Volumes, FileInformation.Default);
+        DuplicateCandidate[] files =
+        [
+            Copy(Path.Combine(Documents, "a.jpg")),
+            Copy(Path.Combine(Downloads, "a.jpg")),
+            Copy(Path.Combine(Desktop, "a.jpg")),
+        ];
         var keeping = new CopyKeeping(
-            new CopyRefusals(_tree.Policy(), []),
+            new CopyRefusals(_tree.Policy(), [], files),
             nowhere,
             nowhere,
             nowhere,
@@ -37,12 +43,6 @@ public sealed class DuplicateJudgingTests : DuplicateMarkingScene
                 asked++;
                 return StorageMedia.Nvme;
             });
-        DuplicateCandidate[] files =
-        [
-            Copy(Path.Combine(Documents, "a.jpg")),
-            Copy(Path.Combine(Downloads, "a.jpg")),
-            Copy(Path.Combine(Desktop, "a.jpg")),
-        ];
 
         var judged = GroupJudgement.Of(GroupOf(files), keeping);
 

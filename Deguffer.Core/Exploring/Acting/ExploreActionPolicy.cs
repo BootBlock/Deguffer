@@ -118,6 +118,35 @@ public sealed class ExploreActionPolicy
     }
 
     /// <summary>
+    /// This policy's rules, followed once when it was built, with each item asked about through
+    /// <paramref name="volumes"/>.
+    /// </summary>
+    private ExploreActionPolicy(ExploreActionPolicy rules, IVolumeInventory volumes)
+    {
+        _regions = rules._regions;
+        _toolRoots = rules._toolRoots;
+        _probedRoots = rules._probedRoots;
+        _held = rules._held;
+        _fileSystem = rules._fileSystem;
+        _volumes = volumes;
+        _finalPlaces = new FinalPlaces(_fileSystem, volumes);
+    }
+
+    /// <summary>
+    /// This policy for a caller that asks about <paramref name="files"/> alone, many to a folder, for
+    /// the life of one judgement that already keeps each answer: where each file's volume is mounted
+    /// is asked once for its folder (<see cref="FileMountPoints"/>) rather than once for each file,
+    /// and every place each volume is mounted once for the volume (<see cref="RememberedMountPoints"/>).
+    ///
+    /// <para><b>A copy of this policy, never a change to it.</b> Explore asks the policy itself, and
+    /// asks again immediately before a removal, so what it is told is never older than the
+    /// question.</para>
+    /// </summary>
+    /// <param name="files">Every file the caller will ask about, in display form. Any other path is asked about live.</param>
+    internal ExploreActionPolicy JudgingFiles(IEnumerable<string> files) =>
+        new(this, new FileMountPoints(new RememberedMountPoints(_volumes), files));
+
+    /// <summary>
     /// The policy for this machine: Windows' own directories, the signed-in user's profile, Outlook's
     /// mail stores, and every §5.2 declaration the providers make. What sits at the top of a volume
     /// is decided by asking <paramref name="volumes"/> where the path's volume is mounted, at the

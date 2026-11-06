@@ -84,8 +84,9 @@ internal sealed class KeepingReader
         // Asked once a volume here, off the UI thread, so the questions a page asks as it draws never
         // wait on a device.
         Dictionary<string, StorageMedia> classes = new(StringComparer.OrdinalIgnoreCase);
+        IReadOnlyList<DuplicateCandidate> judged = [.. copies];
 
-        foreach (var volume in copies.Select(copy => copy.Volume).Distinct())
+        foreach (var volume in judged.Select(copy => copy.Volume).Distinct())
         {
             classes[volume.RootPath] = media(volume).Class;
         }
@@ -112,7 +113,7 @@ internal sealed class KeepingReader
             : null;
 
         return new CopyKeeping(
-            new CopyRefusals(policy, programs),
+            new CopyRefusals(policy, programs, judged),
             temporary,
             cleaned,
             cloudFolders,
