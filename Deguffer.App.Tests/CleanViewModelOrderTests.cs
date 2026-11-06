@@ -24,8 +24,7 @@ public class CleanViewModelOrderTests
         gamma.Steps = [Rows.Folder("g", 900)];
         alpha.Steps = [Rows.Folder("a", 10)];
         beta.Steps = [Rows.Folder("b", 450)];
-        alpha.WhilePlanning = () => Thread.Sleep(120);
-        beta.WhilePlanning = () => Thread.Sleep(60);
+        page.FinishIn(gamma, beta, alpha);
         var placed = new List<int>();
         page.ViewModel.Findings.CollectionChanged += (_, e) =>
         {
