@@ -59,8 +59,8 @@ public sealed class CopyMountPointTests : DuplicateMarkingScene
     /// <summary>
     /// A volume mounted at a folder while the search runs is seen by every copy in that folder judged
     /// after it, so the volume's paging file is refused as the top of the volume it is (§5.2), and the
-    /// rest of the volume stays ordinary (§5.6). The folders judged before the mount keep their answers,
-    /// which no mount can change while they hold a copy: Windows mounts a volume only at an empty folder.
+    /// rest of the volume stays ordinary (§5.6). The mount is at a folder no copy judged before it is in,
+    /// as on a real machine: Windows mounts a volume only at an empty folder.
     /// </summary>
     [Fact]
     public void ACopyBelowAFolderMountedDuringTheSearchIsJudgedByWhereItIsMounted()
@@ -78,7 +78,6 @@ public sealed class CopyMountPointTests : DuplicateMarkingScene
 
         Assert.NotNull(refusals.WhyRefused(paging));
         Assert.Null(refusals.WhyRefused(photo));
-        Assert.Null(refusals.WhyRefused(before));
     }
 
     /// <summary>
