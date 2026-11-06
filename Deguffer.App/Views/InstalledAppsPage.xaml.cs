@@ -27,7 +27,8 @@ public sealed partial class InstalledAppsPage : Page
                 new EntryRemover(registry, reader, backups),
                 new BackupRestorer(registry, backups),
                 new ProgramUninstaller(reader, ShellUninstallLauncher.Default, NativeSystemTool.In(SystemDirectories.Current, "msiexec.exe")),
-                backups,
+                backups.Folder,
+                backups.List,
 
                 // Built per ask, so the dialog never holds a XamlRoot from before a theme change.
                 () => new ContentDialogInstalledAppsConfirmation(XamlRoot, ActualTheme),
@@ -70,7 +71,7 @@ public sealed partial class InstalledAppsPage : Page
         }
 
         _hasRead = true;
-        ViewModel.Actions.ShowBackups();
+        _ = ViewModel.Actions.ShowBackupsAsync();
         _ = ViewModel.RefreshAsync();
     }
 

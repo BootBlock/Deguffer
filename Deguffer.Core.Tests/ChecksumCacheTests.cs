@@ -53,6 +53,29 @@ public sealed class ChecksumCacheTests : IDisposable
     }
 
     /// <summary>
+    /// The first and last blocks of a file larger than the two are read by XXH128 whatever the
+    /// search's checksum, so their value is kept under XXH128 and serves a search by any checksum. A
+    /// search by SHA-512 after one by SHA-256 reads no larger file's ends, only the full content of
+    /// the files whose ends matched and the small files, whose value is the group's by SHA-512.
+    /// </summary>
+    [Fact]
+    public async Task TheEndsOfALargerFileAreKeptOnceForEveryChecksum()
+    {
+        var (a, _) = WriteTree();
+        var cache = new ChecksumCache(Store, _clock);
+
+        await SearchAsync(cache, ChecksumAlgorithm.Sha256);
+        _read = 0;
+        var second = await SearchAsync(cache, ChecksumAlgorithm.Sha512);
+
+        Assert.NotNull(cache.Find(Describe(a), ContentPart.Ends, ChecksumAlgorithm.XxHash128));
+        Assert.Null(cache.Find(Describe(a), ContentPart.Ends, ChecksumAlgorithm.Sha256));
+        Assert.Equal((3 * 3 * Block) + (2 * 5000), _read);
+        Assert.All(second.Groups, group => Assert.Equal(ChecksumAlgorithm.Sha512, group.Checksum!.Value.Algorithm));
+        Assert.Equal(2, second.Groups.Count);
+    }
+
+    /// <summary>
     /// A file whose bytes were changed and whose last-modified time was then put back, as a program
     /// that restores times does, has the same length and last-modified time as before: its change
     /// time is what moved, so its old checksum is not used and it no longer matches its copy.
@@ -592,21 +615,24 @@ public sealed class ChecksumCacheTests : IDisposable
         return (a, copy);
     }
 
-    private Task<DuplicateSearchResult> SearchAsync(ChecksumCache cache) => SearchAsync(_tree, cache);
+    private Task<DuplicateSearchResult> SearchAsync(ChecksumCache cache, ChecksumAlgorithm algorithm = ChecksumAlgorithm.XxHash128) =>
+        SearchAsync(_tree, cache, algorithm);
 
     /// <summary>A content search through <paramref name="cache"/>, once the store write it started has ended.</summary>
-    private async Task<DuplicateSearchResult> SearchAsync(DuplicateTree tree, ChecksumCache cache)
+    private async Task<DuplicateSearchResult> SearchAsync(
+        DuplicateTree tree, ChecksumCache cache, ChecksumAlgorithm algorithm = ChecksumAlgorithm.XxHash128)
     {
-        var result = await AnswerAsync(tree, cache, Counted(Reader(cache)));
+        var result = await AnswerAsync(tree, cache, Counted(Reader(cache)), algorithm);
         await cache.WhenStoredAsync(default);
 
         return result;
     }
 
     /// <summary>A content search through <paramref name="cache"/>, as soon as it answers.</summary>
-    private static Task<DuplicateSearchResult> AnswerAsync(DuplicateTree tree, ChecksumCache cache, ReadContent read) =>
+    private static Task<DuplicateSearchResult> AnswerAsync(
+        DuplicateTree tree, ChecksumCache cache, ReadContent read, ChecksumAlgorithm algorithm = ChecksumAlgorithm.XxHash128) =>
         tree.Searcher(read, cache).SearchAsync(
-            new DuplicateSearch(MatchCriteria.Content, [new SearchLocation(Path.Combine(tree.Top, "Data"))]), tree.Policy());
+            new DuplicateSearch(MatchCriteria.Content, [new SearchLocation(Path.Combine(tree.Top, "Data"))], algorithm), tree.Policy());
 
     /// <summary>Every last-used day the store holds.</summary>
     private IReadOnlyList<int> StoredDays() =>

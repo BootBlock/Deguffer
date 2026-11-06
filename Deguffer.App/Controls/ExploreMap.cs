@@ -123,6 +123,9 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private int _picturesHanded;
 
+    /// <summary>How long each picture handed waits for its first drawing on screen, for a trace.</summary>
+    private readonly PictureArrivals _arrivals = new(RenderingClock.Current);
+
     /// <summary>Whether the left or middle button is dragging the picture. See <see cref="MapDrag"/>.</summary>
     private readonly MapDrag _drag = new();
 
@@ -774,6 +777,7 @@ public sealed class ExploreMap : UserControl
         if (change.Another)
         {
             _picturesHanded++;
+            _arrivals.Handed(change.Asked);
 
             // The camera's drag ends with the map's, where it was held, and the new picture is drawn there.
             if (EndDrag())
@@ -1249,6 +1253,7 @@ public sealed class ExploreMap : UserControl
         var earlier = _drawing;
 
         _drawing = drawing;
+        _arrivals.Presented();
 
         // A drawing that cannot be zoomed shows the whole picture whatever was asked, and the zoom
         // has to agree with it: the screen is placed, and every click resolved, by what was drawn

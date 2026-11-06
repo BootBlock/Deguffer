@@ -38,7 +38,8 @@ public sealed class BackupRestorerTests : IDisposable
     {
         var path = Path.Combine(Folder, name);
         File.WriteAllText(path, text, Encoding.Unicode);
-        return RegistryBackups.Describe(path)!;
+        Assert.True(RegistryBackupListing.TryDescribe(new FileInfo(path), out var backup));
+        return backup!;
     }
 
     [Fact]

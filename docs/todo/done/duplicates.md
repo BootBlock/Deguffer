@@ -623,6 +623,15 @@ past 500,000 the values used longest ago go first. The page's save dialog is the
 `FileSavePicker`, for the reason the folder picker is (`CsvFileDialog`), and the file is written
 beside the one chosen under a name of its own and moved over it once whole.
 
+Changed since, by [#508](https://github.com/BootBlock/Deguffer/issues/508): the first and last
+blocks of a file longer than the two are read by XXH128 whatever the search's checksum
+(`ContentReader.AlgorithmOf`), because their value only decides which files are read in full and is
+never shown, and the slower checksums set the pace of that stage on a solid-state disk. So their
+kept value is always XXH128's and serves a search by any checksum, and a value of that part kept
+under another checksum before the change is no longer found and goes under the 180-day bound. A file
+no longer than the two blocks, and every full read, keep the checksum chosen, because their value is
+the group's.
+
 Proves: a second search over an unchanged tree reads no file in full; a change to any key field
 misses the cache; the store holds no path (a test reads it); a FAT volume is never cached; a corrupt
 store loads empty; the CSV round-trips hostile paths and a long path whole. Added here: a file
