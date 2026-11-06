@@ -123,7 +123,17 @@ use, counted once before the first run, and the bytes of free records each run r
 what reading across free records cost the run. That last figure holds only for a complete run.
 They also report how many reads of clusters each run made, the bitmap's and those of the attribute
 lists kept outside the table, and how long the lists took from the first read starting to the last
-ending: the time the list reads add after the first pass.
+ending: the time the list reads add after the first pass. The mean read is the bytes of records
+over the reads of records: a table in many pieces, or with many runs of free records, reads in
+smaller pieces.
+
+The indented rows split each run into the stages it ran, in order: reading the bitmap, the first
+pass (reads and parse together), the attribute lists kept outside the table, the records held back
+for them, and then, for the index and Explore, placing each file's other names and building the
+index's child links or Explore's tree. The last three run once the drive has
+finished, so a slow one is work, not the drive. "Records deferred" and "links placed" are
+the counts those stages scale with. A stage the first run stopped before is not listed, and one
+a later run stopped before reads as zero.
 
 To report a result, open an issue and paste the output as it stands. It names the drive letter and
 the file system, and never a path, a volume label, a user or a machine. Add the kind of drive

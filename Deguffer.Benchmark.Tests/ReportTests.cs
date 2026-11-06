@@ -298,7 +298,7 @@ public sealed class ReportTests
 
     /// <summary>
     /// Where a table route's time went, stage by stage, so a run held up by one stage on one thread
-    /// reads apart from one held up by the drive. Indented under the elapsed time they divide.
+    /// reads apart from one held up by the drive. Indented, as parts of the elapsed time.
     /// </summary>
     [Fact]
     public void ATableRouteReportsEachStageItRanInOrder()

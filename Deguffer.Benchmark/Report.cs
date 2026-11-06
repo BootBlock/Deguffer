@@ -126,16 +126,22 @@ internal static class Report
             Row(text, StageName(stage), Duration(timed.Elapsed.TotalSeconds), Over(later, r => StageSeconds(r, stage), Duration));
         }
 
-        Row(text, "records deferred", Count(stages.DeferredRecords), Over(later, r => r.Tally.Stages?.DeferredRecords ?? 0, Count));
+        Row(text, "records deferred", Count(stages.DeferredRecords), Over(later, r => StagesOf(r).DeferredRecords, Count));
 
         if (stages.Stages.Any(timed => timed.Stage == MftBuildStage.LinkPlacement))
         {
-            Row(text, "links placed", Count(stages.LinksPlaced), Over(later, r => r.Tally.Stages?.LinksPlaced ?? 0, Count));
+            Row(text, "links placed", Count(stages.LinksPlaced), Over(later, r => StagesOf(r).LinksPlaced, Count));
         }
     }
 
-    private static double StageSeconds(RunSample run, MftBuildStage stage) =>
-        run.Tally.Stages?.Of(stage).TotalSeconds ?? 0;
+    private static double StageSeconds(RunSample run, MftBuildStage stage) => StagesOf(run).Of(stage).TotalSeconds;
+
+    /// <summary>
+    /// A later run's stages. Every run of a table route is timed, so where the first run carries its
+    /// stages and a later run does not, the runs were not measured alike and no median of them holds.
+    /// </summary>
+    private static MftStageTimings StagesOf(RunSample run) =>
+        run.Tally.Stages ?? throw new InvalidOperationException("Every run of a table route carries its stage timings.");
 
     private static string StageName(MftBuildStage stage) => stage switch
     {
