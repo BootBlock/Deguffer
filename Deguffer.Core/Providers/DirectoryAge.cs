@@ -60,7 +60,7 @@ internal static class DirectoryAge
     /// </summary>
     private static readonly FileSystemEnumerable<long>.FindTransform NewestFileTime =
         static (ref FileSystemEntry entry) =>
-            MinimumAge.NewestFileTimeOf(entry.CreationTimeUtc.ToFileTime(), entry.LastWriteTimeUtc.ToFileTime());
+            MinimumAge.NewestFileTimeOf(entry.CreationTimeUtc.UtcDateTime, entry.LastWriteTimeUtc.UtcDateTime);
 
     /// <summary>
     /// The age of <paramref name="directory"/>, or null where it is absent, refused, or could not be

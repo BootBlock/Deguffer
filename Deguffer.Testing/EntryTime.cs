@@ -22,6 +22,8 @@ public static class EntryTime
     {
         var extended = LongPath.Extended(path);
 
+        // A directory's own times matter to a provider that judges an empty folder by them, and
+        // the File calls refuse a directory.
         if (Directory.Exists(extended))
         {
             Directory.SetCreationTimeUtc(extended, created);

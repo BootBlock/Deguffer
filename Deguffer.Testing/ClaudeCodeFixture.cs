@@ -332,8 +332,7 @@ public sealed class ClaudeCodeFixture
             Path.Combine(ShellSnapshots, $"snapshot-bash-{new DateTimeOffset(writtenUtc).ToUnixTimeMilliseconds()}-{suffix}.sh"),
             256);
 
-        File.SetCreationTimeUtc(LongPath.Extended(path), writtenUtc);
-        File.SetLastWriteTimeUtc(LongPath.Extended(path), writtenUtc);
+        EntryTime.Set(path, writtenUtc);
 
         return path;
     }
@@ -376,10 +375,7 @@ public sealed class ClaudeCodeFixture
             return;
         }
 
-        var when = DateTime.UtcNow - by;
-
-        Directory.SetCreationTimeUtc(LongPath.Extended(path), when);
-        Directory.SetLastWriteTimeUtc(LongPath.Extended(path), when);
+        EntryTime.Set(path, DateTime.UtcNow - by);
     }
 
     private static string FileTime(DateTimeOffset instant) =>
