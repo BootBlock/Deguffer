@@ -30,8 +30,6 @@ internal sealed class CushionRenderer : IDisposable
     /// <summary>The bytes of the shader's constant buffer, which <see cref="CushionConstants"/> fills.</summary>
     private static readonly int ConstantsSize = ConstantBuffer.SizeOf<CushionConstants>();
 
-    private static readonly Lazy<(byte[] Vertices, byte[] Pixels)> Shaders = new(Compile);
-
     /// <summary>
     /// The shader's inputs, each read from where its field is in a quad: the four edges as one vector
     /// from the first, and the colour's three bytes with <see cref="CushionQuad.Framed"/> after them as
@@ -71,7 +69,7 @@ internal sealed class CushionRenderer : IDisposable
 
     private CanvasBitmap? _bitmap;
 
-    private CushionRenderer(CanvasDevice device, IDevice direct3D)
+    private CushionRenderer(CanvasDevice device, IDevice direct3D, CushionShaders shaders)
     {
         _device = device;
         _direct3D = direct3D;
@@ -79,7 +77,7 @@ internal sealed class CushionRenderer : IDisposable
 
         OnSoftware = IsSoftware(direct3D);
 
-        var (vertices, pixels) = Shaders.Value;
+        var (vertices, pixels) = shaders.Value;
 
         Check(_direct3D.CreateVertexShader(vertices, (nuint)vertices.Length, 0, out _vertexShader));
         Check(_direct3D.CreatePixelShader(pixels, (nuint)pixels.Length, 0, out _pixelShader));
@@ -100,10 +98,10 @@ internal sealed class CushionRenderer : IDisposable
     public CanvasBitmap? Shaded => _bitmap;
 
     /// <summary>
-    /// A renderer on <paramref name="device"/>, or null where the device cannot run its shaders: one
-    /// below Direct3D feature level 10, which the CPU paints for instead.
+    /// A renderer on <paramref name="device"/> with <paramref name="shaders"/>, or null where the device
+    /// cannot run them: one below Direct3D feature level 10, which the CPU paints for instead.
     /// </summary>
-    public static CushionRenderer? For(CanvasDevice device)
+    public static CushionRenderer? For(CanvasDevice device, CushionShaders shaders)
     {
         var direct3D = DeviceUnder(device);
 
@@ -113,7 +111,7 @@ internal sealed class CushionRenderer : IDisposable
             return null;
         }
 
-        return new CushionRenderer(device, direct3D);
+        return new CushionRenderer(device, direct3D, shaders);
     }
 
     /// <summary>
@@ -205,77 +203,6 @@ internal sealed class CushionRenderer : IDisposable
         finally
         {
             Marshal.Release(unknown);
-        }
-    }
-
-    /// <summary>
-    /// Compile the shaders once for the process, with <see cref="CushionMacros"/>: the code is the same
-    /// on every device. A failure here is a defect in the shader or in the macros, raised with what the
-    /// compiler said.
-    /// </summary>
-    private static (byte[] Vertices, byte[] Pixels) Compile()
-    {
-        using var stream = typeof(CushionRenderer).Assembly.GetManifestResourceStream("Deguffer.App.Controls.Cushions.hlsl")
-            ?? throw new InvalidOperationException("The cushion shader is not embedded in the application.");
-        using var copy = new MemoryStream();
-
-        stream.CopyTo(copy);
-
-        var source = copy.ToArray();
-        var macros = new ShaderMacro[CushionMacros.All.Count + 1];
-
-        try
-        {
-            for (var i = 0; i < CushionMacros.All.Count; i++)
-            {
-                var (name, definition) = CushionMacros.All[i];
-                macros[i] = new ShaderMacro { Name = Marshal.StringToHGlobalAnsi(name), Definition = Marshal.StringToHGlobalAnsi(definition) };
-            }
-
-            return (Compile(source, macros, "vs", "vs_4_0"), Compile(source, macros, "ps", "ps_4_0"));
-        }
-        finally
-        {
-            foreach (var macro in macros)
-            {
-                Marshal.FreeHGlobal(macro.Name);
-                Marshal.FreeHGlobal(macro.Definition);
-            }
-        }
-    }
-
-    private static byte[] Compile(byte[] source, ShaderMacro[] macros, string entry, string target)
-    {
-        var result = D3DCompile(source, (nuint)source.Length, "Cushions.hlsl", macros, 0, entry, target, CompileFlags, 0, out var code, out var errors);
-
-        try
-        {
-            if (result < 0 || code is null)
-            {
-                throw new InvalidOperationException(
-                    $"The cushion shader's {entry} did not compile (0x{result:X8}): {Text(errors)}");
-            }
-
-            var bytes = new byte[(int)code.GetBufferSize()];
-            Marshal.Copy(code.GetBufferPointer(), bytes, 0, bytes.Length);
-
-            return bytes;
-        }
-        finally
-        {
-            Release(code);
-            Release(errors);
-        }
-    }
-
-    private static string Text(IBlob? blob) =>
-        blob is null ? "no message" : Marshal.PtrToStringAnsi(blob.GetBufferPointer(), (int)blob.GetBufferSize()).TrimEnd('\0', '\n', '\r');
-
-    private static void Release(IBlob? blob)
-    {
-        if (blob is not null)
-        {
-            Marshal.ReleaseComObject(blob);
         }
     }
 

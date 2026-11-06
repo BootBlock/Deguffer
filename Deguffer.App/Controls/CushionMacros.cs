@@ -7,7 +7,7 @@ namespace Deguffer.App.Controls;
 /// <summary>
 /// The macros <c>Cushions.hlsl</c> is compiled with: Core's numbers for the picture, and the layout
 /// of the constants the renderer fills, so the shader states none of them itself. A name the shader
-/// reads and this does not define fails the compilation, which <see cref="CushionRenderer"/> raises
+/// reads and this does not define fails the compilation, which <see cref="CushionShaders"/> raises
 /// with what the compiler said.
 ///
 /// <para>Each macro is named for the member it is read from, so the shader says where its numbers

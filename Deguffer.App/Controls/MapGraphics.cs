@@ -35,6 +35,9 @@ internal sealed class MapGraphics
     /// </summary>
     private readonly byte[] _staged = new byte[PaintOrder.RegionSize * PaintOrder.RegionSize * 4];
 
+    /// <summary>The shaders every renderer here is made with.</summary>
+    private readonly CushionShaders _shaders;
+
     /// <summary>The GPU bitmap a region is staged in on its way to a surface, made once per device.</summary>
     private CanvasBitmap? _staging;
 
@@ -45,11 +48,23 @@ internal sealed class MapGraphics
     /// </summary>
     private Lazy<CushionRenderer?> _renderer;
 
-    private MapGraphics(CompositionDevice device)
+    /// <summary>
+    /// The graphics for <paramref name="device"/>, whose renderers are made with
+    /// <paramref name="shaders"/>.
+    ///
+    /// <para>The shaders start compiling here, on a worker. A map makes its graphics as it is
+    /// constructed, so the compilation overlaps whatever comes before its first picture, such as the
+    /// rest of its page being built and its tree being scanned or read, rather than starting on the UI
+    /// thread when that picture asks whether it can be shaded.</para>
+    /// </summary>
+    internal MapGraphics(CompositionDevice device, CushionShaders shaders)
     {
         Device = device;
         Geometry = new MapGeometry(() => device.Current);
+        _shaders = shaders;
         _renderer = RendererOnDevice();
+
+        _ = shaders.Warm();
 
         device.Lost += OnDeviceLost;
     }
@@ -81,7 +96,7 @@ internal sealed class MapGraphics
 
     /// <summary>The graphics for <paramref name="compositor"/>, made the first time a map asks.</summary>
     public static MapGraphics For(Compositor compositor) =>
-        Shared.GetValue(compositor, static compositor => new MapGraphics(CompositionDevice.For(compositor)));
+        Shared.GetValue(compositor, static compositor => new MapGraphics(CompositionDevice.For(compositor), CushionShaders.Default));
 
     /// <summary>
     /// A surface for a canvas of this size, transparent until a region is written into it.
@@ -301,7 +316,7 @@ internal sealed class MapGraphics
 
     /// <summary>The renderer for the device drawn through now, made when it is first asked for.</summary>
     private Lazy<CushionRenderer?> RendererOnDevice() =>
-        new(() => Device.UnlessLost(CushionRenderer.For), LazyThreadSafetyMode.None);
+        new(() => Device.UnlessLost(device => CushionRenderer.For(device, _shaders)), LazyThreadSafetyMode.None);
 
     /// <summary>The device was lost: let go of everything made on it, to be made again on the next.</summary>
     private void OnDeviceLost(object? sender, EventArgs args)
