@@ -16,8 +16,10 @@ public sealed class ReportTests
 
     private static readonly MeasuredPlace Place = new("C:", DriveType.Fixed, "NTFS");
 
+    private static readonly CollectorFacts Collector = new(Server: false, Concurrent: true, Gen0Size: null);
+
     private static readonly MachineFacts Machine =
-        new(16, new Version(10, 0, 26100), new Version(10, 0, 0), Architecture.X64, Elevated: true, DebugBuild: false);
+        new(16, new Version(10, 0, 26100), new Version(10, 0, 0), Architecture.X64, Elevated: true, DebugBuild: false, Collector);
 
     [Fact]
     public void TheFirstRunIsReportedApartFromTheMedianOfTheRest()
@@ -372,6 +374,63 @@ public sealed class ReportTests
 
         var run = Run(0.5 + 0.001 + firstPass + deferred + 0.25);
         return run with { Tally = run.Tally with { Stages = timings, OpenTime = TimeSpan.FromSeconds(0.5) } };
+    }
+
+    /// <summary>
+    /// A race reports each part of its rounds and how many times as long each took raced, and what
+    /// the collector did while each walk ran. A round is several parts, so it has no rate, and the race
+    /// lists no folders of its own beside the walk's count.
+    /// </summary>
+    [Fact]
+    public void ARaceReportsEachPartAndHowMuchTheOtherSlowedIt()
+    {
+        var text = Render(
+            Route.Race,
+            Raced(walkAlone: 2, walkRaced: 5, buildAlone: 4, buildRaced: 5, pausedRaced: 1.5),
+            Raced(walkAlone: 1, walkRaced: 2, buildAlone: 3, buildRaced: 3.3, pausedRaced: 0.25),
+            Raced(walkAlone: 1, walkRaced: 3, buildAlone: 3, buildRaced: 3.6, pausedRaced: 0.75),
+            Raced(walkAlone: 1, walkRaced: 4, buildAlone: 3, buildRaced: 3.9, pausedRaced: 0.5));
+
+        Assert.Equal("walk alone         2.000 s         1.000 s (1.000 s to 1.000 s)", Line(text, "walk alone"));
+        Assert.Equal("walk raced         5.000 s         3.000 s (2.000 s to 4.000 s)", Line(text, "walk raced"));
+        Assert.Equal("build raced        5.000 s         3.600 s (3.300 s to 3.900 s)", Line(text, "build raced"));
+
+        var slowdowns = text.Split('\n').Where(line => line.StartsWith("  times as long ", StringComparison.Ordinal)).ToArray();
+        Assert.Equal(
+            ["  times as long    2.50x           3.00x (2.00x to 4.00x)", "  times as long    1.25x           1.20x (1.10x to 1.30x)"],
+            slowdowns);
+
+        var paused = text.Split('\n').Where(line => line.StartsWith("  paused ", StringComparison.Ordinal)).ToArray();
+        Assert.Equal("  paused           1.500 s         500.0 ms (250.0 ms to 750.0 ms)", paused[1]);
+
+        Assert.Equal("candidates         100             100 (100 to 100)", Line(text, "candidates"));
+        Assert.DoesNotContain("elapsed", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("folders at once", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("MiB/s read", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("full collections", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("processors busy", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>Two results are comparable only under the same collector, so every result names it.</summary>
+    [Fact]
+    public void EveryResultNamesItsCollector()
+    {
+        Assert.Equal("collector          workstation, background collections", Line(Render(Route.Walk, Run(1)), "collector"));
+        Assert.Equal(
+            "collector          server, no background collections, generation 0 budget 0x4000000",
+            Line(Report.Render(Route.Walk, Tuning, [Place], Machine with { Collector = new(true, false, "0x4000000") }, [Run(1)]), "collector"));
+    }
+
+    private static RunSample Raced(double walkAlone, double walkRaced, double buildAlone, double buildRaced, double pausedRaced)
+    {
+        static RacePart Part(double seconds, double paused = 0) =>
+            new(TimeSpan.FromSeconds(seconds), new HeapCounters(TimeSpan.FromSeconds(paused), 12, 3, 1, 64 << 20), 100, Complete: true);
+
+        var race = new RaceTimes(
+            Route.Sources, Part(walkAlone), Part(buildAlone), Part(walkRaced, pausedRaced), Part(buildRaced), Reversed: false);
+        var run = Run(walkAlone + walkRaced + buildAlone);
+
+        return run with { Tally = run.Tally with { Race = race } };
     }
 
     private static RunSample Run(

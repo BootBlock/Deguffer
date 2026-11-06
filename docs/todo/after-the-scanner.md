@@ -492,6 +492,47 @@ investigated. Not measured: a spinning disk, a removable drive, a network share 
 > **Since this was written:** #477 states the two candidate causes and the experiment that separates
 > them, as part of [scan-speed.md](scan-speed.md).
 
+**Why the two slow each other, measured (#477).** The benchmark's `race` route reproduces the race:
+the search for build outputs over a folder on the source volume (1.23 million records in use, NVMe)
+started at the same moment as an index build, and each of the two alone, alternating the order every
+round, with each timed walk following an untimed walk of its own. Elevated, on the same machine,
+while other work ran. Medians of the later rounds:
+
+| Build of | Warm: raced against alone | Cold: raced against alone |
+| --- | --- | --- |
+| The folder's own volume | 1.24 to 1.66 times, in four configurations | 1.34 times |
+| The same, one read in flight | 1.48 times | 1.35 times |
+| Another volume on the same disk | 0.76 to 1.02 times | 2.29 times |
+| The same, one read in flight | | 1.74 to 1.82 times |
+| A volume on another disk | 1.05 to 1.14 times | 1.02 to 1.17 times |
+
+Cold means a command given to `--before-part` emptied the system file cache before each part.
+
+- **(a) The collector is not the cause.** While a raced walk ran, the process was paused for 1 to
+  23 ms warm and at most 192 ms cold, against losses of 250 ms to 2.4 s. Raising the generation 0
+  budget (`DOTNET_GCgen0size`) did not remove the loss, nor, in the route's first version, did the
+  server collector.
+  Under `dotnet-counters`, a whole warm race spent at most 66 ms of any second paused. #482 and #483
+  still cut what a build allocates, but they will not recover the raced walk's time.
+- **(b) The drive queue is a cause only cold, and only for another volume's build.** Warm, a build
+  of another volume on the same disk cost the walk nothing. Cold, it made the walk 2.29 times as
+  long, and one read in flight brought that to 1.74 to 1.82. On the walked volume itself, one read in flight
+  changed nothing, warm or cold. #478, a lower priority for the build's reads, can help where the
+  builds of other volumes on the walk's disk are still reading, and not otherwise.
+- **(c) A cause neither hypothesis named.** A read through a volume's handle makes the next walk of
+  that volume slower, with no race at all, and that walk reads almost nothing from the drive. With
+  nothing beside it, the walk took 0.58 s after another walk, 1.18 s after an index build of its own
+  volume, 1.03 s after a `table` read of it, which keeps nothing, 0.60 s after a build of another
+  volume on the same disk, and 1.11 s after one 1 MiB read through its own handle. 1 GiB cost no
+  more than 1 MiB, and opening the handle without reading cost nothing. Under the kernel logger the
+  benchmark read nothing from the volume during the slow walk, and the System process, which serves
+  paging reads, read 2 MiB from it in that window against 4.8 MiB in a warm walk's. Every build reads its table
+  that way, so the walk raced against its own volume's build pays this. Why is not known: #544.
+
+The earlier "about half the speed" was measured in a planning pass, where a walk can follow a build
+of its own volume. The first version of the route let a timed walk follow one too, and read 2.6
+times; once each timed walk followed a walk of its own, the warm figure was 1.24 to 1.66 times.
+
 ## 8. Let a root probe tell "not there" from "I was refused" ✅ done
 
 **Outcome: the probe answers in three states, and the decision the item was waiting on went the

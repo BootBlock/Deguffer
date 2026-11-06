@@ -56,13 +56,32 @@ internal static class Tuning
                 : "the walk a scan ships with, each file read through a handle";
         }
 
-        var listing = string.Create(
-            CultureInfo.InvariantCulture,
-            $"{walk.Threads} folders listed at once, {walk.ListingBufferBytes / 1024} KiB listing buffer");
+        var listing = Listing(walk);
 
         // Stated because it is the value the Explore walk is timed both ways with.
         return route is Route.ExploreWalk
             ? listing + (snapshots ? ", snapshots on" : ", snapshots off")
             : listing;
     }
+
+    /// <summary>
+    /// The race's values: how the folder was walked, which volume's index was built beside it and
+    /// where that volume is, how the build read, and whether a command ran before each part. The
+    /// command itself is never stated, because it can name a path.
+    /// </summary>
+    public static string DescribeRace(Route racer, WalkTuning walk, char drive, DiskRelation relation, TableTuning table, bool beforePart)
+    {
+        var walked = racer is Route.Walk ? "the walk" : "the search for build outputs";
+        var between = beforePart ? "a command run before each part" : "nothing run between parts";
+
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"{walked}, {Listing(walk)}, raced against the index of {char.ToUpperInvariant(drive)}:, {relation.Describe()}, " +
+            $"{table.ReadBytes / 1024} KiB reads, {table.ReadsInFlight} in flight, parsed on {table.ParseThreads} threads, " +
+            $"{table.ListReadsInFlight} list reads in flight, {between}");
+    }
+
+    private static string Listing(WalkTuning walk) => string.Create(
+        CultureInfo.InvariantCulture,
+        $"{walk.Threads} folders listed at once, {walk.ListingBufferBytes / 1024} KiB listing buffer");
 }
