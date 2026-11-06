@@ -332,7 +332,16 @@ public class VolumeMftSourceTests
         public ValueTask<int> ReadAsync(Memory<byte> destination, long offset, CancellationToken ct)
         {
             Reads.Add((offset, offset + destination.Length));
-            return IsRefused(offset) ? ValueTask.FromResult(0) : inner.ReadAsync(destination, offset, ct);
+
+            // A refusal faults the task rather than throwing from the call, as IRawVolume says.
+            try
+            {
+                return IsRefused(offset) ? ValueTask.FromResult(0) : inner.ReadAsync(destination, offset, ct);
+            }
+            catch (IOException refused)
+            {
+                return ValueTask.FromException<int>(refused);
+            }
         }
 
         private bool IsRefused(long offset)
