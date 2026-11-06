@@ -20,10 +20,8 @@ namespace Deguffer.Core.Configuration;
 /// read is not a decision the user made. The preview and the confirmations still stand in front of
 /// it, and <see cref="SelectionMemory"/> keeps Tier 3 unticked whatever this file says.
 /// </summary>
-public sealed class SelectionStore
+public sealed class SelectionStore : ISelectionStore
 {
-    private static readonly JsonSerializerOptions SerializerOptions = new() { WriteIndented = true };
-
     /// <summary>
     /// Nothing remembered — every failure below lands here, and every step-less entry gets the
     /// second one. Both are shared, so they are the immutable empties rather than a
@@ -53,7 +51,7 @@ public sealed class SelectionStore
             var json = File.ReadAllText(LongPath.Extended(_file));
 
             return Usable(
-                JsonSerializer.Deserialize<Dictionary<string, RememberedSelection>>(json, SerializerOptions));
+                JsonSerializer.Deserialize(json, IndentedStoreJson.Default.Selections));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
@@ -106,7 +104,7 @@ public sealed class SelectionStore
 
         try
         {
-            StoreFile.Replace(_file, JsonSerializer.Serialize(selections, SerializerOptions));
+            StoreFile.Replace(_file, JsonSerializer.Serialize(selections, IndentedStoreJson.Default.SelectionMap));
 
             return true;
         }

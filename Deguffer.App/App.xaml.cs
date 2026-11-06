@@ -84,7 +84,8 @@ public partial class App : Application
     /// <summary>
     /// What the Storage rows were left ticked as, shared for the same reason the two above are: the
     /// page reads it as it builds each row and writes it back as the user clicks, so a second
-    /// instance would hand out a copy that is stale by the first tick.
+    /// instance would hand out a copy that is stale by the first tick. Its file is read on a worker from
+    /// here, so the window's first frame does not wait for it.
     /// </summary>
     public static SelectionService Selections { get; } =
         new(new SelectionStore(UserEnvironment.Current));

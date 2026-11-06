@@ -19,6 +19,19 @@
       (§5.5), the file queries, and the command line a tool is started with.
     -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <!--
+      Here for IL2026 alone, which names a call that builds a contract by reflection at run time, a
+      reflection-based JsonSerializer call above all. The stores are read before the window's first
+      frame, and a reflection contract is work ReadyToRun cannot compile ahead, so every stored type
+      goes through a generated context (IndentedStoreJson and its siblings) and the build refuses a
+      call that does not. PreferenceStore is the one exception, suppressed where it is made, and its
+      summary says why. Deguffer is never trimmed, so the warnings about what trimming would remove
+      are not ones to act on, and are silenced: COM marshalling (IL2050), a COM class activated by
+      CLSID (IL2072), and a Lazy<T> built from a factory (IL2091).
+    -->
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <NoWarn>$(NoWarn);IL2050;IL2072;IL2091</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

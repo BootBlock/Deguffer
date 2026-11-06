@@ -29,14 +29,6 @@ public sealed partial class ProviderSizeStore
     /// <summary>The format this build writes and reads. A file of any other is not read.</summary>
     private const int Format = 1;
 
-    private static readonly JsonSerializerOptions SerializerOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        UnmappedMemberHandling = System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow,
-        RespectRequiredConstructorParameters = true,
-        RespectNullableAnnotations = true,
-    };
-
     private static readonly IReadOnlyDictionary<string, IReadOnlyList<SizePoint>> None =
         ReadOnlyDictionary<string, IReadOnlyList<SizePoint>>.Empty;
 
@@ -62,7 +54,7 @@ public sealed partial class ProviderSizeStore
 
         try
         {
-            stored = JsonSerializer.Deserialize<Stored>(File.ReadAllText(LongPath.Extended(_file)), SerializerOptions);
+            stored = JsonSerializer.Deserialize(File.ReadAllText(LongPath.Extended(_file)), StrictStoreJson.Default.ProviderSizes);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
@@ -107,7 +99,7 @@ public sealed partial class ProviderSizeStore
                 Format,
                 providers.ToDictionary(entry => entry.Key, entry => entry.Value.Select(StoredPoint.Of).ToArray(), StringComparer.Ordinal));
 
-            StoreFile.Replace(_file, JsonSerializer.Serialize(stored, SerializerOptions));
+            StoreFile.Replace(_file, JsonSerializer.Serialize(stored, StrictStoreJson.Default.ProviderSizes));
 
             return true;
         }
@@ -164,13 +156,13 @@ public sealed partial class ProviderSizeStore
     private static partial Regex IdPattern();
 
     /// <summary>The file as it is written.</summary>
-    private sealed record Stored(int Format, Dictionary<string, StoredPoint[]> Providers);
+    internal sealed record Stored(int Format, Dictionary<string, StoredPoint[]> Providers);
 
     /// <summary>
     /// One figure as it is written: a class with every member a constructor parameter, so a figure
     /// missing any of them is refused rather than read as a zero.
     /// </summary>
-    private sealed record StoredPoint(
+    internal sealed record StoredPoint(
         DateTime TakenUtc, long Bytes, long Entries, bool Approximate, bool Ceiling, bool Elevated)
     {
         public static StoredPoint Of(SizePoint point) =>

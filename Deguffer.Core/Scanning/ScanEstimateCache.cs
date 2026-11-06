@@ -34,8 +34,6 @@ namespace Deguffer.Core.Scanning;
 /// </summary>
 public sealed class ScanEstimateCache
 {
-    private static readonly JsonSerializerOptions SerializerOptions = new() { WriteIndented = false };
-
     /// <summary>
     /// Long, because a stale entry costs a briefly-wrong number on screen and nothing else, while
     /// a short one costs the instant re-open this exists to provide.
@@ -119,7 +117,7 @@ public sealed class ScanEstimateCache
     /// Absent from a file written before the count existed, which then reads as nothing counted. The
     /// figure is shown only until the real measurement arrives, so that costs one briefly low number.
     /// </param>
-    private sealed record Entry(long Allocated, long Logical, bool IsApproximate, DateTimeOffset MeasuredAt, long Entries = 0);
+    internal sealed record Entry(long Allocated, long Logical, bool IsApproximate, DateTimeOffset MeasuredAt, long Entries = 0);
 
     /// <summary>The last known size of <paramref name="path"/>, if it is recent enough to show.</summary>
     /// <param name="keepsRoot">
@@ -244,7 +242,7 @@ public sealed class ScanEstimateCache
 
             try
             {
-                _store(_file, JsonSerializer.Serialize(new Dictionary<string, Entry>(copy, StringComparer.OrdinalIgnoreCase), SerializerOptions));
+                _store(_file, JsonSerializer.Serialize(new Dictionary<string, Entry>(copy, StringComparer.OrdinalIgnoreCase), CompactStoreJson.Default.ScanEstimates));
                 _written = copied;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -287,8 +285,8 @@ public sealed class ScanEstimateCache
                 return;
             }
 
-            var loaded = JsonSerializer.Deserialize<Dictionary<string, Entry>>(
-                File.ReadAllText(LongPath.Extended(_file)), SerializerOptions);
+            var loaded = JsonSerializer.Deserialize(
+                File.ReadAllText(LongPath.Extended(_file)), CompactStoreJson.Default.ScanEstimates);
 
             if (loaded is null)
             {
