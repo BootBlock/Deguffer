@@ -6,7 +6,8 @@ namespace Deguffer.App.ViewModels;
 /// <summary>
 /// The figures over every group a search has confirmed so far: how many groups, how many files they
 /// hold, and what their copies that could go occupy. Counted as each group arrives, from what the
-/// group already measured, so a search confirming forty thousand groups never sums the list again.
+/// group already measured, so a search confirming forty thousand groups never sums the list again,
+/// and shown once for each batch of groups the page takes rather than once for each group.
 /// </summary>
 public sealed partial class DuplicateTotalsViewModel : ObservableObject
 {
@@ -34,14 +35,16 @@ public sealed partial class DuplicateTotalsViewModel : ObservableObject
         Changed();
     }
 
-    /// <summary>Count a group the search confirmed.</summary>
+    /// <summary>Count a group the search confirmed, shown with the rest of its batch (<see cref="Show"/>).</summary>
     internal void Add(DuplicateGroupRow group)
     {
         _groups++;
         _files += group.Copies.Count;
         FreeableSpace += group.FreeableSpace;
-        Changed();
     }
+
+    /// <summary>Show the groups counted since the figures were last shown.</summary>
+    internal void Show() => Changed();
 
     private void Changed()
     {

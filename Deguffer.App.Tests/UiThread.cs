@@ -14,9 +14,20 @@ namespace Deguffer.App.Tests;
 /// </summary>
 public static class UiThread
 {
+    [ThreadStatic]
+    private static int t_item;
+
+    /// <summary>
+    /// Which posted item this thread is running, counted from 1 in each <see cref="Run"/>, and 0 for
+    /// the body before its first await. A test tells how many turns of the thread some work took by
+    /// the distinct numbers it saw.
+    /// </summary>
+    public static int Item => t_item;
+
     /// <summary>Run <paramref name="body"/> to completion on this thread, and rethrow whatever it threw.</summary>
     public static void Run(Func<Task> body)
     {
+        t_item = 0;
         var previous = SynchronizationContext.Current;
         using var context = new SingleThreadContext();
         SynchronizationContext.SetSynchronizationContext(context);
@@ -109,6 +120,7 @@ public static class UiThread
         {
             foreach (var (callback, state) in _queue.GetConsumingEnumerable())
             {
+                t_item++;
                 callback(state);
             }
         }

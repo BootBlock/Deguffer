@@ -7,8 +7,9 @@ namespace Deguffer.Core.Duplicates;
 
 /// <summary>
 /// One duplicate search as the page runs it (§7.4): what this machine protects asked afresh, the
-/// search passing over what that refuses, and the marks made the moment the candidates are found, so
-/// each group arrives with its place among the others already decided.
+/// search passing over what that refuses, the marks made the moment the candidates are found, and
+/// each group judged by them as it is confirmed, so it arrives with its place among the others
+/// already decided and nothing left for the page's thread to ask.
 ///
 /// <para><b>Why the marks come before the first group.</b> Groups are sorted by the space each could
 /// free, which only the keeping rule can say: a reference copy, a refused copy and a copy that cannot
@@ -51,7 +52,8 @@ public sealed class DuplicateSearchRun
     }
 
     /// <summary>
-    /// Search, handing over the marks once the candidates are found and each group as it is confirmed.
+    /// Search, handing over the marks once the candidates are found and each group as it is confirmed,
+    /// judged by them (<see cref="DuplicateMarks.Judge"/>) on the search's thread.
     /// </summary>
     /// <param name="marksMade">
     /// Given the marks once, off the UI thread, before the first group is given to
@@ -60,13 +62,14 @@ public sealed class DuplicateSearchRun
     /// added to them: the caller adds each as <paramref name="found"/> is given it, on the thread that
     /// reads them.
     /// </param>
+    /// <param name="found">Given each group as it is confirmed and judged, one at a time, from any thread.</param>
     /// <param name="finding">Given what finding the candidates found, once, before the first group.</param>
     /// <exception cref="OperationCanceledException">The search was stopped before its candidates were all found.</exception>
     public async Task<DuplicateSearchResult> RunAsync(
         DuplicateSearch search,
         Action<DuplicateMarks> marksMade,
         IProgress<CandidateFinding>? finding,
-        IProgress<DuplicateGroup>? found,
+        IProgress<GroupJudgement>? found,
         IProgress<DuplicateSearchProgress>? progress,
         CancellationToken ct)
     {
@@ -87,18 +90,42 @@ public sealed class DuplicateSearchRun
         // caches, which can take as long as finding does.
         _ = protections.StorageCleansAsync(ct);
 
+        var judging = found is null ? null : new Judging(found);
+
         return await _searcher.SearchAsync(
             search,
             protections.Policy,
-            found,
+            judging,
             progress,
             async (candidates, token) =>
             {
-                marksMade(await DuplicateMarks.ForAsync(candidates, protections, _environment, _cloud, _volumes, _media, token)
-                    .ConfigureAwait(false));
+                var marks = await DuplicateMarks.ForAsync(candidates, protections, _environment, _cloud, _volumes, _media, token)
+                    .ConfigureAwait(false);
+                judging?.Made(marks);
+                marksMade(marks);
                 finding?.Report(candidates);
             },
             ct,
             located).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Judges each group the searcher confirms, on the thread that confirms it, by the marks made
+    /// before the first one, and hands the judgement on.
+    /// </summary>
+    private sealed class Judging(IProgress<GroupJudgement> found) : IProgress<DuplicateGroup>
+    {
+        private DuplicateMarks? _marks;
+
+        /// <summary>Written by the search before it confirms anything, and read by each confirmation after.</summary>
+        public void Made(DuplicateMarks marks) => Volatile.Write(ref _marks, marks);
+
+        public void Report(DuplicateGroup value)
+        {
+            var marks = Volatile.Read(ref _marks)
+                ?? throw new InvalidOperationException("A group was confirmed before the marks were made.");
+
+            found.Report(marks.Judge(value));
+        }
     }
 }

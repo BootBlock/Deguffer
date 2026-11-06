@@ -53,6 +53,7 @@ public sealed partial class DuplicatesPage : Page
             ElevatedRelaunch.TryRelaunch,
             App.Running,
             App.Work,
+            TimeProvider.System,
             ElevatedRelaunch.Requested as DuplicatesRequest);
 
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();

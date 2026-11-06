@@ -239,9 +239,10 @@ public sealed class DuplicatesViewModelTests : DuplicatesPageScene
         RunDuplicateSearch run = async (search, marksMade, finding, found, progress, ct) =>
         {
             var candidates = DuplicateScene.Finding(kept);
-            marksMade(_scene.Marks(candidates));
+            var marks = _scene.Marks(candidates);
+            marksMade(marks);
             finding.Report(candidates);
-            found.Report(kept);
+            found.Report(marks.Judge(kept));
 
             // As Core's search does: a stop while reading answers what was confirmed, marked stopped.
             await Task.Delay(Timeout.Infinite, ct).ContinueWith(_ => { }, TaskScheduler.Default);
@@ -321,12 +322,13 @@ public sealed class DuplicatesViewModelTests : DuplicatesPageScene
         RunDuplicateSearch run = async (search, marksMade, finding, found, progress, ct) =>
         {
             var candidates = DuplicateScene.Finding(group);
-            found.Report(group);
+            var marks = _scene.Marks(candidates);
+            found.Report(marks.Judge(group));
 
             // After the group's post, and handed over then, so the end of the search finds marks and
             // only the group itself can say they were missing.
             await Task.Yield();
-            marksMade(_scene.Marks(candidates));
+            marksMade(marks);
 
             return new DuplicateSearchResult(candidates, [group], default, Stopped: false);
         };
@@ -382,9 +384,9 @@ public sealed class DuplicatesViewModelTests : DuplicatesPageScene
         var page = PageWithPhotos(async (search, marksMade, finding, found, progress, ct) =>
         {
             var candidates = DuplicateScene.Finding(group);
-            await Task.Run(() => marksMade(_scene.Marks(candidates)), ct);
+            var marks = await HandOverAsync(candidates, marksMade, ct);
             finding.Report(candidates);
-            found.Report(group);
+            found.Report(marks.Judge(group));
 
             // Held with a group shown, so only the running search can keep the results from being saved.
             await release.Task;

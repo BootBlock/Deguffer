@@ -66,16 +66,9 @@ public sealed class CopyKeeping
 
     /// <summary>
     /// Why <paramref name="copy"/> may not be marked and why it may not be kept, as a page lists them
-    /// beside it: the second only where it says something the first does not, since a refused copy is
-    /// not kept for the same reason.
+    /// beside it (<see cref="CopyStanding.Of"/>).
     /// </summary>
-    public CopyStanding Standing(DuplicateCandidate copy)
-    {
-        var notMarked = WhyNotMarked(copy);
-        var notKept = WhyNotKept(copy);
-
-        return new CopyStanding(notMarked, notKept == notMarked ? null : notKept);
-    }
+    public CopyStanding Standing(DuplicateCandidate copy) => CopyStanding.Of(WhyNotMarked(copy), WhyNotKept(copy));
 
     /// <summary>Why <paramref name="copy"/> cannot be the copy a group keeps, or null where it can be.</summary>
     public string? WhyNotKept(DuplicateCandidate copy)
@@ -124,11 +117,20 @@ public sealed class CopyKeeping
         return copy.Names.Select(_cloud.WhatHolds).FirstOrDefault(what => what is not null);
     }
 
-    private string? WhyNotKept(string name, LocationRole role) =>
-        _refusals.WhyRefused(name)
-        ?? _temporary.WhatHolds(name)
-        ?? _cleaned.WhatHolds(name)
-        ?? (role == LocationRole.Reference ? null : _cloud is null ? NoSyncRoots : _cloud.WhatHolds(name));
+    private string? WhyNotKept(string name, LocationRole role)
+    {
+        if (_refusals.WhyRefused(name) is { } refused)
+        {
+            return refused;
+        }
+
+        // Made comparable once for the three kinds of place, rather than by each in turn.
+        var comparable = ReachedFolder.Comparable(name);
+
+        return _temporary.WhatHoldsComparable(comparable)
+            ?? _cleaned.WhatHoldsComparable(comparable)
+            ?? (role == LocationRole.Reference ? null : _cloud is null ? NoSyncRoots : _cloud.WhatHoldsComparable(comparable));
+    }
 
     private string? WhyNotInternal(LocalVolume volume) => _media(volume) switch
     {
