@@ -51,7 +51,8 @@ public sealed record RuleOutcome(int Marked, IReadOnlyList<(GroupMarks Group, st
 /// because each such mark is one the user looked at.</para>
 ///
 /// <para><b>Nothing reads the groups off the thread that adds them until the search has ended.</b>
-/// Groups are added on the page's thread as the search confirms them (<see cref="Add"/>), while a
+/// Groups are judged on the search's thread (<see cref="Judge"/>) and added on the page's as the
+/// search confirms them (<see cref="Add"/>), while a
 /// rule, a confirmation and a removal read them on another. So a rule
 /// (<see cref="Run"/>) and a judgement (<see cref="RejudgeAsync"/>, which every confirmation and
 /// removal begins with) refuse to start until the thread that adds the groups says the last one is
@@ -73,7 +74,7 @@ public sealed class DuplicateMarks
 
     /// <summary>
     /// What each group in <see cref="_groups"/> could free, in the same order, as it was judged when
-    /// the group was placed, so placing the next asks the keeping rule about its own copies alone.
+    /// the group was placed, so placing the next compares its own judgement alone.
     /// Asked again of every group placed, a search of a few hundred groups spent minutes on the page's
     /// thread (measured on 2026-10-09), and the rule it was judged by does not change while groups are
     /// added.
@@ -189,22 +190,38 @@ public sealed class DuplicateMarks
     public ProtectionScope Searched { get; }
 
     /// <summary>
+    /// Judge a group the search confirmed by the keeping rule the marks were made under, ready to be
+    /// added (<see cref="Add"/>). It only reads, so call it on any thread, and on the search's rather
+    /// than the page's, because it asks the policy and walks every protected place for each copy.
+    /// </summary>
+    public GroupJudgement Judge(DuplicateGroup group) => GroupJudgement.Of(group, Keeping);
+
+    /// <summary>
     /// Add a group the search confirmed, placed after every group that could free more or the same,
     /// as the keeping rule was judged when the marks were made, and before every group that could
     /// free less. Call it on one thread, the one that reads <see cref="Groups"/> while the search
     /// runs.
     /// </summary>
+    /// <param name="judged">The group as <see cref="Judge"/> judged it, which asks the keeping rule nothing more here.</param>
     /// <returns>The marks for the group, and where in <see cref="Groups"/> they were placed.</returns>
+    /// <exception cref="ArgumentException"><paramref name="judged"/> was judged by another keeping rule, so the space it places the group by is not these marks'.</exception>
     /// <exception cref="InvalidOperationException">The search was said to have ended (<see cref="Complete"/>).</exception>
-    public (GroupMarks Marks, int Index) Add(DuplicateGroup group)
+    public (GroupMarks Marks, int Index) Add(GroupJudgement judged)
     {
+        ArgumentNullException.ThrowIfNull(judged);
+
         if (_complete)
         {
             throw new InvalidOperationException("The search has ended, so no group is added to its marks.");
         }
 
-        var marks = new GroupMarks(group);
-        var space = marks.FreeableSpace(Keeping);
+        if (!ReferenceEquals(judged.Keeping, Keeping))
+        {
+            throw new ArgumentException("The group was judged by another keeping rule than these marks'.", nameof(judged));
+        }
+
+        var marks = new GroupMarks(judged.Group);
+        var space = judged.FreeableSpace;
 
         // Before the first group that could free less, so groups that could free the same stay in
         // the order the search confirmed them. The figures fall as the list goes on, so the first

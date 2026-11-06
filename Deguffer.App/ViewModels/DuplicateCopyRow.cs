@@ -15,14 +15,14 @@ public sealed partial class DuplicateCopyRow : ObservableObject
     private readonly Func<bool> _mayMark;
 
     /// <param name="owner">The copy's group, whose marks say whether it is marked.</param>
-    /// <param name="keeping">The keeping rule as last judged, which says why it may not be marked or kept.</param>
+    /// <param name="standing">What the keeping rule judged of the copy: why it may not be marked or kept.</param>
     /// <param name="toggle">Marks or unmarks the copy, answering Core's refusal, or null where it was done.</param>
     /// <param name="mayMark">Whether the page lets any mark change now.</param>
     public DuplicateCopyRow(
         DuplicateCandidate copy,
         PathParts path,
         DuplicateGroupRow owner,
-        CopyKeeping keeping,
+        CopyStanding standing,
         Func<DuplicateCopyRow, string?> toggle,
         Func<bool> mayMark)
     {
@@ -38,7 +38,7 @@ public sealed partial class DuplicateCopyRow : ObservableObject
         Names = copy.HasSeveralNames
             ? $"Its names: {string.Join("; ", copy.Names)}."
             : string.Empty;
-        Show(keeping.Standing(copy));
+        Show(standing);
     }
 
     public DuplicateCandidate Copy { get; }

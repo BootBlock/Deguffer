@@ -6,6 +6,7 @@ using Deguffer.Core.Duplicates;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Viewing;
 using Deguffer.Core.Working;
 
 namespace Deguffer.App.ViewModels;
@@ -16,7 +17,9 @@ namespace Deguffer.App.ViewModels;
 /// notes on what the search did not look at, and the marking and removing that work on its groups
 /// (<see cref="Marking"/>). Every decision is Core's: what a search is
 /// (<see cref="Core.Configuration.DuplicatePreferences"/>), where each group goes
-/// (<see cref="DuplicateMarks.Add"/>) and what the notes say (<see cref="DuplicateSearchNotes"/>).
+/// (<see cref="DuplicateMarks.Add"/>), what each group could free and why each copy may not be marked
+/// or kept (<see cref="GroupJudgement"/>, judged on the search's thread), and what the notes say
+/// (<see cref="DuplicateSearchNotes"/>).
 /// </summary>
 public sealed partial class DuplicatesViewModel : ObservableObject
 {
@@ -29,12 +32,14 @@ public sealed partial class DuplicatesViewModel : ObservableObject
     private readonly Func<ElevationRequest, bool> _relaunch;
     private readonly RunningActions _running;
     private readonly BusyWork _work;
+    private readonly TimeProvider _time;
 
     /// <summary>The search running now, or null, so a callback from one that was replaced is ignored.</summary>
     private Search? _search;
 
     /// <param name="actions">Runs the rules and the removal over what a search found.</param>
     /// <param name="chooseCsv">Asks the user where to save the results, answering the file chosen or null.</param>
+    /// <param name="time">The clock the groups a search confirms are handed to the page in batches by (<see cref="BatchedProgress{T}"/>).</param>
     /// <param name="requested">The locations an elevated relaunch was asked to search, or null for an ordinary launch.</param>
     public DuplicatesViewModel(
         RunDuplicateSearch run,
@@ -46,6 +51,7 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         Func<ElevationRequest, bool> relaunch,
         RunningActions running,
         BusyWork work,
+        TimeProvider time,
         DuplicatesRequest? requested = null)
     {
         _run = run;
@@ -53,6 +59,7 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         _relaunch = relaunch;
         _running = running;
         _work = work;
+        _time = time;
         Filters = new DuplicateFiltersViewModel(preferences);
         Filters.Changed += (_, _) => Judge();
         Marking = new DuplicateMarkingViewModel(actions, Groups, work);
@@ -225,15 +232,30 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         // Its own span, ended whether or not the search is still the page's when it ends.
         var work = _work.Begin();
 
+        // A search with no content criterion confirms every group in one loop, and a post for each
+        // would queue tens of thousands of items on this thread at once.
+        using var arrivals = new BatchedProgress<GroupJudgement>(_time, judged => Confirmed(search, judged), () => Arrived(search));
+
         try
         {
-            var result = await _run(
-                search.Asked,
-                marks => search.Marks = marks,
-                new Progress<CandidateFinding>(finding => Found(search, finding)),
-                new Progress<DuplicateGroup>(group => Confirmed(search, group)),
-                new Progress<DuplicateSearchProgress>(progress => Reached(search, work, progress)),
-                search.Stop.Token);
+            DuplicateSearchResult result;
+
+            try
+            {
+                result = await _run(
+                    search.Asked,
+                    marks => search.Marks = marks,
+                    new Progress<CandidateFinding>(finding => Found(search, finding)),
+                    arrivals,
+                    new Progress<DuplicateSearchProgress>(progress => Reached(search, work, progress)),
+                    search.Stop.Token);
+            }
+            finally
+            {
+                // Every group the search confirmed is in the list before it is said to have ended,
+                // stopped or failed, since its end closes the marks to any group added after.
+                await arrivals.EndAsync();
+            }
 
             if (ReferenceEquals(_search, search))
             {
@@ -324,7 +346,7 @@ public sealed partial class DuplicatesViewModel : ObservableObject
     /// Place a confirmed group where the marks put it, by the space it could free. One insertion, and
     /// no row already there moves, so a reader part-way down the list stays where they are.
     /// </summary>
-    private void Confirmed(Search search, DuplicateGroup group)
+    private void Confirmed(Search search, GroupJudgement judged)
     {
         if (!ReferenceEquals(_search, search))
         {
@@ -335,11 +357,20 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         // here rather than from Marks so a group never waits on the finding's notes being shown.
         var marks = search.MarksMade;
         Marking.Made(marks);
-        var (added, index) = marks.Add(group);
-        var row = new DuplicateGroupRow(added, marks.Keeping, Marking.Toggle, Marking.MayMark);
+        var (added, index) = marks.Add(judged);
+        var row = new DuplicateGroupRow(added, judged, Marking.Toggle, Marking.MayMark);
         Groups.Insert(index, row);
         Totals.Add(row);
-        Headline = "Searching. Each group appears as soon as it is confirmed, in order of the space it could free.";
+    }
+
+    /// <summary>Show what a batch of confirmed groups changed beyond their rows, once for the batch.</summary>
+    private void Arrived(Search search)
+    {
+        if (ReferenceEquals(_search, search))
+        {
+            Totals.Show();
+            Headline = "Searching. Each group appears as soon as it is confirmed, in order of the space it could free.";
+        }
     }
 
     private void Reached(Search search, BusySpan work, DuplicateSearchProgress progress)

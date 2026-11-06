@@ -22,7 +22,7 @@ public sealed class DuplicateActionsTests : DuplicateRemovalScene
         var result = Result(groups);
         var marks = DuplicateMarks.For(
             result.Finding, _tree.Policy(), _cleans, _tree.Environment, _cloud, _tree.Volumes, _media.Of, _media.Now, FileInformation.Default);
-        marks.Add(result.Groups[0]);
+        marks.Add(marks.Judge(result.Groups[0]));
 
         return marks;
     }
@@ -71,11 +71,11 @@ public sealed class DuplicateActionsTests : DuplicateRemovalScene
         var result = Result([Copy(Path.Combine(Documents, "a.jpg")), Copy(Path.Combine(Downloads, "a.jpg"))], late);
         var marks = DuplicateMarks.For(
             result.Finding, _tree.Policy(), _cleans, _tree.Environment, _cloud, _tree.Volumes, _media.Of, _media.Now, FileInformation.Default);
-        marks.Add(result.Groups[0]);
+        marks.Add(marks.Judge(result.Groups[0]));
 
         marks.Complete();
 
-        Assert.Throws<InvalidOperationException>(() => marks.Add(result.Groups[1]));
+        Assert.Throws<InvalidOperationException>(() => marks.Add(marks.Judge(result.Groups[1])));
         Assert.Single(marks.Groups);
     }
 

@@ -114,7 +114,7 @@ public sealed class DuplicateMarkingTests : DuplicateMarkingScene
         var marks = Marks(Pair("a.jpg", 4096), Pair("b.jpg", 8192), Pair("c.jpg", 16384));
 
         Assert.Equal(["c.jpg", "b.jpg", "a.jpg"], marks.Groups.Select(group => group.Group.Files[0].Name));
-        Assert.Equal([16384L, 8192L, 4096L], marks.Groups.Select(group => group.FreeableSpace(marks.Keeping)));
+        Assert.Equal([16384L, 8192L, 4096L], marks.Groups.Select(group => GroupJudgement.Of(group.Group, marks.Keeping).FreeableSpace));
     }
 
     /// <summary>
@@ -138,7 +138,7 @@ public sealed class DuplicateMarkingTests : DuplicateMarkingScene
 
         foreach (var group in result.Groups)
         {
-            var (added, index) = marks.Add(group);
+            var (added, index) = marks.Add(marks.Judge(group));
 
             Assert.Same(added, marks.Groups[index]);
             shown.Insert(index, group.Files[0].Name);
@@ -161,9 +161,9 @@ public sealed class DuplicateMarkingTests : DuplicateMarkingScene
         var result = Result(usbPair, internalPair);
         var marks = DuplicateMarks.For(result.Finding, _tree.Policy(), _cleans, _tree.Environment, _cloud, _tree.Volumes, _media.Of, _media.Now, FileInformation.Default);
 
-        Assert.Equal(0, marks.Add(result.Groups[0]).Index);
-        Assert.Equal(0, marks.Add(result.Groups[1]).Index);
-        Assert.Equal([4096L, 0L], marks.Groups.Select(group => group.FreeableSpace(marks.Keeping)));
+        Assert.Equal(0, marks.Add(marks.Judge(result.Groups[0])).Index);
+        Assert.Equal(0, marks.Add(marks.Judge(result.Groups[1])).Index);
+        Assert.Equal([4096L, 0L], marks.Groups.Select(group => GroupJudgement.Of(group.Group, marks.Keeping).FreeableSpace));
     }
 
     /// <summary>The oldest copy here is not the one with the shortest path, so the two rules keep different copies.</summary>
@@ -300,7 +300,7 @@ public sealed class DuplicateMarkingTests : DuplicateMarkingScene
 
         // Three markable copies, one kept: two can go. A reference, a refused and a linked copy free
         // nothing, so of four only the last can go, and the reference is what is kept.
-        Assert.Equal([2 * 4096L, 4096L], marks.Groups.Select(group => group.FreeableSpace(marks.Keeping)));
+        Assert.Equal([2 * 4096L, 4096L], marks.Groups.Select(group => GroupJudgement.Of(group.Group, marks.Keeping).FreeableSpace));
     }
     /// <summary>
     /// Groups are placed as they arrive by what each could free, judged once a group. Placing each

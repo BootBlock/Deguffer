@@ -40,6 +40,12 @@ public abstract class DuplicatesPageScene : IDisposable
     /// <summary>What the page's confirmation is answered with; declining unless a test says otherwise.</summary>
     private protected FakeDuplicateConfirmation Prompt { get; set; } = new(false);
 
+    /// <summary>
+    /// The clock a page built after this is set hands groups over in batches by: the machine's, unless
+    /// a test holds it still to see what one batch does.
+    /// </summary>
+    private protected TimeProvider Clock { get; set; } = TimeProvider.System;
+
     /// <summary>The file the save dialog answers with, or null where the user cancels it.</summary>
     private protected string? CsvChosen { get; set; }
 
@@ -60,14 +66,12 @@ public abstract class DuplicatesPageScene : IDisposable
     {
         _searches.Add(search);
         var candidates = DuplicateScene.Finding(groups);
-
-        // Off the page's thread, as the search hands them over.
-        await Task.Run(() => marksMade(_scene.Marks(candidates)), ct);
+        var marks = await HandOverAsync(candidates, marksMade, ct);
         finding.Report(candidates);
 
         foreach (var group in groups)
         {
-            found.Report(group);
+            found.Report(marks.Judge(group));
         }
 
         // After the groups' posts, as the search returns after its last group.
@@ -75,6 +79,18 @@ public abstract class DuplicatesPageScene : IDisposable
 
         return new DuplicateSearchResult(candidates, groups, default, Stopped: false);
     };
+
+    /// <summary>The marks for <paramref name="candidates"/>, made and handed over off the page's thread, as the search does.</summary>
+    private protected Task<DuplicateMarks> HandOverAsync(CandidateFinding candidates, Action<DuplicateMarks> marksMade, CancellationToken ct) =>
+        Task.Run(
+            () =>
+            {
+                var marks = _scene.Marks(candidates);
+                marksMade(marks);
+
+                return marks;
+            },
+            ct);
 
     private protected DuplicatesViewModel Page(RunDuplicateSearch? run = null, DuplicatesRequest? requested = null) =>
         new(
@@ -93,6 +109,7 @@ public abstract class DuplicatesPageScene : IDisposable
             },
             _running,
             _work,
+            Clock,
             requested);
 
     /// <summary>A page with one location, ready to search.</summary>

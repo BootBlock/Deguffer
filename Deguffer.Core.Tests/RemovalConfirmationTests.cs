@@ -54,7 +54,7 @@ public sealed class RemovalConfirmationTests : IDisposable
 
         foreach (var files in groups)
         {
-            marks.Add(new DuplicateGroup(MatchCriteria.Content, files[0].Length, Checksum: null, files));
+            marks.Add(marks.Judge(new DuplicateGroup(MatchCriteria.Content, files[0].Length, Checksum: null, files)));
         }
 
         marks.Complete();

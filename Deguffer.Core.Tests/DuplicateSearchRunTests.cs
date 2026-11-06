@@ -8,7 +8,8 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// One search as the page runs it (§7.4): the marks arrive before the first group, holding no group
-/// yet, so the page can place each group as it is confirmed, by the space it could free.
+/// yet, and each group arrives judged by them, so the page can place each group as it is confirmed,
+/// by the space it could free, without asking the keeping rule anything on its own thread.
 /// </summary>
 public sealed class DuplicateSearchRunTests : IDisposable
 {
@@ -17,7 +18,7 @@ public sealed class DuplicateSearchRunTests : IDisposable
     public void Dispose() => _tree.Dispose();
 
     [Fact]
-    public async Task TheMarksArriveEmptyBeforeTheFirstGroup()
+    public async Task TheMarksArriveEmptyBeforeTheFirstGroupAndEachGroupArrivesJudgedByThem()
     {
         _tree.File(new byte[] { 1, 2, 3 }, "Data", "a.bin");
         _tree.File(new byte[] { 1, 2, 3 }, "Data", "Other", "a.bin");
@@ -28,6 +29,7 @@ public sealed class DuplicateSearchRunTests : IDisposable
         DuplicateMarks? made = null;
         var groupsWhenMade = -1;
         CandidateFinding? reported = null;
+        List<GroupJudgement> judged = [];
 
         var run = new DuplicateSearchRun(
             _tree.Searcher(),
@@ -49,10 +51,11 @@ public sealed class DuplicateSearchRunTests : IDisposable
                 }
             },
             new CallbackProgress<CandidateFinding>(finding => reported = finding),
-            new CallbackProgress<DuplicateGroup>(_ =>
+            new CallbackProgress<GroupJudgement>(group =>
             {
                 lock (happened)
                 {
+                    judged.Add(group);
                     happened.Add("group");
                 }
             }),
@@ -64,6 +67,8 @@ public sealed class DuplicateSearchRunTests : IDisposable
         Assert.Equal(["marks", "group", "group"], happened);
         Assert.Same(result.Finding, reported);
         Assert.Equal(2, result.Groups.Count);
+        Assert.Equal(result.Groups, judged.Select(group => group.Group));
+        Assert.All(judged, group => Assert.Same(made.Keeping, group.Keeping));
     }
 
     /// <summary>

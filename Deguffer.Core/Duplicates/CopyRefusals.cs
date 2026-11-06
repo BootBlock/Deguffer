@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Scanning;
 
@@ -17,13 +18,15 @@ namespace Deguffer.Core.Duplicates;
 /// two pages cannot come to disagree about what may go.</para>
 ///
 /// <para>Each answer is kept for the life of the instance (G4): a page asks about every copy of
-/// every group each time it draws, and the policy asks the machine where each path is mounted.</para>
+/// every group each time it draws, and the policy asks the machine where each path is mounted. It is
+/// asked from two threads at once: the search judges each group it confirms on its own thread, while
+/// the page marks copies on the page's.</para>
 /// </summary>
 public sealed class CopyRefusals
 {
     private readonly ExploreActionPolicy _policy;
     private readonly IReadOnlyList<ProgramFolder> _programs;
-    private readonly Dictionary<string, string?> _byPath = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, string?> _byPath = new(StringComparer.OrdinalIgnoreCase);
 
     /// <param name="policy">Explore's policy for this machine, the one the search passed over places by.</param>
     /// <param name="programs">Every folder an installed program's entry names (<see cref="CandidateFinding.ProgramFolders"/>).</param>
@@ -94,6 +97,7 @@ public sealed class CopyRefusals
                   + "two programs that ship the same file each need their own copy."
                 : null;
 
-        return _byPath[path] = why;
+        // Two threads asking at once each work it out to the same answer, so the first one stored stands.
+        return _byPath.GetOrAdd(path, why);
     }
 }

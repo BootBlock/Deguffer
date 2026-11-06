@@ -54,13 +54,15 @@ internal sealed class ResolvedPlaces
 
     /// <summary>What the first place holding <paramref name="path"/> says of it, or null where none holds it.</summary>
     /// <param name="path">A full path, in display form.</param>
-    public string? WhatHolds(string path)
-    {
-        var target = ReachedFolder.Comparable(path);
+    public string? WhatHolds(string path) => WhatHoldsComparable(ReachedFolder.Comparable(path));
 
+    /// <summary>What the first place holding <paramref name="comparable"/> says of it, or null where none holds it.</summary>
+    /// <param name="comparable">A full path in <see cref="ReachedFolder.Comparable"/> form.</param>
+    public string? WhatHoldsComparable(string comparable)
+    {
         foreach (var (place, starts, what) in _places)
         {
-            if (starts.Any(start => place.HoldsComparable(start, target)))
+            if (starts.Any(start => place.HoldsComparable(start, comparable)))
             {
                 return what;
             }

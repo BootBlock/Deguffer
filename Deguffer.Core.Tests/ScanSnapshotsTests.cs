@@ -30,6 +30,24 @@ public sealed class ScanSnapshotsTests
         ]);
 
     /// <summary>
+    /// The first snapshot is started by the first report, with no time passed since the scan began.
+    /// The interval spaces snapshots, and a scan that also waited it for the first showed a count
+    /// and no map for three quarters of a second.
+    /// </summary>
+    [Fact]
+    public void StartsTheFirstSnapshotAtTheFirstReport()
+    {
+        var snapshots = Snapshots();
+
+        Assert.Null(snapshots.Take());
+        Assert.Equal(1, _started);
+
+        FinishAssembling();
+
+        Assert.NotNull(snapshots.Take());
+    }
+
+    /// <summary>
     /// One snapshot at a time. Reports keep coming while one is assembled, each long past the
     /// interval, and none of them starts another: with two at once, the walk's share of the
     /// processor would go to pictures nobody can look at before the next replaces them.
@@ -39,7 +57,6 @@ public sealed class ScanSnapshotsTests
     {
         var snapshots = Snapshots();
 
-        _clock.Advance(ScanSnapshots.Interval);
         Assert.Null(snapshots.Take());
         Assert.Equal(1, _started);
 
@@ -71,7 +88,6 @@ public sealed class ScanSnapshotsTests
         var snapshots = Snapshots();
         var took = ScanSnapshots.Interval * 2;
 
-        _clock.Advance(ScanSnapshots.Interval);
         snapshots.Take();
         _clock.Advance(took);
         FinishAssembling();
@@ -98,7 +114,6 @@ public sealed class ScanSnapshotsTests
     {
         var snapshots = Snapshots();
 
-        _clock.Advance(ScanSnapshots.Interval);
         snapshots.Take();
         FinishAssembling();
 
@@ -162,7 +177,6 @@ public sealed class ScanSnapshotsTests
             return Task.CompletedTask;
         });
 
-        _clock.Advance(ScanSnapshots.Interval);
         snapshots.Take();
         Assert.NotNull(assemble);
 
@@ -199,7 +213,6 @@ public sealed class ScanSnapshotsTests
                 return Task.CompletedTask;
             });
 
-        _clock.Advance(ScanSnapshots.Interval);
         Assert.Null(snapshots.Take());
         Assert.Equal(1, started);
 
@@ -223,7 +236,6 @@ public sealed class ScanSnapshotsTests
         var snapshots = new ScanSnapshots(
             Capture, _clock, _ => Task.FromException(new InvalidOperationException("assembling failed")));
 
-        _clock.Advance(ScanSnapshots.Interval);
         snapshots.Take();
 
         _clock.Advance(BoundedFileWalk.ProgressInterval);
