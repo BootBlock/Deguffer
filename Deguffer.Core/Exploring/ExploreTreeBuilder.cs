@@ -57,8 +57,8 @@ public sealed class ExploreTreeBuilder
     // without the lock (see Capture), which a List cannot allow, because it moves its array to grow.
     private readonly AppendOnlyChunks<Node> _nodes = new();
 
-    // Every name recorded, each distinct one once, written under the lock like the nodes that number
-    // them.
+    // Every name recorded, each distinct one once. Interned before the lock is taken, because the
+    // pool is safe to share and a name it already holds costs no lock at all.
     private readonly NamePool _names = new();
 
     // Marks made on a node after it was added, kept apart from it so that what a capture reads is
@@ -125,12 +125,15 @@ public sealed class ExploreTreeBuilder
     {
         var rented = ArrayPool<NameKey>.Shared.Rent(children.Length);
         var byName = rented.AsSpan(0, children.Length);
+        var rentedNumbers = ArrayPool<int>.Shared.Rent(children.Length);
+        var nameNumbers = rentedNumbers.AsSpan(0, children.Length);
 
         try
         {
             for (var i = 0; i < byName.Length; i++)
             {
                 byName[i] = new NameKey(children[i].Name, i);
+                nameNumbers[i] = _names.Intern(children[i].Name);
             }
 
             // The keys carry their names, so the comparison captures nothing and the sort allocates
@@ -151,11 +154,13 @@ public sealed class ExploreTreeBuilder
 
                 listed.HasChildren = true;
 
-                foreach (ref readonly var child in children)
+                for (var i = 0; i < children.Length; i++)
                 {
+                    ref readonly var child = ref children[i];
+
                     _nodes.Add() = new Node
                     {
-                        Name = _names.Intern(child.Name),
+                        Name = nameNumbers[i],
                         Parent = parent,
                         Size = child.Size,
                         Length = child.Length ?? child.Size,
@@ -182,6 +187,7 @@ public sealed class ExploreTreeBuilder
             // Cleared, because a key holds its name and the pool would otherwise keep it alive.
             byName.Clear();
             ArrayPool<NameKey>.Shared.Return(rented);
+            ArrayPool<int>.Shared.Return(rentedNumbers);
         }
     }
 
