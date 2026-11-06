@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Scanning.Mft;
 
 namespace Deguffer.Benchmark;
 
@@ -79,6 +80,9 @@ internal static class Report
             {
                 Row(text, "free records read", Bytes(inUse.FreeBytesRead(first.Tally)), Over(later, r => inUse.FreeBytesRead(r.Tally), Bytes));
             }
+
+            Row(text, "mean read", Kibibytes(first.Tally.MeanReadBytes), Over(later, r => r.Tally.MeanReadBytes, Kibibytes));
+            StageRows(text, first, later);
         }
         else if (route.Removes())
         {
@@ -103,6 +107,47 @@ internal static class Report
 
         return text.ToString();
     }
+
+    /// <summary>
+    /// Where a table route's time went, stage by stage in the order the first run ran them, and the
+    /// counts that size the stages run on one thread after the drive has finished. A stage a run
+    /// stopped before reads as zero.
+    /// </summary>
+    private static void StageRows(StringBuilder text, RunSample first, RunSample[] later)
+    {
+        if (first.Tally.Stages is not { } stages)
+        {
+            return;
+        }
+
+        foreach (var timed in stages.Stages)
+        {
+            var stage = timed.Stage;
+            Row(text, StageName(stage), Duration(timed.Elapsed.TotalSeconds), Over(later, r => StageSeconds(r, stage), Duration));
+        }
+
+        Row(text, "records deferred", Count(stages.DeferredRecords), Over(later, r => r.Tally.Stages?.DeferredRecords ?? 0, Count));
+
+        if (stages.Stages.Any(timed => timed.Stage == MftBuildStage.LinkPlacement))
+        {
+            Row(text, "links placed", Count(stages.LinksPlaced), Over(later, r => r.Tally.Stages?.LinksPlaced ?? 0, Count));
+        }
+    }
+
+    private static double StageSeconds(RunSample run, MftBuildStage stage) =>
+        run.Tally.Stages?.Of(stage).TotalSeconds ?? 0;
+
+    private static string StageName(MftBuildStage stage) => stage switch
+    {
+        MftBuildStage.BitmapRead => "  bitmap read",
+        MftBuildStage.FirstPass => "  first pass",
+        MftBuildStage.ExtensionLists => "  extension lists",
+        MftBuildStage.DeferredRecords => "  deferred records",
+        MftBuildStage.LinkPlacement => "  link placing",
+        MftBuildStage.ChildLinks => "  child links",
+        MftBuildStage.TreeAssembly => "  tree assembly",
+        _ => throw new ArgumentOutOfRangeException(nameof(stage), stage, "Not a stage of a table read."),
+    };
 
     /// <summary>
     /// Where a removal route's time went: the clean route's steps around their removals where it ran
@@ -163,6 +208,8 @@ internal static class Report
     private static string Share(double processors) => string.Create(Invariant, $"{processors:N2}");
 
     private static string Rate(double value) => string.Create(Invariant, $"{value:N1}");
+
+    private static string Kibibytes(double bytes) => string.Create(Invariant, $"{bytes / 1024:N1} KiB");
 
     private static string Bytes(double bytes) => string.Create(Invariant, $"{bytes / (1024 * 1024):N1} MiB");
 

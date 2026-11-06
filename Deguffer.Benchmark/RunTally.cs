@@ -1,4 +1,5 @@
 using Deguffer.Core.Execution;
+using Deguffer.Core.Scanning.Mft;
 
 namespace Deguffer.Benchmark;
 
@@ -32,6 +33,13 @@ namespace Deguffer.Benchmark;
 /// made. Null for a route that removes nothing.
 /// </param>
 /// <param name="Steps">What the clean route's steps spent their time on. Null for every other route.</param>
+/// <param name="MeanReadBytes">
+/// The bytes of records over the reads of records. Zero for the walk, which reads none.
+/// </param>
+/// <param name="Stages">
+/// How long each stage of reading the table and building from it took, and the counts that size
+/// them. Null for a route that does not read the table.
+/// </param>
 /// <param name="Kept">
 /// What the route built and a scan would keep, held only until <see cref="Timing"/> has measured
 /// it (<see cref="RunSample.KeptBytes"/>), or null for a route that keeps nothing.
@@ -47,4 +55,6 @@ internal readonly record struct RunTally(
     TimeSpan ListReadTime = default,
     int PeakWorkers = 0,
     RemovalPasses? Passes = null,
-    StepTimes? Steps = null);
+    StepTimes? Steps = null,
+    double MeanReadBytes = 0,
+    MftStageTimings? Stages = null);

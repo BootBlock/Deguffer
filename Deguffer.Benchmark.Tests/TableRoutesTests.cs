@@ -96,6 +96,28 @@ public sealed class TableRoutesTests
         Assert.Equal(16 + 1, tally.Items);
         Assert.Equal((17 * BytesPerRecord) + 4096, tally.BytesRead);
         Assert.Equal(2, tally.Reads);
+        Assert.Equal(17.0 * BytesPerRecord / 2, tally.MeanReadBytes);
+    }
+
+    /// <summary>
+    /// Each route times the stages it runs, and only those, so the report can say which one a slow
+    /// run spent its time on. Here one file is held back for its extension record and one has a
+    /// second name.
+    /// </summary>
+    [Theory]
+    [InlineData("Table", "BitmapRead,FirstPass,ExtensionLists,DeferredRecords", 0)]
+    [InlineData("Index", "BitmapRead,FirstPass,ExtensionLists,DeferredRecords,LinkPlacement,ChildLinks", 1)]
+    [InlineData("Explore", "BitmapRead,FirstPass,ExtensionLists,DeferredRecords,LinkPlacement,TreeAssembly", 1)]
+    public void EachRouteTimesTheStagesItRuns(string route, string stages, int linksPlaced)
+    {
+        var tally = Run(route, Volume()
+            .AddFileWithANonResidentAttributeList(18, 16, "spilt.bin", allocated: 8192, logical: 8000, extension: 19, listCluster: 500)
+            .AddHardLinkedFile(20, [(16, "linked.bin"), (MftRecord.RootRecordNumber, "linked.bin")], allocated: 4096, logical: 4000));
+
+        var timed = Assert.IsType<MftStageTimings>(tally.Stages);
+        Assert.Equal(stages.Split(',').Select(Enum.Parse<MftBuildStage>), timed.Stages.Select(stage => stage.Stage));
+        Assert.Equal(1, timed.DeferredRecords);
+        Assert.Equal(linksPlaced, timed.LinksPlaced);
     }
 
     /// <summary>

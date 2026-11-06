@@ -68,30 +68,46 @@ internal static class MftRecordStream
     /// <see cref="MftPassProgress.Interval"/> records apart. Never called twice at once, and
     /// never with a smaller number than before.
     /// </param>
+    /// <param name="timings">
+    /// Told when each of this read's four stages ends, from <see cref="MftBuildStage.BitmapRead"/> to
+    /// <see cref="MftBuildStage.DeferredRecords"/>, and how many records were held back. Null for a
+    /// read nobody measures. The clock starts here, so whatever the caller does first is not part of
+    /// the first stage.
+    /// </param>
     public static bool TryReadAll(
         IMftSource source,
         int count,
         TableTuning tuning,
         MftRecordHandler onRecord,
         Action<long>? onProgress,
-        CancellationToken ct)
+        CancellationToken ct,
+        MftStageTimings? timings = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(tuning);
         ArgumentNullException.ThrowIfNull(onRecord);
 
+        timings?.Start();
         var bitmap = MftBitmapReader.TryRead(source, count);
+        timings?.End(MftBuildStage.BitmapRead);
 
         using var pass = new MftReadPass(source, count, tuning, bitmap, onRecord, onProgress, ct);
         var first = pass.Run();
+        timings?.End(MftBuildStage.FirstPass);
 
         if (first.Abandoned)
         {
             return false;
         }
 
-        var wholeTable = first.WholeTable
-            & MftExtensionReader.TryResolve(source, first, count - first.Wanted, tuning.ListReadsInFlight, pass.SpareBuffer, ct);
+        var listsResolved = MftExtensionReader.TryResolve(source, first, count - first.Wanted, tuning.ListReadsInFlight, pass.SpareBuffer, ct);
+        var wholeTable = first.WholeTable & listsResolved;
+        timings?.End(MftBuildStage.ExtensionLists);
+
+        if (timings is not null)
+        {
+            timings.DeferredRecords = first.Deferred.Count;
+        }
 
         foreach (var held in first.Deferred)
         {
@@ -103,6 +119,7 @@ internal static class MftRecordStream
             }
         }
 
+        timings?.End(MftBuildStage.DeferredRecords);
         return wholeTable;
     }
 }
