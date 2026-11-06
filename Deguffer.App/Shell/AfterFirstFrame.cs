@@ -20,9 +20,6 @@ internal static class AfterFirstFrame
     /// <summary>Run <paramref name="action"/> once, at the frame after <paramref name="frames"/>' first.</summary>
     public static void Run(IFrameClock frames, Action action)
     {
-        ArgumentNullException.ThrowIfNull(frames);
-        ArgumentNullException.ThrowIfNull(action);
-
         var seen = 0;
 
         void OnFrame(object? sender, object e)
