@@ -48,7 +48,7 @@ public sealed class ExploreRows
     /// What the current node holds, in the tree's own order: largest first once a scan has
     /// finished, and by name while one is still running. See <see cref="ExploreChildOrder"/>.
     /// </summary>
-    public ObservableCollection<ExploreRow> Rows { get; } = [];
+    public BoundList<ExploreRow> Rows { get; } = [];
 
     /// <summary>The path from the scan's root down to the current node.</summary>
     public ObservableCollection<ExploreCrumb> Trail { get; } = [];
@@ -108,11 +108,6 @@ public sealed class ExploreRows
     /// <summary>The pass itself. See <see cref="Show"/>, which is what holds <see cref="IsShowing"/> up.</summary>
     private void Rewrite(ExploreTree tree, int node, bool reconcile)
     {
-        if (!reconcile)
-        {
-            Rows.Clear();
-        }
-
         var total = tree.SizeOf(node);
 
         // Once for the whole list rather than once per row. Every age in it is measured against the
@@ -127,12 +122,23 @@ public sealed class ExploreRows
             _arriving.Add(child);
         }
 
+        ExploreRow Make(int child) => new(tree, child, total, now, _guide);
+
+        // A list about something else is replaced in one reset, which is the one change the
+        // ListView answers by rebuilding anyway. See BoundList.
+        if (!reconcile)
+        {
+            Rows.Replace(_arriving.Select(Make));
+
+            return;
+        }
+
         LiveList.Show(
             Rows,
             _arriving,
             row => row.Key,
             child => ExploreRow.KeyOf(tree, child),
-            child => new ExploreRow(tree, child, total, now, _guide),
+            Make,
             (row, child) => row.Describe(tree, child, total, now));
     }
 

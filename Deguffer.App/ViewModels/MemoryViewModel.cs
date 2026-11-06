@@ -82,7 +82,7 @@ public sealed partial class MemoryViewModel : ObservableObject, IMapNavigator, I
     public partial MapReadout Readout { get; private set; } = MapReadout.None;
 
     /// <summary>What the current node holds, largest first.</summary>
-    public ObservableCollection<MemoryRow> Rows { get; } = [];
+    public BoundList<MemoryRow> Rows { get; } = [];
 
     /// <summary>The trail from the root down to the current node.</summary>
     public ObservableCollection<MemoryCrumb> Trail { get; } = [];
@@ -330,14 +330,18 @@ public sealed partial class MemoryViewModel : ObservableObject, IMapNavigator, I
 
     private void Rewrite(MemoryTree tree, int node, bool sameThing)
     {
-        if (!sameThing)
+        if (sameThing)
+        {
+            Fill(tree, Rows, node);
+        }
+        else
         {
             // Another node of another thing. Its rows have nothing to do with these, so one reset
-            // costs the list less than a removal per row, and there is no place worth keeping.
-            Rows.Clear();
-        }
+            // costs the list less than a change per row, and there is no place worth keeping.
+            var partTotal = tree.SizeOf(node);
 
-        Fill(tree, Rows, node);
+            Rows.Replace(Arriving(tree, node).Select(child => new MemoryRow(tree, child, partTotal)));
+        }
 
         if (SelectedView == ExploreView.Tree)
         {
@@ -398,12 +402,9 @@ public sealed partial class MemoryViewModel : ObservableObject, IMapNavigator, I
         }
     }
 
-    /// <summary>Show what <paramref name="node"/> holds in <paramref name="rows"/>, largest first.</summary>
-    private void Fill(MemoryTree tree, ObservableCollection<MemoryRow> rows, int node)
+    /// <summary>What <paramref name="node"/> holds, largest first, in the one list every fill reuses.</summary>
+    private List<int> Arriving(MemoryTree tree, int node)
     {
-        // What the rows are a share of, so a row's bar answers "how much of this part is that".
-        var partTotal = tree.SizeOf(node);
-
         _arriving.Clear();
 
         foreach (var child in tree.ChildrenOf(node))
@@ -411,9 +412,18 @@ public sealed partial class MemoryViewModel : ObservableObject, IMapNavigator, I
             _arriving.Add(child);
         }
 
+        return _arriving;
+    }
+
+    /// <summary>Show what <paramref name="node"/> holds in <paramref name="rows"/>, largest first.</summary>
+    private void Fill(MemoryTree tree, ObservableCollection<MemoryRow> rows, int node)
+    {
+        // What the rows are a share of, so a row's bar answers "how much of this part is that".
+        var partTotal = tree.SizeOf(node);
+
         LiveList.Show(
             rows,
-            _arriving,
+            Arriving(tree, node),
             row => row.Key,
             child => tree.KeyOf(child),
             child => new MemoryRow(tree, child, partTotal),
