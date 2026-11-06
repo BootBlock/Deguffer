@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Testing;
@@ -6,6 +7,7 @@ namespace Deguffer.Testing;
 public sealed class FakeProcessInspector(params string[] running) : IProcessInspector
 {
     private readonly Dictionary<int, ProcessLiveness> _processes = [];
+    private readonly ConcurrentDictionary<int, int> _probes = new();
     private readonly List<TimeSpan> _ageLimits = [];
     private readonly List<string> _running = [.. running];
     private readonly List<StartedProcess> _started = [];
@@ -13,6 +15,12 @@ public sealed class FakeProcessInspector(params string[] running) : IProcessInsp
     public static FakeProcessInspector NothingRunning => new();
 
     public int InvalidateCount { get; private set; }
+
+    /// <summary>
+    /// How many times <see cref="Probe"/> asked about <paramref name="processId"/>, so a test can count
+    /// the readings of a list that probes every process it names.
+    /// </summary>
+    public int ProbeCount(int processId) => _probes.GetValueOrDefault(processId);
 
     /// <summary>The age each <see cref="DiscardOlderThan"/> was asked with, in order.</summary>
     public IReadOnlyList<TimeSpan> AgeLimits => _ageLimits;
@@ -85,6 +93,7 @@ public sealed class FakeProcessInspector(params string[] running) : IProcessInsp
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(processId);
 
+        _probes.AddOrUpdate(processId, 1, (_, count) => count + 1);
         return _processes.GetValueOrDefault(processId, ProcessLiveness.NotRunning);
     }
 

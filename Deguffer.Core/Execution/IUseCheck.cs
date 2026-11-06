@@ -42,8 +42,9 @@ public interface IUseCheck
     /// start a build, and press Clean, all within a second of that reading.</para>
     ///
     /// <para><b>What the bound applies to.</b> Every change to the programs running, a program a command
-    /// step started included. No step that removes a folder starts or ends a program, so a removal
-    /// is no reason to read again.</para>
+    /// step started included, and every record of them a check reads, such as Claude Code's list of
+    /// running sessions, whose entries a process writes as it starts. No step that removes a folder
+    /// starts or ends a program, so a removal is no reason to read again.</para>
     /// </summary>
     public static readonly TimeSpan ReadingLimit = TimeSpan.FromSeconds(1);
 
