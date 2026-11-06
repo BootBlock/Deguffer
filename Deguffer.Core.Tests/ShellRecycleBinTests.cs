@@ -1,5 +1,6 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -184,5 +185,7 @@ public sealed class ShellRecycleBinTests : IDisposable
                 _ => 0,
                 new FakeUserEnvironment(Path.GetTempPath())
                     .WithRegistryNumber(BinKey, "MaxCapacity", 1024)
-                    .WithRegistryNumber(BinKey, "NukeOnDelete", 0))));
+                    .WithRegistryNumber(BinKey, "NukeOnDelete", 0)),
+            WindowsFileSystem.Default,
+            WalkTuning.Default));
 }

@@ -2,6 +2,7 @@ using Deguffer.Core.Duplicates;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -146,7 +147,7 @@ public sealed class DuplicateActionsTests : DuplicateRemovalScene
                 File.Delete(LongPath.Extended(path));
                 return ShellTold.Moved();
             }),
-            new RecycleBinReach(_tree.Volumes, new RecycleBinRooms(_ => null, _tree.Environment)));
+            new RecycleBinReach(_tree.Volumes, new RecycleBinRooms(_ => null, _tree.Environment), WindowsFileSystem.Default, WalkTuning.Default));
         var prompt = new FakeDuplicateConfirmation(true);
 
         var answer = await Actions(prompt, bin).RemoveAsync(marks, ExploreRemovalMode.RecycleBin, () => null);
