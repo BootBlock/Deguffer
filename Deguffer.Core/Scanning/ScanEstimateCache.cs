@@ -295,9 +295,11 @@ public sealed class ScanEstimateCache
 
             foreach (var (path, entry) in loaded)
             {
-                // Expired entries are dropped on the way in, so a long-lived cache cannot
-                // accumulate every path the machine has ever had.
-                if (!IsStale(entry))
+                // `{"C:\\x": null}` is well-formed JSON, so it reaches here rather than the catch, as a
+                // null against a type that says it is never one. It is a miss for that path alone.
+                // Expired entries are dropped on the way in, so a long-lived cache cannot accumulate
+                // every path the machine has ever had.
+                if (entry is not null && !IsStale(entry))
                 {
                     var contents = path.EndsWith(ContentsMarker, StringComparison.Ordinal);
 

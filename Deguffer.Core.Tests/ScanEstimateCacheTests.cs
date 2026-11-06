@@ -142,6 +142,31 @@ public class ScanEstimateCacheTests
     }
 
     /// <summary>
+    /// A path mapped to <c>null</c> is well-formed JSON, so it passes the parse that catches a corrupt
+    /// file. It costs that path its remembered size, and never the others or the scan: the machine's
+    /// cache is built once for the process, so a throw here would fail every scan that asked for it.
+    /// </summary>
+    [Fact]
+    public async Task SkipsANullEntryAndKeepsTheRest()
+    {
+        using var temp = new TempDirectory();
+        var environment = new FakeUserEnvironment(temp.Path);
+        var cache = temp.CreateDirectory("npm-cache");
+        File.WriteAllBytes(Path.Combine(cache, "a.bin"), new byte[3000]);
+        var folder = Directory.CreateDirectory(Path.Combine(environment.LocalAppData, "Deguffer")).FullName;
+        var measuredAt = DateTimeOffset.UtcNow.AddHours(-1).ToString("O");
+        File.WriteAllText(
+            Path.Combine(folder, "scan-estimates.json"),
+            $$$"""{"C:\\Users\\testuser\\.nuget\\packages":null,"{{{cache.Replace(@"\", @"\\")}}}":{"Allocated":8192,"Logical":5000,"IsApproximate":false,"MeasuredAt":"{{{measuredAt}}}","Entries":7}}""");
+
+        var progress = new ProgressRecorder<ScanSize>();
+        var result = await Reopen(environment).MeasureAsync(cache, MinimumAge.Off, progress: progress);
+
+        Assert.Equal(5000, progress.Reports[0].Logical);
+        Assert.Equal(3000, result.Size.Logical);
+    }
+
+    /// <summary>
     /// A remembered size is the whole path's, so a run with the guard on must neither show one nor
     /// leave one behind.
     ///
