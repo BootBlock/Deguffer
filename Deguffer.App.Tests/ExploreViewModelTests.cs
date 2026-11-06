@@ -1046,6 +1046,40 @@ public sealed class ExploreViewModelTests : IDisposable
     });
 
     /// <summary>
+    /// The volume is read beside the scan: Windows is asked about the hidden space before the scan
+    /// finishes, and the map is drawn while the list of every mounted volume is still being read. The
+    /// scan is kept once that list is in.
+    /// </summary>
+    [Fact]
+    public void AFinishedScanIsDrawnWhileTheListOfVolumesIsStillBeingRead() => UiThread.Run(async () =>
+    {
+        _explore.Volumes.With(@"C:\", totalBytes: 12_000, freeBytes: 6_000, volumeName: @"\\?\Volume{5e1d7c42-8a3b-4f6e-b912-3c4d5e6f7a80}\");
+        var page = _explore.Page();
+        var tree = Drive(ExploreFixture.File("file", 3_000));
+        var release = _explore.Volumes.HoldRefreshes();
+
+        var running = page.ScanCommand.ExecuteAsync(null);
+
+        await Eventually.HoldsAsync(() => _explore.Hidden.Asked.Count > 0, "Windows is asked about the hidden space while the scan runs");
+        Assert.Equal([@"C:\"], _explore.Hidden.Asked);
+
+        _explore.Scanner.Current.Finish(ExploreScan.Fast(tree));
+        await Eventually.HoldsAsync(() => page.Tree is not null, "the finished scan is drawn");
+
+        Assert.Same(tree, page.Tree!.Scanned);
+        Assert.Equal(new VolumeSpace(12_000, 6_000), page.Volume);
+        Assert.Equal(StatusLine.Empty, page.Status.Line);
+        Assert.False(running.IsCompleted, "The list of volumes was meant to be held while the map was drawn.");
+        Assert.Empty(_explore.History.Kept(@"\\?\Volume{5e1d7c42-8a3b-4f6e-b912-3c4d5e6f7a80}\"));
+
+        release();
+        await running;
+
+        Assert.Single(_explore.History.Kept(@"\\?\Volume{5e1d7c42-8a3b-4f6e-b912-3c4d5e6f7a80}\"));
+        Assert.False(page.IsBusy);
+    });
+
+    /// <summary>
     /// A scan that walked for a reason elevating cannot fix still offers it where Windows refused a
     /// figure, because the elevated scan would draw that figure.
     /// </summary>
