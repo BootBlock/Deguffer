@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Mft;
+using Deguffer.Testing;
 
 namespace Deguffer.Benchmark.Tests;
 
@@ -294,6 +295,84 @@ public sealed class ReportTests
 
     private static string Render(TableCensus census, Route route, params RunSample[] runs) =>
         Report.Render(route, Tuning, [Place], Machine, runs, census);
+
+    /// <summary>
+    /// Where a table route's time went, stage by stage, so a run held up by one stage on one thread
+    /// reads apart from one held up by the drive. Indented, as parts of the elapsed time.
+    /// </summary>
+    [Fact]
+    public void ATableRouteReportsEachStageItRanInOrder()
+    {
+        var text = Render(
+            Route.Index,
+            Staged(firstPass: 4, deferred: 0.5, links: 12, deferredCount: 4_051),
+            Staged(firstPass: 2, deferred: 0.1, links: 12, deferredCount: 4_051),
+            Staged(firstPass: 3, deferred: 0.3, links: 12, deferredCount: 4_051));
+
+        string[] stages =
+        [
+            "  volume open", "  bitmap read", "  first pass", "  extension lists", "  deferred records", "  link placing", "  child links", "  the rest",
+        ];
+        var lines = text.Split('\n');
+        Assert.Equal(stages, lines.Where(line => stages.Any(stage => line.StartsWith(stage + " ", StringComparison.Ordinal))).Select(line => line[..19].TrimEnd()));
+
+        Assert.Equal("  first pass       4.000 s         2.500 s (2.000 s to 3.000 s)", Line(text, "  first pass"));
+        Assert.Equal("  deferred records 500.0 ms        200.0 ms (100.0 ms to 300.0 ms)", Line(text, "  deferred records"));
+        Assert.Equal("  volume open      500.0 ms        500.0 ms (500.0 ms to 500.0 ms)", Line(text, "  volume open"));
+        Assert.Equal("  the rest         250.0 ms        250.0 ms (250.0 ms to 250.0 ms)", Line(text, "  the rest"));
+        Assert.Equal("records deferred   4,051           4,051 (4,051 to 4,051)", Line(text, "records deferred"));
+        Assert.Equal("links placed       12              12 (12 to 12)", Line(text, "links placed"));
+    }
+
+    /// <summary>The table route places no links, so it shows no count of them rather than a count of zero.</summary>
+    [Fact]
+    public void OnlyARouteThatPlacesLinksReportsHowManyItPlaced()
+    {
+        var text = Render(Route.Table, Staged(firstPass: 1, deferred: 0, links: 0, deferredCount: 0, linkStages: false));
+
+        Assert.Contains("records deferred", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("links placed", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("child links", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>The mean read, bytes of records over reads of records, which a table in many pieces makes small.</summary>
+    [Fact]
+    public void ATableRouteReportsItsMeanRead()
+    {
+        var text = Render(Route.Table, Run(1) with { Tally = Run(1).Tally with { MeanReadBytes = 96 * 1024 } });
+
+        Assert.Equal("mean read          96.0 KiB", Line(text, "mean read"));
+        Assert.DoesNotContain("mean read", Render(Route.Walk, Run(1)), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A run whose stages are timed by a clock this test moves: the open half a second, the bitmap a
+    /// millisecond, the first pass and the deferred records as given, every other stage nothing, and
+    /// a quarter of a second outside them all.
+    /// </summary>
+    private static RunSample Staged(double firstPass, double deferred, int links, int deferredCount, bool linkStages = true)
+    {
+        var clock = new ManualTimeProvider();
+        var timings = new MftStageTimings(clock) { DeferredRecords = deferredCount, LinksPlaced = links };
+
+        timings.Start();
+        clock.Advance(TimeSpan.FromMilliseconds(1));
+        timings.End(MftBuildStage.BitmapRead);
+        clock.Advance(TimeSpan.FromSeconds(firstPass));
+        timings.End(MftBuildStage.FirstPass);
+        timings.End(MftBuildStage.ExtensionLists);
+        clock.Advance(TimeSpan.FromSeconds(deferred));
+        timings.End(MftBuildStage.DeferredRecords);
+
+        if (linkStages)
+        {
+            timings.End(MftBuildStage.LinkPlacement);
+            timings.End(MftBuildStage.ChildLinks);
+        }
+
+        var run = Run(0.5 + 0.001 + firstPass + deferred + 0.25);
+        return run with { Tally = run.Tally with { Stages = timings, OpenTime = TimeSpan.FromSeconds(0.5) } };
+    }
 
     private static RunSample Run(
         double seconds,

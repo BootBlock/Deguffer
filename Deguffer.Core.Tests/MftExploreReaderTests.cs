@@ -944,6 +944,51 @@ public class MftExploreReaderTests
     }
 
     /// <summary>
+    /// #486: the parse threads share one pool of names with no lock around it, so a table read on
+    /// four threads draws exactly the tree one thread draws. Every folder holds names every other
+    /// folder holds too, so the threads meet the same names at once, and each read keeps every
+    /// distinct name once: a name numbered twice would show here as a name kept twice.
+    /// </summary>
+    [Fact]
+    public void DrawsTheSameTreeOnFourParseThreadsAsOnOne()
+    {
+        const int Folders = 40;
+        const int FilesPerFolder = 50;
+
+        var fixture = new MftFixture();
+        var record = MftRecord.ReservedRecordCount;
+
+        for (var folder = 0; folder < Folders; folder++)
+        {
+            var folderRecord = record++;
+            fixture.AddDirectory(folderRecord, MftRecord.RootRecordNumber, $"package-{folder}");
+
+            for (var file = 0; file < FilesPerFolder; file++)
+            {
+                // Half the names repeat in every folder, as index.js and package.json do on a disk,
+                // and half are met once.
+                var name = file % 2 == 0 ? $"shared-{file}.js" : $"only-{folder}-{file}.js";
+                fixture.AddFile(record++, folderRecord, name, allocated: 4096 * (file + 1), logical: 4000 * (file + 1));
+            }
+        }
+
+        using var source = fixture.Build();
+
+        // Four records a read and eight reads in flight, so the four threads parse side by side.
+        var oneThread = MftExploreReader.Read(source, Root, [], new TableTuning(4 * 1024, 8, 1, 1), progress: null, default).Tree!;
+        var fourThreads = MftExploreReader.Read(source, Root, [], new TableTuning(4 * 1024, 8, 4, 1), progress: null, default).Tree!;
+
+        Assert.Equal(Drawn(oneThread), Drawn(fourThreads));
+        Assert.Equal(oneThread.NamesHeld, fourThreads.NamesHeld);
+
+        // The empty name, the root's, each folder's, the shared names once, and the rest once each.
+        Assert.Equal(2 + Folders + FilesPerFolder / 2 + Folders * FilesPerFolder / 2, fourThreads.NamesHeld);
+
+        static string[] Drawn(ExploreTree tree) =>
+            [.. Reachable(tree).Select(node => $"{tree.PathOf(node)}|{tree.SizeOf(node)}|{tree.LengthOf(node)}").Order(StringComparer.Ordinal)];
+    }
+
+    /// <summary>
     /// The whole volume: no components below the root, so there is nothing to resolve and a tree
     /// always comes back. The folder-rooted reads above ask for their own outcome, because what
     /// they can produce instead is the point of them.

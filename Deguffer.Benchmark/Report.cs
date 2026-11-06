@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Scanning.Mft;
 
 namespace Deguffer.Benchmark;
 
@@ -79,6 +80,9 @@ internal static class Report
             {
                 Row(text, "free records read", Bytes(inUse.FreeBytesRead(first.Tally)), Over(later, r => inUse.FreeBytesRead(r.Tally), Bytes));
             }
+
+            Row(text, "mean read", Kibibytes(first.Tally.MeanReadBytes), Over(later, r => r.Tally.MeanReadBytes, Kibibytes));
+            StageRows(text, first, later);
         }
         else if (route.Removes())
         {
@@ -103,6 +107,64 @@ internal static class Report
 
         return text.ToString();
     }
+
+    /// <summary>
+    /// Where a table route's time went: opening the volume, each stage in the order the first run ran
+    /// them, and what neither covers, so the rows add up to the elapsed time. Then the counts that
+    /// size the stages run on one thread after the drive has finished. A stage a run stopped before
+    /// reads as zero.
+    /// </summary>
+    private static void StageRows(StringBuilder text, RunSample first, RunSample[] later)
+    {
+        if (first.Tally.Stages is not { } stages)
+        {
+            return;
+        }
+
+        Row(text, "  volume open", Duration(first.Tally.OpenTime.TotalSeconds), Over(later, r => r.Tally.OpenTime.TotalSeconds, Duration));
+
+        foreach (var timed in stages.Stages)
+        {
+            var stage = timed.Stage;
+            Row(text, StageName(stage), Duration(timed.Elapsed.TotalSeconds), Over(later, r => StageSeconds(r, stage), Duration));
+        }
+
+        Row(text, "  the rest", Duration(Rest(first)), Over(later, Rest, Duration));
+        Row(text, "records deferred", Count(stages.DeferredRecords), Over(later, r => StagesOf(r).DeferredRecords, Count));
+
+        if (stages.Stages.Any(timed => timed.Stage == MftBuildStage.LinkPlacement))
+        {
+            Row(text, "links placed", Count(stages.LinksPlaced), Over(later, r => StagesOf(r).LinksPlaced, Count));
+        }
+    }
+
+    /// <summary>
+    /// The run's time outside the open and the stages: what the route does before the first stage
+    /// and after the last, such as allocating the index's columns, and closing the volume.
+    /// </summary>
+    private static double Rest(RunSample run) =>
+        (run.Elapsed - run.Tally.OpenTime - StagesOf(run).Stages.Aggregate(TimeSpan.Zero, (sum, timed) => sum + timed.Elapsed)).TotalSeconds;
+
+    private static double StageSeconds(RunSample run, MftBuildStage stage) => StagesOf(run).Of(stage).TotalSeconds;
+
+    /// <summary>
+    /// A later run's stages. Every run of a table route is timed, so where the first run carries its
+    /// stages and a later run does not, the runs were not measured alike and no median of them holds.
+    /// </summary>
+    private static MftStageTimings StagesOf(RunSample run) =>
+        run.Tally.Stages ?? throw new InvalidOperationException("Every run of a table route carries its stage timings.");
+
+    private static string StageName(MftBuildStage stage) => stage switch
+    {
+        MftBuildStage.BitmapRead => "  bitmap read",
+        MftBuildStage.FirstPass => "  first pass",
+        MftBuildStage.ExtensionLists => "  extension lists",
+        MftBuildStage.DeferredRecords => "  deferred records",
+        MftBuildStage.LinkPlacement => "  link placing",
+        MftBuildStage.ChildLinks => "  child links",
+        MftBuildStage.TreeAssembly => "  tree assembly",
+        _ => throw new ArgumentOutOfRangeException(nameof(stage), stage, "Not a stage of a table read."),
+    };
 
     /// <summary>
     /// Where a removal route's time went: the clean route's steps around their removals where it ran
@@ -163,6 +225,8 @@ internal static class Report
     private static string Share(double processors) => string.Create(Invariant, $"{processors:N2}");
 
     private static string Rate(double value) => string.Create(Invariant, $"{value:N1}");
+
+    private static string Kibibytes(double bytes) => string.Create(Invariant, $"{bytes / 1024:N1} KiB");
 
     private static string Bytes(double bytes) => string.Create(Invariant, $"{bytes / (1024 * 1024):N1} MiB");
 

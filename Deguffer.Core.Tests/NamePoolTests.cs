@@ -4,7 +4,8 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// The one store of every name an Explore tree holds: each distinct name numbered once, read back
-/// exactly, and readable through a frozen view while more names are added.
+/// exactly, readable through a frozen view while more names are added, and shared by every parse
+/// thread of a file-table read.
 /// </summary>
 public class NamePoolTests
 {
@@ -98,5 +99,69 @@ public class NamePoolTests
         Assert.Equal("before", names[before].ToString());
         Assert.Equal("after", names[after].ToString());
         Assert.Equal(number, pool.Intern(longName));
+    }
+
+    /// <summary>
+    /// #486: every parse thread interns into one pool without a lock of its own, so threads meeting
+    /// the same names at once, while the pool grows under them many times, must still give each
+    /// distinct name exactly one number. <see cref="ExploreTree.CompareByName(int[], NamePool.Frozen, int, int)"/>
+    /// takes two equal numbers as one name without comparing them, so a name numbered twice would be
+    /// sorted as two different names, and two names given one number would be drawn as one.
+    /// </summary>
+    [Fact]
+    public void NumbersEachNameOnceWhenManyThreadsInternTheSameNamesAtOnce()
+    {
+        const int Threads = 8;
+        const int Distinct = 20_000;
+
+        var pool = new NamePool();
+        var names = Enumerable.Range(0, Distinct).Select(i => $"name-{i % 97}-{i}.js").ToArray();
+        var numbers = new int[Threads][];
+        using var start = new Barrier(Threads);
+
+        var threads = Enumerable.Range(0, Threads).Select(t => new Thread(() =>
+        {
+            // Each thread meets the names in its own order, so a name is new to the pool on whichever
+            // thread happens to reach it first, and the others find it or race to add it.
+            var order = Enumerable.Range(0, Distinct).OrderBy(i => (i * (t + 3) + t * 7919) % Distinct).ToArray();
+            var mine = new int[Distinct];
+
+            start.SignalAndWait();
+
+            foreach (var i in order)
+            {
+                mine[i] = pool.Intern(names[i]);
+            }
+
+            numbers[t] = mine;
+        })).ToArray();
+
+        foreach (var thread in threads)
+        {
+            thread.Start();
+        }
+
+        foreach (var thread in threads)
+        {
+            thread.Join();
+        }
+
+        for (var t = 1; t < Threads; t++)
+        {
+            Assert.Equal(numbers[0], numbers[t]);
+        }
+
+        Assert.Equal(Distinct, numbers[0].Distinct().Count());
+        Assert.DoesNotContain(NamePool.Empty, numbers[0]);
+
+        // The empty name and each distinct name once, with nothing added twice.
+        Assert.Equal(Distinct + 1, pool.Count);
+
+        var frozen = pool.Freeze();
+        for (var i = 0; i < Distinct; i++)
+        {
+            Assert.Equal(names[i], frozen[numbers[0][i]].ToString());
+            Assert.Equal(numbers[0][i], pool.Intern(names[i]));
+        }
     }
 }

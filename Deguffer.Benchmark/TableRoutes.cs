@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Mft;
@@ -57,19 +58,28 @@ internal static class TableRoutes
             throw new ArgumentException("A table route reads a volume, so its target has a drive letter.", nameof(target));
         }
 
+        // Timed apart from the stages, which the read times, because opening reads the boot sector
+        // and $MFT's own extent map, and a system volume's $MFT can be in many pieces.
+        var opening = Stopwatch.GetTimestamp();
+
         // Opened above moments before, so a failure here is the volume going away mid-benchmark.
         using var source = new CountingMftSource(
             volumes.TryOpen(place.DriveLetter, out var reason)
             ?? throw new IOException($"The volume could not be opened again: {reason}."));
 
-        return route switch
+        var openTime = Stopwatch.GetElapsedTime(opening);
+        var timings = new MftStageTimings();
+
+        var tally = route switch
         {
-            Route.Table => Tally(source, ReadOnly(source, Count(source), tuning, ct)),
-            Route.Index => Tally(source, MftVolumeIndexBuilder.TryBuild(source, tuning, out _, ct)),
-            Route.Explore => Explore(source, $"{place.DriveLetter}:\\", [], tuning, ct),
-            Route.ExploreFolder => Explore(source, place.FullPath, place.Components, tuning, ct),
+            Route.Table => Tally(source, ReadOnly(source, Count(source), tuning, timings, ct), timings),
+            Route.Index => Tally(source, MftVolumeIndexBuilder.TryBuild(source, tuning, out _, ct, timings), timings),
+            Route.Explore => Explore(source, $"{place.DriveLetter}:\\", [], tuning, timings, ct),
+            Route.ExploreFolder => Explore(source, place.FullPath, place.Components, tuning, timings, ct),
             _ => throw new ArgumentOutOfRangeException(nameof(route), route, "Not a route that reads the table."),
         };
+
+        return tally with { OpenTime = openTime };
     }
 
     /// <summary>
@@ -77,24 +87,31 @@ internal static class TableRoutes
     /// folder was found in it, and handed back for what it keeps to be measured.
     /// </summary>
     private static RunTally Explore(
-        CountingMftSource source, string rootPath, IReadOnlyList<string> components, TableTuning tuning, CancellationToken ct)
+        CountingMftSource source,
+        string rootPath,
+        IReadOnlyList<string> components,
+        TableTuning tuning,
+        MftStageTimings timings,
+        CancellationToken ct)
     {
-        var read = MftExploreReader.Read(source, rootPath, components, tuning, progress: null, ct);
+        var read = MftExploreReader.Read(source, rootPath, components, tuning, progress: null, ct, timings: timings);
 
-        return Tally(source, read is { Tree: not null, WholeTable: true }) with
+        return Tally(source, read is { Tree: not null, WholeTable: true }, timings) with
         {
             Kept = read.Tree is { } tree ? new KeptResult(tree) : null,
         };
     }
 
-    private static RunTally Tally(CountingMftSource source, bool complete) =>
+    private static RunTally Tally(CountingMftSource source, bool complete, MftStageTimings timings) =>
         new(
             source.RecordsRead,
             source.BytesRead,
             complete,
             Reads: source.Reads,
             ClusterReads: source.ClusterReads,
-            ListReadTime: source.ListReadTime);
+            ListReadTime: source.ListReadTime,
+            MeanReadBytes: source.MeanReadBytes,
+            Stages: timings);
 
     /// <summary>The records a pass reads: every record the table holds, as far as a pass can number them.</summary>
     private static int Count(IMftSource source) => (int)Math.Min(source.RecordCount, int.MaxValue);
@@ -102,6 +119,6 @@ internal static class TableRoutes
     /// <summary>
     /// Read and parse every record and keep none of them: the floor the two structures are built on.
     /// </summary>
-    private static bool ReadOnly(IMftSource source, int count, TableTuning tuning, CancellationToken ct) =>
-        MftRecordStream.TryReadAll(source, count, tuning, static (_, _, in _, _) => true, onProgress: null, ct);
+    private static bool ReadOnly(IMftSource source, int count, TableTuning tuning, MftStageTimings timings, CancellationToken ct) =>
+        MftRecordStream.TryReadAll(source, count, tuning, static (_, _, in _, _) => true, onProgress: null, ct, timings);
 }
