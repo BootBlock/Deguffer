@@ -61,16 +61,12 @@ public sealed class RegistryBackups(IProcessRunner runner, string folder, string
     private const int LongestStem = 80;
 
     /// <summary>
-    /// The largest file read as a backup. An entry's export is a few kilobytes; anything near this is
-    /// not one, and reading it whole would be the cost of a stranger's file.
-    /// </summary>
-    private const int LongestFile = 4 * 1024 * 1024;
-
-    /// <summary>
     /// A restore is left to finish once it has started: ended part-way, it would leave the entry
     /// neither as it was nor as it is, which is worse than either.
     /// </summary>
     private static readonly ToolRun ImportRun = ToolRun.Command(CancelledCommand.Finishes);
+
+    private readonly RegistryBackupListing _listing = new(folder);
 
     public static RegistryBackups For(IUserEnvironment environment, ISystemDirectories directories, IProcessRunner runner) =>
         new(
@@ -138,8 +134,8 @@ public sealed class RegistryBackups(IProcessRunner runner, string folder, string
             return new BackupOutcome(false, backup.Path, $"The backup could not be read: {ex.Message}");
         }
 
-        if (bytes.Length > LongestFile
-            || RegistryFileContent.Parse(Decode(bytes)) is not { IsConfined: true } content
+        if (bytes.Length > RegistryBackupListing.LongestFile
+            || RegistryFileContent.Parse(bytes) is not { IsConfined: true } content
             || !content.FirstKey.Equals(backup.KeyPath, StringComparison.OrdinalIgnoreCase))
         {
             return new BackupOutcome(false, backup.Path,
@@ -211,64 +207,9 @@ public sealed class RegistryBackups(IProcessRunner runner, string folder, string
     }
 
     /// <summary>Every backup in the folder that names a key, newest first.</summary>
-    public IReadOnlyList<RegistryBackupFile> List()
-    {
-        var extended = LongPath.Extended(folder);
-
-        if (LongPath.ProbeDirectory(folder) is not PathPresence.Present)
-        {
-            return [];
-        }
-
-        var backups = new List<RegistryBackupFile>();
-
-        try
-        {
-            foreach (var file in Directory.EnumerateFiles(extended, "*.reg"))
-            {
-                // A copy an interrupted restore left behind is not a backup the user took.
-                if (!Path.GetFileName(file).StartsWith('.') && Describe(file) is { } backup)
-                {
-                    backups.Add(backup);
-                }
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // A folder that stops listing part-way still yields the files it listed.
-        }
-
-        return [.. backups.OrderByDescending(b => b.Written)];
-    }
-
-    /// <summary>What a backup file restores, read from the whole file, or null where it is not one.</summary>
-    internal static RegistryBackupFile? Describe(string file)
-    {
-        try
-        {
-            var info = new FileInfo(file);
-
-            if (info.Length > LongestFile)
-            {
-                return null;
-            }
-
-            return RegistryFileContent.Parse(Decode(File.ReadAllBytes(file))) is { } content
-                ? new RegistryBackupFile(LongPath.Display(file), content.FirstKey, content.DisplayName, info.LastWriteTimeUtc, content.IsConfined)
-                : null;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>reg.exe writes UTF-16 with a byte-order mark; the decoder honours whichever mark is there.</summary>
-    private static string Decode(byte[] bytes)
-    {
-        using var reader = new StreamReader(new MemoryStream(bytes), Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-        return reader.ReadToEnd();
-    }
+    /// <remarks>Reads only the files this instance has not read before, or that changed since.</remarks>
+    /// <exception cref="OperationCanceledException">The listing was abandoned.</exception>
+    public IReadOnlyList<RegistryBackupFile> List(CancellationToken ct) => _listing.List(ct);
 
     private string NewFileName(string label)
     {
