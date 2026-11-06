@@ -40,6 +40,11 @@ namespace Deguffer.Benchmark;
 /// How long opening the volume took, before the first stage: the boot sector and <c>$MFT</c>'s own
 /// extent map. Zero for a route that does not read the table.
 /// </param>
+/// <param name="Open">
+/// How long each step of opening the volume took, and how many reads each made. Null for a route
+/// that does not read the table, and without steps where the volume was opened by something that
+/// does not time them, as a test's fixture table is.
+/// </param>
 /// <param name="Stages">
 /// How long each stage of reading the table and building from it took, and the counts that size
 /// them. Null for a route that does not read the table.
@@ -64,4 +69,5 @@ internal readonly record struct RunTally(
     double MeanReadBytes = 0,
     MftStageTimings? Stages = null,
     TimeSpan OpenTime = default,
-    RaceTimes? Race = null);
+    RaceTimes? Race = null,
+    MftOpenTimings? Open = null);

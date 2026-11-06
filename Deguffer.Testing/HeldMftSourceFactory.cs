@@ -25,7 +25,7 @@ public sealed class HeldMftSourceFactory(char driveLetter, MftFixture fixture) :
     /// <summary>Let every read, waiting or still to come, go ahead.</summary>
     public void Release() => _released.TrySetResult();
 
-    public IMftSource? TryOpen(char letter, out FallbackReason reason)
+    public IMftSource? TryOpen(char letter, out FallbackReason reason, MftOpenTimings? timings = null)
     {
         if (char.ToUpperInvariant(letter) != char.ToUpperInvariant(driveLetter))
         {

@@ -146,6 +146,22 @@ public sealed class TableRoutesTests
         Assert.Null(census);
     }
 
+    /// <summary>
+    /// Each run hands the open timings of its own, and reports the steps the open timed in them, so
+    /// the report can say which step a slow open spent its time on.
+    /// </summary>
+    [Fact]
+    public void EachRunReportsTheStepsItsOpenTimed()
+    {
+        var volumes = new StepTimingSources(FakeMftSourceFactory.Serving(Drive, Volume().WithoutBitmap()));
+
+        var first = TableRoutes.Run(Route.Table, volumes, $@"{Drive}:\", TableTuning.Default, CancellationToken.None);
+        var second = TableRoutes.Run(Route.Table, volumes, $@"{Drive}:\", TableTuning.Default, CancellationToken.None);
+
+        Assert.Equal([MftOpenStep.FirstRecord], Assert.IsType<MftOpenTimings>(first.Open).Steps.Select(step => step.Step));
+        Assert.NotSame(first.Open, second.Open);
+    }
+
     [Fact]
     public void AVolumeThatCannotBeOpenedAgainStopsTheBenchmark() =>
         Assert.Throws<IOException>(() => TableRoutes.Run(
@@ -189,6 +205,19 @@ public sealed class TableRoutesTests
     [Fact]
     public void AFolderTheTableDoesNotHoldIsAnIncompleteRun() =>
         Assert.False(Run("ExploreFolder", Volume().WithoutBitmap(), $@"{Drive}:\elsewhere").Complete);
+
+    /// <summary>Opens through <paramref name="inner"/>, timing the open as one step, as a volume's open times its own.</summary>
+    private sealed class StepTimingSources(IMftSourceFactory inner) : IMftSourceFactory
+    {
+        public IMftSource? TryOpen(char driveLetter, out FallbackReason reason, MftOpenTimings? timings = null)
+        {
+            timings?.Start();
+            var source = inner.TryOpen(driveLetter, out reason);
+            timings?.End(MftOpenStep.FirstRecord);
+
+            return source;
+        }
+    }
 
     private static RunTally Run(string route, MftFixture volume, string? target = null) =>
         TableRoutes.Run(

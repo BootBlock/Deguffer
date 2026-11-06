@@ -115,7 +115,7 @@ public sealed class ScanFoldersOnSeveralDisksTests
 
         public int OpenCount => Volatile.Read(ref _opened);
 
-        public IMftSource? TryOpen(char driveLetter, out FallbackReason reason)
+        public IMftSource? TryOpen(char driveLetter, out FallbackReason reason, MftOpenTimings? timings = null)
         {
             Interlocked.Increment(ref _opened);
 
@@ -157,7 +157,7 @@ public sealed class ScanFoldersOnSeveralDisksTests
 
         private readonly TaskCompletionSource _reading = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public IMftSource? TryOpen(char driveLetter, out FallbackReason reason)
+        public IMftSource? TryOpen(char driveLetter, out FallbackReason reason, MftOpenTimings? timings = null)
         {
             reason = FallbackReason.None;
 
