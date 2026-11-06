@@ -247,11 +247,17 @@ public interface IVolumeInventory
     string? MountPointOf(string path);
 
     /// <summary>
-    /// Every place the volume mounted at <paramref name="mountPoint"/> is mounted, that one among
-    /// them, asked of the machine at the moment of the call. Empty where Windows will not say, which
-    /// is a share, a letter standing for somewhere else, and a folder nothing is mounted at.
+    /// Every place the volume mounted at <paramref name="mountPoint"/> now is mounted, that one among
+    /// them: <see cref="VolumeNameOf"/>, then <see cref="MountPointsOfVolume"/>. Empty where Windows
+    /// will not say, which is a share, a letter standing for somewhere else, and a folder nothing is
+    /// mounted at.
     ///
-    /// <para>Live for the reason <see cref="MountPointOf"/> is. Its caller is
+    /// <para>Composed here once, so every implementation asks which volume a mount point names before
+    /// it answers with that volume's places, and none can answer a moved letter with the volume it
+    /// used to name.</para>
+    ///
+    /// <para>Live, or remembered for no longer than one operation as described below, for the reason
+    /// <see cref="MountPointOf"/> is live. Its caller is
     /// <see cref="VolumeRoot.Places"/>, which finds every other path an item is reachable at, so that
     /// a refusal written about <c>C:\Windows</c> holds for the same folder reached through another
     /// mount of the system volume. A list remembered from before that mount was made would name
@@ -270,7 +276,8 @@ public interface IVolumeInventory
     /// unmeasured, and the window above already closes on its own.</para>
     /// </summary>
     /// <param name="mountPoint">A mount point, as <see cref="MountPointOf"/> answers one.</param>
-    IReadOnlyList<string> MountPointsOf(string mountPoint);
+    IReadOnlyList<string> MountPointsOf(string mountPoint) =>
+        VolumeNameOf(mountPoint) is { } name ? MountPointsOfVolume(name) : [];
 
     /// <summary>
     /// The <c>\\?\Volume{GUID}\</c> name of the volume mounted at <paramref name="mountPoint"/> now,

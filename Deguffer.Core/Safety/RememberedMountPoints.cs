@@ -30,8 +30,9 @@ namespace Deguffer.Core.Safety;
 /// then names the new one. That window is the owner's life, so only owners whose life is one
 /// operation remember. Explore's policy outlives a scan, so it remembers while it follows its rules
 /// and asks about each item live. A comparison with a folder named as text alone, such as the
-/// account's own folders, has no second followed side, which is why the clean's last check before a
-/// removal and its §5.6 verification ask the machine.</para>
+/// account's own folders, has no second followed side, which is why the executor's last check before
+/// a removal asks the machine. A clean runs long after the pass that planned it, so its §5.6
+/// verification remembers for that verification alone, never from the pass.</para>
 ///
 /// <para><b><see cref="IVolumeInventory.SubstituteOf"/> stays live.</b> It is one
 /// <c>QueryDosDevice</c> of about two microseconds, so remembering it would save almost nothing, and
@@ -49,14 +50,6 @@ internal sealed class RememberedMountPoints(IVolumeInventory volumes) : IVolumeI
     public IReadOnlyList<LocalVolume> Volumes => volumes.Volumes;
 
     public string? MountPointOf(string path) => volumes.MountPointOf(path);
-
-    /// <summary>
-    /// Every place the volume mounted at <paramref name="mountPoint"/> now is mounted, asked of the
-    /// machine the first time that volume is asked about since this was built or last
-    /// <see cref="Forget">forgot</see>.
-    /// </summary>
-    public IReadOnlyList<string> MountPointsOf(string mountPoint) =>
-        VolumeNameOf(mountPoint) is { } name ? MountPointsOfVolume(name) : [];
 
     public string? VolumeNameOf(string mountPoint) => volumes.VolumeNameOf(mountPoint);
 

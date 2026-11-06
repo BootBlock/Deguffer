@@ -103,19 +103,20 @@ public sealed class VolumeInventoryTests
     [Fact]
     public void AnswersEveryMountPointOfTheVolumeMountedAtOne()
     {
-        var volumes = VolumeInventory.Current.Volumes.Where(v => v.VolumeName is not null).ToList();
+        IVolumeInventory machine = VolumeInventory.Current;
+        var volumes = machine.Volumes.Where(v => v.VolumeName is not null).ToList();
 
         Assert.NotEmpty(volumes);
 
         Assert.All(volumes, v => Assert.All(v.MountPoints, mountPoint =>
         {
-            Assert.Equal(v.MountPoints, VolumeInventory.Current.MountPointsOf(mountPoint));
-            Assert.Equal(v.MountPoints, VolumeInventory.Current.MountPointsOf(mountPoint[..^1]));
+            Assert.Equal(v.MountPoints, machine.MountPointsOf(mountPoint));
+            Assert.Equal(v.MountPoints, machine.MountPointsOf(mountPoint[..^1]));
         }));
 
         using var temp = new TempDirectory();
 
-        Assert.Empty(VolumeInventory.Current.MountPointsOf(temp.Path));
+        Assert.Empty(machine.MountPointsOf(temp.Path));
     }
 
     /// <summary>

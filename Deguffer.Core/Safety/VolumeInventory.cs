@@ -44,9 +44,6 @@ public sealed class VolumeInventory : IVolumeInventory
 
     public string? MountPointOf(string path) => VolumeCalls.MountPointOf(path);
 
-    public IReadOnlyList<string> MountPointsOf(string mountPoint) =>
-        VolumeNameOf(mountPoint) is { } name ? MountPointsOfVolume(name) : [];
-
     public string? VolumeNameOf(string mountPoint)
     {
         // GetVolumeNameForVolumeMountPoint answers only for a mount point named with its trailing

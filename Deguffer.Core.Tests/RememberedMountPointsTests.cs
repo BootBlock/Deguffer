@@ -4,10 +4,12 @@ using Deguffer.Testing;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// Where a drive is mounted is asked once per mount point for the life of an owner that already
-/// remembers each path's answer, because nearly every path is on one of a few drives (#513). A volume
-/// mounted at a folder since the first question is still seen at every path under that folder, and
-/// a volume reached at a second mount point is still refused at both (#144, #146).
+/// Where a volume is mounted is asked once per volume for the life of an owner that already remembers
+/// each path's answer, because nearly every path is on one of a few drives (#513). Which volume a
+/// mount point names is asked each time, so a letter given to another volume is answered with that
+/// volume's places. A volume mounted at a folder since the first question is still seen at every path
+/// under that folder, and a volume reached at a second mount point is still refused at both (#144,
+/// #146).
 /// </summary>
 public sealed class RememberedMountPointsTests
 {
@@ -81,9 +83,9 @@ public sealed class RememberedMountPointsTests
     {
         var remembered = new RememberedMountPoints(_volumes);
 
-        var named = remembered.MountPointsOf(@"Q:\SysMount");
-        var separated = remembered.MountPointsOf(@"Q:\SysMount\");
-        var letter = remembered.MountPointsOf(@"C:\");
+        var named = MountPointsOf(remembered, @"Q:\SysMount");
+        var separated = MountPointsOf(remembered, @"Q:\SysMount\");
+        var letter = MountPointsOf(remembered, @"C:\");
 
         Assert.Single(_volumes.MountPointsQueries);
         Assert.Equal([@"C:\", @"Q:\SysMount\"], named);
@@ -105,7 +107,7 @@ public sealed class RememberedMountPointsTests
             .With(@"E:\", DriveType.Removable, volumeName: @"\\?\Volume{stick}\");
         var remembered = new RememberedMountPoints(volumes);
 
-        Assert.Equal([@"E:\"], remembered.MountPointsOf(@"E:\"));
+        Assert.Equal([@"E:\"], MountPointsOf(remembered, @"E:\"));
 
         volumes.Without(@"E:\").Without(@"C:\Dev\")
             .With(@"C:\Dev\", alsoMountedAt: [@"E:\"], volumeName: @"\\?\Volume{development}\");
@@ -127,7 +129,7 @@ public sealed class RememberedMountPointsTests
         var remembered = new RememberedMountPoints(_volumes);
         _volumes.FailingMountPointQueries = 1;
 
-        Assert.Empty(remembered.MountPointsOf(@"C:\"));
+        Assert.Empty(MountPointsOf(remembered, @"C:\"));
 
         var places = VolumeRoot.Places(remembered, @"Q:\SysMount\Windows\System32");
 
@@ -145,12 +147,12 @@ public sealed class RememberedMountPointsTests
         var volumes = new FakeVolumeInventory().With(@"C:\");
         var remembered = new RememberedMountPoints(volumes);
 
-        Assert.Equal([@"C:\"], remembered.MountPointsOf(@"C:\"));
+        Assert.Equal([@"C:\"], MountPointsOf(remembered, @"C:\"));
 
         volumes.Without(@"C:\").With(@"C:\", alsoMountedAt: [@"Q:\SysMount\"]);
         remembered.Forget();
 
-        Assert.Equal([@"C:\", @"Q:\SysMount\"], remembered.MountPointsOf(@"C:\"));
+        Assert.Equal([@"C:\", @"Q:\SysMount\"], MountPointsOf(remembered, @"C:\"));
         Assert.Equal(2, volumes.MountPointsQueries.Count);
     }
 
@@ -163,9 +165,9 @@ public sealed class RememberedMountPointsTests
     {
         var remembered = new RememberedMountPoints(_volumes);
 
-        remembered.MountPointsOf(@"C:\");
+        MountPointsOf(remembered, @"C:\");
         remembered.Invalidate();
-        remembered.MountPointsOf(@"C:\");
+        MountPointsOf(remembered, @"C:\");
 
         Assert.Equal(1, _volumes.InvalidateCount);
         Assert.Equal(2, _volumes.MountPointsQueries.Count);
@@ -191,4 +193,8 @@ public sealed class RememberedMountPointsTests
 
         Assert.Equal(2, _volumes.MountPointQueries.Count);
     }
+
+    /// <summary>The question every caller asks, which the interface composes for every implementation.</summary>
+    private static IReadOnlyList<string> MountPointsOf(IVolumeInventory volumes, string mountPoint) =>
+        volumes.MountPointsOf(mountPoint);
 }

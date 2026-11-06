@@ -126,13 +126,19 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// See <see cref="RememberedMountPoints"/> and the constructor's parameter.
     ///
     /// <para>Not the clean's: a clean runs long after the pass that planned it, so the executor's last
-    /// check before a removal and the §5.6 verification after it ask <see cref="_machine"/>.</para>
+    /// check before a removal and the §5.6 verification after it are given <see cref="LiveVolumes"/>,
+    /// and the verification remembers for itself alone.</para>
     /// </summary>
     protected IVolumeInventory Volumes => _volumes;
 
     private readonly RememberedMountPoints _volumes;
 
-    /// <summary>The volumes the constructor was given, asked at the call. See <see cref="Volumes"/>.</summary>
+    /// <summary>
+    /// The volumes the constructor was given, asked at the call, for whatever a provider reads again
+    /// at the clean rather than in the pass. See <see cref="Volumes"/>.
+    /// </summary>
+    protected IVolumeInventory LiveVolumes => _machine;
+
     private readonly IVolumeInventory _machine;
 
     private readonly ConcurrentDictionary<string, ReachedFolder> _reached = new(StringComparer.OrdinalIgnoreCase);

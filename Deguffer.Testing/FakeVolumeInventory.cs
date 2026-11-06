@@ -138,13 +138,6 @@ public sealed class FakeVolumeInventory : IVolumeInventory
     }
 
     /// <summary>
-    /// Every mount point of the volume here that is mounted at <paramref name="mountPoint"/>, as the
-    /// volumes stand at the call, or none where no volume is mounted there.
-    /// </summary>
-    public IReadOnlyList<string> MountPointsOf(string mountPoint) =>
-        VolumeNameOf(mountPoint) is { } name ? MountPointsOfVolume(name) : [];
-
-    /// <summary>
     /// The name of the volume here mounted at <paramref name="mountPoint"/>, as the volumes stand at
     /// the call: the one <see cref="With"/> gave it, or one made from its root where it gave none, so a
     /// volume read again with other figures is still the same volume. Null where none is mounted there.

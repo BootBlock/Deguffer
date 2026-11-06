@@ -91,7 +91,7 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
     {
         _system = system ?? SystemDirectories.Current;
         _projects = projects ?? new ClaudeCodeProjectsDiscovery(Environment, _system, Volumes);
-        _sessions = sessions ?? new ClaudeCodeSessionRegistry(Environment, Inspector, _system, Volumes);
+        _sessions = sessions ?? new ClaudeCodeSessionRegistry(Environment, Inspector, _system, LiveVolumes);
     }
 
     public override string Id => "claude-code-conversations";

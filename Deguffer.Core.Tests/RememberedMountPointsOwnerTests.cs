@@ -81,6 +81,37 @@ public sealed class RememberedMountPointsOwnerTests : IDisposable
         Assert.Equal(2, _volumes.MountPointsQueries.Count);
     }
 
+    /// <summary>
+    /// A clean runs long after the pass that planned it, so the provider's §5.6 verification asks
+    /// where the drive is mounted for itself rather than from the pass, and follows a protected
+    /// folder that went through a mount made since.
+    /// </summary>
+    [Fact]
+    public async Task AProvidersVerificationDoesNotUseThePassesAnswers()
+    {
+        var provider = new ReachingProvider(new FakeUserEnvironment(_temp.Path), _volumes);
+
+        provider.Reached($@"{Source}\first");
+
+        Assert.Single(_volumes.MountPointsQueries);
+
+        _volumes.Without(@"C:\").With(@"C:\", alsoMountedAt: [@"Q:\SysMount\"]);
+
+        var plan = new CleanupPlan
+        {
+            ProviderId = provider.Id,
+            ProviderName = provider.Name,
+            Tier = provider.Tier,
+            WhatHappensOnNextUse = provider.WhatHappensOnNextUse,
+            Steps = [new DeleteDirectoryStep($@"{Source}\build", "Build output")],
+            ProtectedPaths = [new ProtectedPath($@"{Source}\keep", "It must survive.", PathPresence.Present, HeldContentBefore: true)],
+        };
+
+        await provider.VerifyAsync(plan);
+
+        Assert.Equal(2, _volumes.MountPointsQueries.Count);
+    }
+
     /// <summary>A provider that plans nothing and follows the folders it is asked about.</summary>
     private sealed class ReachingProvider(IUserEnvironment environment, IVolumeInventory volumes)
         : CleanupProviderBase(
