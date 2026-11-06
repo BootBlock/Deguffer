@@ -88,11 +88,11 @@ internal sealed class ContentMatching
 
     /// <summary>
     /// The checksum of one file's <paramref name="part"/>, or null where it was left out, through a
-    /// running checksum no other reader holds at the time.
+    /// running checksum by <paramref name="algorithm"/> no other reader holds at the time.
     /// </summary>
-    private ContentChecksum? Read(DuplicateCandidate file, ContentPart part, ChecksumAlgorithm algorithm, ConcurrentBag<Checksum> idle, CancellationToken ct)
+    private ContentChecksum? Read(DuplicateCandidate file, ContentPart part, ChecksumAlgorithm algorithm, IdleChecksums idle, CancellationToken ct)
     {
-        var checksum = idle.TryTake(out var free) ? free : Checksum.For(algorithm);
+        var checksum = idle.Take(algorithm);
 
         try
         {
@@ -128,7 +128,7 @@ internal sealed class ContentMatching
         }
         finally
         {
-            idle.Add(checksum);
+            idle.Return(checksum);
         }
     }
 
@@ -147,6 +147,32 @@ internal sealed class ContentMatching
         public int Unread = files.Count;
     }
 
+    /// <summary>
+    /// The running checksums no reader holds at the time, apart by algorithm, since a run reads the
+    /// ends of its larger files by one and everything else by the one chosen
+    /// (<see cref="ContentReader.AlgorithmOf"/>). A reader takes one rather than making one for each
+    /// file (G5).
+    /// </summary>
+    private sealed class IdleChecksums : IDisposable
+    {
+        private readonly ConcurrentDictionary<ChecksumAlgorithm, ConcurrentBag<Checksum>> _idle = new();
+
+        public Checksum Take(ChecksumAlgorithm algorithm) =>
+            Of(algorithm).TryTake(out var free) ? free : Checksum.For(algorithm);
+
+        public void Return(Checksum checksum) => Of(checksum.Algorithm).Add(checksum);
+
+        public void Dispose()
+        {
+            foreach (var checksum in _idle.Values.SelectMany(idle => idle))
+            {
+                checksum.Dispose();
+            }
+        }
+
+        private ConcurrentBag<Checksum> Of(ChecksumAlgorithm algorithm) => _idle.GetOrAdd(algorithm, static _ => []);
+    }
+
     /// <summary>One file of a <see cref="Reading"/>, by its place there.</summary>
     private readonly record struct FileRead(Reading Group, int File);
 
@@ -161,7 +187,7 @@ internal sealed class ContentMatching
         CancellationToken ct)
     {
         private readonly LaneWorkers<FileRead> _workers = new(lanes.Readers, ct);
-        private readonly ConcurrentBag<Checksum> _idle = [];
+        private readonly IdleChecksums _idle = new();
 
         public async Task MatchAsync(IReadOnlyList<CandidateGroup> groups)
         {
@@ -173,10 +199,7 @@ internal sealed class ContentMatching
             finally
             {
                 // Every reader has ended by now, whether the run ended, stopped or failed.
-                foreach (var checksum in _idle)
-                {
-                    checksum.Dispose();
-                }
+                _idle.Dispose();
             }
 
             measure.Finished();
@@ -198,7 +221,8 @@ internal sealed class ContentMatching
             var (group, file) = read;
             var candidate = group.Files[file];
 
-            group.Checksums[file] = matching.Read(candidate, group.Part, algorithm, _idle, ct);
+            group.Checksums[file] = matching.Read(
+                candidate, group.Part, ContentReader.AlgorithmOf(group.Part, candidate.Length, algorithm), _idle, ct);
             measure.Done(ContentReader.BytesOf(group.Part, candidate.Length));
 
             if (Interlocked.Decrement(ref group.Unread) == 0)

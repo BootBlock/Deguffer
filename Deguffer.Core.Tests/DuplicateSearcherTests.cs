@@ -84,6 +84,66 @@ public sealed class DuplicateSearcherTests : IDisposable
     }
 
     /// <summary>
+    /// The first and last blocks of a file larger than the two only decide which files are read in
+    /// full, so they are read by XXH128 whatever the search's checksum. A file read whole at once and
+    /// every full read give the value a group shows, so they are read by the checksum chosen. Files
+    /// whose ends are equal and whose middles differ still part, and equal files still match with the
+    /// chosen checksum's value on their group, large and small alike.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Offered))]
+    public async Task TheEndsOfALargerFileAreReadByXxHash128AndWhatAGroupShowsByTheChosenChecksum(ChecksumAlgorithm algorithm)
+    {
+        const int Large = 200 * 1024;
+        const ChecksumAlgorithm Sorting = ChecksumAlgorithm.XxHash128;
+        var large = Random(Large, 7);
+        var middle = (byte[])large.Clone();
+        middle[Large / 2] ^= 0xFF;
+        var small = Random(5000, 8);
+        _tree.File(large, "Data", "large1.bin");
+        _tree.File(large, "Data", "large2.bin");
+        _tree.File(middle, "Data", "largemiddle.bin");
+        _tree.File(small, "Data", "small1.bin");
+        _tree.File(small, "Data", "small2.bin");
+        List<(string Name, ContentPart Part, ChecksumAlgorithm Algorithm)> reads = [];
+
+        var result = await _tree.Searcher((file, part, checksum, ct) =>
+        {
+            lock (reads)
+            {
+                reads.Add((file.Name, part, checksum.Algorithm));
+            }
+
+            return ContentReader.Default.Read(file, part, checksum, ct);
+        }).SearchAsync(new DuplicateSearch(MatchCriteria.Content, [Searched("Data")], algorithm), _tree.Policy());
+
+        Assert.Equal(
+            [(Of(algorithm, large), "large1.bin, large2.bin"), (Of(algorithm, small), "small1.bin, small2.bin")],
+            result.Groups
+                .Select(group => (group.Checksum, string.Join(", ", group.Files.Select(file => file.Name).Order(StringComparer.Ordinal))))
+                .OrderBy(group => group.Item2, StringComparer.Ordinal));
+        Assert.Equal(
+            [
+                ("large1.bin", ContentPart.Ends, Sorting), ("large1.bin", ContentPart.Whole, algorithm),
+                ("large2.bin", ContentPart.Ends, Sorting), ("large2.bin", ContentPart.Whole, algorithm),
+                ("largemiddle.bin", ContentPart.Ends, Sorting), ("largemiddle.bin", ContentPart.Whole, algorithm),
+                ("small1.bin", ContentPart.Ends, algorithm), ("small2.bin", ContentPart.Ends, algorithm),
+            ],
+            reads.OrderBy(read => read.Name, StringComparer.Ordinal).ThenBy(read => read.Part));
+    }
+
+    public static TheoryData<ChecksumAlgorithm> Offered() => [.. ChecksumAlgorithms.Offered];
+
+    /// <summary>The checksum of the whole of <paramref name="content"/> by <paramref name="algorithm"/>.</summary>
+    private static ContentChecksum? Of(ChecksumAlgorithm algorithm, byte[] content)
+    {
+        using var checksum = Checksum.For(algorithm);
+        checksum.Append(content);
+
+        return checksum.Finish();
+    }
+
+    /// <summary>
     /// The candidates are handed over, and waited for, before any content is read and before the
     /// first group is confirmed, which is what lets a page read the keeping rule each group is
     /// placed by before the first one arrives.
