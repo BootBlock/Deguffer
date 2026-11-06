@@ -25,7 +25,7 @@ public sealed class HeldMftSourceFactory(char driveLetter, MftFixture fixture) :
     /// <summary>Let every read, waiting or still to come, go ahead.</summary>
     public void Release() => _released.TrySetResult();
 
-    public IMftSource? TryOpen(char letter, out FallbackReason reason, MftOpenTimings? timings = null)
+    public IMftVolume? TryOpen(char letter, out FallbackReason reason, MftOpenTimings? timings = null)
     {
         if (char.ToUpperInvariant(letter) != char.ToUpperInvariant(driveLetter))
         {
@@ -36,7 +36,7 @@ public sealed class HeldMftSourceFactory(char driveLetter, MftFixture fixture) :
         Interlocked.Increment(ref _opened);
         reason = FallbackReason.None;
 
-        return new Held(fixture.Build(), this);
+        return new ServedVolume(new Held(fixture.Build(), this));
     }
 
     private sealed class Held(IMftSource inner, HeldMftSourceFactory owner) : IMftSource

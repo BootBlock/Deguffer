@@ -99,8 +99,8 @@ Each needs #466 for its test.
 | #478 | Low I/O priority for a raced build. #477 found the disk queue a cause only cold, for a build of another volume on the walk's disk. |
 | #481 | One subtree traversal for every age guard. |
 | #483 | A string decoded for each hard link's name and almost never kept. |
-| #544 | A read through a volume's handle slows the next walk of that volume without reading the drive: the cause #477 found. |
-| #545 | A busy volume's open waits 0.3 to 1.5 s on an NTFS flush on the thread that asked for its index, so the raced walk starts late. Move record 0's read to the build's thread. |
+| #544 | A read through a volume's handle slows the next walk of that volume without reading the drive: the cause #477 found. Done: NTFS flushes the volume at a handle's first read past 8 KiB, which no other way of reading the table avoids, so the build now makes that read beside the raced walk rather than before it (`after-the-scanner.md` item 7). The first walk of the volume after the flush still waits on a checkpoint of its log. |
+| #545 | A busy volume's open waits 0.3 to 1.5 s on an NTFS flush on the thread that asked for its index, so the raced walk starts late. Move record 0's read to the build's thread. Done with #544: the open reads only the boot sector, and the build finds the table. |
 | #482 | Directory names in a name pool. #477 found collections are not the cause, so this cuts allocation only. |
 
 ### 7. Memory churn in providers

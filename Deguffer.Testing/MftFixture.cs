@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Mft;
 
 namespace Deguffer.Testing;
@@ -497,6 +498,13 @@ public sealed class MftFixture
         return NtfsVolumeImage.Build(
             _records, _bytesPerRecord, bytesPerSector, bytesPerCluster, gapAfterCluster, _withBitmap ? BitmapBytes() : null);
     }
+
+    /// <summary>
+    /// <see cref="BuildVolume"/>, opened and its table read as a scan does both, or null with the
+    /// reason either step gave.
+    /// </summary>
+    internal IMftSource? OpenVolume(int bytesPerSector, int bytesPerCluster, out FallbackReason reason, long? gapAfterCluster = null) =>
+        VolumeMftSource.TryOpen(BuildVolume(bytesPerSector, bytesPerCluster, gapAfterCluster), out reason)?.TryReadTable(out reason);
 
     /// <summary>
     /// A parent as NTFS stores it: record number in the low 48 bits, reuse sequence above. The

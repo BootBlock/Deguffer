@@ -209,13 +209,13 @@ public sealed class TableRoutesTests
     /// <summary>Opens through <paramref name="inner"/>, timing the open as one step, as a volume's open times its own.</summary>
     private sealed class StepTimingSources(IMftSourceFactory inner) : IMftSourceFactory
     {
-        public IMftSource? TryOpen(char driveLetter, out FallbackReason reason, MftOpenTimings? timings = null)
+        public IMftVolume? TryOpen(char driveLetter, out FallbackReason reason, MftOpenTimings? timings = null)
         {
             timings?.Start();
-            var source = inner.TryOpen(driveLetter, out reason);
+            var volume = inner.TryOpen(driveLetter, out reason);
             timings?.End(MftOpenStep.FirstRecord);
 
-            return source;
+            return volume;
         }
     }
 

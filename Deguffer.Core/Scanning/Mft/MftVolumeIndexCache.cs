@@ -13,7 +13,12 @@ namespace Deguffer.Core.Scanning.Mft;
 /// <see cref="Configuration.ScanRoute.Auto"/> does. The open is not deferred with the build, because
 /// it is what says the table cannot be read at all, and a caller racing the walk has to know that
 /// before it starts: a walk that happened to finish first would otherwise hide the reason, and with
-/// it the offer of administrator rights.</para>
+/// it the offer of administrator rights. The read of where the table is, which the open leaves to
+/// <see cref="IMftVolume.TryReadTable"/>, is deferred: its first read makes NTFS flush the whole
+/// volume, which took 0.8 to 1.6 s after a walk where it was measured (#544), and the walk raced against the build would
+/// otherwise wait for it before it started. A table that cannot be found is then a failure of the
+/// build, as one that cannot be parsed whole already is: a walk that answers before it is known says
+/// nothing, and every question after it carries the reason.</para>
 ///
 /// <para>A build belongs to the scan, not to whichever caller started it. A caller that stops
 /// waiting, because the walk answered first, leaves the build running for the questions after it.
@@ -90,9 +95,9 @@ public sealed class MftVolumeIndexCache
         // without an owner. The walk asks the same question of the same cache, so it costs nothing
         // where the open then fails.
         var table = _tuning.ForVolume(driveLetter).Table;
-        var source = _factory.TryOpen(driveLetter, out var reason);
+        var volume = _factory.TryOpen(driveLetter, out var reason);
 
-        if (source is null)
+        if (volume is null)
         {
             return Task.FromResult(new Built(null, reason));
         }
@@ -109,10 +114,13 @@ public sealed class MftVolumeIndexCache
             {
                 Volatile.Write(ref ran, true);
 
-                using (source)
-                {
-                    return Build(source, table, scan);
-                }
+                // Read here rather than with the open: see the class remarks. A table that cannot be
+                // found closes the volume and says why, as an open that fails does.
+                using var source = volume.TryReadTable(out var unread);
+
+                return source is null
+                    ? new Built(null, unread)
+                    : Build(source, table, scan);
             },
             scan);
 
@@ -120,7 +128,7 @@ public sealed class MftVolumeIndexCache
         // build, and the build is all that closes the handle. A build that ran closed it on the way out.
         if ((built.IsFaulted || built.IsCanceled) && !Volatile.Read(ref ran))
         {
-            source.Dispose();
+            volume.Dispose();
         }
 
         return built;

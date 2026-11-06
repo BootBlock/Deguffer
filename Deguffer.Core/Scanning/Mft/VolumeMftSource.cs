@@ -37,12 +37,16 @@ public sealed partial class VolumeMftSource : IMftSource
     public long RecordCount => _extents.DataSize / _geometry.BytesPerFileRecord;
 
     /// <summary>
-    /// Open the volume holding <paramref name="driveLetter"/> and read enough of it to serve
-    /// records. Returns null with a reason on every expected failure — §5.5 requires the fallback
-    /// to be observable, so "could not" always comes with "because".
+    /// Open the volume holding <paramref name="driveLetter"/> and read its boot sector, without
+    /// reading its table (<see cref="IMftVolume"/>). Returns null with a reason on every expected
+    /// failure — §5.5 requires the fallback to be observable, so "could not" always comes with
+    /// "because".
     /// </summary>
-    /// <param name="timings">Where each step of the open is timed, or null where nothing measures it.</param>
-    public static VolumeMftSource? TryOpen(char driveLetter, out FallbackReason reason, MftOpenTimings? timings = null)
+    /// <param name="timings">
+    /// Where each step of the open is timed, and those of finding the table after it, or null where
+    /// nothing measures it.
+    /// </param>
+    public static IMftVolume? TryOpen(char driveLetter, out FallbackReason reason, MftOpenTimings? timings = null)
     {
         timings?.Start();
         var handle = OpenOverlapped($@"\\.\{char.ToUpperInvariant(driveLetter)}:");
@@ -76,22 +80,25 @@ public sealed partial class VolumeMftSource : IMftSource
         CreateFile(path, GenericRead, FileShareRead | FileShareWrite, nint.Zero, OpenExisting, FileFlagOverlapped, nint.Zero);
 
     /// <summary>
-    /// Read enough of <paramref name="volume"/> to serve records, taking ownership of it: it is
-    /// disposed here on every exit that does not hand it to a source, a throw included, because a
-    /// leaked raw handle keeps the volume open until finalisation.
+    /// Read the boot sector of <paramref name="volume"/>, taking ownership of it: it is disposed here
+    /// on every exit that does not hand it to an <see cref="IMftVolume"/>, a throw included, because
+    /// a leaked raw handle keeps the volume open until finalisation.
+    ///
+    /// <para>Reads nothing past <see cref="BootReadBytes"/>, which NTFS serves without the flush the
+    /// table's first read costs (<see cref="IMftVolume"/>).</para>
     /// </summary>
     /// <param name="timings">
-    /// Where each step after the handle is timed, from the clock the caller started, or null.
+    /// Where each step after the handle is timed, from the clock the caller started, or null. The
+    /// volume keeps it for the steps of finding the table.
     /// </param>
-    internal static VolumeMftSource? TryOpen(IRawVolume volume, out FallbackReason reason, MftOpenTimings? timings = null)
+    internal static IMftVolume? TryOpen(IRawVolume volume, out FallbackReason reason, MftOpenTimings? timings = null)
     {
-        reason = FallbackReason.MasterFileTableIncomplete;
-        VolumeMftSource? source = null;
+        IMftVolume? opened = null;
 
         try
         {
-            source = Initialise(volume, ref reason, timings);
-            return source;
+            opened = ReadBootSector(volume, out reason, timings);
+            return opened;
         }
         catch (IOException)
         {
@@ -101,14 +108,14 @@ public sealed partial class VolumeMftSource : IMftSource
         }
         finally
         {
-            if (source is null)
+            if (opened is null)
             {
                 volume.Dispose();
             }
         }
     }
 
-    private static VolumeMftSource? Initialise(IRawVolume volume, ref FallbackReason reason, MftOpenTimings? timings)
+    private static OpenedVolume? ReadBootSector(IRawVolume volume, out FallbackReason reason, MftOpenTimings? timings)
     {
         // Sized to the largest sector, not to the 512 bytes the boot sector occupies, because the
         // sector size is not known until this read has succeeded. Microsoft's rules for an unbuffered
@@ -124,7 +131,44 @@ public sealed partial class VolumeMftSource : IMftSource
         }
 
         timings?.End(MftOpenStep.BootSector);
+        reason = FallbackReason.None;
+        return new OpenedVolume(volume, geometry, timings);
+    }
 
+    /// <summary>
+    /// Read enough of the table of <paramref name="volume"/>, whose boot sector gave
+    /// <paramref name="geometry"/>, to serve records, taking ownership of the volume as
+    /// <see cref="TryOpen(IRawVolume, out FallbackReason, MftOpenTimings?)"/> does: disposed here on
+    /// every exit that does not hand it to a source.
+    /// </summary>
+    /// <param name="timings">Where each step of finding the table is timed, as the open's were, or null.</param>
+    internal static VolumeMftSource? TryReadTable(
+        IRawVolume volume, NtfsBootSector geometry, out FallbackReason reason, MftOpenTimings? timings = null)
+    {
+        VolumeMftSource? source = null;
+
+        try
+        {
+            source = ReadExtents(volume, geometry, out reason, timings);
+            return source;
+        }
+        catch (IOException)
+        {
+            reason = FallbackReason.VolumeNotAddressable;
+            return null;
+        }
+        finally
+        {
+            if (source is null)
+            {
+                volume.Dispose();
+            }
+        }
+    }
+
+    private static VolumeMftSource? ReadExtents(
+        IRawVolume volume, NtfsBootSector geometry, out FallbackReason reason, MftOpenTimings? timings)
+    {
         // Record 0 is read in whole clusters rather than as one record, which can be shorter than
         // a sector. $MFT's extension records are read through the same volume, before the source
         // that would otherwise serve them exists.
@@ -139,10 +183,9 @@ public sealed partial class VolumeMftSource : IMftSource
         using var start = new VolumeReadBuffer(clusters * geometry.BytesPerCluster);
         var record0 = start.Span[..geometry.BytesPerFileRecord];
 
-        // The slow step of the open on a busy volume. NTFS flushes the volume before a handle's first
-        // read past the boot file, whatever the handle's access and wherever the read lands. The flush
-        // costs what an explicit one would: 0.3 to 1.5 s on a busy system volume, milliseconds on an
-        // idle one. Neither a handle for FILE_READ_DATA alone nor extended DASD I/O avoids it.
+        // The slow step on a busy volume: the first read past the volume's first 8 KiB, which NTFS
+        // serves by flushing the volume (IMftVolume). Neither a handle for FILE_READ_DATA alone nor
+        // extended DASD I/O avoids it.
         if (!read(geometry.MftStartCluster, start.Span))
         {
             reason = FallbackReason.MasterFileTableIncomplete;

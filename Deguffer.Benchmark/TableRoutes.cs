@@ -26,7 +26,7 @@ internal static class TableRoutes
     /// </param>
     public static FallbackReason Probe(IMftSourceFactory volumes, char drive, out TableCensus? census)
     {
-        using var source = volumes.TryOpen(drive, out var reason);
+        using var source = volumes.TryOpenTable(drive, out var reason);
 
         census = null;
 
@@ -60,14 +60,19 @@ internal static class TableRoutes
 
         // Timed apart from the stages, which the read times, because opening reads the boot sector
         // and $MFT's own extent map, and a system volume's $MFT can be in many pieces. The open times
-        // its own steps as well, so a slow one can be traced to the handle or to the reads.
+        // its own steps as well, so a slow one can be traced to the handle or to the reads: finding
+        // the table pays NTFS's flush of the volume (IMftVolume). Both steps run here at once, as an
+        // Explore scan runs them.
         var open = new MftOpenTimings();
         var opening = Stopwatch.GetTimestamp();
 
         // Opened above moments before, so a failure here is the volume going away mid-benchmark.
+        using var volume = volumes.TryOpen(place.DriveLetter, out var reason, open)
+            ?? throw new IOException($"The volume could not be opened again: {reason}.");
+
         using var source = new CountingMftSource(
-            volumes.TryOpen(place.DriveLetter, out var reason, open)
-            ?? throw new IOException($"The volume could not be opened again: {reason}."));
+            volume.TryReadTable(out reason)
+            ?? throw new IOException($"The table could not be found again: {reason}."));
 
         var openTime = Stopwatch.GetElapsedTime(opening);
         var timings = new MftStageTimings();

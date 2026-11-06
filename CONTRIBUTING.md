@@ -56,6 +56,7 @@ Deguffer.Benchmark folders C:\Users\<user>\Pictures D:\Photos
 Deguffer.Benchmark remove D:\benchmark --files 100000 --depth 15 --fanout 2 --read-only
 Deguffer.Benchmark clean D:\benchmark --trees 500 --files-per-tree 100
 Deguffer.Benchmark race C:\Users\<user>\source --build D --reads-in-flight 2
+Deguffer.Benchmark scan C:\Users\<user>\source --runs 6
 ```
 
 - `walk <folder>` walks a folder as an unelevated scan does. Run it from an ordinary prompt.
@@ -112,6 +113,12 @@ Deguffer.Benchmark race C:\Users\<user>\source --build D --reads-in-flight 2
   list itself (§2 of the specification). Unlike the other table routes, it walks and builds with what
   a scan uses for each drive's kind, and the table and walk options still override that. Every result
   names the garbage collector, so a run under `DOTNET_gcServer=1` or `DOTNET_GCgen0size` is told apart.
+- `scan <folder>` measures a folder as an elevated scan does the first time it asks about the
+  folder's volume: through the scanner, with a new one each run, so each run opens the volume,
+  finds its table and races the walk against the build, and the first to answer is the answer.
+  Each run follows an untimed walk of the folder. It times what the `race` route leaves out: the
+  open, which a scan makes before it starts the walk. It needs an elevated prompt, and it walks and
+  reads with what a scan uses for the drive's kind, so it takes none of the walk or table options.
 - `remove` and `clean` refuse a folder that already exists, and its parent must exist. After each
   run they check that a file they keep beside the trees, and every project, is still there, and
   stop if one is not. They remove the folder when they finish, even when cancelled. The tree is

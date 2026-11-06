@@ -34,9 +34,7 @@ public class VolumeMftSourceTests
     [InlineData(512, 512, 1024, 3L)]
     public void MeasuresATreeFromTheVolumeItIsOn(int bytesPerSector, int bytesPerCluster, int bytesPerRecord, long? gapAfterCluster)
     {
-        var volume = Tree(bytesPerRecord).BuildVolume(bytesPerSector, bytesPerCluster, gapAfterCluster);
-
-        using var source = VolumeMftSource.TryOpen(volume, out var reason);
+        using var source = Tree(bytesPerRecord).OpenVolume(bytesPerSector, bytesPerCluster, out var reason, gapAfterCluster);
 
         Assert.Equal(FallbackReason.None, reason);
         Assert.NotNull(source);
@@ -57,7 +55,7 @@ public class VolumeMftSourceTests
     [InlineData(4096, 65536, 4096)]
     public void ReadsTheBitmapRecordZeroLocates(int bytesPerSector, int bytesPerCluster, int bytesPerRecord)
     {
-        using var source = VolumeMftSource.TryOpen(Tree(bytesPerRecord).BuildVolume(bytesPerSector, bytesPerCluster), out _);
+        using var source = Tree(bytesPerRecord).OpenVolume(bytesPerSector, bytesPerCluster, out _);
 
         Assert.NotNull(source?.Bitmap);
 
@@ -79,7 +77,7 @@ public class VolumeMftSourceTests
     [InlineData(512, 512, 1024, 3L)]
     public async Task ReadsWhatItPlannedToRead(int bytesPerSector, int bytesPerCluster, int bytesPerRecord, long? gapAfterCluster)
     {
-        using var source = VolumeMftSource.TryOpen(Tree(bytesPerRecord).BuildVolume(bytesPerSector, bytesPerCluster, gapAfterCluster), out _);
+        using var source = Tree(bytesPerRecord).OpenVolume(bytesPerSector, bytesPerCluster, out _, gapAfterCluster);
         using var buffer = new VolumeReadBuffer(8 * bytesPerRecord);
 
         Assert.NotNull(source);
@@ -140,8 +138,7 @@ public class VolumeMftSourceTests
     {
         const int BytesPerRecord = 1024;
 
-        using var source = VolumeMftSource.TryOpen(
-            Tree(BytesPerRecord).BuildVolume(bytesPerSector: 4096, bytesPerCluster: 4096), out _);
+        using var source = Tree(BytesPerRecord).OpenVolume(bytesPerSector: 4096, bytesPerCluster: 4096, out _);
         using var expected = Tree(BytesPerRecord).Build();
         using var actual = new VolumeReadBuffer(8 * BytesPerRecord);
         using var wanted = new VolumeReadBuffer(BytesPerRecord);
@@ -161,6 +158,71 @@ public class VolumeMftSourceTests
 
             next += read;
         }
+    }
+
+    /// <summary>
+    /// Opening a volume reads its boot sector and nothing past the volume's first 8 KiB, and its table
+    /// is read only when asked for. NTFS flushes and purges what it has cached for every file on a
+    /// volume at the first read through its handle that reaches past those 8 KiB (<see cref="IMftVolume"/>),
+    /// so an open that read record 0 would make its caller wait for the flush. The table starts at
+    /// 8 KiB here, so its first read is one that would pay.
+    /// </summary>
+    [Theory]
+    [InlineData(512, 4096, 1024)]
+    [InlineData(4096, 4096, 1024)]
+    [InlineData(4096, 65536, 4096)]
+    public void OpeningAVolumeReadsOnlyItsBootSectors(int bytesPerSector, int bytesPerCluster, int bytesPerRecord)
+    {
+        const long BootSectors = 8192;
+        var volume = new RecordingVolume(Tree(bytesPerRecord).BuildVolume(bytesPerSector, bytesPerCluster));
+
+        var opened = VolumeMftSource.TryOpen(volume, out var reason);
+
+        Assert.Equal(FallbackReason.None, reason);
+        Assert.NotNull(opened);
+        Assert.NotEmpty(volume.Reads);
+        Assert.All(volume.Reads, read => Assert.True(read.End <= BootSectors, $"The open read up to byte {read.End}."));
+
+        using var source = opened.TryReadTable(out reason);
+
+        Assert.Equal(FallbackReason.None, reason);
+        Assert.NotNull(source);
+        Assert.Contains(volume.Reads, read => read.End > BootSectors);
+    }
+
+    /// <summary>
+    /// The handle has one owner at a time: the opened volume until its table is read, then the source.
+    /// Closing the opened volume afterwards leaves the source reading, and its table is read once.
+    /// </summary>
+    [Fact]
+    public void AnOpenedVolumeHandsItsHandleToTheSource()
+    {
+        var volume = new RecordingVolume(Tree(1024).BuildVolume(bytesPerSector: 4096, bytesPerCluster: 4096));
+        var opened = VolumeMftSource.TryOpen(volume, out _)!;
+
+        var source = opened.TryReadTable(out _)!;
+        opened.Dispose();
+
+        Assert.Equal(0, volume.Closed);
+        Assert.Throws<InvalidOperationException>(() => opened.TryReadTable(out _));
+
+        source.Dispose();
+        Assert.Equal(1, volume.Closed);
+    }
+
+    /// <summary>A volume closed before its table is read closes the handle, and reads nothing more.</summary>
+    [Fact]
+    public void AnOpenedVolumeClosedUnreadClosesItsHandle()
+    {
+        var volume = new RecordingVolume(Tree(1024).BuildVolume(bytesPerSector: 4096, bytesPerCluster: 4096));
+        var opened = VolumeMftSource.TryOpen(volume, out _)!;
+        var reads = volume.Reads.Count;
+
+        opened.Dispose();
+
+        Assert.Equal(1, volume.Closed);
+        Assert.Equal(reads, volume.Reads.Count);
+        Assert.Throws<InvalidOperationException>(() => opened.TryReadTable(out _));
     }
 
     /// <summary>
@@ -192,4 +254,30 @@ public class VolumeMftSourceTests
         .AddFileWithSizeAcrossStrideBoundary(20, Cache, AcrossStride, logical: AcrossStride)
         .AddFile(21, Sibling, "c.json", allocated: 4096, logical: 100)
         .AddFile(22, Nested, "b.tgz", allocated: 8192, logical: 8000);
+
+    /// <summary>A volume that notes where each read it serves starts and ends, and how often it was closed.</summary>
+    private sealed class RecordingVolume(IRawVolume inner) : IRawVolume
+    {
+        public List<(long Offset, long End)> Reads { get; } = [];
+
+        public int Closed { get; private set; }
+
+        public int Read(Span<byte> destination, long offset)
+        {
+            Reads.Add((offset, offset + destination.Length));
+            return inner.Read(destination, offset);
+        }
+
+        public ValueTask<int> ReadAsync(Memory<byte> destination, long offset, CancellationToken ct)
+        {
+            Reads.Add((offset, offset + destination.Length));
+            return inner.ReadAsync(destination, offset, ct);
+        }
+
+        public void Dispose()
+        {
+            Closed++;
+            inner.Dispose();
+        }
+    }
 }

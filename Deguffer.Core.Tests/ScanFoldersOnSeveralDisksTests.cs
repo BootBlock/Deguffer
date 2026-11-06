@@ -115,7 +115,7 @@ public sealed class ScanFoldersOnSeveralDisksTests
 
         public int OpenCount => Volatile.Read(ref _opened);
 
-        public IMftSource? TryOpen(char driveLetter, out FallbackReason reason, MftOpenTimings? timings = null)
+        public IMftVolume? TryOpen(char driveLetter, out FallbackReason reason, MftOpenTimings? timings = null)
         {
             Interlocked.Increment(ref _opened);
 
@@ -133,7 +133,7 @@ public sealed class ScanFoldersOnSeveralDisksTests
             Interlocked.Decrement(ref _open);
 
             reason = FallbackReason.None;
-            return fixture.Build();
+            return new ServedVolume(fixture.Build());
         }
 
         private static void InterlockedMax(ref int most, int value)
@@ -157,7 +157,7 @@ public sealed class ScanFoldersOnSeveralDisksTests
 
         private readonly TaskCompletionSource _reading = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public IMftSource? TryOpen(char driveLetter, out FallbackReason reason, MftOpenTimings? timings = null)
+        public IMftVolume? TryOpen(char driveLetter, out FallbackReason reason, MftOpenTimings? timings = null)
         {
             reason = FallbackReason.None;
 
@@ -167,7 +167,7 @@ public sealed class ScanFoldersOnSeveralDisksTests
                 throw new InvalidOperationException(Failure);
             }
 
-            return char.ToUpperInvariant(driveLetter) == held ? new Held(fixture.Build(), _reading) : null;
+            return char.ToUpperInvariant(driveLetter) == held ? new ServedVolume(new Held(fixture.Build(), _reading)) : null;
         }
 
         private sealed class Held(IMftSource inner, TaskCompletionSource reading) : IMftSource

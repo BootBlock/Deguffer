@@ -271,7 +271,7 @@ public sealed class ExploreScanner(
             return (null, FallbackReason.WalkChosen, false);
         }
 
-        if (_sources.TryOpen(letter, out var reason) is not { } source)
+        if (_sources.TryOpenTable(letter, out var reason) is not { } source)
         {
             return (null, reason, false);
         }
@@ -311,7 +311,7 @@ public sealed class ExploreScanner(
             return Walk(root, FallbackReason.WalkChosen, progress, AssembleSnapshot, ct);
         }
 
-        var source = _sources.TryOpen(volume.DriveLetter, out var reason);
+        var source = _sources.TryOpenTable(volume.DriveLetter, out var reason);
         if (source is null)
         {
             return Walk(root, reason, progress, AssembleSnapshot, ct);

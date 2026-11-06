@@ -29,7 +29,8 @@ public sealed class MftOpenTimingsTests
     /// <summary>
     /// An open of a volume image reports every step after the handle once and in order, with the
     /// boot sector's one read and record 0's one read against their own steps. A table in one piece
-    /// has no list, so nothing after record 0 reads at all.
+    /// has no list, so nothing after record 0 reads at all. The steps of finding the table are timed
+    /// by the clock the open started, though the open hands them to the volume it returns.
     /// </summary>
     [Theory]
     [InlineData(512, 4096, 1024)]
@@ -40,7 +41,7 @@ public sealed class MftOpenTimingsTests
         timings.Start();
 
         using var source = VolumeMftSource.TryOpen(
-            new MftFixture(bytesPerRecord).BuildVolume(bytesPerSector, bytesPerCluster), out _, timings);
+            new MftFixture(bytesPerRecord).BuildVolume(bytesPerSector, bytesPerCluster), out _, timings)?.TryReadTable(out _);
 
         Assert.NotNull(source);
         Assert.Equal(

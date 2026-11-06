@@ -121,6 +121,9 @@ internal sealed record BenchmarkRequest(
                             started at the same moment, as Auto races them in a scan, and
                             each of the two alone, alternating the order every round. The
                             slowdown of each is what the other costs it. Elevated.
+          scan <folder>     Measure the folder as an elevated scan does the first time it
+                            asks about the volume: open it, find its table, and race the
+                            walk against the build, after an untimed walk. Elevated.
 
         --runs N               How many times to run the route, 1 to 1000. The default is 5. The
                                first run is reported apart from the others.
@@ -207,7 +210,7 @@ internal sealed record BenchmarkRequest(
 
         if (named is not { } route)
         {
-            error = "The route must be table, index, explore, explorefolder, walk, measure, explorewalk, sources, links, folders, remove, clean or race.";
+            error = "The route must be table, index, explore, explorefolder, walk, measure, explorewalk, sources, links, folders, remove, clean, race or scan.";
             return null;
         }
 
@@ -260,13 +263,13 @@ internal sealed record BenchmarkRequest(
                     TryNumber(value, WalkTuning.MinimumThreads, WalkTuning.MaximumThreads, out threads),
                 "--listing-buffer" when route.TakesWalkTuning() => TryNumber(
                     value, WalkTuning.MinimumListingBuffer / 1024, WalkTuning.MaximumListingBuffer / 1024, out bufferKiB),
-                "--read-size" when route.ReadsTable() => TryNumber(
+                "--read-size" when route.TakesTableTuning() => TryNumber(
                     value, TableTuning.MinimumReadBytes / 1024, TableTuning.MaximumReadBytes / 1024, out readKiB),
-                "--reads-in-flight" when route.ReadsTable() => TryNumber(
+                "--reads-in-flight" when route.TakesTableTuning() => TryNumber(
                     value, TableTuning.MinimumReadsInFlight, TableTuning.MaximumReadsInFlight, out readsInFlight),
-                "--parse-threads" when route.ReadsTable() => TryNumber(
+                "--parse-threads" when route.TakesTableTuning() => TryNumber(
                     value, TableTuning.MinimumParseThreads, TableTuning.MaximumParseThreads, out parseThreads),
-                "--list-reads-in-flight" when route.ReadsTable() => TryNumber(
+                "--list-reads-in-flight" when route.TakesTableTuning() => TryNumber(
                     value, TableTuning.MinimumListReadsInFlight, TableTuning.MaximumListReadsInFlight, out listReadsInFlight),
                 "--snapshots" when route is Route.ExploreWalk => TryOnOff(value, out snapshots),
                 "--read-by" when route is Route.Links => TryReadBy(value, out readBy),

@@ -78,7 +78,7 @@ internal static class Report
             Row(text, $"{itemName}/s", Count(first.ItemsPerSecond), Over(later, r => r.ItemsPerSecond, Count));
         }
 
-        if (route.ReadsTable() && route is not Route.Race)
+        if (route.ReportsTableReads())
         {
             Row(text, "MiB/s read", Rate(first.MegabytesPerSecond), Over(later, r => r.MegabytesPerSecond, Rate));
             Row(text, "reads", Count(first.Tally.Reads), Over(later, r => r.Tally.Reads, Count));
@@ -101,7 +101,7 @@ internal static class Report
         {
             RemovalRows(text, first, later);
         }
-        else if (route is not Route.Race)
+        else if (!route.ReadsTable())
         {
             Row(text, "folders at once", Count(first.Tally.PeakListings), Over(later, r => r.Tally.PeakListings, Count));
         }

@@ -36,6 +36,11 @@ internal static class Tuning
                 $"removed as one plan with nothing running");
         }
 
+        if (route is Route.Scan)
+        {
+            return "the values a scan uses for the drive's kind, under the shipped settings, a new scanner each run";
+        }
+
         if (route.ReadsTable())
         {
             return string.Create(
