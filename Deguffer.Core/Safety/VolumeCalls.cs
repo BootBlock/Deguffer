@@ -145,38 +145,31 @@ internal static partial class VolumeCalls
     }
 
     /// <summary>
-    /// The mount point of the volume holding <paramref name="path"/>, or null where Windows will
-    /// not say — which is a path that names no volume of this machine, and a volume that is not
-    /// there.
+    /// The mount point <c>GetVolumePathNameW</c> gives for <paramref name="extendedPath"/>, in display
+    /// form, or null where Windows will not say — which is a path that names no volume of this
+    /// machine, and a volume that is not there. <see cref="MountPointLookup"/> is what asks it, and
+    /// only where a path's own folders do not settle the answer: Windows asks the mount manager about
+    /// every prefix of the path, which costs most of a millisecond for a deep one (#512).
     ///
     /// <para>Answers for a path that does not exist, and for a file as readily as a directory,
     /// which is what separates it from asking the filesystem.</para>
     ///
-    /// <para>§6.3: the path is normalised and extended before it crosses, and the buffer holds the
-    /// longest path an extended-length name can be rather than <c>MAX_PATH</c>, where a fixed 260
-    /// would answer null for the Node and NuGet trees §6.3 exists for. It is not sized from the
-    /// path, because the answer can be longer than the question: the folder a volume is mounted at
-    /// comes back with a separator it was asked without, and a path through a junction is answered
-    /// with a mount point somewhere else entirely, and <see cref="VolumeRoot"/> decides what may be
-    /// deleted from that answer. The answer
-    /// comes back in display form, because that is what the rest of the app shows and hands on.</para>
+    /// <para>§6.3: the buffer holds the longest path an extended-length name can be rather than
+    /// <c>MAX_PATH</c>, where a fixed 260 would answer null for the Node and NuGet trees §6.3 exists
+    /// for. It is not sized from the path, because the answer can be longer than the question: the
+    /// folder a volume is mounted at comes back with a separator it was asked without, and a path
+    /// through a junction is answered with a mount point somewhere else entirely, and
+    /// <see cref="VolumeRoot"/> decides what may be deleted from that answer. The answer comes back
+    /// in display form, because that is what the rest of the app shows and hands on.</para>
     /// </summary>
-    internal static string? MountPointOf(string path)
+    /// <param name="extendedPath">A normalised path in <see cref="LongPath.Extended"/> form.</param>
+    internal static string? VolumePathNameOf(string extendedPath)
     {
-        // Entry rather than Extended alone: it rejects a relative path, rejects one Windows
-        // will not accept, and answers null instead of throwing — which is this method's own
-        // contract for a path that names no volume.
-        if (LongPath.Entry(path) is not { } qualified)
-        {
-            return null;
-        }
-
-        var extended = LongPath.Extended(qualified);
         var buffer = Marshal.AllocHGlobal((int)LongestPath * sizeof(char));
 
         try
         {
-            return GetVolumePathName(extended, buffer, LongestPath)
+            return GetVolumePathName(extendedPath, buffer, LongestPath)
                 && Marshal.PtrToStringUni(buffer) is { Length: > 0 } mountPoint
                 ? LongPath.Display(mountPoint)
                 : null;
@@ -222,19 +215,26 @@ internal static partial class VolumeCalls
     /// <c>GetVolumePathName</c> and <c>GetVolumeNameForVolumeMountPoint</c> fail for it, so this is
     /// the only call that says where the letter leads.</para>
     /// </summary>
-    internal static string? SubstituteOf(string driveRoot)
-    {
-        if (driveRoot is not [var letter, ':', ..] || !char.IsAsciiLetter(letter))
-        {
-            return null;
-        }
+    internal static string? SubstituteOf(string driveRoot) =>
+        driveRoot is [var letter, ':', ..] && char.IsAsciiLetter(letter)
+            ? Substitution(DeviceOf(letter))
+            : null;
 
+    /// <summary>
+    /// What the drive letter <paramref name="letter"/> stands for in the object manager, read now:
+    /// a device such as <c>\Device\HarddiskVolume3</c> for a volume's own letter, a <c>\??\</c> folder
+    /// for a <c>subst</c>, a redirector's device for a mapped share. Null where the letter is not in
+    /// use. About two microseconds, because nothing below the object manager is asked.
+    /// </summary>
+    internal static string? DeviceOf(char letter)
+    {
         var buffer = Marshal.AllocHGlobal((int)LongestPath * sizeof(char));
 
         try
         {
+            // The first of what may be several targets, which is the one the letter opens now.
             return QueryDosDevice($"{letter}:", buffer, LongestPath) > 0
-                ? Substitution(Marshal.PtrToStringUni(buffer))
+                ? Marshal.PtrToStringUni(buffer)
                 : null;
         }
         finally
