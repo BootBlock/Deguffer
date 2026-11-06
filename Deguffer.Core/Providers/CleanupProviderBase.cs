@@ -567,17 +567,28 @@ public abstract class CleanupProviderBase : ICleanupProvider
             throw new ArgumentException($"Only a folder emptied in place can leave entries standing: {unbounded}.", nameof(targets));
         }
 
+        // Dated beside the measurement rather than before it: both are listings of the same targets,
+        // and each keeps to the disk's number through the listing budget, so neither waits for the other.
+        var dating = DatedAsync(targets, ct);
+
         // An index is removed with the directory it indexes, so it is measured with it. A folder
         // emptied in place is measured on the terms its removal empties it on, so the figure is
         // already without whatever the removal leaves standing and nothing is measured to be taken off.
-        var (each, measured) = await MeasureGroupsAsync(
+        var measuring = MeasureGroupsAsync(
             [.. targets.Select(t => (IReadOnlyList<ScanRequest>)[new ScanRequest(t.Path, BoundsOf(t)), .. Whole(t.IndexedBy ?? [])])],
             keep,
-            ct).ConfigureAwait(false);
+            ct);
+
+        // Both awaited before either answer is read, so a failure of one never leaves the other running
+        // unobserved.
+        await Task.WhenAll(dating, measuring).ConfigureAwait(false);
+
+        var dated = await dating.ConfigureAwait(false);
+        var (each, measured) = await measuring.ConfigureAwait(false);
 
         var steps = new List<CleanupStep>(targets.Count);
 
-        foreach (var (target, group) in targets.Zip(each))
+        foreach (var (target, group) in dated.Zip(each))
         {
             DeleteStep step = target.Kind switch
             {
@@ -609,6 +620,56 @@ public abstract class CleanupProviderBase : ICleanupProvider
 
         return (steps, measured);
     }
+
+    /// <summary>
+    /// <paramref name="targets"/> in their order, each that <see cref="DeletionTarget.DatedOneLevelDown"/>
+    /// asks for given its age, in one bounded step. Paired here, once, for the reason
+    /// <see cref="PlanDeletionsAsync"/> pairs a target with its size. A provider that decides by the
+    /// age of a target it did not date itself, such as one a <see cref="DeclaredLocations"/> scan
+    /// found, reads it from what this returns.
+    /// </summary>
+    protected Task<IReadOnlyList<DeletionTarget>> DatedAsync(IReadOnlyList<DeletionTarget> targets, CancellationToken ct)
+    {
+        // Before anything is read, so a target this cannot date fails its plan rather than reading null.
+        if (targets.FirstOrDefault(t => t.DatedOneLevelDown && (t.LastWritten is not null || t.Kind is not (TargetKind.Directory or TargetKind.DirectoryContents))) is { Path: { } misdated })
+        {
+            throw new ArgumentException($"Only a directory with no age of its own can be dated one level down: {misdated}.", nameof(targets));
+        }
+
+        return ReadAgesAsync(targets, ct);
+    }
+
+    private async Task<IReadOnlyList<DeletionTarget>> ReadAgesAsync(IReadOnlyList<DeletionTarget> targets, CancellationToken ct)
+    {
+        int[] undated = [.. Enumerable.Range(0, targets.Count).Where(index => targets[index].DatedOneLevelDown)];
+
+        if (undated.Length == 0)
+        {
+            return targets;
+        }
+
+        var ages = await DateAsync([.. undated.Select(index => targets[index].Path)], ct).ConfigureAwait(false);
+        var dated = targets.ToArray();
+
+        for (var each = 0; each < undated.Length; each++)
+        {
+            dated[undated[each]] = dated[undated[each]] with { LastWritten = ages[each], DatedOneLevelDown = false };
+        }
+
+        return dated;
+    }
+
+    /// <summary>
+    /// The age of each of <paramref name="directories"/>, in their order, read as many at once as
+    /// this provider's walks of each volume run (<see cref="DirectoryAge.OfEach"/>). For a provider
+    /// whose decision depends on the age, or whose step is not a <see cref="DeletionTarget"/>'s.
+    /// </summary>
+    protected Task<IReadOnlyList<DateTime?>> DateAsync(IReadOnlyList<string> directories, CancellationToken ct) =>
+        directories.Count == 0
+            ? Task.FromResult<IReadOnlyList<DateTime?>>([])
+
+            // On a thread of its own: the listings block it on the disk. See DirectoryAge.OfEach.
+            : WorkerThreads.Shared.RunAsync(() => DirectoryAge.OfEach(directories, Scanner.Tuning, ct), ct);
 
     /// <summary>
     /// Measure every directory each Disk Cleanup handler would clear, and turn each handler into the

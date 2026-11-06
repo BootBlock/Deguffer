@@ -151,7 +151,7 @@ public sealed class NxSharedCacheProvider : CleanupProviderBase
                     return new DeletionTarget(
                         cleared.Path,
                         $"Nx task cache for workspace {workspace}",
-                        DirectoryAge.Of(cleared.Path, ct),
+                        DatedOneLevelDown: true,
                         Facets: [new ItemFacet(WorkspaceFacet, workspace)],
                         UseCheck: new NxIndexCheck(NxSharedCaches.IndexOf(cleared.Project), absentIsEmpty: true, cleared.StillUnused));
                 }),

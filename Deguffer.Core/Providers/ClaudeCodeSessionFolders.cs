@@ -1,5 +1,6 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Providers;
 
@@ -146,12 +147,12 @@ internal static class ClaudeCodeSessionFolders
                 sorting.OfferFolderOnceOldEnough(
                     sidecar.Path,
                     SpilledOutputReason,
-                    evidence.RecentSinceUtc,
                     isLeftover: true,
-                    ClaudeCodeSessionCheck.Ended(evidence.Registry, sidecar.SessionId),
-                    ct);
+                    ClaudeCodeSessionCheck.Ended(evidence.Registry, sidecar.SessionId));
             }
         }
+
+        sorting.DateOffers(evidence.RecentSinceUtc, evidence.Tuning, ct);
 
         if (running > 0)
         {
@@ -221,12 +222,12 @@ internal static class ClaudeCodeSessionFolders
                 sorting.OfferFolderOnceOldEnough(
                     path,
                     EnvironmentReason,
-                    evidence.RecentSinceUtc,
                     isLeftover: true,
-                    ClaudeCodeSessionCheck.Ended(evidence.Registry, entry.Name),
-                    ct);
+                    ClaudeCodeSessionCheck.Ended(evidence.Registry, entry.Name));
             }
         }
+
+        sorting.DateOffers(evidence.RecentSinceUtc, evidence.Tuning, ct);
 
         if (running > 0)
         {

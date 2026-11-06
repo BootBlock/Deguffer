@@ -345,7 +345,7 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
                  version.Path,
                  $"{installation.Name} {version.Number}, the build version "
                  + $"{installation.Current!.Number} replaced.",
-                 DirectoryAge.Of(version.Path, ct),
+                 DatedOneLevelDown: true,
 
                  // The application's folder name and the build's own name, which is what Squirrel
                  // itself goes by, rather than the path: a renamed profile moves the path and leaves

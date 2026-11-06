@@ -43,6 +43,32 @@ public sealed class TempToolCacheProviderTests : IDisposable
 
     private string Entry(int bytes, params string[] segments) => _temp.CreateFile(bytes, ["temp", .. segments]);
 
+    /// <summary>
+    /// Each folder a tool's name identifies is as old as the newest write one level down in it, dated
+    /// with the rest of the plan's folders, and never by a neighbour's.
+    /// </summary>
+    [Fact]
+    public async Task EachFolderIsAsOldAsTheNewestWriteInsideIt()
+    {
+        var longAgo = new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+        var flutter = Entry(2048, "flutter_tools.1a2b3c", "app.dill");
+        var firefox = Entry(1024, "mozilla-temp-files", "mozilla-temp-41");
+
+        File.SetLastWriteTimeUtc(flutter, longAgo.AddDays(10));
+        File.SetLastWriteTimeUtc(firefox, longAgo.AddDays(200));
+
+        foreach (var file in new[] { flutter, firefox })
+        {
+            Directory.SetLastWriteTimeUtc(Path.GetDirectoryName(file)!, longAgo);
+        }
+
+        var plan = await CreateProvider().PlanAsync();
+        var steps = plan.Steps.OfType<DeleteDirectoryStep>().ToDictionary(s => s.Path, StringComparer.OrdinalIgnoreCase);
+
+        Assert.Equal(longAgo.AddDays(10), steps[Path.GetDirectoryName(flutter)!].LastWritten);
+        Assert.Equal(longAgo.AddDays(200), steps[Path.GetDirectoryName(firefox)!].LastWritten);
+    }
+
     [Fact]
     public async Task TakesWhatAToolsOwnNameIdentifiesAndNothingBesideIt()
     {

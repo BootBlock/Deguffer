@@ -1,5 +1,6 @@
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -167,5 +168,119 @@ public sealed class DirectoryAgeTests : IDisposable
         File.SetLastWriteTimeUtc(LongPath.Extended(Path.Combine(deep, "Example.dll")), rewritten);
 
         Assert.Equal(rewritten, DirectoryAge.Of(deep)!.Value, TimeSpan.FromSeconds(1));
+    }
+
+    /// <summary>
+    /// Dating a directory of ten thousand entries makes no object for each entry.
+    ///
+    /// <para>A <c>node_modules</c> holds thousands of entries at its top level, and a row dates every
+    /// one it offers. Read through <see cref="FileSystemInfo"/>, each entry cost an object with its full
+    /// path and its name, about three megabytes here, for one timestamp. The listing's own record of
+    /// the entry carries the timestamp, so what is left is the listing itself.</para>
+    /// </summary>
+    [Fact]
+    public void DatesTenThousandEntriesWithoutAnObjectForEach()
+    {
+        var directory = _temp.CreateDirectory("node_modules");
+
+        for (var entry = 0; entry < 10_000; entry++)
+        {
+            File.Create(Path.Combine(directory, $"package-{entry:D5}")).Dispose();
+        }
+
+        // Once first, so what is measured is the dating rather than the first call's compilation.
+        Assert.NotNull(DirectoryAge.Of(directory));
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var age = DirectoryAge.Of(directory);
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.NotNull(age);
+        Assert.True(allocated < 64 * 1024, $"Dating 10,000 entries allocated {allocated:N0} bytes.");
+    }
+
+    /// <summary>
+    /// Every directory dated together keeps its own age, at its own place in the list, the absent and
+    /// the refused included.
+    ///
+    /// <para>The ages differ by a day a directory, so an age handed to the wrong directory, by the
+    /// threads finishing in a different order from the list's, reads as a failure rather than as a
+    /// near miss.</para>
+    /// </summary>
+    [Fact]
+    public void DatesEachOfManyDirectoriesAtItsOwnPlace()
+    {
+        const int Count = 48;
+        const int Absent = 11;
+        const int Refused = 29;
+
+        var directories = new string[Count];
+        var expected = new DateTime?[Count];
+
+        for (var index = 0; index < Count; index++)
+        {
+            directories[index] = Path.Combine(_temp.Path, $"project-{index:D2}", "obj");
+
+            if (index == Absent)
+            {
+                continue;
+            }
+
+            Directory.CreateDirectory(directories[index]);
+            File.WriteAllBytes(Path.Combine(directories[index], "Example.dll"), new byte[16]);
+
+            var written = LongAgo.AddDays(index);
+            File.SetLastWriteTimeUtc(Path.Combine(directories[index], "Example.dll"), written);
+            Directory.SetLastWriteTimeUtc(directories[index], LongAgo);
+            expected[index] = index == Refused ? null : written;
+        }
+
+        using var denied = new DeniedDirectory(directories[Refused]);
+
+        var ages = DirectoryAge.OfEach(directories, ScanTuner.Shipped, default);
+
+        Assert.Equal(Count, ages.Count);
+
+        for (var index = 0; index < Count; index++)
+        {
+            Assert.Equal(expected[index], ages[index]);
+        }
+    }
+
+    /// <summary>
+    /// Dating keeps to its volume's number of listings in flight, which the walks of every row planned
+    /// beside it share. With the volume's every slot held, dating waits, and one slot given back lets
+    /// it finish.
+    /// </summary>
+    [Fact]
+    public async Task DatesNoMoreDirectoriesAtOnceThanItsVolumeIsTunedFor()
+    {
+        var directory = _temp.CreateDirectory("obj");
+        var budget = new ListingBudget();
+        var extended = LongPath.Extended(directory);
+        var limit = ScanTuner.Shipped.For(directory).Walk.Threads;
+
+        var held = new Stack<ListingBudget.Slot>();
+
+        for (var slot = 0; slot < limit; slot++)
+        {
+            held.Push(budget.Take(extended, limit));
+        }
+
+        var dating = Task.Run(() => DirectoryAge.OfEach([directory], ScanTuner.Shipped, budget, default));
+
+        Assert.True(SpinWait.SpinUntil(() => budget.Waiting(extended) == 1, TimeSpan.FromSeconds(10)), "Dating never waited for a slot.");
+        Assert.False(dating.IsCompleted);
+
+        held.Pop().Dispose();
+
+        Assert.NotNull(Assert.Single(await dating.WaitAsync(TimeSpan.FromSeconds(10))));
+
+        while (held.Count > 0)
+        {
+            held.Pop().Dispose();
+        }
+
+        Assert.Equal(0, budget.InFlight(extended));
     }
 }

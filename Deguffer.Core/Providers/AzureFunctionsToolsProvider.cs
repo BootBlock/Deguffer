@@ -209,7 +209,7 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
         }
 
         var notes = new List<PlanNote>();
-        var releases = new Dictionary<string, (string Version, string Extended)>(StringComparer.OrdinalIgnoreCase);
+        var releases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var declined = new List<(string Path, string Reason)>();
 
         var tags = AzureFunctionsToolTags.Read(_root, ct);
@@ -256,9 +256,7 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
                 continue;
             }
 
-            // Enumeration runs in extended form; a plan always holds display paths, and I/O
-            // re-extends at the point of use.
-            releases.Add(LongPath.Display(child.FullName), (child.Name, child.FullName));
+            releases.Add(LongPath.Display(child.FullName), child.Name);
         }
 
         // func runs out of the release a project is debugged against, and the tooling's own records
@@ -273,7 +271,7 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
             lockFiles: [],
             ct);
 
-        if (LiveTreeVeto.NoteFor(live.Vetoed, vetoed => $"release {releases[vetoed.Directory].Version}") is { } held)
+        if (LiveTreeVeto.NoteFor(live.Vetoed, vetoed => $"release {releases[vetoed.Directory]}") is { } held)
         {
             notes.Add(held);
         }
@@ -285,7 +283,7 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
 
         var targets = live.Cleared.Select(cleared =>
         {
-            var (version, extended) = releases[cleared.Path];
+            var version = releases[cleared.Path];
 
             return new DeletionTarget(
                 cleared.Path,
@@ -295,7 +293,7 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
                 // does not rewrite it — so the answer here is when this release arrived, which is
                 // what separates one the tooling fetched last week from one nobody has needed since
                 // 2019.
-                DirectoryAge.Of(extended, ct),
+                DatedOneLevelDown: true,
 
                 // The version is the release, whichever profile holds it, so a release kept for an
                 // old Functions project stays kept.

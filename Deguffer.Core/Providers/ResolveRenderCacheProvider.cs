@@ -169,7 +169,7 @@ public sealed class ResolveRenderCacheProvider : CleanupProviderBase
                     .Select(folder => new DeletionTarget(
                         folder.Path,
                         "One project's render cache. Resolve renders it again as the timeline plays.",
-                        DirectoryAge.Of(folder.Path, ct),
+                        DatedOneLevelDown: true,
                         Group: folder.Cache,
                         UseCheck: _stillClosed)),
             ],

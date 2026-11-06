@@ -18,6 +18,9 @@ namespace Deguffer.Testing;
 /// </summary>
 public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) : IDirectoryScanner
 {
+    /// <summary>The shipped tuning, which asks nothing of the machine about its disks.</summary>
+    public ScanTuner Tuning => ScanTuner.Shipped;
+
     private readonly ConcurrentQueue<string> _measured = new();
     private readonly ConcurrentQueue<(string Root, DirectorySearch Search)> _asked = new();
     private int _holds;

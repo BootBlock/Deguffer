@@ -110,6 +110,10 @@ public abstract class SetupCleanupProviderBase : CleanupProviderBase
             return EmptyPlan(NothingLeftBehind);
         }
 
+        // Read before the loop, because each cleanup is offered only once its folders are past the
+        // window, and a declared folder's age is read with the rest of the scan's in one step.
+        var targets = await DatedAsync(scan.Targets, ct).ConfigureAwait(false);
+
         var notes = new List<PlanNote>(scan.Notes);
         var held = new List<ProtectedPath>();
         var offered = new List<DiskCleanupTarget>();
@@ -127,7 +131,7 @@ public abstract class SetupCleanupProviderBase : CleanupProviderBase
 
         foreach (var cleanup in _cleanups)
         {
-            var present = Present(cleanup, scan.Targets);
+            var present = Present(cleanup, targets);
 
             if (present.Count == 0)
             {

@@ -200,7 +200,7 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
             targets.Add(new DeletionTarget(
                 LongPath.Display(child.FullName),
                 classification.Reason,
-                isPerWorkspace ? DirectoryAge.Of(child.FullName, ct) : null));
+                DatedOneLevelDown: isPerWorkspace));
         }
 
         var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);

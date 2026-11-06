@@ -280,7 +280,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
             Handler,
             volume,
             [.. folders.Skip(1)],
-            Newest(folders, ct),
+            Newest(await DateAsync(folders, ct).ConfigureAwait(false)),
             RequiresElevation: true);
 
         var (steps, measured) = await PlanDiskCleanupsAsync([target], keep, ct).ConfigureAwait(false);
@@ -317,7 +317,13 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         CancellationToken ct)
     {
         var folders = drivers.Superseded.Select(s => s.Package.Folder!).ToList();
-        var measured = await MeasureAllAsync(folders, ct).ConfigureAwait(false);
+        var dating = DateAsync(folders, ct);
+        var measuring = MeasureAllAsync(folders, ct);
+
+        await Task.WhenAll(dating, measuring).ConfigureAwait(false);
+
+        var dates = await dating.ConfigureAwait(false);
+        var measured = await measuring.ConfigureAwait(false);
         var pnpUtil = DriverStore.PnpUtil(_system);
 
         IReadOnlyList<CleanupStep> steps =
@@ -334,7 +340,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
                 Removes = superseded.Package.Folder,
                 MeasuredPaths = [superseded.Package.Folder!],
                 Estimated = measured.Sizes[i],
-                LastWritten = DirectoryAge.Of(superseded.Package.Folder!, ct),
+                LastWritten = dates[i],
                 RequiresElevation = true,
                 HeldWhileUpdating = true,
                 TargetCheck = new DriverPackageName(_store, superseded.Package.PublishedName),
@@ -424,11 +430,9 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         ];
     }
 
-    /// <summary>The newest write among <paramref name="folders"/>, or null where any could not be dated.</summary>
-    private static DateTime? Newest(IReadOnlyList<string> folders, CancellationToken ct)
+    /// <summary>The newest of <paramref name="dates"/>, or null where any folder could not be dated.</summary>
+    private static DateTime? Newest(IReadOnlyList<DateTime?> dates)
     {
-        var dates = folders.Select(folder => DirectoryAge.Of(folder, ct)).ToList();
-
         return dates.Any(d => d is null) ? null : dates.Max();
     }
 

@@ -236,7 +236,10 @@ public static class TempMarkerSurvey
                     continue;
                 }
 
-                Consider(path, marker, isDirectory ? DirectoryAge.Of(path, ct) : entry.LastWriteTimeUtc, ct);
+                // A directory's age decides nothing here, so it is read with the rest of the plan's
+                // targets, in one bounded step (DeletionTarget.DatedOneLevelDown). A file's is the
+                // listing's own.
+                Consider(path, marker, isDirectory ? null : entry.LastWriteTimeUtc, ct);
             }
         }
 
@@ -318,7 +321,8 @@ public static class TempMarkerSurvey
                     lastWritten,
                     marker.Kind,
                     Group: marker.Tool,
-                    UseCheck: Recheck(marker, path, stillUnused.GetValueOrDefault(path))));
+                    UseCheck: Recheck(marker, path, stillUnused.GetValueOrDefault(path)),
+                    DatedOneLevelDown: marker.Kind is not TargetKind.File));
             }
 
             return new TempMarkerFindings(
