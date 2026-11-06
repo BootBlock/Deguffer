@@ -59,12 +59,14 @@ internal static class TableRoutes
         }
 
         // Timed apart from the stages, which the read times, because opening reads the boot sector
-        // and $MFT's own extent map, and a system volume's $MFT can be in many pieces.
+        // and $MFT's own extent map, and a system volume's $MFT can be in many pieces. The open times
+        // its own steps as well, so a slow one can be traced to the handle or to the reads.
+        var open = new MftOpenTimings();
         var opening = Stopwatch.GetTimestamp();
 
         // Opened above moments before, so a failure here is the volume going away mid-benchmark.
         using var source = new CountingMftSource(
-            volumes.TryOpen(place.DriveLetter, out var reason)
+            volumes.TryOpen(place.DriveLetter, out var reason, open)
             ?? throw new IOException($"The volume could not be opened again: {reason}."));
 
         var openTime = Stopwatch.GetElapsedTime(opening);
@@ -79,7 +81,7 @@ internal static class TableRoutes
             _ => throw new ArgumentOutOfRangeException(nameof(route), route, "Not a route that reads the table."),
         };
 
-        return tally with { OpenTime = openTime };
+        return tally with { OpenTime = openTime, Open = open };
     }
 
     /// <summary>

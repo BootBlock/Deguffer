@@ -41,8 +41,10 @@ public sealed partial class VolumeMftSource : IMftSource
     /// records. Returns null with a reason on every expected failure — §5.5 requires the fallback
     /// to be observable, so "could not" always comes with "because".
     /// </summary>
-    public static VolumeMftSource? TryOpen(char driveLetter, out FallbackReason reason)
+    /// <param name="timings">Where each step of the open is timed, or null where nothing measures it.</param>
+    public static VolumeMftSource? TryOpen(char driveLetter, out FallbackReason reason, MftOpenTimings? timings = null)
     {
+        timings?.Start();
         var handle = OpenOverlapped($@"\\.\{char.ToUpperInvariant(driveLetter)}:");
 
         if (handle.IsInvalid)
@@ -59,7 +61,8 @@ public sealed partial class VolumeMftSource : IMftSource
             return null;
         }
 
-        return TryOpen(new VolumeHandle(handle), out reason);
+        timings?.End(MftOpenStep.VolumeHandle);
+        return TryOpen(new VolumeHandle(handle), out reason, timings);
     }
 
     /// <summary>
@@ -77,14 +80,17 @@ public sealed partial class VolumeMftSource : IMftSource
     /// disposed here on every exit that does not hand it to a source, a throw included, because a
     /// leaked raw handle keeps the volume open until finalisation.
     /// </summary>
-    internal static VolumeMftSource? TryOpen(IRawVolume volume, out FallbackReason reason)
+    /// <param name="timings">
+    /// Where each step after the handle is timed, from the clock the caller started, or null.
+    /// </param>
+    internal static VolumeMftSource? TryOpen(IRawVolume volume, out FallbackReason reason, MftOpenTimings? timings = null)
     {
         reason = FallbackReason.MasterFileTableIncomplete;
         VolumeMftSource? source = null;
 
         try
         {
-            source = Initialise(volume, ref reason);
+            source = Initialise(volume, ref reason, timings);
             return source;
         }
         catch (IOException)
@@ -102,12 +108,13 @@ public sealed partial class VolumeMftSource : IMftSource
         }
     }
 
-    private static VolumeMftSource? Initialise(IRawVolume volume, ref FallbackReason reason)
+    private static VolumeMftSource? Initialise(IRawVolume volume, ref FallbackReason reason, MftOpenTimings? timings)
     {
         // Sized to the largest sector, not to the 512 bytes the boot sector occupies, because the
         // sector size is not known until this read has succeeded. Microsoft's rules for an unbuffered
         // read ask for a whole number of sectors, which 512 bytes is not on a 4,096-byte-sector disk.
         using var boot = new VolumeReadBuffer(BootReadBytes);
+        timings?.Read();
 
         if (volume.Read(boot.Span, 0) != boot.Length
             || !NtfsBootSector.TryParse(boot.Span, out var geometry))
@@ -116,17 +123,35 @@ public sealed partial class VolumeMftSource : IMftSource
             return null;
         }
 
+        timings?.End(MftOpenStep.BootSector);
+
         // Record 0 is read in whole clusters rather than as one record, which can be shorter than
         // a sector. $MFT's extension records are read through the same volume, before the source
         // that would otherwise serve them exists.
-        ClusterReader read = (first, destination) => ReadClusters(volume, geometry.BytesPerCluster, first, destination);
+        ClusterReader read = (first, destination) =>
+        {
+            timings?.Read();
+            return ReadClusters(volume, geometry.BytesPerCluster, first, destination);
+        };
+
         var clusters = (geometry.BytesPerFileRecord + geometry.BytesPerCluster - 1) / geometry.BytesPerCluster;
 
         using var start = new VolumeReadBuffer(clusters * geometry.BytesPerCluster);
         var record0 = start.Span[..geometry.BytesPerFileRecord];
 
-        if (!read(geometry.MftStartCluster, start.Span)
-            || !MftExtentMapReader.TryRead(record0, geometry.BytesPerCluster, read, out var extents, out var bitmap))
+        // The slow step of the open on a busy volume. NTFS flushes the volume before a handle's first
+        // read past the boot file, whatever the handle's access and wherever the read lands. The flush
+        // costs what an explicit one would: 0.3 to 1.5 s on a busy system volume, milliseconds on an
+        // idle one. Neither a handle for FILE_READ_DATA alone nor extended DASD I/O avoids it.
+        if (!read(geometry.MftStartCluster, start.Span))
+        {
+            reason = FallbackReason.MasterFileTableIncomplete;
+            return null;
+        }
+
+        timings?.End(MftOpenStep.FirstRecord);
+
+        if (!MftExtentMapReader.TryRead(record0, geometry.BytesPerCluster, read, out var extents, out var bitmap, timings))
         {
             reason = FallbackReason.MasterFileTableIncomplete;
             return null;

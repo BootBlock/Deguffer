@@ -9,7 +9,7 @@ namespace Deguffer.Core.Scanning.Mft;
 /// </summary>
 public interface IMftSourceFactory
 {
-    IMftSource? TryOpen(char driveLetter, out FallbackReason reason);
+    IMftSource? TryOpen(char driveLetter, out FallbackReason reason, MftOpenTimings? timings = null);
 }
 
 /// <inheritdoc />
@@ -17,6 +17,6 @@ public sealed class VolumeMftSourceFactory : IMftSourceFactory
 {
     public static readonly VolumeMftSourceFactory Default = new();
 
-    public IMftSource? TryOpen(char driveLetter, out FallbackReason reason) =>
-        VolumeMftSource.TryOpen(driveLetter, out reason);
+    public IMftSource? TryOpen(char driveLetter, out FallbackReason reason, MftOpenTimings? timings = null) =>
+        VolumeMftSource.TryOpen(driveLetter, out reason, timings);
 }
