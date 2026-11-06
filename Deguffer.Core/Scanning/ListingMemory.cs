@@ -4,7 +4,8 @@ namespace Deguffer.Core.Scanning;
 
 /// <summary>
 /// One worker's memory for listing directories from the disk: the buffer Windows writes a directory's
-/// entries into, and room for the name of the directory being opened. Made once for a worker and
+/// entries into, room for the name of the directory being opened, and the names a listing lends
+/// rather than building as strings (<see cref="Names"/>). Made once for a worker and
 /// reused for every directory it reads.
 ///
 /// <para><b>Why a worker owns it.</b> A walk reads hundreds of thousands of directories, and listing
@@ -38,6 +39,9 @@ public sealed unsafe class ListingMemory : IDisposable
 
     /// <summary>The entry buffer.</summary>
     internal byte* Entries => _entries is not null ? _entries : throw new ObjectDisposedException(nameof(ListingMemory));
+
+    /// <summary>Where a listing that lends its names (<see cref="FileNames.AllLent"/>) keeps them.</summary>
+    internal ListingNames Names { get; } = new();
 
     /// <summary>Room for a name of <paramref name="length"/> characters, grown where it has none.</summary>
     internal char[] NameRoom(int length)

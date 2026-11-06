@@ -15,7 +15,7 @@ namespace Deguffer.Core.Exploring;
 internal delegate LeavesFolderUnlisted LeavesUnlisted(string parent, bool parentIsRoot);
 
 /// <summary>Whether a walk leaves the folder named <paramref name="name"/>, in the folder it was asked of, unlisted.</summary>
-internal delegate bool LeavesFolderUnlisted(string name);
+internal delegate bool LeavesFolderUnlisted(ReadOnlySpan<char> name);
 
 /// <summary>
 /// A walk of <paramref name="root"/> into a tree, as
@@ -86,6 +86,22 @@ internal static class WalkExploreReader
         TimeProvider clock,
         CancellationToken ct,
         LeavesUnlisted? unlisted = null,
+        Func<Action, Task>? assembleSnapshot = null) =>
+        Read(root, tuning, DirectoryQuery.List, probe, progress, clock, ct, unlisted, assembleSnapshot);
+
+    /// <summary>
+    /// The walk above, listing each directory through <paramref name="list"/> rather than from the
+    /// disk: the seam a test lists a tree no volume holds through.
+    /// </summary>
+    internal static ExploreTree Read(
+        string root,
+        WalkTuning tuning,
+        ListDirectory list,
+        IOccupancyProbe probe,
+        IProgress<ExploreProgress>? progress,
+        TimeProvider clock,
+        CancellationToken ct,
+        LeavesUnlisted? unlisted = null,
         Func<Action, Task>? assembleSnapshot = null)
     {
         // §6.3: the walk is given the extended-length form, and .NET builds every child path from
@@ -111,7 +127,10 @@ internal static class WalkExploreReader
                 LongPath.Extended(root),
                 ExploreTreeBuilder.RootNode,
                 tuning,
-                FileNames.All,
+                // Lent rather than built as strings: every name is copied into the tree's pool before
+                // the listing that lent it is over, so a string for each would only be garbage.
+                FileNames.AllLent,
+                list,
                 (parent, contents, descend) =>
                 {
                     if (contents.WasRefused)
@@ -151,8 +170,8 @@ internal static class WalkExploreReader
                     }
                     finally
                     {
-                        // Cleared, because each child holds its name and the pool would otherwise keep
-                        // it alive.
+                        // Cleared, because each child holds its name, and the pool would otherwise keep
+                        // it alive, or the listing memory a lent name is read from.
                         children.Clear();
                         ArrayPool<ExploreChild>.Shared.Return(rented);
                     }
@@ -176,7 +195,7 @@ internal static class WalkExploreReader
                         {
                             leaves ??= unlisted(LongPath.Display(contents.Directory), parent == ExploreTreeBuilder.RootNode);
 
-                            if (leaves(entry.Name))
+                            if (leaves(entry.NameSpan))
                             {
                                 continue;
                             }
@@ -226,7 +245,7 @@ internal static class WalkExploreReader
             if (entry.IsDirectory)
             {
                 into[next++] = new ExploreChild(
-                    entry.Name, IsDirectory: true, IsLink: false, Size: 0, CreatedOf(entry), WrittenOf(entry),
+                    entry.KeptName, IsDirectory: true, IsLink: false, Size: 0, CreatedOf(entry), WrittenOf(entry),
                     Visibility: VisibilityOf(entry));
             }
             else
@@ -249,7 +268,7 @@ internal static class WalkExploreReader
             // right answer for the same reason the size is zero: the target is somewhere else in
             // this tree, carrying its own.
             into[next++] = new ExploreChild(
-                link.Name, IsDirectory: true, IsLink: true, Size: 0, CreatedOf(link), WrittenOf(link),
+                link.KeptName, IsDirectory: true, IsLink: true, Size: 0, CreatedOf(link), WrittenOf(link),
                 Visibility: VisibilityOf(link));
         }
 
@@ -279,7 +298,7 @@ internal static class WalkExploreReader
         if (!StorageAttributes.MayDifferFromLength(entry.Attributes))
         {
             return new ExploreChild(
-                entry.Name, IsDirectory: false, IsLink: false, entry.Length, CreatedOf(entry), WrittenOf(entry),
+                entry.KeptName, IsDirectory: false, IsLink: false, entry.Length, CreatedOf(entry), WrittenOf(entry),
                 Visibility: VisibilityOf(entry));
         }
 
@@ -288,13 +307,13 @@ internal static class WalkExploreReader
         return probe.Measure(entry.FullName, entry.Attributes) switch
         {
             { IsLink: true } => new ExploreChild(
-                entry.Name, IsDirectory: false, IsLink: true, Size: 0, CreatedOf(entry), WrittenOf(entry), Length: 0,
+                entry.KeptName, IsDirectory: false, IsLink: true, Size: 0, CreatedOf(entry), WrittenOf(entry), Length: 0,
                 Visibility: VisibilityOf(entry)),
             { } occupied => new ExploreChild(
-                entry.Name, IsDirectory: false, IsLink: false, occupied.Bytes, CreatedOf(entry), WrittenOf(entry),
+                entry.KeptName, IsDirectory: false, IsLink: false, occupied.Bytes, CreatedOf(entry), WrittenOf(entry),
                 entry.Length, storage, Visibility: VisibilityOf(entry)),
             null => new ExploreChild(
-                entry.Name, IsDirectory: false, IsLink: false, Size: 0, CreatedOf(entry), WrittenOf(entry),
+                entry.KeptName, IsDirectory: false, IsLink: false, Size: 0, CreatedOf(entry), WrittenOf(entry),
                 entry.Length, storage, SizeUnknown: true, VisibilityOf(entry)),
         };
     }
