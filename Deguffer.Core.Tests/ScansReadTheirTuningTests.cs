@@ -199,11 +199,11 @@ public sealed class ScansReadTheirTuningTests : IDisposable
 
         public int MostInFlight => Volatile.Read(ref _mostInFlight);
 
-        public IMftSource? TryOpen(char driveLetter, out FallbackReason reason)
+        public IMftVolume? TryOpen(char driveLetter, out FallbackReason reason)
         {
             reason = driveLetter == volume ? FallbackReason.None : FallbackReason.NotNtfsVolume;
 
-            return driveLetter == volume ? new Recording(this, Table().Build()) : null;
+            return driveLetter == volume ? new ServedVolume(new Recording(this, Table().Build())) : null;
         }
 
         private static MftFixture Table()

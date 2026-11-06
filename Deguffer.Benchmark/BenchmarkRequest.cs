@@ -121,6 +121,9 @@ internal sealed record BenchmarkRequest(
                             started at the same moment, as Auto races them in a scan, and
                             each of the two alone, alternating the order every round. The
                             slowdown of each is what the other costs it. Elevated.
+          scan <folder>     Measure the folder as an elevated scan does the first time it
+                            asks about the volume: open it, find its table, and race the
+                            walk against the build, after an untimed walk. Elevated.
 
         --runs N               How many times to run the route, 1 to 1000. The default is 5. The
                                first run is reported apart from the others.
@@ -207,7 +210,7 @@ internal sealed record BenchmarkRequest(
 
         if (named is not { } route)
         {
-            error = "The route must be table, index, explore, explorefolder, walk, measure, explorewalk, sources, links, folders, remove, clean or race.";
+            error = "The route must be table, index, explore, explorefolder, walk, measure, explorewalk, sources, links, folders, remove, clean, race or scan.";
             return null;
         }
 

@@ -26,7 +26,7 @@ internal static class TableRoutes
     /// </param>
     public static FallbackReason Probe(IMftSourceFactory volumes, char drive, out TableCensus? census)
     {
-        using var source = volumes.TryOpen(drive, out var reason);
+        using var source = volumes.TryOpenTable(drive, out var reason);
 
         census = null;
 
@@ -58,16 +58,23 @@ internal static class TableRoutes
             throw new ArgumentException("A table route reads a volume, so its target has a drive letter.", nameof(target));
         }
 
-        // Timed apart from the stages, which the read times, because opening reads the boot sector
-        // and $MFT's own extent map, and a system volume's $MFT can be in many pieces.
+        // Each step timed apart from the stages, which the read times. Opening reads the boot sector.
+        // Finding the table reads $MFT's own extent map, which a system volume can keep in many
+        // pieces, and its first read makes NTFS flush the whole volume (IMftVolume).
         var opening = Stopwatch.GetTimestamp();
 
         // Opened above moments before, so a failure here is the volume going away mid-benchmark.
-        using var source = new CountingMftSource(
-            volumes.TryOpen(place.DriveLetter, out var reason)
-            ?? throw new IOException($"The volume could not be opened again: {reason}."));
+        using var volume = volumes.TryOpen(place.DriveLetter, out var reason)
+            ?? throw new IOException($"The volume could not be opened again: {reason}.");
 
         var openTime = Stopwatch.GetElapsedTime(opening);
+        var finding = Stopwatch.GetTimestamp();
+
+        using var source = new CountingMftSource(
+            volume.TryReadTable(out reason)
+            ?? throw new IOException($"The table could not be found again: {reason}."));
+
+        var tableOpenTime = Stopwatch.GetElapsedTime(finding);
         var timings = new MftStageTimings();
 
         var tally = route switch
@@ -79,7 +86,7 @@ internal static class TableRoutes
             _ => throw new ArgumentOutOfRangeException(nameof(route), route, "Not a route that reads the table."),
         };
 
-        return tally with { OpenTime = openTime };
+        return tally with { OpenTime = openTime, TableOpenTime = tableOpenTime };
     }
 
     /// <summary>

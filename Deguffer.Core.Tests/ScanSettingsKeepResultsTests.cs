@@ -207,8 +207,7 @@ public sealed class ScanSettingsKeepResultsTests : IDisposable
     private static long ReadVolume(
         int bytesPerSector, int bytesPerCluster, int bytesPerRecord, long? gapAfterCluster, TableTuning tuning)
     {
-        using var source = VolumeMftSource.TryOpen(
-            Table(bytesPerRecord).BuildVolume(bytesPerSector, bytesPerCluster, gapAfterCluster), out _);
+        using var source = Table(bytesPerRecord).OpenVolume(bytesPerSector, bytesPerCluster, out _, gapAfterCluster);
 
         Assert.NotNull(source);
         Assert.True(MftVolumeIndexBuilder.TryBuild(source, tuning, out var index));

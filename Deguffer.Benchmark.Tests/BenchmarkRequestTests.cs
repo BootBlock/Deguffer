@@ -78,9 +78,26 @@ public sealed class BenchmarkRequestTests
     public void AnyOtherRouteTakesItsTargetAsItsOnlyFolder() =>
         Assert.Equal([Path.GetFullPath("relative")], BenchmarkRequest.Parse(["walk", "relative"], out _)!.Folders);
 
+    /// <summary>
+    /// The scan route measures a folder from its volume's table where it can, so it is elevated, its
+    /// volume is the folder's own, and it walks with what a scan uses rather than values given.
+    /// </summary>
+    [Fact]
+    public void TheScanRouteMeasuresAFolderWithWhatAScanUses()
+    {
+        var request = BenchmarkRequest.Parse(["scan", @"C:\Users\testuser"], out _)!;
+
+        Assert.Equal(Route.Scan, request.Route);
+        Assert.Equal('C', request.Drive);
+        Assert.True(request.Route.ReadsTable());
+        Assert.False(request.Route.TargetsVolume());
+        Assert.False(request.Route.ReportsTableReads());
+        Assert.Null(BenchmarkRequest.Parse(["scan", @"C:\Users\testuser", "--threads", "8"], out _));
+    }
+
     /// <summary>By name only. Enum parsing would read a number or a list of names as a route.</summary>
     [Theory]
-    [InlineData("scan")]
+    [InlineData("sweep")]
     [InlineData("1")]
     [InlineData("table, index")]
     [InlineData("")]

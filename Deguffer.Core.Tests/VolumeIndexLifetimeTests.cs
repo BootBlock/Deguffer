@@ -191,11 +191,11 @@ public sealed class VolumeIndexLifetimeTests
 
         public int CloseCount => Volatile.Read(ref _closed);
 
-        public IMftSource? TryOpen(char driveLetter, out FallbackReason reason)
+        public IMftVolume? TryOpen(char driveLetter, out FallbackReason reason)
         {
             reason = FallbackReason.None;
 
-            return new Held(fixture.Build(), this);
+            return new ServedVolume(new Held(fixture.Build(), this));
         }
 
         private sealed class Held(IMftSource table, ListHeldOpen owner) : IMftSource

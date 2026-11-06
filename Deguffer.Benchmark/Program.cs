@@ -38,7 +38,7 @@ if (request.Route.ReadsTable())
         return 2;
     }
 
-    if (request.Route is Route.Race && LongPath.ProbeDirectory(request.Path) is not PathPresence.Present)
+    if (request.Route is Route.Race or Route.Scan && LongPath.ProbeDirectory(request.Path) is not PathPresence.Present)
     {
         Console.Error.WriteLine("The folder does not exist, or it cannot be read.");
         return 2;
@@ -90,6 +90,7 @@ static int Benchmark(BenchmarkRequest request, ScanTuner tuner, RemovalSite? sit
             site!, request.Trees, request.Tree, UserEnvironment.Current, SystemDirectories.Current, VolumeInventory.Current).Timed,
         Route.Race => RaceRoute.On(
             VolumeMftSourceFactory.Default, request.Path, request.Racer, request.Walk, request.Drive, request.Table, request.BeforePart).Timed,
+        Route.Scan => AutoScanRoute.On(VolumeMftSourceFactory.Default, request.Path, tuner),
         _ => new RouteRun(ct => TableRoutes.Run(request.Route, VolumeMftSourceFactory.Default, request.Path, request.Table, ct)),
     };
 

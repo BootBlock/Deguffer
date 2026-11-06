@@ -533,6 +533,37 @@ The earlier "about half the speed" was measured in a planning pass, where a walk
 of its own volume. The first version of the route let a timed walk follow one too, and read 2.6
 times; once each timed walk followed a walk of its own, the warm figure was 1.24 to 1.66 times.
 
+**Why a read through the volume's handle slows the walk, found (#544).** Under a CPU trace with
+stacks, the first read through a new volume handle runs `NtfsVolumeDasdIo`, which calls
+`NtfsFlushVolume`: NTFS flushes and purges what it has cached for every file on the volume
+(`CcCoherencyFlushAndPurgeCache`, on several system worker threads), so the read sees the disk as
+the cache does. The next walk then waits in `NtfsCheckpointForLogFileFull`, which no other walk
+did. Measured on the source volume, elevated, while other work ran:
+
+- **Only a read past the volume's first 8 KiB pays.** Right after a walk, a first read of 4 or
+  8 KiB at offset 0 took under 1 ms. A first read of 12 KiB at 0, 4 KiB at 8 KiB, 4 KiB at
+  `$MFT`, or 1 MiB at 50 GiB took 0.77 to 1.56 s. With nothing before it, any first read took
+  about 1 ms, so the cost grows with what the volume has cached.
+- **Once for each handle.** A second read through the same handle cost nothing, and two handles
+  that each read once cost the next walk no more than one.
+- **Reading the table another way does not help.** `$MFT` opened as a file is refused (error 5).
+  `FSCTL_GET_NTFS_FILE_RECORD` causes no flush, but reads 0.10 to 0.19 M records a second cold
+  and 0.52 M warm, 2.3 to 12 s for this table. A read through the disk under the volume causes no
+  flush either, but sees the disk without what the cache has not written yet, and cannot read a
+  BitLocker volume.
+
+**What changed.** The table's first read was in the open, which a scan makes on the caller's thread
+before it races the walk, so the walk waited for the flush before it started. The open now reads
+only the boot sector (`IMftSourceFactory.TryOpen`, `IMftVolume`), which is enough to say whether the
+table can be read, and the build reads where the table is, so the flush runs beside the walk. The
+benchmark's `scan` route measures a folder as a scan does the first time it asks about its volume.
+On the source folder (224,834 entries), in three alternating pairs of six runs each, the scan took
+1.02 to 1.09 s (medians) with the table found in the open and 0.15 to 0.18 s with it found in the
+build, every run complete. The flush still happens: its cost is now the build's, and the next walk
+of the volume pays its checkpoint. A probe that started a walk beside the flush rather than after it
+saved 0.3 to 1.1 s in each of eight rounds. This also accounts for part of the open's cost in #543,
+which timed the table's first read as part of the open.
+
 ## 8. Let a root probe tell "not there" from "I was refused" ✅ done
 
 **Outcome: the probe answers in three states, and the decision the item was waiting on went the

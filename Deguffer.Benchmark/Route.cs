@@ -83,6 +83,13 @@ internal enum Route
     /// unless another is named.
     /// </summary>
     Race,
+
+    /// <summary>
+    /// Measure one folder as an elevated scan does the first time it asks about the folder's volume:
+    /// open the volume, find its table, and race the walk against the build of its index, taking
+    /// whichever answers first.
+    /// </summary>
+    Scan,
 }
 
 internal static class RouteFacts
@@ -109,7 +116,14 @@ internal static class RouteFacts
     /// Whether the route's target is a volume rather than a folder. A folder read from the table is
     /// still read from the whole of its volume's, and the race walks a folder beside a volume's build.
     /// </summary>
-    public static bool TargetsVolume(this Route route) => route.ReadsTable() && route is not (Route.ExploreFolder or Route.Race);
+    public static bool TargetsVolume(this Route route) =>
+        route.ReadsTable() && route is not (Route.ExploreFolder or Route.Race or Route.Scan);
+
+    /// <summary>
+    /// Whether the route reads the table itself, so its reads and the stages of its build are what it
+    /// reports. The race and the scan report what the walk beside the build took instead.
+    /// </summary>
+    public static bool ReportsTableReads(this Route route) => route.ReadsTable() && route is not (Route.Race or Route.Scan);
 
     /// <summary>
     /// Whether the route builds what a scan keeps on screen, so what it holds once built is part of
@@ -120,7 +134,7 @@ internal static class RouteFacts
     /// <summary>What one counted item is, in the plural, as the report names it.</summary>
     public static string ItemName(this Route route) => route switch
     {
-        Route.Walk or Route.Measure or Route.ExploreWalk or Route.Folders or Route.Remove => "entries",
+        Route.Walk or Route.Measure or Route.ExploreWalk or Route.Folders or Route.Remove or Route.Scan => "entries",
         Route.Clean => "steps",
         Route.Sources => "candidates",
         Route.Links => "files",

@@ -28,13 +28,13 @@ public sealed class FakeMftSourceFactory : IMftSourceFactory
     public static FakeMftSourceFactory Serving(char driveLetter, MftFixture fixture) =>
         new(letter => letter == driveLetter ? fixture.Build() : null, FallbackReason.NotNtfsVolume);
 
-    public IMftSource? TryOpen(char driveLetter, out FallbackReason reason)
+    public IMftVolume? TryOpen(char driveLetter, out FallbackReason reason)
     {
         OpenCount++;
 
         var source = _open(driveLetter);
         reason = source is null ? _reason : FallbackReason.None;
 
-        return source;
+        return source is null ? null : new ServedVolume(source);
     }
 }

@@ -37,11 +37,12 @@ public sealed partial class VolumeMftSource : IMftSource
     public long RecordCount => _extents.DataSize / _geometry.BytesPerFileRecord;
 
     /// <summary>
-    /// Open the volume holding <paramref name="driveLetter"/> and read enough of it to serve
-    /// records. Returns null with a reason on every expected failure — §5.5 requires the fallback
-    /// to be observable, so "could not" always comes with "because".
+    /// Open the volume holding <paramref name="driveLetter"/> and read its boot sector, without
+    /// reading its table (<see cref="IMftVolume"/>). Returns null with a reason on every expected
+    /// failure — §5.5 requires the fallback to be observable, so "could not" always comes with
+    /// "because".
     /// </summary>
-    public static VolumeMftSource? TryOpen(char driveLetter, out FallbackReason reason)
+    public static IMftVolume? TryOpen(char driveLetter, out FallbackReason reason)
     {
         var handle = OpenOverlapped($@"\\.\{char.ToUpperInvariant(driveLetter)}:");
 
@@ -73,19 +74,21 @@ public sealed partial class VolumeMftSource : IMftSource
         CreateFile(path, GenericRead, FileShareRead | FileShareWrite, nint.Zero, OpenExisting, FileFlagOverlapped, nint.Zero);
 
     /// <summary>
-    /// Read enough of <paramref name="volume"/> to serve records, taking ownership of it: it is
-    /// disposed here on every exit that does not hand it to a source, a throw included, because a
-    /// leaked raw handle keeps the volume open until finalisation.
+    /// Read the boot sector of <paramref name="volume"/>, taking ownership of it: it is disposed here
+    /// on every exit that does not hand it to an <see cref="IMftVolume"/>, a throw included, because
+    /// a leaked raw handle keeps the volume open until finalisation.
+    ///
+    /// <para>Reads nothing past <see cref="BootReadBytes"/>, which NTFS serves without the flush the
+    /// table's first read costs (<see cref="IMftVolume"/>).</para>
     /// </summary>
-    internal static VolumeMftSource? TryOpen(IRawVolume volume, out FallbackReason reason)
+    internal static IMftVolume? TryOpen(IRawVolume volume, out FallbackReason reason)
     {
-        reason = FallbackReason.MasterFileTableIncomplete;
-        VolumeMftSource? source = null;
+        IMftVolume? opened = null;
 
         try
         {
-            source = Initialise(volume, ref reason);
-            return source;
+            opened = ReadBootSector(volume, out reason);
+            return opened;
         }
         catch (IOException)
         {
@@ -95,14 +98,14 @@ public sealed partial class VolumeMftSource : IMftSource
         }
         finally
         {
-            if (source is null)
+            if (opened is null)
             {
                 volume.Dispose();
             }
         }
     }
 
-    private static VolumeMftSource? Initialise(IRawVolume volume, ref FallbackReason reason)
+    private static OpenedVolume? ReadBootSector(IRawVolume volume, out FallbackReason reason)
     {
         // Sized to the largest sector, not to the 512 bytes the boot sector occupies, because the
         // sector size is not known until this read has succeeded. Microsoft's rules for an unbuffered
@@ -116,6 +119,41 @@ public sealed partial class VolumeMftSource : IMftSource
             return null;
         }
 
+        reason = FallbackReason.None;
+        return new OpenedVolume(volume, geometry);
+    }
+
+    /// <summary>
+    /// Read enough of the table of <paramref name="volume"/>, whose boot sector gave
+    /// <paramref name="geometry"/>, to serve records, taking ownership of the volume as
+    /// <see cref="TryOpen(IRawVolume, out FallbackReason)"/> does: disposed here on every exit that
+    /// does not hand it to a source.
+    /// </summary>
+    internal static VolumeMftSource? TryReadTable(IRawVolume volume, NtfsBootSector geometry, out FallbackReason reason)
+    {
+        VolumeMftSource? source = null;
+
+        try
+        {
+            source = ReadExtents(volume, geometry, out reason);
+            return source;
+        }
+        catch (IOException)
+        {
+            reason = FallbackReason.VolumeNotAddressable;
+            return null;
+        }
+        finally
+        {
+            if (source is null)
+            {
+                volume.Dispose();
+            }
+        }
+    }
+
+    private static VolumeMftSource? ReadExtents(IRawVolume volume, NtfsBootSector geometry, out FallbackReason reason)
+    {
         // Record 0 is read in whole clusters rather than as one record, which can be shorter than
         // a sector. $MFT's extension records are read through the same volume, before the source
         // that would otherwise serve them exists.
