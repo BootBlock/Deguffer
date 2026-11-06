@@ -33,8 +33,6 @@ public sealed class RefusalRecord
     private static readonly ConcurrentDictionary<string, RefusalRecord> ByFile =
         new(StringComparer.OrdinalIgnoreCase);
 
-    private static readonly JsonSerializerOptions SerializerOptions = new() { WriteIndented = false };
-
     private readonly Dictionary<string, string[]> _entries = new(StringComparer.OrdinalIgnoreCase);
     private readonly Lock _gate = new();
     private readonly string _file;
@@ -192,8 +190,10 @@ public sealed class RefusalRecord
                 return;
             }
 
-            var loaded = JsonSerializer.Deserialize<Dictionary<string, string?[]?>>(
-                File.ReadAllText(LongPath.Extended(_file)), SerializerOptions);
+            // The contract is the one the record is written with, so it says no list and no place is
+            // null. A hand-edited file can still hold either, and Wellformed drops them.
+            var loaded = JsonSerializer.Deserialize(
+                File.ReadAllText(LongPath.Extended(_file)), CompactStoreJson.Default.RefusedPlaces);
 
             foreach (var (path, recorded) in loaded ?? [])
             {
@@ -225,7 +225,7 @@ public sealed class RefusalRecord
     {
         try
         {
-            StoreFile.Replace(_file, JsonSerializer.Serialize(_entries, SerializerOptions));
+            StoreFile.Replace(_file, JsonSerializer.Serialize(_entries, CompactStoreJson.Default.RefusedPlaces));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

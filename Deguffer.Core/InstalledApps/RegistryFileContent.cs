@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Deguffer.Core.InstalledApps;
@@ -19,6 +20,16 @@ namespace Deguffer.Core.InstalledApps;
 public sealed partial record RegistryFileContent(string FirstKey, string? DisplayName, bool IsConfined)
 {
     private const string Header = "Windows Registry Editor Version 5.00";
+
+    /// <summary>
+    /// What the file whose whole content is <paramref name="bytes"/> would do. reg.exe writes UTF-16
+    /// with a byte-order mark, and the decoder honours whichever mark is there.
+    /// </summary>
+    public static RegistryFileContent? Parse(byte[] bytes)
+    {
+        using var reader = new StreamReader(new MemoryStream(bytes), Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        return Parse(reader.ReadToEnd());
+    }
 
     /// <summary>What <paramref name="text"/> would do, or null where it is not a registry file with a section.</summary>
     public static RegistryFileContent? Parse(string text)

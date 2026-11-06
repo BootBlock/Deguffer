@@ -10,16 +10,26 @@ namespace Deguffer.App.Shell;
 /// </summary>
 public sealed class SelectionService
 {
-    private readonly SelectionStore _store;
+    private readonly ISelectionStore _store;
 
-    public SelectionService(SelectionStore store)
+    /// <summary>
+    /// Starts reading the remembered ticks on a worker, and returns without waiting for them.
+    ///
+    /// <para>The app builds this before its window's first frame, and the file names every step of every
+    /// row by its full path, so it is the largest of the settings files. Nothing needs it until the
+    /// Storage page builds its first row, which a scan returns long after the read has finished.</para>
+    /// </summary>
+    public SelectionService(ISelectionStore store)
     {
         _store = store;
-        Memory = new SelectionMemory(store.Load());
+        Memory = Task.Run(() => new SelectionMemory(store.Load()));
     }
 
-    /// <summary>What each row starts ticked as, read as the preview builds its rows.</summary>
-    public SelectionMemory Memory { get; }
+    /// <summary>
+    /// What each row starts ticked as, once it is read. The preview waits for it before it builds a
+    /// row, so no row starts at its tier default because the file had not been read yet.
+    /// </summary>
+    public Task<SelectionMemory> Memory { get; }
 
     /// <summary>
     /// Record one row's choice.
@@ -37,8 +47,12 @@ public sealed class SelectionService
     /// </summary>
     public void Remember(string providerId, RememberedSelection selection)
     {
-        Memory.Remember(providerId, selection);
+        // Only a row records a choice, and the preview builds none until the memory is read, so this
+        // never waits.
+        var memory = Memory.Result;
 
-        _store.Save(Memory.Entries);
+        memory.Remember(providerId, selection);
+
+        _store.Save(memory.Entries);
     }
 }

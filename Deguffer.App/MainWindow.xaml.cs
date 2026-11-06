@@ -1,3 +1,4 @@
+using Deguffer.App.Controls;
 using Deguffer.App.Shell;
 using Deguffer.App.Views;
 using Deguffer.Core.Configuration;
@@ -20,7 +21,7 @@ public sealed partial class MainWindow : Window
     private readonly WindowSizing _sizing;
     private readonly CloseGuard _closeGuard = new(App.Running);
     private readonly TaskbarButton _taskbarButton;
-    private readonly MapAppearanceOpener _mapAppearance;
+    private readonly ToolWindowOpener _mapAppearance;
 
     public MainWindow()
     {
@@ -36,10 +37,11 @@ public sealed partial class MainWindow : Window
         _sizing = new WindowSizing(this, new WindowPlacementStore<WindowMetrics>(UserEnvironment.Current, "window.json"));
         SystemMotion.Current.Follow(this);
         _taskbarButton = new TaskbarButton(this, new TaskbarIndicator(App.Work, TaskbarButton.UserIsHere));
-        _mapAppearance = new MapAppearanceOpener(
-            this,
-            App.MapAppearance,
-            new WindowPlacementStore<ToolWindowMetrics>(UserEnvironment.Current, "map-appearance-window.json"));
+        var mapAppearancePlacement = new WindowPlacementStore<ToolWindowMetrics>(UserEnvironment.Current, "map-appearance-window.json");
+        _mapAppearance = new ToolWindowOpener(
+            () => new MapAppearanceWindow(App.MapAppearance, this, mapAppearancePlacement),
+            mapAppearancePlacement,
+            RenderingClock.Current);
 
         // Where the window ends up is the user's, so it outlives the session that produced it. The map
         // appearance window is remembered as open here, before this window goes and takes it along.
@@ -103,14 +105,17 @@ public sealed partial class MainWindow : Window
 
     /// <summary>
     /// The application is going: take the windows it owns closing from here on as its own going, so
-    /// one left open is open again at the next launch. See <see cref="MapAppearanceOpener.Leave"/>.
+    /// one left open is open again at the next launch. See <see cref="ToolWindowOpener.Leave"/>.
     /// </summary>
     public void Leave() => _mapAppearance.Leave();
 
     /// <summary>Open the map appearance window, or bring forward the one already open.</summary>
     public void ShowMapAppearance() => _mapAppearance.Show();
 
-    /// <summary>Open again the tool windows the last session closed with open. Once, after this window is first shown.</summary>
+    /// <summary>
+    /// Open again the tool windows the last session closed with open. Once, as this window is first
+    /// shown: each waits for this window's first frame. See <see cref="ToolWindowOpener.Reopen"/>.
+    /// </summary>
     public void ReopenToolWindows() => _mapAppearance.Reopen();
 
     /// <summary>

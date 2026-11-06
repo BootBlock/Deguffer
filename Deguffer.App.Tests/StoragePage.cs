@@ -23,11 +23,15 @@ internal sealed class StoragePage : IDisposable
     /// <param name="storedKeepList">
     /// What the keep list file holds before the page starts, or null for none: a first run.
     /// </param>
+    /// <param name="selectionStore">
+    /// Where the remembered ticks are kept, given the page's own profile, or null for the store the app uses.
+    /// </param>
     public StoragePage(
         IReadOnlyList<FakeCleanupProvider> providers,
         bool isElevated = false,
         long freeBytes = 400_000,
-        string? storedKeepList = null)
+        string? storedKeepList = null,
+        Func<FakeUserEnvironment, ISelectionStore>? selectionStore = null)
     {
         Environment = new FakeUserEnvironment(_temp.Path);
         VolumeRoot = Path.TrimEndingDirectorySeparator(_temp.Path) + Path.DirectorySeparatorChar;
@@ -40,7 +44,7 @@ internal sealed class StoragePage : IDisposable
         }
 
         Keeps = new KeepService(new KeepStore(Environment));
-        Selections = new SelectionService(new SelectionStore(Environment));
+        Selections = new SelectionService(selectionStore?.Invoke(Environment) ?? new SelectionStore(Environment));
         Preferences = new PreferenceService(new PreferenceStore(Environment));
         Sizes = new ProviderSizeHistory(new ProviderSizeStore(Environment));
 

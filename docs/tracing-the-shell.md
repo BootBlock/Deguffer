@@ -20,14 +20,14 @@ parameter that is not a number or an enum.
 
 | Pair | Starts | Stops | Payload |
 | --- | --- | --- | --- |
-| `Launch` | `App.OnLaunched` is called | the first frame composed after the main window is activated | none |
+| `Launch` | `App.OnLaunched` is called | the main window's first frame after it is activated has been handed to the compositor | none |
 | `Window` | inside `Launch`: the main window is about to be built, with the page it opens on | the window is built | none |
-| `ToolWindows` | inside `Launch`: the tool windows left open last session are about to open again | they are open | none |
+| `ToolWindows` | after `Launch`, once the first frame is drawn: a tool window left open last session is about to open again | it is open | none |
 | `Show` | the Explore page is about to show a tree | the tree is shown and handed to the map | start: cause, node total. Stop: cause, rows listed |
 | `Selection` | inside `Show`: what is picked is about to be carried to the tree or cleared | done | none |
 | `Rows` | inside `Show`: the rows are about to be brought up to date or rebuilt | done | stop: rows listed |
 | `Handoff` | inside `Show`: the page is about to hand the tree to the map | the map has taken it and asked for its drawing, and the list has marked what is picked again | none |
-| `Picture` | the map is handed a new picture (another tree, folder or view) | the first frame composed after a drawing of it is on screen, or the next picture is handed over first | start: picture number, view. Stop: picture number, outcome. Every map in the app counts from one shared number |
+| `Picture` | the map is handed a new picture (another tree, folder or view) | the first frame after a drawing of it is presented has been handed to the compositor, or the next picture is handed over first | start: picture number, view. Stop: picture number, outcome. Every map in the app counts from one shared number |
 | `Groups` | the Duplicates page starts to apply a batch of confirmed groups | the batch and its figures are applied | stop: groups in the batch |
 
 A `Show` cause is `Snapshot` (a partial tree from a scan under way), `Step` (a folder opened or
@@ -95,7 +95,7 @@ Map pictures: 2 handed, 2 reached the screen, 0 superseded first, 0 still waitin
 Scan end to first map: 219.0 ms (8 nodes)
 ```
 
-It gives launch to first frame with its two parts, each `Show` cause with its count, median and
+It gives launch to first frame with the main window's part of it, the tool window reopened after it, each `Show` cause with its count, median and
 longest time and the parts of the longest, the wait for each picture, the time from each scan's end
 to its first map, and the time spent applying duplicate groups. Its output names nothing from the
 machine, as the trace does not.

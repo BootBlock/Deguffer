@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Configuration;
@@ -27,7 +28,14 @@ public interface IWindowPlacement
 public sealed class WindowPlacementStore<T>
     where T : class, IWindowPlacement
 {
-    private static readonly JsonSerializerOptions SerializerOptions = new() { WriteIndented = true };
+    /// <summary>
+    /// The generated contract of <typeparamref name="T"/>. Every placement type is declared on
+    /// <see cref="IndentedStoreJson"/>, and a test asks for each, so a new one that is not fails there
+    /// rather than at the first launch.
+    /// </summary>
+    internal static readonly JsonTypeInfo<T> Contract =
+        IndentedStoreJson.Default.GetTypeInfo(typeof(T)) as JsonTypeInfo<T>
+        ?? throw new InvalidOperationException($"{typeof(T).Name} has no contract on {nameof(IndentedStoreJson)}.");
 
     private readonly string _file;
 
@@ -49,7 +57,7 @@ public sealed class WindowPlacementStore<T>
         try
         {
             var json = File.ReadAllText(LongPath.Extended(_file));
-            var stored = JsonSerializer.Deserialize<T>(json, SerializerOptions);
+            var stored = JsonSerializer.Deserialize(json, Contract);
 
             // `null` and `{}` are both well-formed documents, and neither reaches the catch: the
             // first arrives as no record, the second as a zero-sized one.
@@ -73,7 +81,7 @@ public sealed class WindowPlacementStore<T>
 
         try
         {
-            StoreFile.Replace(_file, JsonSerializer.Serialize(placement, SerializerOptions));
+            StoreFile.Replace(_file, JsonSerializer.Serialize(placement, Contract));
 
             return true;
         }

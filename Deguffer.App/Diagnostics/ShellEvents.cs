@@ -5,7 +5,7 @@ namespace Deguffer.App.Diagnostics;
 
 /// <summary>
 /// The shell's milestones on the UI thread, as start and stop pairs a trace of the running app
-/// times: launch to the first frame, each tree Explore shows, each new picture's first drawing on
+/// times: launch to the first frame, a tool window reopened after it, each tree Explore shows, each new picture's first drawing on
 /// screen, and each batch of duplicate groups the Duplicates page applies. How to record and read
 /// them is in <c>docs/tracing-the-shell.md</c>.
 ///
@@ -35,7 +35,7 @@ internal sealed class ShellEvents : EventSource
     [Event(1, Level = EventLevel.Informational)]
     public void LaunchStart() => WriteEvent(1);
 
-    /// <summary>The window composed its first frame after it was activated.</summary>
+    /// <summary>The window's first frame after it was activated has been handed to the compositor.</summary>
     [Event(2, Level = EventLevel.Informational)]
     public void LaunchStop() => WriteEvent(2);
 
@@ -46,7 +46,10 @@ internal sealed class ShellEvents : EventSource
     [Event(4, Level = EventLevel.Informational)]
     public void WindowStop() => WriteEvent(4);
 
-    /// <summary>The tool windows left open last session are about to be opened again.</summary>
+    /// <summary>
+    /// A tool window left open last session is about to open again, after the main window's first
+    /// frame (see <see cref="Views.ToolWindowOpener.Reopen"/>), so outside the launch.
+    /// </summary>
     [Event(5, Level = EventLevel.Informational)]
     public void ToolWindowsStart() => WriteEvent(5);
 

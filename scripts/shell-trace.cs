@@ -65,7 +65,13 @@ static void Launch(List<Raised> raised)
     var launch = spans[0];
     Console.WriteLine($"Launch to first frame: {Ms(launch.Duration)}");
     Console.WriteLine($"  main window and first page: {Ms(Pairs(raised, "Window").FirstOrDefault()?.Duration)}");
-    Console.WriteLine($"  tool windows reopened:      {Ms(Pairs(raised, "ToolWindows").FirstOrDefault()?.Duration)}");
+
+    // Reopened once the first frame is drawn, so after the launch rather than inside it.
+    if (Pairs(raised, "ToolWindows").FirstOrDefault() is { } reopened)
+    {
+        Console.WriteLine($"Tool window reopened after the first frame: {Ms(reopened.Duration)}");
+    }
+
     Console.WriteLine();
 }
 

@@ -157,6 +157,18 @@ internal sealed class ContentReader
         BytesOf(ContentPart.Ends, length) + (IsWhole(ContentPart.Ends, length) ? 0 : length);
 
     /// <summary>
+    /// The checksum a read of <paramref name="part"/> of a file of <paramref name="length"/> bytes is
+    /// taken by, in a search by <paramref name="chosen"/>. A value that covers every byte is the
+    /// group's, shown and exported, so it is taken by the one chosen. The first and last blocks of a
+    /// larger file only decide which files are read in full: unequal values always mean unequal
+    /// bytes, and a collision only sends a pair on to that read. So they are taken by XXH128, the
+    /// fastest, whatever was chosen: SHA-512 takes some seventy times as long over them, and on a
+    /// solid-state disk sets the pace of the stage.
+    /// </summary>
+    public static ChecksumAlgorithm AlgorithmOf(ContentPart part, long length, ChecksumAlgorithm chosen) =>
+        IsWhole(part, length) ? chosen : ChecksumAlgorithm.XxHash128;
+
+    /// <summary>
     /// The checksum of <paramref name="part"/> of <paramref name="file"/>'s content, or the reason it
     /// was left out.
     /// </summary>

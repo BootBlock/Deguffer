@@ -29,14 +29,6 @@ public sealed class ComponentStoreSettlement
     /// <summary>The format this build writes and reads. A file of any other is not read.</summary>
     private const int Format = 1;
 
-    private static readonly JsonSerializerOptions SerializerOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        UnmappedMemberHandling = System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow,
-        RespectRequiredConstructorParameters = true,
-        RespectNullableAnnotations = true,
-    };
-
     private readonly string _file;
     private readonly Lock _gate = new();
     private Dictionary<ComponentStoreCommand, ComponentStoreState>? _left;
@@ -82,7 +74,7 @@ public sealed class ComponentStoreSettlement
                     Format,
                     record.ToDictionary(entry => entry.Key.ToString(), entry => StoredState.Of(entry.Value), StringComparer.Ordinal));
 
-                StoreFile.Replace(_file, JsonSerializer.Serialize(stored, SerializerOptions));
+                StoreFile.Replace(_file, JsonSerializer.Serialize(stored, StrictStoreJson.Default.ComponentStoreStates));
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -107,7 +99,7 @@ public sealed class ComponentStoreSettlement
 
         try
         {
-            stored = JsonSerializer.Deserialize<Stored>(File.ReadAllText(LongPath.Extended(_file)), SerializerOptions);
+            stored = JsonSerializer.Deserialize(File.ReadAllText(LongPath.Extended(_file)), StrictStoreJson.Default.ComponentStoreStates);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
@@ -141,13 +133,13 @@ public sealed class ComponentStoreSettlement
     }
 
     /// <summary>The file as it is written.</summary>
-    private sealed record Stored(int Format, Dictionary<string, StoredState> Left);
+    internal sealed record Stored(int Format, Dictionary<string, StoredState> Left);
 
     /// <summary>
     /// One state as it is written: every member a constructor parameter, so a state missing any of them
     /// is refused rather than read as a zero.
     /// </summary>
-    private sealed record StoredState(
+    internal sealed record StoredState(
         long ExplorerSize,
         long ActualSize,
         long SharedWithWindows,

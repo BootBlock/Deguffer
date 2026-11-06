@@ -17,8 +17,6 @@ namespace Deguffer.Core.Configuration;
 /// </summary>
 public sealed class EmulatorFolderStore
 {
-    private static readonly JsonSerializerOptions SerializerOptions = new() { WriteIndented = true };
-
     private readonly string _file;
 
     public EmulatorFolderStore(IUserEnvironment environment)
@@ -42,7 +40,7 @@ public sealed class EmulatorFolderStore
         {
             var json = File.ReadAllText(LongPath.Extended(_file));
 
-            return Usable(JsonSerializer.Deserialize<string?[]>(json, SerializerOptions) ?? []);
+            return Usable(JsonSerializer.Deserialize(json, IndentedStoreJson.Default.Folders) ?? []);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
@@ -64,7 +62,7 @@ public sealed class EmulatorFolderStore
 
         try
         {
-            StoreFile.Replace(_file, JsonSerializer.Serialize(stored, SerializerOptions));
+            StoreFile.Replace(_file, JsonSerializer.Serialize(stored, IndentedStoreJson.Default.FolderList));
 
             return true;
         }

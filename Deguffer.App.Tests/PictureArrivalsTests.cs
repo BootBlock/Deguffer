@@ -19,8 +19,9 @@ public sealed class PictureArrivalsTests
     private readonly SteppedFrameClock _clock = new();
 
     /// <summary>
-    /// The wait ends at the frame after the first drawing is presented, not as it is presented, and
-    /// stops listening to frames then. A second drawing of the same picture is not a first.
+    /// The wait ends once the frame after the first drawing is presented has reached the compositor,
+    /// not as it is presented or as that frame starts, and stops listening to frames then. A second
+    /// drawing of the same picture is not a first.
     /// </summary>
     [Fact]
     public void APictureWaitsUntilTheFrameAfterItsFirstDrawing()
@@ -41,8 +42,13 @@ public sealed class PictureArrivalsTests
         Assert.Single(recorder.Events);
         Assert.True(_clock.IsTicking);
 
+        // The first tick is raised as the frame showing the drawing is about to be laid out, so the
+        // wait goes on until the next, by which that frame has been handed to the compositor.
         _clock.Step(Frame);
         arrivals.Presented();
+
+        Assert.Single(recorder.Events);
+
         _clock.Step(Frame);
 
         Assert.Equal(["PictureStart", "PictureStop"], recorder.Names);
@@ -82,6 +88,7 @@ public sealed class PictureArrivalsTests
         explore.Handed(Picture(ExploreView.Treemap));
         memory.Handed(Picture(ExploreView.Treemap));
         memory.Presented();
+        _clock.Step(Frame);
         _clock.Step(Frame);
 
         Assert.Equal(["PictureStart", "PictureStart", "PictureStop"], recorder.Names);

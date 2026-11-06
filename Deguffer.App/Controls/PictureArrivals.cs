@@ -1,4 +1,5 @@
 using Deguffer.App.Diagnostics;
+using Deguffer.App.Shell;
 using Deguffer.Core.Exploring.Layout;
 
 namespace Deguffer.App.Controls;
@@ -6,8 +7,8 @@ namespace Deguffer.App.Controls;
 /// <summary>
 /// How long each new picture handed to an <see cref="ExploreMap"/> waits for its first drawing to
 /// reach the screen, as <see cref="ShellEvents.PictureStart"/> and <see cref="ShellEvents.PictureStop"/>
-/// state it: from the hand-off to the first frame composed after a drawing of it became the one the map
-/// works from. The span holds the layout, the paint or the shade (the first shader compile included),
+/// state it: from the hand-off to the first frame handed to the compositor after a drawing of it became
+/// the one the map works from. The span holds the layout, the paint or the shade (the first shader compile included),
 /// and the copy to the screen.
 ///
 /// <para>It waits on no frame while no trace listens, so a session with no trace pays a check of
@@ -51,7 +52,8 @@ internal sealed class PictureArrivals(IFrameClock clock)
 
     /// <summary>
     /// A drawing became the one the map works from. The first since a picture was handed over is on
-    /// screen at the next frame the window composes, which is when the wait is said to end.
+    /// screen once the next frame has been handed to the compositor, which is when the wait is said to
+    /// end (see <see cref="AfterFirstFrame"/>).
     /// </summary>
     public void Presented()
     {
@@ -62,6 +64,6 @@ internal sealed class PictureArrivals(IFrameClock clock)
 
         _waiting = null;
 
-        NextFrame.Then(clock, () => ShellEvents.Log.PictureStop(picture, PictureOutcome.Shown));
+        AfterFirstFrame.Run(clock, () => ShellEvents.Log.PictureStop(picture, PictureOutcome.Shown));
     }
 }

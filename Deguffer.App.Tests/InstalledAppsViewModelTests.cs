@@ -53,7 +53,8 @@ public sealed class InstalledAppsViewModelTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    private InstalledAppsViewModel Page(bool relaunchStarts = false)
+    /// <param name="listBackups">Lists the backups in place of the folder, or null to list the folder.</param>
+    private InstalledAppsViewModel Page(bool relaunchStarts = false, Func<CancellationToken, IReadOnlyList<RegistryBackupFile>>? listBackups = null)
     {
         var reader = new InstalledAppsReader(_registry, _installer, _paths, FixedSystemDirectories.Standard, new FakePackageDependencies(), new FakeVolumeInventory());
         var backups = new RegistryBackups(_runner, Path.Combine(_temp.Path, "backups"), RegExe, TimeProvider.System);
@@ -64,7 +65,8 @@ public sealed class InstalledAppsViewModelTests : IDisposable
                 new EntryRemover(_registry, reader, backups),
                 new BackupRestorer(_registry, backups),
                 new ProgramUninstaller(reader, _launcher, @"C:\Windows\System32\msiexec.exe"),
-                backups,
+                backups.Folder,
+                listBackups ?? backups.List,
                 () => _prompt,
                 _preferences,
                 isElevated: false,
@@ -168,6 +170,88 @@ public sealed class InstalledAppsViewModelTests : IDisposable
         Assert.Equal([gone], _registry.Deleted);
         Assert.Equal(Microsoft.UI.Xaml.Controls.InfoBarSeverity.Success, page.Actions.ReportSeverity);
     });
+
+    /// <summary>
+    /// Listing reads and parses every backup file the folder has gained, so it runs on the thread
+    /// pool, and only its rows reach the UI thread.
+    /// </summary>
+    [Fact]
+    public void TheBackupsAreListedOffTheUiThread() => UiThread.Run(async () =>
+    {
+        var window = Environment.CurrentManagedThreadId;
+        var listedOn = new List<int>();
+        var shownOn = new List<int>();
+        var backup = Backup("Tool");
+        var page = Page(listBackups: _ =>
+        {
+            listedOn.Add(Environment.CurrentManagedThreadId);
+            return [backup];
+        });
+        page.Actions.Backups.CollectionChanged += (_, _) => shownOn.Add(Environment.CurrentManagedThreadId);
+
+        await page.Actions.ShowBackupsAsync();
+
+        Assert.NotEqual(window, Assert.Single(listedOn));
+        Assert.Equal([window], shownOn);
+        Assert.Same(backup, Assert.Single(page.Actions.Backups).File);
+    });
+
+    /// <summary>A listing that finishes after a newer one has shown its rows leaves those rows alone.</summary>
+    [Fact]
+    public void AListingOvertakenByANewerOneDoesNotReplaceItsRows() => UiThread.Run(async () =>
+    {
+        var older = Backup("Older");
+        var newer = Backup("Newer");
+        using var olderStarted = new ManualResetEventSlim();
+        using var releaseOlder = new ManualResetEventSlim();
+        var newerAsked = false;
+        var page = Page(listBackups: _ =>
+        {
+            if (Volatile.Read(ref newerAsked))
+            {
+                return [newer];
+            }
+
+            olderStarted.Set();
+            Assert.True(releaseOlder.Wait(TimeSpan.FromSeconds(10)), "the older listing was never released");
+            return [older];
+        });
+
+        var first = page.Actions.ShowBackupsAsync();
+        Assert.True(olderStarted.Wait(TimeSpan.FromSeconds(10)), "the older listing never started");
+        Volatile.Write(ref newerAsked, true);
+        await page.Actions.ShowBackupsAsync();
+        releaseOlder.Set();
+        await first;
+
+        Assert.Same(newer, Assert.Single(page.Actions.Backups).File);
+    });
+
+    /// <summary>A removal can add backups, so the list is read again before the removal is done.</summary>
+    [Fact]
+    public void ARemovalListsTheBackupsAgain() => UiThread.Run(async () =>
+    {
+        Stale("Gone");
+        IReadOnlyList<RegistryBackupFile> folder = [];
+        var page = Page(listBackups: _ => folder);
+        await page.RefreshAsync();
+        await page.Actions.ShowBackupsAsync();
+        var taken = Backup("Gone");
+        folder = [taken];
+
+        // The listing stands in for the folder, so no export needs to run for it to change.
+        page.Actions.BackUpFirst = false;
+        page.Actions.SelectStale([page.StaleRows[0].Entry]);
+        await page.Actions.RemoveCommand.ExecuteAsync(null);
+
+        Assert.Same(taken, Assert.Single(page.Actions.Backups).File);
+    });
+
+    private RegistryBackupFile Backup(string name)
+    {
+        var key = new UninstallKey(UninstallScope.CurrentUser, name);
+        return new RegistryBackupFile(Path.Combine(_temp.Path, "backups", $"{name}.reg"), key.PhysicalPath, name, DateTimeOffset.UnixEpoch, IsConfined: true);
+    }
 
     [Fact]
     public void DecliningRemovesNothing() => UiThread.Run(async () =>

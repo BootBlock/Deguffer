@@ -86,7 +86,8 @@ public partial class App : Application
     /// <summary>
     /// What the Storage rows were left ticked as, shared for the same reason the two above are: the
     /// page reads it as it builds each row and writes it back as the user clicks, so a second
-    /// instance would hand out a copy that is stale by the first tick.
+    /// instance would hand out a copy that is stale by the first tick. Its file is read on a worker from
+    /// here, so the window's first frame does not wait for it.
     /// </summary>
     public static SelectionService Selections { get; } =
         new(new SelectionStore(UserEnvironment.Current));
@@ -196,16 +197,14 @@ public partial class App : Application
 
         _shell.Activate();
 
-        // After the main window is on screen, because a tool window opens beside it and stays above it.
-        events.ToolWindowsStart();
+        // After the main window, because a tool window opens beside it and stays above it.
         _shell.ReopenToolWindows();
-        events.ToolWindowsStop();
 
-        // The launch ends at the first frame composed after the window is activated, which is the
-        // first one the reader can see. Waited for only while a trace is recording.
+        // The launch ends once the window's first frame has been handed to the compositor, which is
+        // the first the reader can see. Waited for only while a trace is recording.
         if (events.IsEnabled())
         {
-            NextFrame.Then(RenderingClock.Current, events.LaunchStop);
+            AfterFirstFrame.Run(RenderingClock.Current, events.LaunchStop);
         }
     }
 }
