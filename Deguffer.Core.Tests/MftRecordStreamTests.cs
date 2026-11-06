@@ -257,6 +257,8 @@ public sealed class MftRecordStreamTests
 
         ReadAll(source, new TableTuning(TableTuning.MaximumReadBytes, readsInFlight: 4, parseThreads: 1, listReadsInFlight: 4), out var wholeTable);
 
+        // The order is the test's own, so this shows only that all three lists were read: what the
+        // reader made of the reverse order is in the reads below.
         Assert.Equal([900L, 800L, 700L], order.Completions);
         Assert.False(wholeTable);
         Assert.Contains(source.Reads, r => r.First is >= 2_000 and < 2_012);

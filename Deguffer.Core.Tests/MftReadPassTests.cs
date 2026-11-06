@@ -68,8 +68,8 @@ public sealed class MftReadPassTests
     public void NumbersEachRecordByItsPositionWhateverOrderReadsComplete()
     {
         var tuning = new TableTuning(TableTuning.MinimumReadBytes, 8, 4, 8);
-        var order = new CompletionOrder<long>(
-            ReadStarts(LargeTable().WithoutBitmap(), tuning).Chunk(tuning.ReadsInFlight).SelectMany(run => run.Reverse()));
+        IReadOnlyList<long> planned = [.. ReadStarts(LargeTable().WithoutBitmap(), tuning).Chunk(tuning.ReadsInFlight).SelectMany(run => run.Reverse())];
+        var order = new CompletionOrder<long>(planned);
 
         using var source = new ScriptedReads(LargeTable().WithoutBitmap().Build(), (inner, first, destination, ct) =>
             order.InTurn(first, () => Task.FromResult(inner.ReadBatch(first, destination.Span)), ct));
@@ -78,7 +78,11 @@ public sealed class MftReadPassTests
 
         Assert.Equal(Handed(LargeTable().WithoutBitmap(), TableTuning.Default), handed);
 
+        // The order is the test's own, so this shows the pass made every read the order holds, and
+        // only those: a read made from anywhere else fails, and one never made holds up the rest.
+        // What the pass did with them is the assertion on the records above.
         var completed = order.Completions;
+        Assert.Equal(planned, completed);
         Assert.True(completed.Zip(completed.Skip(1)).Any(pair => pair.First > pair.Second), "the reads must complete out of order");
     }
 
