@@ -239,6 +239,7 @@ public sealed class MftRecordStreamTests
     /// they complete in, so a table whose lists want more than it holds loses the same files on every
     /// run. Here the reads complete in reverse, and the budget runs out at the second list in cluster
     /// order: the first two are followed, so the records they name are read, and the third is not.
+    /// All three reads are in flight at once, so each can wait for the one after it.
     /// </summary>
     [Fact]
     public void LosesTheSameListsWhicheverOrderTheirReadsComplete()
@@ -248,13 +249,17 @@ public sealed class MftRecordStreamTests
             .AddFileWhoseListOutsideTheTableNamesRecords(17, listCluster: 700, firstNamed: 2_000, count: 12)
             .AddFileWhoseListOutsideTheTableNamesRecords(18, listCluster: 800, firstNamed: 3_000, count: 12)
             .Build();
-        using var source = new RecordedReads(new ScriptedClusterReads(
-            table, (cluster, ct) => Task.Delay(TimeSpan.FromMilliseconds(1_000 - cluster), ct)));
+        var order = new CompletionOrder<long>([900, 800, 700]);
+        using var source = new RecordedReads(new ScriptedClusterReads(table, (inner, cluster, destination, ct) =>
+            order.InTurn(cluster, () => inner.TryReadClustersAsync(cluster, destination, ct).AsTask(), ct)));
 
         Assert.True(source.RecordCount < 24, "two lists must want more than the table holds, and one must not");
 
         ReadAll(source, new TableTuning(TableTuning.MaximumReadBytes, readsInFlight: 4, parseThreads: 1, listReadsInFlight: 4), out var wholeTable);
 
+        // The order is the test's own, so this shows only that all three lists were read: what the
+        // reader made of the reverse order is in the reads below.
+        Assert.Equal([900L, 800L, 700L], order.Completions);
         Assert.False(wholeTable);
         Assert.Contains(source.Reads, r => r.First is >= 2_000 and < 2_012);
         Assert.Contains(source.Reads, r => r.First is >= 3_000 and < 3_012);
@@ -274,7 +279,7 @@ public sealed class MftRecordStreamTests
             .AddFileWithANonResidentAttributeList(20, MftRecord.RootRecordNumber, "a.tgz", allocated: 4096, logical: 1000, extension: 30, listCluster: 700)
             .AddFileWithANonResidentAttributeList(21, MftRecord.RootRecordNumber, "b.tgz", allocated: 4096, logical: 2000, extension: 31, listCluster: 800)
             .Build();
-        using var source = new ScriptedClusterReads(table, async (cluster, ct) =>
+        using var source = new ScriptedClusterReads(table, async (inner, cluster, destination, ct) =>
         {
             if (cluster == 700)
             {
@@ -293,6 +298,8 @@ public sealed class MftRecordStreamTests
                 await Task.Delay(TimeSpan.FromMilliseconds(200), CancellationToken.None);
                 throw;
             }
+
+            return await inner.TryReadClustersAsync(cluster, destination, ct);
         });
 
         Assert.Throws<IOException>(() => ReadAll(source, new TableTuning(TableTuning.MaximumReadBytes, readsInFlight: 4, parseThreads: 1, listReadsInFlight: 4), out _));
@@ -402,10 +409,11 @@ public sealed class MftRecordStreamTests
     }
 
     /// <summary>
-    /// A table whose overlapped cluster reads each run <c>before</c> first, given the cluster the read
-    /// starts at, and read nothing where it throws. Counts the reads in flight.
+    /// A table whose overlapped cluster reads are made by <c>read</c>, given the table and the cluster
+    /// the read starts at. Counts the reads in flight.
     /// </summary>
-    private sealed class ScriptedClusterReads(IMftSource table, Func<long, CancellationToken, Task> before) : IMftSource
+    private sealed class ScriptedClusterReads(
+        IMftSource table, Func<IMftSource, long, Memory<byte>, CancellationToken, Task<bool>> read) : IMftSource
     {
         private int _inFlight;
 
@@ -434,8 +442,7 @@ public sealed class MftRecordStreamTests
 
             try
             {
-                await before(firstCluster, ct).ConfigureAwait(false);
-                return await table.TryReadClustersAsync(firstCluster, destination, ct).ConfigureAwait(false);
+                return await read(table, firstCluster, destination, ct).ConfigureAwait(false);
             }
             finally
             {

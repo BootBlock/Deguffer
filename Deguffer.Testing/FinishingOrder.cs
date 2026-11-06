@@ -13,42 +13,27 @@ namespace Deguffer.Testing;
 /// </summary>
 public sealed class FinishingOrder : IProgress<Finding>
 {
-    /// <summary>Far longer than a finding takes to arrive, and far shorter than a hung test.</summary>
-    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(30);
-
-    private readonly IReadOnlyList<FakeCleanupProvider> _order;
-    private readonly TaskCompletionSource[] _arrived;
+    private readonly CompletionOrder<string> _order;
 
     /// <param name="order">The providers in the order they are to finish, which sets each one's <see cref="FakeCleanupProvider.WhilePlanning"/>.</param>
     public FinishingOrder(params IReadOnlyList<FakeCleanupProvider> order)
     {
-        _order = order;
-        _arrived = [.. order.Select(_ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously))];
+        _order = new CompletionOrder<string>(order.Select(provider => provider.Id));
 
-        for (var index = 1; index < order.Count; index++)
+        foreach (var provider in order)
         {
-            var previous = order[index - 1];
-            var previousArrived = _arrived[index - 1].Task;
-
-            order[index].WhilePlanning = () =>
-            {
-                if (!previousArrived.Wait(Patience))
-                {
-                    throw new TimeoutException($"The finding of '{previous.Id}' never arrived, so the provider after it could not finish.");
-                }
-            };
+            // A provider plans on a thread of its own and has no way to wait asynchronously.
+            provider.WhilePlanning = () => _order.TurnOf(provider.Id).GetAwaiter().GetResult();
         }
     }
 
     /// <summary>Record that a finding arrived, which lets the provider after its own finish.</summary>
     public void Report(Finding value)
     {
-        for (var index = 0; index < _order.Count; index++)
+        // Findings of providers outside the order arrive too, and hold nothing up.
+        if (_order.Contains(value.Provider.Id))
         {
-            if (ReferenceEquals(_order[index], value.Provider))
-            {
-                _arrived[index].TrySetResult();
-            }
+            _order.Complete(value.Provider.Id);
         }
     }
 }

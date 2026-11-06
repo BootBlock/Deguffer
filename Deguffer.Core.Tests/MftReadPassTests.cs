@@ -60,27 +60,30 @@ public sealed class MftReadPassTests
     }
 
     /// <summary>
-    /// Reads complete in whatever order the disk finishes them. Here the earlier a read starts the
-    /// later it completes, and every record is still the record its position says.
+    /// Reads complete in whatever order the disk finishes them. Here each run of as many reads as
+    /// can be in flight at once completes last first, and every record is still the record its
+    /// position says.
     /// </summary>
     [Fact]
     public void NumbersEachRecordByItsPositionWhateverOrderReadsComplete()
     {
-        var completed = new ConcurrentQueue<long>();
+        var tuning = new TableTuning(TableTuning.MinimumReadBytes, 8, 4, 8);
+        IReadOnlyList<long> planned = [.. ReadStarts(LargeTable().WithoutBitmap(), tuning).Chunk(tuning.ReadsInFlight).SelectMany(run => run.Reverse())];
+        var order = new CompletionOrder<long>(planned);
 
-        using var source = new ScriptedReads(LargeTable().WithoutBitmap().Build(), async (inner, first, destination, ct) =>
-        {
-            await Task.Delay(TimeSpan.FromMilliseconds(Math.Max(0, 40 - (first / 64))), ct);
-            completed.Enqueue(first);
-            return inner.ReadBatch(first, destination.Span);
-        });
+        using var source = new ScriptedReads(LargeTable().WithoutBitmap().Build(), (inner, first, destination, ct) =>
+            order.InTurn(first, () => Task.FromResult(inner.ReadBatch(first, destination.Span)), ct));
 
-        var handed = Handed(source, new TableTuning(TableTuning.MinimumReadBytes, 8, 4, 8));
+        var handed = Handed(source, tuning);
 
         Assert.Equal(Handed(LargeTable().WithoutBitmap(), TableTuning.Default), handed);
 
-        var order = completed.ToList();
-        Assert.True(order.Zip(order.Skip(1)).Any(pair => pair.First > pair.Second), "the reads must complete out of order");
+        // The order is the test's own, so this shows the pass made every read the order holds, and
+        // only those: a read made from anywhere else fails, and one never made holds up the rest.
+        // What the pass did with them is the assertion on the records above.
+        var completed = order.Completions;
+        Assert.Equal(planned, completed);
+        Assert.True(completed.Zip(completed.Skip(1)).Any(pair => pair.First > pair.Second), "the reads must complete out of order");
     }
 
     /// <summary>
@@ -621,6 +624,24 @@ public sealed class MftReadPassTests
             ct);
 
         return new SortedDictionary<long, (MftParseOutcome, MftRecord, string?)>(handed);
+    }
+
+    /// <summary>
+    /// Where each read of a pass over a table without a bitmap starts: one after another from the
+    /// first record, each as long as the tuning and the table allow.
+    /// </summary>
+    private static List<long> ReadStarts(MftFixture fixture, TableTuning tuning)
+    {
+        using var table = fixture.Build();
+        var capacity = tuning.RecordsPerRead(table.BytesPerRecord);
+        var starts = new List<long>();
+
+        for (long first = 0; first < table.RecordCount; first += table.BatchLength(first, capacity))
+        {
+            starts.Add(first);
+        }
+
+        return starts;
     }
 
     /// <summary>A fixture table whose overlapped reads are made by <paramref name="read"/>.</summary>
