@@ -16,10 +16,18 @@ namespace Deguffer.Core.Exploring;
 ///
 /// <para>The characters are kept in chunks of one fixed length, under the 85,000 bytes that put an
 /// array on the Large Object Heap, and a chunk is never replaced once allocated. That is what lets a
-/// <see cref="Frozen"/> taken under the caller's lock be read from any thread after it is released,
-/// as <see cref="AppendOnlyChunks{T}"/> allows for the same reason.</para>
+/// <see cref="Frozen"/> be read from any thread, as <see cref="AppendOnlyChunks{T}"/> allows for the
+/// same reason.</para>
 ///
-/// <para>Not safe for concurrent writes: the caller serialises <see cref="Intern"/>.</para>
+/// <para><b>Safe to call from several threads at once.</b> Every parse thread of a file-table read
+/// interns a name for each record, about three million on a system volume, so the pool cannot be a
+/// lock its callers take around each call. A name already held is found without a lock: its hash is
+/// computed by the caller's thread, and the table of numbers is read as published. Only a name not
+/// met before takes the lock, to be copied in and numbered, and a table that has to grow is rebuilt
+/// from the hashes it stores, without reading any name back. Each distinct name still gets exactly
+/// one number, because a name is numbered only under the lock and only after looking again there.
+/// <see cref="ExploreTree.CompareByName(int[], Frozen, int, int)"/> relies on that: two equal
+/// numbers are taken as one name without comparing them.</para>
 /// </summary>
 internal sealed class NamePool
 {
@@ -27,11 +35,20 @@ internal sealed class NamePool
     private const int ChunkLength = 1 << ChunkShift;
     private const int ChunkMask = ChunkLength - 1;
 
+    private const int InitialSlots = 64;
+
     /// <summary>The number of the empty name, which is what a slot no reader filled names.</summary>
     public const int Empty = 0;
 
     private readonly AppendOnlyChunks<Entry> _entries = new();
-    private readonly HashSet<int>.AlternateLookup<ReadOnlySpan<char>> _byName;
+    private readonly Lock _gate = new();
+
+    // Each slot is empty (zero) or a name's hash in the high half and its number plus one in the low
+    // half, so a probe rejects almost every other name by its hash without reading its characters,
+    // and the table grows by rehashing the slots alone. Published with a release write once the
+    // name's characters and entry are in place, and read with an acquire read: a number found here
+    // is one whose name can already be read.
+    private long[] _slots = new long[InitialSlots];
 
     private char[][] _chunks = [];
     private int _chunkCount;
@@ -39,32 +56,70 @@ internal sealed class NamePool
 
     public NamePool()
     {
-        // Numbers in the set, compared by the names they stand for, so a name is looked up as the
-        // span it arrives as and the set holds no string at all.
-        _byName = new HashSet<int>(new ByName(this)).GetAlternateLookup<ReadOnlySpan<char>>();
-
         Intern([]);
     }
 
     /// <summary>How many distinct names are held.</summary>
-    public int Count => _entries.Count;
+    public int Count
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _entries.Count;
+            }
+        }
+    }
 
     /// <summary>The number of <paramref name="name"/>, which is added where it is new.</summary>
     public int Intern(ReadOnlySpan<char> name)
     {
-        if (!_byName.TryGetValue(name, out var number))
+        var hash = string.GetHashCode(name);
+
+        if (Find(Volatile.Read(ref _slots), name, hash, out var number, out _))
         {
-            _byName.Add(name);
-            number = _entries.Count - 1;
+            return number;
         }
 
-        return number;
+        lock (_gate)
+        {
+            // Looked for again: another thread may have numbered the name since, and numbering it
+            // twice would give one name two numbers.
+            var slots = _slots;
+            if (Find(slots, name, hash, out number, out var free))
+            {
+                return number;
+            }
+
+            number = Append(name);
+
+            // Kept at most three quarters full, so a lookup that misses ends at an empty slot after
+            // a short probe. A probe compares stored hashes, adjacent in memory, and reads a name
+            // only where one matches, so a fuller table costs little and holds three million names
+            // in 32 MB.
+            if (_entries.Count * 4L > slots.Length * 3L)
+            {
+                slots = Grown(slots);
+                free = FreeSlot(slots, hash);
+
+                // Before the new name's slot is written, so a caller probing the old table misses,
+                // takes the lock and finds the name in this one.
+                Volatile.Write(ref _slots, slots);
+            }
+
+            Volatile.Write(ref slots[free], Slot(hash, number));
+            return number;
+        }
     }
 
-    /// <summary>
-    /// The names held so far, to be read from any thread once the caller's lock has published them.
-    /// </summary>
-    public Frozen Freeze() => new(_chunks, _entries.Freeze());
+    /// <summary>The names held so far, to be read from any thread.</summary>
+    public Frozen Freeze()
+    {
+        lock (_gate)
+        {
+            return new Frozen(_chunks, _entries.Freeze());
+        }
+    }
 
     /// <summary>
     /// A pool holding only the names <paramref name="nameNumbers"/> use, each copied once, with every
@@ -102,12 +157,82 @@ internal sealed class NamePool
         return kept.Freeze();
     }
 
-    private ReadOnlySpan<char> this[int number] => Read(_chunks, _entries[number]);
+    private static long Slot(int hash, int number) => ((long)hash << 32) | (uint)(number + 1);
+
+    private static int HashOf(long slot) => (int)(slot >> 32);
+
+    private static int NumberOf(long slot) => (int)(uint)slot - 1;
 
     private static ReadOnlySpan<char> Read(char[][] chunks, in Entry entry) =>
         chunks[entry.Location >> ChunkShift].AsSpan(entry.Location & ChunkMask, entry.Length);
 
-    /// <summary>Copy <paramref name="name"/> in, and number it.</summary>
+    /// <summary>
+    /// Whether <paramref name="slots"/> holds <paramref name="name"/>, and where not, the empty slot
+    /// its probe ended at.
+    ///
+    /// <para>Called without the lock as well as under it. A slot is read with an acquire read, and the
+    /// chunks and entries only after it, so they are at least as new as the name the slot numbers.
+    /// </para>
+    /// </summary>
+    private bool Find(long[] slots, ReadOnlySpan<char> name, int hash, out int number, out int free)
+    {
+        var mask = slots.Length - 1;
+
+        for (var i = hash & mask; ; i = (i + 1) & mask)
+        {
+            var slot = Volatile.Read(ref slots[i]);
+
+            if (slot == 0)
+            {
+                number = default;
+                free = i;
+                return false;
+            }
+
+            if (HashOf(slot) == hash)
+            {
+                var candidate = NumberOf(slot);
+                if (name.SequenceEqual(Read(_chunks, _entries[candidate])))
+                {
+                    number = candidate;
+                    free = default;
+                    return true;
+                }
+            }
+        }
+    }
+
+    /// <summary>A table twice the size holding every slot of <paramref name="slots"/>, placed by its stored hash.</summary>
+    private static long[] Grown(long[] slots)
+    {
+        var grown = new long[slots.Length * 2];
+
+        foreach (var slot in slots)
+        {
+            if (slot != 0)
+            {
+                grown[FreeSlot(grown, HashOf(slot))] = slot;
+            }
+        }
+
+        return grown;
+    }
+
+    /// <summary>The empty slot a probe for <paramref name="hash"/> ends at, in a table only the lock's holder writes.</summary>
+    private static int FreeSlot(long[] slots, int hash)
+    {
+        var mask = slots.Length - 1;
+        var i = hash & mask;
+
+        while (slots[i] != 0)
+        {
+            i = (i + 1) & mask;
+        }
+
+        return i;
+    }
+
+    /// <summary>Copy <paramref name="name"/> in, and number it. Called under the lock, or on a pool no other thread can see.</summary>
     private int Append(ReadOnlySpan<char> name)
     {
         if (_chunkCount == 0 || name.Length > ChunkLength - _used)
@@ -115,7 +240,8 @@ internal sealed class NamePool
             if (_chunkCount == _chunks.Length)
             {
                 // A new directory array rather than one resized in place: a Frozen already handed
-                // out keeps the old one, which still names every chunk it covers.
+                // out, or a lookup under way without the lock, keeps the old one, which still names
+                // every chunk it covers.
                 var grown = new char[Math.Max(4, _chunks.Length * 2)][];
                 _chunks.CopyTo(grown, 0);
                 _chunks = grown;
@@ -162,22 +288,5 @@ internal sealed class NamePool
         public int Count => _entries.Count;
 
         public ReadOnlySpan<char> this[int number] => Read(_chunks, in _entries[number]);
-    }
-
-    /// <summary>
-    /// Compares numbers by the names they stand for, and looks a name up by its span. Two numbers
-    /// are equal only where they are one number, because a name is numbered once.
-    /// </summary>
-    private sealed class ByName(NamePool pool) : IEqualityComparer<int>, IAlternateEqualityComparer<ReadOnlySpan<char>, int>
-    {
-        public bool Equals(int x, int y) => x == y;
-
-        public int GetHashCode(int obj) => string.GetHashCode(pool[obj]);
-
-        public bool Equals(ReadOnlySpan<char> alternate, int other) => alternate.SequenceEqual(pool[other]);
-
-        public int GetHashCode(ReadOnlySpan<char> alternate) => string.GetHashCode(alternate);
-
-        public int Create(ReadOnlySpan<char> alternate) => pool.Append(alternate);
     }
 }
