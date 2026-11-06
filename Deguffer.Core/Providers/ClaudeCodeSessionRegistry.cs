@@ -165,7 +165,9 @@ public sealed partial class ClaudeCodeSessionRegistry
     /// every check within the bound holds its step back on it.</para>
     ///
     /// <para>The read runs under the lock, so checks asking at once share one reading rather than each
-    /// taking their own. Reading the list probes processes and waits for no other thread.</para>
+    /// taking their own. The read waits on no lock but those inside the environment and the volume
+    /// inventory it was given, and neither asks this registry anything while holding one, so no thread
+    /// can hold one of them and wait here.</para>
     /// </summary>
     public ClaudeCodeSessionList ReadNoOlderThan(TimeSpan maxAge, CancellationToken ct = default)
     {
