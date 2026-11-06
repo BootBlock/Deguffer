@@ -112,7 +112,7 @@ public sealed partial class ClaudeCodeCommandSnapshotProvider : TempMarkerProvid
         TempFolderListings? listings = null)
         : base(environment, runner, inspector, scanner, system, liveTrees, volumes, listings)
     {
-        _sessions = sessions ?? new ClaudeCodeSessionRegistry(Environment, Inspector, Machine, Volumes);
+        _sessions = sessions ?? new ClaudeCodeSessionRegistry(Environment, Inspector, Machine, LiveVolumes);
     }
 
     public override string Id => "claude-code-command-snapshots";

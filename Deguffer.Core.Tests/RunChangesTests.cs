@@ -38,6 +38,22 @@ public sealed class RunChangesTests
         Assert.Equal(["nuget", "temp"], Ids(RunChanges.Stale([nuget, temp], [nuget], new FakeVolumeInventory())));
     }
 
+    /// <summary>
+    /// Every location of every row is on one drive, which is asked where it is mounted once, and a
+    /// row is still found through the drive's other mount point (#513).
+    /// </summary>
+    [Fact]
+    public void EveryLocationOnOneDriveAsksWhereItIsMountedOnce()
+    {
+        var volumes = new FakeVolumeInventory().With(@"C:\", alsoMountedAt: [@"Q:\SysMount\"]);
+        var temp = Row("temp", Deletes(Temp + @"\one"), Deletes(Temp + @"\two"), Deletes(Temp + @"\three"));
+        var app = Row("app", Deletes(@"Q:\SysMount\Users\testuser\AppData\Local\Temp\two\cache"));
+        var npm = Row("npm", Deletes(Profile + @"\AppData\Local\npm-cache\_cacache"));
+
+        Assert.Equal(["temp", "app"], Ids(RunChanges.Stale([temp, app, npm], [temp], volumes)));
+        Assert.Single(volumes.MountPointsQueries);
+    }
+
     [Fact]
     public void ARowHoldingAFolderTheRunDeletedIsPlannedAgain()
     {

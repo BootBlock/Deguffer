@@ -344,6 +344,13 @@ public sealed class PlanExecutor(
     /// or null where it would not. The last check before a removal, for a path a provider should
     /// never have planned: every provider asks <see cref="StandingFolders"/> of a folder a setting
     /// names, and this is what holds if one did not.
+    ///
+    /// <para><b>Asked of the machine at the removal, never from a remembered answer</b> such as
+    /// <see cref="RememberedMountPoints"/> gives a pass. A remembered answer is safe where both sides
+    /// of a comparison are followed, and here only the destroyed path is: the account's folders are
+    /// compared as Windows names them. A step destroys one path or a handful, so remembering would
+    /// save almost nothing, and this is the check that holds when a provider's remembered answer
+    /// missed a mount made since.</para>
     /// </summary>
     private string? WhyNotTaken(DeleteStep step) =>
         step.Destroys

@@ -14,12 +14,16 @@ namespace Deguffer.Core.Execution;
 ///
 /// <para><b>Followed only where a question needs it, and once.</b> Following a path asks the machine
 /// where its volume is mounted, a run can target thousands of paths, and a plan whose protected paths
-/// all survive untouched asks nothing of the run's reach at all (G4).</para>
+/// all survive untouched asks nothing of the run's reach at all (G4). Where each drive is mounted is
+/// asked once for the verification too, since nearly every path shares a drive
+/// (<see cref="RememberedMountPoints"/>).</para>
 /// </summary>
 /// <param name="volumes">Asked every other path each folder is reachable at.</param>
 internal sealed class RunPlaces(RunReach reach, IVolumeInventory volumes)
 {
     private readonly Dictionary<string, ReachedFolder> _folders = new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly RememberedMountPoints _volumes = new(volumes);
     private IReadOnlyList<(string Path, ReachedFolder Folder)>? _targets;
     private IReadOnlyList<ReachedFolder>? _probed;
 
@@ -38,7 +42,7 @@ internal sealed class RunPlaces(RunReach reach, IVolumeInventory volumes)
     {
         if (!_folders.TryGetValue(path, out var folder))
         {
-            folder = ReachedFolder.At(path, volumes);
+            folder = ReachedFolder.At(path, _volumes);
             _folders[path] = folder;
         }
 

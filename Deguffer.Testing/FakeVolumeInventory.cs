@@ -18,7 +18,7 @@ public sealed class FakeVolumeInventory : IVolumeInventory
     private readonly List<LocalVolume> _volumes = [];
 
     /// <summary>
-    /// Guards <see cref="MountPointQueries"/>. The policy is asked from a background thread as well
+    /// Guards <see cref="MountPointQueries"/> and <see cref="MountPointsQueries"/>. The policy is asked from a background thread as well
     /// as the window's, because the Explore page's Files layout states a refusal on every row.
     /// </summary>
     private readonly Lock _gate = new();
@@ -138,14 +138,49 @@ public sealed class FakeVolumeInventory : IVolumeInventory
     }
 
     /// <summary>
-    /// Every mount point of the volume here that is mounted at <paramref name="mountPoint"/>, as the
-    /// volumes stand at the call, or none where no volume is mounted there.
+    /// The name of the volume here mounted at <paramref name="mountPoint"/>, as the volumes stand at
+    /// the call: the one <see cref="With"/> gave it, or one made from its root where it gave none, so a
+    /// volume read again with other figures is still the same volume. Null where none is mounted there.
     /// </summary>
-    public IReadOnlyList<string> MountPointsOf(string mountPoint) =>
+    public string? VolumeNameOf(string mountPoint) =>
         _volumes.FirstOrDefault(volume => volume.MountPoints.Any(known => HostVolume.IsMountPoint(known, mountPoint)))
+            is { RootPath: not null } held
+            ? NameOf(held)
+            : null;
+
+    /// <summary>Every mount point of the volume here named <paramref name="volumeName"/>, as the volumes stand at the call.</summary>
+    public IReadOnlyList<string> MountPointsOfVolume(string volumeName)
+    {
+        lock (_gate)
+        {
+            MountPointsQueries.Add(volumeName);
+
+            if (FailingMountPointQueries > 0)
+            {
+                FailingMountPointQueries--;
+                return [];
+            }
+        }
+
+        return _volumes.FirstOrDefault(volume => string.Equals(NameOf(volume), volumeName, StringComparison.OrdinalIgnoreCase))
             is { RootPath: not null } held
             ? [.. held.MountPoints]
             : [];
+    }
+
+    /// <summary>
+    /// Every volume name <see cref="MountPointsOfVolume"/> was asked about, so a test can count how
+    /// often the machine would have been asked where a volume is mounted.
+    /// </summary>
+    public List<string> MountPointsQueries { get; } = [];
+
+    /// <summary>
+    /// How many of the next <see cref="MountPointsOfVolume"/> calls answer nothing, as the machine's
+    /// does when the call fails, such as for a mount point added between its sizing and its read.
+    /// </summary>
+    public int FailingMountPointQueries { get; set; }
+
+    private static string NameOf(LocalVolume volume) => volume.VolumeName ?? $@"\\?\Volume{{{volume.RootPath}}}\";
 
     /// <summary>
     /// Pretend <c>subst</c> made the drive letter <paramref name="driveRoot"/> stand for

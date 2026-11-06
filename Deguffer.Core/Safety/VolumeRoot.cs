@@ -109,8 +109,9 @@ public static class VolumeRoot
     /// and removing it removes the same folder. So a refusal that holds at any of these paths
     /// holds, as one that holds on either reading does.</para>
     ///
-    /// <para>The other places are asked of the machine at each call, for the reason
-    /// <see cref="IVolumeInventory.MountPointOf"/> is, and from the mount point the path's first
+    /// <para>The other places are asked of <paramref name="volumes"/>, which answers them live or, for
+    /// the owners <see cref="IVolumeInventory.MountPointsOf"/> names, as remembered for that owner's
+    /// life (<see cref="RememberedMountPoints"/>), from the mount point the path's first
     /// reading is taken below. That is the path's own root where the machine's answer is not a
     /// prefix of the path, and a junction on that root's volume is reached at every other mount of
     /// the volume as surely as at this one.</para>

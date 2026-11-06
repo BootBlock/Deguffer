@@ -28,6 +28,12 @@ public sealed partial class InstalledPaths(IPathProbe probe, ISystemDirectories 
     /// </summary>
     private readonly Dictionary<string, ReachedFolder> _reached = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Where each drive is mounted, asked once for the reading too, since nearly every entry shares a
+    /// drive (<see cref="RememberedMountPoints"/>).
+    /// </summary>
+    private readonly RememberedMountPoints _volumes = new(volumes);
+
     /// <summary>The three names of the Windows system folder: native, 32-bit, and native as a 32-bit process reaches it.</summary>
     private readonly IReadOnlyList<string> _systemFolders = Named(
         ["System32", "SysWOW64", "Sysnative"],
@@ -126,7 +132,7 @@ public sealed partial class InstalledPaths(IPathProbe probe, ISystemDirectories 
     {
         if (!_reached.TryGetValue(path, out var folder))
         {
-            folder = ReachedFolder.At(path, volumes);
+            folder = ReachedFolder.At(path, _volumes);
             _reached[path] = folder;
         }
 
