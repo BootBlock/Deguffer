@@ -1,3 +1,5 @@
+using Deguffer.App.Controls;
+using Deguffer.App.Diagnostics;
 using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
@@ -175,7 +177,12 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        var events = ShellEvents.Log;
+
+        events.LaunchStart();
+        events.WindowStart();
         _shell = new MainWindow();
+        events.WindowStop();
 
         // Closing the only window ends the session rather than leaving the process resident. This
         // is explicit because a dialog dismissed at the wrong moment has been enough to leave a
@@ -190,6 +197,15 @@ public partial class App : Application
         _shell.Activate();
 
         // After the main window is on screen, because a tool window opens beside it and stays above it.
+        events.ToolWindowsStart();
         _shell.ReopenToolWindows();
+        events.ToolWindowsStop();
+
+        // The launch ends at the first frame composed after the window is activated, which is the
+        // first one the reader can see. Waited for only while a trace is recording.
+        if (events.IsEnabled())
+        {
+            NextFrame.Then(RenderingClock.Current, events.LaunchStop);
+        }
     }
 }

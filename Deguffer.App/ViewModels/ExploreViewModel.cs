@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Deguffer.App.Diagnostics;
 using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
@@ -124,7 +125,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         Listing = new ExploreRows(guide, time);
         Visiting = new ExploreVisiting(
             () => Tree is { } tree ? new ExploreOnScreen(tree, _position, Volume, Display.Zooms) : null,
-            (tree, to) => Show(tree, to, Volume),
+            (tree, to) => Show(tree, to, Volume, ShowCause.Step),
             () => ViewChanged?.Invoke(this, EventArgs.Empty));
 
         // A comparison that arrives, or stops, recolours a map coloured by growth, and the kinds of a
@@ -548,7 +549,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         // Before the tree is shown, because the pointer can describe the new map from then on.
         _strategy = scan.Strategy;
 
-        Show(scan.Tree, _position.CarriedTo(Tree, scan.Tree), volume);
+        Show(scan.Tree, _position.CarriedTo(Tree, scan.Tree), volume, ShowCause.Finished);
 
         Notes.RouteNote = scan.RouteNote;
         Elevation.Offer(scan.Fallback, volume.Hidden);
@@ -726,7 +727,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         // it rather than being merged into it.
         if (progress.Snapshot is { } snapshot)
         {
-            Show(snapshot, _position.CarriedTo(Tree, snapshot), VolumeSpace.None);
+            Show(snapshot, _position.CarriedTo(Tree, snapshot), VolumeSpace.None, ShowCause.Snapshot);
         }
     }
 
@@ -738,8 +739,13 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     /// the list below it is no longer showing.</para>
     /// </summary>
     /// <param name="volume">The volume <paramref name="tree"/> is the whole of. See <see cref="Volume"/>.</param>
-    private void Show(ExploreTree tree, ExplorePosition position, VolumeSpace volume)
+    /// <param name="cause">Why, for a trace that times each show and its parts (<see cref="ShellEvents"/>).</param>
+    private void Show(ExploreTree tree, ExplorePosition position, VolumeSpace volume, ShowCause cause)
     {
+        var events = ShellEvents.Log;
+
+        events.ShowStart(cause, tree.NodeCount);
+
         var redraw = ExploreRedraw.Between(Tree, _position, tree, position);
 
         // Before the tree is replaced, because the steps' node numbers belong to the one leaving.
@@ -753,6 +759,8 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         AscendCommand.NotifyCanExecuteChanged();
         Visiting.Notify();
 
+        events.SelectionStart();
+
         if (redraw.KeepsSelection)
         {
             Selection.Carry(tree);
@@ -762,7 +770,10 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
             Selection.Show(tree);
         }
 
+        events.SelectionStop();
+        events.RowsStart();
         Listing.Show(tree, position, volume, redraw.KeepsRows);
+        events.RowsStop(Listing.Rows.Count);
         Files.Show(tree, position.Node);
         Types.Show(tree, position.Node);
         FollowReplay();
@@ -770,7 +781,11 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         // What the pointer is over is the map's to say, and it says it again for the drawing this
         // redraw is about to produce. Clearing it here left a reader who had not moved with the
         // outline still round a shape and nothing under the map naming it.
+        events.HandoffStart();
         ViewChanged?.Invoke(this, EventArgs.Empty);
+        events.HandoffStop();
+
+        events.ShowStop(cause, Listing.Rows.Count);
     }
 
     /// <summary>
@@ -791,7 +806,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
 
         var left = removed.Left;
 
-        Show(left, _position.CarriedTo(removed.Tree, left), Volume.Remeasured(_volumes, left.RootPath));
+        Show(left, _position.CarriedTo(removed.Tree, left), Volume.Remeasured(_volumes, left.RootPath), ShowCause.Removal);
     }
 
     private bool CanScan() => Gate.MayScan(Targeting.Target, _volumes);

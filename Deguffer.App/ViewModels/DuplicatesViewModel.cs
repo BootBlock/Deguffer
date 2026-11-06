@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Deguffer.App.Diagnostics;
 using Deguffer.App.Shell;
 using Deguffer.Core.Duplicates;
 using Deguffer.Core.Execution;
@@ -348,6 +349,13 @@ public sealed partial class DuplicatesViewModel : ObservableObject
     /// </summary>
     private void Confirmed(Search search, GroupJudgement judged)
     {
+        // The first group of a batch opens its span in a trace, and Arrived closes it. Counted before
+        // the search is checked, because a batch for a search replaced still takes the thread.
+        if (search.Applying++ == 0)
+        {
+            ShellEvents.Log.GroupsStart();
+        }
+
         if (!ReferenceEquals(_search, search))
         {
             return;
@@ -370,6 +378,13 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         {
             Totals.Show();
             Headline = "Searching. Each group appears as soon as it is confirmed, in order of the space it could free.";
+        }
+
+        // A batch whose every group threw before it was counted opened no span to close.
+        if (search.Applying > 0)
+        {
+            ShellEvents.Log.GroupsStop(search.Applying);
+            search.Applying = 0;
         }
     }
 
@@ -439,6 +454,9 @@ public sealed partial class DuplicatesViewModel : ObservableObject
         public DuplicateSearch Asked { get; } = asked;
 
         public CancellationTokenSource Stop { get; } = new();
+
+        /// <summary>How many groups the batch now being applied has handed over, for a trace (<see cref="ShellEvents"/>).</summary>
+        public int Applying { get; set; }
 
         /// <summary>Written once by the search's thread before the first group is confirmed, and read on the page's.</summary>
         public DuplicateMarks? Marks
