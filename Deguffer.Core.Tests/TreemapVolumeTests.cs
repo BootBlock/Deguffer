@@ -291,6 +291,21 @@ public sealed class TreemapVolumeTests
     }
 
     /// <summary>
+    /// A letter <c>subst</c> made for the top of a volume is mounted nowhere itself, so the volume is
+    /// remeasured where the letter leads.
+    /// </summary>
+    [Fact]
+    public void AVolumeScannedThroughALetterStandingForItIsRemeasuredWhereTheLetterLeads()
+    {
+        var scanned = new VolumeSpace(900, 500);
+        var volumes = new FakeVolumeInventory()
+            .With(@"D:\", totalBytes: 900, freeBytes: 650)
+            .Substituting(@"T:\", @"D:\");
+
+        Assert.Equal(scanned with { FreeBytes = 650 }, scanned.Remeasured(volumes, @"T:\"));
+    }
+
+    /// <summary>
     /// Nothing is drawn beside a scan of a folder, and nothing is after a removal from it either; and a
     /// volume that no longer states its figures has nothing to draw, rather than the old ones.
     /// </summary>

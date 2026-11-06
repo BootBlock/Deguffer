@@ -4,7 +4,6 @@ using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Hidden;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Scanning;
-using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -114,60 +113,6 @@ public sealed class HiddenSpaceTests
         Assert.Equal(3_000, tiles.Single(tile => tile.Block == MapBlock.Unaccounted).Bytes);
     }
 
-    [Fact]
-    public async Task TheFiguresAreReadOnceForTheScannedVolumeInThePlainFormOfItsRoot()
-    {
-        var volumes = new FakeVolumeInventory().With(@"D:\", totalBytes: 12_000, freeBytes: 6_000);
-        var hidden = new FakeHiddenSpaceSource { Answer = Shadow(allocated: 1_000) };
-
-        var volume = await VolumeSpace.ReadAsync(volumes, hidden, @"\\?\D:\", Tree(@"\\?\D:\", Svi.Absent), default);
-
-        Assert.Equal([@"D:\"], hidden.Asked);
-        Assert.Equal(new VolumeSpace(12_000, 6_000, Shadow(allocated: 1_000)), volume);
-    }
-
-    [Fact]
-    public async Task AScanOfAFolderAsksWindowsNothing()
-    {
-        var volumes = new FakeVolumeInventory().With(@"D:\", totalBytes: 12_000, freeBytes: 6_000);
-        var hidden = new FakeHiddenSpaceSource { Answer = Shadow(allocated: 1_000) };
-
-        var volume = await VolumeSpace.ReadAsync(volumes, hidden, @"D:\work", Tree(@"D:\work", Svi.Absent), default);
-
-        Assert.Empty(hidden.Asked);
-        Assert.Equal(VolumeSpace.None, volume);
-    }
-
-    /// <summary>
-    /// A walk is refused System Volume Information even as administrator, and marks it unknown with
-    /// nothing counted. A folder the scan read any of, or every size of, has had its storage counted,
-    /// and a part read is counted too, so what the scan read there is never drawn a second time.
-    /// </summary>
-    [Theory]
-    [InlineData(Svi.Refused, false)]
-    [InlineData(Svi.Counted, true)]
-    [InlineData(Svi.PartlyRead, true)]
-    public async Task SystemVolumeInformationIsCountedWhereTheScanCountedAnythingInIt(Svi state, bool counted)
-    {
-        var volumes = new FakeVolumeInventory().With(@"D:\", totalBytes: 12_000, freeBytes: 6_000);
-
-        var volume = await VolumeSpace.ReadAsync(
-                volumes, new FakeHiddenSpaceSource(), @"D:\", Tree(@"D:\", state), default);
-
-        Assert.Equal(counted, volume.CountedSystemVolumeInformation);
-    }
-
-    [Fact]
-    public async Task AVolumeWithoutSystemVolumeInformationInTheTreeHasNotHadItCounted()
-    {
-        var volumes = new FakeVolumeInventory().With(@"D:\", totalBytes: 12_000, freeBytes: 6_000);
-
-        var volume = await VolumeSpace.ReadAsync(
-                volumes, new FakeHiddenSpaceSource(), @"D:\", Tree(@"D:\", Svi.Absent), default);
-
-        Assert.False(volume.CountedSystemVolumeInformation);
-    }
-
     /// <summary>Where the scan counted the storage, the folder holding it says how much of it is the storage.</summary>
     [Fact]
     public void SystemVolumeInformationStatesWindowsFigureWhereTheScanCountedTheStorageInIt()
@@ -221,7 +166,7 @@ public sealed class HiddenSpaceTests
         return TreemapLayout.Compute(tree, tree.RootNode, Width, Height, LayoutLimits.Default, volume);
     }
 
-    private static HiddenSpace Shadow(long allocated) =>
+    internal static HiddenSpace Shadow(long allocated) =>
         new(new ShadowStorage(Statement.Stated, allocated, allocated, allocated * 2), default);
 
     private static HiddenSpace Reserved(long bytes) => new(default, new ReservedStorage(Statement.Stated, bytes));
@@ -230,7 +175,7 @@ public sealed class HiddenSpaceTests
     /// A folder of three 1,000-byte files below <paramref name="root"/>, with System Volume
     /// Information beside it in the given state.
     /// </summary>
-    private static ExploreTree Tree(string root, Svi systemVolumeInformation)
+    internal static ExploreTree Tree(string root, Svi systemVolumeInformation)
     {
         var builder = new ExploreTreeBuilder(root);
 

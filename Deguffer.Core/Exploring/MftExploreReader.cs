@@ -77,6 +77,11 @@ internal static class MftExploreReader
     /// <see cref="ScanSnapshots"/> for when one is taken, and <see cref="Snapshot"/> for what it holds.
     /// </param>
     /// <param name="clock">What the snapshots' cadence is measured by. The system's where null.</param>
+    /// <param name="timings">
+    /// Told when each of the read's six stages ends: the four of
+    /// <see cref="MftRecordStream.TryReadAll"/>, then <see cref="MftBuildStage.LinkPlacement"/> and
+    /// <see cref="MftBuildStage.TreeAssembly"/>. Null for a read nobody measures, as a scan's is.
+    /// </param>
     public static MftExploreRead Read(
         IMftSource source,
         string rootPath,
@@ -85,7 +90,8 @@ internal static class MftExploreReader
         IProgress<ExploreProgress>? progress,
         CancellationToken ct,
         Func<Action, Task>? assembleSnapshot = null,
-        TimeProvider? clock = null)
+        TimeProvider? clock = null,
+        MftStageTimings? timings = null)
     {
         var total = source.RecordCount;
         var records = (int)Math.Min(total, int.MaxValue);
@@ -98,7 +104,6 @@ internal static class MftExploreReader
 
         var columns = new MftExploreColumns(count);
         var names = new NamePool();
-        var namesGate = new Lock();
 
         // Written from several parse threads at once, and only ever to true, so no write can undo
         // another. The stream has finished with every thread before it returns, which is when this
@@ -114,7 +119,7 @@ internal static class MftExploreReader
         // copy of the columns is the assembling's, away from the read.
         var snapshots = progress is not null && assembleSnapshot is not null
             ? new ScanSnapshots(
-                () => stopped => Snapshot(columns, names, namesGate, rootPath, components, count, stopped),
+                () => stopped => Snapshot(columns, names, rootPath, components, count, stopped),
                 clock ?? TimeProvider.System,
                 assembleSnapshot)
             : null;
@@ -177,13 +182,9 @@ internal static class MftExploreReader
                         return true;
                     }
 
-                    // The pool is shared by every parse thread and by a snapshot. What the lock
-                    // covers is a lookup and, for a name not met before, a copy, against a record
-                    // parsed outside it.
-                    lock (namesGate)
-                    {
-                        columns.NameNumbers[number] = names.Intern(name);
-                    }
+                    // The pool is shared by every parse thread and by a snapshot, and finds a name
+                    // it already holds without a lock. See NamePool.
+                    columns.NameNumbers[number] = names.Intern(name);
 
                     columns.Describe((int)number, record, (int)record.ParentRecordNumber);
                     return true;
@@ -198,7 +199,8 @@ internal static class MftExploreReader
                     // one started there would push the first that can draw something back by the
                     // snapshot interval at least, and on a large table by a multiple of that pass.
                     0 < done && done < total ? snapshots?.Take() : null)),
-                ct);
+                ct,
+                timings);
         }
         finally
         {
@@ -228,6 +230,13 @@ internal static class MftExploreReader
             }
         }
 
+        timings?.End(MftBuildStage.LinkPlacement);
+
+        if (timings is not null)
+        {
+            timings.LinksPlaced = links.Length;
+        }
+
         // A record the pass could not place might have been anywhere, this folder included, so the
         // caveat lands on whatever the scan is rooted at. Attributing it only to the volume's root
         // would let a scoped scan report a total as exact on the strength of a record it never read.
@@ -244,6 +253,7 @@ internal static class MftExploreReader
             count,
             new MftExploreRooting.AssembledAs(ExploreChildOrder.BySize, LowerBound: couldNotReadWholeTable || sawUnreadableRecord, MatchCaseOnly: false),
             ct);
+        timings?.End(MftBuildStage.TreeAssembly);
 
         return new MftExploreRead(tree, reason, !couldNotReadWholeTable, !couldNotReadWholeTable && !sawUnreadableRecord);
     }
@@ -274,7 +284,6 @@ internal static class MftExploreReader
     private static ExploreTree? Snapshot(
         MftExploreColumns columns,
         NamePool names,
-        Lock namesGate,
         string rootPath,
         IReadOnlyList<string> components,
         int records,
@@ -284,14 +293,9 @@ internal static class MftExploreReader
 
         // Frozen after the copy, not before. A slot's name was numbered before its flags were
         // released, so every number the copy holds is in a pool frozen once the copy has ended.
-        int rootName;
-        NamePool.Frozen frozen;
-
-        lock (namesGate)
-        {
-            rootName = names.Intern(rootPath);
-            frozen = names.Freeze();
-        }
+        // The root's name is numbered first for the same reason.
+        var rootName = names.Intern(rootPath);
+        var frozen = names.Freeze();
 
         return MftExploreRooting.Assemble(
             copy,

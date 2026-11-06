@@ -76,6 +76,20 @@ internal static class AutoTuning
     /// Every buffer is held for the whole pass, one per read in flight and one per parse thread, so
     /// 16 MiB would also hold 192 MiB where 1 MiB holds 12.</para>
     ///
+    /// <para><b>Where the system volume's time goes.</b> The <c>index</c> route at 1 MiB, eight
+    /// reads in flight, four parse threads, timed stage by stage, five runs, medians of the later
+    /// runs. The NVMe system volume, 2.78 M records read of which 2.56 M in use, took 3.76 s: 0.58 s
+    /// to open the volume (0.32 s in the first run), 2.35 s for the first pass, 0.53 s for the
+    /// attribute lists kept outside the table (11,981 reads of clusters), and about 0.1 s for the
+    /// three stages after them on one thread (75,673 records held back, 217,591 hard links placed).
+    /// The other NVMe volume, 587 k records read, took 242 ms: 1.5 ms to open, 223 ms for the first
+    /// pass, 0.3 ms for its 26 reads of clusters and about 11 ms for the bitmap and the three stages
+    /// after the lists. Its reads averaged 988 KiB
+    /// against 709 KiB on the system volume, so reads made smaller by the pieces of <c>$MFT</c> are
+    /// not the cause. The first pass read 1.1 GiB a second on the system volume against 2.5 GiB on the
+    /// other, with 0.64 processors busy, so the drive, or the other work sharing it, sets that pace.
+    /// The open is not explained yet (#543).</para>
+    ///
     /// <para>The SATA SSD's table was almost all free records, which the pass does not read, so it
     /// took 5 to 9 ms at every value and those runs favour none. It keeps the one read at a time and
     /// the size that were fastest when its whole table was read.</para>
@@ -149,6 +163,20 @@ internal static class AutoTuning
     /// pay there either. The 1.8 TB volume, timed in the same rounds, took 160 to 178 ms from four
     /// threads to sixteen, 169 to 209 ms on two and 164 to 313 ms on one. Nothing measured earns
     /// more than four.</para>
+    ///
+    /// <para>The <c>explore</c> route interned every record's name under one lock shared by the parse
+    /// threads, so the system volume, 2.58 M records in use, was timed again with that lock and with
+    /// no name interned at all, at 1, 2, 4 and 8 threads, 1 MiB reads, one in flight, two rounds of
+    /// five runs, the second in reverse order. Its disk was busy with other work: the <c>table</c>
+    /// route took 6.13 to 8.75 s, about twice its figures above. The medians of the later runs with
+    /// the lock were 6.89, 7.96, 7.71 and 8.18 s in the first round and 9.36, 8.61, 11.25 and
+    /// 14.18 s in the second; with no name interned, 7.05, 7.87, 7.11 and 9.02 s, then 8.56, 8.41,
+    /// 8.53 and 11.68 s. With the lock, 0.52 to 0.77 processors were busy, never the one a lock that
+    /// sets the pace keeps busy. The disk's noise is larger than the difference, so these runs do
+    /// not settle whether the lock costs time on a quiet disk. Timed alone, interning 2.5 million
+    /// names, a third of them distinct, took 194 to 684 ms on one thread under the lock and 274 to
+    /// 737 ms on four, and 92 to 127 ms and 189 to 213 ms through <see cref="Exploring.NamePool"/>,
+    /// which finds a name it holds without a lock.</para>
     /// </summary>
     public static int TableParseThreads() => Math.Min(Environment.ProcessorCount, 4);
 }
