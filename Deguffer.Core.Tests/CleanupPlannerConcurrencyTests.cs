@@ -101,12 +101,14 @@ public sealed class CleanupPlannerConcurrencyTests
     [Fact]
     public async Task FindingsOfEqualSizeAreReturnedInTheProvidersOrder()
     {
-        // Each provider finishes after the ones listed after it, the reverse of the planner's order.
         var providers = new[] { ("a", 0L), ("b", 500L), ("c", 0L), ("d", 500L) }
-            .Select((row, index) => Sized(row.Item1, row.Item2, finishAfter: TimeSpan.FromMilliseconds(40 * (4 - index))))
+            .Select(row => Sized(row.Item1, row.Item2))
             .ToList();
 
-        var findings = await new CleanupPlanner(providers).PlanAllAsync().WaitAsync(Deadline);
+        // Each provider finishes after the ones listed after it, the reverse of the planner's order.
+        var finishing = new FinishingOrder([.. Enumerable.Reverse(providers)]);
+
+        var findings = await new CleanupPlanner(providers).PlanAllAsync(found: finishing).WaitAsync(Deadline);
 
         Assert.Equal(["b", "d", "a", "c"], findings.Select(finding => finding.Provider.Id));
     }
@@ -201,11 +203,10 @@ public sealed class CleanupPlannerConcurrencyTests
         Assert.Equal("Checking waiting…", status.Reports[^1]);
     }
 
-    private static FakeCleanupProvider Sized(string id, long bytes, TimeSpan finishAfter) =>
+    private static FakeCleanupProvider Sized(string id, long bytes) =>
         new(id)
         {
             Steps = bytes == 0 ? [] : [new DeleteDirectoryStep(@$"C:\Users\testuser\{id}", "Output") { Estimated = new ScanSize(bytes, bytes) }],
-            WhilePlanning = () => Thread.Sleep(finishAfter),
         };
 
     private static void InterlockedMax(ref int peak, int now)
