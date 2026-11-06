@@ -205,7 +205,7 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
                 .. live.Cleared.Select(target => new DeletionTarget(
                     target.Path,
                     $"{Subject} for {Path.GetFileName(target.Project)}",
-                    DirectoryAge.Of(target.Path, ct),
+                    DatedOneLevelDown: true,
                     Facets: [new ItemFacet("Project", Path.GetFileName(target.Project))],
                     Group: ApprovedRootHeading.For(ApprovedRoots, target.Path),
                     UseCheck: target.StillUnused)),

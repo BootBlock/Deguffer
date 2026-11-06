@@ -40,6 +40,8 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
     public static readonly HardLinkAwareScanner Default = new(ScanTuner.Shipped);
 
     private readonly ScanTuner _tuner;
+
+    public ScanTuner Tuning => _tuner;
     private readonly FileInformation _files;
 
     /// <param name="tuner">What each walk runs with, asked as the walk starts.</param>

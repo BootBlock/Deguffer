@@ -356,6 +356,27 @@ public sealed class ClaudeCodeConversationProviderTests : IDisposable
     }
 
     /// <summary>
+    /// Every session's folder is dated in one step, and each session is judged by its own folder's
+    /// age: an ended session whose folder was written this week is held back, and the ended session
+    /// beside it, whose folder is a month old, is offered.
+    /// </summary>
+    [Fact]
+    public async Task EachSessionIsJudgedByItsOwnFoldersAge()
+    {
+        var (oldConversation, oldFolder) = OldSession(SessionA);
+        var recentConversation = _claude.Conversation(SessionB, age: Old);
+        var recentFolder = _claude.SessionFolder(SessionB, age: null);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Equal(
+            new[] { oldConversation, oldFolder }.Order(StringComparer.OrdinalIgnoreCase),
+            plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == recentConversation && p.Withheld == Withholding.TooRecent);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == recentFolder && p.Withheld == Withholding.TooRecent);
+    }
+
+    /// <summary>
     /// The floor travels on the plan, not only into the preview. A conversation written between the
     /// preview and the clean, by a version of Claude Code the list does not show, is spared by the removal.
     ///

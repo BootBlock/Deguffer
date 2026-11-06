@@ -318,7 +318,7 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
             folder,
             sessions,
             MinimumAge.Within(ClaudeCodeSessionRegistry.RecentWindow, now),
-            Classify(folder, sessions, _sessions, now - ClaudeCodeSessionRegistry.RecentWindow, ct));
+            Classify(folder, sessions, _sessions, now - ClaudeCodeSessionRegistry.RecentWindow, Scanner.Tuning, ct));
     }
 
     private static ClaudeCodeClassification Classify(
@@ -326,6 +326,7 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
         ClaudeCodeSessionList sessions,
         ClaudeCodeSessionRegistry registry,
         DateTime recentSinceUtc,
+        ScanTuner tuning,
         CancellationToken ct)
     {
         var sorting = new ClaudeCodeClassificationBuilder();
@@ -367,12 +368,12 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
                 sorting.OfferFolderOnceOldEnough(
                     path,
                     SnapshotsReason,
-                    recentSinceUtc,
                     isLeftover: false,
-                    ClaudeCodeSessionCheck.Ended(registry, entry.Name),
-                    ct);
+                    ClaudeCodeSessionCheck.Ended(registry, entry.Name));
             }
         }
+
+        sorting.DateOffers(recentSinceUtc, tuning, ct);
 
         if (running > 0)
         {

@@ -386,7 +386,7 @@ public sealed class TopazModelsProvider : CleanupProviderBase
         return new DeletionTarget(
             target,
             reason,
-            DirectoryAge.Of(target, ct),
+            DatedOneLevelDown: true,
             Identity: new ItemIdentity(product.Name, $"{product.Name} models"),
             Facets: [new ItemFacet("Installed", product.Standing switch
             {

@@ -244,14 +244,15 @@ public static class DeclaredLocations
         targets.Add(new DeletionTarget(
             path,
             location.Reason,
-            location.ReportsAge ? LastWritten(path, isFile) : null,
+            location.ReportsAge && isFile ? FileLastWritten(path) : null,
             location.Kind switch
             {
                 DeclaredLocationKind.File => TargetKind.File,
                 DeclaredLocationKind.DirectoryContents => TargetKind.DirectoryContents,
                 _ => TargetKind.Directory,
             },
-            root.RequiresElevation));
+            root.RequiresElevation,
+            DatedOneLevelDown: location.ReportsAge && !isFile));
     }
 
     /// <summary>
@@ -305,22 +306,17 @@ public static class DeclaredLocations
     }
 
     /// <summary>
-    /// §7's age. A directory is dated by <see cref="DirectoryAge"/>, the one rule every provider
-    /// asking this question uses. A file is dated by its own timestamp, which for <c>MEMORY.DMP</c>
-    /// is the moment the machine stopped.
+    /// §7's age for a file, its own timestamp, which for <c>MEMORY.DMP</c> is the moment the machine
+    /// stopped. A directory is dated by <see cref="DirectoryAge"/>, the one rule every provider asking
+    /// this question uses, with the rest of its plan's targets (<see cref="DeletionTarget.DatedOneLevelDown"/>).
     ///
     /// One level is enough for the locations declared here because their own children are the things
     /// being written: the logs and dumps sit directly inside, and where a report is a directory of
     /// its own, its arrival moves the parent. Where that does not hold, the location says so and is
     /// never asked — see <see cref="DeclaredLocation.ReportsAge"/>.
     /// </summary>
-    private static DateTime? LastWritten(string path, bool isFile)
+    private static DateTime? FileLastWritten(string path)
     {
-        if (!isFile)
-        {
-            return DirectoryAge.Of(path);
-        }
-
         try
         {
             return new FileInfo(LongPath.Extended(path)).LastWriteTimeUtc;

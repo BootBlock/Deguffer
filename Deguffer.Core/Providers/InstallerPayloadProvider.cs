@@ -221,7 +221,7 @@ public abstract class InstallerPayloadProvider : CleanupProviderBase
                 return new DeletionTarget(
                     cleared.Path,
                     payload.Reason,
-                    DirectoryAge.Of(cleared.Path, ct),
+                    DatedOneLevelDown: true,
                     Identity: new ItemIdentity(payload.Key, $"{payload.Root.Vendor} {payload.Name}"),
                     Facets: [new ItemFacet("Vendor", payload.Root.Vendor)],
                     Group: payload.Root.Vendor,

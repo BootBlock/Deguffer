@@ -499,7 +499,7 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
                 .. live.Cleared.Select(c => new DeletionTarget(
                     c.Path,
                     StagingReason,
-                    DirectoryAge.Of(c.Path, ct),
+                    DatedOneLevelDown: true,
                     UseCheck: c.StillUnused)),
             ],
             Unreadable: false,
