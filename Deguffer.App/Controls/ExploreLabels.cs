@@ -23,11 +23,13 @@ namespace Deguffer.App.Controls;
 /// them — neither of which a name burnt into the picture offers. There are only ever a few dozen,
 /// because a shape too small to read is a shape the drawing gives no label.</para>
 ///
-/// <para>Each name is placed in the picture at its anchor (<see cref="ExploreLabel.Anchor"/>), and the
-/// compositor moves it there with the map's camera and with the picture it names as a folder opens,
-/// so the names stay on the map through every zoom, drag and folder opened with no work on the UI
-/// thread per frame. Only the anchor moves: the text stays upright and at the reader's size, so it
-/// fades out as its shape shrinks round it, before it reaches a shape that is not its own
+/// <para>Each name is placed by the rule its drawing placed it by (<see cref="ExploreLabel.Across"/> and
+/// <see cref="ExploreLabel.Down"/>), and the compositor works that rule out again on every frame as
+/// the map's camera moves and as a folder opening carries the picture, so the names stay on the map
+/// through every zoom, drag and folder opened with no work on the UI thread per frame. A zoom ends
+/// with each name already where the drawing at the new zoom puts it, rather than jumping there.
+/// Only the anchor moves: the text stays upright and at the reader's size, so it fades out as its
+/// shape shrinks round it, before it reaches a shape that is not its own
 /// (<see cref="ExploreLabel.Fade"/>), and a shape that grows keeps its name.</para>
 ///
 /// <para>Separate from <see cref="ExploreMap"/> for the reason <see cref="ExploreHighlight"/> is.
@@ -36,8 +38,21 @@ namespace Deguffer.App.Controls;
 /// </summary>
 internal sealed class ExploreLabels : Canvas
 {
-    /// <summary>A name's properties, which the expressions below read: where in its drawing it is anchored.</summary>
-    private const string Anchor = "Anchor";
+    /// <summary>
+    /// A name's properties, which the expressions below read: the rule it is placed across its
+    /// drawing by, as the span's start and end, the inset, and 1 where it is centred on the span
+    /// (<see cref="LabelAxis"/>).
+    /// </summary>
+    private const string Across = "Across";
+
+    /// <summary>The rule it is placed down its drawing by, as <see cref="Across"/>.</summary>
+    private const string Down = "Down";
+
+    /// <summary>1 on each axis where the span is cut to the canvas first, and 0 where it is not.</summary>
+    private const string Kept = "Kept";
+
+    /// <summary>The canvas's size on the screen, in device-independent pixels: where a kept span is cut.</summary>
+    private const string Extent = "Extent";
 
     /// <summary>How far left of its anchor the text starts, so a centred name is centred on it.</summary>
     private const string Shift = "Shift";
@@ -49,14 +64,15 @@ internal sealed class ExploreLabels : Canvas
     private const string Arrival = "Arrival";
 
     /// <summary>
-    /// Where a name's anchor is on the screen, as the composition of where its drawing lies in the
-    /// picture, where the camera puts the picture, and where a folder opening carries it: each a
-    /// scale then a move, written out because the expression language composes nothing for itself.
+    /// Where a name's anchor is on the screen: its rule (<see cref="LabelAxis.At"/>) worked out for
+    /// where its drawing lies in the picture and where the camera puts the picture, then carried
+    /// wherever a folder opening carries it. Each a scale then a move, written out because the
+    /// expression language composes nothing for itself.
     /// </summary>
-    private const string PlacementExpression =
+    private static readonly string PlacementExpression =
         "Vector3("
-        + $"((((label.{Anchor}.X * placed.Scale.X) + placed.Offset.X) * camera.Scale.X) + camera.Offset.X) * carried.Scale.X + carried.Offset.X - label.{Shift}, "
-        + $"((((label.{Anchor}.Y * placed.Scale.Y) + placed.Offset.Y) * camera.Scale.Y) + camera.Offset.Y) * carried.Scale.Y + carried.Offset.Y, "
+        + $"({Pinned(Across, "X")}) * carried.Scale.X + carried.Offset.X - label.{Shift}, "
+        + $"({Pinned(Down, "Y")}) * carried.Scale.Y + carried.Offset.Y, "
         + "0)";
 
     /// <summary>
@@ -81,6 +97,14 @@ internal sealed class ExploreLabels : Canvas
     /// compositor.
     /// </summary>
     private readonly CompositionPropertySet _placed;
+
+    /// <summary>
+    /// Where one device-independent pixel of that drawing is on the screen: <see cref="_placed"/> and
+    /// the camera combined, as a <c>Scale</c> and an <c>Offset</c>, by expressions of its own. Worked
+    /// out once here for every name, because the compositor refuses an expression as long as each
+    /// name's would be with this written into it four times.
+    /// </summary>
+    private readonly CompositionPropertySet _screen;
 
     /// <summary>One entry per text block, in the same order: what moves and fades it.</summary>
     private readonly List<Label> _names = [];
@@ -116,13 +140,35 @@ internal sealed class ExploreLabels : Canvas
         _placed = _compositor.CreatePropertySet();
         _placed.InsertVector3(nameof(Visual.Scale), Vector3.One);
         _placed.InsertVector3(nameof(Visual.Offset), Vector3.Zero);
+        _placed.InsertVector2(Extent, Vector2.Zero);
+
+        _screen = _compositor.CreatePropertySet();
+        _screen.InsertVector3(nameof(Visual.Scale), Vector3.One);
+        _screen.InsertVector3(nameof(Visual.Offset), Vector3.Zero);
+        Combine(nameof(Visual.Scale), "Vector3(placed.Scale.X * camera.Scale.X, placed.Scale.Y * camera.Scale.Y, 1)");
+        Combine(
+            nameof(Visual.Offset),
+            "Vector3((placed.Offset.X * camera.Scale.X) + camera.Offset.X, (placed.Offset.Y * camera.Scale.Y) + camera.Offset.Y, 0)");
+    }
+
+    private void Combine(string property, string expression)
+    {
+        var combined = _compositor.CreateExpressionAnimation(expression);
+        combined.SetReferenceParameter("placed", _placed);
+        combined.SetReferenceParameter("camera", _camera.Properties);
+        _screen.StartAnimation(property, combined);
     }
 
     /// <summary>
     /// Put the names where <paramref name="placed"/> says one device-independent pixel of the drawing
-    /// they name lies in the picture.
+    /// they name lies in the picture, on a canvas <paramref name="width"/> by <paramref name="height"/>
+    /// device-independent pixels.
     /// </summary>
-    public void Place(MapTransform placed) => _placed.Place(placed);
+    public void Place(MapTransform placed, double width, double height)
+    {
+        _placed.Place(placed);
+        _placed.InsertVector2(Extent, new Vector2((float)width, (float)height));
+    }
 
     /// <summary>
     /// Follow <paramref name="carried"/> as a folder opening carries the picture, for the set of
@@ -167,7 +213,7 @@ internal sealed class ExploreLabels : Canvas
 
         while (Children.Count < drawing.Labels.Count)
         {
-            var name = new Label(_compositor, _camera.Properties, _placed, _carried);
+            var name = new Label(_compositor, _camera.Properties, _placed, _screen, _carried);
 
             _names.Add(name);
             Children.Add(name.Text);
@@ -204,9 +250,9 @@ internal sealed class ExploreLabels : Canvas
 
             var measured = text.DesiredSize;
             var (across, down) = label.Fade((float)(measured.Width * scale), (float)(measured.Height * scale));
-            var (anchorX, anchorY) = label.Anchor;
-
-            name.Properties.InsertVector2(Anchor, new Vector2((float)(anchorX / scale), (float)(anchorY / scale)));
+            name.Properties.InsertVector4(Across, Rule(label.Across, scale));
+            name.Properties.InsertVector4(Down, Rule(label.Down, scale));
+            name.Properties.InsertVector2(Kept, new Vector2(label.Across.KeptOnCanvas ? 1 : 0, label.Down.KeptOnCanvas ? 1 : 0));
             name.Properties.InsertScalar(Shift, label.Centred ? (float)(measured.Width / 2) : 0);
             name.Properties.InsertVector4(Fade, new Vector4(across.Gone, across.Whole, down.Gone, down.Whole));
 
@@ -230,6 +276,35 @@ internal sealed class ExploreLabels : Canvas
         (_named, _naming) = (_naming, _named);
         _tree = drawing.Tree;
     }
+
+    /// <summary>A rule as the expressions read it, in device-independent pixels of a canvas at <paramref name="scale"/>.</summary>
+    private static Vector4 Rule(LabelAxis axis, double scale) => new(
+        (float)(axis.From / scale),
+        (float)(axis.To / scale),
+        (float)(axis.Inset / scale),
+        axis.Centred ? 1 : 0);
+
+    /// <summary>
+    /// <see cref="LabelAxis.At"/> as an expression, along <paramref name="axis"/> for the rule in the
+    /// name's <paramref name="rule"/> property: its span carried into the picture and onto the screen,
+    /// cut to the canvas where it is kept, and the anchor measured from its start or its middle.
+    /// </summary>
+    private static string Pinned(string rule, string axis)
+    {
+        var from = OnScreen($"label.{rule}.X", axis);
+        var to = OnScreen($"label.{rule}.Y", axis);
+        var kept = $"label.{Kept}.{axis}";
+        var start = $"Lerp({from}, Max({from}, 0), {kept})";
+        var end = $"Lerp({to}, Min({to}, placed.{Extent}.{axis}), {kept})";
+        var centred = $"label.{rule}.W";
+
+        // The start, or the middle of the span, as one sum: start + (end - start) / 2 where centred.
+        return $"({start} * (1 - ({centred} / 2))) + ({end} * ({centred} / 2)) + label.{rule}.Z";
+    }
+
+    /// <summary>A point of a drawing in its device-independent pixels, on the screen.</summary>
+    private static string OnScreen(string value, string axis) =>
+        $"(({value} * screen.Scale.{axis}) + screen.Offset.{axis})";
 
     /// <summary>
     /// Take the names off until the layout that places them arrives.
@@ -269,7 +344,12 @@ internal sealed class ExploreLabels : Canvas
 
         private readonly Visual _visual;
 
-        public Label(Compositor compositor, CompositionPropertySet camera, CompositionPropertySet placed, Visual carried)
+        public Label(
+            Compositor compositor,
+            CompositionPropertySet camera,
+            CompositionPropertySet placed,
+            CompositionPropertySet screen,
+            Visual carried)
         {
             Text = new TextBlock
             {
@@ -290,7 +370,9 @@ internal sealed class ExploreLabels : Canvas
             AutomationProperties.SetAccessibilityView(Text, AccessibilityView.Raw);
 
             Properties = compositor.CreatePropertySet();
-            Properties.InsertVector2(Anchor, Vector2.Zero);
+            Properties.InsertVector4(Across, Vector4.Zero);
+            Properties.InsertVector4(Down, Vector4.Zero);
+            Properties.InsertVector2(Kept, Vector2.Zero);
             Properties.InsertScalar(Shift, 0);
             Properties.InsertVector4(Fade, new Vector4(0, 1, 0, 1));
             Properties.InsertScalar(Arrival, 1);
@@ -303,6 +385,7 @@ internal sealed class ExploreLabels : Canvas
                 expression.SetReferenceParameter("label", Properties);
                 expression.SetReferenceParameter("camera", camera);
                 expression.SetReferenceParameter("placed", placed);
+                expression.SetReferenceParameter("screen", screen);
             }
 
             _visual = ElementCompositionPreview.GetElementVisual(Text);
@@ -314,8 +397,8 @@ internal sealed class ExploreLabels : Canvas
         public TextBlock Text { get; }
 
         /// <summary>
-        /// Where the name is and how it fades, in its own coordinates: <c>Anchor</c>, <c>Shift</c>,
-        /// <c>Fade</c> and <c>Arrival</c>.
+        /// Where the name is and how it fades, in its own coordinates: <c>Across</c>, <c>Down</c>,
+        /// <c>Kept</c>, <c>Shift</c>, <c>Fade</c> and <c>Arrival</c>.
         /// </summary>
         public CompositionPropertySet Properties { get; }
 

@@ -28,6 +28,11 @@ namespace Deguffer.Core.Exploring.Rendering;
 /// name the band set aside for it. What a picture magnified less than it was drawn at fades the
 /// label against (see <see cref="Fade"/>).
 /// </param>
+/// <param name="Across">
+/// How the label finds its <see cref="Anchor"/> across the canvas once the picture is magnified or
+/// moved. On the canvas it was laid out for, it gives the anchor's X.
+/// </param>
+/// <param name="Down">How it finds the anchor down the canvas, as <paramref name="Across"/> does across it.</param>
 public readonly record struct ExploreLabel(
     int Node,
     float X,
@@ -37,7 +42,9 @@ public readonly record struct ExploreLabel(
     bool Centred,
     TileColour Colour,
     long Bytes,
-    LabelRoom Room)
+    LabelRoom Room,
+    LabelAxis Across,
+    LabelAxis Down)
 {
     /// <summary>
     /// How much smaller than where it is gone a label is still whole: it fades over the last fifth of

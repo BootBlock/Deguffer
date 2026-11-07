@@ -1016,7 +1016,7 @@ public sealed class ExploreMap : UserControl
 
         _highlight.PlaceOver(Placed(drawing), ActualWidth, ActualHeight, _zoom.Origin);
 
-        _labels.Place(_drawn.Labels(drawing.Width, drawing.Height, ActualWidth, ActualHeight, _canvas.Scale, _zoom.Origin));
+        _labels.Place(_drawn.Labels(drawing.Width, drawing.Height, ActualWidth, ActualHeight, _canvas.Scale, _zoom.Origin), ActualWidth, ActualHeight);
     }
 
     /// <summary>
