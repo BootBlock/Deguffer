@@ -10,7 +10,7 @@ namespace Deguffer.App.Shell;
 /// </summary>
 public sealed class SelectionService
 {
-    private readonly ISelectionStore _store;
+    private readonly SelectionWriter _writer;
 
     /// <summary>
     /// Starts reading the remembered ticks on a worker, and returns without waiting for them.
@@ -21,7 +21,7 @@ public sealed class SelectionService
     /// </summary>
     public SelectionService(ISelectionStore store)
     {
-        _store = store;
+        _writer = new SelectionWriter(store);
         Memory = Task.Run(() => new SelectionMemory(store.Load()));
     }
 
@@ -44,6 +44,9 @@ public sealed class SelectionService
     /// took. There is nowhere useful to report it to: the Storage page's info bar carries §5.6's
     /// verification headline, which is not a thing to displace for a tick the user can see took
     /// effect.
+    ///
+    /// <para>Applied here, on the window's thread, and written by <see cref="SelectionWriter"/> on a
+    /// worker, so a tick costs a copy of the memory rather than a write of the whole file.</para>
     /// </summary>
     public void Remember(string providerId, RememberedSelection selection)
     {
@@ -53,6 +56,12 @@ public sealed class SelectionService
 
         memory.Remember(providerId, selection);
 
-        _store.Save(memory.Entries);
+        _writer.Write(memory.Snapshot());
     }
+
+    /// <summary>
+    /// Wait until every choice recorded so far is on disk: the window closing, or the elevated
+    /// relaunch, whose replacement reads the file as it opens.
+    /// </summary>
+    public void Flush() => _writer.Flush();
 }

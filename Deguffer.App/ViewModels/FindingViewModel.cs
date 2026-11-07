@@ -447,8 +447,8 @@ public sealed partial class FindingViewModel : ObservableObject
     /// ticked is passed over, for the reasons <see cref="StepViewModel.CanBeSelected"/> gives.
     ///
     /// <para>One notification and one event, however many steps change. Each event recalculates the
-    /// page's totals over every row and writes the remembered selection to disk, so a click on a group of
-    /// a thousand items that set its steps one at a time would do both a thousand times.</para>
+    /// page's totals over every row and copies the remembered selection for a write to disk, so a click on
+    /// a group of a thousand items that set its steps one at a time would do both a thousand times.</para>
     /// </summary>
     public void SetSelected(IEnumerable<StepViewModel> steps, bool value)
     {

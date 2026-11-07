@@ -169,4 +169,23 @@ public class SelectionMemoryTests
         // every path Deguffer has ever planned.
         Assert.Equal([Current], memory.Entries[NodeModules].Steps.Keys);
     }
+
+    /// <summary>
+    /// The snapshot is written on a worker while the user goes on ticking, so a later tick must not
+    /// reach into it: a write that serialised a dictionary being changed would throw or write half
+    /// of each.
+    /// </summary>
+    [Fact]
+    public void ASnapshotKeepsWhatWasRememberedWhenItWasTaken()
+    {
+        var memory = Remembering(Npm, isSelected: true, (CacheStep, true));
+
+        var snapshot = memory.Snapshot();
+        memory.Remember(Npm, new RememberedSelection(IsSelected: false, new Dictionary<string, bool> { [CacheStep] = false }));
+        memory.Remember(NodeModules, new RememberedSelection(IsSelected: true, new Dictionary<string, bool>()));
+
+        Assert.Equal([Npm], snapshot.Keys);
+        Assert.True(snapshot[Npm].IsSelected);
+        Assert.True(snapshot[Npm].Steps[CacheStep]);
+    }
 }
