@@ -313,6 +313,12 @@ internal static class RemovalWalk
         public ListingRefusal Refusal => _refused;
 
         /// <summary>
+        /// Whether Windows refused to list it while a folder stood there, so nothing in it was seen. A
+        /// file at its path is not this: nothing is inside a file to be lost.
+        /// </summary>
+        public bool IsUnlisted => _refused is ListingRefusal.Denied or ListingRefusal.Other;
+
+        /// <summary>
         /// Let go of the files and links its listing found, once nothing will read them again: a removal
         /// of a large tree would otherwise hold every entry of it until the last folder had gone.
         /// </summary>

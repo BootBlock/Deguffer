@@ -185,6 +185,7 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict, bool Cance
     {
         var refused = results.Aggregate(Refusals.None, (total, result) => total + result.Refused);
         var folders = results.Aggregate(FolderRefusals.None, (total, result) => total + result.RefusedFolders);
+        var unlisted = results.Sum(r => r.UnlistedCount);
         var kept = results.Sum(r => r.KeptCount);
         var spared = results.Sum(r => r.SparedCount);
         var userWork = results.Sum(r => r.UserWorkCount);
@@ -208,6 +209,9 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict, bool Cance
                 : string.Empty)
             + (folders.Denied > 0
                 ? $" Windows would not let Deguffer remove {folders.Denied:N0} folder(s)."
+                : string.Empty)
+            + (unlisted > 0
+                ? $" Windows would not let Deguffer look inside {unlisted:N0} folder(s), so they were left in place."
                 : string.Empty)
             + (kept > 0 ? $" {kept} file(s) changed too recently to remove." : string.Empty)
 

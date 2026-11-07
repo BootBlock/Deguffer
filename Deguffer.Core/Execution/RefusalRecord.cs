@@ -90,7 +90,10 @@ public sealed class RefusalRecord
     /// What a removal of <paramref name="stepPath"/> has just found: in place of what an earlier clean
     /// found where the removal finished, and beside it where the removal was
     /// <see cref="RemovalOutcome.Interrupted"/>. A removal stopped part-way did not ask every file, so
-    /// a place it never reached keeps its entry, and the next preview asks about it again.
+    /// a place it never reached keeps its entry, and the next preview asks about it again. So does a
+    /// place at, inside or around a folder Windows would not let the removal list (see
+    /// <see cref="RemovalOutcome.Unlisted"/>): nothing in that folder was asked, so nothing it found
+    /// says the refusal there has lifted.
     /// </summary>
     public void Record(string stepPath, RemovalOutcome removal)
     {
@@ -98,7 +101,11 @@ public sealed class RefusalRecord
 
         if (!removal.Interrupted)
         {
-            Replace(stepPath, removal.RefusedAt);
+            Replace(
+                stepPath,
+                removal.Unlisted.Count == 0
+                    ? removal.RefusedAt
+                    : [.. removal.RefusedAt, .. Unasked(At(stepPath), removal.Unlisted)]);
             return;
         }
 
@@ -163,6 +170,18 @@ public sealed class RefusalRecord
 
             Save();
         }
+    }
+
+    /// <summary>
+    /// The <paramref name="recorded"/> places a removal could not have asked about: each at or inside
+    /// one of the <paramref name="unlisted"/> folders, or holding one.
+    /// </summary>
+    private static IEnumerable<string> Unasked(IReadOnlyList<string> recorded, IReadOnlyList<string> unlisted)
+    {
+        var folders = Wellformed(unlisted).ToList();
+
+        return recorded.Where(place =>
+            folders.Exists(folder => LongPath.Contains(folder, place) || LongPath.Contains(place, folder)));
     }
 
     private static string FileFor(IUserEnvironment environment) =>

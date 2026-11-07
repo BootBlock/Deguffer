@@ -57,6 +57,7 @@ internal sealed class RemovalTally(string root)
         var mailStores = new List<string>();
         var spared = new List<string>();
         var userWork = new List<string>();
+        var unlisted = new List<string>();
         var kept = 0;
         var removed = Interlocked.Read(ref _removed);
 
@@ -89,7 +90,7 @@ internal sealed class RemovalTally(string root)
                 // already been told about.
                 leftStanding.Add(folder.Path);
 
-                if (standing.Refused is { } reason)
+                if (standing.Refused is { } reason && !folder.IsUnlisted)
                 {
                     refusedFolders += FolderRefusals.One(reason);
                 }
@@ -101,8 +102,15 @@ internal sealed class RemovalTally(string root)
         }
 
         // In the order the walk met them, as the reader would list them.
-        foreach (var folder in folders)
+        foreach (RemovalFolder folder in folders)
         {
+            // Still there, whether kept as the root, never tried, or refused. One never listed and then
+            // taken held nothing, because Windows removes only an empty folder.
+            if (folder.IsUnlisted && !(folder.WasTried && folder.Left is null))
+            {
+                unlisted.Add(folder.Path);
+            }
+
             kept += folder.Kept;
             spared.AddRange(folder.Spared);
             userWork.AddRange(folder.UserWork);
@@ -123,6 +131,7 @@ internal sealed class RemovalTally(string root)
             LeftStanding = [.. leftStanding.Select(LongPath.Display)],
             RefusedFolders = refusedFolders,
             MailStores = [.. mailStores.Select(LongPath.Display)],
+            Unlisted = [.. unlisted.Select(LongPath.Display)],
             LeftAlone = [.. spared.Concat(userWork).Select(LongPath.Display)],
             UserWork = userWork.Count,
             Interrupted = interrupted,

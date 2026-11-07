@@ -190,18 +190,13 @@ internal abstract record GatheredRemoval(string Extended, RemovalBounds Bounds)
                 mailStores.AddRange(folder.MailStores);
                 HoldsRecent |= folder.Kept > 0 || folder.RecentFolders > 0;
 
-                switch (folder.Refusal)
+                if (folder.IsUnlisted)
                 {
-                    case ListingRefusal.None:
-                        break;
-
-                    case ListingRefusal.NotADirectory:
-                        notFolders.Add(folder.Path);
-                        break;
-
-                    default:
-                        unlisted.Add(folder.Path);
-                        break;
+                    unlisted.Add(folder.Path);
+                }
+                else if (folder.Refusal is ListingRefusal.NotADirectory)
+                {
+                    notFolders.Add(folder.Path);
                 }
             }
 
