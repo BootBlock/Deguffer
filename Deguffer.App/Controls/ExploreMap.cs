@@ -1184,7 +1184,7 @@ public sealed class ExploreMap : UserControl
         // Nothing new to draw, and the names are still where this drawing put them. Unless a redraw
         // is landing, which was asked for somewhere the zoom has since left, or of a picture that
         // has changed since this drawing was made.
-        if (_zoom.Shown == _drawn && _canvas.Arriving is not { IsSettled: false })
+        if (ShowsTheDrawingAsDrawn)
         {
             _flight.Pictures.HideTiles();
             _labels.Reveal();
@@ -1547,11 +1547,29 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void Sharpen()
     {
-        if (!Stepping)
+        if (Stepping)
         {
-            _canvas.Sharpen(Ground());
+            return;
         }
+
+        // Where the drawing on top was made, it is the picture pixel for pixel, and a tile, drawn finer
+        // and shown smaller over it, only blurs every line in it. The camera reports a jump there with
+        // no move to come to rest from, as its bounds are first set while the page is still arriving,
+        // so nothing would take the tiles off again.
+        if (ShowsTheDrawingAsDrawn)
+        {
+            _flight.Pictures.HideTiles();
+            return;
+        }
+
+        _canvas.Sharpen(Ground());
     }
+
+    /// <summary>
+    /// Whether the screen shows the picture exactly where the drawing on top was made, with no redraw
+    /// still landing over it, so that drawing is all there is to show.
+    /// </summary>
+    private bool ShowsTheDrawingAsDrawn => _zoom.Shown == _drawn && _canvas.Arriving is not { IsSettled: false };
 
     /// <summary>
     /// Settle any change of folder still flying, whichever button went down, so what the press resolves
