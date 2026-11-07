@@ -3557,7 +3557,8 @@ fetches it again on demand, and nothing else is the authority for any of it.
 
 ## Epic Games launcher logs and crash reports
 
-**Tier 3 — user data.** Never pre-selected, and confirmed before it runs.
+**Tier 3 — user data.** Never pre-selected, and confirmed as every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the
+loss is permanent.
 
 | | |
 | --- | --- |
@@ -3679,7 +3680,8 @@ leaves both alone until somebody does.
 
 ## Battle.net launcher logs
 
-**Tier 3 — user data.** Never pre-selected, and confirmed before it runs.
+**Tier 3 — user data.** Never pre-selected, and confirmed as every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the
+loss is permanent.
 
 | | |
 | --- | --- |
@@ -4288,8 +4290,8 @@ time and bandwidth, and nothing is lost, so they are Tier 2.
 
 Most thumbnails download again too, but RetroArch lets you add your own, and a picture you added sits
 in the same folder, under the same kind of name, as a downloaded one. Nothing tells them apart, and
-yours cannot be downloaded, so the thumbnails are Tier 3: never selected for you, and confirmed as a
-permanent loss.
+yours cannot be downloaded, so the thumbnails are Tier 3: never selected for you, and confirmed as
+every Tier 3 row is.
 
 ---
 
@@ -7853,9 +7855,8 @@ server still holding it. So it is offered and never ticked on your behalf.
 
 ## Recycle Bin
 
-**Tier 3 — user data.** Offered, **never pre-selected**, and confirmed by a dialog that says the
-loss is permanent. Switch *Type a name to delete user data* on in Settings and that dialog asks you
-to type the words out.
+**Tier 3 — user data.** Offered, **never pre-selected**, and confirmed as every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the
+loss is permanent.
 
 | | |
 | --- | --- |
@@ -7970,9 +7971,8 @@ type the name out as well.
 
 ## Windows File History
 
-**Tier 3 — user data, researched.** Offered, **never pre-selected**, and confirmed by a dialog that says the
-loss is permanent. Switch *Type a name to delete user data* on in Settings and that dialog asks you
-to type the words out.
+**Tier 3 — user data, researched.** Offered, **never pre-selected**, and confirmed as every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the
+loss is permanent.
 
 | | |
 | --- | --- |
@@ -8103,9 +8103,8 @@ why its confirmation says the loss is permanent rather than costly.
 
 ## Crash dumps and error reports
 
-**Tier 3 — user data.** Offered, **never pre-selected**, and confirmed by a dialog that says the
-loss is permanent. Switch *Type a name to delete user data* on in Settings and that dialog asks you
-to type the words out.
+**Tier 3 — user data.** Offered, **never pre-selected**, and confirmed as every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the
+loss is permanent.
 
 | | |
 | --- | --- |
@@ -8205,9 +8204,8 @@ not the same claim, and the tier model exists to keep them apart.
 
 ## Windows servicing logs
 
-**Tier 3 — user data.** Offered, **never pre-selected**, and confirmed by a dialog that says the
-loss is permanent. Switch *Type a name to delete user data* on in Settings and that dialog asks you
-to type the words out.
+**Tier 3 — user data.** Offered, **never pre-selected**, and confirmed as every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the
+loss is permanent.
 
 | | |
 | --- | --- |
@@ -8410,7 +8408,7 @@ not Tier 3, because none of it is a record of something you did.
 
 ## Files discarded by a Windows upgrade
 
-**Tier 3 — user data.** Offered, **never pre-selected**, and confirmed by a dialog that says the
+**Tier 3 — user data.** Offered, **never pre-selected**, and confirmed as every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the
 loss is permanent.
 
 | | |
@@ -8668,7 +8666,8 @@ in time. Nothing is lost that Windows needs to run or to uninstall an update.
 
 ## Windows update uninstall data
 
-**Tier 3 — permanent loss.** Offered, **never pre-selected**, and confirmed on its own.
+**Tier 3 — permanent loss.** Offered, **never pre-selected**, and confirmed as every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the
+loss is permanent.
 
 | | |
 | --- | --- |
@@ -8687,7 +8686,8 @@ it that ability.
 Everything the *Superseded Windows components* row does, with `/ResetBase` added, and as a row of its
 own rather than a switch on that one. Microsoft's warning is that "all existing update packages can't
 be uninstalled after this command is completed, but this won't block the uninstallation of future
-update packages". That cost is permanent, so it is its own decision with its own confirmation.
+update packages". That cost is permanent, so it is a decision separate from the cleanup: a row of its own, never
+pre-selected, and confirmed as every Tier 3 row is.
 
 Both rows can be chosen in one clean. Each asks DISM for the store's size immediately before and after
 its own command, so a gigabyte the first frees is not counted again by the second.
@@ -8715,7 +8715,8 @@ The confirmation states the loss without calling it user data.
 
 ## Older restore points
 
-**Tier 3 — permanent loss.** Offered, **never pre-selected**, and confirmed on its own.
+**Tier 3 — permanent loss.** Offered, **never pre-selected**, and confirmed as every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the
+loss is permanent.
 
 | | |
 | --- | --- |
