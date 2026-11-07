@@ -97,7 +97,9 @@ public sealed class ExploreTypesTests : IDisposable
 
         var running = page.ScanCommand.ExecuteAsync(null);
         var scan = _explore.Scanner.Current;
-        var snapshot = builder.Build(ExploreChildOrder.ByName);
+        // By size, as a snapshot comes while the treemap is on screen, so it is its being a snapshot
+        // and not its order that leaves it unmeasured.
+        var snapshot = builder.Snapshot(ExploreChildOrder.BySize);
 
         scan.Report(new ExploreProgress(6, null, 0, snapshot));
         await Eventually.HoldsAsync(() => page.Types.Rows.Count == 3, "the snapshot broken down");

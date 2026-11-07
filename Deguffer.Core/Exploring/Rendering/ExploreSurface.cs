@@ -145,12 +145,12 @@ public abstract class ExploreSurface
     /// The picture <paramref name="tree"/> is actually drawn as when <paramref name="view"/> is
     /// asked for.
     ///
-    /// <para>A tree still being filled in orders its children by name rather than by size, so that a
-    /// growing child widens where it is instead of moving. Two of the four drawings cannot be made
-    /// from that at all and say so by refusing: squarification is defined over a decreasing
-    /// sequence, and a sunburst's residual wedge assumes the small children are the tail. So a scan
-    /// in progress draws the icicle whichever view was picked, and the chosen one arrives with the
-    /// finished scan. Public because the page has to say so, and has to say it from this rule rather
+    /// <para>Two of the drawings cannot be made from a tree ordered by name and say so by refusing:
+    /// squarification is defined over a decreasing sequence, and a sunburst's residual wedge assumes
+    /// the small children are the tail. A scan in progress hands its snapshots over in the order the
+    /// chosen view needs (<see cref="SnapshotOrder"/>), so this substitutes the icicle only for the
+    /// snapshot on screen when the reader switches to one of those two, until the next arrives in
+    /// size order. Public because the page has to say so, and has to say it from this rule rather
     /// than from a copy of it: a substitution nobody is told about reads as a bug.</para>
     /// </summary>
     public static ExploreView Drawn(ISizedTree tree, ExploreView view)
@@ -159,6 +159,20 @@ public abstract class ExploreSurface
 
         return tree.ChildOrder == ExploreChildOrder.BySize ? view : ExploreView.Icicle;
     }
+
+    /// <summary>
+    /// The order a scan in progress hands its snapshots over in while <paramref name="view"/> is on
+    /// screen: by size for the treemap and the sunburst, which cannot be drawn from any other, and by
+    /// name for every other view.
+    ///
+    /// <para>By name wherever it can be, because under it a growing folder widens where it is rather
+    /// than overtaking its siblings (<see cref="ExploreChildOrder.ByName"/>), so the icicle and the
+    /// lists stay still while the scan fills them in. A reader who chose the treemap asked for the
+    /// treemap, and is shown it rearranging as the scan finds more rather than another picture until
+    /// the scan ends.</para>
+    /// </summary>
+    public static ExploreChildOrder SnapshotOrder(ExploreView view) =>
+        view is ExploreView.Treemap or ExploreView.Sunburst ? ExploreChildOrder.BySize : ExploreChildOrder.ByName;
 
     /// <summary>
     /// Whether <paramref name="view"/> shows <paramref name="tree"/> as a picture that can be zoomed:

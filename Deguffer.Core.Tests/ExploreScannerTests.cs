@@ -546,7 +546,7 @@ public class ExploreScannerTests
         var progress = new CallbackProgress<ExploreProgress>(_ => cancel.Cancel());
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => scanner.ScanAsync($@"{letter}:\", progress, cancel.Token).AsTask());
+            () => scanner.ScanAsync($@"{letter}:\", progress, ct: cancel.Token).AsTask());
     }
 
     [Fact]
@@ -561,6 +561,6 @@ public class ExploreScannerTests
         var progress = new CallbackProgress<ExploreProgress>(_ => cancel.Cancel());
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => scanner.ScanAsync(Path.Combine(temp.Path, "cache"), progress, cancel.Token).AsTask());
+            () => scanner.ScanAsync(Path.Combine(temp.Path, "cache"), progress, ct: cancel.Token).AsTask());
     }
 }

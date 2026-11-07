@@ -58,7 +58,18 @@ internal sealed class ExploreTreeCapture
     /// Asked every so many nodes and between the passes, so a snapshot of a walk that has ended or
     /// been cancelled stops part way rather than holding the walk until it is finished.
     /// </param>
-    public ExploreTree Build(ExploreChildOrder childOrder, CancellationToken ct = default)
+    public ExploreTree Build(ExploreChildOrder childOrder, CancellationToken ct = default) =>
+        Build(childOrder, snapshot: false, ct);
+
+    /// <summary>
+    /// The tree as a snapshot of a walk in progress draws it: <see cref="Build(ExploreChildOrder, CancellationToken)"/>,
+    /// marked as a snapshot (<see cref="ExploreTree.IsSnapshot"/>), in the order
+    /// <see cref="ScanSnapshots"/> was asked for when it was captured.
+    /// </summary>
+    public ExploreTree Snapshot(ExploreChildOrder childOrder, CancellationToken ct) =>
+        Build(childOrder, snapshot: true, ct);
+
+    private ExploreTree Build(ExploreChildOrder childOrder, bool snapshot, CancellationToken ct)
     {
         var count = _nodes.Count;
 
@@ -125,14 +136,9 @@ internal sealed class ExploreTreeCapture
             childOrder,
             _listingRefused,
             nameRanks,
+            snapshot,
             ct);
     }
-
-    /// <summary>
-    /// The tree as a snapshot of a walk in progress draws it: <see cref="Build"/> in
-    /// <see cref="ExploreChildOrder.ByName"/>, for <see cref="ScanSnapshots"/>' reason.
-    /// </summary>
-    public ExploreTree Snapshot(CancellationToken ct) => Build(ExploreChildOrder.ByName, ct);
 
     /// <summary>
     /// Rank by name every child of each of <paramref name="listedTwice"/> among all of its

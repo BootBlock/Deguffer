@@ -57,11 +57,13 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
         int[] childStart,
         int[] children,
         ExploreChildOrder childOrder,
-        FrozenSet<int> listingRefused)
+        FrozenSet<int> listingRefused,
+        bool isSnapshot)
     {
         RootPath = rootPath;
         RootNode = rootNode;
         ChildOrder = childOrder;
+        IsSnapshot = isSnapshot;
         _nameNumbers = nameNumbers;
         _names = names;
         _parents = parents;
@@ -87,6 +89,7 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
         RootPath = scanned.RootPath;
         RootNode = scanned.RootNode;
         ChildOrder = scanned.ChildOrder;
+        IsSnapshot = scanned.IsSnapshot;
         _nameNumbers = scanned._nameNumbers;
         _names = scanned._names;
         _parents = scanned._parents;
@@ -134,6 +137,17 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
     /// inferring the one thing that decides whether its picture means anything.</para>
     /// </summary>
     public ExploreChildOrder ChildOrder { get; }
+
+    /// <summary>
+    /// Whether this is a snapshot of a scan still running rather than what a scan found once it
+    /// ended. A snapshot's totals grow with the next one, and a folder it has not reached yet is not
+    /// in it at all.
+    ///
+    /// <para>Its own fact rather than read from <see cref="ChildOrder"/>: a snapshot is ordered by
+    /// size where the picture on screen needs it (<see cref="Rendering.ExploreSurface.SnapshotOrder"/>),
+    /// so the order says nothing about whether the scan has ended.</para>
+    /// </summary>
+    public bool IsSnapshot { get; }
 
     /// <summary>
     /// Bytes on the disk under the root, as far as the scan established them. See
@@ -407,6 +421,8 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
     /// of its cost. The file table reads a folder's children in record order, scattered through the
     /// table, so it has no ranks to give, and its snapshots are sorted by name here instead.
     ///
+    /// <paramref name="snapshot"/> says the tree is of a scan still running (<see cref="IsSnapshot"/>).
+    ///
     /// <paramref name="ct"/> is asked between the passes and by the sort, so a snapshot of a walk that
     /// has ended, or a table read whose scan was cancelled, stops within one pass rather than holding
     /// the end of the scan until the tree is finished.
@@ -427,6 +443,7 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
         ExploreChildOrder childOrder,
         IReadOnlyCollection<int>? listingRefused = null,
         int[]? nameRanks = null,
+        bool snapshot = false,
         CancellationToken ct = default)
     {
         var (childStart, children) = InvertParentLinks(parents, flags, nameRanks);
@@ -467,7 +484,8 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
         return new ExploreTree(
             rootPath, rootNode, nameNumbers, names, parents, sizes, lengths, storage, flags,
             created, modified, visibility, childStart, children, childOrder,
-            listingRefused is { Count: > 0 } ? listingRefused.ToFrozenSet() : FrozenSet<int>.Empty);
+            listingRefused is { Count: > 0 } ? listingRefused.ToFrozenSet() : FrozenSet<int>.Empty,
+            snapshot);
     }
 
     /// <summary>

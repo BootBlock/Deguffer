@@ -242,7 +242,7 @@ public sealed partial class ExploreTypes : ObservableObject
     {
         // A tree already measured, or being measured, needs nothing more for a move to another of its
         // folders.
-        if (!IsActive || _tree is not { ChildOrder: ExploreChildOrder.BySize } tree
+        if (!IsActive || _tree is not { IsSnapshot: false } tree
             || ReferenceEquals(Dominant?.Tree, tree) || ReferenceEquals(_measuringTree, tree))
         {
             return;

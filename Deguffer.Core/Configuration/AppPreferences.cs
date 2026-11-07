@@ -53,8 +53,8 @@ public enum StorageOrder
 /// decoration beside it. <see cref="List"/> is the densest answer to "what is biggest", which is
 /// the question most people actually open the page with. <see cref="Icicle"/> keeps area exactly
 /// proportional at every level, has room to label several levels at once, and is the one picture
-/// that stays still while a scan is filling it in — which is why the map draws it, whichever of the
-/// four is chosen, until the scan finishes. <see cref="Sunburst"/> is what the rest of this category
+/// that stays still while a scan is filling it in: the treemap and the sunburst rearrange themselves
+/// as a scan finds more. <see cref="Sunburst"/> is what the rest of this category
 /// ships and the easiest of the four to point at, at the cost of exaggerating whatever is deepest —
 /// an outer ring gives more area for the same proportion, because area grows with the square of the
 /// radius.</para>

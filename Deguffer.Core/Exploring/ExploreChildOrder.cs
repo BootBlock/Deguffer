@@ -20,7 +20,8 @@ public enum ExploreChildOrder
     /// <summary>
     /// By name, compared ordinally and without case, ties broken by node number.
     ///
-    /// <para>What a scan still in progress wants, for a measured reason. Bederson, Shneiderman and
+    /// <para>What a scan still in progress wants wherever the view on screen can be drawn from it
+    /// (<see cref="Rendering.ExploreSurface.SnapshotOrder"/>), for a measured reason. Bederson, Shneiderman and
     /// Wattenberg (<i>ACM Transactions on Graphics</i> 21(4), 2002, pp. 833-854) score layout change
     /// across 100 items and put a squarified treemap at 14.82 against slice-and-dice's 0.25:
     /// re-sorting siblings by a size that is still growing rearranges the whole picture on every

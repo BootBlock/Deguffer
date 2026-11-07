@@ -231,12 +231,14 @@ public sealed class WalkExploreReaderTests : IDisposable
             }),
             clock,
             default,
-            assembleSnapshot: assemble =>
-            {
-                startedAtReport.Add(reports.Count);
-                assemble();
-                return Task.CompletedTask;
-            });
+            snapshotAssembly: new SnapshotAssembly(
+                assemble =>
+                {
+                    startedAtReport.Add(reports.Count);
+                    assemble();
+                    return Task.CompletedTask;
+                },
+                static () => ExploreChildOrder.ByName));
 
         Assert.Equal(4, reports.Count);
         Assert.Equal([0, 1, 2], startedAtReport);
