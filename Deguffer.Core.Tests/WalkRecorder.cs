@@ -34,7 +34,7 @@ internal sealed class WalkRecorder
         TimeProvider clock,
         CancellationToken ct,
         LeavesUnlisted? unlisted,
-        Func<Action, Task>? assembleSnapshot)
+        SnapshotAssembly? snapshotAssembly)
     {
         lock (_gate)
         {

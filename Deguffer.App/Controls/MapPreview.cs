@@ -57,6 +57,6 @@ public sealed class MapPreview : UserControl
         var tree = MapSample.Tree;
 
         _view = drawn;
-        _map.Show(tree, tree.RootNode, drawn, _ => colours, ExploreMap.NamedAndSized(tree), look, VolumeSpace.None);
+        _map.Show(tree, tree.RootNode, drawn, _ => colours, ExploreMap.Captions(tree), look, VolumeSpace.None);
     }
 }

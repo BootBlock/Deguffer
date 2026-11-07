@@ -74,13 +74,15 @@ public sealed class TileRasteriser : CanvasPainter
 
     /// <summary>
     /// Paint one quad, finished as <paramref name="finish"/> says, into whichever of
-    /// <paramref name="claimed"/>'s pixels are still free: its line inside its sides, then its bevel
+    /// <paramref name="claimed"/>'s pixels are still free: its line inside its sides, or along its top
+    /// and its left and just past its bottom and its right where lines are shared, then its bevel
     /// inside that, then its cushion, its sheen or its own colour across the rest.
     ///
     /// <para>A side off the canvas is not drawn, nor its line or its bevel: the shape goes on past it.
-    /// Where two sides meet, the bevel's lit side is the top or the left only where it is nearer than
-    /// both the bottom and the right, so a corner where one of each meets is shaded, as a raised button
-    /// is drawn. The shader decides every pixel by the same rule.</para>
+    /// The bevel is a raised button's: its lit side runs the whole of the left, then its shaded side
+    /// the whole of the right, then the lit side along the top and the shaded side along the bottom,
+    /// so the top right corner is shaded and the bottom left lit. The shader decides every pixel by the
+    /// same rule.</para>
     ///
     /// <para>The cushion is measured across the whole quad and only <em>drawn</em> where it shows.
     /// Measuring it within the region instead would restart the gradient at every region boundary and
@@ -94,22 +96,22 @@ public sealed class TileRasteriser : CanvasPainter
     private static void Paint(byte[] pixels, ClaimedPixels claimed, int width, int height, CushionQuad quad, ShapeFinish finish)
     {
         var area = claimed.Region;
+        var line = finish.Borders.WidthFor(quad.Framed);
+        var reach = finish.Borders.ReachFor(quad.Framed);
         var left = Math.Max(Math.Max(0, quad.Left), area.X);
-        var right = Math.Min(Math.Min(width, quad.Right), area.Right);
+        var right = Math.Min(Math.Min(width, quad.Right + reach), area.Right);
         var firstRow = Math.Max(Math.Max(0, quad.Top), area.Y);
-        var lastRow = Math.Min(Math.Min(height, quad.Bottom), area.Bottom);
+        var lastRow = Math.Min(Math.Min(height, quad.Bottom + reach), area.Bottom);
 
         if (right <= left || lastRow <= firstRow)
         {
             return;
         }
 
-        var line = finish.Borders.WidthFor(quad.Framed);
+        // Where the line is shared it is outside the bottom and the right, so nothing of it is inside.
+        var lineInside = reach > 0 ? 0 : line;
         var lineColour = line > 0 ? ShapeFinish.Mix(quad.Colour, finish.Borders.Tone, finish.Borders.AmountFor(quad.Framed)) : default;
-        var bevelled = finish.Shading == MapShading.Bevel && quad.Ridge > 0;
-        var band = line + (bevelled ? finish.Bevel.Width : 0);
-        var lit = bevelled ? finish.Lit(quad.Colour) : default;
-        var shaded = bevelled ? finish.Shaded(quad.Colour) : default;
+        var bevel = finish.Shading == MapShading.Bevel && quad.Ridge > 0 ? finish.Bevel.Width : 0;
         var cushioned = finish.Shading == MapShading.Cushion;
         var sheened = finish.Shading == MapShading.Gradient && quad.Ridge > 0;
         var slope = sheened ? GradientShading.SlopeAt(finish.Relief) : 0;
@@ -122,6 +124,8 @@ public sealed class TileRasteriser : CanvasPainter
         {
             var fromTop = y - quad.Top;
             var fromBottom = quad.Bottom - 1 - y;
+            var inTop = fromTop - line;
+            var inBottom = fromBottom - lineInside;
             var v = spanHeight <= 1 ? 0.5 : (double)fromTop / (spanHeight - 1);
             var ny = ridge * ((2 * v) - 1);
             var sheen = sheened ? GradientShading.Lit(quad.Colour, GradientShading.LightAt(slope, fromTop, spanHeight - 1)) : default;
@@ -132,16 +136,28 @@ public sealed class TileRasteriser : CanvasPainter
                 if (claimed.Claim(x, y))
                 {
                     var fromLeft = x - quad.Left;
-                    var fromRight = quad.Right - 1 - x;
-                    var nearest = Math.Min(Math.Min(fromLeft, fromRight), Math.Min(fromTop, fromBottom));
+                    var inLeft = fromLeft - line;
+                    var inRight = quad.Right - 1 - x - lineInside;
 
-                    if (nearest < line)
+                    if (Math.Min(Math.Min(inLeft, inRight), Math.Min(inTop, inBottom)) < 0)
                     {
                         PixelBuffer.Write(pixels, offset, lineColour);
                     }
-                    else if (nearest < band)
+                    else if (inLeft < bevel)
                     {
-                        PixelBuffer.Write(pixels, offset, Math.Min(fromLeft, fromTop) < Math.Min(fromRight, fromBottom) ? lit : shaded);
+                        PixelBuffer.Write(pixels, offset, quad.Lit);
+                    }
+                    else if (inRight < bevel)
+                    {
+                        PixelBuffer.Write(pixels, offset, quad.Shaded);
+                    }
+                    else if (inTop < bevel)
+                    {
+                        PixelBuffer.Write(pixels, offset, quad.Lit);
+                    }
+                    else if (inBottom < bevel)
+                    {
+                        PixelBuffer.Write(pixels, offset, quad.Shaded);
                     }
                     else if (cushioned)
                     {

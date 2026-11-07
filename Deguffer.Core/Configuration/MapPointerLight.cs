@@ -16,16 +16,19 @@ namespace Deguffer.Core.Configuration;
 /// the map always had.</para>
 /// </summary>
 /// <param name="Shown">Whether the light is shown at all.</param>
-/// <param name="Strength">How bright it is where it is shown.</param>
-public sealed record MapPointerLight(bool Shown = true, MapLightStrength Strength = MapLightStrength.Standard)
+/// <param name="Strength">
+/// How bright it is where it is shown. Soft by default: the light is there to show which shape the
+/// pointer is on, and at Standard it competed with the colours it lies over.
+/// </param>
+public sealed record MapPointerLight(bool Shown = true, MapLightStrength Strength = MapLightStrength.Soft)
 {
-    /// <summary>The light the map had before it could be chosen.</summary>
+    /// <summary>The light a map has until the reader chooses another.</summary>
     public static readonly MapPointerLight Default = new();
 
     /// <summary>
     /// How much the light adds, at most, to a surface facing it straight on, as a fraction of the
-    /// colour, or zero where it is not shown. Standard is the strength the map always had: enough to
-    /// see, and short of washing a pale colour out to white.
+    /// colour, or zero where it is not shown. Standard is the strength the map had before Soft became
+    /// the default: enough to see, and short of washing a pale colour out to white.
     ///
     /// <para>Kept out of the file: a value derived from the two beside it would read, to anyone editing
     /// the file by hand, as a third thing they can set.</para>

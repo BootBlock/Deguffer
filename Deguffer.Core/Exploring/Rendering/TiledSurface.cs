@@ -54,7 +54,8 @@ public sealed class TiledSurface : ExploreSurface
         HasVolumeBeside = TreemapLayout.DrawsBeside(tree.SizeOf(root), beside, width, height, limits);
 
         Labels = new TileLabels(
-            tiles, tree, root, width, height, limits, style.ShapeNames, MaximumLabels,
+            tiles, tree, root, width, height, limits, style.ShapeNames, style.Lettering,
+            style.Lettering == MapLettering.Classic ? MaximumClassicLabels : MaximumLabels,
             tile => TextColourFor(tile.Node, tile.Depth, tile.Framed)).Build();
     }
 

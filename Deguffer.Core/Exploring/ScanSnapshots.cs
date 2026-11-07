@@ -15,8 +15,9 @@ namespace Deguffer.Core.Exploring;
 /// <para>One cadence for both routes. What each route hands over differs: the walk captures its
 /// builder under the lock (<see cref="ExploreTreeBuilder.Capture"/>), and the file table's read
 /// copies its columns while the parse threads go on writing them
-/// (<see cref="MftExploreColumns.CopyPresent"/>). Either way a snapshot is ordered by
-/// <see cref="ExploreChildOrder.ByName"/>.</para>
+/// (<see cref="MftExploreColumns.CopyPresent"/>). Either way a snapshot is ordered as
+/// <see cref="SnapshotAssembly.Order"/> says when it is captured, which is how a change of view while
+/// the scan runs reaches the next snapshot.</para>
 ///
 /// <para>Driven by the scan's progress reports, which are never made beside each other, so nothing
 /// here is called from two threads at once except the assembling.</para>
@@ -38,9 +39,11 @@ internal sealed class ScanSnapshots
     /// and DaisyDisk tried live rings and abandoned them. The measured reason is layout instability:
     /// on the Bederson/Shneiderman/Wattenberg change metric a squarified treemap scores 14.82
     /// against slice-and-dice's 0.25, so a map redrawn from growing data rearranges itself
-    /// continuously. Deguffer draws its snapshots anyway, and answers that instead — a snapshot is
-    /// ordered by <see cref="ExploreChildOrder.ByName"/>, under which a growing child widens where
-    /// it already is rather than overtaking its siblings.</para>
+    /// continuously. Deguffer draws its snapshots anyway. Where the reader's view allows it, a snapshot
+    /// is ordered by <see cref="ExploreChildOrder.ByName"/>, under which a growing child widens where
+    /// it already is rather than overtaking its siblings. The treemap and the sunburst cannot be drawn
+    /// from that order, and a reader who chose one is shown it rearranging rather than another
+    /// picture (<see cref="Rendering.ExploreSurface.SnapshotOrder"/>).</para>
     /// </summary>
     public static readonly TimeSpan Interval = TimeSpan.FromMilliseconds(750);
 
@@ -54,9 +57,9 @@ internal sealed class ScanSnapshots
     /// <summary>How a scan assembles a snapshot: on the thread pool, apart from the scan's own threads.</summary>
     public static Func<Action, Task> InBackground { get; } = static assemble => Task.Run(assemble);
 
-    private readonly Func<Func<CancellationToken, ExploreTree?>> _capture;
+    private readonly Func<ExploreChildOrder, Func<CancellationToken, ExploreTree?>> _capture;
     private readonly TimeProvider _clock;
-    private readonly Func<Action, Task> _start;
+    private readonly SnapshotAssembly _assembly;
     private readonly long _intervalTicks;
 
     private long _due;
@@ -71,18 +74,20 @@ internal sealed class ScanSnapshots
     private ExploreTree? _ready;
 
     /// <param name="capture">
-    /// Called on the reporting thread when a snapshot is due. Takes whatever has to be taken there,
-    /// and returns the assembling, which runs elsewhere and gives the tree in name order, or null
-    /// where there is nothing to draw yet. The assembling stops for the token it is given.
+    /// Called on the reporting thread when a snapshot is due, with the order its children are to be
+    /// in. Takes whatever has to be taken there, and returns the assembling, which runs elsewhere and
+    /// gives the tree in that order, marked as a snapshot, or null where there is nothing to draw yet.
+    /// The assembling stops for the token it is given.
     /// </param>
-    /// <param name="start">
-    /// Runs one assembling and says when it has finished. <see cref="InBackground"/> outside tests.
-    /// </param>
-    public ScanSnapshots(Func<Func<CancellationToken, ExploreTree?>> capture, TimeProvider clock, Func<Action, Task> start)
+    /// <param name="assembly">Where each assembling runs, and the order each snapshot is asked for in.</param>
+    public ScanSnapshots(
+        Func<ExploreChildOrder, Func<CancellationToken, ExploreTree?>> capture,
+        TimeProvider clock,
+        SnapshotAssembly assembly)
     {
         _capture = capture;
         _clock = clock;
-        _start = start;
+        _assembly = assembly;
         _intervalTicks = (long)(Interval.TotalSeconds * clock.TimestampFrequency);
         _due = clock.GetTimestamp();
         _stopped = _stopping.Token;
@@ -119,9 +124,9 @@ internal sealed class ScanSnapshots
             return ready;
         }
 
-        var assemble = _capture();
+        var assemble = _capture(_assembly.Order());
         _started = now;
-        _assembling = _start(() => Assemble(assemble));
+        _assembling = _assembly.Start(() => Assemble(assemble));
 
         return ready;
     }

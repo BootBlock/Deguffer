@@ -33,6 +33,11 @@ namespace Deguffer.Core.Configuration;
 /// the bands the folders give that room to what they hold.
 /// </param>
 /// <param name="ShapeNames">Whether a shape with room for it has its name and size written inside it.</param>
+/// <param name="Lines">
+/// Whether two shapes side by side each draw their own line, or share one between them.
+/// </param>
+/// <param name="Lettering">How the text on the picture is set, and what it says.</param>
+/// <param name="BevelShades">What shades a bevel's two sides are drawn in.</param>
 public sealed record MapStyle(
     MapShading Shading = MapShading.Cushion,
     MapRelief Relief = MapRelief.Standard,
@@ -42,7 +47,10 @@ public sealed record MapStyle(
     MapBorderTone BorderTone = MapBorderTone.Dark,
     MapFolderFill FolderFill = MapFolderFill.Coloured,
     bool FolderNames = true,
-    bool ShapeNames = true)
+    bool ShapeNames = true,
+    MapLines Lines = MapLines.Own,
+    MapLettering Lettering = MapLettering.Standard,
+    MapBevelShades BevelShades = MapBevelShades.Mixed)
 {
     /// <summary>The look the map had before any of this could be chosen.</summary>
     public static readonly MapStyle Default = new();
@@ -63,7 +71,10 @@ public sealed record MapStyle(
         StoredEnum.Defined(BorderTone, Default.BorderTone),
         StoredEnum.Defined(FolderFill, Default.FolderFill),
         FolderNames,
-        ShapeNames);
+        ShapeNames,
+        StoredEnum.Defined(Lines, Default.Lines),
+        StoredEnum.Defined(Lettering, Default.Lettering),
+        StoredEnum.Defined(BevelShades, Default.BevelShades));
 }
 
 /// <summary>
@@ -107,6 +118,57 @@ public enum MapRelief
 
     /// <summary>Further than strong: steep cushions, a sheen about a third lighter at its lit edge and a third darker at the far one, and a bevel cut deep.</summary>
     Deep = 3,
+}
+
+/// <summary>
+/// What shades a bevel's two sides are drawn in. Ordinal, as the others are.
+/// </summary>
+public enum MapBevelShades
+{
+    /// <summary>The shape's colour mixed towards white and towards black, as far as the relief says.</summary>
+    Mixed = 0,
+
+    /// <summary>
+    /// SpaceMonger's: for each of the eight colours it draws its levels in, the lighter and the darker
+    /// shade it draws that colour's edges in, and the mix for any other colour.
+    /// </summary>
+    Classic = 1,
+}
+
+/// <summary>
+/// Whether two shapes side by side each draw their own line, or share one. Ordinal, as the others are.
+/// </summary>
+public enum MapLines
+{
+    /// <summary>
+    /// Each shape draws its line inside all four of its sides, so two side by side have a line twice
+    /// as wide between them, and each shape is outlined whole.
+    /// </summary>
+    Own = 0,
+
+    /// <summary>
+    /// Each shape draws its line along its top and its left, and one past its bottom and its right, so
+    /// two shapes side by side share one line and what a folder holds is closed by one line round it,
+    /// as SpaceMonger draws them.
+    /// </summary>
+    Shared = 1,
+}
+
+/// <summary>How the text on the picture is set, and what it says. Ordinal, as the others are.</summary>
+public enum MapLettering
+{
+    /// <summary>
+    /// The application's own type, with each name followed by its size, at the top left of its shape
+    /// or along its folder's band, and cut short with an ellipsis where it does not fit.
+    /// </summary>
+    Standard = 0,
+
+    /// <summary>
+    /// SpaceMonger's: small Microsoft Sans Serif type drawn without smoothing, a folder named in its band with no size, and a
+    /// file's name, its size in bytes and the date it was last written, as many of those lines as its
+    /// box has room for, in the middle of the box and cut off at its edge.
+    /// </summary>
+    Classic = 1,
 }
 
 /// <summary>

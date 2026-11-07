@@ -48,6 +48,10 @@ namespace Deguffer.App.ViewModels;
 public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, IMapShapes<ExploreTree>
 {
     private readonly IExploreScanner _scanner;
+
+    // SelectedView, as the scan's reporting thread reads it when it takes each snapshot. Volatile so
+    // that thread sees a change of view made on this one at the next snapshot rather than never.
+    private volatile ExploreView _viewForSnapshots;
     private readonly IVolumeInventory _volumes;
     private readonly TimeProvider _time;
 
@@ -275,8 +279,10 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     /// Which picture the user asked for.
     ///
     /// <para>Here rather than only in the page, because the page is not the only thing that has to
-    /// answer for it. While a scan is running the map draws the icicle whatever this says, and
-    /// <see cref="ViewNote"/> is what keeps that from being a silent substitution.</para>
+    /// answer for it. A running scan hands its snapshots over in the order this view needs
+    /// (<see cref="ExploreSurface.SnapshotOrder"/>). Changed while one is on screen, the map can draw
+    /// the icicle until the next arrives, and <see cref="ViewNote"/> is what keeps that from being a
+    /// silent substitution.</para>
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedScheme))]
@@ -289,6 +295,8 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
 
     partial void OnSelectedViewChanged(ExploreView value)
     {
+        _viewForSnapshots = value;
+
         Files.IsActive = Display.SearchesFiles;
 
         // Each picture keeps its own colours, so a change of view can be a change of scheme.
@@ -473,6 +481,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
                     Report(progress);
                     work.Report(progress.Fraction);
                 }),
+                () => ExploreSurface.SnapshotOrder(_viewForSnapshots),
                 ct);
             scanned.TrySetResult(scan);
 

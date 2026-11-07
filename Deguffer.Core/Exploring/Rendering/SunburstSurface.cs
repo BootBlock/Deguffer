@@ -352,7 +352,9 @@ public sealed class SunburstSurface : ExploreSurface
                 Centred: true,
                 TextColourFor(sector.Node, sector.Depth),
                 sector.Bytes,
-                new LabelRoom(left, top, left + width, top + Limits.MinimumLabelHeight)));
+                new LabelRoom(left, top, left + width, top + Limits.MinimumLabelHeight),
+                LabelAxis.Fixed(middle.X),
+                LabelAxis.Fixed(top)));
         }
 
         return labels;

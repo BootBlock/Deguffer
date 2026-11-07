@@ -38,6 +38,13 @@ public abstract class ExploreSurface
     protected const int MaximumLabels = 64;
 
     /// <summary>
+    /// How many shapes to name at most under <see cref="MapLettering.Classic"/>, which names every box
+    /// with room for a name, as SpaceMonger does. A bound on the text controls the shell makes for a
+    /// canvas that somehow has more boxes that wide than a 4K screen fits, not a choice of which to name.
+    /// </summary>
+    protected const int MaximumClassicLabels = 1024;
+
+    /// <summary>
     /// Which part of the hue circle each node owns, measured from this drawing's root. See
     /// <see cref="BranchHues"/>.
     /// </summary>
@@ -134,6 +141,12 @@ public abstract class ExploreSurface
     /// <summary>How every shape is finished, and what text is written on them.</summary>
     protected MapStyle Style { get; }
 
+    /// <summary>How the text on this drawing is set, and what it says (<see cref="MapStyle.Lettering"/>).</summary>
+    public MapLettering Lettering => Style.Lettering;
+
+    /// <summary>How far apart the lines of a label of several lines are, in canvas pixels.</summary>
+    public float LineSpacing => Limits.LineSpacing;
+
     /// <summary>
     /// How every shape of this drawing is finished, on this display: the style asked for, or in a high
     /// contrast theme's colours, every shape flat with a line of the theme's text colour inside its
@@ -145,12 +158,12 @@ public abstract class ExploreSurface
     /// The picture <paramref name="tree"/> is actually drawn as when <paramref name="view"/> is
     /// asked for.
     ///
-    /// <para>A tree still being filled in orders its children by name rather than by size, so that a
-    /// growing child widens where it is instead of moving. Two of the four drawings cannot be made
-    /// from that at all and say so by refusing: squarification is defined over a decreasing
-    /// sequence, and a sunburst's residual wedge assumes the small children are the tail. So a scan
-    /// in progress draws the icicle whichever view was picked, and the chosen one arrives with the
-    /// finished scan. Public because the page has to say so, and has to say it from this rule rather
+    /// <para>Two of the drawings cannot be made from a tree ordered by name and say so by refusing:
+    /// squarification is defined over a decreasing sequence, and a sunburst's residual wedge assumes
+    /// the small children are the tail. A scan in progress hands its snapshots over in the order the
+    /// chosen view needs (<see cref="SnapshotOrder"/>), so this substitutes the icicle only for the
+    /// snapshot on screen when the reader switches to one of those two, until the next arrives in
+    /// size order. Public because the page has to say so, and has to say it from this rule rather
     /// than from a copy of it: a substitution nobody is told about reads as a bug.</para>
     /// </summary>
     public static ExploreView Drawn(ISizedTree tree, ExploreView view)
@@ -159,6 +172,20 @@ public abstract class ExploreSurface
 
         return tree.ChildOrder == ExploreChildOrder.BySize ? view : ExploreView.Icicle;
     }
+
+    /// <summary>
+    /// The order a scan in progress hands its snapshots over in while <paramref name="view"/> is on
+    /// screen: by size for the treemap and the sunburst, which cannot be drawn from any other, and by
+    /// name for every other view.
+    ///
+    /// <para>By name wherever it can be, because under it a growing folder widens where it is rather
+    /// than overtaking its siblings (<see cref="ExploreChildOrder.ByName"/>), so the icicle and the
+    /// lists stay still while the scan fills them in. A reader who chose the treemap asked for the
+    /// treemap, and is shown it rearranging as the scan finds more rather than another picture until
+    /// the scan ends.</para>
+    /// </summary>
+    public static ExploreChildOrder SnapshotOrder(ExploreView view) =>
+        view is ExploreView.Treemap or ExploreView.Sunburst ? ExploreChildOrder.BySize : ExploreChildOrder.ByName;
 
     /// <summary>
     /// Whether <paramref name="view"/> shows <paramref name="tree"/> as a picture that can be zoomed:
@@ -217,7 +244,7 @@ public abstract class ExploreSurface
         ArgumentNullException.ThrowIfNull(tree);
 
         var styled = style ?? MapStyle.Default;
-        var limits = LayoutLimits.Default.Spaced(spacing).Banded(styled.FolderNames).ForText(textScale).At(scale);
+        var limits = LayoutLimits.Default.Lettered(styled.Lettering).Spaced(spacing).Banded(styled.FolderNames).ForText(textScale).At(scale);
         var beside = root == tree.RootNode ? volume : VolumeSpace.None;
 
         return Drawn(tree, view) switch

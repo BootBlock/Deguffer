@@ -46,7 +46,8 @@ public sealed class ExploreRows
 
     /// <summary>
     /// What the current node holds, in the tree's own order: largest first once a scan has
-    /// finished, and by name while one is still running. See <see cref="ExploreChildOrder"/>.
+    /// finished, and while one is still running, in the order its snapshots come in. See
+    /// <see cref="Core.Exploring.Rendering.ExploreSurface.SnapshotOrder"/>.
     /// </summary>
     public BoundList<ExploreRow> Rows { get; } = [];
 

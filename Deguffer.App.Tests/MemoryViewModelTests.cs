@@ -349,10 +349,10 @@ public sealed class MemoryViewModelTests : IDisposable
 
         page.Hover(new ExploreHit(page.Tree!.NodeCount, 0));
 
-        Assert.Equal(string.Empty, page.LabelFor(page.Tree.NodeCount));
-        Assert.Equal(string.Empty, page.LabelFor(-1));
+        Assert.Equal(MapCaption.None, page.CaptionFor(page.Tree.NodeCount));
+        Assert.Equal(MapCaption.None, page.CaptionFor(-1));
         Assert.Equal(string.Empty, page.Readout.Name);
-        Assert.NotEqual(string.Empty, page.LabelFor(page.Tree.RootNode));
+        Assert.NotEqual(MapCaption.None, page.CaptionFor(page.Tree.RootNode));
 
         await leave.CancelAsync();
         await watching;

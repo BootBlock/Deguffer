@@ -23,6 +23,8 @@ struct Quad
     int4 edges : EDGES;      // left, top, right, bottom: the columns and rows covered, the far ones excluded
     float ridge : RIDGE;     // zero for a flat shape
     uint4 colour : COLOUR;   // red, green, blue, and one for a folder drawn round what it holds
+    uint4 lit : LIT;         // the bevel's lit side: red, green, blue, and nothing
+    uint4 shaded : SHADED;   // the bevel's shaded side, as lit
     uint corner : SV_VertexID;
 };
 
@@ -32,19 +34,33 @@ struct Pixel
     nointerpolation float4 edges : EDGES;
     nointerpolation float4 shade : SHADE;  // ridge, red, green, blue
     nointerpolation uint framed : FRAMED;
+    nointerpolation uint3 lit : LIT;
+    nointerpolation uint3 shaded : SHADED;
 };
+
+// How far a quad's line runs past its bottom and its right: its width where lines are shared, and
+// none where each shape draws its own. ShapeBorders.ReachFor.
+float reach(uint framed)
+{
+    uint amount = framed != 0 ? FolderLine : BlockLine;
+    return SharedLines != 0 && amount > 0 ? LineWidth : 0;
+}
 
 Pixel vs(Quad quad)
 {
     Pixel pixel;
     float4 edges = float4(quad.edges);
-    // Cut to the region. The edges stay whole, so the cushion is still measured across the whole quad.
-    float2 at = clamp(lerp(edges.xy, edges.zw, float2(quad.corner & 1, quad.corner >> 1)), Region.xy, Region.zw);
+    // Out to where a shared line runs past the bottom and the right, then cut to the region. The edges
+    // stay whole, so the cushion is still measured across the whole quad.
+    float2 far = edges.zw + reach(quad.colour.a);
+    float2 at = clamp(lerp(edges.xy, far, float2(quad.corner & 1, quad.corner >> 1)), Region.xy, Region.zw);
 
     pixel.position = float4((at.x / Size.x * 2) - 1, 1 - (at.y / Size.y * 2), 0, 1);
     pixel.edges = edges;
     pixel.shade = float4(quad.ridge, float3(quad.colour.rgb));
     pixel.framed = quad.colour.a;
+    pixel.lit = quad.lit.rgb;
+    pixel.shaded = quad.shaded.rgb;
     return pixel;
 }
 
@@ -82,31 +98,34 @@ float4 ps(Pixel pixel) : SV_Target
     float fromTop = at.y - pixel.edges.y;
     float fromRight = pixel.edges.z - 1 - at.x;
     float fromBottom = pixel.edges.w - 1 - at.y;
-    float nearest = min(min(fromLeft, fromRight), min(fromTop, fromBottom));
 
     uint amount = pixel.framed != 0 ? FolderLine : BlockLine;
     float drawn = amount > 0 ? LineWidth : 0;
-    bool bevelled = Shading == MapShading_Bevel && pixel.shade.x > 0;
-    float band = drawn + (bevelled ? BevelWidth : 0);
+
+    // How far inside the line each side is. A shared line is past the bottom and the right, so on those
+    // two sides the shape's own pixels start at its edge.
+    float inside = reach(pixel.framed) > 0 ? 0 : drawn;
+    float inLeft = fromLeft - drawn;
+    float inTop = fromTop - drawn;
+    float inRight = fromRight - inside;
+    float inBottom = fromBottom - inside;
+    float bevel = Shading == MapShading_Bevel && pixel.shade.x > 0 ? BevelWidth : 0;
 
     // The line, flat and unlit: nothing of the light or the pointer's light.
-    if (nearest < drawn)
+    if (min(min(inLeft, inRight), min(inTop, inBottom)) < 0)
     {
         return float4(float3(mix(colour, uint3(Tone), amount)) / 255, 1);
     }
 
-    // Flat inside, or the bevel along the edges: the lit side is the top or the left only where it is
-    // nearer than both the bottom and the right, as TileRasteriser decides it.
+    // Flat inside, or the bevel along the edges as a raised button is drawn: the lit left whole, then
+    // the shaded right whole, then the lit top and the shaded bottom, as TileRasteriser decides it.
     if (Shading == MapShading_Bevel || Shading == MapShading_Flat)
     {
-        uint3 flat = colour;
-
-        if (nearest < band)
-        {
-            flat = min(fromLeft, fromTop) < min(fromRight, fromBottom)
-                ? mix(colour, uint3(255, 255, 255), BevelHighlight)
-                : mix(colour, uint3(0, 0, 0), BevelShadow);
-        }
+        uint3 flat = inLeft < bevel ? pixel.lit
+            : inRight < bevel ? pixel.shaded
+            : inTop < bevel ? pixel.lit
+            : inBottom < bevel ? pixel.shaded
+            : colour;
 
         return float4(floor(clamp(float3(flat) * (1 + pointer(at, 0, 0)), 0, 255)) / 255, 1);
     }
