@@ -30,7 +30,7 @@ public class SelectionLoadTests
         held.Release();
 
         var memory = await service.Memory.WaitAsync(TimeSpan.FromSeconds(10));
-        Assert.False(memory.Entries["cache"].IsSelected);
+        Assert.False(memory.Snapshot()["cache"].IsSelected);
     }
 
     /// <summary>

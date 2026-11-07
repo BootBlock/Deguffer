@@ -167,7 +167,7 @@ public class SelectionMemoryTests
 
         // The vanished workspace is not carried forward, so the file tracks the machine rather than
         // every path Deguffer has ever planned.
-        Assert.Equal([Current], memory.Entries[NodeModules].Steps.Keys);
+        Assert.Equal([Current], memory.Snapshot()[NodeModules].Steps.Keys);
     }
 
     /// <summary>

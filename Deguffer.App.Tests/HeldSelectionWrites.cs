@@ -14,7 +14,7 @@ internal sealed class HeldSelectionWrites : ISelectionStore, IDisposable
     private int _writes;
     private IReadOnlyDictionary<string, RememberedSelection>? _written;
 
-    /// <summary>Faults the first write as a store fault nothing expects would.</summary>
+    /// <summary>Faults the first write, once it is released, as a store fault nothing expects would.</summary>
     public bool FaultFirstWrite { get; init; }
 
     /// <summary>How many writes have started.</summary>
@@ -42,15 +42,15 @@ internal sealed class HeldSelectionWrites : ISelectionStore, IDisposable
         var write = Interlocked.Increment(ref _writes);
         _started.Release();
 
-        if (write == 1 && FaultFirstWrite)
-        {
-            throw new InvalidOperationException("The test faulted the first write.");
-        }
-
         // Bounded, so a writer the test never releases fails its test rather than hanging it.
         if (!_released.Wait(TimeSpan.FromSeconds(30)))
         {
             throw new TimeoutException("The test never released the write of the remembered ticks.");
+        }
+
+        if (write == 1 && FaultFirstWrite)
+        {
+            throw new InvalidOperationException("The test faulted the first write.");
         }
 
         Volatile.Write(ref _written, selections);

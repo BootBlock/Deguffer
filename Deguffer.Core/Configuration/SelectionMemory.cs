@@ -31,9 +31,6 @@ public sealed class SelectionMemory
         }
     }
 
-    /// <summary>Everything remembered, live. A write on another thread takes <see cref="Snapshot"/>.</summary>
-    public IReadOnlyDictionary<string, RememberedSelection> Entries => _byProvider;
-
     /// <summary>
     /// Everything remembered as it is now, for a write on another thread while the user goes on
     /// ticking.

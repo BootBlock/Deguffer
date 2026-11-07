@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using Deguffer.Core.Configuration;
 
 namespace Deguffer.App.Shell;
@@ -69,27 +70,27 @@ internal sealed class SelectionWriter(ISelectionStore store)
 
     private void WriteWhilePending()
     {
-        try
+        ExceptionDispatchInfo? fault = null;
+
+        while (TakePending() is { } next)
         {
-            while (TakePending() is { } next)
+            try
             {
                 // A write that fails costs the choice at the next launch and nothing sooner, as
                 // SelectionService.Remember explains, so its answer goes nowhere.
                 store.Save(next);
             }
-        }
-        catch
-        {
-            // Only a fault the store does not expect reaches here, and it is left to fail the task for
-            // the flush to report. Before it does, the next change must be free to start a worker of
-            // its own, or every tick after it would wait on one that has stopped.
-            lock (_gate)
+            catch (Exception e)
             {
-                _isWriting = false;
+                // Only a fault the store does not expect reaches here. The worker goes on to the
+                // change that arrived during the faulted write, which nothing else would start a
+                // write for, and fails its task with the first fault once nothing is pending, for the
+                // flush to report.
+                fault ??= ExceptionDispatchInfo.Capture(e);
             }
-
-            throw;
         }
+
+        fault?.Throw();
     }
 
     /// <summary>The newest copy, taken, or null once there is none, which ends the worker.</summary>

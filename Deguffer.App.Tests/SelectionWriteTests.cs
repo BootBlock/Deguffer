@@ -109,9 +109,27 @@ public class SelectionWriteTests
     }
 
     /// <summary>
-    /// A fault the store does not expect is reported by the flush that follows it, and does not leave
-    /// every later tick waiting on a writer that has stopped.
+    /// A fault the store does not expect is reported by the flush that follows it, and the tick made
+    /// while the faulted write was under way is still written: nothing else would start a write for it.
     /// </summary>
+    [Fact]
+    public async Task AWriteThatFaultsStillWritesTheChoiceMadeDuringIt()
+    {
+        using var store = new HeldSelectionWrites { FaultFirstWrite = true };
+        var service = await ReadAsync(store);
+
+        await RememberAsync(service, 1);
+        await store.WriteStartedAsync();
+        await RememberAsync(service, 2);
+
+        store.Release();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => FlushAsync(service));
+
+        Assert.Equal(2, store.Writes);
+        Assert.Equal(StepOf(2), WrittenStep(store));
+    }
+
+    /// <summary>A fault does not leave every later tick waiting on a writer that has stopped.</summary>
     [Fact]
     public async Task AWriteThatFaultsLeavesTheNextChoiceWritten()
     {
