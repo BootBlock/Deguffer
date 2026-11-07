@@ -16,7 +16,8 @@ namespace Deguffer.Testing;
 /// with <see cref="WithProgram"/>, and whether the table could be read, stand for the process table,
 /// which a query answers from a snapshot taken by the first query after <see cref="Invalidate"/>. A
 /// change declared after it is not seen until <see cref="Invalidate"/>, or until
-/// <see cref="DiscardOlderThan"/> finds the snapshot older than its bound on <see cref="Clock"/>. A
+/// <see cref="DiscardOlderThan"/> finds the snapshot older than its bound, measured on a clock only
+/// <see cref="PassTheReadingLimit"/> moves. A
 /// fake that answered live would let a check at the clean stop reading the machine again with no
 /// test going red. A file declared with <see cref="WithHeldFile"/> is answered live, as the real
 /// inspector asks the Restart Manager on every query.</para>
@@ -50,19 +51,20 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     public int InvalidateCount { get; private set; }
 
     /// <summary>
-    /// What a snapshot's age is measured by. It moves only when a test moves it, so a test that changes
-    /// the machine between the preview and the clean says how long the preview stayed on screen.
+    /// What a snapshot's age is measured by. It moves only by <see cref="PassTheReadingLimit"/>, so a
+    /// test that changes the machine between the preview and the clean says the preview stayed on
+    /// screen past the limit.
     /// </summary>
-    public ManualTimeProvider Clock { get; } = new();
+    private readonly ManualTimeProvider _clock = new();
 
     /// <summary>
-    /// Move <see cref="Clock"/> past <see cref="IUseCheck.ReadingLimit"/>, as a preview left on screen
+    /// Move the snapshot's clock past <see cref="IUseCheck.ReadingLimit"/>, as a preview left on screen
     /// longer than that, or a command that runs longer, moves the real one. A check asked after it
     /// reads the machine again.
     /// </summary>
     public FakeLiveTreeInspector PassTheReadingLimit()
     {
-        Clock.Advance(IUseCheck.ReadingLimit + TimeSpan.FromTicks(1));
+        _clock.Advance(IUseCheck.ReadingLimit + TimeSpan.FromTicks(1));
         return this;
     }
 
@@ -301,7 +303,7 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
         }
     }
 
-    /// <summary>Recorded, and acted on by <see cref="Clock"/> as the real inspector acts on its own.</summary>
+    /// <summary>Recorded, and acted on as the real inspector acts on its own.</summary>
     public void DiscardOlderThan(TimeSpan maxAge)
     {
         lock (_gate)
@@ -336,7 +338,7 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     {
         lock (_gate)
         {
-            var table = (_snapshot ??= new(Clock)).Get(() => new Table([.. _programs], _complete));
+            var table = (_snapshot ??= new(_clock)).Get(() => new Table([.. _programs], _complete));
             return (table, Match);
         }
     }

@@ -480,9 +480,7 @@ public sealed class ChromiumWebView2Tests : IDisposable
         Assert.True(Directory.Exists(cache), "the clean removed a cache an engine started using after the preview.");
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
 
-        // The real inspector answers from a snapshot of the process table, so the check has to
-        // discard one past the use checks' limit to see an engine started since the preview. This
-        // fake has no snapshot to go stale.
+        // The bound the check discards the preview's reading by is the use checks' own.
         Assert.Contains(IUseCheck.ReadingLimit, liveTrees.AgeLimits);
     }
 

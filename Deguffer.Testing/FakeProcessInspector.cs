@@ -10,7 +10,8 @@ namespace Deguffer.Testing;
 /// <para><b>Answers by the real inspector's contract, snapshot included.</b> A name query answers from
 /// a snapshot of the declared machine taken by the first query after <see cref="Invalidate"/>, and a
 /// change declared after it is not seen until <see cref="Invalidate"/>, or until
-/// <see cref="DiscardOlderThan"/> finds the snapshot older than its bound on <see cref="Clock"/>. A fake
+/// <see cref="DiscardOlderThan"/> finds the snapshot older than its bound, measured on a clock only
+/// <see cref="PassTheReadingLimit"/> moves. A fake
 /// that answered live would let a check at the clean stop reading the machine again with no test
 /// going red. <see cref="Probe"/> answers live, as the real one does.</para>
 /// </summary>
@@ -27,19 +28,20 @@ public sealed class FakeProcessInspector(params string[] running) : IProcessInsp
     public static FakeProcessInspector NothingRunning => new();
 
     /// <summary>
-    /// What a snapshot's age is measured by. It moves only when a test moves it, so a test that changes
-    /// the machine between the preview and the clean says how long the preview stayed on screen.
+    /// What a snapshot's age is measured by. It moves only by <see cref="PassTheReadingLimit"/>, so a
+    /// test that changes the machine between the preview and the clean says the preview stayed on
+    /// screen past the limit.
     /// </summary>
-    public ManualTimeProvider Clock { get; } = new();
+    private readonly ManualTimeProvider _clock = new();
 
     /// <summary>
-    /// Move <see cref="Clock"/> past <see cref="IUseCheck.ReadingLimit"/>, as a preview left on screen
+    /// Move the snapshot's clock past <see cref="IUseCheck.ReadingLimit"/>, as a preview left on screen
     /// longer than that, or a command that runs longer, moves the real one. A check asked after it
     /// reads the machine again.
     /// </summary>
     public FakeProcessInspector PassTheReadingLimit()
     {
-        Clock.Advance(IUseCheck.ReadingLimit + TimeSpan.FromTicks(1));
+        _clock.Advance(IUseCheck.ReadingLimit + TimeSpan.FromTicks(1));
         return this;
     }
 
@@ -104,16 +106,25 @@ public sealed class FakeProcessInspector(params string[] running) : IProcessInsp
         return [.. names.Intersect([.. machine.Running, .. machine.Started.Select(process => process.Name)], StringComparer.OrdinalIgnoreCase)];
     }
 
+    /// <summary>
+    /// The processes the snapshot names, each kept only where it is still declared running now, as the
+    /// real inspector takes its ids from the snapshot and probes each one at the moment of the call.
+    /// </summary>
     public IReadOnlyList<StartedProcess> FindRunningProcesses(IEnumerable<string> names)
     {
         var wanted = names.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var machine = Snapshot();
 
-        return
-        [
-            .. machine.Running.Where(wanted.Contains).Select(name => new StartedProcess(name, StartedAt: null)),
-            .. machine.Started.Where(process => wanted.Contains(process.Name)),
-        ];
+        lock (_gate)
+        {
+            return
+            [
+                .. machine.Running
+                    .Where(name => wanted.Contains(name) && _running.Contains(name, StringComparer.OrdinalIgnoreCase))
+                    .Select(name => new StartedProcess(name, StartedAt: null)),
+                .. machine.Started.Where(process => wanted.Contains(process.Name) && _started.Contains(process)),
+            ];
+        }
     }
 
     /// <summary>
@@ -140,7 +151,7 @@ public sealed class FakeProcessInspector(params string[] running) : IProcessInsp
         }
     }
 
-    /// <summary>Recorded, and acted on by <see cref="Clock"/> as the real inspector acts on its own.</summary>
+    /// <summary>Recorded, and acted on as the real inspector acts on its own.</summary>
     public void DiscardOlderThan(TimeSpan maxAge)
     {
         lock (_gate)
@@ -155,7 +166,7 @@ public sealed class FakeProcessInspector(params string[] running) : IProcessInsp
     {
         lock (_gate)
         {
-            return (_snapshot ??= new(Clock)).Get(() => new Machine([.. _running], [.. _started]));
+            return (_snapshot ??= new(_clock)).Get(() => new Machine([.. _running], [.. _started]));
         }
     }
 

@@ -113,7 +113,7 @@ public sealed class ScratchFolderCleanRecheckTests : IDisposable
         var provider = TemporaryFilesRow(new FakeTemporaryFolderTenant("Tool cache", "tool-cache"));
         var plan = await provider.PlanAsync();
 
-        _liveTrees.WithProgram("tool", workingDirectory: owned);
+        _liveTrees.WithProgram("tool", workingDirectory: owned).PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 
