@@ -206,6 +206,22 @@ public sealed class RunOutcomeTests
     }
 
     /// <summary>
+    /// A folder Windows would not let a removal list is stated beside the folders it refused, because
+    /// the run left it and whatever it holds where they were.
+    /// </summary>
+    [Fact]
+    public void StatesTheFoldersWindowsWouldNotLetDegufferLookInside()
+    {
+        var result = Result("Temporary files", folders: new FolderRefusals(InUse: 0, Denied: 1));
+        result = result with { Steps = [result.Steps[0] with { Unlisted = 2 }] };
+
+        Assert.Equal(
+            "All protected paths survived. Windows would not let Deguffer remove 1 folder(s). "
+            + "Windows would not let Deguffer look inside 2 folder(s), so they were left in place.",
+            RunOutcome.For([result]).Statement);
+    }
+
+    /// <summary>
     /// With files refused as well, the folders come after the promise about the next scan, so the
     /// promise does not read as covering them.
     /// </summary>

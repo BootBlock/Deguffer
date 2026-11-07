@@ -53,6 +53,10 @@ namespace Deguffer.Core.Execution;
 /// Entries left alone because they hold somebody's work, such as an editor's unsaved sketch. Apart
 /// from <paramref name="Spared"/> because nothing need be using one, so there is no program to close.
 /// </param>
+/// <param name="Unlisted">
+/// Folders Windows would not let the step's removal list, which are still there with whatever they
+/// hold. See <see cref="RemovalOutcome.Unlisted"/>.
+/// </param>
 public sealed record StepOutcome(
     string Description,
     bool Succeeded,
@@ -67,7 +71,8 @@ public sealed record StepOutcome(
     long BytesRequested = 0,
     long BytesScheduled = 0,
     bool Interrupted = false,
-    int UserWork = 0)
+    int UserWork = 0,
+    int Unlisted = 0)
 {
     /// <summary>
     /// How long the step took, and on what. Set by <see cref="PlanExecutor"/> once the step has its
@@ -129,6 +134,9 @@ public sealed record CleanupResult
 
     /// <summary>Entries left alone because they hold somebody's work. See <see cref="StepOutcome.UserWork"/>.</summary>
     public int UserWorkCount => Steps.Sum(s => s.UserWork);
+
+    /// <summary>Folders Windows would not let a removal list. See <see cref="StepOutcome.Unlisted"/>.</summary>
+    public int UnlistedCount => Steps.Sum(s => s.Unlisted);
 
     /// <summary>Outlook mail stores left where they were. See <see cref="StepOutcome.MailStores"/>.</summary>
     public int MailStoreCount => Steps.Sum(s => s.MailStores);
