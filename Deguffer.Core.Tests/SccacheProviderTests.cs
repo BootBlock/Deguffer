@@ -265,6 +265,30 @@ public sealed class SccacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A server running at the preview can stop on its own idle timeout a moment later, inside the use
+    /// checks' limit. The stop is sent on a reading taken at the clean, so none is sent to a server
+    /// that has gone.
+    /// </summary>
+    [Fact]
+    public async Task SendsNoStopToAServerThatStoppedOnItsOwnSinceThePreview()
+    {
+        CreateCache();
+        _environment.WithExecutable("sccache");
+        _runner.Responding(Sccache, "--stop-server", string.Empty, exitCode: 2);
+        var inspector = new FakeProcessInspector("sccache");
+
+        var provider = CreateProvider(inspector);
+        var plan = await provider.PlanAsync();
+        inspector.WithoutRunning("sccache");
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.Empty(_runner.Invocations);
+        Assert.True(result.Succeeded);
+        Assert.False(Directory.Exists(Child("a")));
+    }
+
+    /// <summary>
     /// The stop is a request. A server that is still running after it holds every removal back, and
     /// what was held back is asserted standing.
     /// </summary>

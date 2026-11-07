@@ -570,6 +570,11 @@ public sealed class GitLfsObjectProviderTests : IDisposable
         Assert.Contains(IUseCheck.ReadingLimit, liveTrees.AgeLimits);
         Assert.Equal([(gitDirectory, game)], liveTrees.Asked.Select(q => (q.Directory, q.Project)));
 
+        // A program started in the work tree after the preview, asked about once the reading is past the limit.
+        liveTrees.WithProgram("git", workingDirectory: game).PassTheReadingLimit();
+
+        Assert.Contains($"is working in {game}", check.WhyNot(step, CancellationToken.None), StringComparison.Ordinal);
+
         Assert.Contains(
             $"is working in {game}",
             new GitLfsPruneTarget(new FakeLiveTreeInspector(gitDirectory), CheckoutOf(game)).WhyNot(step, CancellationToken.None),

@@ -459,6 +459,29 @@ public sealed class TopazModelsProviderTests : IDisposable
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
+    /// <summary>
+    /// The same for an application, which is found by name rather than by where it runs from: one opened
+    /// after the preview keeps the models, because the clean reads the process table again.
+    /// </summary>
+    [Fact]
+    public async Task AnApplicationOpenedAfterThePreviewKeepsTheModelsAtTheClean()
+    {
+        var installed = CreateProduct("Topaz Video AI");
+        Install("Topaz Video AI");
+
+        var inspector = FakeProcessInspector.NothingRunning;
+        var provider = CreateProvider(inspector);
+        var plan = await provider.PlanAsync();
+        Assert.Equal([installed], plan.TargetedPaths);
+
+        inspector.WithRunning("Topaz Video AI").PassTheReadingLimit();
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(Directory.Exists(installed), "The models were removed while the application was open.");
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
     [Fact]
     public async Task HoldsAnInstalledProductsModelsWhereDegufferCannotTellWhatIsRunning()
     {
