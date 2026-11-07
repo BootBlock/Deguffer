@@ -54,8 +54,8 @@ namespace Deguffer.Core.Providers;
 /// and the age column, not a cut-off. §5.3's exclusion for <c>%TEMP%</c> exists because live working
 /// files sit among dead ones and look identical; here nothing is live except a dump still being
 /// written, and that one is held open and skipped. So each step carries the newest write inside it,
-/// Tier 3 keeps it unselected and confirmed before it runs, and the decision stays theirs. A
-/// filter would take it away, and §7's age column is not asking for one.</para>
+/// Tier 3 keeps it unselected and says plainly that the loss is permanent, and the decision stays
+/// theirs. A filter would take it away, and §7's age column is not asking for one.</para>
 /// </summary>
 public sealed class CrashDumpProvider : CleanupProviderBase
 {

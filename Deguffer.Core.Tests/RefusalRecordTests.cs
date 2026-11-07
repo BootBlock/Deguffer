@@ -93,6 +93,46 @@ public sealed class RefusalRecordTests : IDisposable
     }
 
     /// <summary>
+    /// A removal that finished but could not list a folder asked nothing inside it, so a place an
+    /// earlier clean recorded there stays for the next preview to ask about. A place it did reach and
+    /// found no longer refused still goes.
+    /// </summary>
+    [Fact]
+    public void AFinishedRemovalKeepsWhatAnEarlierCleanRecordedInAFolderItCouldNotList()
+    {
+        var step = _temp.CreateDirectory("temp");
+        var reached = _temp.CreateDirectory("temp", "session");
+        var unlisted = _temp.CreateDirectory("temp", "installer");
+        var inside = _temp.CreateDirectory("temp", "profile", "locked");
+        var holding = _temp.CreateDirectory("temp", "profile");
+        var now = _temp.CreateDirectory("temp", "fresh");
+        var record = RefusalRecord.For(_environment);
+
+        record.Replace(step, [reached, unlisted, holding]);
+        record.Record(
+            step,
+            new RemovalOutcome(0, Refusals.None, RootRemoved: false) { RefusedAt = [now], Unlisted = [unlisted, inside] });
+
+        Assert.Equal(
+            new[] { now, holding, unlisted }.Order(StringComparer.OrdinalIgnoreCase),
+            new RefusalRecord(_environment).At(step).Order(StringComparer.OrdinalIgnoreCase));
+    }
+
+    /// <summary>A step whose own root would not list keeps everything recorded under it.</summary>
+    [Fact]
+    public void AFinishedRemovalWhoseRootWouldNotListKeepsEverythingRecorded()
+    {
+        var step = _temp.CreateDirectory("temp");
+        var earlier = _temp.CreateDirectory("temp", "profile");
+        var record = RefusalRecord.For(_environment);
+
+        record.Replace(step, [earlier]);
+        record.Record(step, new RemovalOutcome(0, Refusals.None, RootRemoved: false) { Unlisted = [step] });
+
+        Assert.Equal([earlier], new RefusalRecord(_environment).At(step));
+    }
+
+    /// <summary>
     /// The executor records against the path it removed and the preview asks with the path it
     /// planned. A spelling that missed would leave the row offering everything Windows refuses, with
     /// nothing on screen to say why.

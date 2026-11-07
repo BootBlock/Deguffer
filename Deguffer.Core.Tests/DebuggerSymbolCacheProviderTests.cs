@@ -430,7 +430,7 @@ public sealed class DebuggerSymbolCacheProviderTests : IDisposable
 
         Assert.Equal([entry], plan.TargetedPaths);
 
-        inspector.WithRunning("windbg");
+        inspector.WithRunning("windbg").PassTheReadingLimit();
         var result = await microsoft.ExecuteAsync(plan);
 
         Assert.True(Directory.Exists(entry), "an entry was removed while a debugger that writes to its store ran");

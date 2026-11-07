@@ -199,7 +199,7 @@ public sealed class CapCutCacheProviderTests : IDisposable
 
         Assert.NotEmpty(plan.TargetedPaths);
 
-        inspector.WithRunning("JianyingPro");
+        inspector.WithRunning("JianyingPro").PassTheReadingLimit();
         var result = await provider.ExecuteAsync(plan);
 
         Assert.True(Directory.Exists(Thumbnails), "a cache folder was removed under an editor started after the preview");

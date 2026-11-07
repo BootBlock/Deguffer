@@ -289,7 +289,7 @@ public sealed class PulumiPluginProviderTests : IDisposable
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
-        _processes.WithRunning("pulumi");
+        _processes.WithRunning("pulumi").PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -317,7 +317,7 @@ public sealed class PulumiPluginProviderTests : IDisposable
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(Folder(Aws), StringComparison.OrdinalIgnoreCase) && p.Reason == PulumiPluginUse.InUseReason);
         Assert.Contains(await provider.DiscoverToolRootsAsync(), root => root.Path.Equals(Folder(Aws), StringComparison.OrdinalIgnoreCase));
 
-        _liveTrees.WithProgram("pulumi-resource-aws.exe", executable: Path.Combine(Folder(AwsNext), "pulumi-resource-aws.exe"));
+        _liveTrees.WithProgram("pulumi-resource-aws.exe", executable: Path.Combine(Folder(AwsNext), "pulumi-resource-aws.exe")).PassTheReadingLimit();
 
         var outcome = Assert.Single((await provider.ExecuteAsync(plan)).Steps);
         Assert.False(outcome.Succeeded);

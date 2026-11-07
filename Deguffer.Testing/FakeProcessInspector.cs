@@ -1,18 +1,49 @@
 using System.Collections.Concurrent;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Testing;
 
-/// <summary>Declares which of a tool's processes are "running", for the §5.3 warning path.</summary>
+/// <summary>
+/// Declares which of a tool's processes are "running", for the §5.3 warning path.
+///
+/// <para><b>Answers by the real inspector's contract, snapshot included.</b> A name query answers from
+/// a snapshot of the declared machine taken by the first query after <see cref="Invalidate"/>, and a
+/// change declared after it is not seen until <see cref="Invalidate"/>, or until
+/// <see cref="DiscardOlderThan"/> finds the snapshot older than its bound, measured on a clock only
+/// <see cref="PassTheReadingLimit"/> moves. A fake
+/// that answered live would let a check at the clean stop reading the machine again with no test
+/// going red. <see cref="Probe"/> answers live, as the real one does.</para>
+/// </summary>
 public sealed class FakeProcessInspector(params string[] running) : IProcessInspector
 {
+    private readonly Lock _gate = new();
     private readonly Dictionary<int, ProcessLiveness> _processes = [];
     private readonly ConcurrentDictionary<int, int> _probes = new();
     private readonly List<TimeSpan> _ageLimits = [];
     private readonly List<string> _running = [.. running];
     private readonly List<StartedProcess> _started = [];
+    private TimedReading<Machine>? _snapshot;
 
     public static FakeProcessInspector NothingRunning => new();
+
+    /// <summary>
+    /// What a snapshot's age is measured by. It moves only by <see cref="PassTheReadingLimit"/>, so a
+    /// test that changes the machine between the preview and the clean says the preview stayed on
+    /// screen past the limit.
+    /// </summary>
+    private readonly ManualTimeProvider _clock = new();
+
+    /// <summary>
+    /// Move the snapshot's clock past <see cref="IUseCheck.ReadingLimit"/>, as a preview left on screen
+    /// longer than that, or a command that runs longer, moves the real one. A check asked after it
+    /// reads the machine again.
+    /// </summary>
+    public FakeProcessInspector PassTheReadingLimit()
+    {
+        _clock.Advance(IUseCheck.ReadingLimit + TimeSpan.FromTicks(1));
+        return this;
+    }
 
     public int InvalidateCount { get; private set; }
 
@@ -37,8 +68,8 @@ public sealed class FakeProcessInspector(params string[] running) : IProcessInsp
     }
 
     /// <summary>
-    /// Declare a program running from now on, so a test can start one between the preview and the
-    /// clean and show the clean asking again.
+    /// Declare a program running, seen from the next snapshot, so a test can start one between the
+    /// preview and the clean, pass the reading limit, and show the clean asking again.
     /// </summary>
     public FakeProcessInspector WithRunning(string name)
     {
@@ -47,7 +78,7 @@ public sealed class FakeProcessInspector(params string[] running) : IProcessInsp
     }
 
     /// <summary>
-    /// Declare a process running from now on that was created at <paramref name="startedAt"/>, so a
+    /// Declare a process running, seen from the next snapshot, that was created at <paramref name="startedAt"/>, so a
     /// test can tell one process of a name from another. A process declared by name alone answers
     /// <see cref="FindRunningProcesses"/> with no creation time, as a service does on an unelevated run.
     /// </summary>
@@ -58,8 +89,8 @@ public sealed class FakeProcessInspector(params string[] running) : IProcessInsp
     }
 
     /// <summary>
-    /// Declare a program closed from now on, so a test can close one between the preview and the
-    /// clean and show the clean asking again.
+    /// Declare a program closed, seen from the next snapshot, so a test can close one between the
+    /// preview and the clean, pass the reading limit, and show the clean asking again.
     /// </summary>
     public FakeProcessInspector WithoutRunning(string name)
     {
@@ -68,18 +99,32 @@ public sealed class FakeProcessInspector(params string[] running) : IProcessInsp
         return this;
     }
 
-    public IReadOnlyList<string> FindRunning(IEnumerable<string> names) =>
-        [.. names.Intersect([.. _running, .. _started.Select(process => process.Name)], StringComparer.OrdinalIgnoreCase)];
+    public IReadOnlyList<string> FindRunning(IEnumerable<string> names)
+    {
+        var machine = Snapshot();
 
+        return [.. names.Intersect([.. machine.Running, .. machine.Started.Select(process => process.Name)], StringComparer.OrdinalIgnoreCase)];
+    }
+
+    /// <summary>
+    /// The processes the snapshot names, each kept only where it is still declared running now, as the
+    /// real inspector takes its ids from the snapshot and probes each one at the moment of the call.
+    /// </summary>
     public IReadOnlyList<StartedProcess> FindRunningProcesses(IEnumerable<string> names)
     {
         var wanted = names.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var machine = Snapshot();
 
-        return
-        [
-            .. _running.Where(wanted.Contains).Select(name => new StartedProcess(name, StartedAt: null)),
-            .. _started.Where(process => wanted.Contains(process.Name)),
-        ];
+        lock (_gate)
+        {
+            return
+            [
+                .. machine.Running
+                    .Where(name => wanted.Contains(name) && _running.Contains(name, StringComparer.OrdinalIgnoreCase))
+                    .Select(name => new StartedProcess(name, StartedAt: null)),
+                .. machine.Started.Where(process => wanted.Contains(process.Name) && _started.Contains(process)),
+            ];
+        }
     }
 
     /// <summary>
@@ -97,11 +142,33 @@ public sealed class FakeProcessInspector(params string[] running) : IProcessInsp
         return _processes.GetValueOrDefault(processId, ProcessLiveness.NotRunning);
     }
 
-    public void Invalidate() => InvalidateCount++;
+    public void Invalidate()
+    {
+        lock (_gate)
+        {
+            InvalidateCount++;
+            _snapshot?.Forget();
+        }
+    }
 
-    /// <summary>
-    /// Recorded rather than acted on: this fake has no snapshot to go stale, and answers every
-    /// question as the test last declared the machine.
-    /// </summary>
-    public void DiscardOlderThan(TimeSpan maxAge) => _ageLimits.Add(maxAge);
+    /// <summary>Recorded, and acted on as the real inspector acts on its own.</summary>
+    public void DiscardOlderThan(TimeSpan maxAge)
+    {
+        lock (_gate)
+        {
+            _ageLimits.Add(maxAge);
+            _snapshot?.ForgetOlderThan(maxAge);
+        }
+    }
+
+    /// <summary>The declared machine as the snapshot held saw it, or as it is now where none is held.</summary>
+    private Machine Snapshot()
+    {
+        lock (_gate)
+        {
+            return (_snapshot ??= new(_clock)).Get(() => new Machine([.. _running], [.. _started]));
+        }
+    }
+
+    private sealed record Machine(IReadOnlyList<string> Running, IReadOnlyList<StartedProcess> Started);
 }

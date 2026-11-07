@@ -348,7 +348,7 @@ public sealed class AdobeMediaCacheProviderTests : IDisposable
 
         Assert.Equal([Files, Peaks, Database], plan.TargetedPaths);
 
-        inspector.WithRunning("Adobe Premiere Pro");
+        inspector.WithRunning("Adobe Premiere Pro").PassTheReadingLimit();
         var result = await provider.ExecuteAsync(plan);
 
         Assert.All(cached, path => Assert.True(File.Exists(path), $"{path} was removed under a Premiere Pro started after the preview."));

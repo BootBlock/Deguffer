@@ -67,7 +67,7 @@ public sealed class TempMarkerCleanRecheckTests : IDisposable
         Assert.Contains(flutter, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.Contains(firefox, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
 
-        _inspector.WithRunning("dart");
+        _inspector.WithRunning("dart").PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -93,7 +93,7 @@ public sealed class TempMarkerCleanRecheckTests : IDisposable
         Assert.Contains(vsCode, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.Contains(docker, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
 
-        _inspector.WithRunning("Code");
+        _inspector.WithRunning("Code").PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -150,7 +150,7 @@ public sealed class TempMarkerCleanRecheckTests : IDisposable
 
         Assert.Contains(cache, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
 
-        _liveTrees.WithProgram("node", executable: Path.Combine(cache, "node.exe"));
+        _liveTrees.WithProgram("node", executable: Path.Combine(cache, "node.exe")).PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -178,7 +178,7 @@ public sealed class TempMarkerCleanRecheckTests : IDisposable
         Assert.Contains(traces, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.Contains(updaterLog, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
 
-        _liveTrees.CannotTellFromNow();
+        _liveTrees.CannotTellFromNow().PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 

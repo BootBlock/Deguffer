@@ -336,7 +336,7 @@ public sealed class RetroArchDownloadProviderTests : IDisposable
 
         Assert.Equal([slang], plan.TargetedPaths);
 
-        inspector.WithRunning("retroarch_angle");
+        inspector.WithRunning("retroarch_angle").PassTheReadingLimit();
         var result = await provider.ExecuteAsync(plan);
 
         Assert.True(Directory.Exists(slang), "a shader set was removed under a RetroArch started after the preview");

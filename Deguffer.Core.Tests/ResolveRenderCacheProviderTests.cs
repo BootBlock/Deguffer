@@ -375,7 +375,7 @@ public sealed class ResolveRenderCacheProviderTests : IDisposable
 
         Assert.Equal([project], plan.TargetedPaths);
 
-        inspector.WithRunning("Resolve");
+        inspector.WithRunning("Resolve").PassTheReadingLimit();
         var result = await provider.ExecuteAsync(plan);
 
         Assert.True(Directory.Exists(project), "a render cache was removed under a Resolve started after the preview");

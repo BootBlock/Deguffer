@@ -179,13 +179,15 @@ public static class DirectoryRemover
             // "tried and still here", and a caller keeping the root never tries it — so naming it
             // would report a refusal of a deletion nobody attempted. No folder refusal is counted
             // either: PathPresence does not carry the exception, so "Windows would not let Deguffer
-            // remove it" would be a guess between an access rule and a link it will not follow.
+            // remove it" would be a guess between an access rule and a link it will not follow. It is
+            // named as unlisted whichever it was, because nobody can say what it holds.
             case GatheredRemoval.Refused:
                 progress?.Report(1.0);
 
                 return new RemovalOutcome(0, Refusals.None, RootRemoved: false)
                 {
                     LeftStanding = bounds.KeepRoot ? [] : [LongPath.Display(extended)],
+                    Unlisted = [LongPath.Display(extended)],
                 };
 
             case GatheredRemoval.Link { IsKept: true }:

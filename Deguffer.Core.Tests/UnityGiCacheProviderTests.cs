@@ -219,7 +219,7 @@ public sealed class UnityGiCacheProviderTests : IDisposable
 
         Assert.Equal([Cache], plan.TargetedPaths);
 
-        inspector.WithRunning("Unity");
+        inspector.WithRunning("Unity").PassTheReadingLimit();
         var result = await provider.ExecuteAsync(plan);
 
         Assert.True(Directory.Exists(Cache), "the GI cache was removed under an Editor started after the preview");

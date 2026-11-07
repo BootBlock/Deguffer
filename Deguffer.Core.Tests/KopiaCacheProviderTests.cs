@@ -244,7 +244,7 @@ public sealed class KopiaCacheProviderTests : IDisposable
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
-        _inspector.WithRunning("KopiaUI");
+        _inspector.WithRunning("KopiaUI").PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 

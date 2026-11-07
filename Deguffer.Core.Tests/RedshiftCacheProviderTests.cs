@@ -246,7 +246,7 @@ public sealed class RedshiftCacheProviderTests : IDisposable
 
         Assert.NotEmpty(plan.Steps);
 
-        inspector.WithRunning("Cinema 4D");
+        inspector.WithRunning("Cinema 4D").PassTheReadingLimit();
         var result = await provider.ExecuteAsync(plan);
 
         Assert.All(cached, path => Assert.True(File.Exists(path), $"{path} was removed under a Cinema 4D started after the preview."));

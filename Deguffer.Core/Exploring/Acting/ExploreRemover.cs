@@ -401,7 +401,8 @@ public static class ExploreRemover
         // A folder whose root went held nothing refused, because a refused file or folder keeps every
         // folder above it standing. So only the partial case has anything to say about what stayed —
         // and an Outlook mail store the removal stepped over keeps its folders standing the same way.
-        var left = LeftInPlace.Clauses(tree.Refused, tree.RefusedFolders, kept: 0, mailStores: tree.MailStores.Count);
+        var left = LeftInPlace.Clauses(
+            tree.Refused, tree.RefusedFolders, kept: 0, mailStores: tree.MailStores.Count, unlisted: tree.Unlisted.Count);
 
         return new ExploreItemOutcome(
             item.Path,
@@ -413,6 +414,11 @@ public static class ExploreRemover
                 { Interrupted: true } => $"Partly deleted before the removal was cancelled{left}, so the folder is still there.",
                 { NotADirectory: true } => "Not deleted: a file now stands where the folder was, and Deguffer left it alone.",
                 { RootRemoved: true } => "Deleted.",
+
+                // "Partly deleted" would claim something went. A folder Windows would not list is the
+                // usual case: nothing inside it was seen, so nothing was tried.
+                { BytesReclaimed: 0, EntriesRemoved: 0, MailStores.Count: 0 } =>
+                    LeftInPlace.WhyNothingHappened(tree.Refused, tree.RefusedFolders, tree.Unlisted.Count),
                 _ => $"Partly deleted{left}, so the folder is still there.",
             })
         {

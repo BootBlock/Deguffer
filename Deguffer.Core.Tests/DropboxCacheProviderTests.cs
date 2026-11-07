@@ -248,7 +248,7 @@ public sealed class DropboxCacheProviderTests : IDisposable
 
         Assert.NotEmpty(plan.Steps);
 
-        inspector.WithRunning("Dropbox");
+        inspector.WithRunning("Dropbox").PassTheReadingLimit();
         var result = await provider.ExecuteAsync(plan);
 
         Assert.All(cached, path => Assert.True(File.Exists(path), $"{path} was removed under a Dropbox started after the preview."));

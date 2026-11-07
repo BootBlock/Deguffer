@@ -28,7 +28,6 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
     private readonly FakeUserEnvironment _environment;
     private readonly SourceRootStore _roots;
     private readonly FakeLiveTreeInspector _liveTrees = FakeLiveTreeInspector.NothingLive;
-    private readonly ManualTimeProvider _clock = new();
 
     public LiveTreeCleanRecheckTests()
     {
@@ -72,7 +71,7 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
 
         AssertOffered(plan, busy, idle);
 
-        _liveTrees.WithProgram("editor", workingDirectory: busyProject);
+        _liveTrees.WithProgram("editor", workingDirectory: busyProject).PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -104,7 +103,7 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
 
         AssertOffered(plan, directory);
 
-        _liveTrees.CannotTellFromNow();
+        _liveTrees.CannotTellFromNow().PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -158,7 +157,7 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
 
         AssertOffered(plan, busy, idle);
 
-        _liveTrees.WithProgram("app", Path.Combine(busy, "app.exe"), _temp.Path);
+        _liveTrees.WithProgram("app", Path.Combine(busy, "app.exe"), _temp.Path).PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -228,7 +227,7 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
 
         AssertOffered(plan, busy, idle);
 
-        _liveTrees.WithProgram("MSBuild", workingDirectory: busyProject);
+        _liveTrees.WithProgram("MSBuild", workingDirectory: busyProject).PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -255,7 +254,7 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
         var provider = new DotNetObjProvider(
             _roots,
             new SourceDirectoryDiscovery(scanner, new FakeVolumeInventory()),
-            new SnapshottingLiveTrees(_liveTrees, _clock),
+            _liveTrees,
             _environment,
             new FakeProcessRunner(),
             FakeProcessInspector.NothingRunning,
@@ -264,7 +263,7 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
         var plan = await provider.PlanAsync();
 
         // The clean comes longer after the preview than a check's reading may be old.
-        _clock.Advance(IUseCheck.ReadingLimit + TimeSpan.FromTicks(1));
+        _liveTrees.PassTheReadingLimit();
 
         AssertOffered(plan, busy, idle);
 
@@ -296,7 +295,7 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
         var provider = new DotNetObjProvider(
             _roots,
             new SourceDirectoryDiscovery(scanner, new FakeVolumeInventory()),
-            new SnapshottingLiveTrees(_liveTrees, _clock),
+            _liveTrees,
             _environment,
             new FakeProcessRunner(),
             FakeProcessInspector.NothingRunning,
@@ -305,7 +304,7 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
         var plan = await provider.PlanAsync();
 
         // The clean comes longer after the preview than a check's reading may be old.
-        _clock.Advance(IUseCheck.ReadingLimit + TimeSpan.FromTicks(1));
+        _liveTrees.PassTheReadingLimit();
 
         AssertOffered(plan, busy);
 
@@ -338,7 +337,7 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
         var provider = new DotNetObjProvider(
             _roots,
             new SourceDirectoryDiscovery(scanner, new FakeVolumeInventory()),
-            new SnapshottingLiveTrees(_liveTrees, _clock),
+            _liveTrees,
             _environment,
             new FakeProcessRunner(),
             FakeProcessInspector.NothingRunning,
@@ -347,7 +346,7 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
         var plan = await provider.PlanAsync();
 
         // The clean comes longer after the preview than a check's reading may be old.
-        _clock.Advance(IUseCheck.ReadingLimit + TimeSpan.FromTicks(1));
+        _liveTrees.PassTheReadingLimit();
 
         // The premise: the solution was read at the preview, and named only the open project.
         Assert.Equal([added], plan.TargetedPaths);
@@ -390,7 +389,7 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
         // with no start time would hold every directory in the folder.
         WrittenAt(busy, DateTimeOffset.UtcNow.AddHours(-1));
         WrittenAt(idle, DateTimeOffset.UtcNow.AddHours(-1));
-        _liveTrees.WithProgram("Setup", Path.Combine(busy, "Setup.exe"), _temp.Path, started: DateTimeOffset.UtcNow);
+        _liveTrees.WithProgram("Setup", Path.Combine(busy, "Setup.exe"), _temp.Path, started: DateTimeOffset.UtcNow).PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -427,7 +426,7 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
 
         AssertOffered(plan, busy, idle);
 
-        _liveTrees.WithProgram("Update", Path.Combine(application, SquirrelDiscovery.UpdaterName), application, started: started);
+        _liveTrees.WithProgram("Update", Path.Combine(application, SquirrelDiscovery.UpdaterName), application, started: started).PassTheReadingLimit();
         Directory.SetLastWriteTimeUtc(busy, started.AddMinutes(1).UtcDateTime);
 
         var result = await provider.ExecuteAsync(plan);
@@ -463,7 +462,7 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
 
         AssertOffered(plan, busy, idle);
 
-        _liveTrees.WithProgram("Chatterbox", Path.Combine(running, "app-3.6.4", "Chatterbox.exe"), _temp.Path);
+        _liveTrees.WithProgram("Chatterbox", Path.Combine(running, "app-3.6.4", "Chatterbox.exe"), _temp.Path).PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -471,40 +470,6 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
         Assert.False(Directory.Exists(idle), "the old build of an application that stayed closed was kept");
         Assert.Contains(result.Steps, step => step.Message == "Nothing was removed: Chatterbox is running from inside it.");
         AssertProvedStanding(result, busy);
-    }
-
-    /// <summary>
-    /// <see cref="FakeLiveTreeInspector"/> with the one property of the real inspector it lacks: where
-    /// programs are is read once and kept until it is discarded, as the real inspector keeps its
-    /// process table. A check that read without discarding a reading past the limit would see the
-    /// preview's machine.
-    /// </summary>
-    private sealed class SnapshottingLiveTrees(FakeLiveTreeInspector live, TimeProvider time) : ILiveTreeInspector
-    {
-        private readonly TimedReading<LiveTreeFindings> _occupied = new(time);
-
-        public LiveTreeFindings FindLive(IReadOnlyList<LiveTreeQuery> candidates, CancellationToken ct = default) =>
-            live.FindLive(candidates, ct);
-
-        public LiveTreeFindings FindOccupiedDirectories(CancellationToken ct = default) =>
-            _occupied.Get(() => live.FindOccupiedDirectories(ct));
-
-        public LiveTreeFindings FindLiveChildren(IReadOnlyList<string> directories, CancellationToken ct = default) =>
-            live.FindLiveChildren(directories, ct);
-
-        public ReachedFolder Reach(string path) => live.Reach(path);
-
-        public void Invalidate()
-        {
-            _occupied.Forget();
-            live.Invalidate();
-        }
-
-        public void DiscardOlderThan(TimeSpan maxAge)
-        {
-            _occupied.ForgetOlderThan(maxAge);
-            live.DiscardOlderThan(maxAge);
-        }
     }
 
     private static void AssertOffered(CleanupPlan plan, params string[] paths)
