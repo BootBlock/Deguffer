@@ -41,9 +41,10 @@ public sealed class CleanupPlannerConcurrencyTests
     }
 
     /// <summary>
-    /// A pass holds no more providers at once than its bound (G4), however many it has. More than one is
-    /// the floor rather than the bound itself, because a machine with few threads to spare may not
-    /// start all of them inside a provider's few milliseconds.
+    /// A pass holds no more providers at once than its bound (G4), however many it has, and more than
+    /// one. More than one is the floor rather than the bound itself, because a machine with few threads
+    /// to spare may not start all of them inside a provider's few milliseconds. The floor is proven by
+    /// order: the first provider is held until a second has begun.
     ///
     /// <para>Only a machine with more logical processors than the bound can show the bound being
     /// passed: with no bound given, <see cref="Parallel.ForEachAsync{TSource}(IEnumerable{TSource}, ParallelOptions, Func{TSource, CancellationToken, ValueTask})"/>
@@ -53,26 +54,24 @@ public sealed class CleanupPlannerConcurrencyTests
     [Fact]
     public async Task APassPlansNoMoreProvidersAtOnceThanItsBound()
     {
-        var inFlight = 0;
-        var peak = 0;
+        var planning = new HeldOverlap(Deadline);
         var providers = Enumerable.Range(0, CleanupPlanner.ProvidersAtOnce * 3)
             .Select(index => new FakeCleanupProvider($"p{index}")
             {
                 WhilePlanning = () =>
                 {
-                    var now = Interlocked.Increment(ref inFlight);
-                    InterlockedMax(ref peak, now);
+                    planning.Begin();
 
                     // Long enough for every provider the bound admits to be under way at once.
                     Thread.Sleep(50);
-                    Interlocked.Decrement(ref inFlight);
+                    planning.End();
                 },
             })
             .ToList();
 
-        await new CleanupPlanner(providers).PlanAllAsync().WaitAsync(Deadline);
+        await new CleanupPlanner(providers).PlanAllAsync().WaitAsync(Deadline * 2);
 
-        Assert.InRange(Volatile.Read(ref peak), 2, CleanupPlanner.ProvidersAtOnce);
+        Assert.InRange(planning.MostAtOnce, 2, CleanupPlanner.ProvidersAtOnce);
     }
 
     /// <summary>

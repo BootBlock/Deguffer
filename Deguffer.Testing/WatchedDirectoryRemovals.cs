@@ -6,7 +6,9 @@ namespace Deguffer.Testing;
 
 /// <summary>
 /// The real filesystem, with each directory removal held for a moment so that removals able to overlap
-/// do, and watched: how many ran at once, and which began while a folder inside was still there.
+/// do, and watched: how many ran at once, and which began while a folder inside was still there. The
+/// first removal is held until a second has begun, as <see cref="HeldOverlap"/> describes, so more
+/// than one at once is proven by order rather than by the moment's length.
 /// </summary>
 /// <param name="hold">
 /// How long to hold the removal of a directory, by its path. 15 ms for each by default. A folder held
@@ -22,21 +24,10 @@ public sealed class WatchedDirectoryRemovals(
     private static readonly TimeSpan DefaultHold = TimeSpan.FromMilliseconds(15);
 
     private readonly ConcurrentQueue<string> _triedEarly = new();
-    private readonly Lock _gate = new();
-    private int _running;
-    private int _mostAtOnce;
+    private readonly HeldOverlap _overlap = new();
 
     /// <summary>The most directory removals that were under way at the same moment.</summary>
-    public int MostAtOnce
-    {
-        get
-        {
-            lock (_gate)
-            {
-                return _mostAtOnce;
-            }
-        }
-    }
+    public int MostAtOnce => _overlap.MostAtOnce;
 
     /// <summary>Each directory whose removal began while a directory inside it was still there.</summary>
     public IReadOnlyCollection<string> TriedEarly => _triedEarly;
@@ -77,10 +68,7 @@ public sealed class WatchedDirectoryRemovals(
             _triedEarly.Enqueue(path);
         }
 
-        lock (_gate)
-        {
-            _mostAtOnce = Math.Max(_mostAtOnce, ++_running);
-        }
+        _overlap.Begin();
 
         try
         {
@@ -89,10 +77,7 @@ public sealed class WatchedDirectoryRemovals(
         }
         finally
         {
-            lock (_gate)
-            {
-                _running--;
-            }
+            _overlap.End();
         }
     }
 

@@ -5,26 +5,17 @@ namespace Deguffer.Testing;
 
 /// <summary>
 /// The real filesystem, with each deletion of a file or a directory held for a moment so that
-/// deletions able to overlap do, and counted: the most that were under way at the same moment.
+/// deletions able to overlap do, and counted: the most that were under way at the same moment. The
+/// first deletion is held until a second has begun, as <see cref="HeldOverlap"/> describes, so more
+/// than one at once is proven by order rather than by the moment's length.
 /// </summary>
 /// <param name="hold">How long each deletion is held before it is made.</param>
 public sealed class WatchedDeletions(IFileSystem inner, TimeSpan hold) : IFileSystem
 {
-    private readonly Lock _gate = new();
-    private int _running;
-    private int _mostAtOnce;
+    private readonly HeldOverlap _overlap = new();
 
     /// <summary>The most deletions, files and directories together, under way at the same moment.</summary>
-    public int MostAtOnce
-    {
-        get
-        {
-            lock (_gate)
-            {
-                return _mostAtOnce;
-            }
-        }
-    }
+    public int MostAtOnce => _overlap.MostAtOnce;
 
     public bool DirectoryExists(string path) => inner.DirectoryExists(path);
 
@@ -57,10 +48,7 @@ public sealed class WatchedDeletions(IFileSystem inner, TimeSpan hold) : IFileSy
 
     private void Held(Action delete)
     {
-        lock (_gate)
-        {
-            _mostAtOnce = Math.Max(_mostAtOnce, ++_running);
-        }
+        _overlap.Begin();
 
         try
         {
@@ -69,10 +57,7 @@ public sealed class WatchedDeletions(IFileSystem inner, TimeSpan hold) : IFileSy
         }
         finally
         {
-            lock (_gate)
-            {
-                _running--;
-            }
+            _overlap.End();
         }
     }
 }
