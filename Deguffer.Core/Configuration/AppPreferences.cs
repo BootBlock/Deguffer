@@ -391,6 +391,11 @@ public enum ExploreScheme
 /// nobody expected to end is the countdown it is carried out behind, which says what is about to
 /// happen and can be cancelled. See <see cref="Execution.CompletionCountdown"/>.</para>
 /// </param>
+/// <param name="NavigationCollapsed">
+/// Whether the window's navigation rail is collapsed to its icons. Off by default, so every
+/// destination is named. Stored for the reason <paramref name="ExploreOverviewHidden"/> is: a reader
+/// who wants the width for the map wants it at every launch. Presentation only.
+/// </param>
 public sealed record AppPreferences(
     AppTheme Theme = AppTheme.System,
     ViewDensity View = ViewDensity.Standard,
@@ -416,7 +421,8 @@ public sealed record AppPreferences(
     int FileHistoryRetentionDays = 365,
     int MinimumTemporaryFileAgeDays = 7,
     bool BackUpInstalledAppEntries = true,
-    Execution.CompletionAction WhenCleanComplete = Execution.CompletionAction.Nothing)
+    Execution.CompletionAction WhenCleanComplete = Execution.CompletionAction.Nothing,
+    bool NavigationCollapsed = false)
 {
     public static readonly AppPreferences Default = new();
 

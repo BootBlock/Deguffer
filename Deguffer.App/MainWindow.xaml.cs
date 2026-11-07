@@ -22,6 +22,7 @@ public sealed partial class MainWindow : Window
     private readonly CloseGuard _closeGuard = new(App.Running);
     private readonly TaskbarButton _taskbarButton;
     private readonly ToolWindowOpener _mapAppearance;
+    private readonly DrawnSetting<bool> _navigationCollapsed;
 
     public MainWindow()
     {
@@ -84,6 +85,18 @@ public sealed partial class MainWindow : Window
         _backdrop.IsRequested = App.Preferences.Current.BackdropEnabled;
         ApplyTheme();
         App.Preferences.Changed += OnPreferencesChanged;
+
+        // Before the first page, so the window opens with the rail as the reader left it rather than
+        // collapsing it in front of them. The pane raises its events for this assignment too, and the
+        // write they make is of the value just read, which the preferences treat as no change.
+        _navigationCollapsed = new DrawnSetting<bool>(
+            App.Preferences,
+            current => current.NavigationCollapsed,
+            (current, collapsed) => current with { NavigationCollapsed = collapsed },
+            collapsed => Navigation.IsPaneOpen = !collapsed);
+        Navigation.IsPaneOpen = !_navigationCollapsed.Stored;
+        Navigation.PaneOpened += (_, _) => _navigationCollapsed.Choose(false);
+        Navigation.PaneClosed += (_, _) => _navigationCollapsed.Choose(true);
 
         OpenWhereTheLaunchAsked();
 
