@@ -567,13 +567,13 @@ public sealed class GitLfsObjectProviderTests : IDisposable
         var check = Assert.IsType<GitLfsPruneTarget>(step.TargetCheck);
 
         Assert.Null(check.WhyNot(step, CancellationToken.None));
-        Assert.Contains(IUseCheck.ReadingLimit, liveTrees.AgeLimits);
         Assert.Equal([(gitDirectory, game)], liveTrees.Asked.Select(q => (q.Directory, q.Project)));
 
         // A program started in the work tree after the preview, asked about once the reading is past the limit.
         liveTrees.WithProgram("git", workingDirectory: game).PassTheReadingLimit();
 
         Assert.Contains($"is working in {game}", check.WhyNot(step, CancellationToken.None), StringComparison.Ordinal);
+        Assert.Contains(IUseCheck.ReadingLimit, liveTrees.AgeLimits);
 
         Assert.Contains(
             $"is working in {game}",
