@@ -10,8 +10,9 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>A row of its own, never a switch on the cleanup.</b> Microsoft's warning is that "all
 /// existing update packages can't be uninstalled after this command is completed". That is a permanent
-/// cost, so it is put in front of the user as its own decision and confirmed on its own, rather than
-/// carried by a row the user may already have chosen for its space.</para>
+/// cost, so it is put in front of the user as a decision of its own, never pre-selected, rather than
+/// carried by a row the user may already have chosen for its space. Its confirmation is Tier 3's, as
+/// §7 lets the user set it, with no exception for this row.</para>
 ///
 /// <para><b>Tier 3.</b> Nothing is deleted that a user made, but what is lost cannot be had back: an
 /// update that turns out to break something can no longer be removed, and the only way out is to reset or

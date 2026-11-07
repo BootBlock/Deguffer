@@ -338,7 +338,10 @@ public sealed class CleanupPlannerTests
         Assert.False(provider.WasExecuted);
     }
 
-    /// <summary>§7: Tier 3 requires *typed* confirmation — a bare acknowledgement is not enough.</summary>
+    /// <summary>
+    /// §7: under the typed phrase, which execution applies unless told otherwise, Tier 3 requires
+    /// *typed* confirmation — a bare acknowledgement is not enough.
+    /// </summary>
     [Fact]
     public async Task Tier3NeedsTheTypedPhraseNotMerelyAnAcknowledgement()
     {
