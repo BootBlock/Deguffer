@@ -158,6 +158,12 @@ public partial class App : Application
     internal static void RememberChecksums() => Checksums.Save();
 
     /// <summary>
+    /// Get the Storage rows' ticks onto disk now, once the write the last tick started has ended: the
+    /// window closing, or <see cref="ElevatedRelaunch"/>, whose replacement builds its rows from them.
+    /// </summary>
+    internal static void RememberSelections() => Selections.Flush();
+
+    /// <summary>
     /// This instance has been replaced and is about to exit, so the windows closing with it are the
     /// application's going rather than the reader closing them. See
     /// <see cref="Deguffer.App.MainWindow.Leave"/>.
@@ -192,6 +198,7 @@ public partial class App : Application
         {
             RememberScanEstimates();
             RememberChecksums();
+            RememberSelections();
             Exit();
         };
 

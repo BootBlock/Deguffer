@@ -31,8 +31,16 @@ public sealed class SelectionMemory
         }
     }
 
-    /// <summary>Everything remembered, for whoever writes it to disk.</summary>
-    public IReadOnlyDictionary<string, RememberedSelection> Entries => _byProvider;
+    /// <summary>
+    /// Everything remembered as it is now, for a write on another thread while the user goes on
+    /// ticking.
+    ///
+    /// <para>A shallow copy is enough: <see cref="Remember"/> replaces a provider's record whole, with a
+    /// step map built for it and never changed after, so nothing the copy refers to changes under
+    /// the write.</para>
+    /// </summary>
+    public IReadOnlyDictionary<string, RememberedSelection> Snapshot() =>
+        new Dictionary<string, RememberedSelection>(_byProvider, StringComparer.Ordinal);
 
     /// <summary>Whether the row for <paramref name="provider"/> starts ticked.</summary>
     /// <param name="byDefault">

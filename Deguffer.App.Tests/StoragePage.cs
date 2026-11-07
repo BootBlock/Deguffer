@@ -160,5 +160,10 @@ internal sealed class StoragePage : IDisposable
     public FindingViewModel Row(string providerId) =>
         ViewModel.Findings.Single(row => row.Finding.Provider.Id == providerId);
 
-    public void Dispose() => _temp.Dispose();
+    public void Dispose()
+    {
+        // The last tick's write runs on a worker, and must not land in a folder being deleted.
+        Selections.Flush();
+        _temp.Dispose();
+    }
 }

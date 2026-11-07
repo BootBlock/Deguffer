@@ -1300,7 +1300,8 @@ public sealed partial class CleanViewModel : ObservableObject
     /// Written on every change rather than at some tidier moment, because there is no reliable
     /// later one. A scan can be cancelled, a clean rebuilds the rows it changed from what was
     /// remembered, and the process can be replaced outright by the elevated relaunch — all three
-    /// would lose a choice that was only being held until the end.
+    /// would lose a choice that was only being held until the end. The write runs on a worker
+    /// (<see cref="SelectionService.Remember"/>), and the close and the relaunch wait for it.
     /// </summary>
     private void OnRowSelectionChanged(FindingViewModel row)
     {
