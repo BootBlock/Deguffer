@@ -547,7 +547,7 @@ public sealed class AzureFunctionsToolsProviderTests : IDisposable
         Assert.Contains(busy, plan.TargetedPaths);
         Assert.Contains(idle, plan.TargetedPaths);
 
-        liveTrees.WithProgram("func", Path.Combine(busy, "cli_x64", "func.exe"), _temp.Path);
+        liveTrees.WithProgram("func", Path.Combine(busy, "cli_x64", "func.exe"), _temp.Path).PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 

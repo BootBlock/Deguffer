@@ -569,7 +569,7 @@ public sealed class LmStudioRuntimeProviderTests : IDisposable
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
 
-        _inspector.WithoutRunning("LM Studio");
+        _inspector.WithoutRunning("LM Studio").PassTheReadingLimit();
         var result = await provider.ExecuteAsync(plan);
 
         var outcome = Assert.Single(result.Steps);
@@ -577,9 +577,7 @@ public sealed class LmStudioRuntimeProviderTests : IDisposable
         Assert.Contains("LM Studio is no longer running", outcome.Message, StringComparison.Ordinal);
         Assert.DoesNotContain(_runner.Invocations, call => call.Arguments.StartsWith("runtime remove", StringComparison.Ordinal));
 
-        // The real inspector answers from a snapshot of the process table, so the run has to discard
-        // one past the use checks' limit to see a program closed since the preview. This fake has no
-        // snapshot to go stale.
+        // The bound the run discards the preview's reading by is the use checks' own.
         Assert.Contains(IUseCheck.ReadingLimit, _inspector.AgeLimits);
     }
 

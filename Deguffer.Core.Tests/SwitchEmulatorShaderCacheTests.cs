@@ -352,7 +352,7 @@ public sealed class SwitchEmulatorShaderCacheTests : IDisposable
         var preview = await provider.PlanAsync();
         // yuzu rather than Citron: the item is Citron's by the order the layouts are read in, so only
         // the other fork tells a check of every owner from a check of the first.
-        inspector.WithRunning("yuzu");
+        inspector.WithRunning("yuzu").PassTheReadingLimit();
         var result = await provider.ExecuteAsync(preview);
 
         Assert.True(File.Exists(pipelines), "a shared cache was removed under a yuzu started after the preview");

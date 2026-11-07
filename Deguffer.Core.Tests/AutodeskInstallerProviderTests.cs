@@ -371,7 +371,7 @@ public sealed class AutodeskInstallerProviderTests : IDisposable
 
         Assert.Equal([product], plan.TargetedPaths);
 
-        liveTrees.WithProgram("Setup", executable: Path.Combine(product, "Setup.exe"));
+        liveTrees.WithProgram("Setup", executable: Path.Combine(product, "Setup.exe")).PassTheReadingLimit();
         await provider.ExecuteAsync(plan);
 
         Assert.True(Directory.Exists(product), "a payload an installer started running from was removed");

@@ -256,7 +256,7 @@ public sealed class UnrealDerivedDataCacheProviderTests : IDisposable
             new[] { LegacyCache, CurrentStore, OlderStore }.Order(StringComparer.OrdinalIgnoreCase),
             plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
 
-        inspector.WithRunning("zenserver");
+        inspector.WithRunning("zenserver").PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -285,7 +285,7 @@ public sealed class UnrealDerivedDataCacheProviderTests : IDisposable
 
         Assert.Equal([LegacyCache], plan.TargetedPaths);
 
-        inspector.WithRunning("zenserver");
+        inspector.WithRunning("zenserver").PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 

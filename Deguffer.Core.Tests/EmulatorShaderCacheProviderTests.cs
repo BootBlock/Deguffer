@@ -570,7 +570,7 @@ public sealed class EmulatorShaderCacheProviderTests : IDisposable
 
         Assert.Equal([cache], plan.TargetedPaths);
 
-        inspector.WithRunning("DolphinNoGUI");
+        inspector.WithRunning("DolphinNoGUI").PassTheReadingLimit();
         var result = await provider.ExecuteAsync(plan);
 
         Assert.True(Directory.Exists(cache), "a shader cache was removed under a Dolphin started after the preview");

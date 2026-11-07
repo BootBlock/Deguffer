@@ -251,7 +251,7 @@ public sealed class NxWorkspaceCacheProviderTests : IDisposable
 
         Assert.Equal(2, plan.TargetedPaths.Count);
 
-        live.WithProgram("node", workingDirectory: busy.Folder);
+        live.WithProgram("node", workingDirectory: busy.Folder).PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 
