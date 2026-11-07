@@ -276,7 +276,7 @@ public sealed class Stm32CubeFirmwareZipProviderTests : IDisposable
 
         Assert.NotEmpty(plan.Steps);
 
-        inspector.WithRunning("STM32CubeMX");
+        inspector.WithRunning("STM32CubeMX").PassTheReadingLimit();
         var result = await provider.ExecuteAsync(plan);
 
         Assert.True(File.Exists(offered), "The zip was removed under an STM32CubeMX started after the preview.");

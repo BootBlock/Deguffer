@@ -473,7 +473,7 @@ public sealed class ChromiumWebView2Tests : IDisposable
 
         Assert.Contains(cache, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
 
-        liveTrees.WithProgram("msedgewebview2", arguments: [userData]);
+        liveTrees.WithProgram("msedgewebview2", arguments: [userData]).PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -502,7 +502,7 @@ public sealed class ChromiumWebView2Tests : IDisposable
 
         Assert.Contains(cache, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
 
-        liveTrees.CannotTellFromNow();
+        liveTrees.CannotTellFromNow().PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 

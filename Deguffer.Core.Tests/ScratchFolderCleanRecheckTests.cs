@@ -88,7 +88,7 @@ public sealed class ScratchFolderCleanRecheckTests : IDisposable
 
         Assert.Empty(Assert.Single(plan.Steps.OfType<ClearDirectoryStep>(), s => s.Path == UserTemp).Spared);
 
-        _liveTrees.WithProgram("setup", workingDirectory: taken);
+        _liveTrees.WithProgram("setup", workingDirectory: taken).PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -141,7 +141,7 @@ public sealed class ScratchFolderCleanRecheckTests : IDisposable
         Assert.Contains(live, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
         Assert.Contains(abandoned, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
 
-        _liveTrees.WithProgram("chrome-headless-shell", arguments: [live]);
+        _liveTrees.WithProgram("chrome-headless-shell", arguments: [live]).PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -169,7 +169,7 @@ public sealed class ScratchFolderCleanRecheckTests : IDisposable
 
         Assert.Empty(Assert.Single(plan.Steps.OfType<ClearDirectoryStep>(), s => s.Path == UserTemp).Spared);
 
-        _liveTrees.CannotTellFromNow();
+        _liveTrees.CannotTellFromNow().PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -225,7 +225,7 @@ public sealed class ScratchFolderCleanRecheckTests : IDisposable
 
         Assert.Contains(profile, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
 
-        _liveTrees.CannotTellFromNow();
+        _liveTrees.CannotTellFromNow().PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 

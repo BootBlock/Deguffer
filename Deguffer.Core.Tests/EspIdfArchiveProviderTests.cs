@@ -538,7 +538,7 @@ public sealed class EspIdfArchiveProviderTests : IDisposable
 
         Assert.NotEmpty(plan.Steps);
 
-        inspector.WithRunning("eim");
+        inspector.WithRunning("eim").PassTheReadingLimit();
         var result = await provider.ExecuteAsync(plan);
 
         Assert.All(archives, path => Assert.True(File.Exists(path), $"{path} was removed under an Installation Manager started after the preview."));

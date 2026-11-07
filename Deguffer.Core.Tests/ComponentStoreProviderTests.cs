@@ -369,9 +369,11 @@ public sealed class ComponentStoreProviderTests : IDisposable
 
         var provider = Cleanup(inspector, new OwnServicingCalls());
         Assert.True(Assert.Single((await provider.ExecuteAsync(await provider.PlanAsync())).Steps).Succeeded);
+
+        // The scan reads the machine afresh, and the premise is that it finds the stack running.
+        provider.InvalidateCaches();
         Assert.Single(inspector.FindRunning(["TiWorker"]));
 
-        provider.InvalidateCaches();
         var next = await provider.PlanAsync();
 
         Assert.False(next.WaitsForAnUpdate);
@@ -390,7 +392,7 @@ public sealed class ComponentStoreProviderTests : IDisposable
 
         var provider = Cleanup(inspector, new OwnServicingCalls());
         var plan = await provider.PlanAsync();
-        inspector.WithRunning("TiWorker", DateTimeOffset.UtcNow);
+        inspector.WithRunning("TiWorker", DateTimeOffset.UtcNow).PassTheReadingLimit();
         var result = await provider.ExecuteAsync(plan);
 
         var step = Assert.Single(result.Steps);
@@ -409,7 +411,8 @@ public sealed class ComponentStoreProviderTests : IDisposable
         var inspector = FakeProcessInspector.NothingRunning;
         _runner.Replying(Dism, arguments =>
         {
-            inspector.WithRunning("TrustedInstaller");
+            // An analysis takes minutes, so the check after it reads the machine again.
+            inspector.WithRunning("TrustedInstaller").PassTheReadingLimit();
             return new CommandOutcome(0, Report(21 * Gigabyte), string.Empty);
         });
 
@@ -437,6 +440,9 @@ public sealed class ComponentStoreProviderTests : IDisposable
                 woken = true;
                 inspector.WithRunning("TrustedInstaller", DateTimeOffset.UtcNow).WithRunning("TiWorker", DateTimeOffset.UtcNow);
             }
+
+            // A DISM call takes minutes, so the check after it reads the machine again.
+            inspector.PassTheReadingLimit();
 
             return IsAnalysis(arguments)
                 ? new CommandOutcome(0, Report(actualSizes[Math.Min(next++, actualSizes.Length - 1)]), string.Empty)

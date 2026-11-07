@@ -517,7 +517,7 @@ public sealed class ZigCacheProviderTests : IDisposable
         var provider = CreateProvider(inspector);
         var plan = await provider.PlanAsync();
 
-        inspector.WithRunning("zig");
+        inspector.WithRunning("zig").PassTheReadingLimit();
         var result = await provider.ExecuteAsync(plan);
 
         Assert.True(Directory.Exists(Child("h")));

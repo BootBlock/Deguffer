@@ -569,7 +569,7 @@ public sealed class LmStudioRuntimeProviderTests : IDisposable
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
 
-        _inspector.WithoutRunning("LM Studio");
+        _inspector.WithoutRunning("LM Studio").PassTheReadingLimit();
         var result = await provider.ExecuteAsync(plan);
 
         var outcome = Assert.Single(result.Steps);

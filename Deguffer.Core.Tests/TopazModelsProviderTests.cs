@@ -451,7 +451,7 @@ public sealed class TopazModelsProviderTests : IDisposable
         var plan = await provider.PlanAsync();
         Assert.Equal([installed], plan.TargetedPaths);
 
-        liveTrees.WithProgram("ffmpeg", executable: Path.Combine(ProgramFolder, "Topaz Video AI", "ffmpeg.exe"));
+        liveTrees.WithProgram("ffmpeg", executable: Path.Combine(ProgramFolder, "Topaz Video AI", "ffmpeg.exe")).PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 

@@ -360,7 +360,7 @@ public sealed class AfterEffectsDiskCacheProviderTests : IDisposable
 
         Assert.Equal([cache], plan.TargetedPaths);
 
-        inspector.WithRunning("AfterFX");
+        inspector.WithRunning("AfterFX").PassTheReadingLimit();
         await provider.ExecuteAsync(plan);
 
         Assert.True(File.Exists(Path.Combine(cache, "0a", "frame-000123.bin")), "the cache was removed while After Effects ran");

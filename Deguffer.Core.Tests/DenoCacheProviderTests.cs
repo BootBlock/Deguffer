@@ -244,7 +244,7 @@ public sealed class DenoCacheProviderTests : IDisposable
         var provider = CreateProvider(inspector);
         var plan = await provider.PlanAsync();
 
-        inspector.WithRunning("deno");
+        inspector.WithRunning("deno").PassTheReadingLimit();
         var result = await provider.ExecuteAsync(plan);
 
         Assert.All(disposable, path => Assert.True(Path.Exists(path), $"{path} was removed while Deno ran."));

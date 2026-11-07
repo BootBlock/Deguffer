@@ -1,3 +1,4 @@
+using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Testing;
@@ -10,16 +11,28 @@ namespace Deguffer.Testing;
 /// nothing about the Restart Manager or the process table can be established with a fake. What this
 /// proves is the other half: that a provider given a live directory refuses to target it, and that
 /// it says so.
+///
+/// <para><b>Answers by the real inspector's contract, snapshot included.</b> The programs declared
+/// with <see cref="WithProgram"/>, and whether the table could be read, stand for the process table,
+/// which a query answers from a snapshot taken by the first query after <see cref="Invalidate"/>. A
+/// change declared after it is not seen until <see cref="Invalidate"/>, or until
+/// <see cref="DiscardOlderThan"/> finds the snapshot older than its bound on <see cref="Clock"/>. A
+/// fake that answered live would let a check at the clean stop reading the machine again with no
+/// test going red. A file declared with <see cref="WithHeldFile"/> is answered live, as the real
+/// inspector asks the Restart Manager on every query.</para>
 /// </summary>
 public sealed class FakeLiveTreeInspector : ILiveTreeInspector
 {
+    private readonly Lock _gate = new();
     private readonly HashSet<string> _live;
     private readonly HashSet<string> _unanswered = new(StringComparer.OrdinalIgnoreCase);
     private bool _complete;
     private readonly List<RunningProgram> _programs = [];
     private readonly List<TimeSpan> _ageLimits = [];
     private readonly Dictionary<string, string> _heldFiles = new(StringComparer.OrdinalIgnoreCase);
-    private LiveTreeMatch _match = new(new FakeVolumeInventory());
+    private IVolumeInventory _volumes = new FakeVolumeInventory();
+    private LiveTreeMatch? _match;
+    private TimedReading<Table>? _snapshot;
 
     public FakeLiveTreeInspector(bool complete, params string[] live)
     {
@@ -36,12 +49,29 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
 
     public int InvalidateCount { get; private set; }
 
+    /// <summary>
+    /// What a snapshot's age is measured by. It moves only when a test moves it, so a test that changes
+    /// the machine between the preview and the clean says how long the preview stayed on screen.
+    /// </summary>
+    public ManualTimeProvider Clock { get; } = new();
+
+    /// <summary>
+    /// Move <see cref="Clock"/> past <see cref="IUseCheck.ReadingLimit"/>, as a preview left on screen
+    /// longer than that, or a command that runs longer, moves the real one. A check asked after it
+    /// reads the machine again.
+    /// </summary>
+    public FakeLiveTreeInspector PassTheReadingLimit()
+    {
+        Clock.Advance(IUseCheck.ReadingLimit + TimeSpan.FromTicks(1));
+        return this;
+    }
+
     /// <summary>The age each <see cref="DiscardOlderThan"/> was asked with, in order.</summary>
     public IReadOnlyList<TimeSpan> AgeLimits => _ageLimits;
 
     /// <summary>
-    /// Answer "could not tell" from now on, so a test can have the process table become unreadable
-    /// between the preview and the clean.
+    /// Answer "could not tell" from the next snapshot, so a test can have the process table become
+    /// unreadable between the preview and the clean.
     /// </summary>
     public FakeLiveTreeInspector CannotTellFromNow()
     {
@@ -102,7 +132,12 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     /// </summary>
     public FakeLiveTreeInspector WithVolumes(IVolumeInventory volumes)
     {
-        _match = new LiveTreeMatch(volumes);
+        lock (_gate)
+        {
+            _volumes = volumes;
+            _match = null;
+        }
+
         return this;
     }
 
@@ -122,21 +157,26 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     {
         Asked = candidates;
 
+        var (table, match) = Snapshot();
         var unknown = new List<string>();
         ReachedProgram[] programs =
-            [.. _programs.Select(p => _match.Program(p.Name, p.Executable, p.WorkingDirectory, p.Started))];
+            [.. table.Programs.Select(p => match.Program(p.Name, p.Executable, p.WorkingDirectory, p.Started))];
 
         return Answer(
+            table,
             [.. candidates
-                .Select(c => new LiveTree(c.Directory, HoldersOf(c, programs, unknown)))
+                .Select(c => new LiveTree(c.Directory, HoldersOf(c, match, programs, unknown)))
                 .Where(tree => tree.Holders.Count > 0)],
             [.. candidates.Select(c => c.Directory)],
             unknown);
     }
 
     public LiveTreeFindings FindOccupiedDirectories(CancellationToken ct = default) =>
+        Occupied(Snapshot().Table);
+
+    private static LiveTreeFindings Occupied(Table table) =>
         new(
-            [.. _programs
+            [.. table.Programs
                 .SelectMany(program => new (string? Directory, string Holder)[]
                 {
                     (program.Executable is { } executable ? Path.GetDirectoryName(executable) : null,
@@ -146,13 +186,17 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
                 .Where(place => place.Directory is not null)
                 .GroupBy(place => place.Directory!, StringComparer.OrdinalIgnoreCase)
                 .Select(group => new LiveTree(group.Key, [.. group.Select(place => place.Holder)]))],
-            _complete);
+            table.Complete);
 
     /// <summary>
     /// What makes <paramref name="candidate"/> live, adding it to <paramref name="unknown"/> where a
     /// writer's start or its last write could not be compared, as the real inspector does.
     /// </summary>
-    private List<string> HoldersOf(LiveTreeQuery candidate, ReachedProgram[] programs, List<string> unknown)
+    private List<string> HoldersOf(
+        LiveTreeQuery candidate,
+        LiveTreeMatch match,
+        ReachedProgram[] programs,
+        List<string> unknown)
     {
         var holders = new List<string>();
 
@@ -171,7 +215,7 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
             }
         }
 
-        var reached = _match.Candidate(candidate);
+        var reached = match.Candidate(candidate);
 
         foreach (var program in programs)
         {
@@ -200,23 +244,28 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     /// </summary>
     public LiveTreeFindings FindLiveChildren(
         IReadOnlyList<string> directories,
-        CancellationToken ct = default) =>
-        Answer(
+        CancellationToken ct = default)
+    {
+        var (table, match) = Snapshot();
+
+        return Answer(
+            table,
             [
                 .. _live
                     .Where(child => directories.Any(root => IsImmediateChild(root, child)))
                     .Select(child => new LiveTree(child, ["a test says something is using it"])),
-                .. FindOccupiedDirectories(ct).Live
-                    .Select(place => (Child: _match.ChildHolding(directories, place.Directory), place.Holders))
+                .. Occupied(table).Live
+                    .Select(place => (Child: match.ChildHolding(directories, place.Directory), place.Holders))
                     .Where(found => found.Child is not null)
                     .Select(found => new LiveTree(found.Child!, found.Holders)),
-                .. _programs
+                .. table.Programs
                     .SelectMany(program => program.Arguments
-                        .Select(argument => _match.ChildHolding(directories, argument))
+                        .Select(argument => match.ChildHolding(directories, argument))
                         .OfType<string>()
                         .Select(child => new LiveTree(child, [$"{program.Name} was started with it"]))),
             ],
             directories);
+    }
 
     /// <summary>
     /// What the real inspector answers: nothing whole where the table could not be read, and otherwise
@@ -224,10 +273,11 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
     /// writers' times could not be compared (<paramref name="unknown"/>).
     /// </summary>
     private LiveTreeFindings Answer(
+        Table table,
         IReadOnlyList<LiveTree> live,
         IReadOnlyList<string> asked,
         IReadOnlyList<string>? unknown = null) =>
-        _complete
+        table.Complete
             ? LiveTreeFindings.Partly(
                 live,
                 [.. asked.Where(directory => _unanswered.Contains(directory)
@@ -239,15 +289,59 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
         && parent.Equals(
             Path.TrimEndingDirectorySeparator(root), StringComparison.OrdinalIgnoreCase);
 
-    public ReachedFolder Reach(string path) => _match.Reach(path);
+    public ReachedFolder Reach(string path) => Match.Reach(path);
 
-    public void Invalidate() => InvalidateCount++;
+    public void Invalidate()
+    {
+        lock (_gate)
+        {
+            InvalidateCount++;
+            _snapshot?.Forget();
+            _match = null;
+        }
+    }
+
+    /// <summary>Recorded, and acted on by <see cref="Clock"/> as the real inspector acts on its own.</summary>
+    public void DiscardOlderThan(TimeSpan maxAge)
+    {
+        lock (_gate)
+        {
+            _ageLimits.Add(maxAge);
+
+            // The rule that matches the table goes with it, as the real inspector drops both.
+            if (_snapshot?.ForgetOlderThan(maxAge) is true)
+            {
+                _match = null;
+            }
+        }
+    }
+
+    /// <summary>The rule that matches the table, kept until the snapshot is discarded, as the real one is.</summary>
+    private LiveTreeMatch Match
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _match ??= new LiveTreeMatch(_volumes);
+            }
+        }
+    }
 
     /// <summary>
-    /// Recorded rather than acted on: this fake has no snapshot to go stale, and answers every
-    /// question as the test last declared the machine.
+    /// The declared table as the snapshot held saw it, or as it is now where none is held, and the rule
+    /// it is matched by.
     /// </summary>
-    public void DiscardOlderThan(TimeSpan maxAge) => _ageLimits.Add(maxAge);
+    private (Table Table, LiveTreeMatch Match) Snapshot()
+    {
+        lock (_gate)
+        {
+            var table = (_snapshot ??= new(Clock)).Get(() => new Table([.. _programs], _complete));
+            return (table, Match);
+        }
+    }
+
+    private sealed record Table(IReadOnlyList<RunningProgram> Programs, bool Complete);
 
     private sealed record RunningProgram(
         string Name,

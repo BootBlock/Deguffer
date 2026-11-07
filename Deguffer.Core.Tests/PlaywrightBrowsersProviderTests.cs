@@ -427,7 +427,7 @@ public sealed class PlaywrightBrowsersProviderTests : IDisposable
         Assert.Contains(busy, plan.TargetedPaths);
         Assert.Contains(idle, plan.TargetedPaths);
 
-        liveTrees.WithProgram("chrome", Path.Combine(busy, "chrome-win", "chrome.exe"), _temp.Path);
+        liveTrees.WithProgram("chrome", Path.Combine(busy, "chrome-win", "chrome.exe"), _temp.Path).PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 

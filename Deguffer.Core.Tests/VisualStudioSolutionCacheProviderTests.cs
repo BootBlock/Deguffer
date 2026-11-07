@@ -502,7 +502,7 @@ public sealed class VisualStudioSolutionCacheProviderTests : IDisposable
 
         Assert.Equal(opened.Caches.Count + idle.Caches.Count, plan.TargetedPaths.Count);
 
-        live.WithProgram("devenv", workingDirectory: opened.SolutionFolder);
+        live.WithProgram("devenv", workingDirectory: opened.SolutionFolder).PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 

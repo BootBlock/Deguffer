@@ -320,7 +320,7 @@ public sealed class SccacheProviderTests : IDisposable
         var provider = CreateProvider(inspector);
         var plan = await provider.PlanAsync();
 
-        inspector.WithRunning("sccache");
+        inspector.WithRunning("sccache").PassTheReadingLimit();
         var result = await provider.ExecuteAsync(plan);
 
         Assert.Empty(_runner.Invocations);

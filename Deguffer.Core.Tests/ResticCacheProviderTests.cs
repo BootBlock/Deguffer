@@ -288,7 +288,7 @@ public sealed class ResticCacheProviderTests : IDisposable
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
-        _inspector.WithRunning("restic");
+        _inspector.WithRunning("restic").PassTheReadingLimit();
 
         var result = await provider.ExecuteAsync(plan);
 

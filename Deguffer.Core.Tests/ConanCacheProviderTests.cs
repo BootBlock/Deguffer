@@ -511,7 +511,7 @@ public sealed class ConanCacheProviderTests : IDisposable
         var plan = await provider.PlanAsync();
         Assert.Single(plan.Steps);
 
-        inspector.WithRunning("conan");
+        inspector.WithRunning("conan").PassTheReadingLimit();
         var result = await provider.ExecuteAsync(plan);
 
         var outcome = Assert.Single(result.Steps);
