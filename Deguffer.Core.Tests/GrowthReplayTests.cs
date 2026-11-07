@@ -54,7 +54,7 @@ public class GrowthReplayTests
         Assert.Equal([old, Child(after, "Logs")], children);
         Assert.Equal(30 * Megabyte, earliest.SizeOf(old));
         Assert.Equal(0, replay.At(Steps).SizeOf(old));
-        Assert.Equal("Old, removed since  30.0 MB", earliest.Label(old));
+        Assert.Equal("Old, removed since  30.0 MB", earliest.Caption(old).Text(MapLettering.Standard, 1));
         Assert.Equal(after.RootNode, earliest.ParentOf(old));
         Assert.Equal(-30 * Megabyte, replay.ChangeOf(old));
 
@@ -82,7 +82,7 @@ public class GrowthReplayTests
         Assert.False(earliest.IsContainer(block));
         Assert.Equal(10 * Megabyte, earliest.SizeOf(block));
         Assert.Equal(0, earliest.SizeOf(file));
-        Assert.Equal("Files, not recorded  10.0 MB", earliest.Label(block));
+        Assert.Equal("Files, not recorded  10.0 MB", earliest.Caption(block).Text(MapLettering.Standard, 1));
         Assert.Null(replay.ChangeOf(block));
 
         Assert.Equal([file, block], replay.At(Steps).ChildrenOf(logs).ToArray());
@@ -109,7 +109,7 @@ public class GrowthReplayTests
 
         Assert.Equal(5 * Megabyte, summary.UnrecordedAtMost);
         Assert.Equal(5 * Megabyte, earliest.SizeOf(block));
-        Assert.Equal("Files and folders under 5.0 MB, not recorded  5.0 MB", earliest.Label(block));
+        Assert.Equal("Files and folders under 5.0 MB, not recorded  5.0 MB", earliest.Caption(block).Text(MapLettering.Standard, 1));
         Assert.False(replay.Recorded(Child(before, "Small")));
         Assert.Equal(0, earliest.SizeOf(Child(before, "Small")));
     }
@@ -231,7 +231,7 @@ public class GrowthReplayTests
         var gone = Assert.Single(earliest.ChildrenOf(left.RootNode).ToArray(), node => node >= replay.TodayCount);
 
         Assert.False(replay.Recorded(logs));
-        Assert.Equal("Logs, removed since  10.0 MB", earliest.Label(gone));
+        Assert.Equal("Logs, removed since  10.0 MB", earliest.Caption(gone).Text(MapLettering.Standard, 1));
         Assert.DoesNotContain(logs, earliest.ChildrenOf(left.RootNode).ToArray());
         Assert.Equal(left.TotalBytes, replay.At(Steps).SizeOf(left.RootNode));
     }

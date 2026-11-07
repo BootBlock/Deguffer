@@ -22,6 +22,10 @@ namespace Deguffer.Core.Exploring.Rendering;
 /// small to read. So a folder whose band runs off the left is named where the band comes on, and
 /// a band that is off the canvas altogether is not named.</para>
 /// </summary>
+/// <param name="lettering">
+/// How the text is set: a name at the top left of its shape, or under <see cref="MapLettering.Classic"/>
+/// as many lines of it as the shape has room for, in its middle.
+/// </param>
 /// <param name="maximumLabels">How many shapes to name inside at most: see <see cref="ExploreSurface.MaximumLabels"/>.</param>
 /// <param name="textColourOf">The colour a shape's name is drawn in, which is its drawing's to say.</param>
 internal sealed class TileLabels(
@@ -32,6 +36,7 @@ internal sealed class TileLabels(
     int height,
     LayoutLimits limits,
     bool shapeNames,
+    MapLettering lettering,
     int maximumLabels,
     Func<ExploreTile, TileColour> textColourOf)
 {
@@ -170,10 +175,32 @@ internal sealed class TileLabels(
             new LabelAxis(tile.Y, tile.Y + tile.Header, -limits.MinimumLabelHeight / 2, Centred: true, KeptOnCanvas: false));
     }
 
-    /// <summary>A shape's name, at the top left of the part of it on the canvas.</summary>
+    /// <summary>
+    /// A shape's name, at the top left of the part of it on the canvas, or under
+    /// <see cref="MapLettering.Classic"/> in the middle of that part, with as many of its lines as fit
+    /// down it, up to three.
+    /// </summary>
     private ExploreLabel InsideLabel(Named named)
     {
         var (tile, shown) = named;
+
+        if (lettering == MapLettering.Classic)
+        {
+            return new ExploreLabel(
+                tile.Node,
+                shown.X + limits.LabelPadding,
+                shown.Y + (shown.Height / 2),
+                shown.Width - (limits.LabelPadding * 2),
+                Rotation: 0,
+                Centred: true,
+                textColourOf(tile),
+                tile.Bytes,
+                new LabelRoom(tile.X, tile.Y, tile.X + tile.Width, tile.Y + tile.Height),
+                new LabelAxis(tile.X, tile.X + tile.Width, 0, Centred: true, KeptOnCanvas: true),
+                new LabelAxis(tile.Y, tile.Y + tile.Height, 0, Centred: true, KeptOnCanvas: true),
+                Middle: true,
+                Lines: Math.Clamp((int)(shown.Height / limits.LineSpacing), 1, ExploreLabel.MostLines));
+        }
 
         return new ExploreLabel(
             tile.Node,

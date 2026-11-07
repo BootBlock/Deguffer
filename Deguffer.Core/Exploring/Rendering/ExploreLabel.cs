@@ -9,7 +9,7 @@ namespace Deguffer.Core.Exploring.Rendering;
 /// what belongs to the shell is the part that is a control.</para>
 /// </summary>
 /// <param name="X">The left edge of a box one line high. The text is trimmed to fit it.</param>
-/// <param name="Y">The top of that box.</param>
+/// <param name="Y">The top of that box, or the middle of the text down it where <paramref name="Middle"/>.</param>
 /// <param name="Rotation">
 /// How far to turn the text about the middle of its box, in degrees clockwise. Zero for anything
 /// laid out in rectangles; a sunburst turns each label to lie along its own ring.
@@ -33,6 +33,14 @@ namespace Deguffer.Core.Exploring.Rendering;
 /// moved. On the canvas it was laid out for, it gives the anchor's X.
 /// </param>
 /// <param name="Down">How it finds the anchor down the canvas, as <paramref name="Across"/> does across it.</param>
+/// <param name="Middle">
+/// Whether the text is centred down its anchor, as a label of several lines in the middle of its box
+/// is, rather than hanging from it.
+/// </param>
+/// <param name="Lines">
+/// How many lines of text the shape has room for: one, or under <see cref="Configuration.MapLettering.Classic"/>
+/// up to <see cref="MostLines"/> of a file's name, its size and when it was last written.
+/// </param>
 public readonly record struct ExploreLabel(
     int Node,
     float X,
@@ -44,8 +52,13 @@ public readonly record struct ExploreLabel(
     long Bytes,
     LabelRoom Room,
     LabelAxis Across,
-    LabelAxis Down)
+    LabelAxis Down,
+    bool Middle = false,
+    int Lines = 1)
 {
+    /// <summary>The most lines a label has: a name, a size and a date.</summary>
+    public const int MostLines = 3;
+
     /// <summary>
     /// How much smaller than where it is gone a label is still whole: it fades over the last fifth of
     /// the way its shape shrinks before the text reaches the shape's edge. Enough to read as a fade at
@@ -72,7 +85,7 @@ public readonly record struct ExploreLabel(
     /// <summary>
     /// The point of the label that stays on its place in the picture as the picture is magnified,
     /// while the text keeps the reader's size: the start of the line, or its middle for a centred
-    /// label, along the top of its box.
+    /// label, along the top of its box or down the middle of the text where <see cref="Middle"/>.
     /// </summary>
     public (float X, float Y) Anchor => (Centred ? X + (Width / 2) : X, Y);
 
@@ -93,10 +106,11 @@ public readonly record struct ExploreLabel(
     {
         var (anchorX, anchorY) = Anchor;
         var before = Centred ? 0.5f : 0;
+        var above = Middle ? 0.5f : 0;
 
         return (
             AxisFade(anchorX - Room.Left, Room.Right - anchorX, textWidth * before, textWidth * (1 - before)),
-            AxisFade(anchorY - Room.Top, Room.Bottom - anchorY, 0, textHeight));
+            AxisFade(anchorY - Room.Top, Room.Bottom - anchorY, textHeight * above, textHeight * (1 - above)));
     }
 
     /// <summary>

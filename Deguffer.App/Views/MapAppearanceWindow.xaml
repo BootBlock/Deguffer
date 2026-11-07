@@ -261,6 +261,19 @@
                         </views:SettingsRow.Control>
                     </views:SettingsRow>
 
+                    <views:SettingsRow Glyph="&#xE790;"
+                                       Title="Bevel shades"
+                                       Description="What a bevel's lighter and darker edges are drawn in.">
+                        <views:SettingsRow.Control>
+                            <ComboBox MinWidth="140"
+                                      SelectedIndex="{x:Bind ViewModel.BevelShadesIndex, Mode=TwoWay}"
+                                      AutomationProperties.Name="Bevel shades">
+                                <ComboBoxItem Content="Mixed" />
+                                <ComboBoxItem Content="SpaceMonger's" />
+                            </ComboBox>
+                        </views:SettingsRow.Control>
+                    </views:SettingsRow>
+
                     <TextBlock Text="Pointer light"
                                Style="{StaticResource BodyStrongTextBlockStyle}"
                                Margin="0,12,0,0" />
@@ -354,6 +367,19 @@
                             </ComboBox>
                         </views:SettingsRow.Control>
                     </views:SettingsRow>
+
+                    <views:SettingsRow Glyph="&#xE8A9;"
+                                       Title="Lines between shapes"
+                                       Description="Whether two shapes side by side each draw their own line, or share one.">
+                        <views:SettingsRow.Control>
+                            <ComboBox MinWidth="140"
+                                      SelectedIndex="{x:Bind ViewModel.LinesIndex, Mode=TwoWay}"
+                                      AutomationProperties.Name="Lines between shapes">
+                                <ComboBoxItem Content="Each its own" />
+                                <ComboBoxItem Content="Shared" />
+                            </ComboBox>
+                        </views:SettingsRow.Control>
+                    </views:SettingsRow>
                 </StackPanel>
 
                 <StackPanel x:Name="LayoutSection" Spacing="8" Visibility="Collapsed">
@@ -393,6 +419,19 @@
                                           OnContent="On"
                                           OffContent="Off"
                                           AutomationProperties.Name="Write names and sizes inside shapes" />
+                        </views:SettingsRow.Control>
+                    </views:SettingsRow>
+
+                    <views:SettingsRow Glyph="&#xE8D2;"
+                                       Title="Lettering"
+                                       Description="How the names are set: the application's own, or SpaceMonger's, unsmoothed, with a file's size in bytes and date in the middle of its box.">
+                        <views:SettingsRow.Control>
+                            <ComboBox MinWidth="140"
+                                      SelectedIndex="{x:Bind ViewModel.LetteringIndex, Mode=TwoWay}"
+                                      AutomationProperties.Name="Lettering">
+                                <ComboBoxItem Content="Standard" />
+                                <ComboBoxItem Content="SpaceMonger's" />
+                            </ComboBox>
                         </views:SettingsRow.Control>
                     </views:SettingsRow>
                 </StackPanel>

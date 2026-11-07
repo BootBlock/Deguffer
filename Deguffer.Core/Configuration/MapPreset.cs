@@ -5,12 +5,14 @@ namespace Deguffer.Core.Configuration;
 /// look whose colours are part of what makes it recognisable, what the colours say as well.
 ///
 /// <para>Two of them follow other disk maps, from grounding in what those tools draw.
-/// <see cref="SpaceMonger"/> is SpaceMonger 1.4's: flat boxes with a one-pixel bevel, a black line
-/// round every box, each folder named in a band, and a colour per level of depth from its own eight.
+/// <see cref="SpaceMonger"/> is SpaceMonger 1.4's, measured from its own pixels: flat boxes with a
+/// one-pixel bevel in its own shades of each colour, one black line between neighbours, each folder
+/// named in a band one line of its small type deep, what it holds three pixels in, and each file's
+/// name, size in bytes and date in the middle of its box, in a colour per level of depth from its own
+/// eight.
 /// <see cref="WizTree"/> is WizTree 4's: cushions with no line round them, a narrow gap round
 /// what each folder holds, folders as dark grey frames named in their bands, and files coloured by
-/// kind. Each is as close as this map draws, not a copy: the font, the background and the selection
-/// stay the application's own.</para>
+/// kind. The selection and the pointer's light stay the application's own.</para>
 ///
 /// <para>A preset changes nothing about the schemes chosen for each view. It is applied as a whole and
 /// then forgotten: a change made afterwards makes a custom look, and the window says so.</para>
@@ -42,7 +44,7 @@ public sealed record MapPreset(
     /// <summary>SpaceMonger 1.4's look. See the type's remarks.</summary>
     public static readonly MapPreset SpaceMonger = new(
         "SpaceMonger",
-        "Flat bevelled boxes with a black line round each, coloured by depth, as SpaceMonger draws them.",
+        "Flat bevelled boxes with one black line between each, coloured by depth, as SpaceMonger draws them.",
         new MapStyle(
             Shading: MapShading.Bevel,
             Relief: MapRelief.Standard,
@@ -52,7 +54,10 @@ public sealed record MapPreset(
             BorderTone: MapBorderTone.Dark,
             FolderFill: MapFolderFill.Coloured,
             FolderNames: true,
-            ShapeNames: true),
+            ShapeNames: true,
+            Lines: MapLines.Shared,
+            Lettering: MapLettering.Classic,
+            BevelShades: MapBevelShades.Classic),
         ExploreSpacing.Comfortable,
         ExploreColouring.Depth);
 

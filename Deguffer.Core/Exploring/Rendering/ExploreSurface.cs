@@ -38,6 +38,13 @@ public abstract class ExploreSurface
     protected const int MaximumLabels = 64;
 
     /// <summary>
+    /// How many shapes to name at most under <see cref="MapLettering.Classic"/>, which names every box
+    /// with room for a name, as SpaceMonger does. A bound on the text controls the shell makes for a
+    /// canvas that somehow has more boxes that wide than a 4K screen fits, not a choice of which to name.
+    /// </summary>
+    protected const int MaximumClassicLabels = 1024;
+
+    /// <summary>
     /// Which part of the hue circle each node owns, measured from this drawing's root. See
     /// <see cref="BranchHues"/>.
     /// </summary>
@@ -133,6 +140,12 @@ public abstract class ExploreSurface
 
     /// <summary>How every shape is finished, and what text is written on them.</summary>
     protected MapStyle Style { get; }
+
+    /// <summary>How the text on this drawing is set, and what it says (<see cref="MapStyle.Lettering"/>).</summary>
+    public MapLettering Lettering => Style.Lettering;
+
+    /// <summary>How far apart the lines of a label of several lines are, in canvas pixels.</summary>
+    public float LineSpacing => Limits.LineSpacing;
 
     /// <summary>
     /// How every shape of this drawing is finished, on this display: the style asked for, or in a high
@@ -231,7 +244,7 @@ public abstract class ExploreSurface
         ArgumentNullException.ThrowIfNull(tree);
 
         var styled = style ?? MapStyle.Default;
-        var limits = LayoutLimits.Default.Spaced(spacing).Banded(styled.FolderNames).ForText(textScale).At(scale);
+        var limits = LayoutLimits.Default.Lettered(styled.Lettering).Spaced(spacing).Banded(styled.FolderNames).ForText(textScale).At(scale);
         var beside = root == tree.RootNode ? volume : VolumeSpace.None;
 
         return Drawn(tree, view) switch

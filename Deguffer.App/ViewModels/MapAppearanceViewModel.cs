@@ -26,13 +26,16 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
         nameof(SpacingIndex),
         nameof(ShadingIndex),
         nameof(ReliefIndex),
+        nameof(BevelShadesIndex),
         nameof(BlockBordersIndex),
         nameof(FolderBordersIndex),
         nameof(BorderWidthIndex),
         nameof(BorderToneIndex),
+        nameof(LinesIndex),
         nameof(FolderFillIndex),
         nameof(FolderNames),
         nameof(ShapeNames),
+        nameof(LetteringIndex),
         nameof(PointerLightShown),
         nameof(LightStrengthIndex),
         nameof(PresetIndex),
@@ -176,6 +179,27 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
     {
         get => (int)_look.Style.Relief;
         set => Restyle(value, style => style with { Relief = (MapRelief)value });
+    }
+
+    /// <summary>Index into the list of a bevel's shades, ordered to match <see cref="MapBevelShades"/>.</summary>
+    public int BevelShadesIndex
+    {
+        get => (int)_look.Style.BevelShades;
+        set => Restyle(value, style => style with { BevelShades = (MapBevelShades)value });
+    }
+
+    /// <summary>Index into the list of ways shapes side by side draw their lines, ordered to match <see cref="MapLines"/>.</summary>
+    public int LinesIndex
+    {
+        get => (int)_look.Style.Lines;
+        set => Restyle(value, style => style with { Lines = (MapLines)value });
+    }
+
+    /// <summary>Index into the lettering list, ordered to match <see cref="MapLettering"/>.</summary>
+    public int LetteringIndex
+    {
+        get => (int)_look.Style.Lettering;
+        set => Restyle(value, style => style with { Lettering = (MapLettering)value });
     }
 
     /// <summary>Index into the list of lines round each block, ordered to match <see cref="MapBorder"/>.</summary>

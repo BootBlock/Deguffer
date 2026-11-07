@@ -11,9 +11,15 @@ namespace Deguffer.Core.Exploring.Rendering;
 /// and the shapes a change of view carries. The colour arithmetic is whole numbers out of 256, so the
 /// shader can reproduce it exactly rather than to within a rounding of it.</para>
 ///
-/// <para>A line and a bevel are drawn inside a shape's own pixels, never across its edge, so each
-/// shape still draws only what it covers and the shapes claim the canvas as they do without them. Two
-/// siblings that share an edge draw a line twice as wide between them.</para>
+/// <para>A line and a bevel are drawn inside a shape's own pixels, so each shape draws what it covers
+/// and the shapes claim the canvas as they do without them, and two siblings that share an edge draw a
+/// line twice as wide between them. Under <see cref="MapLines.Shared"/> a shape draws its line along
+/// its top and its left and one past its bottom and its right instead, over the line of the shape
+/// beside it, so the two share one (<see cref="ShapeBorders.Shared"/>).</para>
+///
+/// <para>A bevel is drawn as a raised button is: the lit side runs the whole of the left and along the
+/// top, and the shaded side the whole of the right and along the bottom, so the top right corner is
+/// shaded and the bottom left lit.</para>
 /// </summary>
 /// <param name="Shading">How the inside of each shape is lit.</param>
 /// <param name="Relief">
@@ -46,12 +52,16 @@ public readonly record struct ShapeFinish(MapShading Shading, float Relief, Shap
         var bevel = style.Shading == MapShading.Bevel
             ? style.Relief switch
             {
-                // Standard is SpaceMonger's: half way to white along the top and the left, and a
-                // quarter of the way to black along the bottom and the right.
                 MapRelief.Subtle => new ShapeBevel(pixel, Highlight: 64, Shadow: 32),
                 MapRelief.Strong => new ShapeBevel(pixel, Highlight: 192, Shadow: 112),
                 MapRelief.Deep => new ShapeBevel(pixel, Highlight: 224, Shadow: 160),
+
+                // Half way to white along the top and the left, and a quarter of the way to black
+                // along the bottom and the right.
                 _ => new ShapeBevel(pixel, Highlight: 128, Shadow: 64),
+            } with
+            {
+                Classic = style.BevelShades == MapBevelShades.Classic,
             }
             : default;
 
@@ -68,7 +78,8 @@ public readonly record struct ShapeFinish(MapShading Shading, float Relief, Shap
                     _ => pixel,
                 },
                 blocks,
-                folders);
+                folders,
+                Shared: style.Lines == MapLines.Shared);
 
         var relief = style.Relief switch
         {
@@ -112,10 +123,12 @@ public readonly record struct ShapeFinish(MapShading Shading, float Relief, Shap
         Mix(colour.Blue, toward.Blue, amount));
 
     /// <summary>The colour of a bevel's lit side, along the top and the left of a shape filled <paramref name="fill"/>.</summary>
-    public TileColour Lit(TileColour fill) => Mix(fill, White, Bevel.Highlight);
+    public TileColour Lit(TileColour fill) =>
+        Bevel.Classic && ClassicBevel.TryShade(fill, out var lit, out _) ? lit : Mix(fill, White, Bevel.Highlight);
 
     /// <summary>The colour of a bevel's shaded side, along the bottom and the right.</summary>
-    public TileColour Shaded(TileColour fill) => Mix(fill, Black, Bevel.Shadow);
+    public TileColour Shaded(TileColour fill) =>
+        Bevel.Classic && ClassicBevel.TryShade(fill, out _, out var shaded) ? shaded : Mix(fill, Black, Bevel.Shadow);
 
     /// <summary>How far a line of <paramref name="border"/> is mixed towards its tone, out of <see cref="Whole"/>.</summary>
     private static int Amount(MapBorder border) => border switch
@@ -134,16 +147,23 @@ public readonly record struct ShapeFinish(MapShading Shading, float Relief, Shap
 /// <summary>
 /// A bevel along the inside of each shape's edges: <paramref name="Width"/> pixels, mixed
 /// <paramref name="Highlight"/> parts in 256 towards white along the top and the left and
-/// <paramref name="Shadow"/> parts towards black along the bottom and the right. No width for none.
+/// <paramref name="Shadow"/> parts towards black along the bottom and the right, or in SpaceMonger's
+/// own shades where <paramref name="Classic"/> and the shape is one of its colours
+/// (<see cref="ClassicBevel"/>). No width for none.
 /// </summary>
-public readonly record struct ShapeBevel(int Width, int Highlight, int Shadow);
+public readonly record struct ShapeBevel(int Width, int Highlight, int Shadow, bool Classic = false);
 
 /// <summary>
 /// The line inside each shape's sides: <paramref name="Width"/> pixels of the shape's own colour mixed
 /// towards <paramref name="Tone"/>, by <paramref name="Blocks"/> parts in 256 for a block and by
 /// <paramref name="Folders"/> for a folder drawn round what it holds. No width for none.
 /// </summary>
-public readonly record struct ShapeBorders(TileColour Tone, int Width, int Blocks, int Folders)
+/// <param name="Shared">
+/// Whether the line runs inside the top and the left of each shape and just past its bottom and its
+/// right, so a shape and the one beside it share it (<see cref="MapLines.Shared"/>), rather than
+/// inside all four sides.
+/// </param>
+public readonly record struct ShapeBorders(TileColour Tone, int Width, int Blocks, int Folders, bool Shared = false)
 {
     /// <summary>How far the line round a shape is mixed towards the tone, or zero where none is drawn.</summary>
     /// <param name="folder">Whether the shape is a folder drawn round what it holds.</param>
@@ -151,4 +171,7 @@ public readonly record struct ShapeBorders(TileColour Tone, int Width, int Block
 
     /// <summary>How wide the line round a shape is, or zero where none is drawn.</summary>
     public int WidthFor(bool folder) => AmountFor(folder) > 0 ? Width : 0;
+
+    /// <summary>How far past its bottom and its right a shape's line runs: its width where it is shared, and none where it is not.</summary>
+    public int ReachFor(bool folder) => Shared ? WidthFor(folder) : 0;
 }

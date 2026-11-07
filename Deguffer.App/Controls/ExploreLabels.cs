@@ -1,5 +1,6 @@
 using System.Numerics;
 using Deguffer.App.Shell;
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
@@ -54,8 +55,14 @@ internal sealed class ExploreLabels : Canvas
     /// <summary>The canvas's size on the screen, in device-independent pixels: where a kept span is cut.</summary>
     private const string Extent = "Extent";
 
+    /// <summary>How many device pixels a device-independent one is: what an anchor is rounded to.</summary>
+    private const string Pixel = "Pixel";
+
     /// <summary>How far left of its anchor the text starts, so a centred name is centred on it.</summary>
     private const string Shift = "Shift";
+
+    /// <summary>How far above its anchor the text starts, so a name of several lines is centred down it.</summary>
+    private const string Lift = "Lift";
 
     /// <summary>The magnifications it fades between, across then down: see <see cref="ExploreLabel.Fade"/>.</summary>
     private const string Fade = "Fade";
@@ -72,7 +79,7 @@ internal sealed class ExploreLabels : Canvas
     private static readonly string PlacementExpression =
         "Vector3("
         + $"({Pinned(Across, "X")}) * carried.Scale.X + carried.Offset.X - label.{Shift}, "
-        + $"({Pinned(Down, "Y")}) * carried.Scale.Y + carried.Offset.Y, "
+        + $"({Pinned(Down, "Y")}) * carried.Scale.Y + carried.Offset.Y - label.{Lift}, "
         + "0)";
 
     /// <summary>
@@ -137,10 +144,16 @@ internal sealed class ExploreLabels : Canvas
         _carried = carried;
         _motion = motion;
 
+        // A name in SpaceMonger's lettering is drawn into an image, whose contents a device lost or
+        // replaced takes with it.
+        Loaded += (_, _) => CompositionTarget.SurfaceContentsLost += OnContentsLost;
+        Unloaded += (_, _) => CompositionTarget.SurfaceContentsLost -= OnContentsLost;
+
         _placed = _compositor.CreatePropertySet();
         _placed.InsertVector3(nameof(Visual.Scale), Vector3.One);
         _placed.InsertVector3(nameof(Visual.Offset), Vector3.Zero);
         _placed.InsertVector2(Extent, Vector2.Zero);
+        _placed.InsertScalar(Pixel, 1);
 
         _screen = _compositor.CreatePropertySet();
         _screen.InsertVector3(nameof(Visual.Scale), Vector3.One);
@@ -195,7 +208,7 @@ internal sealed class ExploreLabels : Canvas
     ///
     /// <para>The caption comes from the page rather than from here, because only it knows what the
     /// tree's nodes are: a drive's are a file name and a size, and a memory picture's are a process or
-    /// a part of Windows.</para>
+    /// a part of Windows. How it is written is the drawing's lettering (<see cref="MapCaption.Text"/>).</para>
     ///
     /// <para>The text blocks are kept and written over rather than rebuilt. A scan repaints this
     /// several times a second, and each rebuild would throw away a few dozen controls and their
@@ -207,16 +220,17 @@ internal sealed class ExploreLabels : Canvas
     /// picture altogether, whose nodes are not the same nodes, and its names are put up at once, as a
     /// scan repainting several times a second needs.</para>
     /// </summary>
-    public void Show(ExploreSurface drawing, double scale, Func<ExploreLabel, string> caption)
+    public void Show(ExploreSurface drawing, double scale, Func<ExploreLabel, MapCaption> caption)
     {
         Visibility = Visibility.Visible;
+        _placed.InsertScalar(Pixel, (float)scale);
 
         while (Children.Count < drawing.Labels.Count)
         {
             var name = new Label(_compositor, _camera.Properties, _placed, _screen, _carried);
 
             _names.Add(name);
-            Children.Add(name.Text);
+            Children.Add(name.Text.Element);
         }
 
         while (Children.Count > drawing.Labels.Count)
@@ -234,26 +248,21 @@ internal sealed class ExploreLabels : Canvas
         {
             var label = drawing.Labels[i];
             var name = _names[i];
-            var text = name.Text;
-
-            text.Text = caption(label);
-            text.MaxWidth = label.Width / scale;
-
-            ((SolidColorBrush)text.Foreground).Color = label.Colour.ToColor();
-
-            ((RotateTransform)text.RenderTransform).Angle = label.Rotation;
-
-            // Measured here rather than left to the layout pass, because where the text goes and when
-            // it fades both depend on how much of the box it fills. The pass that follows asks the same
-            // question and is answered from this.
-            text.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-
-            var measured = text.DesiredSize;
+            var measured = name.Text.Write(
+                caption(label).Text(drawing.Lettering, label.Lines),
+                drawing.Lettering,
+                label.Width / scale,
+                label.Centred,
+                label.Colour.ToColor(),
+                label.Rotation,
+                drawing.LineSpacing / scale,
+                scale);
             var (across, down) = label.Fade((float)(measured.Width * scale), (float)(measured.Height * scale));
             name.Properties.InsertVector4(Across, Rule(label.Across, scale));
             name.Properties.InsertVector4(Down, Rule(label.Down, scale));
             name.Properties.InsertVector2(Kept, new Vector2(label.Across.KeptOnCanvas ? 1 : 0, label.Down.KeptOnCanvas ? 1 : 0));
-            name.Properties.InsertScalar(Shift, label.Centred ? (float)(measured.Width / 2) : 0);
+            name.Properties.InsertScalar(Shift, label.Centred ? Half(measured.Width, scale) : 0);
+            name.Properties.InsertScalar(Lift, label.Middle ? Half(measured.Height, scale) : 0);
             name.Properties.InsertVector4(Fade, new Vector4(across.Gone, across.Whole, down.Gone, down.Whole));
 
             if (!sameTree || _named.Contains(label.Node))
@@ -277,6 +286,20 @@ internal sealed class ExploreLabels : Canvas
         _tree = drawing.Tree;
     }
 
+    private void OnContentsLost(object? sender, object e)
+    {
+        foreach (var name in _names)
+        {
+            name.Text.Redraw();
+        }
+    }
+
+    /// <summary>
+    /// Half of <paramref name="length"/> device-independent pixels, down to a whole device pixel, so a
+    /// centred name starts on one as its anchor does (see <see cref="Pinned"/>).
+    /// </summary>
+    private static float Half(double length, double scale) => (float)(Math.Floor(length * scale / 2) / scale);
+
     /// <summary>A rule as the expressions read it, in device-independent pixels of a canvas at <paramref name="scale"/>.</summary>
     private static Vector4 Rule(LabelAxis axis, double scale) => new(
         (float)(axis.From / scale),
@@ -299,7 +322,12 @@ internal sealed class ExploreLabels : Canvas
         var centred = $"label.{rule}.W";
 
         // The start, or the middle of the span, as one sum: start + (end - start) / 2 where centred.
-        return $"({start} * (1 - ({centred} / 2))) + ({end} * ({centred} / 2)) + label.{rule}.Z";
+        // Rounded to a whole device pixel, because a name drawn off the pixel grid is resampled, and
+        // one in SpaceMonger's unsmoothed lettering comes out smoothed after all; the middle of a span
+        // falls on a half pixel as often as not.
+        var anchor = $"({start} * (1 - ({centred} / 2))) + ({end} * ({centred} / 2)) + label.{rule}.Z";
+
+        return $"Floor(({anchor}) * placed.{Pixel} + 0.5) / placed.{Pixel}";
     }
 
     /// <summary>A point of a drawing in its device-independent pixels, on the screen.</summary>
@@ -351,29 +379,14 @@ internal sealed class ExploreLabels : Canvas
             CompositionPropertySet screen,
             Visual carried)
         {
-            Text = new TextBlock
-            {
-                FontSize = 12,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                Foreground = new SolidColorBrush(),
-
-                // Zero for anything in rectangles, and per label for a sunburst, which turns each one
-                // to lie along its own ring. Always present rather than attached only where it turns:
-                // a transform of no degrees costs nothing to keep, and a branch here would mean a
-                // label reused from a sunburst kept its angle on a treemap.
-                RenderTransformOrigin = new Point(0.5, 0.5),
-                RenderTransform = new RotateTransform(),
-            };
-
-            // Announced through the list view instead: a label here duplicates a row there, and a
-            // screen reader reading fifty fragments of a picture helps nobody.
-            AutomationProperties.SetAccessibilityView(Text, AccessibilityView.Raw);
+            Text = new LabelText();
 
             Properties = compositor.CreatePropertySet();
             Properties.InsertVector4(Across, Vector4.Zero);
             Properties.InsertVector4(Down, Vector4.Zero);
             Properties.InsertVector2(Kept, Vector2.Zero);
             Properties.InsertScalar(Shift, 0);
+            Properties.InsertScalar(Lift, 0);
             Properties.InsertVector4(Fade, new Vector4(0, 1, 0, 1));
             Properties.InsertScalar(Arrival, 1);
 
@@ -388,17 +401,19 @@ internal sealed class ExploreLabels : Canvas
                 expression.SetReferenceParameter("screen", screen);
             }
 
-            _visual = ElementCompositionPreview.GetElementVisual(Text);
-            ElementCompositionPreview.SetIsTranslationEnabled(Text, true);
+            _visual = ElementCompositionPreview.GetElementVisual(Text.Element);
+            ElementCompositionPreview.SetIsTranslationEnabled(Text.Element, true);
+
 
             Follow(carried);
         }
 
-        public TextBlock Text { get; }
+        /// <summary>The text of the name, in the drawing's lettering.</summary>
+        public LabelText Text { get; }
 
         /// <summary>
         /// Where the name is and how it fades, in its own coordinates: <c>Across</c>, <c>Down</c>,
-        /// <c>Kept</c>, <c>Shift</c>, <c>Fade</c> and <c>Arrival</c>.
+        /// <c>Kept</c>, <c>Shift</c>, <c>Lift</c>, <c>Fade</c> and <c>Arrival</c>.
         /// </summary>
         public CompositionPropertySet Properties { get; }
 

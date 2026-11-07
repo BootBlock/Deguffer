@@ -171,6 +171,9 @@ public readonly record struct ExploreTile(
 /// Whether a treemap folder with room for one keeps a band along its top for its name. Without it,
 /// the top edge has the gap the other three have. See <see cref="Configuration.MapStyle.FolderNames"/>.
 /// </param>
+/// <param name="LineSpacing">
+/// How far apart the lines of a label of several lines are: see <see cref="Lettered"/>.
+/// </param>
 public readonly record struct LayoutLimits(
     float MinimumTileSize,
     int MaximumDepth,
@@ -178,7 +181,8 @@ public readonly record struct LayoutLimits(
     float MinimumLabelWidth,
     float MinimumLabelHeight,
     float ContainerGap,
-    bool FolderBands = true)
+    bool FolderBands = true,
+    float LineSpacing = 16f)
 {
     public static readonly LayoutLimits Default = new(
         MinimumTileSize: 3f,
@@ -187,6 +191,18 @@ public readonly record struct LayoutLimits(
         MinimumLabelWidth: 48f,
         MinimumLabelHeight: 16f,
         ContainerGap: 3f);
+
+    /// <summary>
+    /// These limits for text set as <paramref name="lettering"/> says.
+    ///
+    /// <para>SpaceMonger's type is eleven pixels and its lines eleven apart, and its band is a line
+    /// and a bevel above nine pixels of text: twelve pixels with the standard gap, measured from its
+    /// own pixels. It names a box as narrow as a few letters, and cuts the name off at the box's
+    /// edge.</para>
+    /// </summary>
+    public LayoutLimits Lettered(Configuration.MapLettering lettering) => lettering == Configuration.MapLettering.Classic
+        ? this with { MinimumLabelWidth = 32f, MinimumLabelHeight = 9f, LineSpacing = 11f }
+        : this;
 
     /// <summary>
     /// The band along the top of a folder's frame: one line of text, with half the gap above it and
@@ -228,6 +244,7 @@ public readonly record struct LayoutLimits(
     {
         MinimumLabelWidth = (float)(MinimumLabelWidth * textScale),
         MinimumLabelHeight = (float)(MinimumLabelHeight * textScale),
+        LineSpacing = (float)(LineSpacing * textScale),
     };
 
     /// <summary>The same limits in device pixels, for a display at <paramref name="scale"/>.</summary>
@@ -238,5 +255,6 @@ public readonly record struct LayoutLimits(
         (float)(MinimumLabelWidth * scale),
         (float)(MinimumLabelHeight * scale),
         (float)(ContainerGap * scale),
-        FolderBands);
+        FolderBands,
+        (float)(LineSpacing * scale));
 }
