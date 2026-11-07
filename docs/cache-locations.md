@@ -8272,8 +8272,8 @@ The same reasoning as the crash dumps, and it is the less obvious of the two. Ev
 internet treats these as free space, and most of the time they are. But a log is a record of an
 operation that has finished, the operation does not run again on request, and what Windows re-creates
 is the next log rather than the ones that went. That is Tier 3's definition and not Tier 1's, so
-Deguffer offers them without ticking them, and confirms that the loss is permanent before it
-acts.
+Deguffer offers them without ticking them, and confirms them as every Tier 3 row is: by default
+with a dialog that says the loss is permanent.
 
 ---
 
@@ -8790,8 +8790,8 @@ exists to say.
 
 ## Other accounts' profiles
 
-**Tier 3 — permanent loss.** Offered, **never pre-selected**, one profile at a time, and confirmed on
-its own.
+**Tier 3 — permanent loss.** Offered, **never pre-selected**, one profile at a time, and confirmed as
+every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the loss is permanent.
 
 | | |
 | --- | --- |
@@ -9229,8 +9229,8 @@ the Blender case is a bake that has to be made again.
 
 ## Tool logs in temporary folders
 
-**Tier 3 — user data.** Offered, **never pre-selected**, and the confirmation says the loss is
-permanent.
+**Tier 3 — user data.** Offered, **never pre-selected**, and confirmed as every [Tier 3](#how-to-read-the-tiers) row is: by default with a dialog that says the
+loss is permanent.
 
 | | |
 | --- | --- |
