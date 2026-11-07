@@ -69,7 +69,9 @@ public sealed class UnlistedRemovalTests : IDisposable
         var locked = _temp.CreateDirectory("cache", "locked");
         _temp.CreateFile(2048, "cache", "locked", "unseen.bin");
 
-        var fs = new UndeletableDirectory(new UnlistableFileSystem(WindowsFileSystem.Default, locked), locked);
+        var fs = new RefusingFileSystem(
+            new UnlistableFileSystem(WindowsFileSystem.Default, locked),
+            new Dictionary<string, RefusalReason> { [locked] = RefusalReason.Denied });
 
         var outcome = await DirectoryRemover.RemoveAsync(root, fileSystem: fs);
 
@@ -225,49 +227,5 @@ public sealed class UnlistedRemovalTests : IDisposable
             "Nothing was removed: Windows would not let Deguffer look inside 1 folder(s).",
             Assert.Single(report.Refused).Message);
         Assert.True(File.Exists(inside));
-    }
-
-    /// <summary>
-    /// The filesystem it wraps, except that Windows denies the removal of one directory for itself, as
-    /// it does a folder the account may not delete, before it asks whether the folder is empty.
-    /// </summary>
-    private sealed class UndeletableDirectory(IFileSystem inner, string denied) : IFileSystem
-    {
-        public bool DirectoryExists(string path) => inner.DirectoryExists(path);
-
-        public PathPresence ProbeDirectory(string path) => inner.ProbeDirectory(path);
-
-        public PathPresence ProbeEntry(string path) => inner.ProbeEntry(path);
-
-        public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
-
-        public ListingEnd ListEntries(string directory, ListingRequest request, List<WalkEntry> into) =>
-            inner.ListEntries(directory, request, into);
-
-        public long? TryGetFileLength(string path) => inner.TryGetFileLength(path);
-
-        public long? TryGetNewestFileTime(string path) => inner.TryGetNewestFileTime(path);
-
-        public void DeleteFile(string path) => inner.DeleteFile(path);
-
-        public RefusalReason? ProbeRemoval(string path) => inner.ProbeRemoval(path);
-
-        public void DeleteDirectory(string path)
-        {
-            if (LongPath.Display(path).Equals(denied, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new UnauthorizedAccessException($"Access to the path '{path}' is denied.");
-            }
-
-            inner.DeleteDirectory(path);
-        }
-
-        public void ClearAttributes(string path) => inner.ClearAttributes(path);
-
-        public FileAttributes? TryGetAttributes(string path) => inner.TryGetAttributes(path);
-
-        public bool MayExist(string path) => inner.MayExist(path);
-
-        public string? FinalPath(string path) => inner.FinalPath(path);
     }
 }
