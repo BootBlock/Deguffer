@@ -7,13 +7,14 @@ namespace Deguffer.Core.Execution;
 ///
 /// <para>The causes are named separately because they ask different things of the reader. Another
 /// program has files open, or is working in a folder, which closing it answers. Windows would not let
-/// Deguffer remove files or folders, which waiting will not change. A setting they chose held files
+/// Deguffer remove files or folders, which waiting will not change. Windows would not let Deguffer look
+/// inside a folder, so what it holds was never tried. A setting they chose held files
 /// back. Deguffer declined to touch an entry it found somebody working in. And an Outlook mail store, or
 /// work an editor keeps in a temporary folder until it is saved, is never removed at all, which asks
 /// nothing of them. A single count would tell them how much stayed and nothing about what to do.</para>
 ///
-/// <para>Composed from the clauses that apply rather than switched on every combination: eight causes
-/// make two hundred and fifty-six cases, and the wording would then live in every one of them.</para>
+/// <para>Composed from the clauses that apply rather than switched on every combination: nine causes
+/// make five hundred and twelve cases, and the wording would then live in every one of them.</para>
 /// </summary>
 internal static class LeftInPlace
 {
@@ -27,9 +28,17 @@ internal static class LeftInPlace
     /// What a step that achieved something has to add about what it left behind, or nothing where it
     /// left nothing.
     /// </summary>
-    public static string Clauses(Refusals refused, FolderRefusals folders, int kept, int spared = 0, int mailStores = 0, int userWork = 0)
+    /// <param name="unlisted">How many folders Windows would not let the removal list. See <see cref="RemovalOutcome.Unlisted"/>.</param>
+    public static string Clauses(
+        Refusals refused,
+        FolderRefusals folders,
+        int kept,
+        int spared = 0,
+        int mailStores = 0,
+        int userWork = 0,
+        int unlisted = 0)
     {
-        var clauses = new List<string>(8);
+        var clauses = new List<string>(9);
 
         if (refused.InUse.Files > 0)
         {
@@ -49,6 +58,11 @@ internal static class LeftInPlace
         if (folders.Denied > 0)
         {
             clauses.Add($"{folders.Denied:N0} folder(s) left in place because Windows would not let Deguffer remove them");
+        }
+
+        if (unlisted > 0)
+        {
+            clauses.Add($"{unlisted:N0} folder(s) left in place because Windows would not let Deguffer look inside them");
         }
 
         if (kept > 0)
@@ -84,14 +98,15 @@ internal static class LeftInPlace
     /// guess, and "run as administrator" is advice this is almost only shown to somebody who has
     /// taken — the shell does not offer a step needing those rights to a process without them.</para>
     /// </summary>
-    public static string WhyNothingHappened(Refusals refused, FolderRefusals folders)
+    /// <param name="unlisted">How many folders Windows would not let the removal list. See <see cref="RemovalOutcome.Unlisted"/>.</param>
+    public static string WhyNothingHappened(Refusals refused, FolderRefusals folders, int unlisted = 0)
     {
-        if (refused.IsEmpty && folders.IsEmpty)
+        if (refused.IsEmpty && folders.IsEmpty && unlisted == 0)
         {
             return "Nothing was removed.";
         }
 
-        var causes = new List<string>(4);
+        var causes = new List<string>(5);
 
         if (refused.Denied.Files > 0)
         {
@@ -111,6 +126,11 @@ internal static class LeftInPlace
         if (folders.InUse > 0)
         {
             causes.Add($"another program was using {folders.InUse:N0} folder(s)");
+        }
+
+        if (unlisted > 0)
+        {
+            causes.Add($"Windows would not let Deguffer look inside {unlisted:N0} folder(s)");
         }
 
         return $"Nothing was removed: {string.Join(", and ", causes)}.";

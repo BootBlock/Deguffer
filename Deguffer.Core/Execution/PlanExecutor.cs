@@ -810,7 +810,7 @@ public sealed class PlanExecutor(
         {
             false when removal.NotADirectory => LeftInPlace.NotAFolder,
 
-            false => LeftInPlace.WhyNothingHappened(removal.Refused, removal.RefusedFolders),
+            false => LeftInPlace.WhyNothingHappened(removal.Refused, removal.RefusedFolders, removal.Unlisted.Count),
 
             // Whatever came out was the index, which went whole before the folder was looked at: a
             // removal that met a file at the folder's path takes nothing. "Removed" alone would claim
@@ -824,13 +824,13 @@ public sealed class PlanExecutor(
             // about what stayed, because that is all that happened.
             _ when removal is { BytesReclaimed: 0, RootRemoved: false, EntriesRemoved: 0 } && stores == 0 =>
                 $"Left alone: {removal.Kept} file(s) changed too recently"
-                + $"{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, kept: 0)}.",
+                + $"{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, kept: 0, unlisted: removal.Unlisted.Count)}.",
 
             // The same shape with a store among what stayed, which the guard's sentence would misname.
             _ when removal is { BytesReclaimed: 0, RootRemoved: false, EntriesRemoved: 0 } =>
-                $"Nothing was removed{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept, mailStores: stores)}.",
+                $"Nothing was removed{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept, mailStores: stores, unlisted: removal.Unlisted.Count)}.",
 
-            _ => $"Removed{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept, mailStores: stores)}.",
+            _ => $"Removed{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept, mailStores: stores, unlisted: removal.Unlisted.Count)}.",
         };
 
         return new StepOutcome(
@@ -842,7 +842,8 @@ public sealed class PlanExecutor(
             removal.Kept,
             EntriesRemoved: removal.EntriesRemoved,
             RefusedFolders: removal.RefusedFolders,
-            MailStores: stores)
+            MailStores: stores,
+            Unlisted: removal.Unlisted.Count)
         {
             Passes = removal.Passes,
         };
@@ -893,10 +894,13 @@ public sealed class PlanExecutor(
         }
 
         // A file standing where the folder was is not a folder that held nothing, which is what a clear
-        // that met no refusal otherwise reports.
+        // that met no refusal otherwise reports. Nor is a folder Windows would not let the removal look
+        // inside, whose contents nothing tried.
+        var unlisted = removal.Unlisted.Count;
         var succeeded = !removal.NotADirectory
             && (removal.BytesReclaimed > 0 || removal.EntriesRemoved > 0 || removal.Kept > 0
-                || removal.Spared > 0 || removal.UserWork > 0 || stores > 0 || (removal.Refused.IsEmpty && removal.RefusedFolders.IsEmpty));
+                || removal.Spared > 0 || removal.UserWork > 0 || stores > 0
+                || (removal.Refused.IsEmpty && removal.RefusedFolders.IsEmpty && unlisted == 0));
 
         // Asked of the entries as well as the bytes: a folder holding only empty folders reclaims no
         // bytes, and it was still cleared.
@@ -904,18 +908,18 @@ public sealed class PlanExecutor(
         {
             (false, _, _) when removal.NotADirectory => LeftInPlace.NotAFolder,
 
-            (false, _, _) => LeftInPlace.WhyNothingHappened(removal.Refused, removal.RefusedFolders),
+            (false, _, _) => LeftInPlace.WhyNothingHappened(removal.Refused, removal.RefusedFolders, unlisted),
 
             // Nothing came out, and the reasons are the ones the step promised: files too recent to
             // touch, entries something is using, somebody's work, and Outlook mail stores. "Cleared"
             // would be a false statement about a folder that is exactly as full as it was.
             (true, 0, 0) when removal.Kept > 0 || removal.Spared > 0 || removal.UserWork > 0 || stores > 0 =>
                 "Nothing was cleared"
-                + $"{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept, removal.Spared, stores, removal.UserWork)}.",
+                + $"{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept, removal.Spared, stores, removal.UserWork, unlisted)}.",
 
             (true, 0, 0) => "It held nothing to clear.",
 
-            _ => $"Cleared{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept, removal.Spared, stores, removal.UserWork)}.",
+            _ => $"Cleared{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept, removal.Spared, stores, removal.UserWork, unlisted)}.",
         };
 
         return new StepOutcome(
@@ -929,7 +933,8 @@ public sealed class PlanExecutor(
             removal.EntriesRemoved,
             removal.RefusedFolders,
             stores,
-            UserWork: removal.UserWork)
+            UserWork: removal.UserWork,
+            Unlisted: unlisted)
         {
             Passes = removal.Passes,
         };
@@ -951,14 +956,15 @@ public sealed class PlanExecutor(
         (removal.BytesReclaimed == 0 && removal.EntriesRemoved == 0
             ? "Stopped when the clean was cancelled, before anything was removed"
             : "Stopped part-way when the clean was cancelled")
-        + $"{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept, removal.Spared, stores, removal.UserWork)}.",
+        + $"{LeftInPlace.Clauses(removal.Refused, removal.RefusedFolders, removal.Kept, removal.Spared, stores, removal.UserWork, removal.Unlisted.Count)}.",
         removal.Kept,
         removal.Spared,
         removal.EntriesRemoved,
         removal.RefusedFolders,
         stores,
         Interrupted: true,
-        UserWork: removal.UserWork)
+        UserWork: removal.UserWork,
+        Unlisted: removal.Unlisted.Count)
     {
         Passes = removal.Passes,
     };

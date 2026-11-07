@@ -91,10 +91,28 @@ public sealed record RemovalOutcome(
     public IReadOnlyList<string> MailStores { get; init; } = [];
 
     /// <summary>
+    /// The folders Windows would not let this removal list and that are still there, in display form,
+    /// the root among them where it is one. Nothing inside one was seen, so nothing inside it was tried.
+    ///
+    /// <para><b>Its own fact, because no other field can say it.</b> A folder holding something Windows
+    /// refused is held up by an entry the reader was told about. One that was never listed is held up by
+    /// entries nobody saw, so it has no refusal to count, and without this a clear whose root would not
+    /// list reported that it held nothing to clear. The same sentence <see cref="WholeTreeLook"/> gives
+    /// for a removal that goes whole or not at all.</para>
+    ///
+    /// <para>A folder here is not counted in <see cref="RefusedFolders"/> as well, even where Windows
+    /// refused its deletion too: the account that may not read a folder is seldom allowed to remove it,
+    /// and one folder would then be two clauses. Each is in <see cref="LeftStanding"/> where this
+    /// removal tried it.</para>
+    /// </summary>
+    public IReadOnlyList<string> Unlisted { get; init; } = [];
+
+    /// <summary>
     /// The folders in <see cref="LeftStanding"/> that Windows refused for a reason of their own, by
     /// reason. See <see cref="FolderRefusals"/> for why a folder held up by what it holds is not
-    /// counted. A link left standing is not counted either, for the reason a refused file link is not:
-    /// see <see cref="DirectoryRemover"/>.
+    /// counted, and <see cref="Unlisted"/> for why a folder never listed is not. A link left standing
+    /// is not counted either, for the reason a refused file link is not: see
+    /// <see cref="DirectoryRemover"/>.
     /// </summary>
     public FolderRefusals RefusedFolders { get; init; }
 
