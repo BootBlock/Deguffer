@@ -27,29 +27,37 @@ namespace Deguffer.Core.Execution;
 /// reasons <see cref="HostVolume.Unopened"/> gives, and nothing can say which other path is the same
 /// folder, so its step runs alone.</para>
 ///
-/// <para>Each step's folders are found once, the first time the step is compared. Only the loop that
-/// starts the steps asks, one question at a time, so nothing here takes a lock.</para>
+/// <para><b>Every step's folders are found before the first step starts.</b> Following a path opens
+/// a handle on it, and a handle opened on a later step's folder while an earlier step removed the
+/// folder holding it could stand in that removal's way. Each step is followed once, and a step that
+/// runs alone is not followed at all.</para>
 /// </summary>
-/// <param name="volumes">Asked every other path each folder is reachable at.</param>
-/// <param name="fileSystem">Asked where each path leads once its links are followed.</param>
-internal sealed class StepOverlap(IReadOnlyList<CleanupStep> steps, IVolumeInventory volumes, IFileSystem fileSystem)
+internal sealed class StepOverlap
 {
-    private readonly RememberedMountPoints _volumes = new(volumes);
+    // Empty for a step whose folders nothing can tell apart from another's, which runs alone.
+    private readonly IReadOnlyList<ReachedFolder>[] _folders;
 
-    // Null for a step not yet compared, and empty for one whose folders nothing can tell apart from
-    // another's, which runs alone.
-    private readonly IReadOnlyList<ReachedFolder>?[] _folders = new IReadOnlyList<ReachedFolder>?[steps.Count];
+    private StepOverlap(IReadOnlyList<ReachedFolder>[] folders) => _folders = folders;
+
+    /// <summary>Which of <paramref name="steps"/> may run together, found before any of them runs.</summary>
+    /// <param name="volumes">Asked every other path each folder is reachable at.</param>
+    /// <param name="fileSystem">Asked where each path leads once its links are followed.</param>
+    public static StepOverlap Of(IReadOnlyList<CleanupStep> steps, IVolumeInventory volumes, IFileSystem fileSystem)
+    {
+        var remembered = new RememberedMountPoints(volumes);
+        var places = new FinalPlaces(fileSystem, remembered);
+
+        return new StepOverlap([.. steps.Select(step => FoldersOf(step, remembered, places))]);
+    }
 
     /// <summary>Whether the step at <paramref name="step"/> may start while every step in <paramref name="underway"/> runs.</summary>
     public bool MayStartBeside(int step, IReadOnlyCollection<int> underway) =>
-        underway.Count == 0 || (FoldersOf(step) is { Count: > 0 } own && underway.All(other => Apart(own, FoldersOf(other))));
+        underway.Count == 0 || (_folders[step] is { Count: > 0 } own && underway.All(other => Apart(own, _folders[other])));
 
     private static bool Apart(IReadOnlyList<ReachedFolder> one, IReadOnlyList<ReachedFolder> other) =>
         other.Count > 0 && one.All(folder => other.All(theirs => !folder.Holds(theirs) && !theirs.Holds(folder)));
 
-    private IReadOnlyList<ReachedFolder> FoldersOf(int step) => _folders[step] ??= Find(steps[step]);
-
-    private IReadOnlyList<ReachedFolder> Find(CleanupStep step)
+    private static IReadOnlyList<ReachedFolder> FoldersOf(CleanupStep step, IVolumeInventory volumes, FinalPlaces places)
     {
         if (step is not (DeleteDirectoryStep or ClearDirectoryStep or DeleteFileStep) || step is DeleteStep { UseCheck: ReleasingProcessCheck })
         {
@@ -58,21 +66,11 @@ internal sealed class StepOverlap(IReadOnlyList<CleanupStep> steps, IVolumeInven
 
         var destroys = ((DeleteStep)step).Destroys;
 
-        if (destroys.Any(path => HostVolume.Unopened(_volumes, path) is UnopenedPlace.Share))
+        if (destroys.Any(path => HostVolume.Unopened(volumes, path) is UnopenedPlace.Share))
         {
             return [];
         }
 
-        return [.. destroys.Select(Reached)];
+        return [.. destroys.Select(places.Rule)];
     }
-
-    private ReachedFolder Reached(string path)
-    {
-        var folder = ReachedFolder.At(path, _volumes);
-
-        return ReachedFolder.FollowedTo(path, _volumes, Final) is { } followed ? folder.Joined(followed) : folder;
-    }
-
-    // In the extended form §6.3 requires.
-    private string? Final(string path) => fileSystem.FinalPath(LongPath.Extended(path));
 }

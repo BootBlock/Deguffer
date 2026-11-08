@@ -162,7 +162,7 @@ public sealed class PlanExecutor(
         // removal that ends early would leave a gap that never closes.
         var run = await PlanSteps.RunAsync(
             plan.Steps,
-            new StepOverlap(plan.Steps, _volumes, _fileSystem),
+            StepOverlap.Of(plan.Steps, _volumes, _fileSystem),
             (index, stepProgress, stop) => RunTimedStepAsync(
                 plan, index, heldAtClean[index] = [], runResidue, deletions, stepProgress, underway, stop),
             progress,

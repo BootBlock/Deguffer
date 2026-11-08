@@ -71,7 +71,7 @@ public sealed class StepOverlapTests : IDisposable
     public void AFolderReachedThroughASubstitutedDriveIsTheSameFolder()
     {
         var volumes = new FakeVolumeInventory().Substituting(@"T:\", Source);
-        var overlap = new StepOverlap(
+        var overlap = StepOverlap.Of(
             [new DeleteDirectoryStep($@"{Source}\app\obj", "obj"), new DeleteDirectoryStep(@"T:\app\obj\Debug", "Debug")],
             volumes,
             EmptyFileSystem.Instance);
@@ -91,7 +91,7 @@ public sealed class StepOverlapTests : IDisposable
         var work = Path.Combine(_temp.Path, "work");
         Junction.ToDirectory(work, Path.Combine(_temp.Path, "src"));
 
-        var overlap = new StepOverlap(
+        var overlap = StepOverlap.Of(
             [new DeleteDirectoryStep(real, "obj"), new DeleteDirectoryStep(Path.Combine(work, "app", "obj", "Debug"), "Debug")],
             new FakeVolumeInventory(),
             WindowsFileSystem.Default);
@@ -157,5 +157,5 @@ public sealed class StepOverlapTests : IDisposable
     }
 
     private static StepOverlap Overlap(params CleanupStep[] steps) =>
-        new(steps, new FakeVolumeInventory(), EmptyFileSystem.Instance);
+        StepOverlap.Of(steps, new FakeVolumeInventory(), EmptyFileSystem.Instance);
 }

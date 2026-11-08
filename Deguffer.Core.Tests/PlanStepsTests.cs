@@ -144,6 +144,7 @@ public sealed class PlanStepsTests
         using var cts = new CancellationTokenSource();
         using var allStarted = new CountdownEvent(PlanSteps.MostAtOnce);
         var started = 0;
+        var toldToStop = 0;
 
         var run = await PlanSteps.RunAsync(
             steps,
@@ -158,8 +159,12 @@ public sealed class PlanStepsTests
                     await cts.CancelAsync();
                 }
 
-                // A step stops where the clean is cancelled, as a removal does, and says so.
-                await Task.Delay(Timeout.InfiniteTimeSpan, stop).ContinueWith(static _ => { }, TaskScheduler.Default);
+                // A step stops where the clean is cancelled, as a removal does, and says so. Bounded, so
+                // a loop that never told it to stop fails the test rather than hanging it.
+                if (await ToldToStop(stop))
+                {
+                    Interlocked.Increment(ref toldToStop);
+                }
 
                 return Outcome(steps[index]) with { Interrupted = true };
             },
@@ -168,6 +173,7 @@ public sealed class PlanStepsTests
 
         Assert.True(run.Interrupted);
         Assert.Equal(PlanSteps.MostAtOnce, started);
+        Assert.Equal(PlanSteps.MostAtOnce, toldToStop);
         Assert.Equal(PlanSteps.MostAtOnce, run.Outcomes.Count);
         Assert.All(run.Outcomes, outcome => Assert.True(outcome.Interrupted));
     }
@@ -222,6 +228,7 @@ public sealed class PlanStepsTests
         var thrown = new InvalidOperationException("The step failed.");
         var started = 0;
         var stillRunning = 0;
+        var toldToStop = 0;
 
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => PlanSteps.RunAsync(
             steps,
@@ -240,7 +247,11 @@ public sealed class PlanStepsTests
                         throw thrown;
                     }
 
-                    await Task.Delay(Timeout.InfiniteTimeSpan, stop).ContinueWith(static _ => { }, TaskScheduler.Default);
+                    if (await ToldToStop(stop))
+                    {
+                        Interlocked.Increment(ref toldToStop);
+                    }
+
                     return Outcome(steps[index]) with { Interrupted = true };
                 }
                 finally
@@ -253,6 +264,7 @@ public sealed class PlanStepsTests
 
         Assert.Same(thrown, failure);
         Assert.Equal(0, Volatile.Read(ref stillRunning));
+        Assert.Equal(PlanSteps.MostAtOnce - 1, toldToStop);
         Assert.Equal(PlanSteps.MostAtOnce, started);
     }
 
@@ -295,11 +307,21 @@ public sealed class PlanStepsTests
         Assert.All(reports.Zip(reports.Skip(1)), pair => Assert.True(pair.Second >= pair.First, $"{pair.Second} followed {pair.First}"));
     }
 
+    /// <summary>
+    /// Wait until <paramref name="stop"/> is cancelled or the patience runs out, and say which. Never
+    /// thrown, so a step that was not told to stop ends and is counted rather than hanging the test.
+    /// </summary>
+    private static async Task<bool> ToldToStop(CancellationToken stop)
+    {
+        await Task.Delay(Patience, stop).ContinueWith(static _ => { }, TaskScheduler.Default);
+        return stop.IsCancellationRequested;
+    }
+
     private static IReadOnlyList<CleanupStep> Apart(int count) =>
         [.. Enumerable.Range(0, count).Select(index => new DeleteDirectoryStep($@"C:\Users\testuser\src\p{index}\obj", $"step {index}"))];
 
     private static StepOverlap Overlap(IReadOnlyList<CleanupStep> steps) =>
-        new(steps, new FakeVolumeInventory(), EmptyFileSystem.Instance);
+        StepOverlap.Of(steps, new FakeVolumeInventory(), EmptyFileSystem.Instance);
 
     private static StepOutcome Outcome(CleanupStep step) =>
         new(step.Description, Succeeded: true, BytesReclaimed: 0, Refusals.None, "Removed.");

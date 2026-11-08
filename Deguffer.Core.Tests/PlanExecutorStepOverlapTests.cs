@@ -87,16 +87,22 @@ public sealed class PlanExecutorStepOverlapTests : IDisposable
     }
 
     /// <summary>
-    /// The inner folder comes first in the plan and its first deletion is held, which is when a removal
-    /// of the folder holding it would run if it were let start beside it. Every deletion of the inner
-    /// folder still begins before any deletion of the rest of the outer one.
+    /// The inner folder comes first in the plan, and every deletion of it begins before any deletion of
+    /// the rest of the outer one, which is the order the deletions were made in rather than a time.
+    ///
+    /// <para>The inner folder's first deletion is held for a moment, to give a removal of the outer
+    /// folder let start beside it the time to show in that order. The hold can only let a broken rule
+    /// pass unseen on a slow machine. It cannot fail a rule that works, because nothing waits on
+    /// it.</para>
     /// </summary>
     [Fact]
     public async Task AFolderInsideAnotherIsNeverRemovedBesideIt()
     {
-        var outer = _temp.CreateDirectory("out");
-        var inner = Tree("out", "in");
-        var rest = Tree("out", "rest");
+        var work = _temp.CreateDirectory("work");
+        var notes = _temp.CreateFile(64, "work", "notes.txt");
+        var outer = _temp.CreateDirectory("work", "out");
+        var inner = Tree("work", "out", "in");
+        var rest = Tree("work", "out", "rest");
 
         var fs = new FirstDeletionHooks(WindowsFileSystem.Default, new Dictionary<string, Action>
         {
@@ -104,7 +110,10 @@ public sealed class PlanExecutorStepOverlapTests : IDisposable
         });
 
         var result = await Executor(fs).ExecuteAsync(
-            Plan([new DeleteDirectoryStep(inner, "inner"), new DeleteDirectoryStep(outer, "outer")]),
+            Plan(
+                [new DeleteDirectoryStep(inner, "inner"), new DeleteDirectoryStep(outer, "outer")],
+                new ProtectedPath(work, "The folder holding the output.", PathPresence.Present),
+                new ProtectedPath(notes, "A file beside the output.", PathPresence.Present)),
             runReach: null,
             residue: null,
             progress: null,
@@ -118,6 +127,11 @@ public sealed class PlanExecutorStepOverlapTests : IDisposable
         Assert.InRange(lastOfInner, 0, firstOfRest - 1);
         Assert.All(result.Steps, step => Assert.True(step.Succeeded, step.Message));
         Assert.False(Directory.Exists(outer));
+
+        // §5.6's negative, on the disk and in the verdict.
+        Assert.True(File.Exists(notes));
+        Assert.True(result.Verification!.Passed);
+        Assert.All(result.Verification.Checks, check => Assert.Equal(VerificationOutcome.Survived, check.Outcome));
     }
 
     /// <summary>
@@ -129,10 +143,13 @@ public sealed class PlanExecutorStepOverlapTests : IDisposable
     public async Task TheStepsOfAPlanShareOneBoundOnTheirDeletions()
     {
         var trees = Enumerable.Range(0, 6).Select(index => Tree("src", $"p{index}", "obj")).ToList();
+        var projects = Enumerable.Range(0, 6).Select(index => _temp.CreateFile(64, "src", $"p{index}", $"p{index}.csproj")).ToList();
         var watched = new WatchedDeletions(WindowsFileSystem.Default, TimeSpan.FromMilliseconds(5));
 
         var result = await Executor(watched).ExecuteAsync(
-            Plan([.. trees.Select(tree => new DeleteDirectoryStep(tree, tree))]),
+            Plan(
+                [.. trees.Select(tree => new DeleteDirectoryStep(tree, "A build folder"))],
+                [.. projects.Select(project => new ProtectedPath(project, "The project beside its output.", PathPresence.Present))]),
             runReach: null,
             residue: null,
             progress: null,
@@ -142,6 +159,11 @@ public sealed class PlanExecutorStepOverlapTests : IDisposable
         Assert.All(result.Steps, step => Assert.True(step.Succeeded, step.Message));
         Assert.All(trees, tree => Assert.False(Directory.Exists(tree)));
         Assert.InRange(watched.MostAtOnce, 2, DirectoryRemover.MostAtOnce);
+
+        // §5.6's negative, on the disk and in the verdict.
+        Assert.All(projects, project => Assert.True(File.Exists(project), $"{project} went"));
+        Assert.True(result.Verification!.Passed);
+        Assert.All(result.Verification.Checks, check => Assert.Equal(VerificationOutcome.Survived, check.Outcome));
     }
 
     /// <summary>

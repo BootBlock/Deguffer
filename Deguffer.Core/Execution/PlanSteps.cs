@@ -33,6 +33,11 @@ internal static class PlanSteps
     /// overlap whatever the processor count, and the deletions themselves share one bound for the plan
     /// (<see cref="Scanning.ThreadAllowance"/>), so this bounds the questions in flight rather than the
     /// disk's queue.
+    ///
+    /// <para><b>Eight is chosen, not tuned.</b> It is the top of the range the audit that found the
+    /// cost (#494) estimated, and no other count has been measured. The benchmark's clean route (#502),
+    /// 500 build folders of 100 files on a fixed NTFS drive with 32 logical processors, took a median
+    /// of 2.86 s at eight against 4.12 s one at a time.</para>
     /// </summary>
     public const int MostAtOnce = 8;
 

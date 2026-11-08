@@ -992,9 +992,9 @@ public sealed class PlanExecutorTests : IDisposable
     /// plans. One <c>obj</c> of 4 GB beside five of 20 MB is six steps, and an equal split would
     /// crawl through the first sixth of the bar and then jump the rest of it.
     ///
-    /// <para>The two folders are apart, so they are removed at once and either may end first. The bar
-    /// then stands at the weight of whichever did, nine tenths or one tenth, and never at the half an
-    /// equal split would give.</para>
+    /// <para>A command between the two folders runs alone, so the big folder ends before the small one
+    /// starts, as two folders apart would not. The command frees nothing it was estimated at, so it
+    /// takes none of the bar.</para>
     /// </summary>
     [Fact]
     public async Task WeightsTheBarByWhatEachStepFreesRatherThanByHowManyThereAre()
@@ -1013,20 +1013,17 @@ public sealed class PlanExecutorTests : IDisposable
             Steps =
             [
                 new DeleteDirectoryStep(big, "The big one") { Estimated = new ScanSize(9_000, 9_000) },
+                new RunCommandStep("tool", "prune", "Between them") { WhenCancelled = CancelledCommand.Ended },
                 new DeleteDirectoryStep(small, "The small one") { Estimated = new ScanSize(1_000, 1_000) },
             ],
         };
 
         var progress = new ProgressRecorder<double>();
 
-        await new PlanExecutor(new FakeProcessRunner(), new FakeDirectoryScanner(), RefusalLog)
+        await new PlanExecutor(new FakeProcessRunner().Responding("tool", "prune", string.Empty), new FakeDirectoryScanner(), RefusalLog)
             .ExecuteAsync(plan, runReach: null, residue: null, progress, underway: null, default);
 
-        var reports = progress.Reports.Select(r => Math.Round(r, 6)).Distinct().ToList();
-
-        Assert.Equal(1.0, reports[^1]);
-        Assert.Contains(reports, r => r is 0.9 or 0.1);
-        Assert.All(reports, r => Assert.Contains(r, (double[])[0.0, 0.1, 0.9, 1.0]));
+        Assert.Equal([0.9, 1.0], progress.Reports.Select(r => Math.Round(r, 6)).Distinct());
     }
 
     /// <summary>

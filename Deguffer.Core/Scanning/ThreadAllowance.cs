@@ -25,11 +25,7 @@ public sealed class ThreadAllowance
         ArgumentOutOfRangeException.ThrowIfLessThan(places, 1);
 
         _places = new SemaphoreSlim(places, places);
-        Places = places;
     }
-
-    /// <summary>How many threads may be at work at once across every run sharing it.</summary>
-    public int Places { get; }
 
     /// <summary>Take a place if one is free now, without waiting. True where one was taken.</summary>
     public bool TryTake() => _places.Wait(0);

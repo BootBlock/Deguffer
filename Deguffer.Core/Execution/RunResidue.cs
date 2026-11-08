@@ -45,7 +45,7 @@ namespace Deguffer.Core.Execution;
 ///
 /// <para><b>Safe for concurrent use.</b> The steps of a plan that destroy unrelated folders run at
 /// once, and each records its own removal as it ends. What the removals record is read and written
-/// under one lock, which costs nothing a removal would notice: each records once a step, and §5.6 reads
+/// under one lock, which costs nothing a removal would notice: each records once for each tree it removes, and §5.6 reads
 /// once the steps are over. What had gone before the run is written only by <see cref="Begin"/>, before
 /// anything else can see the record.</para>
 /// </summary>
