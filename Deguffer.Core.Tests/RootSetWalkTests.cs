@@ -38,6 +38,7 @@ public sealed class RootSetWalkTests
                 [.. leaves.Select(leaf => new WalkRoot(LongPath.Extended(leaf), LeftOut: null))],
                 new WalkTuning(Threads, WalkTuning.MinimumListingBuffer),
                 FileNames.All,
+                DirectoryHold.None,
                 tree.List,
                 static (_, _, _, _) => new object(),
                 static () => { },
@@ -225,6 +226,7 @@ public sealed class RootSetWalkTests
             [.. roots.Select(root => WalkRoot.Of(root, default))],
             new WalkTuning(Threads, WalkTuning.MinimumListingBuffer),
             FileNames.All,
+            DirectoryHold.None,
             tree.List,
             (root, holder, contents, _) =>
             {

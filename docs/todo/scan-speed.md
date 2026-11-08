@@ -78,7 +78,7 @@ Each needs #466 for its test.
 | #467 | Every listing that ends wakes every waiting walk on its volume. |
 | #470 | Volumes, and fallback walks, measured one after another. |
 | #471 | Approved source folders searched one after another. |
-| #469 | The hard-link-aware scan builds two paths and a by-name read per file. |
+| #469 | The hard-link-aware scan builds two paths and a by-name read per file. Done: each file is read by its bare name relative to a handle the walk holds on its folder while the callback runs. On one 33,115-file pnpm store the links route allocated 9.4 to 14.0 MiB rather than 31.2 MiB, and its time did not move outside the noise. |
 | #468 | Open each directory relative to its parent. Measure with #476 first. `safety`. |
 | #473 | A frame array per child directory. |
 

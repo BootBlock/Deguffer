@@ -210,11 +210,13 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
         var roots = asked.Select((_, i) => new RootTally(owns[i], keeps)).ToArray();
         var route = new ByNameRoute();
 
-        // Every name, because each file counted is opened by its path to ask what else links it.
+        // Every name, because each file counted is asked what else links it by its name, relative to
+        // the directory the walk holds open while this reads it.
         RootSetWalk.Visit<RootTally>(
             [.. asked.Select(question => WalkRoot.Of(question.Path, question.Bounds))],
             tuning,
             FileNames.All,
+            DirectoryHold.DuringCallback,
             (root, holder, contents, left) =>
             {
                 var measured = holder ?? roots[root];
@@ -268,7 +270,7 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
 
                         if (!read)
                         {
-                            info = files.Standard(file.FullName, route);
+                            info = files.Standard(contents.Handle, file, route);
                             read = true;
                         }
 

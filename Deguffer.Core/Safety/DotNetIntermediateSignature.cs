@@ -51,7 +51,7 @@ public static class DotNetIntermediateSignature
     private static readonly int[] KnownSchemaVersions = [3, 4];
 
     /// <summary>
-    /// A ceiling on the manifest read into memory. Real ones run to about a megabyte; anything
+    /// A ceiling on the manifest that is read. Real ones run to about a megabyte; anything
     /// vastly larger is not the file this rule was written against, and refusing it is the safe
     /// direction as well as the cheap one.
     /// </summary>
@@ -117,6 +117,11 @@ public static class DotNetIntermediateSignature
     /// Only the filename is taken. The manifest records an absolute path, and resolving that path
     /// would reintroduce the copied-tree hole the caller's parent check exists to close.
     /// </summary>
+    /// <remarks>
+    /// A manifest that defines its <c>version</c>, <c>project</c>, <c>restore</c> or
+    /// <c>projectPath</c> twice is refused. This is stricter than the reading it replaced, which took
+    /// the last definition: a manifest naming two projects does not say which one it is for.
+    /// </remarks>
     private static string? ReadProjectFileName(string manifest)
     {
         try
@@ -128,20 +133,13 @@ public static class DotNetIntermediateSignature
                 return null;
             }
 
-            using var stream = file.OpenRead();
-            using var document = JsonDocument.Parse(stream);
+            // The reader keeps its own window, so a stream buffer would only copy every byte twice.
+            using var stream = new FileStream(
+                file.FullName,
+                new FileStreamOptions { Mode = FileMode.Open, Access = FileAccess.Read, Share = FileShare.Read, BufferSize = 0 });
 
-            if (TryGetProperty(document.RootElement, "version") is not { ValueKind: JsonValueKind.Number } version
-                || !version.TryGetInt32(out var schema)
+            if (RestoreManifestReader.Read(stream) is not { SchemaVersion: { } schema, ProjectPath: { Length: > 0 } projectPath }
                 || !KnownSchemaVersions.Contains(schema))
-            {
-                return null;
-            }
-
-            if (TryGetProperty(document.RootElement, "project") is not { } project
-                || TryGetProperty(project, "restore") is not { } restore
-                || TryGetProperty(restore, "projectPath") is not { ValueKind: JsonValueKind.String } path
-                || path.GetString() is not { Length: > 0 } projectPath)
             {
                 return null;
             }
@@ -162,19 +160,4 @@ public static class DotNetIntermediateSignature
             return null;
         }
     }
-
-    /// <summary>
-    /// One property of a JSON object, or null if it is absent — or if the value being asked is not
-    /// an object at all.
-    ///
-    /// <see cref="JsonElement.TryGetProperty(string, out JsonElement)"/> is named as though it
-    /// answers that question and does not: asked for a property of an array or a string it throws
-    /// rather than returning false. A hand-edited manifest that is valid JSON of the wrong shape is
-    /// exactly the input this rule has to survive, so the kind is checked rather than assumed.
-    /// </summary>
-    private static JsonElement? TryGetProperty(JsonElement element, string name) =>
-        element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value)
-            ? value
-            : null;
-
 }

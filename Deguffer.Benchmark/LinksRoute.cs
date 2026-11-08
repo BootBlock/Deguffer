@@ -27,7 +27,7 @@ internal static class LinksRoute
                 return FileInformation.Open(path, use);
             },
             FileInformation.ReadIdentity,
-            readByName: (string path, out FileInformation.FileStandardInfo info) =>
+            readByName: (nint directory, ReadOnlySpan<char> name, out FileInformation.FileStandardInfo info) =>
             {
                 if (readBy is LinkRead.Handle)
                 {
@@ -37,7 +37,7 @@ internal static class LinksRoute
                     return ByNameReading.Unsupported;
                 }
 
-                var reading = StatByName.Read(path, out info);
+                var reading = StatByName.Read(directory, name, out info);
 
                 if (reading is ByNameReading.Read or ByNameReading.Gone)
                 {

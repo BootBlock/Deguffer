@@ -281,6 +281,7 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner
             [.. asked.Select(question => WalkRoot.Of(question.Path, question.Bounds))],
             tuning,
             FileNames.Stores,
+            DirectoryHold.None,
             _list,
             (root, holder, contents, left) =>
             {
