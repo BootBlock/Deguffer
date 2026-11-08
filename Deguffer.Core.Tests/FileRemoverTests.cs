@@ -110,6 +110,36 @@ public sealed class FileRemoverTests : IDisposable
     }
 
     /// <summary>
+    /// Whether the named path is a folder and whether it is a link come from one read of it. Asked in
+    /// two reads, the two can describe two entries.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DescribesTheNamedPathOnce(bool isLink)
+    {
+        var bystander = _temp.CreateFile(4096, "precious", "irreplaceable.bin");
+        var path = Path.Combine(_temp.CreateDirectory("dumps"), "MEMORY.DMP");
+
+        if (isLink)
+        {
+            SymbolicLink.ToFile(path, bystander);
+        }
+        else
+        {
+            File.WriteAllBytes(path, new byte[64]);
+        }
+
+        var fs = new RecordingFileSystem(WindowsFileSystem.Default);
+
+        var outcome = await FileRemover.RemoveAsync(path, fileSystem: fs);
+
+        Assert.True(outcome.Removed);
+        Assert.Equal(isLink ? 0 : 64, outcome.BytesReclaimed);
+        Assert.Equal(LongPath.Extended(path), Assert.Single(fs.Described));
+    }
+
+    /// <summary>
     /// A link whose target has gone — a redirected dump location whose far side was cleaned up.
     ///
     /// This pins the outcome and not the mechanism, and it is worth saying which. Windows reports a
@@ -210,13 +240,12 @@ public sealed class FileRemoverTests : IDisposable
     /// </summary>
     private sealed class VanishingFileSystem(IFileSystem inner, Type thrown) : IFileSystem
     {
-        public bool DirectoryExists(string path) => inner.DirectoryExists(path);
-
         public PathPresence ProbeDirectory(string path) => inner.ProbeDirectory(path);
 
         public PathPresence ProbeEntry(string path) => inner.ProbeEntry(path);
 
-        public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
+        public PathPresence ProbeEntry(string path, out bool? isDirectory, out bool? isLink) =>
+            inner.ProbeEntry(path, out isDirectory, out isLink);
 
         public ListingEnd ListEntries(string directory, ListingRequest request, List<WalkEntry> into) =>
             inner.ListEntries(directory, request, into);

@@ -17,8 +17,8 @@ namespace Deguffer.Core.Exploring.Acting;
 /// oversight: knowing it beforehand means a walk of the folder on every change of selection, and this
 /// look is the one that decides.</para>
 ///
-/// <para><b>A folder Windows will not describe is left where it is.</b> The link question fails closed,
-/// so asked first it would read the refusal as "a link" and skip the look, and a folder nobody could
+/// <para><b>A folder Windows will not describe is left where it is.</b> A refusal answers neither "a
+/// link" nor "a folder", and reading it as the first would skip the look, so a folder nobody could
 /// classify would go to the shell unexamined. The permanent route's <see cref="DirectoryRemover"/>
 /// gives a root it cannot describe the same answer, and leaves it standing.</para>
 ///
@@ -38,15 +38,16 @@ internal static class RecycleBinLook
 
         var name = Path.GetFileName(item.Path);
 
-        if (fs.ProbeDirectory(LongPath.Extended(item.Path)) is PathPresence.Refused)
+        switch (fs.ProbeEntry(LongPath.Extended(item.Path), out _, out var isLink))
         {
-            return $"Windows would not say what is in '{name}', so Deguffer could not check it for an Outlook "
-                + "data file. Deguffer never removes one, so it left the folder alone.";
-        }
+            case PathPresence.Refused:
+                return $"Windows would not say what is in '{name}', so Deguffer could not check it for an Outlook "
+                    + "data file. Deguffer never removes one, so it left the folder alone.";
 
-        if (fs.IsReparsePoint(LongPath.Extended(item.Path)))
-        {
-            return null;
+            // A link of either kind, a file symbolic link where the folder was included, is moved as a
+            // link and takes nothing on its far side.
+            case PathPresence.Present when isLink is true:
+                return null;
         }
 
         var look = await WorkerThreads.Shared.RunAsync(

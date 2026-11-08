@@ -51,12 +51,18 @@ public static class BuildDirectoryFixture
     /// <summary>
     /// A Cargo project, returning its <c>target</c>. <paramref name="writeCacheTag"/> false is the
     /// directory Cargo never wrote, which must not be recognised on the manifest alone.
+    ///
+    /// <para>The <c>debug</c> profile inside is laid out as Cargo 1.98 writes one, with the
+    /// <c>.cargo-lock</c> and <c>.fingerprint</c> it is recognised by, so it is the one part offered.
+    /// <paramref name="writeIncremental"/> adds its <c>incremental</c>, which is the incremental row's
+    /// rather than the build output row's.</para>
     /// </summary>
     public static string CreateCargoProject(
         string projectDirectory,
         bool writeManifest = true,
         bool writeCacheTag = true,
-        int payloadBytes = 4096)
+        int payloadBytes = 4096,
+        bool writeIncremental = false)
     {
         if (writeManifest)
         {
@@ -74,10 +80,32 @@ public static class BuildDirectoryFixture
             WriteText(Path.Combine(target, "CACHEDIR.TAG"), "Signature: 8a477f597d28d172789f06886806bc55");
         }
 
-        Directory(target, "debug");
-        WriteBytes(Path.Combine(target, "debug", "example.exe"), payloadBytes);
+        CreateCargoProfile(target, "debug", payloadBytes, writeIncremental);
 
         return target;
+    }
+
+    /// <summary>
+    /// One Cargo profile directory inside <paramref name="targetDirectory"/>, returning it: the lock
+    /// file and fingerprints Cargo writes into every profile, a dependency and a built program, and
+    /// where <paramref name="writeIncremental"/> asks, the incremental cache of one crate.
+    /// </summary>
+    public static string CreateCargoProfile(string targetDirectory, string name, int payloadBytes = 4096, bool writeIncremental = false)
+    {
+        var profile = Directory(targetDirectory, name);
+        WriteText(Path.Combine(profile, ".cargo-lock"), string.Empty);
+        Directory(profile, ".fingerprint");
+        Directory(profile, "deps");
+        WriteBytes(Path.Combine(profile, "deps", "libdependency.rlib"), payloadBytes);
+        WriteBytes(Path.Combine(profile, "example.exe"), payloadBytes);
+
+        if (writeIncremental)
+        {
+            var session = Directory(Directory(profile, "incremental"), "example-1abc");
+            WriteBytes(Path.Combine(session, "query-cache.bin"), payloadBytes);
+        }
+
+        return profile;
     }
 
     /// <summary>

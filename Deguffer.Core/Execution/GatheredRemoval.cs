@@ -89,23 +89,10 @@ internal abstract record GatheredRemoval(string Extended, RemovalBounds Bounds)
     /// <param name="extended">The path, in the extended-length form §6.3 requires.</param>
     public static GatheredRemoval? Probe(string extended, MinimumAge keep, RemovalBounds bounds, IFileSystem fs)
     {
-        var presence = fs.ProbeDirectory(extended);
-
-        // The directory probe answers Absent for a file, so absence is decided by the entry probe. A
-        // file that has taken the directory's name since the preview is nothing this step planned to
-        // remove, and reading it as the directory gone reported "Removed." for a path still occupied —
-        // and let the directory an index belongs to go while a file stood where the index was.
-        if (presence is PathPresence.Absent)
-        {
-            presence = fs.ProbeEntry(extended);
-
-            if (presence is PathPresence.Present)
-            {
-                return new NotAFolder(extended, bounds);
-            }
-        }
-
-        switch (presence)
+        // One read for the presence, the kind and the link. Read apart, a folder replaced by a junction
+        // between the reads would pass the presence read as the folder and the link read as the
+        // junction, or the other way round, and be walked.
+        switch (fs.ProbeEntry(extended, out var isDirectory, out var isLink))
         {
             case PathPresence.Absent:
                 return new Gone(extended, bounds);
@@ -114,12 +101,21 @@ internal abstract record GatheredRemoval(string Extended, RemovalBounds Bounds)
                 return new Refused(extended, bounds);
         }
 
+        // A file that has taken the directory's name since the preview is nothing this step planned to
+        // remove, a file symbolic link included, and reading it as the directory gone reported
+        // "Removed." for a path still occupied — and let the directory an index belongs to go while a
+        // file stood where the index was.
+        if (isDirectory is not true)
+        {
+            return new NotAFolder(extended, bounds);
+        }
+
         // The root is the one entry no enumeration classified, so it is the one place a link can
         // still be walked through. Enumerating a junction returns the target's children, which are
         // ordinary directories and files, so the walk would gather a tree nobody looked at and the
         // §5.6 negative — written against paths inside the profile — would pass. The link is removed
         // and nothing behind it, exactly as the walk does for a link it finds below.
-        if (fs.IsReparsePoint(extended))
+        if (isLink is true)
         {
             // The guard covers the root exactly as the walk covers a link below it, and for the same
             // reason: a junction carries its own timestamps, so one made an hour ago is an hour old

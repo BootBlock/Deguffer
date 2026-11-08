@@ -348,4 +348,70 @@ public sealed class RefusalCheckTests : IDisposable
         Assert.Equal(other, Assert.Single(finding.Places).Place, ignoreCase: true);
         Assert.DoesNotContain(recorder.Probed, p => LongPath.Display(p).Equals(hidden, StringComparison.OrdinalIgnoreCase));
     }
+
+    /// <summary>
+    /// A file symbolic link at a recorded place is removed as a link, so neither it nor its target is
+    /// anything the removal would attempt. The directory probe calls it absent, and an answer taken
+    /// from that probe would send it down the file branch, open it for deletion and take a refusal of
+    /// it out of the estimate.
+    /// </summary>
+    [Fact]
+    public void OpensNothingAtARecordedPlaceThatIsAFileLink()
+    {
+        var step = _temp.CreateDirectory("temp");
+        var target = _temp.CreateFile(4096, "elsewhere", "dump.dmp");
+        var link = Path.Combine(step, "dump.dmp");
+        SymbolicLink.ToFile(link, target);
+
+        var recorder = new RecordingFileSystem(Refusing((link, RefusalReason.Denied), (target, RefusalReason.Denied)));
+
+        var finding = RefusalCheck.Of(new ClearDirectoryStep(step, "Scratch"), [link], MinimumAge.Off, recorder, default);
+
+        Assert.True(finding.Refused.IsEmpty);
+        Assert.Empty(finding.Undescribed);
+        Assert.Empty(recorder.Probed);
+    }
+
+    /// <summary>
+    /// A step root that is a file symbolic link is the same at the root: removed as a link, and
+    /// nothing is opened.
+    /// </summary>
+    [Fact]
+    public void OpensNothingAtAStepRootThatIsAFileLink()
+    {
+        var target = _temp.CreateFile(8192, "elsewhere", "MEMORY.DMP");
+        var link = Path.Combine(_temp.CreateDirectory("Windows"), "MEMORY.DMP");
+        SymbolicLink.ToFile(link, target);
+
+        var recorder = new RecordingFileSystem(Refusing((link, RefusalReason.InUse), (target, RefusalReason.InUse)));
+
+        var finding = RefusalCheck.Of(new DeleteFileStep(link, "A crash dump"), [link], MinimumAge.Off, recorder, default);
+
+        Assert.True(finding.Refused.IsEmpty);
+        Assert.Empty(recorder.Probed);
+    }
+
+    /// <summary>
+    /// The presence, the kind and the link of the step root and of each place come from one read of
+    /// each. Two reads of one path can describe two entries: a folder replaced by a junction between
+    /// them passes one read as the folder and the other as the junction.
+    /// </summary>
+    [Fact]
+    public void DescribesTheStepRootAndEachRecordedPlaceOnce()
+    {
+        var step = _temp.CreateDirectory("temp");
+        var profile = _temp.CreateDirectory("temp", "profile");
+        var denied = _temp.CreateFile(4096, "temp", "profile", "Cookies");
+        var dump = _temp.CreateFile(64, "temp", "dump.dmp");
+
+        var recorder = new RecordingFileSystem(Refusing((denied, RefusalReason.Denied), (dump, RefusalReason.Denied)));
+
+        RefusalCheck.Of(new ClearDirectoryStep(step, "Scratch"), [profile, dump], MinimumAge.Off, recorder, default);
+
+        Assert.Equal(
+            new[] { step, profile, dump }.Order(StringComparer.OrdinalIgnoreCase),
+            recorder.Described.Select(LongPath.Display).Order(StringComparer.OrdinalIgnoreCase),
+            StringComparer.OrdinalIgnoreCase);
+        Assert.All(recorder.Described, path => Assert.StartsWith(@"\\?\", path, StringComparison.Ordinal));
+    }
 }

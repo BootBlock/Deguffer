@@ -38,7 +38,7 @@ largest files inside it:
 
 Besides Settings and About, Deguffer has six pages:
 
-- [Storage](#storage) checks 123 sources of waste, from package-manager and browser caches to
+- [Storage](#storage) checks 124 sources of waste, from package-manager and browser caches to
   `Windows.old` and old restore points, and puts each one in a [safety tier](#safety-tiers). You
   choose what goes, and when the clean has finished Deguffer checks that everything it said it would
   leave alone is still there.
@@ -125,7 +125,7 @@ remove one by any route.
 
 ## Storage
 
-Each of the 123 sources has its own provider, which knows what that location is and what sits next
+Each of the 124 sources has its own provider, which knows what that location is and what sits next
 to it. Rows for tools you do not have are hidden unless you ask the Storage page to show them. Build
 output and project caches, such as `node_modules`, `obj`, Rust's `target`, Python's `.tox` and
 `.pytest_cache` folders, and the caches in Visual Studio's `.vs` folders, are only looked for
@@ -155,7 +155,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | Gradle build cache | `caches` and `wrapper` only, never the Gradle user home itself: `.gradle`, or wherever `GRADLE_USER_HOME` points |
 | Coursier artefact cache | The downloads in `%LOCALAPPDATA%\Coursier\Cache\v1`, or wherever `COURSIER_CACHE` points; never the Java runtimes Coursier installed beside it in `arc` and `jvm`, its container image layers, or the applications `cs install` put on your path. Researched |
 | Ivy dependency cache | `.ivy2\cache` only; never `.ivy2\local`, which holds what `publishLocal` published from this computer, or your `.credentials`. Researched |
-| Cargo crate cache | Researched |
+| Cargo crate cache | `registry\cache`, `registry\src` and `git\checkouts` only; never the registry index, the clones of git dependencies, `bin`, or your credentials and configuration |
 | Go build and module caches | Researched |
 | Zig build cache | Never the packages Zig fetched. What it built is removed only together with the records that point to it. Researched |
 | Deno cache | By path, never with `deno clean`, which also deletes what Deno programs saved and your REPL history; left alone while Deno is running. Researched |
@@ -179,6 +179,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | ruff caches | `.ruff_cache` folders under your own source folders, only where ruff's own cache tag and `.gitignore` are inside and a ruff settings file is next to it. Researched |
 | Nx workspace task caches | `.nx\cache` beside an `nx.json` under your own source folders, only where Nx's own `terminalOutputs` folder is inside and the Nx that reads its index is 23.3 or later; never the rest of `.nx`, and nothing while Nx is running in the workspace. Researched |
 | .NET intermediate build output | `obj` folders under your own source folders |
+| Rust incremental compilation caches | The `incremental` folder in each build profile inside `target` folders under your own source folders; the rest of each build stays |
 | Visual Studio solution caches | Inside the `.vs` folder beside a solution under your own source folders: the design-time build and project evaluation caches, the Find in Files index, and the C++ browsing database and precompiled headers, each only where the files inside it are the ones Visual Studio writes; never Copilot conversations or snapshots, solution options or window layouts, and nothing while the solution is open |
 | Dart analysis server cache | |
 | Roslyn solution index cache | One dated row per set of indexes, so that sets left behind when a program moved folder can go; never the rest of Visual Studio's folder |
@@ -246,7 +247,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | nox environments | `.nox` folders under your own source folders, only where nox's cache tag and `.gitignore` are inside and a `noxfile.py` is next to it. Researched |
 | Dart and Flutter tool folders | `.dart_tool` folders under your own source folders, only where pub's own package configuration is inside, `pubspec.yaml` and `pubspec.lock` are next to it, and git tracks nothing inside it |
 | Git LFS old file versions | Old versions of large files in `.git\lfs\objects` in the Git repositories under your own source folders, removed only by Git LFS's own prune after the repository's server confirms it still holds each one. A repository whose remote is a folder, whose store is shared, or that something is working in is left alone |
-| Rust build output | `target` folders under your own source folders |
+| Rust build output | What Cargo wrote inside `target` folders under your own source folders: each build profile, each target platform's folder, `doc` and `tmp`; never `target` itself, the incremental caches, which are a Tier 1 row, or anything else a build script keeps there |
 | Unity project library | |
 | Unreal project intermediate files | `Intermediate` next to a `.uproject` under your own source folders; never `Saved` or `Binaries`. Researched |
 | Unreal project derived data cache | A project's own `DerivedDataCache` under your own source folders. Researched |
