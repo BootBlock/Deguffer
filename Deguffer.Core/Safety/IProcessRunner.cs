@@ -172,7 +172,7 @@ public sealed class ProcessRunner : IProcessRunner
 
             // The plain form of the folder, because cmd.exe refuses an extended-length current
             // directory, and the .cmd shims run through it. The folder is a short child of LocalAppData.
-            tool = ToolProcess.Start(application, commandLine, _workingDirectory, jobs, environment);
+            tool = ToolProcess.Start(application, commandLine, _workingDirectory, jobs, environment, run.Output);
         }
         catch (Win32Exception ex)
         {

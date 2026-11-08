@@ -74,7 +74,7 @@ internal static class GitLfsRemote
         CancellationToken ct)
     {
         var repository = GitLfsPlanNotes.Describe(checkout);
-        var outcome = await runner.RunAsync(git, checkout.EnvironmentArguments, ToolRun.Query, ct).ConfigureAwait(false);
+        var outcome = await runner.RunAsync(git, checkout.EnvironmentArguments, GitRun.Query, ct).ConfigureAwait(false);
 
         if (!outcome.Succeeded)
         {

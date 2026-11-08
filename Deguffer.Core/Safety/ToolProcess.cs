@@ -22,6 +22,12 @@ internal sealed class ToolProcess : IDisposable
     /// </summary>
     private static readonly TimeSpan OutputAfterEnd = TimeSpan.FromSeconds(5);
 
+    /// <summary>
+    /// Never one with a preamble, because <see cref="System.Diagnostics.Process"/> decoded the bytes as
+    /// they came, so a byte order mark a tool wrote reached its parser as text.
+    /// </summary>
+    private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
+
     private readonly SafeProcessHandle _process;
     private readonly AnonymousPipeServerStream _output;
     private readonly AnonymousPipeServerStream _error;
@@ -29,14 +35,15 @@ internal sealed class ToolProcess : IDisposable
     private readonly Task<string> _standardOutput;
     private readonly Task<string> _standardError;
 
-    private ToolProcess(SafeProcessHandle process, AnonymousPipeServerStream output, AnonymousPipeServerStream error)
+    private ToolProcess(
+        SafeProcessHandle process, AnonymousPipeServerStream output, AnonymousPipeServerStream error, ToolOutputEncoding written)
     {
         _process = process;
         _output = output;
         _error = error;
         _processExited = ProcessExit.Of(process);
 
-        var encoding = OutputEncoding();
+        var encoding = written is ToolOutputEncoding.Utf8 ? Utf8 : ConsoleOutputEncoding();
         _standardOutput = ReadLinesAsync(output, encoding);
         _standardError = ReadLinesAsync(error, encoding);
     }
@@ -67,9 +74,15 @@ internal sealed class ToolProcess : IDisposable
     /// The environment block as <see cref="ToolEnvironmentText.Encode"/> writes it, or null for this
     /// process's own.
     /// </param>
+    /// <param name="written">How the tool encodes what it writes, which is how its output is read.</param>
     /// <exception cref="Win32Exception">Windows would not start it.</exception>
     public static ToolProcess Start(
-        string applicationName, string commandLine, string workingDirectory, IReadOnlyList<ToolJob> jobs, string? environment)
+        string applicationName,
+        string commandLine,
+        string workingDirectory,
+        IReadOnlyList<ToolJob> jobs,
+        string? environment,
+        ToolOutputEncoding written)
     {
         var output = new AnonymousPipeServerStream(PipeDirection.In, HandleInheritability.Inheritable);
         var error = new AnonymousPipeServerStream(PipeDirection.In, HandleInheritability.Inheritable);
@@ -91,7 +104,7 @@ internal sealed class ToolProcess : IDisposable
             error.DisposeLocalCopyOfClientHandle();
 
             started = true;
-            return new ToolProcess(process, output, error);
+            return new ToolProcess(process, output, error, written);
         }
         finally
         {
@@ -230,15 +243,12 @@ internal sealed class ToolProcess : IDisposable
     }
 
     /// <summary>
-    /// The encoding <see cref="System.Diagnostics.Process"/> reads a redirected output in, which every
-    /// parser of tool output was written against: the console's output code page, including the OEM
-    /// pages only <see cref="CodePagesEncodingProvider"/> carries, or UTF-8 where there is no console,
-    /// which is the app's case.
-    ///
-    /// <para>Never one with a preamble, because <see cref="System.Diagnostics.Process"/> decoded the
-    /// bytes as they came, so a byte order mark a tool wrote reached its parser as text.</para>
+    /// The encoding <see cref="System.Diagnostics.Process"/> reads a redirected output in
+    /// (<see cref="ToolOutputEncoding.ConsoleCodePage"/>): the console's output code page, including the
+    /// OEM pages only <see cref="CodePagesEncodingProvider"/> carries, or UTF-8 where there is no console.
+    /// Asked for each tool, because the console's code page can change while Deguffer runs.
     /// </summary>
-    private static Encoding OutputEncoding()
+    private static Encoding ConsoleOutputEncoding()
     {
         var codePage = (int)ToolProcessNative.GetConsoleOutputCP();
 
@@ -254,7 +264,7 @@ internal sealed class ToolProcess : IDisposable
             }
         }
 
-        return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        return Utf8;
     }
 
     /// <summary>

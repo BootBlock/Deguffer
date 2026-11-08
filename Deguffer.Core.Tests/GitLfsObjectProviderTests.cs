@@ -225,6 +225,26 @@ public sealed class GitLfsObjectProviderTests : IDisposable
         Assert.Empty(plan.TargetedPaths);
     }
 
+    /// <summary>
+    /// git writes paths and configuration values in UTF-8 whatever the console's code page, so every
+    /// git query and the prune itself are read that way, rather than mangled in a console's OEM code
+    /// page.
+    /// </summary>
+    [Fact]
+    public async Task ReadsEveryGitOutputAsUtf8()
+    {
+        var old = Oid("old");
+        var game = CreateRepository(_root, "game", (old, 3_000));
+        DryRunReports(Path.Combine(game, ".git"), Report(1, old));
+        var runner = Runner();
+
+        var step = TheStep(await CreateProvider(runner).PlanAsync());
+
+        Assert.Equal(ToolOutputEncoding.Utf8, step.Output);
+        Assert.Equal(4, runner.Invocations.Count);
+        Assert.All(runner.Invocations, invocation => Assert.Equal(ToolOutputEncoding.Utf8, invocation.Run.Output));
+    }
+
     /// <summary>Git for Windows hides <c>.git</c>, and the source search must still find it.</summary>
     [Fact]
     public async Task FindsAHiddenGitDirectory()

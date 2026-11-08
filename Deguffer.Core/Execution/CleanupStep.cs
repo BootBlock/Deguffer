@@ -302,6 +302,12 @@ public sealed record RunCommandStep(string FileName, string Arguments, string Wh
     /// </summary>
     public required CancelledCommand WhenCancelled { get; init; }
 
+    /// <summary>
+    /// How the tool encodes what it writes, which is how the run reads its output into the step's
+    /// outcome. See <see cref="ToolRun.Output"/>.
+    /// </summary>
+    public ToolOutputEncoding Output { get; init; }
+
     public override string Description => $"{What} ({Path.GetFileName(FileName)} {Arguments})";
 
     /// <summary>

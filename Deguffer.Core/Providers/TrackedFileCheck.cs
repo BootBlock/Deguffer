@@ -122,7 +122,7 @@ public sealed class TrackedFileCheck(IUserEnvironment environment, IProcessRunne
                 var outcome = await runner.RunAsync(
                     git,
                     $"--literal-pathspecs -C \"{root}\" ls-files -z --{string.Concat(batch.Keys.Select(p => $" \"{p}\""))}",
-                    ToolRun.Query,
+                    GitRun.Query,
                     ct).ConfigureAwait(false);
 
                 if (!outcome.Succeeded)
