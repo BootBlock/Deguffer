@@ -5,9 +5,10 @@ using Deguffer.Core.Scanning.Mft;
 namespace Deguffer.Core.Exploring;
 
 /// <summary>
-/// The columns a read of the file table fills, one slot a record, which
-/// <see cref="ExploreTree.Create"/> is handed once the read ends, and the copy of them a snapshot is
-/// drawn from while the read goes on.
+/// The columns a read of the file table fills, which <see cref="ExploreTree.Create"/> is handed once
+/// the read ends, and the copy of them a snapshot is drawn from while the read goes on. One set has a
+/// slot for each record, and where the table has hard links, a second has a slot for each further
+/// name of a hard-linked file.
 ///
 /// <para>Apart from <see cref="MftExploreReader"/> because two threads meet here: the parse threads
 /// write a record's slot, and a snapshot reads every slot beside them. What makes that safe is one

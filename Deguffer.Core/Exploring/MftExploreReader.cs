@@ -217,11 +217,11 @@ internal static class MftExploreReader
             .ThenBy(met => met.Link.Name, StringComparer.Ordinal)
             .ToArray();
 
-        // Columns of their own, sized to the links, rather than the record columns grown to hold
-        // them. Those are sized to every record on the volume, and every system volume has links, so
-        // growing them copied each column whole into a new one on the large object heap, only for
-        // ExploreTree.Create to copy it again to keep what the root reaches. Each link is numbered
-        // after every record all the same, so Create compacts the two into one copy.
+        // Columns of their own, sized to the links. The record columns are sized to every record on
+        // the volume, and every system volume has links, so growing those to hold them would copy
+        // each one whole on the large object heap, which ExploreTree.Create then copies again to keep
+        // what the root reaches. Each link is numbered after every record all the same, and Create
+        // compacts the two sets into one copy.
         MftExploreColumns? linkColumns = null;
 
         if (links.Length > 0)

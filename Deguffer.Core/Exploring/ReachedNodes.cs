@@ -2,7 +2,7 @@ namespace Deguffer.Core.Exploring;
 
 /// <summary>
 /// The nodes a tree's root reaches, numbered again from zero with nothing between them, for a reader
-/// that numbered more nodes than the tree it builds holds.
+/// that numbered more nodes than the tree it builds holds, or numbered them in two sets of columns.
 ///
 /// <para>The file table's reader is that reader. It numbers a node by its record, so it sizes every
 /// column to the whole table before it reads one, and keeps a slot for every free record and for
