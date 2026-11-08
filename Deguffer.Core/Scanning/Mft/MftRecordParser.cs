@@ -65,7 +65,7 @@ internal static class MftRecordParser
     {
         result = default;
         name = default;
-        otherLinks = default;
+        otherLinks = MftOtherLinks.None;
         deferred = null;
         extension = null;
 

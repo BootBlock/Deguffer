@@ -289,7 +289,7 @@ internal struct MftRecordDraft
     {
         result = default;
         name = default;
-        otherLinks = default;
+        otherLinks = MftOtherLinks.None;
 
         // No name anywhere: a record in use claiming no identity. Without a list it points nowhere
         // else for one, which no healthy volume produces. With one, the names were in records that
