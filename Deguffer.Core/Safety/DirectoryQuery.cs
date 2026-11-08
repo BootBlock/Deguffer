@@ -16,6 +16,22 @@ namespace Deguffer.Core.Safety;
 /// 12 to 24 percent off its processor time on sixteen. About half of that was the flag, and why the
 /// flag helps is not proven.</para>
 ///
+/// <para><b>Why each directory is opened by its whole path</b>, not by its bare name relative to its
+/// parent's handle (<c>OBJECT_ATTRIBUTES.RootDirectory</c>), as the runtime's recursive enumeration
+/// opens one. A prototype that held each parent's handle until its last child was opened was timed
+/// against this on one 32-thread machine without administrator rights (#468), warm, alternating the
+/// two, through the benchmark's walk and measure routes at 1 and 16 threads. On a source tree of
+/// 234,000 entries, one of 285,000 and the Windows folder it gained nothing beyond the noise, and used
+/// more processor time in 9 of the 12 cases. On a made tree of 2,000 chains 40 folders deep it used
+/// the same processor time, 9.5 seconds on one thread. That tree took 6.8 to 9.1 seconds on one thread
+/// either way, against 3.4 to 7.6 for the same 80,000 folders two deep, so depth may cost something,
+/// but not in parsing the name passed here. Cold was not timed: the parent was listed moments before
+/// its child is opened, so its part of the path is probably cached either way. The change would also
+/// hold a counted handle open on every directory with children still waiting, which can delay the
+/// removal of a directory a tool deletes and recreates during a scan. Its one gain beyond speed is
+/// left undone: an open by whole path still goes through a junction put in place of an ancestor after
+/// that ancestor was listed (#551).</para>
+///
 /// <para><b>§5.3: nothing throws.</b> Every failure is read as the Win32 error its <c>NTSTATUS</c> maps
 /// to, which is the error <c>CreateFileW</c> and the runtime's read reported, so
 /// <see cref="ListingEnd.Failed"/> gives each the answer it gave before. A file where a directory was
@@ -24,7 +40,8 @@ namespace Deguffer.Core.Safety;
 /// <para><b>A directory the walk descended into is opened as itself</b>
 /// (<see cref="ListingRequest.FollowsLink"/>). Its parent's listing said it was no link, and a junction
 /// put at its name since would otherwise be followed, and its target listed under the child's path,
-/// which the removal walk lists through too.</para>
+/// which the removal walk lists through too. The flag covers the child's own name only, not a folder
+/// above it (#551).</para>
 ///
 /// <para><b>The handle is closed once the directory is listed</b>, unless the request names a
 /// <see cref="ListingRequest.Holder"/>, which keeps it for the walk's callback to read each file

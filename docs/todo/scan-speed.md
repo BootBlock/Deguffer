@@ -79,7 +79,7 @@ Each needs #466 for its test.
 | #470 | Volumes, and fallback walks, measured one after another. Done: a measurement runs one pipeline for each set of physical disks at the same time, the volumes of one set in turn, and the walking scanners run the walks of separate disks at the same time. Where any disk is not known, everything stays in turn. |
 | #471 | Approved source folders searched one after another. |
 | #469 | The hard-link-aware scan builds two paths and a by-name read per file. Done: each file is read by its bare name relative to a handle the walk holds on its folder while the callback runs. On one 33,115-file pnpm store the links route allocated 9.4 to 14.0 MiB rather than 31.2 MiB, and its time did not move outside the noise. |
-| #468 | Open each directory relative to its parent. Measure with #476 first. `safety`. |
+| #468 | Open each directory relative to its parent. Measured, not done: a prototype gained nothing beyond the noise, warm, at 1 and 16 threads, on three real trees and one made 40 folders deep, and used more processor time in 9 of 12 cases. `DirectoryQuery` records the figures. Its safety gain, a junction put in place of an already-listed folder, is #551. `safety`. |
 | #473 | A frame array per child directory. |
 
 ### 5. Explore: time to the first map
@@ -89,7 +89,7 @@ Each needs #466 for its test.
 | #485 | The finished map waits on a full volume read and the shadow copy service. |
 | #490 | The first walk snapshot waits 750 ms. |
 | #486 | One lock per parsed record around the name pool. Measure first. |
-| #488, #480 | Tree assembly copies every column twice, and the links are sorted through LINQ. |
+| #488, #480 | Tree assembly copies every column twice, and the links are sorted through LINQ. #488 done: a read places the links in columns sized to them, and assembly compacts the records and the links in one copy. On a system volume of 2.8 million records and 69 thousand links it allocated about 120 MiB less, and placed its links in about 42 ms rather than 85 to 89. Of the assembly's other passes, the parallel sort took 380 to 500 ms and keeping the names 230 to 340 ms. The column copies took about 100 ms together, and running them on parallel threads showed no gain clear of the noise. The LINQ sort is #480. |
 | #489 | A string per listed name, interned under the builder's lock. |
 
 ### 6. The file-table route

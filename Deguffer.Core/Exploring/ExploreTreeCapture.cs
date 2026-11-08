@@ -136,8 +136,8 @@ internal sealed class ExploreTreeCapture
             childOrder,
             _listingRefused,
             nameRanks,
-            snapshot,
-            ct);
+            snapshot: snapshot,
+            ct: ct);
     }
 
     /// <summary>

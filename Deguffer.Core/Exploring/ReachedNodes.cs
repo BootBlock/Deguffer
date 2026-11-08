@@ -2,7 +2,7 @@ namespace Deguffer.Core.Exploring;
 
 /// <summary>
 /// The nodes a tree's root reaches, numbered again from zero with nothing between them, for a reader
-/// that numbered more nodes than the tree it builds holds.
+/// that numbered more nodes than the tree it builds holds, or numbered them in two sets of columns.
 ///
 /// <para>The file table's reader is that reader. It numbers a node by its record, so it sizes every
 /// column to the whole table before it reads one, and keeps a slot for every free record and for
@@ -15,6 +15,11 @@ namespace Deguffer.Core.Exploring;
 /// only in case are told apart by number (<see cref="ExploreTree.CompareByName(int, int)"/>). It also
 /// makes this nothing at all for a reader whose every node is reached, which the walk's always is,
 /// so a walked node keeps its number from one snapshot of a scan to the next.</para>
+///
+/// <para><b>From two sets of columns, in one copy.</b> The file table's reader numbers a hard-linked
+/// file's further names after every record, in columns of their own, because the record columns
+/// are sized to the whole volume and growing them to make room would copy each of them once more.
+/// A node numbered past the record columns is read from the columns after them.</para>
 /// </summary>
 internal sealed class ReachedNodes
 {
@@ -24,16 +29,29 @@ internal sealed class ReachedNodes
     private readonly int[] _kept;
     private readonly int[] _renumbered;
 
+    // How many slots the first columns have, and how many of the kept nodes are among them. Every
+    // kept node from there on is in the columns after them, because the nodes are kept in order.
+    private readonly int _first;
+    private readonly int _keptFromFirst;
+
     /// <param name="order">Every node the root reaches, once each, in any order.</param>
-    /// <param name="count">How many nodes the reader numbered.</param>
-    public ReachedNodes(ReadOnlySpan<int> order, int count)
+    /// <param name="first">How many nodes the reader numbered in its first columns.</param>
+    /// <param name="after">How many it numbered after those, in columns of their own.</param>
+    public ReachedNodes(ReadOnlySpan<int> order, int first, int after)
     {
+        var count = first + after;
+        _first = first;
         _renumbered = new int[count];
         Array.Fill(_renumbered, NotReached);
 
         foreach (var node in order)
         {
             _renumbered[node] = 0;
+
+            if (node < first)
+            {
+                _keptFromFirst++;
+            }
         }
 
         _kept = new int[order.Length];
@@ -52,14 +70,22 @@ internal sealed class ReachedNodes
     /// <summary>The new number of a node the root reaches.</summary>
     public int this[int node] => _renumbered[node];
 
-    /// <summary>A copy of <paramref name="column"/> holding only the kept nodes, at their new numbers.</summary>
-    public T[] Keep<T>(T[] column)
+    /// <summary>
+    /// One column holding only the kept nodes, at their new numbers, copied from
+    /// <paramref name="column"/> and the column <paramref name="after"/> it.
+    /// </summary>
+    public T[] Keep<T>(T[] column, T[] after)
     {
         var kept = new T[_kept.Length];
 
-        for (var node = 0; node < kept.Length; node++)
+        for (var node = 0; node < _keptFromFirst; node++)
         {
             kept[node] = column[_kept[node]];
+        }
+
+        for (var node = _keptFromFirst; node < kept.Length; node++)
+        {
+            kept[node] = after[_kept[node] - _first];
         }
 
         return kept;
@@ -69,13 +95,18 @@ internal sealed class ReachedNodes
     /// <see cref="Keep{T}"/> for the parent links, each renumbered too. A node the root reaches is
     /// reached through its parent, so every parent kept is one of the kept nodes.
     /// </summary>
-    public int[] Parents(int[] parents)
+    public int[] Parents(int[] parents, int[] after)
     {
         var kept = new int[_kept.Length];
 
-        for (var node = 0; node < kept.Length; node++)
+        for (var node = 0; node < _keptFromFirst; node++)
         {
             kept[node] = _renumbered[parents[_kept[node]]];
+        }
+
+        for (var node = _keptFromFirst; node < kept.Length; node++)
+        {
+            kept[node] = _renumbered[after[_kept[node] - _first]];
         }
 
         return kept;

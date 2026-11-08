@@ -33,16 +33,20 @@ internal static class MftExploreRooting
     /// <summary>
     /// Root a tree at the folder <paramref name="components"/> name, or say why the table cannot
     /// answer for it. Writes to <paramref name="columns"/>, which <see cref="ExploreTree.Create"/>
-    /// then takes.
+    /// then takes with <paramref name="links"/>.
     /// </summary>
-    /// <param name="records">How many slots are records, rather than a hard link's other names.</param>
+    /// <param name="columns">One slot a record.</param>
+    /// <param name="links">
+    /// One slot for each further name of a hard-linked file, numbered after every record, or null
+    /// where there are none. None is a folder, so the folder is found among the records alone.
+    /// </param>
     public static (ExploreTree? Tree, FallbackReason Reason) Assemble(
         MftExploreColumns columns,
+        MftExploreColumns? links,
         NamePool.Frozen names,
         int rootName,
         string rootPath,
         IReadOnlyList<string> components,
-        int records,
         AssembledAs assembled,
         CancellationToken ct)
     {
@@ -55,7 +59,7 @@ internal static class MftExploreRooting
         columns.Parents[volumeRoot] = volumeRoot;
         columns.Flags[volumeRoot] |= ExploreNodeFlags.Directory | ExploreNodeFlags.Present;
 
-        var resolved = Resolve(components, columns, names, records, assembled.MatchCaseOnly);
+        var resolved = Resolve(components, columns, names, assembled.MatchCaseOnly);
         if (resolved.Node is not { } root)
         {
             return (null, resolved.Reason);
@@ -80,7 +84,7 @@ internal static class MftExploreRooting
         var tree = ExploreTree.Create(
             rootPath, root, columns.NameNumbers, names, columns.Parents, columns.Sizes, columns.Lengths,
             columns.Storage, columns.Flags, columns.Created, columns.Modified, columns.Visibility,
-            assembled.ChildOrder, snapshot: assembled.Snapshot, ct: ct);
+            assembled.ChildOrder, links: links, snapshot: assembled.Snapshot, ct: ct);
 
         return (tree, FallbackReason.None);
     }
@@ -100,14 +104,13 @@ internal static class MftExploreRooting
         IReadOnlyList<string> components,
         MftExploreColumns columns,
         NamePool.Frozen names,
-        int records,
         bool matchCaseOnly) =>
         Descend(
             components,
             (int)MftRecord.RootRecordNumber,
             node => (columns.Flags[node] & ExploreNodeFlags.Link) != 0,
             node => (columns.Flags[node] & ExploreNodeFlags.Directory) != 0,
-            (directory, name) => FindChild(directory, name, columns, names, records, matchCaseOnly));
+            (directory, name) => FindChild(directory, name, columns, names, matchCaseOnly));
 
     /// <summary>
     /// The node of <paramref name="tree"/>, a tree rooted at its volume's top, that holds the folder
@@ -211,12 +214,12 @@ internal static class MftExploreRooting
     /// a node the tree then declines to link.</para>
     /// </summary>
     private static int? FindChild(
-        int directory, string name, MftExploreColumns columns, NamePool.Frozen names, int records, bool matchCaseOnly)
+        int directory, string name, MftExploreColumns columns, NamePool.Frozen names, bool matchCaseOnly)
     {
         var (nameNumbers, parents, flags) = (columns.NameNumbers, columns.Parents, columns.Flags);
         int? differingInCase = null;
 
-        for (var i = 0; i < records; i++)
+        for (var i = 0; i < columns.Count; i++)
         {
             if ((flags[i] & ExploreNodeFlags.Present) == 0 || parents[i] != directory || i == directory)
             {
