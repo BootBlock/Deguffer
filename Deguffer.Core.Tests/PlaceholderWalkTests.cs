@@ -171,13 +171,13 @@ public sealed class PlaceholderWalkTests
 
         public IReadOnlyList<SyncRoot>? SyncRoots() => inner.SyncRoots();
 
-        public string? Resolve(string path) => inner.Resolve(path);
+        public VolumeDevicePath? Resolve(string path) => inner.Resolve(path);
 
         public SyncProviderState ProviderState(string syncRoot) => inner.ProviderState(syncRoot);
 
         public IEnumerable<CloudEntry> List(string directory, CancellationToken ct) => inner.List(directory, ct);
 
-        public ReleaseAnswer Release(string path, string resolvedPath, Func<Placeholder, bool> stillEligible) =>
+        public ReleaseAnswer Release(string path, VolumeDevicePath resolvedPath, Func<Placeholder, bool> stillEligible) =>
             inner.Release(path, resolvedPath, stillEligible);
 
         private void InterlockedMax(int value)

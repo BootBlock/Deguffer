@@ -185,11 +185,15 @@ public sealed class FakeCloudFiles : ICloudFiles
         }
     }
 
-    public string? Resolve(string path)
+    /// <summary>
+    /// Where a root really is, in display form rather than the device form Windows gives: this fake's
+    /// locations are compared only with each other.
+    /// </summary>
+    public VolumeDevicePath? Resolve(string path)
     {
         lock (_gate)
         {
-            return _entries.ContainsKey(path) ? _rootLocations.GetValueOrDefault(path, path) : null;
+            return _entries.ContainsKey(path) ? new VolumeDevicePath(_rootLocations.GetValueOrDefault(path, path)) : null;
         }
     }
 
@@ -232,7 +236,7 @@ public sealed class FakeCloudFiles : ICloudFiles
         }
     }
 
-    public ReleaseAnswer Release(string path, string resolvedPath, Func<Placeholder, bool> stillEligible)
+    public ReleaseAnswer Release(string path, VolumeDevicePath resolvedPath, Func<Placeholder, bool> stillEligible)
     {
         lock (_gate)
         {
@@ -248,14 +252,14 @@ public sealed class FakeCloudFiles : ICloudFiles
     }
 
     /// <summary>What a release of <paramref name="path"/> comes to, judged and acted on under the lock.</summary>
-    private ReleaseAnswer Judged(string path, string resolvedPath, Func<Placeholder, bool> stillEligible)
+    private ReleaseAnswer Judged(string path, VolumeDevicePath resolvedPath, Func<Placeholder, bool> stillEligible)
     {
         switch (_entries.GetValueOrDefault(path))
         {
             case null:
                 return new ReleaseAnswer(ReleaseResult.Gone);
 
-            case not null when !string.Equals(ResolvedFile(path), resolvedPath, StringComparison.OrdinalIgnoreCase):
+            case not null when new VolumeDevicePath(ResolvedFile(path)) != resolvedPath:
                 return new ReleaseAnswer(ReleaseResult.NoLongerEligible);
 
             case { Refused: true }:

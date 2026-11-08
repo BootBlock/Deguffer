@@ -111,7 +111,7 @@ internal static class LocalCopyRelease
     private static Dictionary<ReleaseResult, HeldTally> Request(
         ICloudFiles cloud,
         ReleaseLocalCopiesStep step,
-        string resolvedRoot,
+        VolumeDevicePath resolvedRoot,
         MinimumAge keep,
         IProgress<double>? progress,
         CancellationToken ct)
@@ -128,7 +128,7 @@ internal static class LocalCopyRelease
             var shown = LongPath.Display(path);
             var inherited = Path.GetDirectoryName(shown) is { } folder ? pins.For(folder) : PinState.Pinned;
 
-            var resolved = Path.Join(resolvedRoot, LongPath.Relative(root, shown));
+            var resolved = resolvedRoot.Join(LongPath.Relative(root, shown));
             answers[index] = cloud.Release(path, resolved, now => ReleaseRules.Hold(now, inherited, keep) is null);
 
             if (Interlocked.Increment(ref finished) is var done && done % ProgressInterval == 0)
