@@ -256,6 +256,30 @@ public class RouteRaceTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => racing);
     }
 
+    /// <summary>
+    /// A table that fails still leaves no walk running behind the race: the walk is stopped and waited
+    /// for before the failure reaches the caller, as it is behind an answer.
+    /// </summary>
+    [Fact]
+    public async Task ATableThatFailsStopsTheWalkAndWaitsForItToStop()
+    {
+        var table = new Route<Answer>();
+        var walk = new Route<Answer>(stopsSlowly: true);
+        var racing = Race(table, walk);
+
+        table.Fail(new InvalidOperationException("the table is broken"));
+        await walk.WhenStopped.WaitAsync(TimeSpan.FromSeconds(30));
+
+        // As above: a race that waits for the walk cannot have ended here, whatever the machine's load.
+        await Task.Delay(TimeSpan.FromMilliseconds(100));
+        Assert.False(racing.IsCompleted, "The race ended with its walk still running.");
+
+        walk.LetStop();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => racing);
+        Assert.True(walk.Finished);
+    }
+
     [Fact]
     public async Task TheCallersCancellationStopsBothRoutes()
     {

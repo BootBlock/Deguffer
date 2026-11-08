@@ -22,8 +22,8 @@ internal readonly record struct Raced<T>(T Answer, RaceOutcome Outcome);
 ///
 /// <para>One place for every question that races, so that what counts as an answer, and that the
 /// loser is stopped and waited for before the winner is returned, is one rule rather than one per
-/// caller. Nothing about a route is chosen here: <see cref="DirectoryScanner"/> still decides
-/// whether a question races at all.</para>
+/// caller. Nothing about a route is chosen here: <see cref="DirectoryScanner"/> and
+/// <see cref="Exploring.ExploreScanner"/> still decide whether a question races at all.</para>
 /// </summary>
 internal static class RouteRace
 {
@@ -84,8 +84,10 @@ internal static class RouteRace
         finally
         {
             await stop.CancelAsync().ConfigureAwait(false);
-            await SettleAsync(reading).ConfigureAwait(false);
-            await SettleAsync(walking).ConfigureAwait(false);
+
+            // Both waited for before either's failure leaves: a route that failed must not leave the
+            // other still reading the disk, or reporting, behind a race that has ended.
+            await Task.WhenAll(SettleAsync(reading), SettleAsync(walking)).ConfigureAwait(false);
         }
     }
 
