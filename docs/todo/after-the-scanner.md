@@ -565,6 +565,40 @@ of the volume pays its checkpoint. A probe that started a walk beside the flush 
 saved 0.3 to 1.1 s in each of eight rounds. #543, which timed the open's steps, found the same flush
 in its read of record 0, and #545 asked for this change.
 
+**A build's reads yield to the walks on its disk (#478).** First, whether the storage stack honours
+an I/O priority hint on a raw volume read at all: under a kernel disk trace (`xperf`, `DISK_IO`),
+64 reads of 1 MiB through a raw handle to a volume on the NVMe disk reached the disk at normal
+priority with no hint and with `IoPriorityHintNormal`, at low priority with `IoPriorityHintLow`, and
+at very low with `IoPriorityHintVeryLow`. Then the benchmark's `race`, the search for build outputs
+over the source folder raced against an index build, elevated, while other work ran, alternating
+runs of three rounds, medians of the later rounds of each run:
+
+| Build of | Cache | Walk raced against alone, build at normal | The same, build at low throughout | Build alone, normal | Build alone, low |
+| --- | --- | --- | --- | --- | --- |
+| The system volume, the folder's disk | cold | 3.17, 3.68 times | 1.09, 1.09 times | 4.4, 4.6 s | 33.6, 23.6 s |
+| The folder's own volume | cold | 2.04, 1.69 times | 1.26, 1.58 times | 3.9, 3.5 s | 24.1, 37.7 s |
+| The system volume, the folder's disk | warm | 0.86, 0.86 times | 0.71, 1.22 times | 6.1, 8.0 s | 25.8, 22.5 s |
+| The folder's own volume | warm | 0.88, 1.02 times | 0.66, 1.07 times | 3.5, 3.2 s | 9.7, 7.6 s |
+
+So the hint removes most of what a build of another volume costs a cold walk on the same disk, as
+(b) above predicted, but a low-priority read waits behind everything else the disk serves, and a
+build read at low priority throughout took 2 to 11 times as long with nothing racing it. Builds
+therefore yield only while a walk of a volume on one of their disks is in flight, and read at normal
+priority otherwise, and for good once a caller waits for the table alone (`BuildPriorities`). The
+race, which now reuses that rule (`--build-priority yield`), measured it the same way:
+
+| Build of | Cache | Walk raced against alone, normal | The same, yielding | Build raced, normal | Build raced, yielding |
+| --- | --- | --- | --- | --- | --- |
+| The system volume, the folder's disk | cold | 2.68, 3.03 times | 0.99, 1.03 times | 4.9, 5.1 s | 6.0, 5.9 s |
+| The folder's own volume | cold | 1.21, 1.41 times | 1.24, 1.23 times | 4.6, 4.5 s | 4.5, 4.5 s |
+| The system volume, the folder's disk | warm | 0.93, 0.95 times | 0.69, 1.00 times | 4.8, 5.5 s | 5.4, 6.7 s |
+| The folder's own volume | warm | 0.91, 1.42 times | 1.00, 0.93 times | 7.3, 5.8 s | 4.4, 5.4 s |
+
+Cold, a walk beside another volume's build no longer loses anything, for about a second more on
+that build. A walk beside its own volume's build loses what it lost before, which (c) above says is
+the flush, not the queue. Warm, neither changes beyond the spread between runs. Not measured: a
+whole planning pass, a spinning disk, and a SATA SSD.
+
 ## 8. Let a root probe tell "not there" from "I was refused" ✅ done
 
 **Outcome: the probe answers in three states, and the decision the item was waiting on went the

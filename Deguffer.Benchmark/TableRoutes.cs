@@ -51,7 +51,12 @@ internal static class TableRoutes
     /// <param name="target">
     /// The volume's root, or for <see cref="Route.ExploreFolder"/> the folder, fully qualified.
     /// </param>
-    public static RunTally Run(Route route, IMftSourceFactory volumes, string target, TableTuning tuning, CancellationToken ct)
+    /// <param name="opened">
+    /// Called with the volume once it is open and before its table is read, as a scan's build hands
+    /// its volume to the priorities it reads at, or null for nothing.
+    /// </param>
+    public static RunTally Run(
+        Route route, IMftSourceFactory volumes, string target, TableTuning tuning, Action<IMftVolume>? opened, CancellationToken ct)
     {
         if (!VolumePath.TryParse(target, out var place))
         {
@@ -69,6 +74,8 @@ internal static class TableRoutes
         // Opened above moments before, so a failure here is the volume going away mid-benchmark.
         using var volume = volumes.TryOpen(place.DriveLetter, out var reason, open)
             ?? throw new IOException($"The volume could not be opened again: {reason}.");
+
+        opened?.Invoke(volume);
 
         using var source = new CountingMftSource(
             volume.TryReadTable(out reason)

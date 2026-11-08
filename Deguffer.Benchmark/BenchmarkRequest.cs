@@ -47,6 +47,11 @@ namespace Deguffer.Benchmark;
 /// system file cache, or null for none. No other route reads it. Never printed: see
 /// <see cref="PartCommand"/>.
 /// </param>
+/// <param name="BuildYields">
+/// For <see cref="Route.Race"/>, whether the build reads at low priority while the walk runs, as
+/// Auto's build does where the two share a disk, or at normal priority throughout, as every build read
+/// before it could yield. No other route reads it.
+/// </param>
 internal sealed record BenchmarkRequest(
     Route Route,
     string Path,
@@ -60,7 +65,8 @@ internal sealed record BenchmarkRequest(
     int Trees,
     char Drive,
     Route Racer,
-    string? BeforePart)
+    string? BeforePart,
+    bool BuildYields)
 {
     public const int DefaultRuns = 5;
 
@@ -166,6 +172,10 @@ internal sealed record BenchmarkRequest(
                                outside its time, such as one that empties the system file
                                cache so every part lists from the drive. A command that fails
                                stops the run. Deguffer never empties the cache itself.
+        --build-priority yield|normal
+                               Race only. Whether the build reads at low priority while the
+                               walk runs, as Auto's does where the two share a disk, or at
+                               normal priority throughout. The default is yield.
 
         A table route's defaults are what a scan uses on a drive of unknown kind, except the
         race's: it walks and builds with what a scan uses for each drive's kind, under the
@@ -232,6 +242,7 @@ internal sealed record BenchmarkRequest(
         char? build = null;
         var racer = Route.Sources;
         string? beforePart = null;
+        var buildYields = true;
 
         // Before the options, because the race's defaults depend on the drives it walks and builds
         // on, and a value an option sets has to win over them.
@@ -281,6 +292,7 @@ internal sealed record BenchmarkRequest(
                 "--build" when route is Route.Race => TryDrive(value, out build),
                 "--racer" when route is Route.Race => TryRacer(value, out racer),
                 "--before-part" when route is Route.Race => TryCommand(value, out beforePart),
+                "--build-priority" when route is Route.Race => TryYield(value, out buildYields),
                 _ => false,
             };
 
@@ -300,7 +312,8 @@ internal sealed record BenchmarkRequest(
                     $"For remove, --files takes a number from 0 to {TreeShape.MaximumFiles}, --depth from 0 to " +
                     $"{TreeShape.MaximumDepth} and --fanout from 1 to {TreeShape.MaximumFanout}, and --read-only takes nothing. " +
                     $"For clean, --trees takes a number from 1 to {MaximumTrees} and --files-per-tree from 0 to {MaximumFilesPerTree}. " +
-                    "For race, --build takes a drive letter, --racer takes sources or walk, and --before-part a command. " +
+                    "For race, --build takes a drive letter, --racer takes sources or walk, --before-part a command, " +
+                    "and --build-priority yield or normal. " +
                     "Nothing else is accepted after the target.";
                 return null;
             }
@@ -347,7 +360,8 @@ internal sealed record BenchmarkRequest(
             trees,
             build ?? path[0],
             racer,
-            beforePart);
+            beforePart,
+            buildYields);
     }
 
     /// <summary>
@@ -391,6 +405,12 @@ internal sealed record BenchmarkRequest(
     {
         command = string.IsNullOrWhiteSpace(text) ? null : text;
         return command is not null;
+    }
+
+    private static bool TryYield(string? text, out bool yields)
+    {
+        yields = text is not "normal";
+        return text is "yield" or "normal";
     }
 
     private static bool TryRacer(string? text, out Route racer)

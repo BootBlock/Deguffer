@@ -157,6 +157,25 @@ public interface IDirectoryScanner
     bool RacesTheWalk => false;
 
     /// <summary>
+    /// Say that the caller waits for <see cref="TryFindDirectoriesAsync"/>'s answer about
+    /// <paramref name="root"/> with no walk of its own beside it: because it does not race, or because
+    /// its walk could not list the root. A volume index built under
+    /// <see cref="Configuration.ScanRoute.Auto"/> is read after the walks beside it until this is
+    /// called, so a caller calls it before it waits alone, and may call it before it asks. Nothing for
+    /// a scanner with no index.
+    /// </summary>
+    void NeedIndex(string root)
+    {
+    }
+
+    /// <summary>
+    /// Say that the caller walks <paramref name="root"/> itself until the walk returned is disposed,
+    /// so a volume index read on the root's disk under <see cref="Configuration.ScanRoute.Auto"/> reads
+    /// after the walk. Null for a scanner with no index.
+    /// </summary>
+    IDisposable? Walking(string root) => null;
+
+    /// <summary>
     /// Drop cached volume indexes and sizes. Called before a planning pass, for the same reason
     /// providers drop theirs: a preview must describe the machine as it is now.
     /// </summary>

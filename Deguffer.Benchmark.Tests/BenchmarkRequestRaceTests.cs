@@ -70,7 +70,19 @@ public sealed class BenchmarkRequestRaceTests
         Assert.Equal("empty-cache.cmd --all", told.BeforePart);
     }
 
+    /// <summary>The build yields to the walk, as Auto's does, unless told to read at normal priority throughout.</summary>
+    [Fact]
+    public void TheRaceBuildYieldsUnlessToldOtherwise()
+    {
+        Assert.True(Parse("race", @"C:\Users\testuser\source").BuildYields);
+        Assert.False(Parse("race", @"C:\Users\testuser\source", "--build-priority", "normal").BuildYields);
+        Assert.True(Parse("race", @"C:\Users\testuser\source", "--build-priority", "yield").BuildYields);
+    }
+
     [Theory]
+    [InlineData("race", "--build-priority", "low")]
+    [InlineData("race", "--build-priority")]
+    [InlineData("index", "--build-priority", "yield")]
     [InlineData("race", "--racer", "index")]
     [InlineData("race", "--build", @"D:\folder")]
     [InlineData("race", "--build")]
