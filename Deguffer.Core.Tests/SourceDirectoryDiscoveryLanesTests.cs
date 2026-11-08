@@ -82,7 +82,14 @@ public sealed class SourceDirectoryDiscoveryLanesTests : IDisposable
             new SourceRoot(parent), new SourceRoot(other), new SourceRoot(work), new SourceRoot(parent.ToUpperInvariant()),
         ];
 
-        var together = await Discovery(new FakeDirectoryScanner(), SolidState()).FindAsync(roots);
+        var solidState = SolidState();
+        string[] folders = [.. roots.Select(root => root.Path)];
+
+        // The two discoveries take the two routes this test compares: one lane a folder, and one lane.
+        Assert.Equal(folders.Length, SourceSearchLanes.Of(folders, solidState.StorageOf).Count);
+        Assert.Single(SourceSearchLanes.Of(folders, ScanTuner.Shipped.StorageOf));
+
+        var together = await Discovery(new FakeDirectoryScanner(), solidState).FindAsync(roots);
         var inTurn = await Discovery(new FakeDirectoryScanner(), tuning: null).FindAsync(roots);
 
         Assert.Equal([outer, packages, lib, inner], together.Candidates);
