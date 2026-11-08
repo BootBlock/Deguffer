@@ -304,6 +304,12 @@ public sealed record RunCommandStep(string FileName, string Arguments, string Wh
     public required CancelledCommand WhenCancelled { get; init; }
 
     /// <summary>
+    /// How the tool encodes what it writes, which is how the run reads its output into the step's
+    /// outcome. See <see cref="ToolRun.Output"/>.
+    /// </summary>
+    public ToolOutputEncoding Output { get; init; }
+
+    /// <summary>
     /// Variables the command starts without, for a tool that reads an inherited one as which files to
     /// act on (<see cref="ToolRun.Without"/>). Empty for every tool that reads its environment as given.
     /// </summary>

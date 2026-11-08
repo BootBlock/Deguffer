@@ -299,7 +299,7 @@ public sealed class GitLfsObjectProvider : CleanupProviderBase
         Findings found,
         CancellationToken ct)
     {
-        var version = await Runner.RunAsync(git, "lfs version", GitEnvironment.Query, ct).ConfigureAwait(false);
+        var version = await Runner.RunAsync(git, "lfs version", GitRun.Query, ct).ConfigureAwait(false);
 
         if (!version.Succeeded)
         {
@@ -371,7 +371,7 @@ public sealed class GitLfsObjectProvider : CleanupProviderBase
     {
         var outcomes = await EachStoreAsync(
             prunes,
-            (prune, token) => Runner.RunAsync(git, prune.DryRunArguments, GitEnvironment.Query, token),
+            (prune, token) => Runner.RunAsync(git, prune.DryRunArguments, GitRun.Query, token),
             ct).ConfigureAwait(false);
 
         var offered = new List<OfferedStore>();
@@ -447,7 +447,8 @@ public sealed class GitLfsObjectProvider : CleanupProviderBase
                 // Prune removes one file at a time and nothing else, so ended part-way it leaves fewer
                 // old versions and no damaged store.
                 WhenCancelled = CancelledCommand.Ended,
-                Unset = GitEnvironment.RepositoryVariables,
+                Unset = GitRun.Unset,
+                Output = GitRun.Output,
                 Estimated = measured.TotalOf((start + 1)..(start + 1 + objectFiles.Count)),
                 MeasuredPaths = [checkout.Store.Objects],
                 MeasuredBefore = measured.Sizes[start],

@@ -50,6 +50,20 @@ public sealed class TrackedFileCheckTests : IDisposable
     private FakeProcessRunner GitListingNothing() => new FakeProcessRunner().Responding(Git, "ls-files", string.Empty);
 
     /// <summary>
+    /// git lists paths in UTF-8 whatever the console's code page, so its listing is read that way. Read
+    /// in a console's OEM code page, a non-ASCII path matched no candidate.
+    /// </summary>
+    [Fact]
+    public async Task ReadsWhatGitListsAsUtf8()
+    {
+        var runner = GitListingNothing();
+
+        await Create(runner).FindTrackedAsync(Candidates(1));
+
+        Assert.Equal(ToolOutputEncoding.Utf8, Assert.Single(runner.Invocations).Run.Output);
+    }
+
+    /// <summary>
     /// The command is split, and the answer is the union of every part. A tracked file reported by
     /// the last invocation counts for exactly as much as one reported by the first — accumulating
     /// only until the first answer arrives would leave most of the repository unexamined while

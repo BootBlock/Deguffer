@@ -1110,6 +1110,25 @@ public sealed class PlanExecutorTests : IDisposable
     }
 
     /// <summary>
+    /// A command step's output is read as its provider says the tool writes it, so a tool that writes
+    /// UTF-8 under a console set to another code page reports its paths whole. Every other step keeps
+    /// the console's code page, which every parser of tool output was written against.
+    /// </summary>
+    [Theory]
+    [InlineData(ToolOutputEncoding.ConsoleCodePage)]
+    [InlineData(ToolOutputEncoding.Utf8)]
+    public async Task RunsACommandStepWithItsOutputReadAsTheStepSays(ToolOutputEncoding output)
+    {
+        var step = new RunCommandStep(@"C:\Tools\tool.exe", "prune", "Prune") { WhenCancelled = CancelledCommand.Ended, Output = output };
+        var runner = new FakeProcessRunner().Responding(step.FileName, step.Arguments, string.Empty);
+
+        await new PlanExecutor(runner, new FakeDirectoryScanner(), RefusalLog)
+            .ExecuteAsync(PlanDeleting(step), runReach: null, residue: null, progress: null, underway: null, ct: default);
+
+        Assert.Equal(output, Assert.Single(runner.Invocations).Run.Output);
+    }
+
+    /// <summary>
     /// Every reason must have a sentence or a considered silence, because <c>ScanResult</c> exposes
     /// the lookup as a property and a switch with no arm throws rather than returning nothing. A new
     /// member added without one is a crash on a property access, which is a poor way to find out.

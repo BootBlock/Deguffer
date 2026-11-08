@@ -225,6 +225,26 @@ public sealed class GitLfsObjectProviderTests : IDisposable
         Assert.Empty(plan.TargetedPaths);
     }
 
+    /// <summary>
+    /// git writes paths and configuration values in UTF-8 whatever the console's code page, so every
+    /// git query and the prune itself are read that way, rather than mangled in a console's OEM code
+    /// page.
+    /// </summary>
+    [Fact]
+    public async Task ReadsEveryGitOutputAsUtf8()
+    {
+        var old = Oid("old");
+        var game = CreateRepository(_root, "game", (old, 3_000));
+        DryRunReports(Path.Combine(game, ".git"), Report(1, old));
+        var runner = Runner();
+
+        var step = TheStep(await CreateProvider(runner).PlanAsync());
+
+        Assert.Equal(ToolOutputEncoding.Utf8, step.Output);
+        Assert.Equal(4, runner.Invocations.Count);
+        Assert.All(runner.Invocations, invocation => Assert.Equal(ToolOutputEncoding.Utf8, invocation.Run.Output));
+    }
+
     /// <summary>Git for Windows hides <c>.git</c>, and the source search must still find it.</summary>
     [Fact]
     public async Task FindsAHiddenGitDirectory()
@@ -261,7 +281,10 @@ public sealed class GitLfsObjectProviderTests : IDisposable
         Assert.Equal(CancelledCommand.Ended, step.WhenCancelled);
     }
 
-    /// <summary>The dry run is pinned exactly as the prune is, forces the progress that lists every object, and only reads.</summary>
+    /// <summary>
+    /// The dry run is pinned exactly as the prune is, forces the progress that lists every object, only
+    /// reads, and is read as the UTF-8 git writes.
+    /// </summary>
     [Fact]
     public async Task TheDryRunIsPinnedToTheSameStoreAndIsAQuery()
     {
@@ -279,7 +302,7 @@ public sealed class GitLfsObjectProviderTests : IDisposable
             + $"-c \"lfs.storage={Forward(Path.Combine(gitDirectory, "lfs"))}\" "
             + "-c \"lfs.pruneremotetocheck=origin\" -c lfs.forceprogress=true lfs prune --dry-run --verbose",
             dryRun.Arguments);
-        Assert.Equal(GitEnvironment.Query, dryRun.Run);
+        Assert.Equal(GitRun.Query, dryRun.Run);
     }
 
     /// <summary>
@@ -299,9 +322,9 @@ public sealed class GitLfsObjectProviderTests : IDisposable
 
         Assert.NotEmpty(runner.Invocations);
         Assert.All(runner.Invocations, invocation => Assert.True(
-            invocation.Run.Unset.IsSupersetOf(GitEnvironment.RepositoryVariables),
+            invocation.Run.Unset.IsSupersetOf(GitRun.Unset),
             $"git {invocation.Arguments} keeps an inherited repository variable."));
-        Assert.True(step.Unset.SetEquals(GitEnvironment.RepositoryVariables), "The prune keeps an inherited repository variable.");
+        Assert.True(step.Unset.SetEquals(GitRun.Unset), "The prune keeps an inherited repository variable.");
     }
 
     /// <summary>

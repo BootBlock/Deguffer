@@ -9,7 +9,7 @@ namespace Deguffer.Core.Tests;
 /// <para>Git is required rather than skipped when absent, because a test that passes when git could
 /// not be found has proved nothing.</para>
 /// </summary>
-public sealed class GitEnvironmentTests
+public sealed class GitRunTests
 {
     private static readonly string Git = UserEnvironment.Current.FindExecutable("git")
         ?? throw new InvalidOperationException("These tests run a real git, and none was found on PATH.");
@@ -22,7 +22,7 @@ public sealed class GitEnvironmentTests
     public async Task UnsetsEveryVariableGitTreatsAsNamingARepository()
     {
         var outcome = await ProcessRunner.Default
-            .RunAsync(Git, "rev-parse --local-env-vars", GitEnvironment.Query, CancellationToken.None);
+            .RunAsync(Git, "rev-parse --local-env-vars", GitRun.Query, CancellationToken.None);
 
         Assert.True(outcome.Succeeded, outcome.Message);
 
@@ -30,6 +30,6 @@ public sealed class GitEnvironmentTests
             ["\r\n", "\n"],
             StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-        Assert.Equal(listed.Order(StringComparer.Ordinal), GitEnvironment.RepositoryVariables.Order(StringComparer.Ordinal));
+        Assert.Equal(listed.Order(StringComparer.Ordinal), GitRun.Unset.Order(StringComparer.Ordinal));
     }
 }

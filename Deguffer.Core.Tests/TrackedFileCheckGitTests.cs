@@ -1,5 +1,3 @@
-using System.Diagnostics;
-using System.Text;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Testing;
@@ -111,8 +109,8 @@ public sealed class TrackedFileCheckGitTests : IDisposable
     /// <c>:(</c>, matched nothing, and every candidate read as holding nothing tracked.
     ///
     /// <para>Set on this process, which every tool it starts inherits. xUnit runs the tests of one class
-    /// one at a time, and the one other test class that starts a real git
-    /// (<see cref="GitEnvironmentTests"/>) asks it only for a list nothing set here changes.</para>
+    /// one at a time. Of the other test classes that start a real git, <see cref="ToolOutputEncodingTests"/>
+    /// runs alone, and <see cref="GitRunTests"/> asks git only for a list nothing set here changes.</para>
     /// </summary>
     [Fact]
     public async Task FindsTrackedFilesWhenTheEnvironmentAsksForLiteralPathspecs()
@@ -161,7 +159,7 @@ public sealed class TrackedFileCheckGitTests : IDisposable
             _ => Path.Combine(elsewhere, "no-such-index"),
         };
 
-        var findings = await CheckThroughTheRunnerWithAsync(variable, value, candidate);
+        var findings = await CheckWithAsync(variable, value, candidate);
 
         Assert.Equal([candidate], findings.Tracked);
         Assert.Empty(findings.Unanswered);
@@ -182,32 +180,28 @@ public sealed class TrackedFileCheckGitTests : IDisposable
         var candidate = Path.Combine(worktree, "Proj", "obj");
         var elsewhere = await AnotherRepositoryAsync();
 
-        var findings = await CheckThroughTheRunnerWithAsync("GIT_DIR", Path.Combine(elsewhere, ".git"), candidate);
+        var findings = await CheckWithAsync("GIT_DIR", Path.Combine(elsewhere, ".git"), candidate);
 
         Assert.Equal([candidate], findings.Tracked);
         Assert.Empty(findings.Unanswered);
     }
 
     private Task<TrackedFileFindings> CheckAsync(IReadOnlyList<string> candidates) =>
-        new TrackedFileCheck(new FakeUserEnvironment(_temp.Path).WithExecutable("git", Git), Utf8Runner.Instance)
+        new TrackedFileCheck(new FakeUserEnvironment(_temp.Path).WithExecutable("git", Git), ProcessRunner.Default)
             .FindTrackedAsync(candidates);
 
     /// <summary>
-    /// Asks about <paramref name="candidate"/> through <see cref="ProcessRunner"/>, which is what
-    /// starts git without the repository variables, with <paramref name="variable"/> set on this
-    /// process for the length of the check.
+    /// Asks about <paramref name="candidate"/> with <paramref name="variable"/> set on this process for
+    /// the length of the check.
     /// </summary>
-    private async Task<TrackedFileFindings> CheckThroughTheRunnerWithAsync(string variable, string value, string candidate)
+    private async Task<TrackedFileFindings> CheckWithAsync(string variable, string value, string candidate)
     {
         var before = Environment.GetEnvironmentVariable(variable);
         Environment.SetEnvironmentVariable(variable, value);
 
         try
         {
-            return await new TrackedFileCheck(
-                    new FakeUserEnvironment(_temp.Path).WithExecutable("git", Git),
-                    new ProcessRunner(Path.Combine(_temp.Path, "tools")))
-                .FindTrackedAsync([candidate]);
+            return await CheckAsync([candidate]);
         }
         finally
         {
@@ -267,36 +261,5 @@ public sealed class TrackedFileCheckGitTests : IDisposable
             .RunAsync(Git, $"{Isolated} -C \"{repository}\" {arguments}", ToolRun.Query, CancellationToken.None);
 
         Assert.True(outcome.Succeeded, $"git {arguments} failed: {outcome.StandardError}");
-    }
-
-    /// <summary>
-    /// Starts the check's git with its output read as UTF-8, which is how git writes paths and how
-    /// <see cref="ProcessRunner"/> reads output in the app, which has no console. In a process that
-    /// has one, as the test host does, <see cref="ProcessRunner"/> reads in the console's code page,
-    /// and a non-ASCII path git lists would reach the check mangled. What is under test here is what
-    /// git matches, not how the runner decodes it.
-    /// </summary>
-    private sealed class Utf8Runner : IProcessRunner
-    {
-        public static readonly Utf8Runner Instance = new();
-
-        public async Task<CommandOutcome> RunAsync(string fileName, string arguments, ToolRun run, CancellationToken ct)
-        {
-            using var process = Process.Start(new ProcessStartInfo(fileName, arguments)
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                StandardOutputEncoding = Encoding.UTF8,
-                StandardErrorEncoding = Encoding.UTF8,
-            })!;
-
-            var output = process.StandardOutput.ReadToEndAsync(ct);
-            var error = process.StandardError.ReadToEndAsync(ct);
-            await process.WaitForExitAsync(ct);
-
-            return new CommandOutcome(process.ExitCode, await output, await error);
-        }
     }
 }
