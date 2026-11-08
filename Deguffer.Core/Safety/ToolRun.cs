@@ -21,8 +21,28 @@ public enum CancelledCommand
 }
 
 /// <summary>
-/// How long a started tool may run, what a cancellation does to it, and which environment it starts
-/// with. Every <see cref="IProcessRunner.RunAsync"/> names one, because each is a decision about that
+/// How Deguffer reads the text a tool writes to its standard output and error.
+/// </summary>
+public enum ToolOutputEncoding
+{
+    /// <summary>
+    /// The console's output code page where Deguffer has a console, and UTF-8 where it has none, which
+    /// is the app's case. This is how <see cref="System.Diagnostics.Process"/> read a redirected output,
+    /// and every parser of tool output was written against it.
+    /// </summary>
+    ConsoleCodePage,
+
+    /// <summary>
+    /// UTF-8 whatever the console's code page, for a tool that writes UTF-8 to a pipe however the
+    /// console is set. Read in a console's OEM code page such as 850, a non-ASCII path such a tool
+    /// prints reaches its parser mangled, and matches nothing it is compared with.
+    /// </summary>
+    Utf8,
+}
+
+/// <summary>
+/// How long a started tool may run, what a cancellation does to it, which environment it starts
+/// with, and how its output is read. Every <see cref="IProcessRunner.RunAsync"/> names one, because each is a decision about that
 /// tool rather than a property of the runner.
 ///
 /// <para>A tool that may be ended runs in a job object Deguffer holds open for its whole life and
@@ -57,6 +77,12 @@ public sealed record ToolRun
     public IReadOnlyDictionary<string, string>? Environment { get; private init; }
 
     /// <summary>
+    /// How the tool's output is read. <see cref="ToolOutputEncoding.ConsoleCodePage"/> unless the
+    /// caller knows the tool writes something else (<see cref="WritingIn"/>).
+    /// </summary>
+    public ToolOutputEncoding Output { get; private init; }
+
+    /// <summary>
     /// How long the tool may run before it is ended and the run fails, or null for no limit. Only a
     /// tool that is <see cref="CancelledCommand.Ended"/> has one: a limit on one that
     /// <see cref="CancelledCommand.Finishes"/> could not be enforced without the harm it exists to avoid.
@@ -86,4 +112,7 @@ public sealed record ToolRun
         ArgumentNullException.ThrowIfNull(environment);
         return this with { Environment = environment };
     }
+
+    /// <summary>This run, with the tool's output read as <paramref name="output"/>.</summary>
+    public ToolRun WritingIn(ToolOutputEncoding output) => this with { Output = output };
 }

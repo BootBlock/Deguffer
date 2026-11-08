@@ -1,5 +1,3 @@
-using System.Diagnostics;
-using System.Text;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Testing;
@@ -110,8 +108,9 @@ public sealed class TrackedFileCheckGitTests : IDisposable
     /// literal mode, where it does not read pathspec magic. Each pathspec was then a path beginning
     /// <c>:(</c>, matched nothing, and every candidate read as holding nothing tracked.
     ///
-    /// <para>Set on this process, which every tool it starts inherits. No other test class starts a
-    /// real git, and xUnit runs the tests of one class one at a time.</para>
+    /// <para>Set on this process, which every tool it starts inherits. The one other test class that
+    /// starts a real git, <see cref="ToolOutputEncodingTests"/>, runs alone, and xUnit runs the tests of
+    /// one class one at a time.</para>
     /// </summary>
     [Fact]
     public async Task FindsTrackedFilesWhenTheEnvironmentAsksForLiteralPathspecs()
@@ -136,7 +135,7 @@ public sealed class TrackedFileCheckGitTests : IDisposable
     }
 
     private Task<TrackedFileFindings> CheckAsync(IReadOnlyList<string> candidates) =>
-        new TrackedFileCheck(new FakeUserEnvironment(_temp.Path).WithExecutable("git", Git), Utf8Runner.Instance)
+        new TrackedFileCheck(new FakeUserEnvironment(_temp.Path).WithExecutable("git", Git), ProcessRunner.Default)
             .FindTrackedAsync(candidates);
 
     /// <summary>Create a repository holding <paramref name="files"/>, each committed.</summary>
@@ -178,36 +177,5 @@ public sealed class TrackedFileCheckGitTests : IDisposable
             .RunAsync(Git, $"{Isolated} -C \"{_repository}\" {arguments}", ToolRun.Query, CancellationToken.None);
 
         Assert.True(outcome.Succeeded, $"git {arguments} failed: {outcome.StandardError}");
-    }
-
-    /// <summary>
-    /// Starts the check's git with its output read as UTF-8, which is how git writes paths and how
-    /// <see cref="ProcessRunner"/> reads output in the app, which has no console. In a process that
-    /// has one, as the test host does, <see cref="ProcessRunner"/> reads in the console's code page,
-    /// and a non-ASCII path git lists would reach the check mangled. What is under test here is what
-    /// git matches, not how the runner decodes it.
-    /// </summary>
-    private sealed class Utf8Runner : IProcessRunner
-    {
-        public static readonly Utf8Runner Instance = new();
-
-        public async Task<CommandOutcome> RunAsync(string fileName, string arguments, ToolRun run, CancellationToken ct)
-        {
-            using var process = Process.Start(new ProcessStartInfo(fileName, arguments)
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                StandardOutputEncoding = Encoding.UTF8,
-                StandardErrorEncoding = Encoding.UTF8,
-            })!;
-
-            var output = process.StandardOutput.ReadToEndAsync(ct);
-            var error = process.StandardError.ReadToEndAsync(ct);
-            await process.WaitForExitAsync(ct);
-
-            return new CommandOutcome(process.ExitCode, await output, await error);
-        }
     }
 }

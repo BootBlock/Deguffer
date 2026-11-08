@@ -79,7 +79,7 @@ internal static class GitLfsSettings
         var outcome = await runner.RunAsync(
             git,
             $"{GitLfsCheckout.GitDirectoryArgument(store)} {Query}",
-            ToolRun.Query,
+            GitRun.Query,
             ct).ConfigureAwait(false);
 
         // git config exits 1 where no key matches, which here is the ordinary answer.
