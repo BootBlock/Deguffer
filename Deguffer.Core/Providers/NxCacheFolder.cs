@@ -34,7 +34,7 @@ internal static class NxCacheFolder
     /// </summary>
     public static NxCacheVerdict Examine(string path, string index, bool absentIsEmpty)
     {
-        switch (LongPath.ProbeDirectory(path))
+        switch (LongPath.ProbeDirectory(path, out var pathIsLink))
         {
             case PathPresence.Absent:
                 return default;
@@ -43,14 +43,15 @@ internal static class NxCacheFolder
                 return NxCacheVerdict.Declining(path, "Windows would not say what is in it, so it is left alone.");
         }
 
-        if (LongPath.IsReparsePoint(path))
+        if (pathIsLink is true)
         {
             return NxCacheVerdict.Declining(path, CacheLevelWalk.LinkReason);
         }
 
         var terminalOutputs = System.IO.Path.Combine(path, TerminalOutputs);
 
-        if (LongPath.ProbeDirectory(terminalOutputs) != PathPresence.Present || LongPath.IsReparsePoint(terminalOutputs))
+        if (LongPath.ProbeDirectory(terminalOutputs, out var terminalOutputsIsLink) != PathPresence.Present
+            || terminalOutputsIsLink is true)
         {
             return NxCacheVerdict.Declining(
                 path,

@@ -17,6 +17,9 @@ public static class RouteTuners
     /// <summary>The table wherever it can be read, waited for.</summary>
     public static ScanTuner Table { get; } = With(ScanRoute.Table);
 
+    /// <summary>The walk raced against the table wherever the table can be read, as shipped.</summary>
+    public static ScanTuner Auto { get; } = With(ScanRoute.Auto);
+
     private static ScanTuner With(ScanRoute route) => new(
         new FakePreferences(AppPreferences.Default with { Scanning = ScanPreferences.Default with { Route = route } }),
         new VolumeMediaCache(new FakeStorageQueries()),

@@ -148,7 +148,7 @@ internal sealed class ArduinoFolderRules(
     /// </summary>
     public static (bool Absent, bool Unlisted, string? Why) WhyNotEmptied(string downloads)
     {
-        switch (LongPath.ProbeDirectory(downloads))
+        switch (LongPath.ProbeDirectory(downloads, out var downloadsIsLink))
         {
             case PathPresence.Absent:
                 return (true, false, null);
@@ -156,7 +156,7 @@ internal sealed class ArduinoFolderRules(
                 return (false, true, null);
         }
 
-        if (LongPath.IsReparsePoint(downloads))
+        if (downloadsIsLink is true)
         {
             return (false, false, $"Leaving the Arduino downloads folder '{downloads}' alone: it is a link to somewhere "
                 + "else, and the Arduino CLI's cache clean would remove what it points at.");

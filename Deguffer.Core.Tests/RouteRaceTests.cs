@@ -77,8 +77,8 @@ public class RouteRaceTests
         }
     }
 
-    private static Task<Raced<Answer>> Race(Route<Answer> table, Route<Answer> walk, CancellationToken ct = default) =>
-        RouteRace.FirstAsync<Answer>(table.RunAsTable, walk.Run, answer => answer.Reached, ct);
+    private static Task<Raced<Answer>> Race(Route<Answer> table, Route<Answer> walk, CancellationToken ct = default, Action? tableAlone = null) =>
+        RouteRace.FirstAsync<Answer>(table.RunAsTable, walk.Run, answer => answer.Reached, tableAlone ?? (() => { }), ct);
 
     /// <summary>
     /// The walk is not left reading the disk, or reporting progress, after its question has been
@@ -139,6 +139,63 @@ public class RouteRaceTests
 
         Assert.Equal(RaceOutcome.TableAnswered, raced.Outcome);
         Assert.Equal("table", raced.Answer.From);
+    }
+
+    /// <summary>
+    /// A walk that did not reach its path leaves the table as the only route answering, and the race
+    /// says so before it waits, so a build read at low priority beside the walk is raised for the wait.
+    /// </summary>
+    [Fact]
+    public async Task AWalkThatDidNotReachItsPathLeavesTheTableAloneBeforeItIsWaitedFor()
+    {
+        var table = new Route<Answer>();
+        var walk = new Route<Answer>();
+        var alone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = 0;
+        var racing = Race(table, walk, tableAlone: () =>
+        {
+            Interlocked.Increment(ref calls);
+            alone.TrySetResult();
+        });
+
+        walk.Answer(new Answer("walk", Reached: false));
+        await alone.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        Assert.False(racing.IsCompleted);
+
+        table.Answer(new Answer("table"));
+        await racing;
+
+        Assert.Equal(1, calls);
+    }
+
+    /// <summary>A walk that answers leaves the build speculative, still reading for later questions.</summary>
+    [Fact]
+    public async Task AWalkThatAnswersNeverLeavesTheTableAlone()
+    {
+        var table = new Route<Answer>();
+        var walk = new Route<Answer>();
+        var calls = 0;
+        var racing = Race(table, walk, tableAlone: () => Interlocked.Increment(ref calls));
+
+        walk.Answer(new Answer("walk"));
+        await racing;
+
+        Assert.Equal(0, calls);
+    }
+
+    /// <summary>A table that answers first has nothing left to read for the question.</summary>
+    [Fact]
+    public async Task ATableThatAnswersFirstIsNeverLeftAlone()
+    {
+        var table = new Route<Answer>();
+        var walk = new Route<Answer>();
+        var calls = 0;
+        var racing = Race(table, walk, tableAlone: () => Interlocked.Increment(ref calls));
+
+        table.Answer(new Answer("table"));
+        await racing;
+
+        Assert.Equal(0, calls);
     }
 
     [Fact]

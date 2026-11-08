@@ -203,12 +203,12 @@ public sealed class CoursierCacheProvider : CleanupProviderBase
                 + $"cache: {setting.Declined} It is leaving it alone.");
         }
 
-        if (NothingToPlanFor(cache, $"Coursier has not downloaded anything for this user — no {cache} directory.") is { } nothing)
+        if (NothingToPlanFor(cache, $"Coursier has not downloaded anything for this user — no {cache} directory.", out var cacheIsLink) is { } nothing)
         {
             return nothing;
         }
 
-        if (LongPath.IsReparsePoint(cache))
+        if (cacheIsLink)
         {
             return UnexaminedPlan(
                 $"Leaving '{cache}' alone: it is a link to somewhere else, and Deguffer does not look "

@@ -1,3 +1,5 @@
+using Deguffer.Core.Scanning.Media;
+
 namespace Deguffer.Core.Scanning.Mft;
 
 /// <summary>
@@ -25,6 +27,10 @@ namespace Deguffer.Core.Scanning.Mft;
 /// <see cref="Invalidate"/> ends every build, because the next scan starts from the machine as it is
 /// then.</para>
 ///
+/// <para><b>Read at low priority while a walk is in flight on its disk.</b> Under Auto a build reads
+/// its table after the walks <see cref="Walking"/> registers on its disks, until <see cref="Need"/>
+/// says a caller waits for it alone: see <see cref="BuildPriorities"/>.</para>
+///
 /// <para><b>Kept only while a pass holds it.</b> An index costs about 49 bytes for every slot of the
 /// volume's table, so a system volume of a few million slots holds over a hundred megabytes. Nothing
 /// reads it once the pass that built it has ended, because the next pass starts with
@@ -38,7 +44,8 @@ public sealed class MftVolumeIndexCache
     private readonly IMftSourceFactory _factory;
     private readonly ScanTuner _tuning;
     private readonly Action<Action> _run;
-    private readonly Dictionary<char, Lazy<Task<Built>>> _byVolume = [];
+    private readonly Dictionary<char, (Lazy<Task<Built>> Build, BuildPriorities.Build Priority)> _byVolume = [];
+    private readonly BuildPriorities _priorities = new();
     private readonly Lock _gate = new();
     private int _holds;
 
@@ -68,28 +75,78 @@ public sealed class MftVolumeIndexCache
     /// The index for <paramref name="driveLetter"/>, started now if no build for it has been. Already
     /// complete where the volume would not open or the build has finished.
     /// </summary>
-    public Task<Built> Get(char driveLetter)
+    public Task<Built> Get(char driveLetter) => Entry(driveLetter).Build.Value;
+
+    /// <summary>
+    /// A caller waits for the index of <paramref name="driveLetter"/> with no walk beside it, so the
+    /// build is not speculative and reads at normal priority for the rest of its life. See
+    /// <see cref="BuildPriorities"/>.
+    ///
+    /// <para>Kept for a build not started yet, which then never yields, so a caller can say it waits
+    /// alone before the question that starts the build. Starts nothing and opens nothing.</para>
+    /// </summary>
+    public void Need(char driveLetter) => _priorities.Need(Entry(driveLetter).Priority);
+
+    /// <summary>
+    /// A walk of <paramref name="paths"/> is in flight until the walk returned is disposed, and every
+    /// build on the disks under them reads after it. See <see cref="BuildPriorities"/>.
+    /// </summary>
+    public IDisposable Walking(IEnumerable<string> paths) => _priorities.Walking(DisksOf(paths));
+
+    /// <summary>
+    /// The physical disks under the volumes holding <paramref name="paths"/>, or null where any of them
+    /// could not say, which <see cref="BuildPriorities"/> takes to share every disk.
+    ///
+    /// <para>Asked of each path rather than its drive letter, so a folder mounted from another volume
+    /// counts that volume's disks. A share, a mapped network drive or an optical drive is on no disk of
+    /// this machine, which its media says with no reason, and adds no disk rather than every one.</para>
+    /// </summary>
+    private IReadOnlyList<int>? DisksOf(IEnumerable<string> paths)
+    {
+        var disks = new SortedSet<int>();
+
+        foreach (var path in paths)
+        {
+            switch (_tuning.StorageOf(path))
+            {
+                case { PhysicalDisks.Count: > 0 } media:
+                    disks.UnionWith(media.PhysicalDisks);
+                    break;
+
+                case { Reason: MediaUnknownReason.None }:
+                    break;
+
+                default:
+                    return null;
+            }
+        }
+
+        return [.. disks];
+    }
+
+    /// <summary>The volume's build, started by the first read of its <c>Build</c>, and its priority.</summary>
+    private (Lazy<Task<Built>> Build, BuildPriorities.Build Priority) Entry(char driveLetter)
     {
         var key = char.ToUpperInvariant(driveLetter);
-        Lazy<Task<Built>> pending;
 
         // The lock covers only the dictionary; the Lazy serialises the open of the *same* volume,
         // which is the duplication worth preventing. Holding the lock across the open instead would
         // make a question about D: wait on a device that is slow to answer about C:.
         lock (_gate)
         {
-            if (!_byVolume.TryGetValue(key, out pending!))
+            if (!_byVolume.TryGetValue(key, out var entry))
             {
                 var scan = _scan.Token;
-                pending = new Lazy<Task<Built>>(() => Start(key, scan), LazyThreadSafetyMode.ExecutionAndPublication);
-                _byVolume[key] = pending;
+                var priority = new BuildPriorities.Build();
+                entry = (new Lazy<Task<Built>>(() => Start(key, priority, scan), LazyThreadSafetyMode.ExecutionAndPublication), priority);
+                _byVolume[key] = entry;
             }
-        }
 
-        return pending.Value;
+            return entry;
+        }
     }
 
-    private Task<Built> Start(char driveLetter, CancellationToken scan)
+    private Task<Built> Start(char driveLetter, BuildPriorities.Build priority, CancellationToken scan)
     {
         // Asked before the open, so nothing between the open and the build can leave the handle
         // without an owner. The walk asks the same question of the same cache, so it costs nothing
@@ -100,6 +157,13 @@ public sealed class MftVolumeIndexCache
         if (volume is null)
         {
             return Task.FromResult(new Built(null, reason));
+        }
+
+        // Only under Auto, the one route that races the questions it asks a build against a walk.
+        // File table first waits for the table, so its build is the answer and keeps normal priority.
+        if (_tuning.Route is Configuration.ScanRoute.Auto)
+        {
+            _priorities.Yield(priority, volume, DisksOf([$@"{driveLetter}:\"]));
         }
 
         // A build Invalidate or the last hold ends stops at its next check of the token, with the handle
@@ -199,5 +263,6 @@ public sealed class MftVolumeIndexCache
         _scan.Cancel();
         _scan = new CancellationTokenSource();
         _byVolume.Clear();
+        _priorities.Forget();
     }
 }

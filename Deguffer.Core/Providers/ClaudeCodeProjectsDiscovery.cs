@@ -129,7 +129,7 @@ public sealed class ClaudeCodeProjectsDiscovery
 
         var root = Path.Combine(home, ClaudeCodeHome.Projects);
 
-        switch (LongPath.ProbeDirectory(root))
+        switch (LongPath.ProbeDirectory(root, out var rootIsLink))
         {
             // Not there is a complete answer: Claude Code has written no transcript for this user.
             case PathPresence.Absent:
@@ -145,7 +145,7 @@ public sealed class ClaudeCodeProjectsDiscovery
                 };
         }
 
-        if (LongPath.IsReparsePoint(root))
+        if (rootIsLink is true)
         {
             return new ClaudeCodeProjects([], NoTranscripts, [], [root], Complete: false);
         }

@@ -77,7 +77,7 @@ internal sealed record NxWorkspaceFolder(string Path, string Workspace)
 
         var manifest = System.IO.Path.Combine(workspace, Manifest);
 
-        return LongPath.ProbeFile(manifest) == PathPresence.Present && !LongPath.IsReparsePoint(manifest)
+        return LongPath.ProbeFile(manifest, out var manifestIsLink) == PathPresence.Present && manifestIsLink is false
             ? new NxWorkspaceFolder(path, workspace)
             : null;
     }

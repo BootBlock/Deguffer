@@ -74,15 +74,17 @@ internal static class Tuning
     /// where that volume is, how the build read, and whether a command ran before each part. The
     /// command itself is never stated, because it can name a path.
     /// </summary>
-    public static string DescribeRace(Route racer, WalkTuning walk, char drive, DiskRelation relation, TableTuning table, bool beforePart)
+    public static string DescribeRace(
+        Route racer, WalkTuning walk, char drive, DiskRelation relation, TableTuning table, bool buildYields, bool beforePart)
     {
         var walked = racer is Route.Walk ? "the walk" : "the search for build outputs";
         var between = beforePart ? "a command run before each part" : "nothing run between parts";
+        var priority = buildYields ? "at low priority while the walk runs" : "at normal priority";
 
         return string.Create(
             CultureInfo.InvariantCulture,
             $"{walked}, {Listing(walk)}, raced against the index of {char.ToUpperInvariant(drive)}:, {relation.Describe()}, " +
-            $"{table.ReadBytes / 1024} KiB reads, {table.ReadsInFlight} in flight, parsed on {table.ParseThreads} threads, " +
+            $"{table.ReadBytes / 1024} KiB reads {priority}, {table.ReadsInFlight} in flight, parsed on {table.ParseThreads} threads, " +
             $"{table.ListReadsInFlight} list reads in flight, {between}");
     }
 

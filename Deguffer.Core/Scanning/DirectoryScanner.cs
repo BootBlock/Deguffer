@@ -183,6 +183,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
         ThrowIfAnyPathIsBlank(asked);
 
         using var remembering = _estimates?.Hold() ?? PassHold.Nothing;
+        using var walking = _volumes.Walking([.. asked.Select(request => request.Path)]);
 
         var results = await _fallback
             .Because(FallbackReason.FreshReadingRequired)
@@ -252,6 +253,23 @@ public sealed class DirectoryScanner : IDirectoryScanner
     /// </summary>
     public bool RacesTheWalk => _tuner.Route is ScanRoute.Auto;
 
+    public void NeedIndex(string root)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(root);
+
+        if (VolumePath.TryParse(root, out var volumeRoot))
+        {
+            _volumes.Need(volumeRoot.DriveLetter);
+        }
+    }
+
+    public IDisposable? Walking(string root)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(root);
+
+        return _volumes.Walking([root]);
+    }
+
     /// <summary>
     /// The index's answer for one root, as full paths in ordinal order, or null where it has none.
     ///
@@ -265,6 +283,8 @@ public sealed class DirectoryScanner : IDirectoryScanner
     /// </summary>
     private async Task<IReadOnlyList<string>?> FindAsync(DirectorySearch search, VolumePath root, CancellationToken ct)
     {
+        // Not raised here: only the caller knows whether a walk is beside this wait, and it says so
+        // with NeedIndex. Reading the route again here could disagree with the caller's reading.
         var built = await _volumes.Get(root.DriveLetter).WaitAsync(ct).ConfigureAwait(false);
 
         if (built.Index?.TryFindDirectories(root.Components, search, ct) is not { } found)
@@ -374,8 +394,8 @@ public sealed class DirectoryScanner : IDirectoryScanner
             // the table to be waited for. A table already read answers in a lookup, and one that could not
             // be read has a reason the walk has to carry, which a race would let a quick walk hide.
             var answered = !building.IsCompleted && _tuner.Route is ScanRoute.Auto
-                ? await RaceAsync(asked, questions, keeps, building, running, ct).ConfigureAwait(false)
-                : FromIndex((await building.WaitAsync(ct).ConfigureAwait(false)).Index, questions);
+                ? await RaceAsync(asked, questions, keeps, driveLetter, building, running, ct).ConfigureAwait(false)
+                : FromIndex((await WaitAloneAsync(driveLetter, building, ct).ConfigureAwait(false)).Index, questions);
 
             for (var j = 0; j < questions.Count; j++)
             {
@@ -395,6 +415,8 @@ public sealed class DirectoryScanner : IDirectoryScanner
 
         foreach (var (reason, indexes) in walks)
         {
+            using var walking = _volumes.Walking([.. indexes.Select(i => asked[i].Path)]);
+
             var walked = await _fallback
                 .Because(reason)
                 .MeasureEachAsync([.. indexes.Select(i => asked[i])], keeps, running.Of(indexes), ct)
@@ -426,21 +448,28 @@ public sealed class DirectoryScanner : IDirectoryScanner
         IReadOnlyList<ScanRequest> asked,
         IReadOnlyList<(int Index, Asked Asked)> questions,
         MinimumAge[] keeps,
+        char driveLetter,
         Task<MftVolumeIndexCache.Built> building,
         RunningPaths running,
         CancellationToken ct)
     {
         var raced = await RouteRace.FirstAsync<IReadOnlyList<ScanResult[]?>>(
             async stop => Answered(FromIndex((await building.WaitAsync(stop).ConfigureAwait(false)).Index, questions)),
-            async stop => await _fallback
-                .Because(FallbackReason.WalkAnsweredFirst)
-                .MeasureEachAsync(
-                    [.. questions.Select(question => asked[question.Index])],
-                    keeps,
-                    running.Of([.. questions.Select(question => question.Index)]),
-                    stop)
-                .ConfigureAwait(false),
+            async stop =>
+            {
+                using var walking = _volumes.Walking([.. questions.Select(question => question.Asked.Path)]);
+
+                return await _fallback
+                    .Because(FallbackReason.WalkAnsweredFirst)
+                    .MeasureEachAsync(
+                        [.. questions.Select(question => asked[question.Index])],
+                        keeps,
+                        running.Of([.. questions.Select(question => question.Index)]),
+                        stop)
+                    .ConfigureAwait(false);
+            },
             walked => walked.All(readings => readings![0].WasReached),
+            () => _volumes.Need(driveLetter),
             ct).ConfigureAwait(false);
 
         return raced.Outcome switch
@@ -452,6 +481,21 @@ public sealed class DirectoryScanner : IDirectoryScanner
                 : readings)],
             _ => raced.Answer,
         };
+    }
+
+    /// <summary>
+    /// Wait for the index of <paramref name="driveLetter"/> with no walk beside it, so its build is no
+    /// longer speculative. A build started under Auto reads at low priority, and the route can change
+    /// between the question that started it and this one.
+    /// </summary>
+    private Task<MftVolumeIndexCache.Built> WaitAloneAsync(char driveLetter, Task<MftVolumeIndexCache.Built> building, CancellationToken ct)
+    {
+        if (!building.IsCompleted)
+        {
+            _volumes.Need(driveLetter);
+        }
+
+        return building.WaitAsync(ct);
     }
 
     /// <summary>

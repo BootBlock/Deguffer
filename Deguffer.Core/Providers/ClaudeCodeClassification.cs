@@ -101,7 +101,7 @@ internal sealed class ClaudeCodeClassificationBuilder
     /// </summary>
     public IReadOnlyList<FileSystemInfo>? Open(string folder, string reason)
     {
-        switch (LongPath.ProbeDirectory(folder))
+        switch (LongPath.ProbeDirectory(folder, out var folderIsLink))
         {
             // Windows would not say whether the folder is there. Nothing in it was classified, and
             // an unqualified null would let the plan present that as a folder holding nothing.
@@ -113,7 +113,7 @@ internal sealed class ClaudeCodeClassificationBuilder
                 return null;
         }
 
-        if (LongPath.IsReparsePoint(folder))
+        if (folderIsLink is true)
         {
             Link(folder);
             return null;

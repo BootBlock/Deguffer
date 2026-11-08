@@ -171,14 +171,14 @@ public sealed class PipenvCacheProvider : CleanupProviderBase
                 + $"cache: {setting.Declined} It is leaving it alone.");
         }
 
-        if (NothingToPlanFor(root, $"pipenv has not cached anything for this user — no {root} directory.") is { } nothing)
+        if (NothingToPlanFor(root, $"pipenv has not cached anything for this user — no {root} directory.", out var rootIsLink) is { } nothing)
         {
             return nothing;
         }
 
         // The root arrives by name, from a variable or a default, so nothing has classified it, and a
         // recognised name on the far side of a link would be cleared through it.
-        if (LongPath.IsReparsePoint(root))
+        if (rootIsLink)
         {
             return UnexaminedPlan(
                 $"Leaving '{root}' alone: it is a link to somewhere else, and Deguffer does not look "

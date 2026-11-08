@@ -109,6 +109,13 @@ internal static class AutoTuning
     /// sixteen, against 8.9 s for the reader that read one at a time. Sixteen was 2 to 6 % faster
     /// than eight and holds eight more buffers, so eight is where adding reads stopped paying
     /// for what they hold.</para>
+    ///
+    /// <para><b>Beside a walk.</b> Eight reads in flight made a cold walk on the same disk 2.7 to
+    /// 3.7 times as long as alone, and one read in flight still 1.7 to 1.8 times (#477). Reading at
+    /// low priority while the walk runs (<see cref="Mft.BuildPriorities"/>) brought it to 0.99 to
+    /// 1.03 times with eight still in flight, for about a second more on a system volume's build, so
+    /// eight stays: the priority, not fewer reads, is what keeps the build out of the walk's way
+    /// (#478).</para>
     /// </summary>
     public static int TableReadsInFlight(StorageMedia media) => media switch
     {

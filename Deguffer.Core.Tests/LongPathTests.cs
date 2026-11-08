@@ -559,6 +559,37 @@ public class LongPathTests
     }
 
     /// <summary>
+    /// The file form gives the same answers, with the same null. A directory at the path is absent to
+    /// it, so the link answer for a linked directory is null rather than true.
+    /// </summary>
+    [Fact]
+    public void AnswersAFilesLinkQuestionOnlyWhereWindowsDescribedTheFile()
+    {
+        using var temp = new TempDirectory();
+
+        var file = temp.CreateFile(4, "settings.json");
+        var link = Path.Combine(temp.Path, "link.json");
+        SymbolicLink.ToFile(link, file);
+
+        Assert.Equal(PathPresence.Present, LongPath.ProbeFile(link, out var linkIsALink));
+        Assert.True(linkIsALink);
+
+        Assert.Equal(PathPresence.Present, LongPath.ProbeFile(file, out var plainIsALink));
+        Assert.False(plainIsALink);
+
+        var linkedDirectory = Path.Combine(temp.Path, "linked");
+        SymbolicLink.ToDirectory(linkedDirectory, temp.CreateDirectory("target"));
+
+        Assert.Equal(PathPresence.Absent, LongPath.ProbeFile(linkedDirectory, out var directoryIsALink));
+        Assert.Null(directoryIsALink);
+
+        using var denied = DeniedDirectory.WithUnreadableFile(file);
+
+        Assert.Equal(PathPresence.Refused, LongPath.ProbeFile(file, out var refusedIsALink));
+        Assert.Null(refusedIsALink);
+    }
+
+    /// <summary>
     /// <see cref="LongPath.DirectoryExists"/> and <see cref="LongPath.FileExists"/> are now the
     /// probe's <see cref="PathPresence.Present"/> arm rather than <c>Directory.Exists</c> and
     /// <c>File.Exists</c>, and around a hundred call sites depend on the answer not moving.

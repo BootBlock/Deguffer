@@ -184,13 +184,13 @@ public sealed class PulumiPluginProvider : CleanupProviderBase
 
         var plugins = PluginsIn(home);
 
-        if (NothingToPlanFor(plugins, $"Pulumi has downloaded no plugins for this account: {plugins} does not exist.") is { } nothing)
+        if (NothingToPlanFor(plugins, $"Pulumi has downloaded no plugins for this account: {plugins} does not exist.", out var pluginsIsLink) is { } nothing)
         {
             return nothing;
         }
 
         // The folder arrives by name, from a variable or a default, so nothing has classified it.
-        if (LongPath.IsReparsePoint(plugins))
+        if (pluginsIsLink)
         {
             return UnexaminedPlan(
                 $"Leaving '{plugins}' alone: it is a link to somewhere else, and Deguffer does not look through a link.");

@@ -111,7 +111,10 @@ Deguffer.Benchmark scan C:\Users\<user>\source --runs 6
   searches it (the default), or walked whole. `--before-part <command>` runs a command through
   `cmd.exe` before each part, outside its time, and stops the run if the command fails: give it a
   tool that empties the system file cache to time every part cold. Deguffer never empties a memory
-  list itself (§2 of the specification). Unlike the other table routes, it walks and builds with what
+  list itself (§2 of the specification). `--build-priority yield|normal` sets whether the build reads
+  at low I/O priority while the walk runs and at normal priority otherwise, as a scan's build does
+  where the two share a disk (the default), or at normal priority throughout; a build of a volume on
+  another disk never yields. Unlike the other table routes, it walks and builds with what
   a scan uses for each drive's kind, and the table and walk options still override that. Every result
   names the garbage collector, so a run under `DOTNET_gcServer=1` or `DOTNET_GCgen0size` is told apart.
 - `scan <folder>` measures a folder as an elevated scan does the first time it asks about the

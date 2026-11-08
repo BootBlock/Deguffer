@@ -59,7 +59,7 @@ public static class CacheLevelWalk
 
             var directory = level.Resolve(root);
 
-            switch (LongPath.ProbeDirectory(directory))
+            switch (LongPath.ProbeDirectory(directory, out var directoryIsLink))
             {
                 // Windows would not say whether the level is there, which is the same thing to a
                 // caller as a level it could not list: the figures leave out an amount nobody can
@@ -79,7 +79,7 @@ public static class CacheLevelWalk
             // today — and that is the point. Phase 1's junction defect existed because the safety
             // property was riding on a filter nobody had named, and it held only for as long as
             // every target happened to arrive the same way.
-            if (LongPath.IsReparsePoint(directory))
+            if (directoryIsLink is true)
             {
                 Decline(directory);
                 continue;

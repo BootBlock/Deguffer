@@ -138,14 +138,14 @@ public sealed class ScoopCacheProvider : CleanupProviderBase
     {
         var cache = layout.Cache;
 
-        if (NothingToPlanFor(cache, $"Scoop has not downloaded anything into its cache yet ({cache} does not exist).") is { } nothing)
+        if (NothingToPlanFor(cache, $"Scoop has not downloaded anything into its cache yet ({cache} does not exist).", out var cacheIsLink) is { } nothing)
         {
             return nothing;
         }
 
         // Scoop lists and empties a linked cache through the link, but every survivor this plan names
         // would resolve through it too, which makes §5.6's check of them say nothing.
-        if (LongPath.IsReparsePoint(cache))
+        if (cacheIsLink)
         {
             return UnexaminedPlan(
                 $"Leaving '{cache}' alone: it is a link to somewhere else, and Deguffer does not look through a link.");

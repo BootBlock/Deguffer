@@ -15,9 +15,13 @@ public sealed class HeldMftSourceFactory(char driveLetter, MftFixture fixture) :
     private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _opened;
     private int _closed;
+    private ServedVolume? _volume;
 
     /// <summary>How many times the volume was opened.</summary>
     public int OpenCount => Volatile.Read(ref _opened);
+
+    /// <summary>The volume as it was last opened, or null before the first open.</summary>
+    public ServedVolume? Opened => Volatile.Read(ref _volume);
 
     /// <summary>How many of those opens have been closed again.</summary>
     public int CloseCount => Volatile.Read(ref _closed);
@@ -36,7 +40,10 @@ public sealed class HeldMftSourceFactory(char driveLetter, MftFixture fixture) :
         Interlocked.Increment(ref _opened);
         reason = FallbackReason.None;
 
-        return new ServedVolume(new Held(fixture.Build(), this));
+        var volume = new ServedVolume(new Held(fixture.Build(), this));
+        Volatile.Write(ref _volume, volume);
+
+        return volume;
     }
 
     private sealed class Held(IMftSource inner, HeldMftSourceFactory owner) : IMftSource

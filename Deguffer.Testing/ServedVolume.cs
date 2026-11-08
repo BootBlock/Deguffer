@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Mft;
 
@@ -11,7 +12,11 @@ namespace Deguffer.Testing;
 /// </summary>
 public sealed class ServedVolume(IMftSource source) : IMftVolume
 {
+    private readonly ConcurrentQueue<ReadPriority> _priorities = new();
     private IMftSource? _source = source;
+
+    /// <summary>Every priority the volume was asked for, in order, before its table was read and after.</summary>
+    public IReadOnlyList<ReadPriority> Priorities => [.. _priorities];
 
     public IMftSource? TryReadTable(out FallbackReason reason)
     {
@@ -20,6 +25,8 @@ public sealed class ServedVolume(IMftSource source) : IMftVolume
         return Interlocked.Exchange(ref _source, null)
             ?? throw new InvalidOperationException("The table of this volume was read already, or the volume was closed.");
     }
+
+    public void Prioritise(ReadPriority priority) => _priorities.Enqueue(priority);
 
     public void Dispose() => Interlocked.Exchange(ref _source, null)?.Dispose();
 }

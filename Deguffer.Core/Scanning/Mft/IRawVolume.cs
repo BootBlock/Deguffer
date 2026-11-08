@@ -22,4 +22,11 @@ internal interface IRawVolume : IDisposable
     /// an <see cref="IOException"/>.
     /// </summary>
     ValueTask<int> ReadAsync(Memory<byte> destination, long offset, CancellationToken ct);
+
+    /// <summary>
+    /// Serve every read from now on at <paramref name="priority"/>. A hint the storage stack may
+    /// ignore, never a failure, and nothing at all once the volume is closed, because the build that
+    /// closes it and the caller that changes its priority run on different threads.
+    /// </summary>
+    void Prioritise(ReadPriority priority);
 }

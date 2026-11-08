@@ -155,11 +155,26 @@ public sealed class TableRoutesTests
     {
         var volumes = new StepTimingSources(FakeMftSourceFactory.Serving(Drive, Volume().WithoutBitmap()));
 
-        var first = TableRoutes.Run(Route.Table, volumes, $@"{Drive}:\", TableTuning.Default, CancellationToken.None);
-        var second = TableRoutes.Run(Route.Table, volumes, $@"{Drive}:\", TableTuning.Default, CancellationToken.None);
+        var first = TableRoutes.Run(Route.Table, volumes, $@"{Drive}:\", TableTuning.Default, opened: null, CancellationToken.None);
+        var second = TableRoutes.Run(Route.Table, volumes, $@"{Drive}:\", TableTuning.Default, opened: null, CancellationToken.None);
 
         Assert.Equal([MftOpenStep.FirstRecord], Assert.IsType<MftOpenTimings>(first.Open).Steps.Select(step => step.Step));
         Assert.NotSame(first.Open, second.Open);
+    }
+
+    /// <summary>
+    /// The volume opened is handed over once, as a scan's build hands its volume to the priorities it
+    /// reads at, so a race can lower the build it times.
+    /// </summary>
+    [Fact]
+    public void TheOpenedVolumeIsHandedOver()
+    {
+        var volumes = new RememberingSources(FakeMftSourceFactory.Serving(Drive, Volume().WithoutBitmap()));
+        var handed = new List<IMftVolume>();
+
+        TableRoutes.Run(Route.Index, volumes, $@"{Drive}:\", TableTuning.Default, handed.Add, CancellationToken.None);
+
+        Assert.Same(volumes.Opened, Assert.Single(handed));
     }
 
     [Fact]
@@ -169,6 +184,7 @@ public sealed class TableRoutesTests
             FakeMftSourceFactory.Unavailable(FallbackReason.VolumeNotAddressable),
             $@"{Drive}:\",
             TableTuning.Default,
+            opened: null,
             CancellationToken.None));
 
     [Fact]
@@ -219,11 +235,26 @@ public sealed class TableRoutesTests
         }
     }
 
+    /// <summary>Opens through <paramref name="inner"/>, keeping the volume it opened last.</summary>
+    private sealed class RememberingSources(IMftSourceFactory inner) : IMftSourceFactory
+    {
+        public ServedVolume? Opened { get; private set; }
+
+        public IMftVolume? TryOpen(char driveLetter, out FallbackReason reason, MftOpenTimings? timings = null)
+        {
+            var volume = inner.TryOpen(driveLetter, out reason, timings);
+            Opened = volume as ServedVolume;
+
+            return volume;
+        }
+    }
+
     private static RunTally Run(string route, MftFixture volume, string? target = null) =>
         TableRoutes.Run(
             Enum.Parse<Route>(route),
             FakeMftSourceFactory.Serving(Drive, volume),
             target ?? $@"{Drive}:\",
             TableTuning.Default,
+            opened: null,
             CancellationToken.None);
 }
