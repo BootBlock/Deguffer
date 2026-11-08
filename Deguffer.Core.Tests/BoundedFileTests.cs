@@ -100,7 +100,7 @@ public sealed class BoundedFileTests : IDisposable
     {
         var file = Write("marked.txt", [0xEF, 0xBB, 0xBF, (byte)'a']);
 
-        Assert.Equal([(byte)'a'], BoundedFile.Read(file, 4096)?.ToArray());
+        Assert.Equal("a"u8.ToArray(), BoundedFile.Read(file, 4096)?.ToArray());
         Assert.Equal([0xEF, 0xBB, 0xBF, (byte)'a'], BoundedFile.ReadVerbatim(file, 4096)?.ToArray());
     }
 
