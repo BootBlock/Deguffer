@@ -55,8 +55,8 @@ public static class MemoryText
         _ => "Memory",
     };
 
-    /// <summary>The name a shape carries on the picture: what it is, and how much it holds.</summary>
-    public static string Label(MemoryTree tree, int node) => MapShapeText.Label(Name(tree, node), tree.SizeOf(node));
+    /// <summary>What a shape carries on the picture: what it is, and how much it holds.</summary>
+    public static MapCaption Caption(MemoryTree tree, int node) => MapShapeText.Caption(Name(tree, node), tree.SizeOf(node));
 
     /// <summary>
     /// How much a node holds, and for a process what it has committed beside it.

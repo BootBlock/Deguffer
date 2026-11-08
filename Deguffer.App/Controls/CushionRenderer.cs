@@ -32,14 +32,17 @@ internal sealed class CushionRenderer : IDisposable
 
     /// <summary>
     /// The shader's inputs, each read from where its field is in a quad: the four edges as one vector
-    /// from the first, and the colour's three bytes with <see cref="CushionQuad.Framed"/> after them as
-    /// a fourth. The names are made once, and never freed: every layout reads them.
+    /// from the first, the colour's three bytes with <see cref="CushionQuad.Framed"/> after them as
+    /// a fourth, and the bevel's two colours. The names are made once, and never freed: every layout
+    /// reads them.
     /// </summary>
     private static readonly InputElement[] Inputs =
     [
         Input("EDGES", FormatR32G32B32A32Sint, nameof(CushionQuad.Left)),
         Input("RIDGE", FormatR32Float, nameof(CushionQuad.Ridge)),
         Input("COLOUR", FormatR8G8B8A8Uint, nameof(CushionQuad.Colour)),
+        Input("LIT", FormatR8G8B8A8Uint, nameof(CushionQuad.Lit)),
+        Input("SHADED", FormatR8G8B8A8Uint, nameof(CushionQuad.Shaded)),
     ];
 
     private readonly CanvasDevice _device;

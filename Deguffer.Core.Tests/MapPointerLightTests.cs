@@ -7,7 +7,7 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// The light the map shines under the pointer: off adds nothing at all, each strength adds more than
-/// the one before it, and a file written before the choice existed keeps the light the map always had.
+/// the one before it, and a file written before the choice existed reads with the default light.
 /// </summary>
 public sealed class MapPointerLightTests
 {
@@ -28,7 +28,6 @@ public sealed class MapPointerLightTests
         var bright = new MapPointerLight(Strength: MapLightStrength.Bright).Amount;
 
         Assert.Equal(PointerLight.StandardStrength, standard);
-        Assert.Equal(PointerLight.StandardStrength, MapPointerLight.Default.Amount);
         Assert.True(soft > 0);
         Assert.True(soft < standard);
         Assert.True(bright > standard);
@@ -37,12 +36,17 @@ public sealed class MapPointerLightTests
         Assert.True(bright < 1);
     }
 
+    /// <summary>A map the reader has not set a light for shows it, at the softest strength.</summary>
+    [Fact]
+    public void TheDefaultLightIsShownSoft() =>
+        Assert.Equal(new MapPointerLight(Shown: true, MapLightStrength.Soft), MapPointerLight.Default);
+
     /// <summary>The light the map shines carries the strength it was given, to the shader that adds it.</summary>
     [Fact]
     public void ThePointersLightCarriesTheStrengthItWasGiven() =>
         Assert.Equal(0.2f, PointerLight.At(10, 10, 1, 0.2f).Strength);
 
-    /// <summary>Every file on an upgraded machine was written before the light could be chosen. It reads with the light on, at the old strength.</summary>
+    /// <summary>Every file on an upgraded machine was written before the light could be chosen. It reads with the light on, at the default strength.</summary>
     [Fact]
     public void AFileFromBeforeTheChoiceReadsWithTheLightOn() =>
         Assert.Equal(MapPointerLight.Default, LoadWritten("""{ "Theme": "Dark" }""").MapPointerLight);

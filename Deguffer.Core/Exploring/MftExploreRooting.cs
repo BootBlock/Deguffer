@@ -27,7 +27,8 @@ internal static class MftExploreRooting
     /// and a pick made in it would carry by path into the finished tree. A path typed in another
     /// case is drawn when the read ends instead.
     /// </param>
-    internal readonly record struct AssembledAs(ExploreChildOrder ChildOrder, bool LowerBound, bool MatchCaseOnly);
+    /// <param name="Snapshot">Whether the tree is of a read still running (<see cref="ExploreTree.IsSnapshot"/>).</param>
+    internal readonly record struct AssembledAs(ExploreChildOrder ChildOrder, bool LowerBound, bool MatchCaseOnly, bool Snapshot);
 
     /// <summary>
     /// Root a tree at the folder <paramref name="components"/> name, or say why the table cannot
@@ -79,7 +80,7 @@ internal static class MftExploreRooting
         var tree = ExploreTree.Create(
             rootPath, root, columns.NameNumbers, names, columns.Parents, columns.Sizes, columns.Lengths,
             columns.Storage, columns.Flags, columns.Created, columns.Modified, columns.Visibility,
-            assembled.ChildOrder, ct: ct);
+            assembled.ChildOrder, snapshot: assembled.Snapshot, ct: ct);
 
         return (tree, FallbackReason.None);
     }

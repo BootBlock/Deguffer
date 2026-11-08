@@ -1,3 +1,4 @@
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Scanning;
@@ -60,7 +61,7 @@ public sealed class MapShapeTextTests
     /// <summary>A shape's label is its name, then its size, two spaces apart, on every page and for every block.</summary>
     [Fact]
     public void ALabelIsTheNameThenTheSize() =>
-        Assert.Equal($"Documents  {FreeSpace.Format(450)}", MapShapeText.Label("Documents", 450));
+        Assert.Equal($"Documents  {FreeSpace.Format(450)}", MapShapeText.Caption("Documents", 450).Text(MapLettering.Standard, 1));
 
     /// <summary>
     /// §7.1: a shape the scan could not read all of says its size is a lower bound, in its name and
@@ -80,7 +81,7 @@ public sealed class MapShapeTextTests
         var plain = tree.ChildrenOf(tree.RootNode).ToArray().Single(node => tree.NameOf(node) == "plain.bin");
 
         Assert.Equal($"refused, {FreeSpace.Format(450)}, 45% of Users{ExploreNodeText.Unread}", MapShapeText.Name("refused", 450, 1000, "Users", lowerBound: true));
-        Assert.Equal($"refused  ≥ {FreeSpace.Format(450)}", MapShapeText.Label(tree, refused));
-        Assert.Equal($"plain.bin  {FreeSpace.Format(450)}", MapShapeText.Label(tree, plain));
+        Assert.Equal($"refused  ≥ {FreeSpace.Format(450)}", MapShapeText.Caption(tree, refused).Text(MapLettering.Standard, 1));
+        Assert.Equal($"plain.bin  {FreeSpace.Format(450)}", MapShapeText.Caption(tree, plain).Text(MapLettering.Standard, 1));
     }
 }

@@ -43,9 +43,9 @@ public sealed class CushionQuads
             var tile = tiles[i];
             var quad = CushionQuad.Of(tile, finish);
 
-            if (quad.Reaches(width, height))
+            if (quad.Reaches(width, height, finish.Borders.ReachFor(quad.Framed)))
             {
-                quads[count++] = quad.Coloured(colourOf(tile));
+                quads[count++] = quad.Coloured(colourOf(tile), finish);
             }
         }
 
