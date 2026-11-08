@@ -17,13 +17,12 @@ namespace Deguffer.Testing;
 /// </param>
 public sealed class UnlistableFileSystem(IFileSystem inner, string refused, bool partWay = false) : IFileSystem
 {
-    public bool DirectoryExists(string path) => inner.DirectoryExists(path);
-
     public PathPresence ProbeDirectory(string path) => inner.ProbeDirectory(path);
 
     public PathPresence ProbeEntry(string path) => inner.ProbeEntry(path);
 
-    public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
+    public PathPresence ProbeEntry(string path, out bool? isDirectory, out bool? isLink) =>
+        inner.ProbeEntry(path, out isDirectory, out isLink);
 
     /// <summary>
     /// Refused as Windows refuses a folder the account may not read: an answer, never an exception,

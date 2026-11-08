@@ -369,13 +369,13 @@ and they are never a candidate.
 
 ## Cargo crate cache
 
-**Tier 1 — regenerable cache, researched.** Offered but **not pre-selected**: see *Some rows are researched rather than observed* at the top of this page.
+**Tier 1 — regenerable cache.** Pre-selected.
 
 | | |
 | --- | --- |
 | **Location** | `%USERPROFILE%\.cargo`, or wherever `CARGO_HOME` points |
 | **Method** | Delete `registry\cache`, `registry\src` and `git\checkouts` |
-| **Typical size** | Reported to reach 50 GB on a working Rust machine |
+| **Typical size** | 2.16 GB of a 2.76 GB home measured on a machine that builds GPUI applications; reported to reach 50 GB on a working Rust machine |
 
 ### What it is
 
@@ -7410,8 +7410,8 @@ only copy of a change. So the row is not pre-selected, and is confirmed on its o
 
 ## Per-project build output
 
-**Tier 1 for .NET intermediate output, the caches in Visual Studio's `.vs` folders, Nx's task cache
-and three Python tools' caches, Tier 2 for the rest.** With [Git LFS old file versions](#git-lfs-old-file-versions) and the workspace half of [Nx task caches](#nx-task-caches),
+**Tier 1 for .NET intermediate output, the caches in Visual Studio's `.vs` folders, Nx's task cache,
+Rust's incremental compilation caches and three Python tools' caches, Tier 2 for the rest.** With [Git LFS old file versions](#git-lfs-old-file-versions) and the workspace half of [Nx task caches](#nx-task-caches),
 the only thing Deguffer looks for inside your own folders, and the only thing it will not look for
 anywhere else.
 
@@ -7423,7 +7423,8 @@ anywhere else.
 | `Library` | A Unity project's imported assets and caches | 2 |
 | `Intermediate` | An Unreal project's intermediate build files | 2 |
 | `DerivedDataCache` | An Unreal project's own derived data cache | 2 |
-| `target` | Rust build output | 2 |
+| `target` | Rust build output: what Cargo wrote inside it, and nothing else | 2 |
+| `incremental` in each profile inside `target` | Rust's incremental compilation caches | 1 |
 | `node_modules` | Installed Node.js dependencies | 2 |
 | `.venv`, `venv` | A Python virtual environment | 2 |
 | `.pytest_cache` | pytest's record of the last run | 1 |
@@ -7485,7 +7486,7 @@ the tool itself writes inside it.
 | `cache` inside `.nx` | `nx.json` beside `.nx` | `terminalOutputs`, and an index that only Nx 23.3 or later reads. See [Nx task caches](#nx-task-caches) |
 | `Library` | `Assets`, `Packages`, `ProjectSettings` | — |
 | `Intermediate` / `DerivedDataCache` | A file ending in `.uproject`, whose name is the project's own | — |
-| `target` | `Cargo.toml` | `CACHEDIR.TAG`, opening with the tagging specification's header |
+| `target` | `Cargo.toml` | `CACHEDIR.TAG`, opening with the tagging specification's header. Only Cargo's own children inside it are removed: see *Inside `target`, only what Cargo wrote*, below |
 | `node_modules` | `package.json`, **and a lock file** | — |
 | `.venv` / `venv` | A dependency manifest: `requirements.txt`, `pyproject.toml`, `Pipfile`, `setup.py` or `environment.yml` | `pyvenv.cfg` |
 | `.pytest_cache` | A file pytest reads its settings from: `pytest.toml`, `.pytest.toml`, `pytest.ini`, `.pytest.ini`, `pyproject.toml`, `tox.ini` or `setup.cfg` | `CACHEDIR.TAG` with the header, then "created by pytest" |
@@ -7515,6 +7516,29 @@ requires the header alone, because a `Cargo.toml` beside it already says which t
 Each of these tools can be told to keep its folder somewhere else, by a setting or a variable. A
 folder moved that way is not beside the configuration, and is not found.
 
+**Inside `target`, only what Cargo wrote.** A project's own build scripts keep their output in
+`target` too, because it is the one folder every Rust repository ignores: release archives,
+screenshots and a downloaded Zig toolchain were all found there beside Cargo's builds. So `target`
+is never removed whole, and neither is a folder `cargo clean` would take with it. Deguffer removes
+only the children Cargo is recognised to have written, each by what Cargo puts in it:
+
+| Inside `target` | Recognised by |
+| --- | --- |
+| A profile (`debug`, `release`, or a custom profile's own name) | The `.cargo-lock` file and `.fingerprint` folder Cargo writes into every profile |
+| A target platform's folder, such as `x86_64-pc-windows-msvc`, or a whole target folder another tool pointed Cargo at | A `CACHEDIR.TAG` carrying Cargo's own line, "created by cargo". Its children are recognised the same way, two levels deep |
+| `doc` | The `.lock` Cargo takes on it and the `crates.js` index rustdoc writes |
+| `tmp` | Its name: it is the scratch folder Cargo creates for integration tests as `CARGO_TARGET_TMPDIR` |
+
+Everything else in `target` stays and is named as left alone, and so does `target` itself. That
+includes `package`, which holds the `.crate` archive `cargo publish` uploads, the small files at the
+top of `target`, and any link. Each profile's `incremental` folder is a row of its own, Rust
+incremental compilation caches, so the build output row empties each profile around it.
+
+A profile is Cargo's own output folder and is not looked inside further, so anything another tool
+writes into one goes with it. Tauri's bundler is the known case: it writes the installers it builds
+into `target\release\bundle`. They come back with the next `cargo tauri build`, but copy any you
+mean to keep out of `target` first.
+
 **`.dart_tool` is recognised by what pub writes in it.** pub documents `"generator"` as "for `pub`
 this is always `'pub'`"
 ([package_config.dart](https://github.com/dart-lang/pub/blob/master/lib/src/package_config.dart)),
@@ -7525,7 +7549,7 @@ generator alone is not enough: a test fixture inside a published package was fou
 workspace has neither the lock file nor the configuration, which pub keeps at the workspace's root
 only ([workspaces](https://dart.dev/tools/pub/workspaces)), so a member's `.dart_tool` is left alone.
 `flutter clean` would remove the folder, but it runs once per project, inside each one, so Deguffer
-removes the folder itself, as it does Cargo's `target`.
+removes the folder itself.
 
 Every condition has to hold. A directory that fails any of them is left alone, and the scan says
 how many were left and why. `obj`, `.dart_tool`, `.vs` and Nx's `cache` carry an extra check: git is asked whether the
@@ -7560,9 +7584,9 @@ neither is:
   freeing space. `pyvenv.cfg` proves the folder is an environment; the manifest proves it can be
   rebuilt. Neither alone is enough.
 
-Nested directories belong to their parent. A `node_modules` inside another one, or a vendored crate's
-`target` inside the outer `target`, is removed with the directory that contains it rather than
-offered as a second row.
+Nested directories belong to their parent. A `node_modules` inside another one is removed with the
+directory that contains it rather than offered as a second row. A vendored crate kept inside an
+outer `target` is not something Cargo wrote there, so it is left alone with its own `target`.
 
 ### A project you are using now is never offered
 
@@ -7635,8 +7659,8 @@ space actually is.
 
 ### What is protected
 
-Everything except the one directory in each row, or the caches inside `.vs`, asserted by name after
-the deletion runs:
+Everything except the one directory in each row, the caches inside `.vs`, or what Cargo wrote inside
+`target`, asserted by name after the deletion runs:
 
 - **The project folder itself** — only the build directory inside it is removed. For `.vs`, the
   solution folder, the `.vs` folder and the folders between it and each cache stay standing.
@@ -7654,6 +7678,8 @@ the deletion runs:
   being removed; each is named because it is what a rule reaching one level too far would take.
   `bin` in particular looks equivalent to `obj` and is not — it can hold hand-placed native
   dependencies and copied assets that no build reproduces — so it is out of scope entirely.
+- **`target` itself, and everything in it that Cargo did not write.** See *Inside `target`, only
+  what Cargo wrote*, above.
 - **Every directory that was left alone**, whether because it could not be confirmed or because
   something is using it. Those sit in the same trees as the targets, separated only by evidence,
   which is exactly the situation where an over-broad rule takes one with the other.
@@ -7668,7 +7694,8 @@ the deletion runs:
 | `Library` | Unity reimports every asset when you next open the project. On a large one that is tens of minutes, and packages it had downloaded are fetched again. |
 | `Intermediate` | A C++ project's next build compiles its code from the start, and its Visual Studio solution shows the projects as unavailable until you choose **Generate Visual Studio project files** on the `.uproject`. A Blueprint-only project opens as before. |
 | `DerivedDataCache` | Unreal compiles the project's shaders again the next time it opens, which on a large project can take tens of minutes. |
-| `target` | The next build recompiles the project and every dependency, per profile — minutes to hours on a large workspace, and anything you built and are running from `target` goes with it. |
+| `target` | The next build recompiles the project and every dependency, per profile — minutes to hours on a large workspace, and anything you built and are running from `target` goes with it. Anything else your own scripts keep there stays. |
+| `incremental` in a profile | The next build compiles the project's own crates in full once, and is incremental again after that. Compiled dependencies and built programs stay, so nothing is downloaded and no dependency is compiled again. |
 | `node_modules` | The project will not build or run until dependencies are installed again. The lock file pins the versions, so what comes back is what was there. |
 | `.venv` / `venv` | The environment has to be created again and the install re-run from the manifest. **A manifest only lists what somebody wrote down** — check it covers what you had before removing an environment you still use. |
 | `.pytest_cache` | pytest makes it again on its next run. Until a run has finished, `--lf` and `--ff` have no record of what failed, so they run everything. |
@@ -7680,17 +7707,20 @@ Where a package manager's own cache still holds the downloads, most of this is o
 cache in the same run is what makes it a download — so a run that takes both the npm cache and a
 `node_modules` needs the network afterwards.
 
-### Why `obj`, Visual Studio's caches and three Python caches are Tier 1, and the others Tier 2
+### Why `obj`, Visual Studio's caches, Rust's incremental caches and three Python caches are Tier 1, and the others Tier 2
 
 Tier 1 means the tool re-creates it on demand and you lose only time. That is `obj`: a missing one
 makes the next build slower and nothing else. The caches in a `.vs` folder are the same: Visual
 Studio rebuilds each of them by itself the next time the solution opens. pytest's, mypy's and ruff's caches are the same: each
 tool records them as it runs and makes them again on the next run, and what goes is one slower run,
-and for pytest the record of which tests failed last.
+and for pytest the record of which tests failed last. Rust's incremental caches are the same: Cargo
+keeps incremental state only for the workspace's own crates, never for a dependency from a
+registry, so what goes is one full compile of your own code. On one measured project's debug
+profile it was 1.67 GB of 3.86 GB.
 
 The three Python caches are researched, written from each tool's source on a machine where none of
 them had been run, so their rows are not pre-selected: see *Some rows are researched rather than
-observed* at the top of this page. `obj` and the `.vs` caches were observed, and are. Of the Tier 2
+observed* at the top of this page. `obj`, the `.vs` caches and Rust's incremental caches were observed, and are. Of the Tier 2
 rows, tox's and nox's environments and the two Unreal folders are researched too.
 
 The others cost more than a slower next use, and §3's definition of Tier 2 — "re-created, but

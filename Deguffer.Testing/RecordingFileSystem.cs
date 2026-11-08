@@ -17,6 +17,7 @@ public sealed class RecordingFileSystem(IFileSystem inner) : IFileSystem
     private readonly ConcurrentQueue<string> _probed = new();
     private readonly ConcurrentQueue<string> _resolved = new();
     private readonly ConcurrentQueue<string> _listed = new();
+    private readonly ConcurrentQueue<string> _described = new();
 
     public IReadOnlyCollection<string> Paths => _paths;
 
@@ -39,28 +40,32 @@ public sealed class RecordingFileSystem(IFileSystem inner) : IFileSystem
     /// </summary>
     public IReadOnlyCollection<string> Listed => _listed;
 
-    public bool DirectoryExists(string path)
-    {
-        _paths.Enqueue(path);
-        return inner.DirectoryExists(path);
-    }
+    /// <summary>
+    /// The paths a probe asked what is there, once for each probe, which <see cref="Paths"/> holds too.
+    /// Kept apart so a test can say a path was described once: two reads of one path can describe
+    /// two entries.
+    /// </summary>
+    public IReadOnlyCollection<string> Described => _described;
 
     public PathPresence ProbeDirectory(string path)
     {
         _paths.Enqueue(path);
+        _described.Enqueue(path);
         return inner.ProbeDirectory(path);
     }
 
     public PathPresence ProbeEntry(string path)
     {
         _paths.Enqueue(path);
+        _described.Enqueue(path);
         return inner.ProbeEntry(path);
     }
 
-    public bool IsReparsePoint(string path)
+    public PathPresence ProbeEntry(string path, out bool? isDirectory, out bool? isLink)
     {
         _paths.Enqueue(path);
-        return inner.IsReparsePoint(path);
+        _described.Enqueue(path);
+        return inner.ProbeEntry(path, out isDirectory, out isLink);
     }
 
     public ListingEnd ListEntries(string directory, ListingRequest request, List<WalkEntry> into)

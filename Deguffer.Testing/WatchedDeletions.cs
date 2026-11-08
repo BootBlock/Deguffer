@@ -17,13 +17,12 @@ public sealed class WatchedDeletions(IFileSystem inner, TimeSpan hold) : IFileSy
     /// <summary>The most deletions, files and directories together, under way at the same moment.</summary>
     public int MostAtOnce => _overlap.MostAtOnce;
 
-    public bool DirectoryExists(string path) => inner.DirectoryExists(path);
-
     public PathPresence ProbeDirectory(string path) => inner.ProbeDirectory(path);
 
     public PathPresence ProbeEntry(string path) => inner.ProbeEntry(path);
 
-    public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
+    public PathPresence ProbeEntry(string path, out bool? isDirectory, out bool? isLink) =>
+        inner.ProbeEntry(path, out isDirectory, out isLink);
 
     public ListingEnd ListEntries(string directory, ListingRequest request, List<WalkEntry> into) =>
         inner.ListEntries(directory, request, into);

@@ -316,7 +316,28 @@ public static partial class LongPath
     /// <see cref="ProbeDirectory(string, out bool?)"/> gives its link answer.
     /// </summary>
     public static PathPresence ProbeEntry(string path, out bool? isDirectory) =>
-        ProbeEntry(path, out isDirectory, out _);
+        ProbeEntry(path, out isDirectory, out long _);
+
+    /// <summary>
+    /// The same answer, with which kind the entry is and whether it is a link, both taken from the
+    /// same attribute read, and null where Windows described nothing, as
+    /// <see cref="ProbeDirectory(string, out bool?)"/> gives its link answer.
+    ///
+    /// <para><b>For a removal, which must answer for a link of either kind.</b> A file symbolic link
+    /// at a directory's path is a link to whoever made it, and the directory probe would call it
+    /// absent instead. Asking for the kind and the link in two reads lets them describe two entries:
+    /// a folder replaced by a junction in between passes one as the folder and the other as the
+    /// junction.</para>
+    /// </summary>
+    public static PathPresence ProbeEntry(string path, out bool? isDirectory, out bool? isLink)
+    {
+        var presence = Probe(path, EntryKind.Either, out var described, out _);
+
+        isDirectory = described?.HasFlag(FileAttributes.Directory);
+        isLink = described?.HasFlag(FileAttributes.ReparsePoint);
+
+        return presence;
+    }
 
     /// <summary>
     /// The same answer, with the newer of the entry's creation and last-write times from the same
@@ -548,24 +569,24 @@ public static partial class LongPath
     /// "not installed" branch, which was a coincidence holding a safety property up. It is not a
     /// coincidence now.</para>
     ///
-    /// <para><b>A caller that reads a true as a reason to do <em>less</em> asks the probe first
-    /// too.</b> <see cref="Execution.RefusalCheck"/> asks this of a step's root and of each place it
-    /// checks, where a true means "nothing here will be refused", and <c>ExploreRemover</c> asks it
-    /// before searching a folder for an Outlook store, where a true skips the search. Asked
-    /// unprobed, each would turn a path Windows would not describe into a smaller claim than the
-    /// truth: a preview promising back a figure nobody could check, and a folder moved to the Recycle
-    /// Bin unexamined. So each settles <see cref="PathPresence.Refused"/> first and says so.</para>
+    /// <para><b>A caller that reads a true as a reason to do <em>less</em> does not ask this.</b>
+    /// <see cref="Execution.RefusalCheck"/>, where a true means "nothing here will be refused", and
+    /// <c>RecycleBinLook</c>, where a true skips the search for an Outlook store, take the link
+    /// answer from <see cref="ProbeEntry(string, out bool?, out bool?)"/> through the
+    /// <see cref="IFileSystem"/> seam, which settles <see cref="PathPresence.Refused"/> apart. This
+    /// answer would turn a path Windows would not describe into a smaller claim than the truth: a
+    /// preview promising back a figure nobody could check, and a folder moved to the Recycle Bin
+    /// unexamined.</para>
     ///
-    /// <para><b>Four callers do <em>not</em> ask first, and each is answered by what it does with a
-    /// true.</b> <see cref="BuildDirectorySignature"/>, <see cref="DotNetIntermediateSignature"/> and
+    /// <para><b>A caller that does not probe first is answered by what it does with a true.</b>
+    /// <see cref="BuildDirectorySignature"/>, <see cref="DotNetIntermediateSignature"/> and
     /// <see cref="NonSdkIntermediateSignature"/> put a candidate and its parent through this without
     /// probing either, and what they say when they get a true is "not recognised as build output, so
     /// it is left alone" — §5.2's own answer for a thing that could not be classified, which names
-    /// no link and claims nothing.
-    /// <see cref="Execution.FileRemover"/> asks this through the <see cref="IFileSystem"/> seam, and
-    /// a true there removes the path as a link, once the recent-files guard allows it, and reports
-    /// nothing reclaimed rather than its length. That under-reports, which is the safe
-    /// direction.</para>
+    /// no link and claims nothing. <see cref="Execution.FileRemover"/> keeps the same closed reading
+    /// of a refusal from the seam's probe: it removes the path as a link, once the recent-files guard
+    /// allows it, and reports nothing reclaimed rather than its length. That under-reports, which is
+    /// the safe direction.</para>
     ///
     /// <para><see cref="DotNetIntermediateSignature"/> carried its own copy of this rule and now
     /// calls here instead. A safety predicate written twice is one that gets changed once.</para>

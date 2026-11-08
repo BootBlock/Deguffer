@@ -159,7 +159,7 @@ public sealed class DartToolProviderTests : IDisposable
             _roots, new SourceDirectoryDiscovery(scanner, new FakeVolumeInventory()), FakeLiveTreeInspector.NothingLive,
             _environment, runner, FakeProcessInspector.NothingRunning, scanner).PlanAsync();
 
-        Assert.Equal([target], plan.TargetedPaths);
+        Assert.Equal([Path.Combine(target, "debug")], plan.TargetedPaths);
         Assert.Empty(runner.Invocations);
     }
 
