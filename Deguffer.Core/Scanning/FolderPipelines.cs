@@ -1,7 +1,6 @@
-using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Media;
 
-namespace Deguffer.Core.Exploring;
+namespace Deguffer.Core.Scanning;
 
 /// <summary>One folder of a scan of several, and where in the request it was asked for.</summary>
 /// <param name="Volume">The folder parsed for the file table's route, or null where that route cannot serve it.</param>
@@ -15,8 +14,9 @@ internal readonly record struct FolderAsked(int Index, VolumePath? Volume);
 internal sealed record VolumeFolders(char? DriveLetter, IReadOnlyList<FolderAsked> Folders);
 
 /// <summary>
-/// Puts the folders of a scan of several into pipelines, one for each set of physical disks, so a
-/// pipeline's table reads and walks can run at the same time as another's (#369).
+/// Puts the folders of a scan of several, or the paths of a measurement of several, into pipelines,
+/// one for each set of physical disks, so a pipeline's table reads and walks can run at the same time
+/// as another's (#369, #470). <see cref="PipelinesAtOnce"/> runs them.
 ///
 /// <para><b>Volumes on one disk stay in one pipeline</b>, one after another
 /// (<see cref="DiskSharing"/>). A walk or a table read on each of two volumes of one spinning disk
@@ -75,14 +75,36 @@ internal static class FolderPipelines
             volumes[at].Paths.Add(folders[i]);
         }
 
-        VolumeFolders[] asked = [.. volumes.Select(volume => new VolumeFolders(volume.DriveLetter, volume.Folders))];
-        var disks = new IReadOnlyList<int>[volumes.Count];
+        return
+        [
+            .. ByDisks(volumes, volume => volume.Paths, storageOf)
+                .Select(set => (IReadOnlyList<VolumeFolders>)[.. set.Select(volume => new VolumeFolders(volume.DriveLetter, volume.Folders))]),
+        ];
+    }
 
-        for (var i = 0; i < volumes.Count; i++)
+    /// <summary>
+    /// <paramref name="items"/> in sets that can be worked at the same time, each item on the disks of
+    /// every one of its paths, by the rules this type's remarks give: apart only where known to be
+    /// apart, and everything on the network in one set. A walk, which reads only the volume of the
+    /// directory it is given, is placed by that directory alone (<see cref="DirectoryWalks"/>).
+    /// </summary>
+    /// <returns>Each set in the order of its first item, and the items in each in that order too.</returns>
+    public static IReadOnlyList<IReadOnlyList<T>> ByDisks<T>(
+        IReadOnlyList<T> items, Func<T, IEnumerable<string>> pathsOf, Func<string, VolumeMedia?> storageOf)
+    {
+        // One item is one set whatever it is on, so no device is opened to learn its disks.
+        if (items.Count <= 1)
         {
-            if (DisksUnder(volumes[i].Paths, storageOf) is not { } under)
+            return [items];
+        }
+
+        var disks = new IReadOnlyList<int>[items.Count];
+
+        for (var i = 0; i < items.Count; i++)
+        {
+            if (DisksUnder(pathsOf(items[i]), storageOf) is not { } under)
             {
-                return [asked];
+                return [items];
             }
 
             disks[i] = under;
@@ -90,8 +112,8 @@ internal static class FolderPipelines
 
         return
         [
-            .. DiskSharing.Sets([.. Enumerable.Range(0, asked.Length)], i => disks[i])
-                .Select(set => (IReadOnlyList<VolumeFolders>)[.. set.Select(i => asked[i])]),
+            .. DiskSharing.Sets([.. Enumerable.Range(0, items.Count)], i => disks[i])
+                .Select(set => (IReadOnlyList<T>)[.. set.Select(i => items[i])]),
         ];
     }
 
@@ -99,7 +121,7 @@ internal static class FolderPipelines
     /// Every disk under any of <paramref name="paths"/>, <see cref="Network"/> for those on the
     /// network, or null where one of them might be on any disk. Empty for an optical drive.
     /// </summary>
-    private static IReadOnlyList<int>? DisksUnder(IReadOnlyList<string> paths, Func<string, VolumeMedia?> storageOf)
+    private static IReadOnlyList<int>? DisksUnder(IEnumerable<string> paths, Func<string, VolumeMedia?> storageOf)
     {
         SortedSet<int> under = [];
 
