@@ -150,6 +150,7 @@ public sealed class GitLfsObjectProvider : CleanupProviderBase
             _discovery,
             ApprovedRoots,
             DirectoryNames,
+            Scanner.Tuning,
             candidate => GitLfsStores.In(candidate, ct) is { Recognised: true, Stores.Count: > 0 }
                 ? Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(candidate))
                 : null,
@@ -176,13 +177,17 @@ public sealed class GitLfsObjectProvider : CleanupProviderBase
         var stores = new List<GitLfsStore>();
         var unreachable = new List<string>();
 
-        foreach (var candidate in discovered.Named(DirectoryNames))
+        var candidates = discovered.Named(DirectoryNames);
+        var surveys = await DiskBoundWork.EachAsync(candidates, Scanner.Tuning, candidate => GitLfsStores.In(candidate, ct), ct)
+            .ConfigureAwait(false);
+
+        for (var index = 0; index < candidates.Count; index++)
         {
-            var survey = GitLfsStores.In(candidate, ct);
+            var survey = surveys[index];
 
             if (!survey.Recognised)
             {
-                declined.Add(candidate);
+                declined.Add(candidates[index]);
                 continue;
             }
 

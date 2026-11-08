@@ -148,6 +148,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
             _discovery,
             ApprovedRoots,
             DirectoryNames,
+            Scanner.Tuning,
             candidate => Recognise(candidate, ct) is { } project
                 ? Path.GetDirectoryName(project.ProjectFilePath)
                 : null,
@@ -182,17 +183,19 @@ public sealed class DotNetObjProvider : CleanupProviderBase
         var targets = new List<RecognisedObj>();
         var declined = new List<string>();
 
-        foreach (var candidate in discovered.Named(DirectoryNames))
-        {
-            ct.ThrowIfCancellationRequested();
+        var candidates = discovered.Named(DirectoryNames);
+        var projects = await DiskBoundWork.EachAsync(candidates, Scanner.Tuning, candidate => Recognise(candidate, ct), ct)
+            .ConfigureAwait(false);
 
-            if (Recognise(candidate, ct) is { } project)
+        for (var index = 0; index < candidates.Count; index++)
+        {
+            if (projects[index] is { } project)
             {
-                targets.Add(new RecognisedObj(candidate, project));
+                targets.Add(new RecognisedObj(candidates[index], project));
             }
             else
             {
-                declined.Add(candidate);
+                declined.Add(candidates[index]);
             }
         }
 

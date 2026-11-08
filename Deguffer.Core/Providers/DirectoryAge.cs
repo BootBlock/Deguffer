@@ -103,17 +103,10 @@ internal static class DirectoryAge
     /// The age of each of <paramref name="directories"/>, by <see cref="Of(string, CancellationToken)"/>,
     /// in their order.
     ///
-    /// <para><b>Several at once, bounded by the disk's own number</b> (G4). A row that decides by age
-    /// dates every candidate before it measures any, a Claude Code row its session folders among them,
-    /// and each date is a directory opened and listed, which waits on the disk. One after another, a row paid every wait
-    /// in turn. Here the list is worked by as many threads as a walk runs on whichever volume asked
-    /// about is tuned for the most (<see cref="WalkTuning.Threads"/>), and each listing takes a slot in
-    /// <see cref="ListingBudget.Shared"/> under its own volume's number, so dating shares a disk with
-    /// the walks of the rows planned beside it rather than adding to them. A spinning disk tuned to one
-    /// thread is still read one directory at a time.</para>
-    ///
-    /// <para>On threads of the list's own rather than the pool's (<see cref="ListWorkers"/>), with the
-    /// calling thread working too. An async caller starts it on
+    /// <para><b>Several at once, bounded by the disk's own number</b> (<see cref="DiskBoundWork"/>). A
+    /// row that decides by age dates every candidate before it measures any, a Claude Code row its
+    /// session folders among them, and each date is a directory opened and listed, which waits on the
+    /// disk. One after another, a row paid every wait in turn. An async caller starts it on
     /// <see cref="WorkerThreads.RunAsync{T}(Func{T}, CancellationToken)"/>.</para>
     /// </summary>
     /// <param name="tuning">What the walks of each volume run with. See <see cref="IDirectoryScanner.Tuning"/>.</param>
@@ -125,44 +118,8 @@ internal static class DirectoryAge
         IReadOnlyList<string> directories,
         ScanTuner tuning,
         ListingBudget budget,
-        CancellationToken ct)
-    {
-        if (directories.Count == 0)
-        {
-            return [];
-        }
-
-        var limits = new int[directories.Count];
-        var byVolume = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-
-        for (var index = 0; index < directories.Count; index++)
-        {
-            var root = Path.GetPathRoot(directories[index]) ?? directories[index];
-
-            if (!byVolume.TryGetValue(root, out var limit))
-            {
-                limit = tuning.For(directories[index]).Walk.Threads;
-                byVolume[root] = limit;
-            }
-
-            limits[index] = limit;
-        }
-
-        var ages = new DateTime?[directories.Count];
-
-        ListWorkers.Run(
-            directories.Count,
-            byVolume.Values.Max(),
-            index =>
-            {
-                // Extended, as a walk's listings are, so both count against the same volume.
-                using var slot = budget.Take(LongPath.Extended(directories[index]), limits[index]);
-                ages[index] = Of(directories[index], ct);
-            },
-            ct);
-
-        return ages;
-    }
+        CancellationToken ct) =>
+        DiskBoundWork.Each(directories, tuning, budget, directory => Of(directory, ct), ct);
 
     /// <summary>
     /// The same rule, for a caller whose listings have read both halves already: the directory's own
