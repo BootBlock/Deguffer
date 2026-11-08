@@ -309,6 +309,30 @@ public sealed class PlanExecutorTests : IDisposable
         Assert.Equal("Not run: a build started while the folders were looked over.", step.Message);
     }
 
+    /// <summary>
+    /// A command that is to start without some variables is asked of the runner without them, so git's
+    /// prune reads the repository it was sent to rather than one an inherited <c>GIT_DIR</c> names.
+    /// </summary>
+    [Fact]
+    public async Task RunsACommandWithoutTheVariablesItsStepUnsets()
+    {
+        var unset = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "GIT_DIR", "GIT_INDEX_FILE" };
+        var command = new RunCommandStep("git.exe", "lfs prune", "Prune")
+        {
+            WhenCancelled = CancelledCommand.Ended,
+            Unset = unset,
+        };
+
+        var runner = new FakeProcessRunner().Responding(command.FileName, command.Arguments, string.Empty);
+        var executor = new PlanExecutor(runner, ParallelEnumerationScanner.Default, RefusalLog);
+        await executor.ExecuteAsync(PlanDeleting(command), runReach: null, residue: null, progress: null, underway: null, default);
+
+        var run = Assert.Single(runner.Invocations).Run;
+
+        Assert.True(run.Unset.SetEquals(unset), $"The command was run without: {string.Join(", ", run.Unset)}.");
+        Assert.Equal(CancelledCommand.Ended, run.WhenCancelled);
+    }
+
     /// <summary>The same for a Recycle Bin Windows would empty whole: a store deleted into it after the preview.</summary>
     [Fact]
     public async Task DoesNotEmptyABinWhenAStoreArrivedInItAfterThePreview()

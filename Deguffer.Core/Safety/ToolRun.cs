@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+
 namespace Deguffer.Core.Safety;
 
 /// <summary>
@@ -57,6 +59,13 @@ public sealed record ToolRun
     public IReadOnlyDictionary<string, string>? Environment { get; private init; }
 
     /// <summary>
+    /// Variables the tool starts without, whichever environment it is otherwise given, compared without
+    /// regard to case as Windows compares them. Empty for every tool that reads its environment as
+    /// given.
+    /// </summary>
+    public IReadOnlySet<string> Unset { get; private init; } = FrozenSet<string>.Empty;
+
+    /// <summary>
     /// How long the tool may run before it is ended and the run fails, or null for no limit. Only a
     /// tool that is <see cref="CancelledCommand.Ended"/> has one: a limit on one that
     /// <see cref="CancelledCommand.Finishes"/> could not be enforced without the harm it exists to avoid.
@@ -85,5 +94,20 @@ public sealed record ToolRun
     {
         ArgumentNullException.ThrowIfNull(environment);
         return this with { Environment = environment };
+    }
+
+    /// <summary>
+    /// This run, started without <paramref name="names"/> as well as whatever it was already to start
+    /// without: for a tool that reads a variable as an instruction about which files to act on, where
+    /// the value Deguffer inherited was set for some other work (<see cref="Providers.GitEnvironment"/>).
+    /// </summary>
+    public ToolRun Without(IReadOnlySet<string> names)
+    {
+        ArgumentNullException.ThrowIfNull(names);
+
+        // The same run where nothing is added, so a command that unsets nothing is the run it always was.
+        return names.All(Unset.Contains)
+            ? this
+            : this with { Unset = Unset.Union(names).ToFrozenSet(StringComparer.OrdinalIgnoreCase) };
     }
 }

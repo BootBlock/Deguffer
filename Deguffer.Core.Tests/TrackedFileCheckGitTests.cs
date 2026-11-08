@@ -110,8 +110,9 @@ public sealed class TrackedFileCheckGitTests : IDisposable
     /// literal mode, where it does not read pathspec magic. Each pathspec was then a path beginning
     /// <c>:(</c>, matched nothing, and every candidate read as holding nothing tracked.
     ///
-    /// <para>Set on this process, which every tool it starts inherits. No other test class starts a
-    /// real git, and xUnit runs the tests of one class one at a time.</para>
+    /// <para>Set on this process, which every tool it starts inherits. xUnit runs the tests of one class
+    /// one at a time, and the one other test class that starts a real git
+    /// (<see cref="GitEnvironmentTests"/>) asks it only for a list nothing set here changes.</para>
     /// </summary>
     [Fact]
     public async Task FindsTrackedFilesWhenTheEnvironmentAsksForLiteralPathspecs()
@@ -135,9 +136,95 @@ public sealed class TrackedFileCheckGitTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// A variable in the environment Deguffer was started with that tells git which repository, work
+    /// tree or index to read. git reads each over <c>-C</c>: <c>GIT_DIR</c> naming another repository,
+    /// <c>GIT_WORK_TREE</c> naming the folder above the repository, which makes every pathspec begin
+    /// with the repository's own name, or <c>GIT_INDEX_FILE</c> naming a file that is not there, made
+    /// git list nothing and exit 0, and the candidate read as holding nothing tracked.
+    ///
+    /// <para>Set on this process for the reason the literal-pathspec test gives.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("GIT_DIR")]
+    [InlineData("GIT_WORK_TREE")]
+    [InlineData("GIT_INDEX_FILE")]
+    public async Task FindsTrackedFilesWhenTheEnvironmentNamesAnotherRepository(string variable)
+    {
+        await CommitAsync(Path.Combine("Proj", "obj", "committed.props"));
+        var candidate = Path.Combine(_repository, "Proj", "obj");
+        var elsewhere = await AnotherRepositoryAsync();
+        var value = variable switch
+        {
+            "GIT_DIR" => Path.Combine(elsewhere, ".git"),
+            "GIT_WORK_TREE" => Path.GetDirectoryName(_repository)!,
+            _ => Path.Combine(elsewhere, "no-such-index"),
+        };
+
+        var findings = await CheckThroughTheRunnerWithAsync(variable, value, candidate);
+
+        Assert.Equal([candidate], findings.Tracked);
+        Assert.Empty(findings.Unanswered);
+    }
+
+    /// <summary>
+    /// The same in a linked worktree, whose <c>.git</c> is a file naming its git directory. With the
+    /// variables gone, git finds that file from <c>-C</c> as it finds a <c>.git</c> folder, so the
+    /// worktree's own index is the one read.
+    /// </summary>
+    [Fact]
+    public async Task FindsTrackedFilesInALinkedWorktreeWhenTheEnvironmentNamesAnotherRepository()
+    {
+        await CommitAsync(Path.Combine("Proj", "obj", "committed.props"));
+        var worktree = Path.Combine(_temp.Path, "linked");
+        await GitAsync($"worktree add --quiet \"{worktree}\"");
+        Assert.True(File.Exists(Path.Combine(worktree, ".git")), "The linked worktree has no .git file.");
+        var candidate = Path.Combine(worktree, "Proj", "obj");
+        var elsewhere = await AnotherRepositoryAsync();
+
+        var findings = await CheckThroughTheRunnerWithAsync("GIT_DIR", Path.Combine(elsewhere, ".git"), candidate);
+
+        Assert.Equal([candidate], findings.Tracked);
+        Assert.Empty(findings.Unanswered);
+    }
+
     private Task<TrackedFileFindings> CheckAsync(IReadOnlyList<string> candidates) =>
         new TrackedFileCheck(new FakeUserEnvironment(_temp.Path).WithExecutable("git", Git), Utf8Runner.Instance)
             .FindTrackedAsync(candidates);
+
+    /// <summary>
+    /// Asks about <paramref name="candidate"/> through <see cref="ProcessRunner"/>, which is what
+    /// starts git without the repository variables, with <paramref name="variable"/> set on this
+    /// process for the length of the check.
+    /// </summary>
+    private async Task<TrackedFileFindings> CheckThroughTheRunnerWithAsync(string variable, string value, string candidate)
+    {
+        var before = Environment.GetEnvironmentVariable(variable);
+        Environment.SetEnvironmentVariable(variable, value);
+
+        try
+        {
+            return await new TrackedFileCheck(
+                    new FakeUserEnvironment(_temp.Path).WithExecutable("git", Git),
+                    new ProcessRunner(Path.Combine(_temp.Path, "tools")))
+                .FindTrackedAsync([candidate]);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(variable, before);
+        }
+    }
+
+    /// <summary>A second repository with one commit and nothing under <c>Proj</c>.</summary>
+    private async Task<string> AnotherRepositoryAsync()
+    {
+        var other = _temp.CreateDirectory("other");
+        File.WriteAllText(Path.Combine(other, "readme.txt"), "other");
+        await GitAsync(other, "init --quiet --template=");
+        await GitAsync(other, "add --all");
+        await GitAsync(other, "commit --quiet -m other");
+        return other;
+    }
 
     /// <summary>Create a repository holding <paramref name="files"/>, each committed.</summary>
     private async Task CommitAsync(params string[] files)
@@ -172,10 +259,12 @@ public sealed class TrackedFileCheckGitTests : IDisposable
         Directory.Move(through, Path.Combine(_repository, to));
     }
 
-    private async Task GitAsync(string arguments)
+    private Task GitAsync(string arguments) => GitAsync(_repository, arguments);
+
+    private static async Task GitAsync(string repository, string arguments)
     {
         var outcome = await ProcessRunner.Default
-            .RunAsync(Git, $"{Isolated} -C \"{_repository}\" {arguments}", ToolRun.Query, CancellationToken.None);
+            .RunAsync(Git, $"{Isolated} -C \"{repository}\" {arguments}", ToolRun.Query, CancellationToken.None);
 
         Assert.True(outcome.Succeeded, $"git {arguments} failed: {outcome.StandardError}");
     }
