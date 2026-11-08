@@ -59,6 +59,7 @@ public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) 
     public ValueTask<IReadOnlyList<ScanResult>> MeasureManyAsync(
         IReadOnlyList<ScanRequest> asked,
         MinimumAge keep = default,
+        IProgress<ScanSize>? progress = null,
         CancellationToken ct = default)
     {
         Interlocked.Increment(ref _measureManyCalls);
@@ -68,14 +69,15 @@ public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) 
             _measured.Enqueue(question.Path);
         }
 
-        return ParallelEnumerationScanner.Default.MeasureManyAsync(asked, keep, ct);
+        return ParallelEnumerationScanner.Default.MeasureManyAsync(asked, keep, progress, ct);
     }
 
     /// <summary>One walk, recorded once, as the real scanner makes it.</summary>
-    public ValueTask<AgedScan> MeasureAgedAsync(string path, MinimumAge age, CancellationToken ct = default)
+    public ValueTask<AgedScan> MeasureAgedAsync(
+        string path, MinimumAge age, IProgress<ScanSize>? progress = null, CancellationToken ct = default)
     {
         _measured.Enqueue(path);
-        return ParallelEnumerationScanner.Default.MeasureAgedAsync(path, age, ct);
+        return ParallelEnumerationScanner.Default.MeasureAgedAsync(path, age, progress, ct);
     }
 
     /// <summary>How many lists were read from the disk, each in one call.</summary>

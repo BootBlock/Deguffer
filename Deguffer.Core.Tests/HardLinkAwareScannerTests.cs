@@ -171,6 +171,28 @@ public sealed class HardLinkAwareScannerTests : IDisposable
         Assert.Equal(1, levels);
     }
 
+    /// <summary>
+    /// A list measured in one walk reports what it has counted of every path, not of the first alone,
+    /// as <see cref="ParallelEnumerationScannerTests.AListReportsTheSumOfEveryPath"/> asks of the plain
+    /// walk.
+    /// </summary>
+    [Fact]
+    public async Task AListReportsTheSumOfEveryPath()
+    {
+        _temp.CreateFile(1000, "a", "one.bin");
+        _temp.CreateFile(2000, "b", "two.bin");
+        _temp.CreateFile(4000, "c", "deep", "three.bin");
+
+        var progress = new ProgressRecorder<ScanSize>();
+
+        await HardLinkAwareScanner.Default.MeasureManyAsync(
+            [.. new[] { "a", "b", "c" }.Select(name => new ScanRequest(Path.Combine(_temp.Path, name)))],
+            MinimumAge.Off,
+            progress);
+
+        Assert.Equal(7000, progress.Reports[^1].Logical);
+    }
+
     [Fact]
     public async Task AnAbsentPathMeasuresZero()
     {

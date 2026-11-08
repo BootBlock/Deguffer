@@ -59,7 +59,7 @@ internal sealed class DeclaringRow(
 
     public Task BeginPass(CancellationToken ct) => Task.CompletedTask;
 
-    public Task<CleanupPlan> PlanAsync(MinimumAge keep = default, CancellationToken ct = default) =>
+    public Task<CleanupPlan> PlanAsync(MinimumAge keep = default, IProgress<ScanSize>? counted = null, CancellationToken ct = default) =>
         throw new NotSupportedException("This stub exists only to carry a declaration.");
 
     public Task<CleanupResult> ExecuteAsync(

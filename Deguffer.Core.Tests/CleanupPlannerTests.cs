@@ -1185,7 +1185,7 @@ public sealed class CleanupPlannerTests
             }
         }
 
-        public Task<CleanupPlan> PlanAsync(MinimumAge keep = default, CancellationToken ct = default)
+        public Task<CleanupPlan> PlanAsync(MinimumAge keep = default, IProgress<ScanSize>? counted = null, CancellationToken ct = default)
         {
             Note($"plan:{id}");
             return planFails is null ? Task.FromResult(NewPlan()) : Task.FromException<CleanupPlan>(planFails);

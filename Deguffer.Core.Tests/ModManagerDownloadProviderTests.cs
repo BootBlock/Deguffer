@@ -531,11 +531,12 @@ public sealed class ModManagerDownloadProviderTests : IDisposable
         public async ValueTask<IReadOnlyList<ScanResult>> MeasureManyAsync(
             IReadOnlyList<ScanRequest> asked,
             MinimumAge keep = default,
+            IProgress<ScanSize>? progress = null,
             CancellationToken ct = default)
         {
             _measurementAsked.TrySetResult();
             await _readStarted.Task.WaitAsync(ct).ConfigureAwait(false);
-            return await inner.MeasureManyAsync(asked, keep, ct).ConfigureAwait(false);
+            return await inner.MeasureManyAsync(asked, keep, progress, ct).ConfigureAwait(false);
         }
 
         public ValueTask<ScanResult> MeasureAsync(
@@ -546,8 +547,8 @@ public sealed class ModManagerDownloadProviderTests : IDisposable
             CancellationToken ct = default) =>
             inner.MeasureAsync(path, keep, bounds, progress, ct);
 
-        public ValueTask<AgedScan> MeasureAgedAsync(string path, MinimumAge age, CancellationToken ct = default) =>
-            inner.MeasureAgedAsync(path, age, ct);
+        public ValueTask<AgedScan> MeasureAgedAsync(string path, MinimumAge age, IProgress<ScanSize>? progress = null, CancellationToken ct = default) =>
+            inner.MeasureAgedAsync(path, age, progress, ct);
 
         public ValueTask<IReadOnlyList<ScanResult>> MeasureFromDiskAsync(IReadOnlyList<ScanRequest> asked, CancellationToken ct = default) =>
             inner.MeasureFromDiskAsync(asked, ct);
