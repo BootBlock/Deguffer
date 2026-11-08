@@ -94,9 +94,9 @@ public sealed partial class LinkProbeSweepTests
                 .Select(line => $"{name}: {line.Trim()}"));
         }
 
-        // The sweep is worth nothing if it stops finding the removal's files. Fifteen named the seam
-        // when this was written.
-        Assert.True(removals > 10, $"Only {removals} files name IFileSystem, so the sweep is no longer reading the source.");
+        // The sweep is worth nothing if it stops finding the removal's files. Twenty-seven product
+        // files named the seam when this was written.
+        Assert.True(removals > 20, $"Only {removals} files name IFileSystem, so the sweep is no longer reading the source.");
         Assert.Empty(bypasses);
     }
 

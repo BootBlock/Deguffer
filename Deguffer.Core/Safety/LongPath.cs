@@ -578,8 +578,8 @@ public static partial class LongPath
     /// preview promising back a figure nobody could check, and a folder moved to the Recycle Bin
     /// unexamined.</para>
     ///
-    /// <para><b>Three callers do not probe first, and each is answered by what it does with a
-    /// true.</b> <see cref="BuildDirectorySignature"/>, <see cref="DotNetIntermediateSignature"/> and
+    /// <para><b>A caller that does not probe first is answered by what it does with a true.</b>
+    /// <see cref="BuildDirectorySignature"/>, <see cref="DotNetIntermediateSignature"/> and
     /// <see cref="NonSdkIntermediateSignature"/> put a candidate and its parent through this without
     /// probing either, and what they say when they get a true is "not recognised as build output, so
     /// it is left alone" — §5.2's own answer for a thing that could not be classified, which names
