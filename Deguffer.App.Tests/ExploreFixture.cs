@@ -1,4 +1,5 @@
 using Deguffer.App.ViewModels;
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Diagnostics;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
@@ -87,6 +88,19 @@ internal sealed class ExploreFixture : IDisposable
 
         Assert.True(shown.IsCompleted, "The fake inventory answers at once, so the first reading finishes as the page is shown.");
         shown.GetAwaiter().GetResult();
+
+        return page;
+    }
+
+    /// <summary>
+    /// A page shown in the List layout, for a test of the folder's rows: the maps never read them, so
+    /// they are written only while the list is on screen.
+    /// </summary>
+    public ExploreViewModel Listed()
+    {
+        var page = Page();
+
+        page.SelectedView = ExploreView.List;
 
         return page;
     }

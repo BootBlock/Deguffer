@@ -305,25 +305,27 @@ public sealed partial class ExplorePage : Page
     /// layout takes one row at a time, which is what keeps "select all" off it: §7.1 allows a
     /// selection of several things picked out by hand, and Ctrl+A or a Shift range over a filtered
     /// list is the filter picking them.</para>
+    ///
+    /// <para>The highlight is put back even where the list keeps the rows it had: the folder's rows
+    /// are not rewritten while a map is on screen, so coming back to them rewrites them, and a
+    /// rebuild drops the highlight with the rows it was on.</para>
     /// </summary>
     private void ShowRowsOf(ExploreView view)
     {
         var files = view == ExploreView.Files;
         object rows = files ? ViewModel.Files.Rows : ViewModel.Listing.Rows;
 
-        if (ReferenceEquals(RowsList.ItemsSource, rows))
+        if (!ReferenceEquals(RowsList.ItemsSource, rows))
         {
-            return;
+            // The list reports every row it drops on the way, and none of that is the user's doing.
+            _guard.Write(() =>
+            {
+                RowsList.ItemsSource = null;
+                RowsList.SelectionMode = files ? ListViewSelectionMode.Single : ListViewSelectionMode.Extended;
+                RowsList.ItemTemplate = (DataTemplate)Resources[files ? "FileRow" : "FolderRow"];
+                RowsList.ItemsSource = rows;
+            });
         }
-
-        // The list reports every row it drops on the way, and none of that is the user's doing.
-        _guard.Write(() =>
-        {
-            RowsList.ItemsSource = null;
-            RowsList.SelectionMode = files ? ListViewSelectionMode.Single : ListViewSelectionMode.Extended;
-            RowsList.ItemTemplate = (DataTemplate)Resources[files ? "FileRow" : "FolderRow"];
-            RowsList.ItemsSource = rows;
-        });
 
         ShowSelectedRows();
     }

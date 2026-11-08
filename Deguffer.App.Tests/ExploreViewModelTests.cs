@@ -10,6 +10,7 @@ using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Testing;
+using static Deguffer.App.Tests.CollectionChanges;
 
 namespace Deguffer.App.Tests;
 
@@ -412,7 +413,7 @@ public sealed class ExploreViewModelTests : IDisposable
     public void ARescanThatNumbersTheEntriesAfreshKeepsTheRowsAndWhatIsPicked() => UiThread.Run(async () =>
     {
         _explore.Volumes.With(@"C:\");
-        var page = _explore.Page();
+        var page = _explore.Listed();
 
         var first = new ExploreTreeBuilder(@"C:\");
         var users = first.AddChildren(ExploreTreeBuilder.RootNode, [
@@ -452,7 +453,7 @@ public sealed class ExploreViewModelTests : IDisposable
     public void ASnapshotKeepsWhatIsPickedAndTheRowsWhereTheyAre() => UiThread.Run(async () =>
     {
         _explore.Volumes.With(@"C:\");
-        var page = _explore.Page();
+        var page = _explore.Listed();
         var builder = new ExploreTreeBuilder(@"C:\");
         var users = builder.AddChildren(ExploreTreeBuilder.RootNode, [
             ExploreFixture.Folder("Users"),
@@ -594,7 +595,7 @@ public sealed class ExploreViewModelTests : IDisposable
     public void AStepIntoAFolderStartsWithNothingPicked() => UiThread.Run(async () =>
     {
         _explore.Volumes.With(@"C:\");
-        var page = _explore.Page();
+        var page = _explore.Listed();
         var builder = new ExploreTreeBuilder(@"C:\");
         var users = builder.AddChildren(ExploreTreeBuilder.RootNode, [
             ExploreFixture.Folder("Users"),
@@ -625,7 +626,7 @@ public sealed class ExploreViewModelTests : IDisposable
     public void AStepIntoAnotherFolderTellsTheListOnce() => UiThread.Run(async () =>
     {
         _explore.Volumes.With(@"C:\");
-        var page = _explore.Page();
+        var page = _explore.Listed();
         var builder = new ExploreTreeBuilder(@"C:\");
         var users = builder.AddChildren(ExploreTreeBuilder.RootNode, [
             ExploreFixture.Folder("Users"),
@@ -656,7 +657,7 @@ public sealed class ExploreViewModelTests : IDisposable
     public void ARemovedFolderLeavesTheListAndCannotBeOpenedOrPicked() => UiThread.Run(async () =>
     {
         _explore.Volumes.With(Path.GetPathRoot(_explore.Temp.Path)!);
-        var page = _explore.Page();
+        var page = _explore.Listed();
         var (tree, folder) = _explore.OnDisk();
         var busy = new List<bool>();
 
@@ -710,7 +711,7 @@ public sealed class ExploreViewModelTests : IDisposable
     public void ARemovalTakesWhatWentOutOfEverySize() => UiThread.Run(async () =>
     {
         _explore.Volumes.With(Path.GetPathRoot(_explore.Temp.Path)!);
-        var page = _explore.Page();
+        var page = _explore.Listed();
         var (tree, folder) = _explore.OnDisk();
         var file = tree.ChildrenOf(folder)[0];
 
@@ -1298,14 +1299,5 @@ public sealed class ExploreViewModelTests : IDisposable
         }
 
         throw new InvalidOperationException($"No child named {name}.");
-    }
-
-    private static List<NotifyCollectionChangedAction> Watch(INotifyCollectionChanged list)
-    {
-        var changes = new List<NotifyCollectionChangedAction>();
-
-        list.CollectionChanged += (_, e) => changes.Add(e.Action);
-
-        return changes;
     }
 }

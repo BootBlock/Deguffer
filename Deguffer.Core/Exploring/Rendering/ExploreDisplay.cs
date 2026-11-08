@@ -71,6 +71,13 @@ public readonly record struct ExploreDisplay(
     public bool SearchesFiles => View == ExploreView.Files;
 
     /// <summary>
+    /// Whether the folder on screen is listed a row per entry: only while the List layout is on
+    /// screen, because each row is a path, a lookup and five formatted strings, and a folder can hold
+    /// tens of thousands of entries. The maps and the Files layout read none of them.
+    /// </summary>
+    public bool ListsRows => View == ExploreView.List;
+
+    /// <summary>
     /// Whether what kind of file fills each folder is measured: only while the map is coloured by type,
     /// because each measurement is a pass over the folder or the tree.
     /// </summary>

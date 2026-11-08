@@ -298,6 +298,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         _viewForSnapshots = value;
 
         Files.IsActive = Display.SearchesFiles;
+        Listing.IsActive = Display.ListsRows;
 
         // Each picture keeps its own colours, so a change of view can be a change of scheme.
         ShowLegend();

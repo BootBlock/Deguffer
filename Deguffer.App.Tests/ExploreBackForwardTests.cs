@@ -27,6 +27,8 @@ public sealed class ExploreBackForwardTests : IDisposable
         var (page, tree, users, profile) = await ScannedAsync();
         var top = page.Listing.Trail[0].Position;
 
+        page.SelectedView = Core.Configuration.ExploreView.List;
+
         Assert.False(page.Visiting.GoBackCommand.CanExecute(null));
 
         page.Descend(users);

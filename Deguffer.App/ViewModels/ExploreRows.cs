@@ -38,6 +38,22 @@ public sealed class ExploreRows
     /// <summary>What every age in the list is measured against.</summary>
     private readonly TimeProvider _time;
 
+    /// <summary>
+    /// The tree and the folder on screen, kept while the rows are not listed so that listing them
+    /// later describes where the reader is rather than where they were.
+    /// </summary>
+    private ExploreTree? _tree;
+
+    private int _node;
+
+    /// <summary>
+    /// Whether <see cref="Rows"/> is still about the folder on screen, in the order the tree gives it,
+    /// so that listing it again brings it up to date in place. A step, a scan rooted elsewhere, or
+    /// the reorder of a finished tree while the rows are not listed makes the rows held a different
+    /// list, which <see cref="ExploreRedraw.KeepsRows"/> states.
+    /// </summary>
+    private bool _current;
+
     public ExploreRows(ItemGuide guide, TimeProvider time)
     {
         _guide = guide;
@@ -66,6 +82,36 @@ public sealed class ExploreRows
     public bool IsShowing { get; private set; }
 
     /// <summary>
+    /// Whether the rows are listed, so <see cref="Show"/> rewrites them (see
+    /// <see cref="Core.Exploring.Rendering.ExploreDisplay.ListsRows"/>).
+    ///
+    /// <para>Nothing reads <see cref="Rows"/> but the list, and a map is on screen by default. A row
+    /// costs a path, a lookup in the guide and five formatted strings, so a step into a folder of
+    /// twenty thousand entries, and every snapshot while one is on screen, did all of that for a
+    /// control that was collapsed or never bound. Listed again, the rows are brought to the folder
+    /// on screen: in place where they are still the same list, so a reader who went to the map and
+    /// back without moving keeps their place in it, and rebuilt where they are not.</para>
+    /// </summary>
+    public bool IsActive
+    {
+        get;
+        set
+        {
+            if (field == value)
+            {
+                return;
+            }
+
+            field = value;
+
+            if (value && _tree is { } tree)
+            {
+                Write(tree, _node, _current);
+            }
+        }
+    }
+
+    /// <summary>
     /// Bring the rows and the trail to <paramref name="position"/> in <paramref name="tree"/>.
     /// </summary>
     /// <param name="volume">The volume <paramref name="tree"/> is the whole of, whose step the trail names for the whole drive.</param>
@@ -85,28 +131,52 @@ public sealed class ExploreRows
     /// </param>
     public void Show(ExploreTree tree, ExplorePosition position, VolumeSpace volume, bool reconcile)
     {
-        IsShowing = true;
+        _tree = tree;
+        _node = position.Node;
 
-        try
+        if (IsActive)
         {
-            Rewrite(tree, position.Node, reconcile);
+            Write(tree, position.Node, reconcile);
         }
-        finally
+        else
         {
-            IsShowing = false;
+            _current &= reconcile;
         }
 
+        // The trail is above the map as well as the list, so it is brought up to date either way.
         ShowTrail(tree, position, volume);
     }
 
     /// <summary>Empty the list and the trail, where nothing is on screen to describe.</summary>
     public void Clear()
     {
+        _tree = null;
+        _current = false;
         Rows.Clear();
         Trail.Clear();
     }
 
-    /// <summary>The pass itself. See <see cref="Show"/>, which is what holds <see cref="IsShowing"/> up.</summary>
+    /// <summary>
+    /// Rewrite the rows, with <see cref="IsShowing"/> held up for the length of it, after which they
+    /// are about the folder on screen.
+    /// </summary>
+    private void Write(ExploreTree tree, int node, bool reconcile)
+    {
+        IsShowing = true;
+
+        try
+        {
+            Rewrite(tree, node, reconcile);
+        }
+        finally
+        {
+            IsShowing = false;
+        }
+
+        _current = true;
+    }
+
+    /// <summary>The pass itself. See <see cref="Write"/>, which is what holds <see cref="IsShowing"/> up.</summary>
     private void Rewrite(ExploreTree tree, int node, bool reconcile)
     {
         var total = tree.SizeOf(node);
