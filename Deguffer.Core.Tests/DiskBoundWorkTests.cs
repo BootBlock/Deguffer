@@ -48,9 +48,11 @@ public sealed class DiskBoundWorkTests
 
         try
         {
+            // Tuned to the whole chain, which finishes only if every link runs at once. The shipped
+            // number follows the processor count, and falls below six on a machine of two.
             var answers = await DiskBoundWork.EachAsync(
                 paths,
-                ScanTuner.Shipped,
+                TunedTo(Count),
                 path =>
                 {
                     var index = paths.IndexOf(path);
