@@ -393,8 +393,9 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
     /// for a scan scoped to one.
     ///
     /// <para><b>Only the nodes the root reaches are kept</b>, renumbered by <see cref="ReachedNodes"/>
-    /// in the order the reader numbered them, with the names they use and no others. The file table's
-    /// reader sizes its arrays to every record on the volume and names every one in use, so a tree
+    /// in the order the reader numbered them, with their names kept as <see cref="NamePool.Keeping"/>
+    /// decides. The file table's reader sizes its arrays to every record on the volume and names
+    /// every one in use, so a tree
     /// of one folder kept as read would hold the whole volume's records and names for as long as it
     /// is shown, and a rescan two of them. Kept for a whole volume too, which drops the free records
     /// and those no folder reaches. A tree's node numbers are therefore its own: the same folder in two

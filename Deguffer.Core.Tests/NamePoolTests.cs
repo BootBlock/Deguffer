@@ -164,4 +164,99 @@ public class NamePoolTests
             Assert.Equal(numbers[0][i], pool.Intern(names[i]));
         }
     }
+
+    /// <summary>
+    /// #552: a tree of a whole volume uses all but a handful of the names its reader numbered, and
+    /// copying 1.4 million names to drop one cost a system volume 98 MiB and a fifth of a second. A
+    /// tree that uses nearly every name keeps the pool as it was, with its numbers untouched, and
+    /// spends only the bit a name it takes to find which are used.
+    /// </summary>
+    [Fact]
+    public void KeepingNearlyEveryNameHandsThePoolBackAndAllocatesOnlyABitAName()
+    {
+        const int Distinct = 100_000;
+
+        Keeping(Distinct);
+
+        var (names, nameNumbers) = Keeping(Distinct);
+        var asRead = nameNumbers.ToArray();
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var kept = NamePool.Keeping(names, nameNumbers);
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.Equal(names.Count, kept.Count);
+        Assert.Equal(asRead, nameNumbers);
+        Assert.Equal("name-41234.dat", kept[nameNumbers[41_233]].ToString());
+
+        // From the bits alone, so a measurement that missed the large object heap, where a copy's
+        // map would be, fails rather than passing at nothing. The bound leaves an array's header.
+        var bits = ((names.Count + 63) / 64) * sizeof(ulong);
+        Assert.InRange(allocated, bits, bits + 32);
+
+        // Every name but the last is used by two nodes, as a name repeats on a disk.
+        static (NamePool.Frozen Names, int[] NameNumbers) Keeping(int distinct)
+        {
+            var pool = new NamePool();
+            var nameNumbers = new int[distinct * 2];
+
+            for (var i = 0; i < distinct; i++)
+            {
+                var number = pool.Intern($"name-{i + 1:D5}.dat");
+                nameNumbers[i] = number;
+                nameNumbers[distinct + i] = number;
+            }
+
+            pool.Intern("left-out.dat");
+            return (pool.Freeze(), nameNumbers);
+        }
+    }
+
+    /// <summary>
+    /// #364: a tree of one folder keeps the names its nodes use and no other. Each is copied in the
+    /// order the pool numbered it, every node's number is rewritten to its name's number in the copy,
+    /// and a node with no name keeps the empty name. The names used lie either side of the 64-name
+    /// steps a node's new number is counted in, the first of a step among them.
+    /// </summary>
+    [Fact]
+    public void KeepingFewNamesCopiesOnlyThoseUsedInTheOrderTheyWereNumbered()
+    {
+        var pool = new NamePool();
+        var numbers = Enumerable.Range(0, 200).Select(i => pool.Intern($"file-{i:D3}.txt")).ToArray();
+        var names = pool.Freeze();
+        int[] nameNumbers = [numbers[7], numbers[2], numbers[7], NamePool.Empty, numbers[5], numbers[150], numbers[70], numbers[63]];
+
+        var kept = NamePool.Keeping(names, nameNumbers);
+
+        Assert.Equal(64, numbers[63]);
+        Assert.Equal(7, kept.Count);
+        Assert.Equal([3, 1, 3, NamePool.Empty, 2, 6, 5, 4], nameNumbers);
+        Assert.Equal(
+            ["", "file-002.txt", "file-005.txt", "file-007.txt", "file-063.txt", "file-070.txt", "file-150.txt"],
+            Enumerable.Range(0, kept.Count).Select(number => kept[number].ToString()));
+    }
+
+    /// <summary>
+    /// #552: a copy is made only where the names left out hold more than the names kept, counting
+    /// each name's characters and its entry, so a tree never keeps more than twice what its names
+    /// need. The weight is the text, not the count: one long name kept against several short ones
+    /// left out keeps the pool.
+    /// </summary>
+    [Theory]
+    [InlineData(new[] { "aaaa", "bbbb", "cccc", "dddd" }, new[] { 0 }, true)]
+    [InlineData(new[] { "aaaa", "bbbb", "cccc", "dddd" }, new[] { 0, 1 }, false)]
+    [InlineData(new[] { "a-name-long-enough-to-hold-more-than-every-short-one-together", "b", "c", "d", "e", "f" }, new[] { 0 }, false)]
+    [InlineData(new[] { "a", "b", "c", "d", "e", "a-name-long-enough-to-hold-more-than-every-short-one-together" }, new[] { 0 }, true)]
+    public void KeepingCopiesOnlyWhereTheNamesLeftOutHoldMoreThanTheNamesKept(string[] held, int[] usedIndices, bool copied)
+    {
+        var pool = new NamePool();
+        var numbers = held.Select(name => pool.Intern(name)).ToArray();
+        var names = pool.Freeze();
+        var nameNumbers = usedIndices.Select(index => numbers[index]).ToArray();
+
+        var kept = NamePool.Keeping(names, nameNumbers);
+
+        Assert.Equal(copied ? 1 + usedIndices.Length : names.Count, kept.Count);
+        Assert.Equal(usedIndices.Select(index => held[index]), nameNumbers.Select(number => kept[number].ToString()));
+    }
 }
