@@ -124,7 +124,13 @@ public interface ICleanupProvider
     /// a preview naming bytes the clean will not take is §5.4's broken promise arriving from the
     /// other direction. <see cref="MinimumAge.Off"/> by default, which is the shipped preference.
     /// </param>
-    Task<CleanupPlan> PlanAsync(MinimumAge keep = default, CancellationToken ct = default);
+    /// <param name="counted">
+    /// The bytes the plan's measurements have counted so far, reported as the figure rises and never
+    /// after the plan is returned, so the preview has something moving while a large location is
+    /// walked (§5.5). A lower bound on work done, never the plan's figure: a provider can measure a
+    /// path it then offers less of, or nothing of.
+    /// </param>
+    Task<CleanupPlan> PlanAsync(MinimumAge keep = default, IProgress<ScanSize>? counted = null, CancellationToken ct = default);
 
     /// <param name="runReach">
     /// What the whole run may destroy, for §5.6's negative. It sits beside the plan rather than

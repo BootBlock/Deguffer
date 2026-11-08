@@ -313,6 +313,14 @@ exactly the reason §4 measures.
 
 ### B. Wire the progress sink that already exists
 
+> **Since this was written:** route B shipped (#475). `CleanupPlanner` hands each provider a sink,
+> `CleanupProviderBase` passes it to `MeasureManyAsync` and `MeasureAgedAsync`, and the scanners
+> report the sum of every path's latest reading (`RunningTotal`), a nested path left out and the sum
+> never falling. The status line names each provider under way with "(N counted so far)". The figure
+> is a count of work done, so it is never cached, never the plan's figure, and never called what a
+> clean would free. The info bar that shows it speaks when it opens, not as its message changes, so
+> the figure does not flood Narrator. What Narrator says for the ring itself is still unobserved.
+
 Pass a real `IProgress<ScanSize>` down from the planner through `CleanupProviderBase`, so the
 preview shows bytes accumulating while a large location is measured. This restores the behaviour
 §5.5 asks for, uses machinery that is already built and already tested, and needs no denominator. It

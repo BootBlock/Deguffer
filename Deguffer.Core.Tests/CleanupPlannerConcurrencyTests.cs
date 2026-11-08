@@ -162,11 +162,59 @@ public sealed class CleanupPlannerConcurrencyTests
     [Fact]
     public void TheStatusOfManyProvidersNamesTheFirstTwoAndCountsTheRest()
     {
-        ICleanupProvider[] checking = [.. new[] { "conda", "pip", "npm", "PlatformIO" }.Select(name => new FakeCleanupProvider(name))];
+        PlanningStatus.Underway[] checking =
+            [.. new[] { "conda", "pip", "npm", "PlatformIO" }.Select(name => new PlanningStatus.Underway(new FakeCleanupProvider(name)))];
 
         Assert.Equal("Checking conda…", PlanningStatus.Describe(checking[..1]));
         Assert.Equal("Checking conda and pip…", PlanningStatus.Describe(checking[..2]));
         Assert.Equal("Checking conda, pip and 2 more…", PlanningStatus.Describe(checking));
+    }
+
+    /// <summary>
+    /// §5.5: a provider walking a large location says how much it has counted, so the line moves while
+    /// the walk runs. Worded as a count of work done, never as what a clean would free, and left off a
+    /// provider that has counted nothing yet.
+    /// </summary>
+    [Fact]
+    public void TheStatusNamesTheBytesEachProviderHasCountedSoFar()
+    {
+        var npm = new PlanningStatus.Underway(new FakeCleanupProvider("npm")) { Counted = 3 * 1024 * 1024 };
+        var pip = new PlanningStatus.Underway(new FakeCleanupProvider("pip"));
+
+        Assert.Equal($"Checking npm ({FreeSpace.Format(3 * 1024 * 1024)} counted so far)…", PlanningStatus.Describe([npm]));
+        Assert.Equal($"Checking pip and npm ({FreeSpace.Format(3 * 1024 * 1024)} counted so far)…", PlanningStatus.Describe([pip, npm]));
+    }
+
+    /// <summary>
+    /// The line follows a provider's figure as it rises, and a figure reported once the provider has
+    /// ended is dropped: the finding has its own figure by then, and the line must not go on naming
+    /// the provider.
+    /// </summary>
+    [Fact]
+    public void TheStatusFollowsAProvidersFigureUntilItEnds()
+    {
+        var status = new ProgressRecorder<string>();
+        var planning = new PlanningStatus(status);
+        var npm = new FakeCleanupProvider("npm");
+        var pip = new FakeCleanupProvider("pip");
+        var counted = planning.Counted(npm);
+
+        planning.Started(npm);
+        planning.Started(pip);
+        counted.Report(ScanSize.FromLengths(2048));
+        counted.Report(ScanSize.FromLengths(4096));
+        planning.Ended(npm);
+        counted.Report(ScanSize.FromLengths(8192));
+
+        Assert.Equal(
+            [
+                "Checking npm…",
+                "Checking npm and pip…",
+                $"Checking npm ({FreeSpace.Format(2048)} counted so far) and pip…",
+                $"Checking npm ({FreeSpace.Format(4096)} counted so far) and pip…",
+                "Checking pip…",
+            ],
+            status.Reports);
     }
 
     /// <summary>

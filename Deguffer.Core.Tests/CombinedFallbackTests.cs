@@ -68,10 +68,11 @@ public sealed class CombinedFallbackTests : IDisposable
         public ValueTask<IReadOnlyList<ScanResult>> MeasureManyAsync(
             IReadOnlyList<ScanRequest> asked,
             MinimumAge keep = default,
+            IProgress<ScanSize>? progress = null,
             CancellationToken ct = default) =>
             new([.. asked.Select(question => ScanResult.Slow(ScanSize.Zero, reasons[question.Path]))]);
 
-        public ValueTask<AgedScan> MeasureAgedAsync(string path, MinimumAge age, CancellationToken ct = default) =>
+        public ValueTask<AgedScan> MeasureAgedAsync(string path, MinimumAge age, IProgress<ScanSize>? progress = null, CancellationToken ct = default) =>
             new(new AgedScan(ScanResult.Slow(ScanSize.Zero, reasons[path]), ScanResult.Slow(ScanSize.Zero, reasons[path])));
 
         public ValueTask<IReadOnlyList<ScanResult>> MeasureFromDiskAsync(IReadOnlyList<ScanRequest> asked, CancellationToken ct = default) =>
