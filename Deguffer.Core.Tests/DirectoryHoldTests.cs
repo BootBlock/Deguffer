@@ -77,25 +77,60 @@ public sealed class DirectoryHoldTests : IDisposable
         Assert.All(after, handle => Assert.Equal(0, handle));
     }
 
+    /// <summary>
+    /// Two folders read at once on two workers: <c>failing</c>'s callback throws, and <c>watching</c>'s
+    /// waits while the walk is still running to see the failing worker's handle closed. The walk
+    /// closes every worker's handle once it has ended too, so the handle is looked at before then.
+    /// </summary>
     [Fact]
-    public void TheHandleIsClosedWhenTheCallbackThrows()
+    public void TheHandleIsClosedAsSoonAsTheCallbackThrows()
     {
-        _temp.CreateFile(1, "root", "file.bin");
-        var holder = new ListedDirectoryHandle[1];
-        nint during = 0;
+        _temp.CreateFile(1, "root", "failing", "file.bin");
+        _temp.CreateFile(1, "root", "watching", "file.bin");
+        var holders = new ConcurrentDictionary<string, ListedDirectoryHandle>();
+        using var together = new Barrier(2);
+        nint whileFailing = 0;
+        var closedWhileWalking = false;
 
-        Assert.Throws<InvalidOperationException>(() => Walk(
+        Assert.Throws<InvalidOperationException>(() => BoundedFileWalk.Visit<byte>(
+            [(Path.Combine(_temp.Path, "root"), 0)],
+            new WalkTuning(2, WalkTuning.MinimumListingBuffer),
+            FileNames.All,
             DirectoryHold.DuringCallback,
-            Capturing(holder),
-            contents =>
+            (directory, request, into) =>
             {
-                during = holder[0].Handle;
-                throw new InvalidOperationException("The callback failed.");
+                holders[Path.GetFileName(directory)] = request.Holder!;
+                return DirectoryQuery.List(directory, request, into);
             },
-            _ => { }));
+            (_, contents, descend) =>
+            {
+                switch (Path.GetFileName(contents.Directory))
+                {
+                    case "root":
+                        foreach (var entry in contents.Entries)
+                        {
+                            descend(entry, 0);
+                        }
 
-        Assert.NotEqual(0, during);
-        Assert.Equal(0, holder[0].Handle);
+                        break;
+                    case "failing":
+                        Assert.True(together.SignalAndWait(TimeSpan.FromSeconds(30)), "The two folders were not read at once.");
+                        whileFailing = holders["failing"].Handle;
+                        throw new InvalidOperationException("The callback failed.");
+                    case "watching":
+                        Assert.True(together.SignalAndWait(TimeSpan.FromSeconds(30)), "The two folders were not read at once.");
+                        closedWhileWalking = SpinWait.SpinUntil(
+                            () => whileFailing != 0 && holders["failing"].Handle == 0,
+                            TimeSpan.FromSeconds(5));
+                        break;
+                }
+            },
+            static _ => { },
+            TimeProvider.System,
+            CancellationToken.None));
+
+        Assert.NotEqual(0, whileFailing);
+        Assert.True(closedWhileWalking);
     }
 
     /// <summary>
