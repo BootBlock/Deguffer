@@ -7,11 +7,13 @@ namespace Deguffer.Core.Providers;
 /// How every git Deguffer starts is run: without the variables that tell git which repository, index
 /// and objects to read.
 ///
-/// <para>git reads these over <c>-C</c>, <c>--git-dir</c> and the repository it finds, so a value
-/// Deguffer inherited from a script or a tool that exported it for its own work sends every question
-/// to that work instead. Observed with git 2.56 for Windows: an inherited <c>GIT_DIR</c> naming
-/// another repository, or <c>GIT_INDEX_FILE</c> naming a file that is not there, made
-/// <c>ls-files</c> list nothing and exit 0, and a successful empty answer reads as "nothing tracked".
+/// <para>git reads every one of these over <c>-C</c> and the repository it finds, and
+/// <c>GIT_INDEX_FILE</c>, <c>GIT_OBJECT_DIRECTORY</c> and <c>GIT_COMMON_DIR</c> over
+/// <c>--git-dir</c> and <c>--work-tree</c> as well, so a value Deguffer inherited from a script or a
+/// tool that exported it for its own work sends the question to that work instead. Observed with git
+/// 2.56 for Windows: an inherited <c>GIT_DIR</c> naming another repository, <c>GIT_WORK_TREE</c>
+/// naming the folder above the repository, or <c>GIT_INDEX_FILE</c> naming a file that is not there,
+/// made <c>ls-files</c> list nothing and exit 0, and a successful empty answer reads as "nothing tracked".
 /// <c>GIT_COMMON_DIR</c> would hand Git LFS's prune another repository's refs to decide what to keep.</para>
 ///
 /// <para>The list is the one git itself clears before it runs a command in another repository, as in
