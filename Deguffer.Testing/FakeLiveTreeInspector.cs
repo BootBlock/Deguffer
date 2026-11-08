@@ -50,6 +50,14 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
 
     public int InvalidateCount { get; private set; }
 
+    private int _occupiedAsked;
+
+    /// <summary>
+    /// How many times <see cref="FindOccupiedDirectories"/> was asked, which is how many times a
+    /// question built from where programs are was built.
+    /// </summary>
+    public int OccupiedAskedCount => Volatile.Read(ref _occupiedAsked);
+
     /// <summary>
     /// What a snapshot's age is measured by. It moves only by <see cref="PassTheReadingLimit"/>, so a
     /// test that changes the machine between the preview and the clean says the preview stayed on
@@ -173,8 +181,11 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
             unknown);
     }
 
-    public LiveTreeFindings FindOccupiedDirectories(CancellationToken ct = default) =>
-        Occupied(Snapshot().Table);
+    public LiveTreeFindings FindOccupiedDirectories(CancellationToken ct = default)
+    {
+        Interlocked.Increment(ref _occupiedAsked);
+        return Occupied(Snapshot().Table);
+    }
 
     private static LiveTreeFindings Occupied(Table table) =>
         new(
@@ -292,6 +303,15 @@ public sealed class FakeLiveTreeInspector : ILiveTreeInspector
             Path.TrimEndingDirectorySeparator(root), StringComparison.OrdinalIgnoreCase);
 
     public ReachedFolder Reach(string path) => Match.Reach(path);
+
+    public LiveTreeReading Reading(CancellationToken ct = default)
+    {
+        lock (_gate)
+        {
+            Snapshot();
+            return new LiveTreeReading(_snapshot!.Number);
+        }
+    }
 
     public void Invalidate()
     {
