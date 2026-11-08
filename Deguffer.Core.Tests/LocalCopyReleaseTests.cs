@@ -1,5 +1,7 @@
+using System.Collections.Concurrent;
 using Deguffer.Core.Cloud;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Testing;
 
@@ -8,10 +10,12 @@ namespace Deguffer.Core.Tests;
 /// <summary>
 /// A release step of many files, asked about several at a time and proved standing the same way.
 ///
-/// <para>Each request and each reading here is held until a set of them is under way, so the tests
-/// prove that the work runs side by side by the order things happened in, never by how long it took.
-/// Run one at a time, the first held call waits for a second that cannot begin until it ends, gives
-/// up at the deadline, and the test fails on the count it saw.</para>
+/// <para>A test that the work runs side by side holds each call until a set of them is under way, so
+/// it proves it by the order things happened in, never by how long the work took. Run one at a time,
+/// the first held call waits for a second that cannot begin until it ends, gives up at the deadline,
+/// and the test fails on the count it saw. The bound's ceiling is the one timed window: a held set is
+/// kept a little longer once it has gathered, in which a call past the bound would have begun too.
+/// </para>
 /// </summary>
 public sealed class LocalCopyReleaseTests : IDisposable
 {
@@ -115,25 +119,22 @@ public sealed class LocalCopyReleaseTests : IDisposable
     /// <summary>
     /// Every thread asks what the folders pass on, and each folder is still read from the disk once:
     /// a thread arriving while another reads it waits for that reading rather than making its own.
+    /// Each folder's first reading is held until a second reading of it begins, which only a thread
+    /// making its own does, or until the patience runs out.
     /// </summary>
     [Fact]
     public async Task ReadsWhatEachFolderPassesOnOnceWhateverAsksAtOnce()
     {
         var step = Step(LocalCopyRelease.ReleasesAtOnce * 4);
         var folders = step.Files.Select(f => Path.GetDirectoryName(f.Path)!).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var reads = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var reads = new ConcurrentDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-        // Each folder's reading is held a while, in which a second thread asking about it would read it too.
         _cloud.BeforeRead = path =>
         {
-            if (folders.Contains(path) || string.Equals(path, _root, StringComparison.OrdinalIgnoreCase))
+            if ((folders.Contains(path) || string.Equals(path, _root, StringComparison.OrdinalIgnoreCase))
+                && reads.AddOrUpdate(path, 1, static (_, count) => count + 1) == 1)
             {
-                lock (reads)
-                {
-                    reads[path] = reads.GetValueOrDefault(path) + 1;
-                }
-
-                Thread.Sleep(50);
+                SpinWait.SpinUntil(() => reads[path] > 1, TimeSpan.FromSeconds(1));
             }
         };
 
@@ -143,9 +144,12 @@ public sealed class LocalCopyReleaseTests : IDisposable
         Assert.All(reads, read => Assert.Equal(1, read.Value));
     }
 
-    /// <summary>Reported from whichever thread finished a file, and still never backwards.</summary>
+    /// <summary>
+    /// Reported every so often from whichever thread finished a file, and whole at the end. That two
+    /// such reports reach the bar in order is <see cref="ForwardProgress"/>'s, and proved there.
+    /// </summary>
     [Fact]
-    public async Task ReportsProgressThatNeverMovesBackwardsAndEndsWhole()
+    public async Task ReportsProgressAsFilesFinishAndEndsWhole()
     {
         var step = Step(4_000);
         var progress = new ProgressRecorder<double>();
@@ -154,8 +158,63 @@ public sealed class LocalCopyReleaseTests : IDisposable
 
         var reports = progress.Reports;
         Assert.True(reports.Count > 2, $"Only {reports.Count} report(s) were made.");
+        Assert.All(reports, report => Assert.InRange(report, double.Epsilon, 1.0));
         Assert.Equal(1.0, reports[^1]);
-        Assert.All(reports.Zip(reports.Skip(1)), pair => Assert.True(pair.First <= pair.Second, $"{pair.First} came before {pair.Second}."));
+    }
+
+    /// <summary>
+    /// Neither the requests nor the proof's readings run on the pool, through the clean and through a
+    /// verification asked for on its own: each blocks its thread on the disk, and the pool's threads
+    /// are what the rest of the process's async work waits for.
+    /// </summary>
+    [Fact]
+    public async Task ReleasesAndProvesNoFileOnThePool()
+    {
+        var provider = new CloudLocalCopiesProvider(
+            _cloud,
+            new FakeUserEnvironment(_temp.Path),
+            new FakeProcessRunner(),
+            FakeProcessInspector.NothingRunning,
+            new FakeDirectoryScanner());
+        var step = Step(LocalCopyRelease.ReleasesAtOnce * 4);
+        var plan = await provider.PlanAsync();
+        Assert.Equal(step.Files.Count, Assert.IsType<ReleaseLocalCopiesStep>(Assert.Single(plan.Steps)).Files.Count);
+
+        var named = step.Files.Select(f => f.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var released = 0;
+        var read = 0;
+        var onThePool = 0;
+
+        void Watch(ref int calls)
+        {
+            Interlocked.Increment(ref calls);
+
+            if (Thread.CurrentThread.IsThreadPoolThread)
+            {
+                Interlocked.Increment(ref onThePool);
+            }
+
+            // Long enough that every thread of the run takes some of the files, its calling thread too.
+            Thread.Sleep(2);
+        }
+
+        _cloud.BeforeRelease = _ => Watch(ref released);
+        _cloud.BeforeRead = path =>
+        {
+            if (named.Contains(path))
+            {
+                Watch(ref read);
+            }
+        };
+
+        var result = await provider.ExecuteAsync(plan);
+        var verified = await provider.VerifyAsync(plan);
+
+        Assert.True(result.Verification!.Passed);
+        Assert.True(verified.Passed);
+        Assert.Equal(step.Files.Count, released);
+        Assert.Equal(2 * step.Files.Count, read);
+        Assert.Equal(0, onThePool);
     }
 
     [Fact]
