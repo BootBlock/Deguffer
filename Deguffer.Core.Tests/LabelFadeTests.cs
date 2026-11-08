@@ -141,7 +141,8 @@ public sealed class LabelFadeTests
     }
 
     private static ExploreLabel Label(float x, float y, float width, bool centred, LabelRoom room) =>
-        new(Node: 1, x, y, width, Rotation: 0, centred, Black, Bytes: 1000, room);
+        new(Node: 1, x, y, width, Rotation: 0, centred, Black, Bytes: 1000, room,
+            LabelAxis.Fixed(centred ? x + (width / 2) : x), LabelAxis.Fixed(y));
 
     private static ExploreTree NestedTree()
     {

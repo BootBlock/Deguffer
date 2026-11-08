@@ -171,11 +171,11 @@ public sealed class ScanSnapshotsTests
     public void StopsTheSnapshotBeingAssembledWhenTheWalkStops()
     {
         Action? assemble = null;
-        var snapshots = new ScanSnapshots(Capture, _clock, work =>
+        var snapshots = new ScanSnapshots(Capture, _clock, ByName(work =>
         {
             assemble = work;
             return Task.CompletedTask;
-        });
+        }));
 
         snapshots.Take();
         Assert.NotNull(assemble);
@@ -197,7 +197,7 @@ public sealed class ScanSnapshotsTests
     {
         var started = 0;
         var snapshots = new ScanSnapshots(
-            () =>
+            _ =>
             {
                 started++;
                 return _ =>
@@ -207,11 +207,11 @@ public sealed class ScanSnapshotsTests
                 };
             },
             _clock,
-            assemble =>
+            ByName(assemble =>
             {
                 assemble();
                 return Task.CompletedTask;
-            });
+            }));
 
         Assert.Null(snapshots.Take());
         Assert.Equal(1, started);
@@ -234,7 +234,7 @@ public sealed class ScanSnapshotsTests
     public void FailsTheWalkWhereASnapshotFailed()
     {
         var snapshots = new ScanSnapshots(
-            Capture, _clock, _ => Task.FromException(new InvalidOperationException("assembling failed")));
+            Capture, _clock, ByName(_ => Task.FromException(new InvalidOperationException("assembling failed"))));
 
         snapshots.Take();
 
@@ -244,9 +244,15 @@ public sealed class ScanSnapshotsTests
         Assert.Equal("assembling failed", thrown.Message);
     }
 
-    private ScanSnapshots Snapshots() => new(Capture, _clock, Start);
+    private ScanSnapshots Snapshots() => new(Capture, _clock, ByName(Start));
 
-    private Func<CancellationToken, ExploreTree?> Capture() => _builder.Capture().Snapshot;
+    private static SnapshotAssembly ByName(Func<Action, Task> start) => new(start, static () => ExploreChildOrder.ByName);
+
+    private Func<CancellationToken, ExploreTree?> Capture(ExploreChildOrder order)
+    {
+        var captured = _builder.Capture();
+        return stopped => captured.Snapshot(order, stopped);
+    }
 
     private Task Start(Action assemble)
     {

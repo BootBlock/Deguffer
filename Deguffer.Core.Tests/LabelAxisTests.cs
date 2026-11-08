@@ -1,0 +1,141 @@
+using Deguffer.Core.Configuration;
+using Deguffer.Core.Exploring;
+using Deguffer.Core.Exploring.Layout;
+using Deguffer.Core.Exploring.Rendering;
+
+namespace Deguffer.Core.Tests;
+
+/// <summary>
+/// A label's place as a rule (<see cref="LabelAxis"/>): on the canvas it was laid out for the rule gives
+/// the place the drawing gave it, and worked out for the picture at another zoom it gives the place the
+/// drawing at that zoom gives it, so a name is already there when that drawing arrives.
+/// </summary>
+public sealed class LabelAxisTests
+{
+    private const int Width = 800;
+    private const int Height = 600;
+
+    /// <summary>A span kept on the canvas is cut to it, and a centred anchor is measured from the middle of what is left.</summary>
+    [Fact]
+    public void AKeptSpanIsCutToTheCanvasBeforeTheAnchorIsMeasured()
+    {
+        Assert.Equal(4, new LabelAxis(-50, 100, 4, Centred: false, KeptOnCanvas: true).At(-50, 100, 800));
+        Assert.Equal(-46, new LabelAxis(-50, 100, 4, Centred: false, KeptOnCanvas: false).At(-50, 100, 800));
+        Assert.Equal(745, new LabelAxis(700, 900, -5, Centred: true, KeptOnCanvas: true).At(700, 900, 800));
+        Assert.Equal(795, new LabelAxis(700, 900, -5, Centred: true, KeptOnCanvas: false).At(700, 900, 800));
+    }
+
+    /// <summary>Every label's rule, on the canvas it was laid out for, gives the anchor the drawing gave it.</summary>
+    [Theory]
+    [InlineData(ExploreView.Treemap, 1, 0.5, 0.5)]
+    [InlineData(ExploreView.Treemap, 3, 0.7, 0.2)]
+    [InlineData(ExploreView.Treemap, 6, 0.1, 0.9)]
+    [InlineData(ExploreView.Sunburst, 1, 0.5, 0.5)]
+    public void EveryLabelsRuleGivesTheAnchorItWasDrawnAt(ExploreView view, double zoom, double x, double y)
+    {
+        var tree = Tree();
+        var drawing = Draw(tree, view, MapViewport.Anchored(zoom, x, y, 0.5, 0.5, MapCeiling.Least));
+
+        Assert.NotEmpty(drawing.Labels);
+        Assert.All(drawing.Labels, label =>
+        {
+            var (anchorX, anchorY) = label.Anchor;
+
+            Assert.Equal(anchorX, label.Across.At(label.Across.From, label.Across.To, Width), 3);
+            Assert.Equal(anchorY, label.Down.At(label.Down.From, label.Down.To, Height), 3);
+        });
+    }
+
+    /// <summary>
+    /// A name carried by its rule through a zoom in, a zoom out or a drag ends where the drawing at the
+    /// new place puts it: the padding stays the same on the screen, a band's name stays centred in the
+    /// band, and a shape running off an edge keeps its name at that edge. Carried by its point, it was
+    /// up to a band's height away and jumped there once the new drawing arrived.
+    /// </summary>
+    [Theory]
+    [InlineData(1, 0.5, 0.5, 2.5, 0.3, 0.3)]
+    [InlineData(2.5, 0.3, 0.3, 1, 0.5, 0.5)]
+    [InlineData(3, 0.2, 0.6, 3, 0.35, 0.5)]
+    [InlineData(2, 0.6, 0.4, 5, 0.8, 0.1)]
+    public void ANameCarriedThroughAZoomEndsWhereTheNewDrawingPutsIt(
+        double fromZoom, double fromX, double fromY, double toZoom, double toX, double toY)
+    {
+        var tree = Tree();
+        var from = MapViewport.Anchored(fromZoom, fromX, fromY, 0.5, 0.5, MapCeiling.Least);
+        var to = MapViewport.Anchored(toZoom, toX, toY, 0.5, 0.5, MapCeiling.Least);
+        var before = Draw(tree, ExploreView.Treemap, from);
+        var after = Draw(tree, ExploreView.Treemap, to).Labels.ToDictionary(label => label.Node);
+
+        var compared = 0;
+        var cut = 0;
+
+        foreach (var label in before.Labels)
+        {
+            // A folder drawn as a box at one zoom and opened with a band at the other is named by
+            // another rule, and changing between them is a change of what is drawn, not a jump.
+            if (!after.TryGetValue(label.Node, out var arrived) || arrived.Down.Centred != label.Down.Centred)
+            {
+                continue;
+            }
+
+            var x = label.Across.At(Moved(label.Across.From, from, to, Width), Moved(label.Across.To, from, to, Width), Width);
+            var y = label.Down.At(Moved(label.Down.From, from, to, Height), Moved(label.Down.To, from, to, Height), Height);
+            var (anchorX, anchorY) = arrived.Anchor;
+
+            Assert.Equal(anchorX, x, 1);
+            Assert.Equal(anchorY, y, 1);
+
+            compared++;
+            cut += arrived.Room.Left < 0 || arrived.Room.Top < 0 ? 1 : 0;
+        }
+
+        Assert.True(compared >= 2, $"only {compared} names were on both drawings");
+        Assert.True(cut >= 1 || toZoom < fromZoom, "no name was on a shape running off the canvas, so nothing tested the cut");
+    }
+
+    /// <summary>Where a canvas point of a drawing at <paramref name="from"/> is on a drawing at <paramref name="to"/>.</summary>
+    private static float Moved(float at, MapViewport from, MapViewport to, int extent)
+    {
+        var picture = (at / (extent * from.Zoom)) + (extent == Width ? from.Left : from.Top);
+
+        return (float)((picture - (extent == Width ? to.Left : to.Top)) * extent * to.Zoom);
+    }
+
+    private static ExploreSurface Draw(ExploreTree tree, ExploreView view, MapViewport viewport) =>
+        ExploreSurface.Create(
+            tree, tree.RootNode, view, Width, Height, scale: 1, textScale: 1,
+            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None, viewport);
+
+    /// <summary>Folders inside folders, each holding files of a few sizes, so a zoom shows bands and names cut by the canvas's edges.</summary>
+    private static ExploreTree Tree()
+    {
+        var builder = new ExploreTreeBuilder(@"C:\");
+        var tops = builder.AddChildren(ExploreTreeBuilder.RootNode,
+        [
+            new ExploreChild("Users", IsDirectory: true, IsLink: false, Size: 0),
+            new ExploreChild("Games", IsDirectory: true, IsLink: false, Size: 0),
+            new ExploreChild("Media", IsDirectory: true, IsLink: false, Size: 0),
+        ]);
+
+        for (var top = 0; top < 3; top++)
+        {
+            var inner = builder.AddChildren(tops + top,
+            [
+                new ExploreChild("a", IsDirectory: true, IsLink: false, Size: 0),
+                new ExploreChild("b", IsDirectory: true, IsLink: false, Size: 0),
+            ]);
+
+            for (var folder = 0; folder < 2; folder++)
+            {
+                builder.AddChildren(inner + folder,
+                [
+                    new ExploreChild("one.bin", IsDirectory: false, IsLink: false, Size: 4_000_000 * (top + 1)),
+                    new ExploreChild("two.bin", IsDirectory: false, IsLink: false, Size: 2_500_000 * (folder + 1)),
+                    new ExploreChild("three.bin", IsDirectory: false, IsLink: false, Size: 1_500_000),
+                ]);
+            }
+        }
+
+        return builder.Build(ExploreChildOrder.BySize);
+    }
+}

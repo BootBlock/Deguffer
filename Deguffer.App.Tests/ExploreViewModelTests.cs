@@ -462,7 +462,7 @@ public sealed class ExploreViewModelTests : IDisposable
         var running = page.ScanCommand.ExecuteAsync(null);
         var scan = _explore.Scanner.Current;
 
-        scan.Report(new ExploreProgress(2, null, 0, builder.Build(ExploreChildOrder.ByName)));
+        scan.Report(new ExploreProgress(2, null, 0, builder.Snapshot(ExploreChildOrder.ByName)));
         await Task.Yield();
 
         Assert.False(page.Selection.CanAct);
@@ -473,7 +473,7 @@ public sealed class ExploreViewModelTests : IDisposable
         var changes = Watch(page.Listing.Rows);
 
         builder.AddChildren(ExploreTreeBuilder.RootNode, [ExploreFixture.Folder("Program Files")]);
-        scan.Report(new ExploreProgress(3, null, 0, builder.Build(ExploreChildOrder.ByName)));
+        scan.Report(new ExploreProgress(3, null, 0, builder.Snapshot(ExploreChildOrder.ByName)));
         await Task.Yield();
 
         Assert.Equal([users + 1], page.Selection.Nodes);
@@ -486,6 +486,33 @@ public sealed class ExploreViewModelTests : IDisposable
         Assert.Equal([users + 1], page.Selection.Nodes);
         Assert.Equal([NotifyCollectionChangedAction.Add, NotifyCollectionChangedAction.Reset], changes);
         Assert.True(page.Selection.CanAct);
+    });
+
+    /// <summary>
+    /// The scan is asked for each snapshot in the order the view on screen needs, at the time it takes
+    /// the snapshot: by size under the treemap the reader chose, so the treemap is what is drawn while
+    /// the scan runs, and by name once they switch to the list.
+    /// </summary>
+    [Fact]
+    public void TheScanIsAskedForSnapshotsInTheOrderTheViewOnScreenNeeds() => UiThread.Run(async () =>
+    {
+        _explore.Volumes.With(@"C:");
+        var page = _explore.Page();
+        page.SelectedView = ExploreView.Treemap;
+
+        var running = page.ScanCommand.ExecuteAsync(null);
+        var scan = _explore.Scanner.Current;
+
+        Assert.Equal(ExploreChildOrder.BySize, scan.SnapshotOrder);
+
+        page.SelectedView = ExploreView.List;
+        Assert.Equal(ExploreChildOrder.ByName, scan.SnapshotOrder);
+
+        page.SelectedView = ExploreView.Sunburst;
+        Assert.Equal(ExploreChildOrder.BySize, scan.SnapshotOrder);
+
+        scan.Finish(ExploreScan.Fast(new ExploreTreeBuilder(@"C:").Build(ExploreChildOrder.BySize)));
+        await running;
     });
 
     /// <summary>
@@ -502,7 +529,7 @@ public sealed class ExploreViewModelTests : IDisposable
 
         var running = page.ScanCommand.ExecuteAsync(null);
 
-        _explore.Scanner.Current.Report(new ExploreProgress(1, null, 0, builder.Build(ExploreChildOrder.ByName)));
+        _explore.Scanner.Current.Report(new ExploreProgress(1, null, 0, builder.Snapshot(ExploreChildOrder.ByName)));
         await Task.Yield();
 
         Assert.NotNull(page.Tree);
@@ -905,7 +932,7 @@ public sealed class ExploreViewModelTests : IDisposable
         var running = page.ScanCommand.ExecuteAsync(null);
 
         raised.Clear();
-        _explore.Scanner.Current.Report(new ExploreProgress(1, null, 0, builder.Build(ExploreChildOrder.ByName)));
+        _explore.Scanner.Current.Report(new ExploreProgress(1, null, 0, builder.Snapshot(ExploreChildOrder.ByName)));
         await Task.Yield();
 
         Assert.Contains(nameof(ExploreViewModel.ViewNote), raised);

@@ -44,7 +44,8 @@ public class PreferenceStoreTests
             FileHistoryRetentionDays: 30,
             MinimumTemporaryFileAgeDays: 2,
             BackUpInstalledAppEntries: false,
-            WhenCleanComplete: CompletionAction.Hibernate)
+            WhenCleanComplete: CompletionAction.Hibernate,
+            NavigationCollapsed: true)
         {
             // Every field of the map's style away from its default, so a field dropped from the file, or
             // read from another field's key, fails here.
@@ -105,6 +106,7 @@ public class PreferenceStoreTests
         // Not the default, on the same reasoning.
         Assert.True(loaded.ExploreOverviewHidden);
         Assert.True(loaded.MemoryOverviewHidden);
+        Assert.True(loaded.NavigationCollapsed);
 
         Assert.True(loaded.ShowNotInstalled);
         Assert.True(loaded.ShowAlreadyClear);

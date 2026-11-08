@@ -91,7 +91,7 @@ public sealed class ExploreWiringTests : IDisposable
         page.SelectedView = ExploreView.Files;
 
         var running = page.ScanCommand.ExecuteAsync(null);
-        var snapshot = Folder(@"C:\", "Users", ExploreChildOrder.ByName);
+        var snapshot = Snapshot(@"C:\", "Users");
 
         _explore.Scanner.Current.Report(new ExploreProgress(1, null, 0, snapshot));
         await Task.Yield();
@@ -127,11 +127,15 @@ public sealed class ExploreWiringTests : IDisposable
         Assert.False(page.IsShowingRows);
     });
 
-    private static ExploreTree Folder(string root, string child, ExploreChildOrder order = ExploreChildOrder.BySize)
+    private static ExploreTree Folder(string root, string child) => Holding(root, child).Build(ExploreChildOrder.BySize);
+
+    private static ExploreTree Snapshot(string root, string child) => Holding(root, child).Snapshot(ExploreChildOrder.ByName);
+
+    private static ExploreTreeBuilder Holding(string root, string child)
     {
         var builder = new ExploreTreeBuilder(root);
         builder.AddChildren(ExploreTreeBuilder.RootNode, [ExploreFixture.Folder(child)]);
 
-        return builder.Build(order);
+        return builder;
     }
 }

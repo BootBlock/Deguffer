@@ -106,9 +106,10 @@ public sealed class ExploreSurfaceTests
     }
 
     /// <summary>
-    /// A scan still running publishes a tree ordered by name, and neither the treemap nor the
-    /// sunburst can be drawn from one — both refuse it rather than draw a picture that lies. So the
-    /// icicle stands in until the scan finishes, which is also what stops a repaint throwing.
+    /// A snapshot ordered by name, as one taken before the reader switched to the treemap or the
+    /// sunburst is, cannot be drawn as either: both refuse it rather than draw a picture that lies. So
+    /// the icicle stands in until a snapshot by size arrives, which is also what stops a repaint
+    /// throwing.
     /// </summary>
     [Theory]
     [InlineData(ExploreView.Treemap)]
@@ -124,6 +125,38 @@ public sealed class ExploreSurfaceTests
         Assert.IsType<TiledSurface>(surface);
         Assert.NotEmpty(surface.Labels);
         Assert.Equal(ExploreView.Icicle, ExploreSurface.Drawn(tree, view));
+    }
+
+    /// <summary>
+    /// A scan in progress hands its snapshots over by size while the treemap or the sunburst is on
+    /// screen, so the picture asked for is the one drawn, and by name for every other view, so it
+    /// stays still as a folder grows.
+    /// </summary>
+    [Theory]
+    [InlineData(ExploreView.Treemap, ExploreChildOrder.BySize)]
+    [InlineData(ExploreView.Sunburst, ExploreChildOrder.BySize)]
+    [InlineData(ExploreView.Icicle, ExploreChildOrder.ByName)]
+    [InlineData(ExploreView.List, ExploreChildOrder.ByName)]
+    [InlineData(ExploreView.Tree, ExploreChildOrder.ByName)]
+    [InlineData(ExploreView.Files, ExploreChildOrder.ByName)]
+    public void ASnapshotComesInTheOrderTheViewOnScreenNeeds(ExploreView view, ExploreChildOrder order) =>
+        Assert.Equal(order, ExploreSurface.SnapshotOrder(view));
+
+    /// <summary>A snapshot in the order a picture asked for is drawn as that picture, not as a stand-in.</summary>
+    [Theory]
+    [InlineData(ExploreView.Treemap)]
+    [InlineData(ExploreView.Sunburst)]
+    [InlineData(ExploreView.Icicle)]
+    public void ASnapshotInTheOrderAPictureAskedForIsDrawnAsThatPicture(ExploreView view)
+    {
+        var builder = new ExploreTreeBuilder(@"C:");
+        builder.AddChildren(ExploreTreeBuilder.RootNode,
+        [
+            new ExploreChild("a.bin", IsDirectory: false, IsLink: false, Size: 1),
+            new ExploreChild("b.bin", IsDirectory: false, IsLink: false, Size: 2),
+        ]);
+
+        Assert.Equal(view, ExploreSurface.Drawn(builder.Snapshot(ExploreSurface.SnapshotOrder(view)), view));
     }
 
     /// <summary>
