@@ -79,7 +79,7 @@ Each needs #466 for its test.
 | #470 | Volumes, and fallback walks, measured one after another. Done: a measurement runs one pipeline for each set of physical disks at the same time, the volumes of one set in turn, and the walking scanners run the walks of separate disks at the same time. Where any disk is not known, everything stays in turn. |
 | #471 | Approved source folders searched one after another. |
 | #469 | The hard-link-aware scan builds two paths and a by-name read per file. Done: each file is read by its bare name relative to a handle the walk holds on its folder while the callback runs. On one 33,115-file pnpm store the links route allocated 9.4 to 14.0 MiB rather than 31.2 MiB, and its time did not move outside the noise. |
-| #468 | Open each directory relative to its parent. Measure with #476 first. `safety`. |
+| #468 | Open each directory relative to its parent. Measured, not done: a prototype gained nothing beyond the noise, warm, at 1 and 16 threads, on three real trees and one made 40 folders deep, and used more processor time in 9 of 12 cases. `DirectoryQuery` records the figures. |
 | #473 | A frame array per child directory. |
 
 ### 5. Explore: time to the first map
