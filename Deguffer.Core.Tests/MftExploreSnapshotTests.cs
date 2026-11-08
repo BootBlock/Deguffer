@@ -38,6 +38,31 @@ public sealed class MftExploreSnapshotTests
     };
 
     /// <summary>
+    /// A snapshot asked for by size, as one is while the treemap is on screen, comes by size, and is
+    /// still marked as a snapshot with its totals as lower bounds; the finished tree is not marked.
+    /// </summary>
+    [Fact]
+    public void HandsOverASnapshotInTheOrderItWasAskedFor()
+    {
+        using var source = Table().Build();
+
+        var (reports, read) = ReadWithSnapshots(source, Root, [], order: ExploreChildOrder.BySize);
+        var snapshot = FirstSnapshot(reports);
+
+        Assert.Equal(ExploreChildOrder.BySize, snapshot.ChildOrder);
+        Assert.True(snapshot.IsSnapshot);
+        Assert.True(snapshot.HasUnknownSizeBelow(snapshot.RootNode), "The snapshot gave its totals as exact.");
+
+        // By size, where name would put .config first.
+        var profile = At(snapshot, ProfilePath);
+        Assert.Equal(
+            [".npm-cache", ".config"],
+            snapshot.ChildrenOf(profile).ToArray().Select(child => snapshot.NameOf(child)));
+
+        Assert.False(read.Tree!.IsSnapshot);
+    }
+
+    /// <summary>
     /// A snapshot holds every record whose chain of parents was read, and nothing else: a file read
     /// before its folder hangs from nothing yet, and a hard link's other names are placed only once
     /// the read ends. Its root says every total is a lower bound, and its folders are in name order,
@@ -53,6 +78,7 @@ public sealed class MftExploreSnapshotTests
         var snapshot = FirstSnapshot(reports);
 
         Assert.Equal(ExploreChildOrder.ByName, snapshot.ChildOrder);
+        Assert.True(snapshot.IsSnapshot);
         Assert.Equal(Root, snapshot.RootPath);
         Assert.True(snapshot.HasUnknownSizeBelow(snapshot.RootNode), "The snapshot gave its totals as exact.");
 
@@ -188,7 +214,11 @@ public sealed class MftExploreSnapshotTests
         .WithoutBitmap();
 
     private static (List<ExploreProgress> Reports, MftExploreRead Read) ReadWithSnapshots(
-        IMftSource source, string rootPath, string[] components, TimeSpan? perReport = null)
+        IMftSource source,
+        string rootPath,
+        string[] components,
+        TimeSpan? perReport = null,
+        ExploreChildOrder order = ExploreChildOrder.ByName)
     {
         var clock = new ManualTimeProvider();
         var reports = new List<ExploreProgress>();
@@ -199,7 +229,7 @@ public sealed class MftExploreSnapshotTests
         });
 
         var read = MftExploreReader.Read(
-            source, rootPath, components, TableTuning.Default, progress, default, OnTheSpot, clock);
+            source, rootPath, components, TableTuning.Default, progress, default, new SnapshotAssembly(OnTheSpot, () => order), clock);
 
         Assert.True(
             reports.Count >= 3 && reports[1].Done == MftPassProgress.Interval,

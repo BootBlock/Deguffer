@@ -118,7 +118,7 @@ public sealed class ExploreMap : UserControl
     private readonly InputCursor _dragCursor = InputSystemCursor.Create(InputSystemCursorShape.SizeAll);
 
     /// <summary>
-    /// How many different pictures <see cref="Show(ISizedTree, int, ExploreView, Func{DateTime, ShapeColours}, Func{int, string}, MapLook, VolumeSpace, MapViewport?)"/>
+    /// How many different pictures <see cref="Show(ISizedTree, int, ExploreView, Func{DateTime, ShapeColours}, Func{int, MapCaption}, MapLook, VolumeSpace, MapViewport?)"/>
     /// has been handed, so a double-click can tell whether the page opened what it asked for.
     /// </summary>
     private int _picturesHanded;
@@ -163,7 +163,7 @@ public sealed class ExploreMap : UserControl
     /// What to write on a shape. The tree knows its own names, and what a name means differs between
     /// a drive and a picture of memory, so the page that owns the tree says it.
     /// </summary>
-    private Func<int, string> _labelText = _ => string.Empty;
+    private Func<int, MapCaption> _captions = _ => MapCaption.None;
 
     /// <summary>How much room a treemap leaves round what each folder holds, and how every shape is finished.</summary>
     private MapLook _look = MapLook.Default;
@@ -716,17 +716,17 @@ public sealed class ExploreMap : UserControl
             tree is null
                 ? _ => ShapeColours.ByBranch(scheme)
                 : now => ShapeColours.For(tree, colouring, scheme, now, growth, types),
-            tree is null ? _ => string.Empty : NamedAndSized(tree),
+            tree is null ? _ => MapCaption.None : Captions(tree),
             look,
             volume,
             viewport);
 
-    /// <summary>What a shape of a scanned <paramref name="tree"/> is labelled with: its name, then its size.</summary>
-    public static Func<int, string> NamedAndSized(ExploreTree tree)
+    /// <summary>What a shape of a scanned <paramref name="tree"/> is labelled with: its name, its size and when it was written.</summary>
+    public static Func<int, MapCaption> Captions(ExploreTree tree)
     {
         ArgumentNullException.ThrowIfNull(tree);
 
-        return node => MapShapeText.Label(tree, node);
+        return node => MapShapeText.Caption(tree, node);
     }
 
     /// <summary>
@@ -745,7 +745,7 @@ public sealed class ExploreMap : UserControl
     /// shapes from where the one draws them to where the other does (<see cref="ViewMorph"/>).</para>
     /// </summary>
     /// <param name="colours">What the colours are to say, asked at each repaint.</param>
-    /// <param name="labelText">What to write on a shape of the tree this drawing chose to label.</param>
+    /// <param name="captions">What to write on a shape of the tree this drawing chose to label.</param>
     /// <param name="look">
     /// How much room a treemap leaves round what each folder holds, and how every shape is finished.
     /// Its schemes are not read: the colours already say what they are drawn in.
@@ -760,13 +760,13 @@ public sealed class ExploreMap : UserControl
         int node,
         ExploreView view,
         Func<DateTime, ShapeColours> colours,
-        Func<int, string> labelText,
+        Func<int, MapCaption> captions,
         MapLook look,
         VolumeSpace volume,
         MapViewport? viewport = null)
     {
         ArgumentNullException.ThrowIfNull(colours);
-        ArgumentNullException.ThrowIfNull(labelText);
+        ArgumentNullException.ThrowIfNull(captions);
         ArgumentNullException.ThrowIfNull(look);
 
         var was = _zoom.Shown;
@@ -787,7 +787,7 @@ public sealed class ExploreMap : UserControl
 
             if (_flight.State.Left is { Drawing: { } drawing } left && change.Returns(left.Picture, left.Viewport) && Stepping)
             {
-                Return(drawing, colours, labelText, look);
+                Return(drawing, colours, captions, look);
                 return;
             }
 
@@ -839,7 +839,7 @@ public sealed class ExploreMap : UserControl
 
         Hold(change.Asked);
         _colours = colours;
-        _labelText = labelText;
+        _captions = captions;
         _look = look;
 
         // A step in starts before the new picture is drawn, so the drawing arrives into a flight
@@ -1016,7 +1016,7 @@ public sealed class ExploreMap : UserControl
 
         _highlight.PlaceOver(Placed(drawing), ActualWidth, ActualHeight, _zoom.Origin);
 
-        _labels.Place(_drawn.Labels(drawing.Width, drawing.Height, ActualWidth, ActualHeight, _canvas.Scale, _zoom.Origin));
+        _labels.Place(_drawn.Labels(drawing.Width, drawing.Height, ActualWidth, ActualHeight, _canvas.Scale, _zoom.Origin), ActualWidth, ActualHeight);
     }
 
     /// <summary>
@@ -1184,7 +1184,7 @@ public sealed class ExploreMap : UserControl
         // Nothing new to draw, and the names are still where this drawing put them. Unless a redraw
         // is landing, which was asked for somewhere the zoom has since left, or of a picture that
         // has changed since this drawing was made.
-        if (_zoom.Shown == _drawn && _canvas.Arriving is not { IsSettled: false })
+        if (ShowsTheDrawingAsDrawn)
         {
             _flight.Pictures.HideTiles();
             _labels.Reveal();
@@ -1279,7 +1279,7 @@ public sealed class ExploreMap : UserControl
         Unlock();
 
         // Over a change of folder still flying, too: the names ride the picture they name as it moves.
-        _labels.Show(drawing, _canvas.Scale, LabelText);
+        _labels.Show(drawing, _canvas.Scale, CaptionOf);
 
         (FrameworkElementAutomationPeer.FromElement(this) as MapAutomationPeer)?.Redrawn(_keyboard.Folder);
 
@@ -1364,9 +1364,9 @@ public sealed class ExploreMap : UserControl
     /// What to write on a labelled shape. The blocks standing for the rest of the volume are the
     /// map's own, because they are not nodes of the page's tree.
     /// </summary>
-    private string LabelText(ExploreLabel label) => MapBlock.Of(label.Node) is { } block
-        ? MapShapeText.Label(block.Name, label.Bytes)
-        : _labelText(label.Node);
+    private MapCaption CaptionOf(ExploreLabel label) => MapBlock.Of(label.Node) is { } block
+        ? MapShapeText.Caption(block.Name, label.Bytes)
+        : _captions(label.Node);
 
     /// <summary>Mark everything the map marks out again, on the drawing it works from now. See <see cref="ExploreMarking.Remark"/>.</summary>
     private void Remark() => _marking.Remark(_drawing, _canvas.Scale);
@@ -1547,11 +1547,29 @@ public sealed class ExploreMap : UserControl
     /// </summary>
     private void Sharpen()
     {
-        if (!Stepping)
+        if (Stepping)
         {
-            _canvas.Sharpen(Ground());
+            return;
         }
+
+        // Where the drawing on top was made, it is the picture pixel for pixel, and a tile, drawn finer
+        // and shown smaller over it, only blurs every line in it. The camera reports a jump there with
+        // no move to come to rest from, as its bounds are first set while the page is still arriving,
+        // so nothing would take the tiles off again.
+        if (ShowsTheDrawingAsDrawn)
+        {
+            _flight.Pictures.HideTiles();
+            return;
+        }
+
+        _canvas.Sharpen(Ground());
     }
+
+    /// <summary>
+    /// Whether the screen shows the picture exactly where the drawing on top was made, with no redraw
+    /// still landing over it, so that drawing is all there is to show.
+    /// </summary>
+    private bool ShowsTheDrawingAsDrawn => _zoom.Shown == _drawn && _canvas.Arriving is not { IsSettled: false };
 
     /// <summary>
     /// Settle any change of folder still flying, whichever button went down, so what the press resolves
@@ -1845,7 +1863,7 @@ public sealed class ExploreMap : UserControl
     ///
     /// <para>The page is what decides whether a node opens, and it says so by showing it here before
     /// <see cref="Activated"/> returns. The camera then flies into the folder's shape, as it does for
-    /// every step into a folder however the page asked for it (see <see cref="Show(ISizedTree, int, ExploreView, Func{DateTime, ShapeColours}, Func{int, string}, MapLook, VolumeSpace, MapViewport?)"/>).
+    /// every step into a folder however the page asked for it (see <see cref="Show(ISizedTree, int, ExploreView, Func{DateTime, ShapeColours}, Func{int, MapCaption}, MapLook, VolumeSpace, MapViewport?)"/>).
     /// What does not open is zoomed to: see <see cref="MapOpen"/>.</para>
     /// </summary>
     private void OnDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
@@ -2077,7 +2095,7 @@ public sealed class ExploreMap : UserControl
     /// at: the flight turns round from where it is, at the speed it has, and the drawing left, still on
     /// screen, is the one the map works from again. Nothing is drawn afresh, and nothing jumps.
     /// </summary>
-    private void Return(ExploreSurface drawing, Func<DateTime, ShapeColours> colours, Func<int, string> labelText, MapLook look)
+    private void Return(ExploreSurface drawing, Func<DateTime, ShapeColours> colours, Func<int, MapCaption> captions, MapLook look)
     {
         var left = _flight.State.Left!;
         var leaving = _zoom.Shown;
@@ -2093,7 +2111,7 @@ public sealed class ExploreMap : UserControl
 
         Hold(left.Picture);
         _colours = colours;
-        _labelText = labelText;
+        _captions = captions;
         _look = look;
         _shapeColours = left.Colours;
 

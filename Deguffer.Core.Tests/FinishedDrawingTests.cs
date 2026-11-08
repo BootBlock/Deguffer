@@ -448,7 +448,7 @@ public sealed class FinishedDrawingTests
         var folder = Tree.ChildrenOf(ExploreTreeBuilder.RootNode).ToArray().First(node => Tree.IsDirectory(node));
         var drawing = Treemap(MapStyle.Default, ShapeColours.ByDepth, folder);
         var quads = drawing.Quads().Quads.ToArray();
-        var tiles = drawing.Tiles.Where(tile => CushionQuad.Of(tile, drawing.Finish).Reaches(Width, Height)).ToList();
+        var tiles = drawing.Tiles.Where(tile => CushionQuad.Of(tile, drawing.Finish).Reaches(Width, Height, drawing.Finish.Borders.ReachFor(tile.Framed))).ToList();
 
         Assert.Equal(tiles.Count, quads.Length);
         Assert.Contains(tiles, tile => tile.Depth == 2);

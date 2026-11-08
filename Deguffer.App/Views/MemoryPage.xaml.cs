@@ -308,7 +308,7 @@ public sealed partial class MemoryPage : Page
             ViewModel.CurrentNode,
             ViewModel.SelectedView,
             _ => colours,
-            ViewModel.LabelFor,
+            ViewModel.CaptionFor,
             _look,
             VolumeSpace.None);
     }

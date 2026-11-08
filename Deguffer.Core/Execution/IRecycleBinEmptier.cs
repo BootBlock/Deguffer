@@ -81,8 +81,9 @@ public sealed class ShellRecycleBinEmptier : IRecycleBinEmptier
     // SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND.
     //
     // All three suppress a window this app does not own. Deguffer has already previewed what it
-    // will remove and asked for the confirmation §7 requires of Tier 3, so the shell's own
-    // "are you sure" is a second question about a decision already taken — and it would arrive
+    // will remove and asked whatever Tier 3 confirmation §7 lets the user set, so the shell's own
+    // "are you sure" is a second question about a decision already taken, or one the user chose
+    // not to be asked — and it would arrive
     // parentless, because handing an HWND down here would put a UI concept in Core, which means
     // appearing behind the window that caused it.
     private const uint EmptyFlags = 0x00000001 | 0x00000002 | 0x00000004;

@@ -146,28 +146,31 @@ public static class MapShapeText
     }
 
     /// <summary>
-    /// What is written on a shape on the map: its name, then its size, apart by two spaces. One format
-    /// for every page and every block, so a label reads alike wherever it is.
+    /// What is written on a shape on the map called <paramref name="name"/> and
+    /// <paramref name="bytes"/> in size. One source of the facts for every page and every block, so a
+    /// label reads alike wherever it is (<see cref="MapCaption.Text"/>).
     /// </summary>
-    public static string Label(string name, long bytes)
+    public static MapCaption Caption(string name, long bytes)
     {
         ArgumentNullException.ThrowIfNull(name);
 
-        return Labelled(name, FreeSpace.Format(bytes));
+        return new MapCaption(name, FreeSpace.Format(bytes), bytes);
     }
 
     /// <summary>
-    /// What is written on the shape of <paramref name="node"/>: its name, then its size, marked where
-    /// the size is a lower bound (§7.1), as its row marks it.
+    /// What is written on the shape of <paramref name="node"/>: its name, its size marked where it is
+    /// a lower bound (§7.1), as its row marks it, and when it was last written.
     /// </summary>
-    public static string Label(ExploreTree tree, int node)
+    public static MapCaption Caption(ExploreTree tree, int node)
     {
         ArgumentNullException.ThrowIfNull(tree);
 
-        return Labelled(tree.NameOf(node), ExploreNodeText.Size(tree, node));
+        return new MapCaption(
+            tree.NameOf(node),
+            ExploreNodeText.Size(tree, node),
+            tree.SizeOf(node),
+            tree.ModifiedOf(node).Utc?.ToLocalTime());
     }
-
-    private static string Labelled(string name, string size) => $"{name}  {size}";
 
     /// <summary>
     /// <paramref name="bytes"/> as a share of <paramref name="ofBytes"/>, to the nearest percent:

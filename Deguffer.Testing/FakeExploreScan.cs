@@ -12,10 +12,13 @@ public sealed class FakeExploreScan
     private readonly TaskCompletionSource<ExploreScan> _result =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    internal FakeExploreScan(string root, IProgress<ExploreProgress>? progress, CancellationToken ct)
+    private readonly Func<ExploreChildOrder> _snapshotOrder;
+
+    internal FakeExploreScan(string root, IProgress<ExploreProgress>? progress, Func<ExploreChildOrder> snapshotOrder, CancellationToken ct)
     {
         Root = root;
         _progress = progress;
+        _snapshotOrder = snapshotOrder;
 
         ct.Register(() => _result.TrySetCanceled(ct));
     }
@@ -24,6 +27,9 @@ public sealed class FakeExploreScan
     public string Root { get; }
 
     internal Task<ExploreScan> Result => _result.Task;
+
+    /// <summary>The order the page asks for the next snapshot in, as a real scan asks as it takes one.</summary>
+    public ExploreChildOrder SnapshotOrder => _snapshotOrder();
 
     /// <summary>Report running counts, and a snapshot where one is given, as a walk does on its clock.</summary>
     public void Report(ExploreProgress progress) => _progress?.Report(progress);

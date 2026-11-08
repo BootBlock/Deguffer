@@ -360,7 +360,7 @@ public sealed partial class ExplorePage : Page
                 ViewModel.CurrentNode,
                 ViewModel.SelectedView,
                 _ => ShapeColours.ForReplay(frame),
-                frame.Label,
+                frame.Caption,
                 ViewModel.Look,
                 frame.Replay.VolumeAt(frame.Step, ViewModel.VolumeBeside));
 

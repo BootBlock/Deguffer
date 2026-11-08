@@ -20,9 +20,9 @@ namespace Deguffer.Core.Providers;
 /// <para><b>Tier 3, not Tier 2 beside <c>Windows.old</c>.</b> What Windows keeps here is, by its own
 /// description, whatever it could not place, which is the one part of an upgrade most likely to be
 /// somebody's own files, and the copy here may be the only one. Nothing re-creates it, and §3 puts
-/// anything whose loss is permanent in Tier 3. So it is its own row, never pre-selected, and confirmed
-/// as a permanent loss, where a fourth row in the Tier 2 provider would have offered it on that
-/// provider's terms.</para>
+/// anything whose loss is permanent in Tier 3. So it is its own row, never pre-selected, and named as a
+/// permanent loss, where a fourth row in the Tier 2 provider would have offered it on that provider's
+/// terms.</para>
 ///
 /// <para>Removed through the handler, and only once the upgrade can no longer be undone and no update
 /// is unfinished, for the reasons <see cref="SetupCleanupProviderBase"/> gives: the uninstall window is

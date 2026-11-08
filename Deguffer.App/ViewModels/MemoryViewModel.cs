@@ -253,8 +253,8 @@ public sealed partial class MemoryViewModel : ObservableObject, IMapNavigator, I
     public void Hover(ExploreHit? hit) => Readout = MapReadout.For(Tree, hit, this);
 
     /// <summary>What to write on a shape of the tree on screen.</summary>
-    public string LabelFor(int node) =>
-        Tree is { } tree && tree.Holds(node) ? MemoryText.Label(tree, node) : string.Empty;
+    public MapCaption CaptionFor(int node) =>
+        Tree is { } tree && tree.Holds(node) ? MemoryText.Caption(tree, node) : MapCaption.None;
 
     /// <summary>
     /// Take a new reading: keep the reader where they were, and rebuild everything on screen from it.

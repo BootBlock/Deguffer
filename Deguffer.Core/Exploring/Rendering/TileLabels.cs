@@ -22,6 +22,10 @@ namespace Deguffer.Core.Exploring.Rendering;
 /// small to read. So a folder whose band runs off the left is named where the band comes on, and
 /// a band that is off the canvas altogether is not named.</para>
 /// </summary>
+/// <param name="lettering">
+/// How the text is set: a name at the top left of its shape, or under <see cref="MapLettering.Classic"/>
+/// as many lines of it as the shape has room for, in its middle.
+/// </param>
 /// <param name="maximumLabels">How many shapes to name inside at most: see <see cref="ExploreSurface.MaximumLabels"/>.</param>
 /// <param name="textColourOf">The colour a shape's name is drawn in, which is its drawing's to say.</param>
 internal sealed class TileLabels(
@@ -32,6 +36,7 @@ internal sealed class TileLabels(
     int height,
     LayoutLimits limits,
     bool shapeNames,
+    MapLettering lettering,
     int maximumLabels,
     Func<ExploreTile, TileColour> textColourOf)
 {
@@ -149,7 +154,8 @@ internal sealed class TileLabels(
     /// <summary>
     /// A folder's name, centred in its band, which is one line of text with the gap shared above and
     /// below it. Along the band from where it comes on the canvas, and down from the band's own top,
-    /// which moves with the folder as a zoom scrolls it away.
+    /// which moves with the folder as a zoom scrolls it away. The line stays one line high as a zoom
+    /// grows the band, so it is centred on the band's middle rather than carried at a fraction of it.
     /// </summary>
     private ExploreLabel HeaderLabel(Named named)
     {
@@ -164,13 +170,37 @@ internal sealed class TileLabels(
             Centred: false,
             textColourOf(tile),
             tile.Bytes,
-            new LabelRoom(tile.X, tile.Y, tile.X + tile.Width, tile.Y + tile.Header));
+            new LabelRoom(tile.X, tile.Y, tile.X + tile.Width, tile.Y + tile.Header),
+            new LabelAxis(tile.X, tile.X + tile.Width, limits.LabelPadding, Centred: false, KeptOnCanvas: true),
+            new LabelAxis(tile.Y, tile.Y + tile.Header, -limits.MinimumLabelHeight / 2, Centred: true, KeptOnCanvas: false));
     }
 
-    /// <summary>A shape's name, at the top left of the part of it on the canvas.</summary>
+    /// <summary>
+    /// A shape's name, at the top left of the part of it on the canvas, or under
+    /// <see cref="MapLettering.Classic"/> in the middle of that part, with as many of its lines as fit
+    /// down it, up to three.
+    /// </summary>
     private ExploreLabel InsideLabel(Named named)
     {
         var (tile, shown) = named;
+
+        if (lettering == MapLettering.Classic)
+        {
+            return new ExploreLabel(
+                tile.Node,
+                shown.X + limits.LabelPadding,
+                shown.Y + (shown.Height / 2),
+                shown.Width - (limits.LabelPadding * 2),
+                Rotation: 0,
+                Centred: true,
+                textColourOf(tile),
+                tile.Bytes,
+                new LabelRoom(tile.X, tile.Y, tile.X + tile.Width, tile.Y + tile.Height),
+                new LabelAxis(tile.X, tile.X + tile.Width, 0, Centred: true, KeptOnCanvas: true),
+                new LabelAxis(tile.Y, tile.Y + tile.Height, 0, Centred: true, KeptOnCanvas: true),
+                Middle: true,
+                Lines: Math.Clamp((int)(shown.Height / limits.LineSpacing), 1, ExploreLabel.MostLines));
+        }
 
         return new ExploreLabel(
             tile.Node,
@@ -181,7 +211,9 @@ internal sealed class TileLabels(
             Centred: false,
             textColourOf(tile),
             tile.Bytes,
-            new LabelRoom(tile.X, tile.Y, tile.X + tile.Width, tile.Y + tile.Height));
+            new LabelRoom(tile.X, tile.Y, tile.X + tile.Width, tile.Y + tile.Height),
+            new LabelAxis(tile.X, tile.X + tile.Width, limits.LabelPadding, Centred: false, KeptOnCanvas: true),
+            new LabelAxis(tile.Y, tile.Y + tile.Height, limits.LabelPadding / 2, Centred: false, KeptOnCanvas: true));
     }
 
     /// <summary>Keeps at most <paramref name="count"/> of <paramref name="named"/>, largest shape on the canvas first.</summary>

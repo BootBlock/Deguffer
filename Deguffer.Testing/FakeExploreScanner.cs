@@ -19,9 +19,10 @@ public sealed class FakeExploreScanner : IExploreScanner
     public ValueTask<ExploreScan> ScanAsync(
         string root,
         IProgress<ExploreProgress>? progress = null,
+        Func<ExploreChildOrder>? snapshotOrder = null,
         CancellationToken ct = default)
     {
-        var scan = new FakeExploreScan(root, progress, ct);
+        var scan = new FakeExploreScan(root, progress, snapshotOrder ?? (static () => ExploreChildOrder.ByName), ct);
         _scans.Add(scan);
 
         return new ValueTask<ExploreScan>(scan.Result);

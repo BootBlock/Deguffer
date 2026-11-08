@@ -45,14 +45,11 @@ internal readonly struct CushionConstants
     /// <summary>How far a folder's line is mixed towards the tone, out of <see cref="ShapeFinish.Whole"/>.</summary>
     public readonly uint FolderLine;
 
-    /// <summary>How many pixels wide the bevel is.</summary>
+    /// <summary>How many pixels wide the bevel is. Its colours are each quad's own (<see cref="CushionQuad.Lit"/>).</summary>
     public readonly float BevelWidth;
 
-    /// <summary>How far the bevel's lit side is mixed towards white, out of <see cref="ShapeFinish.Whole"/>.</summary>
-    public readonly uint BevelHighlight;
-
-    /// <summary>How far the bevel's shaded side is mixed towards black, out of <see cref="ShapeFinish.Whole"/>.</summary>
-    public readonly uint BevelShadow;
+    /// <summary>1 where shapes side by side share one line (<see cref="ShapeBorders.Shared"/>), and 0 where each draws its own.</summary>
+    public readonly uint SharedLines;
 
     /// <summary>How far a sheen's light falls from a quad's top row to its middle (<see cref="GradientShading.SlopeAt"/>).</summary>
     public readonly uint SheenSlope;
@@ -78,8 +75,7 @@ internal readonly struct CushionConstants
         BlockLine = (uint)finish.Borders.Blocks;
         FolderLine = (uint)finish.Borders.Folders;
         BevelWidth = finish.Bevel.Width;
-        BevelHighlight = (uint)finish.Bevel.Highlight;
-        BevelShadow = (uint)finish.Bevel.Shadow;
+        SharedLines = finish.Borders.Shared ? 1u : 0u;
         SheenSlope = (uint)GradientShading.SlopeAt(finish.Relief);
     }
 }

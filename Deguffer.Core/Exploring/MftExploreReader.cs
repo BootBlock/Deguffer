@@ -71,9 +71,9 @@ internal static class MftExploreReader
     /// Told how many records have been dealt with, as <see cref="MftRecordStream.TryReadAll"/>
     /// describes, out of the table's record count, and now and then the tree so far.
     /// </param>
-    /// <param name="assembleSnapshot">
-    /// How a snapshot is assembled (<see cref="ScanSnapshots.InBackground"/> for a scan), or null to
-    /// take none, as for a caller that draws nothing until the read ends. See
+    /// <param name="snapshotAssembly">
+    /// How a snapshot is made, or null to take none, as for a caller that draws nothing until the
+    /// read ends. See
     /// <see cref="ScanSnapshots"/> for when one is taken, and <see cref="Snapshot"/> for what it holds.
     /// </param>
     /// <param name="clock">What the snapshots' cadence is measured by. The system's where null.</param>
@@ -89,7 +89,7 @@ internal static class MftExploreReader
         TableTuning tuning,
         IProgress<ExploreProgress>? progress,
         CancellationToken ct,
-        Func<Action, Task>? assembleSnapshot = null,
+        SnapshotAssembly? snapshotAssembly = null,
         TimeProvider? clock = null,
         MftStageTimings? timings = null)
     {
@@ -117,11 +117,11 @@ internal static class MftExploreReader
 
         // Nothing is taken on the reporting thread, which is a parse thread holding its slot: the
         // copy of the columns is the assembling's, away from the read.
-        var snapshots = progress is not null && assembleSnapshot is not null
+        var snapshots = progress is not null && snapshotAssembly is not null
             ? new ScanSnapshots(
-                () => stopped => Snapshot(columns, names, rootPath, components, count, stopped),
+                order => stopped => Snapshot(columns, names, rootPath, components, count, order, stopped),
                 clock ?? TimeProvider.System,
-                assembleSnapshot)
+                snapshotAssembly)
             : null;
 
         bool couldNotReadWholeTable;
@@ -251,7 +251,7 @@ internal static class MftExploreReader
             rootPath,
             components,
             count,
-            new MftExploreRooting.AssembledAs(ExploreChildOrder.BySize, LowerBound: couldNotReadWholeTable || sawUnreadableRecord, MatchCaseOnly: false),
+            new MftExploreRooting.AssembledAs(ExploreChildOrder.BySize, LowerBound: couldNotReadWholeTable || sawUnreadableRecord, MatchCaseOnly: false, Snapshot: false),
             ct);
         timings?.End(MftBuildStage.TreeAssembly);
 
@@ -276,9 +276,9 @@ internal static class MftExploreReader
     /// "at least". A hard link's other names are placed only once the read ends, so a snapshot draws
     /// a file under the name its record was placed by and no other.</para>
     ///
-    /// <para><b>Ordered by name</b>, as the walk's snapshots are, so a folder that grows widens where
-    /// it is rather than overtaking its siblings (<see cref="ScanSnapshots.Interval"/>). Nothing that
-    /// decides a removal reads one: <see cref="ExploreGate"/> holds the page's actions while a scan
+    /// <para><b>Ordered as it was asked for</b>, as the walk's snapshots are: by name where the view
+    /// allows it, so a folder that grows widens where it is rather than overtaking its siblings
+    /// (<see cref="ScanSnapshots.Interval"/>). Nothing that decides a removal reads one: <see cref="ExploreGate"/> holds the page's actions while a scan
     /// runs, and the finished tree replaces the last snapshot.</para>
     /// </summary>
     private static ExploreTree? Snapshot(
@@ -287,6 +287,7 @@ internal static class MftExploreReader
         string rootPath,
         IReadOnlyList<string> components,
         int records,
+        ExploreChildOrder order,
         CancellationToken stopped)
     {
         var copy = columns.CopyPresent(stopped);
@@ -304,7 +305,7 @@ internal static class MftExploreReader
             rootPath,
             components,
             records,
-            new MftExploreRooting.AssembledAs(ExploreChildOrder.ByName, LowerBound: true, MatchCaseOnly: true),
+            new MftExploreRooting.AssembledAs(order, LowerBound: true, MatchCaseOnly: true, Snapshot: true),
             stopped).Tree;
     }
 }

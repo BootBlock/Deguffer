@@ -19,7 +19,7 @@ internal delegate bool LeavesFolderUnlisted(ReadOnlySpan<char> name);
 
 /// <summary>
 /// A walk of <paramref name="root"/> into a tree, as
-/// <see cref="WalkExploreReader.Read(string, ScanTuner, IOccupancyProbe, IProgress{ExploreProgress}?, TimeProvider, CancellationToken, LeavesUnlisted?, Func{Action, Task}?)"/>
+/// <see cref="WalkExploreReader.Read(string, ScanTuner, IOccupancyProbe, IProgress{ExploreProgress}?, TimeProvider, CancellationToken, LeavesUnlisted?, SnapshotAssembly?)"/>
 /// does it.
 /// </summary>
 internal delegate ExploreTree ExploreWalk(
@@ -30,7 +30,7 @@ internal delegate ExploreTree ExploreWalk(
     TimeProvider clock,
     CancellationToken ct,
     LeavesUnlisted? unlisted,
-    Func<Action, Task>? assembleSnapshot);
+    SnapshotAssembly? snapshotAssembly);
 
 /// <summary>
 /// Builds an <see cref="ExploreTree"/> by walking directories — §5.5's guaranteed route, the one
@@ -50,17 +50,17 @@ internal static class WalkExploreReader
     /// <see cref="BoundedFileWalk.ProgressInterval"/> of <paramref name="clock"/>, which is the
     /// cadence §5.5 wants for a UI: coarse enough to be worth marshalling and frequent enough that a
     /// large scan does not look stalled. It is never told beside itself, and never after this
-    /// returns. Some reports also carry a snapshot, where <paramref name="assembleSnapshot"/> says
-    /// how to assemble one: see <see cref="ScanSnapshots"/> for when.
+    /// returns. Some reports also carry a snapshot, where <paramref name="snapshotAssembly"/> says
+    /// how to make one: see <see cref="ScanSnapshots"/> for when.
     /// </summary>
     /// <param name="unlisted">
     /// The folders not to list, or null to list every one. A folder left unlisted is still in the
     /// tree, with nothing below it, so a caller going through the tree meets it and can name it; and
     /// it is never marked as refused, because nothing asked Windows for its listing.
     /// </param>
-    /// <param name="assembleSnapshot">
-    /// How a snapshot is assembled (<see cref="ScanSnapshots.InBackground"/> for a scan), or null to
-    /// take none, for a caller that draws nothing until the walk is over.
+    /// <param name="snapshotAssembly">
+    /// How a snapshot is made, or null to take none, for a caller that draws nothing until the walk
+    /// is over.
     /// </param>
     public static ExploreTree Read(
         string root,
@@ -70,11 +70,11 @@ internal static class WalkExploreReader
         TimeProvider clock,
         CancellationToken ct,
         LeavesUnlisted? unlisted = null,
-        Func<Action, Task>? assembleSnapshot = null) =>
-        Read(root, tuning.For(LongPath.Extended(root)).Walk, probe, progress, clock, ct, unlisted, assembleSnapshot);
+        SnapshotAssembly? snapshotAssembly = null) =>
+        Read(root, tuning.For(LongPath.Extended(root)).Walk, probe, progress, clock, ct, unlisted, snapshotAssembly);
 
     /// <summary>
-    /// <see cref="Read(string, ScanTuner, IOccupancyProbe, IProgress{ExploreProgress}?, TimeProvider, CancellationToken, LeavesUnlisted?, Func{Action, Task}?)"/>
+    /// <see cref="Read(string, ScanTuner, IOccupancyProbe, IProgress{ExploreProgress}?, TimeProvider, CancellationToken, LeavesUnlisted?, SnapshotAssembly?)"/>
     /// with the walk's values given rather than resolved for the drive, for a benchmark that sets
     /// them itself.
     /// </summary>
@@ -86,8 +86,8 @@ internal static class WalkExploreReader
         TimeProvider clock,
         CancellationToken ct,
         LeavesUnlisted? unlisted = null,
-        Func<Action, Task>? assembleSnapshot = null) =>
-        Read(root, tuning, DirectoryQuery.List, probe, progress, clock, ct, unlisted, assembleSnapshot);
+        SnapshotAssembly? snapshotAssembly = null) =>
+        Read(root, tuning, DirectoryQuery.List, probe, progress, clock, ct, unlisted, snapshotAssembly);
 
     /// <summary>
     /// The walk above, listing each directory through <paramref name="list"/> rather than from the
@@ -102,7 +102,7 @@ internal static class WalkExploreReader
         TimeProvider clock,
         CancellationToken ct,
         LeavesUnlisted? unlisted = null,
-        Func<Action, Task>? assembleSnapshot = null)
+        SnapshotAssembly? snapshotAssembly = null)
     {
         // §6.3: the walk is given the extended-length form, and .NET builds every child path from
         // the parent it was handed — so the whole traversal stays past MAX_PATH. The tree keeps the
@@ -117,8 +117,15 @@ internal static class WalkExploreReader
         long items = 0;
         long bytes = 0;
 
-        var snapshots = progress is not null && assembleSnapshot is not null
-            ? new ScanSnapshots(() => builder.Capture().Snapshot, clock, assembleSnapshot)
+        var snapshots = progress is not null && snapshotAssembly is not null
+            ? new ScanSnapshots(
+                order =>
+                {
+                    var captured = builder.Capture();
+                    return stopped => captured.Snapshot(order, stopped);
+                },
+                clock,
+                snapshotAssembly)
             : null;
 
         try

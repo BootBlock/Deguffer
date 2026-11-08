@@ -57,6 +57,7 @@ public sealed class ExploreScanner(
     public async ValueTask<ExploreScan> ScanAsync(
         string root,
         IProgress<ExploreProgress>? progress = null,
+        Func<ExploreChildOrder>? snapshotOrder = null,
         CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(root);
@@ -65,7 +66,7 @@ public sealed class ExploreScanner(
         // walk enumerates before its first yield. On the caller's thread that is a frozen window
         // for the length of the scan, which is the one thing §5.5 asks a scanner not to be. On a pool
         // thread it is a thread held for as long, which the pool has too few of (WorkerThreads).
-        return await WorkerThreads.Shared.RunAsync(() => Scan(root, progress, ct), ct).ConfigureAwait(false);
+        return await WorkerThreads.Shared.RunAsync(() => Scan(root, progress, snapshotOrder, ct), ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -252,7 +253,7 @@ public sealed class ExploreScanner(
         {
             // No snapshots: what asks for several folders draws nothing until they are all read, and
             // a snapshot nobody draws is a pass over the tree for nothing.
-            var walked = Walk(folders[index], reason, sum?.Pass(), assembleSnapshot: null, ct, unlisted?[index]);
+            var walked = Walk(folders[index], reason, sum?.Pass(), snapshots: null, ct, unlisted?[index]);
             scans[index] = new ScannedFolder(
                 walked.Tree, walked.Tree.RootNode, walked.Strategy, walked.Fallback, FromIncompleteTable: false);
         }
@@ -282,7 +283,7 @@ public sealed class ExploreScanner(
             {
                 var top = new VolumePath(letter, [], $"{letter}:{Path.DirectorySeparatorChar}");
                 // No snapshots, for the reason the walks below take none.
-                var read = Read(source, top, _tuning.ForVolume(letter).Table, progress, assembleSnapshot: null, ct);
+                var read = Read(source, top, _tuning.ForVolume(letter).Table, progress, snapshots: null, ct);
 
                 return (read.Tree, read.Reason, read.EveryRecordRead);
             }
@@ -295,11 +296,17 @@ public sealed class ExploreScanner(
         }
     }
 
-    private ExploreScan Scan(string root, IProgress<ExploreProgress>? progress, CancellationToken ct)
+    private ExploreScan Scan(
+        string root,
+        IProgress<ExploreProgress>? progress,
+        Func<ExploreChildOrder>? snapshotOrder,
+        CancellationToken ct)
     {
+        var snapshots = new SnapshotAssembly(AssembleSnapshot, snapshotOrder ?? SnapshotAssembly.ByName.Order);
+
         if (!VolumePath.TryParse(root, out var volume))
         {
-            return Walk(root, FallbackReason.VolumeNotAddressable, progress, AssembleSnapshot, ct);
+            return Walk(root, FallbackReason.VolumeNotAddressable, progress, snapshots, ct);
         }
 
         // Each scan is a look at the machine of its own, so a drive attached since the last one is
@@ -308,20 +315,20 @@ public sealed class ExploreScanner(
 
         if (_tuning.WalkOnly)
         {
-            return Walk(root, FallbackReason.WalkChosen, progress, AssembleSnapshot, ct);
+            return Walk(root, FallbackReason.WalkChosen, progress, snapshots, ct);
         }
 
         var source = _sources.TryOpenTable(volume.DriveLetter, out var reason);
         if (source is null)
         {
-            return Walk(root, reason, progress, AssembleSnapshot, ct);
+            return Walk(root, reason, progress, snapshots, ct);
         }
 
         using (source)
         {
             try
             {
-                var read = Read(source, volume, _tuning.ForVolume(volume.DriveLetter).Table, progress, AssembleSnapshot, ct);
+                var read = Read(source, volume, _tuning.ForVolume(volume.DriveLetter).Table, progress, snapshots, ct);
 
                 if (read.Tree is { } tree)
                 {
@@ -345,7 +352,7 @@ public sealed class ExploreScanner(
 
         // Outside the using deliberately. The walk can run for minutes on a full drive, and holding
         // a raw volume handle open across it serves nothing once the table has been given up on.
-        return Walk(root, reason, progress, AssembleSnapshot, ct);
+        return Walk(root, reason, progress, snapshots, ct);
     }
 
     private MftExploreRead Read(
@@ -353,7 +360,7 @@ public sealed class ExploreScanner(
         VolumePath volume,
         TableTuning tuning,
         IProgress<ExploreProgress>? progress,
-        Func<Action, Task>? assembleSnapshot,
+        SnapshotAssembly? snapshots,
         CancellationToken ct) =>
         // Both halves come from the same parse. The tree names its root with the path the user
         // reads and locates that root by the components, so the two have to describe one location
@@ -361,18 +368,18 @@ public sealed class ExploreScanner(
         //
         // The scan's own clock, so the walk and the table space their snapshots alike.
         MftExploreReader.Read(
-            source, volume.FullPath, volume.Components, tuning, progress, ct, assembleSnapshot, _time);
+            source, volume.FullPath, volume.Components, tuning, progress, ct, snapshots, _time);
 
     private ExploreScan Walk(
         string root,
         FallbackReason reason,
         IProgress<ExploreProgress>? progress,
-        Func<Action, Task>? assembleSnapshot,
+        SnapshotAssembly? snapshots,
         CancellationToken ct,
         LeavesUnlisted? unlisted = null)
     {
         // The scan's own clock, so the walk's reports and its snapshots keep one time.
-        var tree = Walker(root, _tuning, _occupancy, progress, _time, ct, unlisted, assembleSnapshot);
+        var tree = Walker(root, _tuning, _occupancy, progress, _time, ct, unlisted, snapshots);
 
         return ExploreScan.Walked(tree, reason);
     }

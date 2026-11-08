@@ -13,7 +13,13 @@ public sealed class ExploreDisplayTests
     private static readonly ExploreTree Finished = Tree(ExploreChildOrder.BySize);
 
     /// <summary>A tree a running scan published, in name order, which no treemap or sunburst can be drawn from.</summary>
-    private static readonly ExploreTree Partial = Tree(ExploreChildOrder.ByName);
+    private static readonly ExploreTree Partial = Tree(ExploreChildOrder.ByName, snapshot: true);
+
+    /// <summary>A tree a running scan published by size, as it does while the treemap or the sunburst is on screen.</summary>
+    private static readonly ExploreTree PartialBySize = Tree(ExploreChildOrder.BySize, snapshot: true);
+
+    /// <summary>A tree ordered by name that no scan is still filling in.</summary>
+    private static readonly ExploreTree FinishedByName = Tree(ExploreChildOrder.ByName);
 
     /// <summary>
     /// The legend is on screen only where the colours are a scale, the picture is a map rather than a
@@ -104,20 +110,35 @@ public sealed class ExploreDisplayTests
     }
 
     /// <summary>
-    /// A partial tree is named for what it does to each view, and a finished one, or none, says
-    /// nothing.
+    /// A snapshot is named for what it does to each view, and a finished tree, or none, says
+    /// nothing, whatever order it is in.
     /// </summary>
     [Fact]
     public void ASubstitutedViewIsNamed()
     {
-        Assert.Contains("A treemap reorders every folder", Display(Partial, ExploreView.Treemap, ExploreColouring.Branch).Note);
-        Assert.Contains("A sunburst turns every wedge", Display(Partial, ExploreView.Sunburst, ExploreColouring.Branch).Note);
+        Assert.EndsWith("ordered by size for the treemap.", Display(Partial, ExploreView.Treemap, ExploreColouring.Branch).Note);
+        Assert.EndsWith("ordered by size for the sunburst.", Display(Partial, ExploreView.Sunburst, ExploreColouring.Branch).Note);
         Assert.StartsWith("The largest files found so far", Display(Partial, ExploreView.Files, ExploreColouring.Branch).Note);
         Assert.StartsWith("In name order while the scan runs", Display(Partial, ExploreView.List, ExploreColouring.Branch).Note);
         Assert.StartsWith("In name order while the scan runs", Display(Partial, ExploreView.Icicle, ExploreColouring.Branch).Note);
 
         Assert.Null(Display(Finished, ExploreView.Treemap, ExploreColouring.Branch).Note);
+        Assert.Null(Display(FinishedByName, ExploreView.List, ExploreColouring.Branch).Note);
         Assert.Null(Display(null, ExploreView.Treemap, ExploreColouring.Branch).Note);
+    }
+
+    /// <summary>
+    /// A snapshot that came by size, because the treemap or the sunburst was on screen, draws the view
+    /// asked for, so a picture says nothing about it. The Files layout still says a larger file may
+    /// turn up, and a list in size order has nothing to own up to.
+    /// </summary>
+    [Fact]
+    public void ASnapshotBySizeDrawsThePictureAskedFor()
+    {
+        Assert.Null(Display(PartialBySize, ExploreView.Treemap, ExploreColouring.Branch).Note);
+        Assert.Null(Display(PartialBySize, ExploreView.Sunburst, ExploreColouring.Branch).Note);
+        Assert.Null(Display(PartialBySize, ExploreView.List, ExploreColouring.Branch).Note);
+        Assert.StartsWith("The largest files found so far", Display(PartialBySize, ExploreView.Files, ExploreColouring.Branch).Note);
     }
 
     private static ExploreDisplay Display(
@@ -128,7 +149,7 @@ public sealed class ExploreDisplayTests
         MapLook? look = null) =>
         new(tree, view, colouring, look ?? MapLook.Default, inContrast);
 
-    private static ExploreTree Tree(ExploreChildOrder order)
+    private static ExploreTree Tree(ExploreChildOrder order, bool snapshot = false)
     {
         var builder = new ExploreTreeBuilder(@"C:\");
 
@@ -138,6 +159,6 @@ public sealed class ExploreDisplayTests
             new ExploreChild("a.bin", IsDirectory: false, IsLink: false, Size: 1_000),
         ]);
 
-        return builder.Build(order);
+        return snapshot ? builder.Snapshot(order) : builder.Build(order);
     }
 }
