@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Safety;
 
@@ -24,8 +25,11 @@ internal enum ByNameReading
     Refused,
 }
 
-/// <summary>Reads a file's link count and sizes by a path in the form it reaches Windows, with no handle.</summary>
-internal delegate ByNameReading StandardByNameReader(string extendedPath, out FileInformation.FileStandardInfo info);
+/// <summary>
+/// Reads a file's link count and sizes by its name, with no handle on the file, as
+/// <see cref="StatByName.Read"/> reads it.
+/// </summary>
+internal delegate ByNameReading StandardByNameReader(nint directory, ReadOnlySpan<char> name, out FileInformation.FileStandardInfo info);
 
 /// <summary>
 /// A file's link count, allocation size and length from <c>NtQueryInformationByName</c> with
@@ -64,14 +68,31 @@ internal static unsafe partial class StatByName
     private const int StatusInvalidDeviceRequest = unchecked((int)0xC000_0010);
     private const int StatusNotSupported = unchecked((int)0xC000_00BB);
 
-    /// <param name="extendedPath">The path in the extended form §6.3 requires.</param>
-    public static ByNameReading Read(string extendedPath, out FileInformation.FileStandardInfo info)
+    /// <summary>
+    /// The file called <paramref name="name"/>, named to Windows as <c>OBJECT_ATTRIBUTES</c> names it:
+    /// relative to <paramref name="directory"/>, or on its own where that is zero.
+    ///
+    /// <para>Relative to the directory a walk listed, the name is the file's bare name: no full path
+    /// is built for it, and Windows parses no folder on the way to it. The file read is the one in the
+    /// directory that was listed, even where that directory was moved and a junction put at its name
+    /// since. (Windows refuses to move a folder above a directory held open.)</para>
+    /// </summary>
+    /// <param name="directory">
+    /// A handle open on the directory holding the file (<see cref="DirectoryContents.Handle"/>), or
+    /// zero.
+    /// </param>
+    /// <param name="name">
+    /// The file's bare name in <paramref name="directory"/>, or, where that is zero, its full path in
+    /// the object manager's form (<see cref="LongPath.ObjectManagerForm"/>), which is §6.3's extended
+    /// form under the object manager's prefix.
+    /// </param>
+    public static ByNameReading Read(nint directory, ReadOnlySpan<char> name, out FileInformation.FileStandardInfo info)
     {
         info = default;
 
         // A name too long for the native string cannot be given, so the file is asked through a
         // handle instead, as it was before this route existed.
-        if (LongPath.ObjectManagerForm(extendedPath) is not { Length: <= UnicodeString.LongestName } name)
+        if (name.Length > UnicodeString.LongestName)
         {
             return ByNameReading.Refused;
         }
@@ -91,6 +112,7 @@ internal static unsafe partial class StatByName
             var attributes = new ObjectAttributes
             {
                 Length = (uint)sizeof(ObjectAttributes),
+                RootDirectory = directory,
                 ObjectName = &unicode,
                 Attributes = CaseInsensitive,
             };

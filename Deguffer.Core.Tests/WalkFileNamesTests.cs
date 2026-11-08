@@ -127,6 +127,7 @@ public sealed class WalkFileNamesTests : IDisposable
             [WalkRoot.Of(root, new ScanBounds(KeepRoot: false, LeftOut: [Path.Combine(root, "holder", "spared.bin")]))],
             new WalkTuning(1, WalkTuning.MinimumListingBuffer),
             FileNames.Stores,
+            DirectoryHold.None,
             (_, _, contents, leftOut) =>
             {
                 var folder = Path.GetFileName(contents.Directory);

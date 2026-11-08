@@ -36,12 +36,20 @@ namespace Deguffer.Core.Scanning;
 /// How the listing ended, and why Windows would not list the directory where it would not. What was
 /// listed before a listing failed part-way is still in the three lists.
 /// </param>
+/// <param name="Handle">
+/// A handle open on the directory listed, valid only while the callback runs, as the lists are: the
+/// walk closes it when the callback returns or throws. Zero where the walk did not ask for it
+/// (<see cref="DirectoryHold.DuringCallback"/>), where the directory could not be opened, and for a
+/// test's listing, which opens nothing. A caller reading a file by name relative to it falls back to
+/// the file's full path where it is zero.
+/// </param>
 internal readonly record struct DirectoryContents(
     string Directory,
     IReadOnlyList<WalkEntry> Entries,
     IReadOnlyList<WalkEntry> Links,
     IReadOnlyList<WalkEntry> ReparseFiles,
-    ListingEnd End)
+    ListingEnd End,
+    nint Handle = 0)
 {
     /// <summary>
     /// <see cref="PathPresence.Present"/> where the listing was read to the end,

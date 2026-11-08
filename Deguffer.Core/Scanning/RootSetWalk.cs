@@ -66,16 +66,18 @@ internal static class RootSetWalk
     /// Called as <see cref="BoundedFileWalk"/>'s progress is, and once more at the end of each further
     /// walk a nested root needs.
     /// </param>
+    /// <param name="hold">Whether each directory stays open while <paramref name="onDirectory"/> reads it.</param>
     public static void Visit<TFolder>(
         IReadOnlyList<WalkRoot> roots,
         WalkTuning tuning,
         FileNames files,
+        DirectoryHold hold,
         Func<int, TFolder?, DirectoryContents, IReadOnlySet<string>?, TFolder> onDirectory,
         Action onProgress,
         TimeProvider clock,
         CancellationToken ct)
         where TFolder : class =>
-        Visit(roots, tuning, files, DirectoryQuery.List, onDirectory, onProgress, clock, ct);
+        Visit(roots, tuning, files, hold, DirectoryQuery.List, onDirectory, onProgress, clock, ct);
 
     /// <summary>
     /// The walk above, listing each directory through <paramref name="list"/>: the seam a test lists a
@@ -85,6 +87,7 @@ internal static class RootSetWalk
         IReadOnlyList<WalkRoot> roots,
         WalkTuning tuning,
         FileNames files,
+        DirectoryHold hold,
         ListDirectory list,
         Func<int, TFolder?, DirectoryContents, IReadOnlySet<string>?, TFolder> onDirectory,
         Action onProgress,
@@ -103,6 +106,7 @@ internal static class RootSetWalk
                 round.Seeds,
                 tuning,
                 files,
+                hold,
                 list,
                 (Frame<TFolder>[] frames, DirectoryContents contents, Action<WalkEntry, Frame<TFolder>[]> descend) =>
                     Read(roots, round, frames, contents, descend, onDirectory),
