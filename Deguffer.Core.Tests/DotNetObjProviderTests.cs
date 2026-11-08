@@ -342,6 +342,83 @@ public sealed class DotNetObjProviderTests : IDisposable
     }
 
     /// <summary>
+    /// §5.2 and §5.6 with many candidates recognised at once, as a large source root has them. Each
+    /// way a directory is declined sits beside a recognised one, several times over: a tree copied for
+    /// backup whose manifest names the original, imports named after another project, a link at the
+    /// candidate, a link at its project, and art assets. Only the recognised go, every other one is
+    /// protected and survives the run, and the count the user reads is the whole of them.
+    ///
+    /// <para>Every candidate comes from the index, so each reaches recognition, link or not.</para>
+    /// </summary>
+    [Fact]
+    public async Task ManyCandidatesRecognisedAtOnceLeaveEveryDeclinedOneStanding()
+    {
+        const int Each = 6;
+
+        var root = ApproveRoot();
+        var recognised = new List<string>();
+        var declined = new List<string>();
+
+        for (var i = 0; i < Each; i++)
+        {
+            var original = Path.Combine(root, $"App{i}");
+            recognised.Add(ProjectFixture.CreateProject(original, $"App{i}"));
+
+            declined.Add(ProjectFixture.CreateProject(
+                Path.Combine(root, "backup", $"App{i}"), $"App{i}",
+                manifestProjectPath: Path.Combine(original, $"App{i}.csproj"),
+                writeProjectFile: false));
+
+            declined.Add(ProjectFixture.CreateProject(Path.Combine(root, $"Stem{i}"), $"Stem{i}", importStem: "Other.csproj"));
+
+            // Output that would be recognised for the project holding the link, were it not a link.
+            var linking = Path.Combine(root, $"Linking{i}");
+            var outside = ProjectFixture.CreateProject(
+                _temp.CreateDirectory($"outside{i}"), $"Linking{i}",
+                manifestProjectPath: Path.Combine(linking, $"Linking{i}.csproj"));
+            Directory.CreateDirectory(linking);
+            File.Copy(Path.Combine(Path.GetDirectoryName(outside)!, $"Linking{i}.csproj"), Path.Combine(linking, $"Linking{i}.csproj"));
+            Junction.ToDirectory(Path.Combine(linking, "obj"), outside);
+            declined.Add(Path.Combine(linking, "obj"));
+
+            // A project reached through a link, whose manifest names it by the linked path.
+            var linked = Path.Combine(root, $"Linked{i}");
+            ProjectFixture.CreateProject(
+                _temp.CreateDirectory($"real{i}"), $"Linked{i}",
+                manifestProjectPath: Path.Combine(linked, $"Linked{i}.csproj"));
+            Junction.ToDirectory(linked, Path.Combine(_temp.Path, $"real{i}"));
+            declined.Add(Path.Combine(linked, "obj"));
+
+            declined.Add(ProjectFixture.CreateArtAssets(Path.Combine(root, "game", $"pack{i}")));
+        }
+
+        var provider = CreateProvider(new FakeDirectoryScanner([.. recognised, .. declined]));
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(
+            recognised.Order(StringComparer.OrdinalIgnoreCase),
+            plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase),
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var path in declined)
+        {
+            Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
+        }
+
+        Assert.Contains(plan.Notes, n => n.Message.StartsWith(
+            $"Left {declined.Count} directories named 'obj' alone because they could not be confirmed",
+            StringComparison.Ordinal));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Succeeded);
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+        Assert.All(recognised, obj => Assert.False(Directory.Exists(obj)));
+        Assert.All(declined, obj => Assert.True(Directory.Exists(obj), $"{obj} was removed."));
+        Assert.All(declined, obj => Assert.NotEmpty(Directory.EnumerateFileSystemEntries(obj)));
+    }
+
+    /// <summary>
     /// An old-style project's <c>obj</c> is offered under its project's name, as an SDK-style one is,
     /// and its §5.6 negative holds after a real run: the project file, <c>packages.config</c>, the
     /// source, <c>bin</c> and an unrecognised <c>obj</c> beside it are all still standing.

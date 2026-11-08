@@ -131,6 +131,7 @@ public sealed class NxWorkspaceCacheProvider : CleanupProviderBase
             _discovery,
             ApprovedRoots,
             DirectoryNames,
+            Scanner.Tuning,
             candidate => NxWorkspaceFolder.TryRecognise(candidate)?.Workspace,
             Questions,
             ct);
@@ -158,17 +159,18 @@ public sealed class NxWorkspaceCacheProvider : CleanupProviderBase
         var recognised = new List<NxWorkspaceFolder>();
         var declined = new List<string>();
 
-        foreach (var candidate in discovered.Named(DirectoryNames))
-        {
-            ct.ThrowIfCancellationRequested();
+        var candidates = discovered.Named(DirectoryNames);
+        var folders = await DiskBoundWork.EachAsync(candidates, Scanner.Tuning, NxWorkspaceFolder.TryRecognise, ct).ConfigureAwait(false);
 
-            if (NxWorkspaceFolder.TryRecognise(candidate) is { } folder)
+        for (var index = 0; index < candidates.Count; index++)
+        {
+            if (folders[index] is { } folder)
             {
                 recognised.Add(folder);
             }
             else
             {
-                declined.Add(candidate);
+                declined.Add(candidates[index]);
             }
         }
 
