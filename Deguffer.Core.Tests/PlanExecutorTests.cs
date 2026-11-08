@@ -653,7 +653,7 @@ public sealed class PlanExecutorTests : IDisposable
         var step = new DeleteDirectoryStep(output, "Output") { IndexedBy = [index] };
 
         var gathered = await GatheredRemoval.TakeAsync(step.IndexedBy, MinimumAge.Off, WindowsFileSystem.Default, TimeProvider.System, default);
-        var removal = await IndexRemoval.RemoveAsync(step, gathered, RefusalLog, new RunResidue(), WindowsFileSystem.Default, TimeProvider.System, default);
+        var removal = await IndexRemoval.RemoveAsync(step, gathered, RefusalLog, new RunResidue(), WindowsFileSystem.Default, TimeProvider.System, new ThreadAllowance(DirectoryRemover.MostAtOnce), default);
 
         Assert.False(removal.Complete);
         Assert.True(removal.NotADirectory);
@@ -991,6 +991,10 @@ public sealed class PlanExecutorTests : IDisposable
     /// Steps share the bar by what each will free, the same rule the planner applies to whole
     /// plans. One <c>obj</c> of 4 GB beside five of 20 MB is six steps, and an equal split would
     /// crawl through the first sixth of the bar and then jump the rest of it.
+    ///
+    /// <para>The two folders are apart, so they are removed at once and either may end first. The bar
+    /// then stands at the weight of whichever did, nine tenths or one tenth, and never at the half an
+    /// equal split would give.</para>
     /// </summary>
     [Fact]
     public async Task WeightsTheBarByWhatEachStepFreesRatherThanByHowManyThereAre()
@@ -1018,7 +1022,11 @@ public sealed class PlanExecutorTests : IDisposable
         await new PlanExecutor(new FakeProcessRunner(), new FakeDirectoryScanner(), RefusalLog)
             .ExecuteAsync(plan, runReach: null, residue: null, progress, underway: null, default);
 
-        Assert.Equal([0.9, 1.0], progress.Reports.Select(r => Math.Round(r, 6)).Distinct());
+        var reports = progress.Reports.Select(r => Math.Round(r, 6)).Distinct().ToList();
+
+        Assert.Equal(1.0, reports[^1]);
+        Assert.Contains(reports, r => r is 0.9 or 0.1);
+        Assert.All(reports, r => Assert.Contains(r, (double[])[0.0, 0.1, 0.9, 1.0]));
     }
 
     /// <summary>

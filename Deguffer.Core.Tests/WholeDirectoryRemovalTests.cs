@@ -280,6 +280,7 @@ public sealed class WholeDirectoryRemovalTests : IDisposable
             progress: null,
             fs,
             TimeProvider.System,
+            new ThreadAllowance(DirectoryRemover.MostAtOnce),
             cts.Token);
 
         Assert.True(outcome.Interrupted);

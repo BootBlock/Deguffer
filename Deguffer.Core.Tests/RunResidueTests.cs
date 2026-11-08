@@ -43,6 +43,34 @@ public sealed class RunResidueTests
         Assert.False(residue.LeftAlone(Scratch, $@"{Scratch}\kitprobe"));
     }
 
+    /// <summary>
+    /// The steps of a plan that are apart record their removals at once, from threads of their own.
+    /// Nothing any of them recorded is lost, which an unguarded set loses or corrupts under writers
+    /// racing for it.
+    /// </summary>
+    [Fact]
+    public void RemovalsRecordedAtOnceAreAllKept()
+    {
+        const int Removals = 64;
+        const int Folders = 200;
+        var residue = new RunResidue();
+
+        Parallel.For(0, Removals, new ParallelOptions { MaxDegreeOfParallelism = 16 }, removal =>
+        {
+            // Every removal shares one root, so every writer adds to the same set.
+            residue.Record(Scratch, [.. Enumerable.Range(0, Folders).Select(folder => $@"{Scratch}\r{removal}\f{folder}")]);
+            residue.RecordLeftAlone(Scratch, [$@"{Scratch}\kept"]);
+        });
+
+        Assert.All(
+            Enumerable.Range(0, Removals),
+            removal => Assert.All(
+                Enumerable.Range(0, Folders),
+                folder => Assert.True(residue.Entered($@"{Scratch}\r{removal}\f{folder}"), $@"r{removal}\f{folder} was lost")));
+        Assert.True(residue.LeftAlone(Scratch, $@"{Scratch}\kept\file.txt"));
+        Assert.Equal([Scratch], residue.EnteredRoots);
+    }
+
     [Fact]
     public void EveryFolderBetweenWhatStayedAndTheRootWasEntered()
     {

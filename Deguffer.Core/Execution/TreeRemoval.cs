@@ -20,11 +20,16 @@ namespace Deguffer.Core.Execution;
 /// most <see cref="DirectoryRemover.MostAtOnce"/> threads, the thread that runs the walk joining it
 /// once the walk is over. No folder is tried while anything inside it is still to be tried: see
 /// <see cref="RemovalFolder"/>.</para>
+///
+/// <para><b>And one bound for every removal that runs beside it.</b> Each thread that deletes holds a
+/// place in a <see cref="ThreadAllowance"/> while it does, the walk's thread only once the walk is over,
+/// so removals that run at once share the bound rather than each taking it whole.</para>
 /// </summary>
 internal sealed class TreeRemoval
 {
     private readonly ConcurrentQueue<Work> _queue = new();
     private readonly WorkerCrew _crew;
+    private readonly ThreadAllowance _deletions;
     private readonly RemovalBounds _bounds;
     private readonly RemovalProgress _progress;
     private readonly IFileSystem _fs;
@@ -55,9 +60,11 @@ internal sealed class TreeRemoval
         RemovalProgress progress,
         IFileSystem fs,
         TimeProvider time,
+        ThreadAllowance deletions,
         CancellationToken ct)
     {
         _time = time;
+        _deletions = deletions;
         _files = new PassSpan(time);
         _folders = new PassSpan(time);
         _tally = new RemovalTally(root);
@@ -68,7 +75,7 @@ internal sealed class TreeRemoval
         _stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
         Action drain = Drain;
-        _crew = new WorkerCrew(DirectoryRemover.MostAtOnce, () => drain, () => !Stopping && !_queue.IsEmpty);
+        _crew = new WorkerCrew(DirectoryRemover.MostAtOnce, () => drain, () => !Stopping && !_queue.IsEmpty, deletions);
         _readyToLook = () => !_queue.IsEmpty || Stopping || Volatile.Read(ref _pending) == 0;
     }
 
@@ -90,6 +97,7 @@ internal sealed class TreeRemoval
     /// The walk that gathered a tree handed over from what it gathered, which is the removal's walk
     /// pass. Null where <paramref name="walk"/> lists the tree, which is then timed as the walk.
     /// </param>
+    /// <param name="deletions">Where each thread that deletes takes its place, shared with every removal beside this one.</param>
     public static RemovalOutcome Run(
         RemovalFolder root,
         RemovalBounds bounds,
@@ -99,9 +107,10 @@ internal sealed class TreeRemoval
         IFileSystem fs,
         TimeProvider time,
         PassTiming? gathered,
+        ThreadAllowance deletions,
         CancellationToken ct)
     {
-        var removal = new TreeRemoval(root.FoundAs, bounds, new RemovalProgress(progress, planned), fs, time, ct);
+        var removal = new TreeRemoval(root.FoundAs, bounds, new RemovalProgress(progress, planned), fs, time, deletions, ct);
 
         try
         {
@@ -139,17 +148,18 @@ internal sealed class TreeRemoval
 
         var walkTook = gathered ?? new PassTiming(_time.GetElapsedTime(walkStarted), Interlocked.Read(ref _walked));
 
-        // The walk is over, so this thread joins the crew until the last of the work is done.
-        while (walked && !Stopping)
+        // The walk is over, so this thread joins the crew until the last of the work is done, once it
+        // holds a place of its own. False where the removal is cancelled while it waits for one.
+        if (walked && !Stopping && _deletions.Take(_ct))
         {
-            Drain();
-
-            if (Volatile.Read(ref _pending) == 0)
+            try
             {
-                break;
+                DrainToTheEnd();
             }
-
-            _crew.WaitUnless(_readyToLook);
+            finally
+            {
+                _deletions.Return();
+            }
         }
 
         _crew.Finish();
@@ -164,6 +174,27 @@ internal sealed class TreeRemoval
         {
             Passes = new RemovalPasses(walkTook, _files.Timing, _folders.Timing),
         };
+    }
+
+    /// <summary>
+    /// Take queued work on the thread that ran the walk until none is left or the removal is stopping.
+    /// A place another removal gave back since a helper last failed to start is taken here too, because
+    /// nothing else asks for one once the walk has stopped handing over work.
+    /// </summary>
+    private void DrainToTheEnd()
+    {
+        while (!Stopping)
+        {
+            StartHelpers(int.MaxValue);
+            Drain();
+
+            if (Volatile.Read(ref _pending) == 0)
+            {
+                return;
+            }
+
+            _crew.WaitUnless(_readyToLook);
+        }
     }
 
     /// <summary>

@@ -61,6 +61,54 @@ public sealed class WorkerCrewTests
     }
 
     /// <summary>
+    /// Two crews sharing an allowance have no more helpers at work between them than it holds, however
+    /// much their own bounds allow, and each helper gives its place back as it ends.
+    /// </summary>
+    [Fact]
+    public void CrewsSharingAnAllowanceHaveNoMoreHelpersAtWorkThanItHolds()
+    {
+        const int Places = 5;
+        var allowance = new ThreadAllowance(Places);
+        using var released = new ManualResetEventSlim();
+        using var atWork = new CountdownEvent(Places);
+
+        WorkerCrew Crew() => new(
+            64,
+            () => () =>
+            {
+                atWork.Signal();
+                released.Wait();
+            },
+            () => !released.IsSet,
+            allowance);
+
+        var first = Crew();
+        var second = Crew();
+
+        var started = 0;
+        for (var attempt = 0; attempt < 64; attempt++)
+        {
+            started += (first.TryStartHelper() ? 1 : 0) + (second.TryStartHelper() ? 1 : 0);
+        }
+
+        var reached = atWork.Wait(HangGuard);
+        released.Set();
+        first.Finish();
+        second.Finish();
+
+        Assert.True(reached, "The helpers the allowance holds were never all at work.");
+        Assert.Equal(Places, started);
+
+        var givenBack = 0;
+        while (allowance.TryTake())
+        {
+            givenBack++;
+        }
+
+        Assert.Equal(Places, givenBack);
+    }
+
+    /// <summary>
     /// A helper the system will not start a thread for fails the run rather than throwing where it was
     /// asked for, which may be a read's completion that nothing watches, and is counted out, or the
     /// run would wait for it for ever.

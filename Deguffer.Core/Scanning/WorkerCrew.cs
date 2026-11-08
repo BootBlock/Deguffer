@@ -30,6 +30,7 @@ internal sealed class WorkerCrew
     private readonly Func<Action> _newHelper;
     private readonly Func<bool> _hasWork;
     private readonly Action<Action> _run;
+    private readonly ThreadAllowance? _shared;
     private readonly Action _help;
 
     private int _helpers;
@@ -48,18 +49,25 @@ internal sealed class WorkerCrew
     /// per helper, so whatever a helper reuses lasts for every turn it takes.
     /// </param>
     /// <param name="hasWork">Whether work is waiting that a helper could take.</param>
-    public WorkerCrew(int threads, Func<Action> newHelper, Func<bool> hasWork)
-        : this(threads, newHelper, hasWork, WorkerThreads.Shared.Run)
+    /// <param name="shared">
+    /// Where each helper also takes a place for as long as it works, where this crew's threads count
+    /// toward a bound it shares with other crews. Null where the crew's own bound is the only one. The
+    /// calling thread takes no place here: it is the caller's to count, because only the caller knows
+    /// when that thread starts on the work the allowance bounds.
+    /// </param>
+    public WorkerCrew(int threads, Func<Action> newHelper, Func<bool> hasWork, ThreadAllowance? shared = null)
+        : this(threads, newHelper, hasWork, WorkerThreads.Shared.Run, shared)
     {
     }
 
     /// <param name="run">Runs a helper on a thread of its own: the seam a test fails a start through.</param>
-    public WorkerCrew(int threads, Func<Action> newHelper, Func<bool> hasWork, Action<Action> run)
+    public WorkerCrew(int threads, Func<Action> newHelper, Func<bool> hasWork, Action<Action> run, ThreadAllowance? shared = null)
     {
         _helpersAllowed = threads - 1;
         _newHelper = newHelper;
         _hasWork = hasWork;
         _run = run;
+        _shared = shared;
         _help = Help;
 
         Made.Value?.Invoke(Thread.CurrentThread.IsThreadPoolThread);
@@ -111,6 +119,7 @@ internal sealed class WorkerCrew
             // What starting a thread throws when the system will not create one, or when the thread
             // fails before it can run any code. Counted out, or Finish would wait for a helper that
             // never ran.
+            _shared?.Return();
             Interlocked.Decrement(ref _helpers);
             Fail(ex);
             return false;
@@ -165,6 +174,7 @@ internal sealed class WorkerCrew
                 Fail(ex);
             }
 
+            _shared?.Return();
             Interlocked.Decrement(ref _helpers);
             _changed.Set();
 
@@ -185,10 +195,23 @@ internal sealed class WorkerCrew
                 return false;
             }
 
-            if (Interlocked.CompareExchange(ref _helpers, running + 1, running) == running)
+            if (Interlocked.CompareExchange(ref _helpers, running + 1, running) != running)
+            {
+                continue;
+            }
+
+            if (_shared is null || _shared.TryTake())
             {
                 return true;
             }
+
+            // Every shared place is taken by another crew. Given up rather than waited for, because the
+            // thread asking may be a helper about to end or a read's completion, and the work stays
+            // queued for this crew's other threads. Signalled, because Finish may have seen the count
+            // this claim raised and be waiting for it to fall.
+            Interlocked.Decrement(ref _helpers);
+            _changed.Set();
+            return false;
         }
     }
 }
