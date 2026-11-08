@@ -447,6 +447,7 @@ public sealed class GitLfsObjectProvider : CleanupProviderBase
                 // Prune removes one file at a time and nothing else, so ended part-way it leaves fewer
                 // old versions and no damaged store.
                 WhenCancelled = CancelledCommand.Ended,
+                Unset = GitRun.Unset,
                 Output = GitRun.Output,
                 Estimated = measured.TotalOf((start + 1)..(start + 1 + objectFiles.Count)),
                 MeasuredPaths = [checkout.Store.Objects],

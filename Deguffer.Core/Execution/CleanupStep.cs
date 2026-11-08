@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -307,6 +308,12 @@ public sealed record RunCommandStep(string FileName, string Arguments, string Wh
     /// outcome. See <see cref="ToolRun.Output"/>.
     /// </summary>
     public ToolOutputEncoding Output { get; init; }
+
+    /// <summary>
+    /// Variables the command starts without, for a tool that reads an inherited one as which files to
+    /// act on (<see cref="ToolRun.Without"/>). Empty for every tool that reads its environment as given.
+    /// </summary>
+    public IReadOnlySet<string> Unset { get; init; } = FrozenSet<string>.Empty;
 
     public override string Description => $"{What} ({Path.GetFileName(FileName)} {Arguments})";
 

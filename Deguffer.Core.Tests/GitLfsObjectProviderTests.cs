@@ -302,7 +302,29 @@ public sealed class GitLfsObjectProviderTests : IDisposable
             + $"-c \"lfs.storage={Forward(Path.Combine(gitDirectory, "lfs"))}\" "
             + "-c \"lfs.pruneremotetocheck=origin\" -c lfs.forceprogress=true lfs prune --dry-run --verbose",
             dryRun.Arguments);
-        Assert.Equal(ToolRun.Query.WritingIn(ToolOutputEncoding.Utf8), dryRun.Run);
+        Assert.Equal(GitRun.Query, dryRun.Run);
+    }
+
+    /// <summary>
+    /// Every git this provider starts, the prune included, starts without the variables that would
+    /// send it to another repository's index, objects or refs. <c>GIT_COMMON_DIR</c> inherited from a
+    /// script would otherwise hand prune another repository's refs to decide what to keep.
+    /// </summary>
+    [Fact]
+    public async Task EveryGitStartsWithoutTheVariablesThatNameAnotherRepository()
+    {
+        var old = Oid("old");
+        var game = CreateRepository(_root, "game", (old, 3_000));
+        DryRunReports(Path.Combine(game, ".git"), Report(1, old));
+        var runner = Runner();
+
+        var step = TheStep(await CreateProvider(runner).PlanAsync());
+
+        Assert.NotEmpty(runner.Invocations);
+        Assert.All(runner.Invocations, invocation => Assert.True(
+            invocation.Run.Unset.IsSupersetOf(GitRun.Unset),
+            $"git {invocation.Arguments} keeps an inherited repository variable."));
+        Assert.True(step.Unset.SetEquals(GitRun.Unset), "The prune keeps an inherited repository variable.");
     }
 
     /// <summary>
