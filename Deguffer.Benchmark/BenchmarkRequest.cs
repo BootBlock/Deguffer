@@ -100,7 +100,8 @@ internal sealed record BenchmarkRequest(
           explore <drive>   Build the Explore tree for the volume from its file table. Elevated.
           explorefolder <folder>
                             Build the Explore tree for the folder from its volume's file
-                            table, as an elevated Explore of a folder does. Elevated.
+                            table: the table's side of an elevated Explore of a folder,
+                            which races it against a walk under Auto. Elevated.
           walk <folder>     Walk the folder as an unelevated scan does.
           measure <folder>  Measure the folder as an unelevated scan does: the walk, and
                             what the scan adds up for each entry.

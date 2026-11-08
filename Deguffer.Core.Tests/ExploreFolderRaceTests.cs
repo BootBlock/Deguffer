@@ -38,9 +38,9 @@ public sealed class ExploreFolderRaceTests
     /// The walk lists the folder while the table is still being read, so the walk's tree is drawn and
     /// nothing is said about it: nothing was unavailable, and the table opened, so the rights are held.
     ///
-    /// <para>The table is never released before the scan returns, so a scan that waited for it would
-    /// fail on the bound. Its volume is closed by then, which says the read was stopped and waited for
-    /// rather than left reading behind a finished scan.</para>
+    /// <para>The table is never released before the scan returns, and the race waits for its loser,
+    /// so the scan returns within the bound only where the read was stopped. A scan that waited for the
+    /// table's answer would fail on the bound. Its volume is closed by the time the scan returns.</para>
     ///
     /// <para>The table has no bitmap. Its read is a short synchronous one that stops for nothing,
     /// which on a volume is over in moments, and held here would never end. Without it the hold falls

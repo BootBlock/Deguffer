@@ -78,9 +78,10 @@ public sealed record ScannedFolder(
 /// reason. That one qualifies the measurement of a dozen named caches, where building the table
 /// costs a pass over the whole volume to answer a handful of questions — which is why the walk
 /// races the table there, and why its sentence is careful not to promise a speed-up.
-/// Here the table answers for every directory on the disk from that same single pass, and the walk
-/// it replaces is the one §5.5 measured at over ten minutes. The same fact, and opposite
-/// advice.</para>
+/// Here the table answers for every directory on the disk from that same single pass, and for a
+/// whole volume the walk it replaces is the one §5.5 measured at over ten minutes. The same fact,
+/// and opposite advice. A scan of a folder races the two routes as the clean does, and a walk that
+/// wins there says nothing, for the reason its arm below gives.</para>
 /// </summary>
 public static class ExploreRouteText
 {

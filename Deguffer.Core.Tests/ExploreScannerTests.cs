@@ -111,9 +111,9 @@ public class ExploreScannerTests
     }
 
     /// <summary>
-    /// A scan scoped to a folder reads the table too, rooted at the record that holds the folder.
-    /// The one pass the route costs answers for a folder exactly as it answers for a drive, and the
-    /// walk it replaces is the one §5.5 measured at over ten minutes.
+    /// A scan scoped to a folder, where it reads the table, roots the tree at the record that holds
+    /// the folder. The one pass the route costs answers for a folder exactly as it answers for a
+    /// drive. Under Auto the folder is raced against a walk instead (<see cref="ExploreFolderRaceTests"/>).
     /// </summary>
     [Fact]
     public async Task ReadsTheTableForAFolderBelowTheVolumeRoot()
