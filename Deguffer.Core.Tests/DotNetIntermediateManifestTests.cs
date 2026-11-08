@@ -26,6 +26,9 @@ public sealed class DotNetIntermediateManifestTests : IDisposable
         "restore": { "projectPath": {{ExamplePath}}, "projectName": "Example" }
         """;
 
+    /// <summary>The JSON escape for a low surrogate with no high surrogate before it.</summary>
+    private const string LoneSurrogate = @"\" + "uDC00";
+
     private readonly TempDirectory _temp = new();
 
     public void Dispose() => _temp.Dispose();
@@ -75,9 +78,9 @@ public sealed class DotNetIntermediateManifestTests : IDisposable
     }
 
     /// <summary>
-    /// A field of the identity defined twice. In each case the last definition names this project,
-    /// which the reading this replaced accepted. Which one the manifest means cannot be known, so it
-    /// is refused.
+    /// A field of the identity defined twice. In each case the last definition names this project, so
+    /// a last-wins reading would accept it. Which one the manifest means cannot be known, so it is
+    /// refused.
     /// </summary>
     [Theory]
     [InlineData($$"""{ "version": 99, "version": 3, "project": { {{Restore}} } }""")]
@@ -120,8 +123,9 @@ public sealed class DotNetIntermediateManifestTests : IDisposable
     }
 
     /// <summary>
-    /// A project path that is not valid UTF-8. Decoding it throws, and that exception once escaped
-    /// recognition altogether instead of making the directory Tier 4.
+    /// A project path that is not valid UTF-8. Decoding it throws
+    /// <see cref="InvalidOperationException"/>, which must make the directory Tier 4 rather than
+    /// escape recognition.
     /// </summary>
     [Fact]
     public void Refuses_a_project_path_that_is_not_valid_utf8_without_throwing()
@@ -135,7 +139,21 @@ public sealed class DotNetIntermediateManifestTests : IDisposable
         Assert.Null(Recognise(manifest));
     }
 
-    /// <summary>The forms the document parser accepted, which the reader has to go on accepting.</summary>
+    /// <summary>
+    /// An escape for half a surrogate pair. The tokenizer accepts its form, and comparing a property
+    /// name or reading a string decodes it, which throws <see cref="InvalidOperationException"/>. The
+    /// name must be long enough for the comparison to decode it rather than reject it by length.
+    /// </summary>
+    [Theory]
+    [InlineData($$"""{ "{{LoneSurrogate}}x": 1, "version": 3, "project": { {{Restore}} } }""")]
+    [InlineData($$"""{ "version": 3, "project": { "restore": { "{{LoneSurrogate}}xxxxxxxxxxx": 1, "projectPath": {{ExamplePath}} } } }""")]
+    [InlineData($$"""{ "version": 3, "project": { "restore": { "projectPath": "C:\\src\\{{LoneSurrogate}}\\Example.csproj" } } }""")]
+    public void Refuses_text_that_cannot_be_decoded_without_throwing(string manifest)
+    {
+        Assert.Null(Recognise(manifest));
+    }
+
+    /// <summary>Forms valid JSON allows that a hand edit or another writer may produce.</summary>
     [Fact]
     public void Recognises_a_manifest_that_starts_with_a_byte_order_mark()
     {
@@ -165,11 +183,12 @@ public sealed class DotNetIntermediateManifestTests : IDisposable
     }
 
     /// <summary>
-    /// Reading a megabyte manifest allocates a small fraction of it. A document of the same file
-    /// allocated about four megabytes: the file itself and a row for each of its tokens.
+    /// Reading a megabyte manifest allocates a small fraction of it. A <see cref="System.Text.Json.JsonDocument"/>
+    /// of the same file allocates three to four megabytes: the file itself and a row for each of its
+    /// tokens.
     ///
-    /// The document rented both from the shared array pool, so once a thread had read one manifest
-    /// the next allocated almost nothing, and what it cost was the memory the pool went on holding.
+    /// The document rents both from the shared array pool, so once a thread has read one manifest
+    /// the next allocates almost nothing, and what it costs is the memory the pool goes on holding.
     /// A new thread starts with no arrays of its own, which is what lets the first read show the
     /// working set. The reader rents one window from the same pool, so the bound here covers it.
     /// </summary>

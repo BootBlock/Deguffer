@@ -6,7 +6,7 @@ namespace Deguffer.Core.Safety;
 /// <summary>The two fields of a restore manifest that say which project it was written for.</summary>
 /// <param name="SchemaVersion">The root's <c>version</c>, or null if it is absent or not a 32-bit integer.</param>
 /// <param name="ProjectPath">
-/// <c>project.restore.projectPath</c>, or null if it is absent, not a string, or not valid UTF-8.
+/// <c>project.restore.projectPath</c>, or null if it is absent or not a string.
 /// </param>
 internal sealed record RestoreManifestIdentity(int? SchemaVersion, string? ProjectPath);
 
@@ -18,8 +18,8 @@ internal sealed record RestoreManifestIdentity(int? SchemaVersion, string? Proje
 /// token to answer that, so this walks the tokens once through a small window and keeps only what
 /// it was asked for.
 ///
-/// It still reads to the end of the document. NuGet writes <c>project</c> after everything else, so
-/// stopping once both values are in hand would save almost nothing, and it would accept a manifest
+/// It still reads to the end of the document. NuGet writes <c>project</c> after <c>targets</c>,
+/// <c>libraries</c> and the rest of the bulk, so stopping once both values are in hand would save almost nothing, and it would accept a manifest
 /// cut off after them. Validating the whole document is what makes a truncated file a
 /// <see cref="JsonException"/>, and so Tier 4.
 /// </summary>
@@ -31,18 +31,24 @@ internal static class RestoreManifestReader
     /// </summary>
     private const int WindowBytes = 16 * 1024;
 
-    /// <summary>JsonDocument skipped a leading UTF-8 byte order mark, and the reader does not.</summary>
+    /// <summary>
+    /// A manifest may begin with a UTF-8 byte order mark, which <see cref="Utf8JsonReader"/> reads as
+    /// invalid JSON rather than skipping.
+    /// </summary>
     private static ReadOnlySpan<byte> Utf8ByteOrderMark => [0xEF, 0xBB, 0xBF];
 
     /// <summary>
     /// The identity the manifest declares, or null if it declares a field of it more than once.
     ///
-    /// A duplicate is refused rather than resolved. <see cref="JsonElement.TryGetProperty(string, out JsonElement)"/>
-    /// took the last definition, but a manifest that names its project twice is hand-edited or
-    /// corrupt, and which name it means cannot be known. Duplicates anywhere outside the identity
-    /// are accepted, as they always were.
+    /// A duplicate is refused rather than resolved by taking the first or the last definition. A
+    /// manifest that names its project twice is hand-edited or corrupt, and which name it means
+    /// cannot be known. Duplicates anywhere outside the identity say nothing about it, and are
+    /// accepted.
     /// </summary>
-    /// <exception cref="JsonException">The document is not one complete, valid JSON value.</exception>
+    /// <exception cref="JsonException">
+    /// The document is not one complete, valid JSON value, or a property name or value it reads
+    /// cannot be decoded.
+    /// </exception>
     public static RestoreManifestIdentity? Read(Stream stream)
     {
         var window = ArrayPool<byte>.Shared.Rent(WindowBytes);
@@ -58,9 +64,20 @@ internal static class RestoreManifestReader
             {
                 var reader = new Utf8JsonReader(window.AsSpan(start, length - start), final, state);
 
-                while (reader.Read())
+                try
                 {
-                    visitor.Visit(ref reader);
+                    while (reader.Read())
+                    {
+                        visitor.Visit(ref reader);
+                    }
+                }
+                catch (InvalidOperationException ex)
+                {
+                    // The tokenizer checks an escape's form, not what it decodes to. Comparing a
+                    // property name, or reading a string, decodes it, and text that is not valid
+                    // UTF-8 or holds an unpaired surrogate throws this. That makes the manifest
+                    // malformed, which the caller refuses, not a fault in reading it.
+                    throw new JsonException("The manifest holds text that cannot be decoded.", ex);
                 }
 
                 if (final)
@@ -182,7 +199,7 @@ internal static class RestoreManifestReader
                     break;
 
                 case Field.ProjectPath:
-                    _projectPath = reader.TokenType == JsonTokenType.String ? ReadString(ref reader) : null;
+                    _projectPath = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
                     break;
             }
 
@@ -194,23 +211,6 @@ internal static class RestoreManifestReader
             {
                 _inProject &= depth != 1;
                 _inRestore &= depth != 2;
-            }
-        }
-
-        /// <summary>
-        /// The string value, or null if it is not valid UTF-8. Transcoding throws
-        /// <see cref="InvalidOperationException"/> for that, which is a reason to refuse the manifest
-        /// rather than a fault in reading it.
-        /// </summary>
-        private static string? ReadString(ref Utf8JsonReader reader)
-        {
-            try
-            {
-                return reader.GetString();
-            }
-            catch (InvalidOperationException)
-            {
-                return null;
             }
         }
     }
