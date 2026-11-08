@@ -25,10 +25,11 @@ public interface ICloudFiles
     IReadOnlyList<SyncRoot>? SyncRoots();
 
     /// <summary>
-    /// Where <paramref name="path"/> really is once every link on the way to it is followed, in display
-    /// form, or null where Windows would not open it.
+    /// Where <paramref name="path"/> really is once every link on the way to it is followed, named from
+    /// its volume's device, or null where Windows would not open it. Resolved once for a whole release,
+    /// so the volume is named once rather than for every file <see cref="Release"/> compares with it.
     /// </summary>
-    string? Resolve(string path);
+    VolumeDevicePath? Resolve(string path);
 
     /// <summary>Whether the sync app behind <paramref name="syncRoot"/> is running and connected to it.</summary>
     SyncProviderState ProviderState(string syncRoot);
@@ -64,11 +65,12 @@ public interface ICloudFiles
     /// </summary>
     /// <param name="path">The file, as the plan named it.</param>
     /// <param name="resolvedPath">
-    /// Where that file must turn out to be: its place under the sync root's own resolved location. The
-    /// root is resolved once, so a root the user reaches through a link of its own still works.
+    /// Where that file must turn out to be: its place under the sync root's own location as
+    /// <see cref="Resolve"/> gave it. The root is resolved once, so a root the user reaches through a
+    /// link of its own still works.
     /// </param>
     /// <param name="stillEligible">The rules, asked of the file as it is now.</param>
-    ReleaseAnswer Release(string path, string resolvedPath, Func<Placeholder, bool> stillEligible);
+    ReleaseAnswer Release(string path, VolumeDevicePath resolvedPath, Func<Placeholder, bool> stillEligible);
 }
 
 /// <summary>One registered sync root.</summary>

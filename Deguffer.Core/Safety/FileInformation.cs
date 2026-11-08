@@ -109,6 +109,9 @@ internal sealed unsafe partial class FileInformation
     /// <summary><c>FILE_NAME_NORMALIZED | VOLUME_NAME_DOS</c>.</summary>
     private const uint FileNameNormalized = 0;
 
+    /// <summary><c>FILE_NAME_NORMALIZED | VOLUME_NAME_NT</c>.</summary>
+    private const uint FileNameNormalizedOnDevice = 0x2;
+
     private readonly HandleOpener _open;
     private readonly IdentityReader _identify;
     private readonly NameLister _listNames;
@@ -433,7 +436,20 @@ internal sealed unsafe partial class FileInformation
     /// The normalised path of whatever <paramref name="handle"/> is open on, with its drive letter, or
     /// null where Windows would not say.
     /// </summary>
-    public static string? FinalPathOf(SafeFileHandle handle)
+    public static string? FinalPathOf(SafeFileHandle handle) => FinalPathOf(handle, FileNameNormalized);
+
+    /// <summary>
+    /// The normalised path of whatever <paramref name="handle"/> is open on, named from its volume's
+    /// device, or null where Windows would not say.
+    ///
+    /// <para>Cheaper than <see cref="FinalPathOf(SafeFileHandle)"/> where many files are compared with
+    /// one place: the drive-letter form makes Windows ask the mount manager to name the volume on every
+    /// call, and this form does not.</para>
+    /// </summary>
+    public static VolumeDevicePath? DevicePathOf(SafeFileHandle handle) =>
+        FinalPathOf(handle, FileNameNormalizedOnDevice) is { } path ? new VolumeDevicePath(path) : null;
+
+    private static string? FinalPathOf(SafeFileHandle handle, uint flags)
     {
         var buffer = ArrayPool<char>.Shared.Rent(LongestPath);
 
@@ -441,7 +457,7 @@ internal sealed unsafe partial class FileInformation
         {
             fixed (char* chars = buffer)
             {
-                var length = GetFinalPathNameByHandle(handle, chars, LongestPath, FileNameNormalized);
+                var length = GetFinalPathNameByHandle(handle, chars, LongestPath, flags);
 
                 return length is > 0 and < LongestPath ? new string(chars, 0, (int)length) : null;
             }

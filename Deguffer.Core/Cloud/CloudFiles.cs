@@ -170,12 +170,14 @@ public sealed class CloudFiles : ICloudFiles
         };
     }
 
-    public string? Resolve(string path)
+    public VolumeDevicePath? Resolve(string path)
     {
-        return FileInformation.Default.FinalPath(path) is { } final ? Comparable(final) : null;
+        using var handle = FileInformation.Open(LongPath.Extended(path), HandleUse.Resolve);
+
+        return handle.IsInvalid ? null : FileInformation.DevicePathOf(handle);
     }
 
-    public ReleaseAnswer Release(string path, string resolvedPath, Func<Placeholder, bool> stillEligible)
+    public ReleaseAnswer Release(string path, VolumeDevicePath resolvedPath, Func<Placeholder, bool> stillEligible)
     {
         using var handle = FileInformation.Open(LongPath.Extended(path), HandleUse.Describe);
 
@@ -185,8 +187,7 @@ public sealed class CloudFiles : ICloudFiles
                 Unopened().Presence is PathPresence.Absent ? ReleaseResult.Gone : ReleaseResult.Refused);
         }
 
-        if (FileInformation.FinalPathOf(handle) is not { } final
-            || !string.Equals(Comparable(final), Comparable(resolvedPath), StringComparison.OrdinalIgnoreCase))
+        if (FileInformation.DevicePathOf(handle) != resolvedPath)
         {
             return new ReleaseAnswer(ReleaseResult.NoLongerEligible);
         }
@@ -270,9 +271,6 @@ public sealed class CloudFiles : ICloudFiles
             Enum.IsDefined((PinState)info.PinState) ? (PinState)info.PinState : PinState.Pinned,
             MinimumAge.NewestFileTimeOf(basic.CreationTime, basic.LastWriteTime)));
     }
-
-    /// <summary>A path in the one form two resolved paths are compared in.</summary>
-    private static string Comparable(string path) => Path.TrimEndingDirectorySeparator(LongPath.Display(path));
 
     /// <summary>
     /// Why a handle would not open, in the probe's own three answers and on the probe's own reading of
