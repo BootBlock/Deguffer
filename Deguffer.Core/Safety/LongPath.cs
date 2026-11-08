@@ -275,7 +275,7 @@ public static partial class LongPath
     {
         var presence = Probe(path, EntryKind.Directory, out var described, out _);
 
-        isLink = described?.HasFlag(FileAttributes.ReparsePoint);
+        isLink = Carries(described, FileAttributes.ReparsePoint);
 
         return presence;
     }
@@ -294,7 +294,7 @@ public static partial class LongPath
     {
         var presence = Probe(path, EntryKind.File, out var described, out _);
 
-        isLink = described?.HasFlag(FileAttributes.ReparsePoint);
+        isLink = Carries(described, FileAttributes.ReparsePoint);
 
         return presence;
     }
@@ -333,8 +333,8 @@ public static partial class LongPath
     {
         var presence = Probe(path, EntryKind.Either, out var described, out _);
 
-        isDirectory = described?.HasFlag(FileAttributes.Directory);
-        isLink = described?.HasFlag(FileAttributes.ReparsePoint);
+        isDirectory = Carries(described, FileAttributes.Directory);
+        isLink = Carries(described, FileAttributes.ReparsePoint);
 
         return presence;
     }
@@ -351,7 +351,7 @@ public static partial class LongPath
     {
         var presence = Probe(path, EntryKind.Either, out var described, out newestFileTime);
 
-        isDirectory = described?.HasFlag(FileAttributes.Directory);
+        isDirectory = Carries(described, FileAttributes.Directory);
 
         return presence;
     }
@@ -463,6 +463,14 @@ public static partial class LongPath
     internal static bool OpenSaysNothingIsThere(int win32Error) =>
         SaysNothingIsThere(win32Error) || win32Error == ErrorDirectory;
 
+    /// <summary>
+    /// Whether what a probe described carries <paramref name="flag"/>, or null where it described
+    /// nothing. A mask rather than <see cref="Enum.HasFlag"/>, which boxes until the JIT optimises
+    /// the caller, and every probe of a planning pass comes through here.
+    /// </summary>
+    private static bool? Carries(FileAttributes? described, FileAttributes flag) =>
+        described is { } attributes ? (attributes & flag) != 0 : null;
+
     /// <param name="expected">
     /// Which kind the caller asked about. The other kind is <see cref="PathPresence.Absent"/> rather
     /// than present: a file where a directory was expected means there is no directory there, which
@@ -501,7 +509,7 @@ public static partial class LongPath
             return SaysNothingIsThere(error) ? PathPresence.Absent : PathPresence.Refused;
         }
 
-        var isDirectory = attributes.HasFlag(FileAttributes.Directory);
+        var isDirectory = (attributes & FileAttributes.Directory) != 0;
 
         // A file named with a trailing separator is absent for either kind, for the reason above.
         var answersFor = expected switch
@@ -606,7 +614,7 @@ public static partial class LongPath
 
         return FileAttributeRead.Read(extended, out var attributes) switch
         {
-            0 => attributes.HasFlag(FileAttributes.ReparsePoint),
+            0 => (attributes & FileAttributes.ReparsePoint) != 0,
             FileAttributeRead.FileNotFound or FileAttributeRead.PathNotFound => false,
             _ => true,
         };

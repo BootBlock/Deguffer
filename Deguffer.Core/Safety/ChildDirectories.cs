@@ -72,7 +72,7 @@ public static class ChildDirectories
         {
             var child = children.Current;
 
-            if (child.Attributes.HasFlag(FileAttributes.ReparsePoint))
+            if ((child.Attributes & FileAttributes.ReparsePoint) != 0)
             {
                 links.Add(child);
             }

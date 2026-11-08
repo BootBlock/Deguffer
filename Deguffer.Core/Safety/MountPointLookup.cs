@@ -101,7 +101,7 @@ internal sealed partial class MountPointLookup
 
             if (error == 0)
             {
-                if (attributes.HasFlag(FileAttributes.ReparsePoint))
+                if ((attributes & FileAttributes.ReparsePoint) != 0)
                 {
                     return null;
                 }

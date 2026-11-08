@@ -444,7 +444,7 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner
             // A link's length is its own, not its target's, and following one would count a tree
             // this scanner never looked inside — the same rule BoundedFileWalk applies to every
             // entry it enumerates.
-            if (file.Attributes.HasFlag(FileAttributes.ReparsePoint))
+            if ((file.Attributes & FileAttributes.ReparsePoint) != 0)
             {
                 return null;
             }

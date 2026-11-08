@@ -221,7 +221,7 @@ internal static unsafe partial class DirectoryQuery
         {
             var name = new ReadOnlySpan<char>(&entry->FileName, (int)(entry->FileNameLength / sizeof(char)));
             var attributes = (FileAttributes)entry->FileAttributes;
-            var isDirectory = attributes.HasFlag(FileAttributes.Directory);
+            var isDirectory = (attributes & FileAttributes.Directory) != 0;
 
             if (!IsSelfOrParent(name) && (isDirectory || request.Files.KeepsFiles))
             {

@@ -99,7 +99,6 @@ public sealed class ContentSignature
     /// this is not the shape being looked for.
     /// </summary>
     private bool Admits(string name, FileAttributes attributes) =>
-        !attributes.HasFlag(FileAttributes.Directory)
-        && !attributes.HasFlag(FileAttributes.ReparsePoint)
+        (attributes & (FileAttributes.Directory | FileAttributes.ReparsePoint)) == 0
         && _permitted.IsMatch(name);
 }

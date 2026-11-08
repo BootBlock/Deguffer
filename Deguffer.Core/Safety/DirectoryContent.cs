@@ -97,7 +97,7 @@ public static class DirectoryContent
             {
                 var entry = listing.Current;
 
-                if (entry is not DirectoryInfo || entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                if (entry is not DirectoryInfo || (entry.Attributes & FileAttributes.ReparsePoint) != 0)
                 {
                     return Finding.Content;
                 }

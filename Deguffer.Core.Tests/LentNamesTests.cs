@@ -72,14 +72,17 @@ public sealed class LentNamesTests : IDisposable
     /// The point of lending: a listing of a folder of files builds no string for any of them, where a
     /// listing with strings builds one each. The two listings differ only in how they keep names, so
     /// what lending saves has to be every string: at least twenty bytes and two for each character,
-    /// for every entry. Compared rather than measured alone, because listing and describing an entry
-    /// is not free in a build without optimisation, where each <see cref="Enum.HasFlag"/> boxes.
+    /// for every entry. And lending allocates nothing for any entry at all, whether or not the JIT has
+    /// optimised the path yet: an <see cref="Enum.HasFlag"/> boxes until it has, so one left on the
+    /// path allocates for every entry, and in a suite run in parallel the two listings can be
+    /// measured at different tiers.
     /// </summary>
     [Fact]
     public void ListsAndDescribesAFolderWithoutAStringForEachName()
     {
         var folder = LongPath.Extended(Fixture(files: 2_000));
-        var strings = Directory.EnumerateFileSystemEntries(folder).Sum(path => 20L + (2L * Path.GetFileName(path).Length));
+        var names = Directory.EnumerateFileSystemEntries(folder).Select(path => Path.GetFileName(path)).ToList();
+        var strings = names.Sum(name => 20L + (2L * name.Length));
 
         var lent = BytesToListAndDescribe(folder, FileNames.AllLent);
         var withStrings = BytesToListAndDescribe(folder, FileNames.All);
@@ -87,6 +90,9 @@ public sealed class LentNamesTests : IDisposable
         Assert.True(
             withStrings - lent >= strings,
             $"Lending saved {withStrings - lent} bytes of the {strings} the names' strings take ({lent} lent, {withStrings} as strings).");
+        Assert.True(
+            lent < names.Count,
+            $"Listing and describing {names.Count} entries with lent names allocated {lent} bytes, so something allocates for each entry.");
     }
 
     /// <summary>

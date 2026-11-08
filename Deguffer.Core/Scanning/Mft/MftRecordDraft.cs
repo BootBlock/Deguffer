@@ -300,7 +300,8 @@ internal struct MftRecordDraft
         // extension record that could not be read. Placing the file under its second-best name
         // is a guess at which directory it belongs to. A file's lost name could also have been
         // another of its links, which would leave whichever folder holds it short.
-        if (_bestRank == NoName || list?.Lost.HasFlag(MftAttributeKinds.Name) == true)
+        var lost = list?.Lost ?? MftAttributeKinds.None;
+        if (_bestRank == NoName || (lost & MftAttributeKinds.Name) != 0)
         {
             return MftParseOutcome.Unreadable;
         }
@@ -309,7 +310,7 @@ internal struct MftRecordDraft
         // index steps over a link without asking its size, so a link mark kept here would let the
         // unknown size below it pass unseen; the unknown alone is what sends the question to the
         // walk.
-        var isReparsePoint = _isReparsePoint && list?.Lost.HasFlag(MftAttributeKinds.ReparsePoint) != true;
+        var isReparsePoint = _isReparsePoint && (lost & MftAttributeKinds.ReparsePoint) == 0;
 
         if (_name is not null)
         {
@@ -367,7 +368,7 @@ internal struct MftRecordDraft
         // question to the walk, which follows the link.
         if (isDirectory)
         {
-            return lost.HasFlag(MftAttributeKinds.ReparsePoint) ? null : ScanSize.Zero;
+            return (lost & MftAttributeKinds.ReparsePoint) != 0 ? null : ScanSize.Zero;
         }
 
         // Any loss leaves a file's size in doubt: the stream itself, or the reparse point that
