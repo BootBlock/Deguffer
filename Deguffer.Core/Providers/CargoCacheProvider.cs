@@ -277,7 +277,7 @@ public sealed class CargoCacheProvider : CleanupProviderBase
                 + $"folder: {setting.Declined} It is leaving it alone.");
         }
 
-        if (NothingToPlanFor(home, $"Cargo has not run for this user — no {home} directory.") is { } nothing)
+        if (NothingToPlanFor(home, $"Cargo has not run for this user — no {home} directory.", out var homeIsLink) is { } nothing)
         {
             return nothing;
         }
@@ -288,7 +288,7 @@ public sealed class CargoCacheProvider : CleanupProviderBase
         // through the very link that was declined, finding ordinary directories on the far side.
         // Those would be targeted while every survivor named for this home resolves through the same
         // link and passes — §5.6's negative made vacuous, in the worst of its forms.
-        if (LongPath.IsReparsePoint(home))
+        if (homeIsLink)
         {
             return UnexaminedPlan(
                 $"Leaving '{home}' alone: it is a link to somewhere else, and Deguffer does not look "
@@ -368,7 +368,7 @@ public sealed class CargoCacheProvider : CleanupProviderBase
     {
         var directory = level.Resolve(home);
 
-        switch (LongPath.ProbeDirectory(directory))
+        switch (LongPath.ProbeDirectory(directory, out var directoryIsLink))
         {
             // Windows would not say whether the level is there, so nothing below it was examined.
             // Returning true here would let the caller say Cargo has downloaded nothing into a home
@@ -385,7 +385,7 @@ public sealed class CargoCacheProvider : CleanupProviderBase
         // name. A junctioned 'registry' hands back the far side's ordinary directories, and a
         // recognised name among them would be targeted while every survivor named for this home
         // resolves through the link and passes — §5.6's negative made vacuous.
-        if (LongPath.IsReparsePoint(directory))
+        if (directoryIsLink is true)
         {
             Decline(directory, OwnName(level, directory), LinkReason);
             return true;

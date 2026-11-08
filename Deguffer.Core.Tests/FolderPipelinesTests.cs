@@ -1,4 +1,4 @@
-using Deguffer.Core.Exploring;
+using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Media;
 
 namespace Deguffer.Core.Tests;

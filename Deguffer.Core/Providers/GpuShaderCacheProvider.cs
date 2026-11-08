@@ -348,7 +348,7 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
 
             var rootPath = root.Path;
 
-            switch (LongPath.ProbeDirectory(rootPath))
+            switch (LongPath.ProbeDirectory(rootPath, out var rootPathIsLink))
             {
                 case PathPresence.Refused:
                     notes.Add(UnreadableRoot.UnreachedNote(rootPath));
@@ -363,7 +363,7 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
             // Enumerating a junctioned root hands back the far side's ordinary directories, and a
             // recognised name among them would be targeted while every survivor named below resolves
             // through the link and passes — the vacuous negative in its other costume.
-            if (LongPath.IsReparsePoint(rootPath))
+            if (rootPathIsLink is true)
             {
                 notes.Add(new PlanNote(
                     PlanNoteSeverity.Information,

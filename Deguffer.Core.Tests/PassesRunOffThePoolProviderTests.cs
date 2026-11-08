@@ -142,6 +142,38 @@ public sealed class PassesRunOffThePoolProviderTests : IDisposable
     }
 
     /// <summary>
+    /// Each source-tree row's recognition of the candidates its search found, for its plan and for
+    /// Explore's declaration: a few file reads a candidate, several hundred candidates on a large
+    /// root, worked several at once on threads of the walk's own.
+    ///
+    /// <para>The search answers from the index, so it walks nothing, and its one candidate is an empty
+    /// folder every row declines, so nothing is dated or measured. The only crew left to make is the
+    /// recognition's.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("obj")]
+    [InlineData("node_modules")]
+    [InlineData(".nx")]
+    [InlineData(".vs")]
+    [InlineData(".git")]
+    public async Task ASourceTreeRowRecognisesItsCandidatesOffThePool(string name)
+    {
+        var root = _temp.CreateDirectory("src");
+        var candidate = _temp.CreateDirectory("src", "Example", name);
+        var roots = new SourceRootStore(_environment);
+        roots.Save([new SourceRoot(root)]);
+
+        var planned = await CrewThreads.MadeBy(async () =>
+            Assert.Contains(candidate, (await SourceTreeRow(name, roots, candidate).PlanAsync()).ProtectedPaths.Select(p => p.Path)));
+
+        var declared = await CrewThreads.MadeBy(async () =>
+            Assert.Empty(await SourceTreeRow(name, roots, candidate).DiscoverToolRootsAsync()));
+
+        CrewThreads.AssertOffThePool(planned);
+        CrewThreads.AssertOffThePool(declared);
+    }
+
+    /// <summary>
     /// <see cref="CloudLocalCopiesProvider"/>'s walk of a running sync app's folder for the local
     /// copies it can release.
     /// </summary>
@@ -182,6 +214,30 @@ public sealed class PassesRunOffThePoolProviderTests : IDisposable
         _temp.CreateDirectory("src", "Example", "obj");
 
         return root;
+    }
+
+    /// <summary>
+    /// A fresh row that searches for folders named <paramref name="name"/>, whose index answers
+    /// <paramref name="indexed"/> alone. Git is installed, so the Git LFS row gets as far as its search.
+    /// </summary>
+    private CleanupProviderBase SourceTreeRow(string name, SourceRootStore roots, string indexed)
+    {
+        var environment = _environment.WithExecutable("git");
+        var scanner = new FakeDirectoryScanner([indexed]);
+        var discovery = new SourceDirectoryDiscovery(scanner, new FakeVolumeInventory());
+        var live = FakeLiveTreeInspector.NothingLive;
+        var runner = new FakeProcessRunner();
+        var inspector = FakeProcessInspector.NothingRunning;
+
+        return name switch
+        {
+            "obj" => new DotNetObjProvider(roots, discovery, live, environment, runner, inspector, scanner),
+            "node_modules" => new NodeModulesProvider(roots, discovery, live, environment, runner, inspector, scanner),
+            ".nx" => new NxWorkspaceCacheProvider(roots, discovery, live, environment, runner, inspector, scanner),
+            ".vs" => new VisualStudioSolutionCacheProvider(roots, discovery, live, environment, runner, inspector, scanner),
+            ".git" => new GitLfsObjectProvider(roots, discovery, live, environment, runner, inspector, scanner),
+            _ => throw new ArgumentOutOfRangeException(nameof(name), name, "Not a source-tree row's folder name."),
+        };
     }
 
     /// <summary>A search for <c>obj</c> over a machine whose only volume is the scratch tree's, a local disk.</summary>
@@ -257,11 +313,12 @@ public sealed class PassesRunOffThePoolProviderTests : IDisposable
         public ValueTask<IReadOnlyList<ScanResult>> MeasureManyAsync(
             IReadOnlyList<ScanRequest> asked,
             MinimumAge keep = default,
+            IProgress<ScanSize>? progress = null,
             CancellationToken ct = default) =>
-            inner.MeasureManyAsync(asked, keep, ct);
+            inner.MeasureManyAsync(asked, keep, progress, ct);
 
-        public ValueTask<AgedScan> MeasureAgedAsync(string path, MinimumAge age, CancellationToken ct = default) =>
-            inner.MeasureAgedAsync(path, age, ct);
+        public ValueTask<AgedScan> MeasureAgedAsync(string path, MinimumAge age, IProgress<ScanSize>? progress = null, CancellationToken ct = default) =>
+            inner.MeasureAgedAsync(path, age, progress, ct);
 
         public ValueTask<IReadOnlyList<ScanResult>> MeasureFromDiskAsync(IReadOnlyList<ScanRequest> asked, CancellationToken ct = default) =>
             inner.MeasureFromDiskAsync(asked, ct);

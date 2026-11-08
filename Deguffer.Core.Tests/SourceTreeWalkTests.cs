@@ -66,6 +66,48 @@ public sealed class SourceTreeWalkTests : IDisposable
     }
 
     /// <summary>
+    /// The walk never lists a directory the search refuses, so it neither offers what is inside one
+    /// nor asks whether it may. The refused directory is denied to prove the second: a walk that
+    /// tried to list it would name it as unreadable. Its <c>obj</c> sits where Mercurial mirrors a
+    /// project's own (§5.6).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(NeverEnteredNames.All), MemberType = typeof(NeverEnteredNames))]
+    public void NeverListsADirectoryTheSearchRefuses(string name)
+    {
+        var root = _temp.CreateDirectory("root");
+        var project = _temp.CreateDirectory("root", "src", "obj");
+        var refused = _temp.CreateDirectory("root", name);
+        _temp.CreateDirectory("root", name, "store", "data", "src", "obj");
+
+        using var denied = new DeniedDirectory(refused);
+
+        var walked = SourceTreeWalk.Under(root, Sought, WalkTuning.Default, CancellationToken.None);
+
+        Assert.Equal([project], walked.Candidates);
+        Assert.Empty(walked.Unreadable);
+    }
+
+    /// <summary>
+    /// A refused name that is sought is found, and still not entered: the <c>obj</c> inside belongs
+    /// to it.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(NeverEnteredNames.All), MemberType = typeof(NeverEnteredNames))]
+    public void FindsADirectoryTheSearchRefusesWhenItIsSought(string name)
+    {
+        var root = _temp.CreateDirectory("root");
+        var refused = _temp.CreateDirectory("root", "repo", name);
+        _temp.CreateDirectory("root", "repo", name, "store", "data", "src", "obj");
+
+        var search = SourceTreeBoundary.Searching(FrozenSet.Create(StringComparer.OrdinalIgnoreCase, "obj", name));
+
+        var walked = SourceTreeWalk.Under(root, search, WalkTuning.Default, CancellationToken.None);
+
+        Assert.Equal([refused], walked.Candidates);
+    }
+
+    /// <summary>
     /// A nested approved root is searched on its own, so the walk of the folder around it stops
     /// there rather than listing its subtree a second time. One that carries a sought name is still
     /// an answer: only the descent is handed off.

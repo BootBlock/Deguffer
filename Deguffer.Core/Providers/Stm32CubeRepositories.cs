@@ -97,7 +97,9 @@ public sealed record Stm32CubeRepositories(
             {
                 notes.Add(Declining(named, why));
             }
-            else if (LongPath.IsReparsePoint(named) && LongPath.ProbeDirectory(named) is not PathPresence.Absent)
+            // Not false rather than true: a folder Windows would not describe is declined with a link,
+            // because nothing in it was classified.
+            else if (LongPath.ProbeDirectory(named, out var namedIsLink) is not PathPresence.Absent && namedIsLink is not false)
             {
                 declined.Add((named, LinkReason));
                 notes.Add(CacheLevelWalk.Note(named));

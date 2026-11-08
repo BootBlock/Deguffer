@@ -589,11 +589,12 @@ public sealed class SpeculativeBuildPriorityTests : IDisposable
         public ValueTask<IReadOnlyList<ScanResult>> MeasureManyAsync(
             IReadOnlyList<ScanRequest> asked,
             MinimumAge keep = default,
+            IProgress<ScanSize>? progress = null,
             CancellationToken ct = default) =>
-            inner.MeasureManyAsync(asked, keep, ct);
+            inner.MeasureManyAsync(asked, keep, progress, ct);
 
-        public ValueTask<AgedScan> MeasureAgedAsync(string path, MinimumAge age, CancellationToken ct = default) =>
-            inner.MeasureAgedAsync(path, age, ct);
+        public ValueTask<AgedScan> MeasureAgedAsync(string path, MinimumAge age, IProgress<ScanSize>? progress = null, CancellationToken ct = default) =>
+            inner.MeasureAgedAsync(path, age, progress, ct);
 
         public ValueTask<IReadOnlyList<ScanResult>> MeasureFromDiskAsync(IReadOnlyList<ScanRequest> asked, CancellationToken ct = default) =>
             inner.MeasureFromDiskAsync(asked, ct);

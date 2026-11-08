@@ -76,9 +76,9 @@ Each needs #466 for its test.
 | Issue | Note |
 | --- | --- |
 | #467 | Every listing that ends wakes every waiting walk on its volume. |
-| #470 | Volumes, and fallback walks, measured one after another. |
+| #470 | Volumes, and fallback walks, measured one after another. Done: a measurement runs one pipeline for each set of physical disks at the same time, the volumes of one set in turn, and the walking scanners run the walks of separate disks at the same time. Where any disk is not known, everything stays in turn. |
 | #471 | Approved source folders searched one after another. |
-| #469 | The hard-link-aware scan builds two paths and a by-name read per file. |
+| #469 | The hard-link-aware scan builds two paths and a by-name read per file. Done: each file is read by its bare name relative to a handle the walk holds on its folder while the callback runs. On one 33,115-file pnpm store the links route allocated 9.4 to 14.0 MiB rather than 31.2 MiB, and its time did not move outside the noise. |
 | #468 | Open each directory relative to its parent. Measure with #476 first. `safety`. |
 | #473 | A frame array per child directory. |
 
@@ -109,7 +109,7 @@ Each needs #466 for its test.
 | --- | --- |
 | #460 | Every bounded file read allocates its whole limit, 16 MB for each solution file. |
 | #461 | A whole restore manifest parsed to read two values. |
-| #462 | Candidate folders recognised one at a time. |
+| #462 | Candidate folders recognised one at a time. Done: every source-tree row and Explore's declaration recognise their candidates through `DiskBoundWork`, several at once up to the walk tuning of each volume and inside the shared listing budget, answered in the search's order. The Git LFS, Nx and `.vs` rows are covered too. Not timed. |
 | #463 | Each temporary-folder row lists the same folders again. |
 | #464 | A folder's attributes read twice, for presence and for a link. |
 
@@ -125,7 +125,7 @@ Each of these changes a recorded design choice or what Deguffer finds, so each i
 | #455 | Ask Conan for its store and its home at once, against the documented order. |
 | #459 | Ask the driver-package cleanup at the same time as pnputil, against the order recorded as deliberate. |
 | #465 | One walk of a replaced JetBrains version for its age and its size. Needs a scanner seam. |
-| #474 | Never enter `.hg`, `.svn`, `.bzr` or `__pycache__` in source discovery. |
+| #474 | Never enter `.hg`, `.svn`, `.bzr` or `__pycache__` in source discovery. Done: those four, `.jj` and `_darcs` join `.git` and `node_modules` in `SourceTreeBoundary`, and §5.2 states the rule a name must meet to join. |
 | #475 | Stream the bytes counted so far into the Clean preview (`scan-progress.md` route B). |
 | #484 | Start a volume's index build when the pass starts (`after-the-scanner.md` item 7's G1 question). |
 | #487 | Race the walk against the table for an Explore scan of a folder. |
@@ -268,5 +268,5 @@ Each keeps what it proves and proves it more cheaply. All are `safety`.
 | Header reads through a 4 KB buffer, probe then open, `FileSystemInfo` listings | Once per provider per pass and microseconds each, or filed as #463, #464 or #526. |
 | Regexes, comparers and sets per call; process, volume and registry reads | None built per call; the reads are already cached between readings. |
 | Provider reads (Claude Code transcripts and session folders, Conan, Arduino, Dart, Chromium roots, Maven, restore points, temporary roots, Steam, Squirrel, RetroArch and Mozilla discovery) | Once per pass on small files or few folders, already memoised, or covered by #455, #460, #461 or #462. |
-| The Visual Studio and Nx rows recognise candidates one at a time | The same loop as #462, whose fix should cover them. |
+| The Visual Studio and Nx rows recognise candidates one at a time | The same loop as #462, and fixed with it. |
 | Two process listings, and four small `Safety` micro-costs | Milliseconds per pass, or the cheaper form would not prove the same thing. |

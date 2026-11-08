@@ -243,12 +243,12 @@ public sealed class DenoCacheProvider : CleanupProviderBase
                 + $"as Deno's: {setting.Declined} It is leaving it alone.");
         }
 
-        if (NothingToPlanFor(root, $"Deno has not cached anything for this user — no {root} directory.") is { } nothing)
+        if (NothingToPlanFor(root, $"Deno has not cached anything for this user — no {root} directory.", out var rootIsLink) is { } nothing)
         {
             return nothing;
         }
 
-        if (LongPath.IsReparsePoint(root))
+        if (rootIsLink)
         {
             return UnexaminedPlan(
                 $"Leaving '{root}' alone: it is a link to somewhere else, and Deguffer does not look "

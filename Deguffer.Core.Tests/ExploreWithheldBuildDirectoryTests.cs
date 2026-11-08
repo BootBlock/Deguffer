@@ -257,6 +257,35 @@ public sealed class ExploreWithheldBuildDirectoryTests : IDisposable
     }
 
     /// <summary>
+    /// A scan's tree holds everything inside a store, because the scan lists it to draw it. The
+    /// search through that tree still stops at the store, as the disk's does, so the <c>obj</c>
+    /// Mercurial mirrors from the project is not a candidate on this route either (§5.6).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(NeverEnteredNames.All), MemberType = typeof(NeverEnteredNames))]
+    public async Task AScannedRootIsNotSearchedInsideADirectoryTheSearchRefuses(string name)
+    {
+        var root = ApproveRootInProfile();
+        var project = Directory.CreateDirectory(Path.Combine(root, "App", "obj")).FullName;
+        var mirrored = Directory.CreateDirectory(Path.Combine(root, name, "store", "data", "App", "obj")).FullName;
+        var tree = Scan(root);
+
+        var discovery = new SourceDirectoryDiscovery(
+            new FakeDirectoryScanner(),
+            _volumes,
+            scope: ProtectionScope.Scanned(root, Task.FromResult<ExploreScan?>(ExploreScan.Walked(tree, FallbackReason.NotElevated)), _volumes));
+        discovery.Include(["obj"]);
+
+        var found = await discovery.FindAsync(_roots.Load());
+
+        Assert.Contains(
+            Enumerable.Range(0, tree.NodeCount),
+            node => string.Equals(tree.TryPathOf(node), mirrored, StringComparison.OrdinalIgnoreCase));
+        Assert.False(found.FellBack);
+        Assert.Equal([project], found.Candidates);
+    }
+
+    /// <summary>
     /// It is the tree being read and not the disk: a directory created after the scan is not in what
     /// the scan found. Once the discovery is told the disk has changed, the disk is searched again.
     /// </summary>

@@ -38,6 +38,12 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// </summary>
     private static readonly AsyncLocal<ConcurrentBag<(string Path, RootReach Root)>?> UnreachedMeasurements = new();
 
+    /// <summary>
+    /// Where the measurements behind the plan being built report the bytes they have counted, scoped as
+    /// <see cref="MeasuredMailStores"/> is and for the same reason. Null where nobody listens.
+    /// </summary>
+    private static readonly AsyncLocal<CountedSoFar?> Counting = new();
+
     private readonly PlanExecutor _executor;
     private readonly RefusalRecord _refusals;
     private readonly ICloudFiles? _cloud;
@@ -241,7 +247,8 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// constructs one in sixty-nine places across this project — twenty-two <c>new CleanupPlan</c>
     /// and forty-seven <see cref="EmptyPlan"/>. So it is stamped once, on whatever comes back.</para>
     /// </summary>
-    public async Task<CleanupPlan> PlanAsync(MinimumAge keep = default, CancellationToken ct = default)
+    public async Task<CleanupPlan> PlanAsync(
+        MinimumAge keep = default, IProgress<ScanSize>? counted = null, CancellationToken ct = default)
     {
         var measured = new ConcurrentBag<string>();
         MeasuredMailStores.Value = measured;
@@ -249,7 +256,21 @@ public abstract class CleanupProviderBase : ICleanupProvider
         var unreached = new ConcurrentBag<(string Path, RootReach Root)>();
         UnreachedMeasurements.Value = unreached;
 
-        var built = UnmeasuredPaths.Apply(await BuildPlanAsync(keep, ct).ConfigureAwait(false), unreached);
+        var counting = counted is null ? null : new CountedSoFar(counted);
+        Counting.Value = counting;
+
+        CleanupPlan built;
+
+        try
+        {
+            built = UnmeasuredPaths.Apply(await BuildPlanAsync(keep, ct).ConfigureAwait(false), unreached);
+        }
+        finally
+        {
+            // A measurement the provider started and did not wait for must not go on moving a figure
+            // for a plan that is over, however the plan ended.
+            counting?.End();
+        }
 
         // §9, stamped here for the reason the guard is: a store has to be protected, and a step that
         // cannot leave one withheld, on every plan, and no provider may be able to forget either. First,
@@ -375,12 +396,33 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// </summary>
     /// <param name="root">The directory the provider reaches by name before it classifies anything.</param>
     /// <param name="absent">What to tell the user where the root is genuinely not there.</param>
-    protected CleanupPlan? NothingToPlanFor(string root, string absent) => LongPath.ProbeDirectory(root) switch
+    protected CleanupPlan? NothingToPlanFor(string root, string absent) => NothingToPlanFor(root, absent, out _);
+
+    /// <summary>
+    /// The same plan, with whether <paramref name="root"/> is a link taken from the same attribute
+    /// read, for a provider that declines a linked root before it lists anything.
+    ///
+    /// <para>One read rather than this and a separate link check, so the two answers describe one
+    /// entry. Asked apart, they can describe two: a folder replaced by a junction between them passes
+    /// the presence check as the folder and the link check as the junction.</para>
+    /// </summary>
+    /// <param name="isLink">
+    /// True only where the root is there and is a link. Read only where this returns null, because
+    /// the other two answers are settled here.
+    /// </param>
+    protected CleanupPlan? NothingToPlanFor(string root, string absent, out bool isLink)
     {
-        PathPresence.Absent => EmptyPlan(absent),
-        PathPresence.Refused => UnreadableRootPlan(root),
-        _ => null,
-    };
+        var presence = LongPath.ProbeDirectory(root, out var link);
+
+        isLink = link is true;
+
+        return presence switch
+        {
+            PathPresence.Absent => EmptyPlan(absent),
+            PathPresence.Refused => UnreadableRootPlan(root),
+            _ => null,
+        };
+    }
 
     /// <summary>
     /// The same for a provider whose tool names several locations: null where any of them is there,
@@ -494,7 +536,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         MinimumAge age,
         CancellationToken ct)
     {
-        var measured = await Scanner.MeasureAgedAsync(path, age, ct).ConfigureAwait(false);
+        var measured = await Scanner.MeasureAgedAsync(path, age, Counting.Value?.Measurement(), ct).ConfigureAwait(false);
 
         // One listing produced both readings, so the stores it met and whether it reached the path
         // are recorded once.
@@ -514,7 +556,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
     {
         // One call for the whole list, so a walking scanner reads every path in one walk rather than
         // one walk a path. See IDirectoryScanner.MeasureManyAsync.
-        var results = await Scanner.MeasureManyAsync(asked, keep, ct).ConfigureAwait(false);
+        var results = await Scanner.MeasureManyAsync(asked, keep, Counting.Value?.Measurement(), ct).ConfigureAwait(false);
 
         foreach (var (question, measured) in asked.Zip(results))
         {
@@ -674,15 +716,11 @@ public abstract class CleanupProviderBase : ICleanupProvider
 
     /// <summary>
     /// The age of each of <paramref name="directories"/>, in their order, read as many at once as
-    /// this provider's walks of each volume run (<see cref="DirectoryAge.OfEach"/>). For a provider
+    /// this provider's walks of each volume run (<see cref="DiskBoundWork"/>). For a provider
     /// whose decision depends on the age, or whose step is not a <see cref="DeletionTarget"/>'s.
     /// </summary>
     protected Task<IReadOnlyList<DateTime?>> DateAsync(IReadOnlyList<string> directories, CancellationToken ct) =>
-        directories.Count == 0
-            ? Task.FromResult<IReadOnlyList<DateTime?>>([])
-
-            // On a thread of its own: the listings block it on the disk. See DirectoryAge.OfEach.
-            : WorkerThreads.Shared.RunAsync(() => DirectoryAge.OfEach(directories, Scanner.Tuning, ct), ct);
+        DiskBoundWork.EachAsync(directories, Scanner.Tuning, directory => DirectoryAge.Of(directory, ct), ct);
 
     /// <summary>
     /// Measure every directory each Disk Cleanup handler would clear, and turn each handler into the

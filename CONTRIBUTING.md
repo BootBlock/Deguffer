@@ -67,8 +67,9 @@ Deguffer.Benchmark scan C:\Users\<user>\source --runs 6
   Explore does. `--snapshots on|off` sets whether it also assembles the pictures of the tree so far
   that Explore draws while it walks. The default is on. Time it both ways to see what they cost.
 - `sources <folder>` finds the build outputs in a folder as an unelevated scan does when the folder
-  is an approved source folder. It stops at each one it finds and never enters `.git` or
-  `node_modules`, so it lists fewer folders than `walk`.
+  is an approved source folder. It stops at each one it finds and never enters a folder
+  `SourceTreeBoundary` refuses, such as `.git` or `node_modules`, so it lists fewer folders than
+  `walk`.
 - `links <folder>` measures a folder as a hard-linked store such as pnpm's is measured, reading
   each file's link count and sizes. `--read-by name|handle` sets whether each file is read by
   name, as a scan does where the file system answers that, or through a handle opened on it. The

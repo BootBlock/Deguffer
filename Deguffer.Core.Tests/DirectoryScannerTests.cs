@@ -37,6 +37,36 @@ public class DirectoryScannerTests
     }
 
     /// <summary>
+    /// The table answers each path in a lookup of its own, and a list's running figure adds every
+    /// answer up rather than reporting each path's figure in turn, which would read as a count that
+    /// went down.
+    /// </summary>
+    [Fact]
+    public async Task AListAnsweredByTheTableReportsTheSumOfEveryPath()
+    {
+        const uint pip = 9;
+        const uint uv = 10;
+        var volume = Volume()
+            .AddDirectory(pip, Profile, "pip")
+            .AddFile(21, pip, "wheel.whl", allocated: 4096, logical: 3000)
+            .AddDirectory(uv, Profile, "uv")
+            .AddFile(22, uv, "archive.tar", allocated: 4096, logical: 1000);
+
+        var scanner = new DirectoryScanner(FakeMftSourceFactory.Serving('C', volume), tuning: RouteTuners.Table);
+        var progress = new ProgressRecorder<ScanSize>();
+
+        await scanner.MeasureManyAsync(
+            [
+                new ScanRequest(@"C:\Users\testuser\.npm-cache"),
+                new ScanRequest(@"C:\Users\testuser\pip"),
+                new ScanRequest(@"C:\Users\testuser\uv"),
+            ],
+            progress: progress);
+
+        Assert.Equal([8000L, 11000L, 12000L], progress.Reports.Select(size => size.Logical));
+    }
+
+    /// <summary>
     /// §6.3 says the app runs unelevated by default, so this is the ordinary path rather than an
     /// edge case — and §5.5 says it must be observable. A silent slow scan looks exactly like a
     /// large directory, and the user is never told that elevating would make it quick.

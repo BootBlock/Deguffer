@@ -78,6 +78,7 @@ public sealed class ListingBudgetTests
                     [(@"Q:\outer", 0)],
                     tuning,
                     FileNames.All,
+                    DirectoryHold.None,
                     budget,
                     EmptyListing,
                     (_, _, _) =>
@@ -86,6 +87,7 @@ public sealed class ListingBudgetTests
                             [(@"Q:\inner", 0)],
                             tuning,
                             FileNames.All,
+                            DirectoryHold.None,
                             budget,
                             EmptyListing,
                             static (_, _, _) => { },
@@ -263,6 +265,7 @@ public sealed class ListingBudgetTests
                 [(root, 0)],
                 new WalkTuning(threads, WalkTuning.MinimumListingBuffer),
                 FileNames.All,
+                DirectoryHold.None,
                 budget,
                 tree.List,
                 static (_, contents, descend) =>

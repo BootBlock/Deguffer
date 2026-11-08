@@ -205,7 +205,7 @@ internal static partial class SquirrelPackages
                 $"A build of {installation.Name}. This row removes update packages and never a "
                 + "build.")));
 
-            switch (LongPath.ProbeDirectory(packages))
+            switch (LongPath.ProbeDirectory(packages, out var packagesIsLink))
             {
                 case PathPresence.Refused:
                     notes.Add(UnreadableRoot.UnreachedNote(packages));
@@ -216,7 +216,7 @@ internal static partial class SquirrelPackages
                     continue;
             }
 
-            if (LongPath.IsReparsePoint(packages))
+            if (packagesIsLink is true)
             {
                 notes.Add(CacheLevelWalk.Note(packages));
                 survivors.Add((packages, CacheLevelWalk.LinkReason));

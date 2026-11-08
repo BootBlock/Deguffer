@@ -11,15 +11,19 @@ namespace Deguffer.Core.Tests;
 /// <see cref="ExploreScanner.ScanFoldersAsync"/> over folders on more than one volume: the volumes on
 /// separate disks scanned at the same time, and those on one disk, or on a disk not known, in turn.
 ///
-/// <para>Each table is opened through a factory that holds every open until another volume's open
-/// arrives or <see cref="Company"/> passes, and counts the most that were held at once. Two at once
-/// is only possible where two pipelines ran together.</para>
+/// <para>Each table is opened through a <see cref="CompanyMftSourceFactory"/>, which holds every open
+/// until another volume's open arrives or its wait passes, and counts the most that were held at once.
+/// Two at once is only possible where two pipelines ran together.</para>
 /// </summary>
 public sealed class ScanFoldersOnSeveralDisksTests
 {
+    /// <summary>How long an open that must have company waits for it before the test fails (#395).</summary>
+    private static readonly TimeSpan Deadline = TimeSpan.FromSeconds(30);
+
     /// <summary>
-    /// How long an open waits for another volume's. Long enough for a pipeline started at the same
-    /// time to reach its open on a busy machine, and paid in full by each open that is rightly alone.
+    /// How long an open that must be alone waits for company that would prove it was not. Long enough
+    /// for a pipeline started at the same time to reach its open on a busy machine, and paid in full by
+    /// each open that is rightly alone.
     /// </summary>
     private static readonly TimeSpan Company = TimeSpan.FromSeconds(1);
 
@@ -50,7 +54,7 @@ public sealed class ScanFoldersOnSeveralDisksTests
     [Fact]
     public async Task VolumesOnSeparateDisksAreReadAtTheSameTime()
     {
-        var sources = new CompanyMftSourceFactory(Photos(), 'X', 'Y');
+        var sources = new CompanyMftSourceFactory(Deadline, ('X', Photos()), ('Y', Photos()));
         var tuner = Tuner(new FakeStorageQueries().Volume(@"X:\", 1).Volume(@"Y:\", 2), @"X:\", @"Y:\");
 
         var scans = await new ExploreScanner(sources, tuning: tuner).ScanFoldersAsync([@"X:\Photos", @"Y:\Photos"]);
@@ -64,7 +68,7 @@ public sealed class ScanFoldersOnSeveralDisksTests
     [Fact]
     public async Task VolumesOnOneDiskAreReadInTurn()
     {
-        var sources = new CompanyMftSourceFactory(Photos(), 'X', 'Y');
+        var sources = new CompanyMftSourceFactory(Company, ('X', Photos()), ('Y', Photos()));
         var tuner = Tuner(new FakeStorageQueries().Volume(@"X:\", 1).Volume(@"Y:\", 1), @"X:\", @"Y:\");
 
         await new ExploreScanner(sources, tuning: tuner).ScanFoldersAsync([@"X:\Photos", @"Y:\Photos"]);
@@ -77,7 +81,7 @@ public sealed class ScanFoldersOnSeveralDisksTests
     [Fact]
     public async Task AVolumeOnADiskNotKnownIsReadInTurnWithTheOthers()
     {
-        var sources = new CompanyMftSourceFactory(Photos(), 'X', 'Y');
+        var sources = new CompanyMftSourceFactory(Company, ('X', Photos()), ('Y', Photos()));
         var tuner = Tuner(new FakeStorageQueries().Volume(@"X:\", 1), @"X:\", @"Y:\");
 
         await new ExploreScanner(sources, tuning: tuner).ScanFoldersAsync([@"X:\Photos", @"Y:\Photos"]);
@@ -102,101 +106,5 @@ public sealed class ScanFoldersOnSeveralDisksTests
 
         var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() => scan.WaitAsync(TimeSpan.FromSeconds(30)));
         Assert.Equal(FailingMftSourceFactory.Failure, thrown.Message);
-    }
-
-    /// <summary>Opens that wait for each other's company, so two pipelines running at once show as two opens held at once.</summary>
-    private sealed class CompanyMftSourceFactory(MftFixture fixture, params char[] letters) : IMftSourceFactory
-    {
-        private int _open;
-        private int _mostAtOnce;
-        private int _opened;
-
-        public int MostAtOnce => Volatile.Read(ref _mostAtOnce);
-
-        public int OpenCount => Volatile.Read(ref _opened);
-
-        public IMftVolume? TryOpen(char driveLetter, out FallbackReason reason, MftOpenTimings? timings = null)
-        {
-            Interlocked.Increment(ref _opened);
-
-            if (!letters.Contains(char.ToUpperInvariant(driveLetter)))
-            {
-                reason = FallbackReason.NotNtfsVolume;
-                return null;
-            }
-
-            var atOnce = Interlocked.Increment(ref _open);
-            InterlockedMax(ref _mostAtOnce, atOnce);
-
-            SpinWait.SpinUntil(() => Volatile.Read(ref _open) > 1, Company);
-            InterlockedMax(ref _mostAtOnce, Volatile.Read(ref _open));
-            Interlocked.Decrement(ref _open);
-
-            reason = FallbackReason.None;
-            return new ServedVolume(fixture.Build());
-        }
-
-        private static void InterlockedMax(ref int most, int value)
-        {
-            var seen = Volatile.Read(ref most);
-
-            while (value > seen && Interlocked.CompareExchange(ref most, value, seen) is var was && was != seen)
-            {
-                seen = was;
-            }
-        }
-    }
-
-    /// <summary>
-    /// One volume whose open fails once the other's read has begun, and the other's read held until
-    /// its token is cancelled.
-    /// </summary>
-    private sealed class FailingMftSourceFactory(MftFixture fixture, char failing, char held) : IMftSourceFactory
-    {
-        public const string Failure = "The volume driver failed.";
-
-        private readonly TaskCompletionSource _reading = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public IMftVolume? TryOpen(char driveLetter, out FallbackReason reason, MftOpenTimings? timings = null)
-        {
-            reason = FallbackReason.None;
-
-            if (char.ToUpperInvariant(driveLetter) == failing)
-            {
-                _reading.Task.Wait(TimeSpan.FromSeconds(30));
-                throw new InvalidOperationException(Failure);
-            }
-
-            return char.ToUpperInvariant(driveLetter) == held ? new ServedVolume(new Held(fixture.Build(), _reading)) : null;
-        }
-
-        private sealed class Held(IMftSource inner, TaskCompletionSource reading) : IMftSource
-        {
-            public int BytesPerRecord => inner.BytesPerRecord;
-
-            public long RecordCount => inner.RecordCount;
-
-            public MftBitmapPlacement? Bitmap => inner.Bitmap;
-
-            public int BytesPerCluster => inner.BytesPerCluster;
-
-            public int BatchLength(long firstRecord, int capacity) => inner.BatchLength(firstRecord, capacity);
-
-            public int ReadBatch(long firstRecord, Span<byte> destination) => inner.ReadBatch(firstRecord, destination);
-
-            public async ValueTask<int> ReadBatchAsync(long firstRecord, Memory<byte> destination, CancellationToken ct)
-            {
-                reading.TrySetResult();
-                await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false);
-                return 0;
-            }
-
-            public bool TryReadClusters(long firstCluster, Span<byte> destination) => inner.TryReadClusters(firstCluster, destination);
-
-            public ValueTask<bool> TryReadClustersAsync(long firstCluster, Memory<byte> destination, CancellationToken ct) =>
-                inner.TryReadClustersAsync(firstCluster, destination, ct);
-
-            public void Dispose() => inner.Dispose();
-        }
     }
 }

@@ -388,7 +388,10 @@ public sealed class CleanupPlanner
     }
 
     /// <summary>
-    /// How many providers a pass plans at once.
+    /// How many providers a pass plans at once. Also the bound on what a pass does for several rows or
+    /// folders at once on the same reasoning: reading each row's declared roots
+    /// (<see cref="DeclaredRoots"/>), and searching the approved source folders
+    /// (<see cref="SourceDirectoryDiscovery"/>).
     ///
     /// <para>Measured on one machine of 32 logical processors and two NVMe drives, 82 providers, warm
     /// and unelevated, four passes each: one at a time took 22.8 to 27.2 s, four 8.7 to 10.8 s, eight
@@ -547,7 +550,7 @@ public sealed class CleanupPlanner
 
             try
             {
-                finding = await PlanOneAsync(provider, registered, volumes, keep, token).ConfigureAwait(false);
+                finding = await PlanOneAsync(provider, registered, volumes, keep, checking.Counted(provider), token).ConfigureAwait(false);
                 planned = true;
             }
             finally
@@ -583,6 +586,7 @@ public sealed class CleanupPlanner
         RegisteredStorage registered,
         IVolumeInventory volumes,
         MinimumAge keep,
+        IProgress<ScanSize> counted,
         CancellationToken ct)
     {
         var present = await provider.IsPresentAsync(ct).ConfigureAwait(false);
@@ -599,7 +603,7 @@ public sealed class CleanupPlanner
 
         // Applied here rather than inside the provider: the set is the pass's, gathered from every row
         // that registers storage, and no row can see another's records. See VirtualMachineStoragePlan.
-        var plan = VirtualMachineStoragePlan.Apply(await provider.PlanAsync(keep, ct).ConfigureAwait(false), registered, volumes);
+        var plan = VirtualMachineStoragePlan.Apply(await provider.PlanAsync(keep, counted, ct).ConfigureAwait(false), registered, volumes);
 
         return new Finding(provider, present, plan, awaitingFolders);
     }

@@ -188,7 +188,7 @@ public sealed partial class ClaudeCodeSessionRegistry
 
         var directory = Path.Combine(home, ClaudeCodeHome.Sessions);
 
-        switch (LongPath.ProbeDirectory(directory))
+        switch (LongPath.ProbeDirectory(directory, out var directoryIsLink))
         {
             // Not there is an answer: no session has registered. It is also how a version of Claude
             // Code that predates the list looks, which this cannot tell apart, and that is why no
@@ -205,7 +205,7 @@ public sealed partial class ClaudeCodeSessionRegistry
 
         // Never read through, on the rule every walk in Core keeps: what a link points at was never
         // classified, and a list read from somewhere else describes somebody else's sessions.
-        if (LongPath.IsReparsePoint(directory))
+        if (directoryIsLink is true)
         {
             return Unreadable;
         }

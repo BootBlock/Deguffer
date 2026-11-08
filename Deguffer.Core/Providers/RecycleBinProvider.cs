@@ -273,7 +273,7 @@ public sealed class RecycleBinProvider : CleanupProviderBase
         {
             ct.ThrowIfCancellationRequested();
 
-            switch (LongPath.ProbeDirectory(bin))
+            switch (LongPath.ProbeDirectory(bin, out var binIsLink))
             {
                 case PathPresence.Refused:
                     notes.Add(UnreadableRoot.UnreachedNote(bin));
@@ -287,7 +287,7 @@ public sealed class RecycleBinProvider : CleanupProviderBase
             // Reached by name rather than through an enumeration, so it needs the check the
             // enumeration would otherwise have made: a junctioned bin root hands back ordinary
             // directories from the far side, one of which could carry this user's SID.
-            if (LongPath.IsReparsePoint(bin))
+            if (binIsLink is true)
             {
                 notes.Add(new PlanNote(
                     PlanNoteSeverity.Information,

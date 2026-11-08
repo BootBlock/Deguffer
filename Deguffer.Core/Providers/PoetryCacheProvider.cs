@@ -267,7 +267,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
         var located = await _discovery.DiscoverAsync(poetry, DefaultCacheRoot, ct).ConfigureAwait(false);
         var (cacheRoot, environments) = (located.CacheRoot.Path, located.Environments.Path);
 
-        if (NothingToPlanFor(cacheRoot, located.CacheRoot.DescribeAbsent("Poetry", "cache directory")) is { } nothing)
+        if (NothingToPlanFor(cacheRoot, located.CacheRoot.DescribeAbsent("Poetry", "cache directory"), out var cacheRootIsLink) is { } nothing)
         {
             return nothing;
         }
@@ -275,7 +275,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
         // A junctioned cache directory is declined whole. The walk below would decline it too, but
         // this says so about the whole directory in one sentence, and makes no claim about
         // environments that only resolve through the link.
-        if (LongPath.IsReparsePoint(cacheRoot))
+        if (cacheRootIsLink)
         {
             return UnexaminedPlan(
                 $"Leaving '{LongPath.Display(cacheRoot)}' alone: it is a link to somewhere else, and "

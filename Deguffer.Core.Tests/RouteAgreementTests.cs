@@ -452,6 +452,33 @@ public class RouteAgreementTests
     }
 
     /// <summary>
+    /// Both routes stop at every name the search refuses, on a real tree: the <c>obj</c> Mercurial
+    /// mirrors from a project is offered by neither, and the project's own is offered by both.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(NeverEnteredNames.All), MemberType = typeof(NeverEnteredNames))]
+    public async Task TheTwoRoutesStopAtEveryNameTheSearchRefuses(string name)
+    {
+        using var temp = new TempDirectory();
+
+        var (root, fixture) = MirroredTree.Realise(temp, new TreeDirectory(
+            "src",
+            new TreeDirectory("Example", new TreeDirectory("obj")),
+            new TreeDirectory(
+                name,
+                new TreeDirectory("store", new TreeDirectory("data", new TreeDirectory("Example", new TreeDirectory("obj")))))));
+
+        var walked = await Discovery(Walking()).FindAsync([new SourceRoot(root)]);
+        var indexed = await Discovery(Indexing(root, fixture)).FindAsync([new SourceRoot(root)]);
+
+        Assert.True(walked.FellBack);
+        Assert.False(indexed.FellBack);
+
+        Assert.Equal([Path.Combine(root, "Example", "obj")], walked.Candidates);
+        Assert.Equal(walked.Candidates, indexed.Candidates);
+    }
+
+    /// <summary>
     /// The agreement has to survive long names as well, because the index route decides what to keep
     /// by taking a path apart rather than by walking it. A disagreement there is not a crash: it is a
     /// candidate list quietly differing from the walk's, which is the one thing these tests exist to

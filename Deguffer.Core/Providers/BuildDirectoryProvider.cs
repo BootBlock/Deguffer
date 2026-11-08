@@ -136,6 +136,7 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
             _discovery,
             ApprovedRoots,
             Kind.DirectoryNames,
+            Scanner.Tuning,
             candidate => BuildDirectorySignature.TryRecognise(Kind, candidate, ct)?.Project,
             Questions,
             ct);
@@ -178,18 +179,23 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
         var siblingFiles = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
         var declined = new List<string>();
 
-        foreach (var candidate in discovered.Named(Kind.DirectoryNames))
-        {
-            ct.ThrowIfCancellationRequested();
+        var candidates = discovered.Named(Kind.DirectoryNames);
+        var recognitions = await DiskBoundWork.EachAsync(
+            candidates,
+            Scanner.Tuning,
+            candidate => BuildDirectorySignature.TryRecognise(Kind, candidate, ct),
+            ct).ConfigureAwait(false);
 
-            if (BuildDirectorySignature.TryRecognise(Kind, candidate, ct) is { } recognition)
+        for (var index = 0; index < candidates.Count; index++)
+        {
+            if (recognitions[index] is { } recognition)
             {
-                recognised.Add(new RecognisedBuildDirectory(candidate, recognition.Project));
+                recognised.Add(new RecognisedBuildDirectory(candidates[index], recognition.Project));
                 siblingFiles[recognition.Project] = recognition.SiblingFiles;
             }
             else
             {
-                declined.Add(candidate);
+                declined.Add(candidates[index]);
             }
         }
 

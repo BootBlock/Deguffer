@@ -163,7 +163,7 @@ public sealed class PuppeteerBrowsersProvider : CleanupProviderBase
 
         if (NothingToPlanFor(
                 root,
-                $"Puppeteer has not downloaded any browsers on this machine ({root}).") is { } nothing)
+                $"Puppeteer has not downloaded any browsers on this machine ({root}).", out var rootIsLink) is { } nothing)
         {
             return nothing;
         }
@@ -171,7 +171,7 @@ public sealed class PuppeteerBrowsersProvider : CleanupProviderBase
         // The root arrives by name, and the enumeration below never classifies the directory it is
         // handed: a junctioned root would hand back the far side's ordinary directories, and every
         // survivor named for it would resolve through the same link and pass.
-        if (LongPath.IsReparsePoint(root))
+        if (rootIsLink)
         {
             return UnexaminedPlan(
                 $"Leaving '{root}' alone: it is a link to somewhere else, and Deguffer does not look "

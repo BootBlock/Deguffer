@@ -286,6 +286,20 @@ public static partial class LongPath
     public static PathPresence ProbeFile(string path) => Probe(path, EntryKind.File, out _, out _);
 
     /// <summary>
+    /// The same answer for a file, with whether it is a link taken from the same attribute read, as
+    /// <see cref="ProbeDirectory(string, out bool?)"/> gives it for a directory and with the same
+    /// null.
+    /// </summary>
+    public static PathPresence ProbeFile(string path, out bool? isLink)
+    {
+        var presence = Probe(path, EntryKind.File, out var described, out _);
+
+        isLink = described?.HasFlag(FileAttributes.ReparsePoint);
+
+        return presence;
+    }
+
+    /// <summary>
     /// The same three-state answer for a path that may be either kind, which is what §5.6 asks of a
     /// protected path. <see cref="PathPresence.Present"/> exactly where
     /// <c>FileExists || DirectoryExists</c> is true, so it answers everything that pair answers and
@@ -489,6 +503,14 @@ public static partial class LongPath
 
     internal static bool EndsWithSeparator(string path) =>
         path.EndsWith(Path.DirectorySeparatorChar) || path.EndsWith(Path.AltDirectorySeparatorChar);
+
+    /// <summary>
+    /// The prefix every path below <paramref name="path"/> starts with: the path and one separator.
+    /// A volume root already ends in one, and a second would build a prefix nothing below it matches,
+    /// as <see cref="Contains(string, string)"/> warns.
+    /// </summary>
+    internal static string Below(string path) =>
+        EndsWithSeparator(path) ? path : path + Path.DirectorySeparatorChar;
 
     /// <summary>The kind of entry a probe asks about.</summary>
     private enum EntryKind

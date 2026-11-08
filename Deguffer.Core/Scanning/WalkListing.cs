@@ -62,13 +62,17 @@ internal delegate ListingEnd ListDirectory(string directory, ListingRequest requ
 /// <para>The lists and the <see cref="ListingMemory"/> are reused for every directory the worker reads,
 /// because a walk reads hundreds of thousands of them and they are what a listing would otherwise
 /// allocate (G4). Dispose it once the worker has ended.</para>
+///
+/// <para>Where <paramref name="hold"/> asks, the directory last listed stays open until
+/// <see cref="Release"/>, which the walk calls when its callback returns or throws.</para>
 /// </summary>
-internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list, FileNames files) : IDisposable
+internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list, FileNames files, DirectoryHold hold = DirectoryHold.None) : IDisposable
 {
     private readonly ListingMemory _memory = new(buffer.Largest);
     private readonly List<WalkEntry> _entries = [];
     private readonly List<WalkEntry> _links = [];
     private readonly List<WalkEntry> _reparseFiles = [];
+    private readonly ListedDirectoryHandle? _held = hold is DirectoryHold.DuringCallback ? new() : null;
 
     /// <param name="directory">In the extended form (§6.3).</param>
     /// <param name="followsLink">See <see cref="ListingRequest.FollowsLink"/>.</param>
@@ -81,9 +85,10 @@ internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list, File
         // The last directory's contents are over with once this is called, and so are the names its
         // listing lent.
         _memory.Names.Recall();
+        _held?.Release();
 
         var bytes = buffer.Bytes;
-        var end = list(directory, new ListingRequest(_memory, bytes, followsLink, files), _entries);
+        var end = list(directory, Request(bytes, followsLink), _entries);
 
         if (buffer.RetryAfter(bytes, end) is { } smaller)
         {
@@ -91,8 +96,9 @@ internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list, File
             // what the first attempt read would hand those entries back twice.
             _entries.Clear();
             _memory.Names.Recall();
+            _held?.Release();
 
-            var retried = list(directory, new ListingRequest(_memory, smaller, followsLink, files), _entries);
+            var retried = list(directory, Request(smaller, followsLink), _entries);
             if (retried.Presence is PathPresence.Present)
             {
                 buffer.Rejected();
@@ -104,10 +110,20 @@ internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list, File
         SetReparsePointsApart();
 
         // Expected on a live machine, and reported rather than thrown, since a volume holds hundreds.
-        return new DirectoryContents(directory, _entries, _links, _reparseFiles, end);
+        return new DirectoryContents(directory, _entries, _links, _reparseFiles, end, _held?.Handle ?? 0);
     }
 
-    public void Dispose() => _memory.Dispose();
+    /// <summary>Close the directory last listed, where it was held open. The walk calls this once its callback is over.</summary>
+    public void Release() => _held?.Release();
+
+    public void Dispose()
+    {
+        _held?.Dispose();
+        _memory.Dispose();
+    }
+
+    private ListingRequest Request(int bytes, bool followsLink) =>
+        new(_memory, bytes, followsLink, files) { Holder = _held };
 
     private void SetReparsePointsApart()
     {

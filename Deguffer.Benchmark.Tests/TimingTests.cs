@@ -12,9 +12,12 @@ public sealed class TimingTests
 {
     private const int Held = 32 << 20;
 
-    // What else the heap figure moves by between two collections a moment apart: a few hundred
-    // bytes in these tests' runs, with room to spare and far below any size asserted here.
-    private const int Noise = 64 << 10;
+    // How far a kept figure may stray from what the run kept. Running alone does not make the heap
+    // quiet: the runner and the work earlier tests left behind allocate on other threads between the
+    // two readings, by an amount nothing bounds, seen at up to 76 KB on a loaded machine. The bound is
+    // set by what the assertions must tell apart instead: the result from nothing, and from what the
+    // run leaves behind, which differ by at least Held / 4. A megabyte is an eighth of that.
+    private const int Tolerance = 1 << 20;
 
     // What one run leaves behind, as a shared pool would hold it.
     private static byte[]? _leftBehind;
@@ -24,7 +27,7 @@ public sealed class TimingTests
     {
         var sample = Timing.Measure(_ => new RunTally(1, 0, Complete: true, Kept: new KeptResult(new byte[Held])), CancellationToken.None);
 
-        Assert.InRange(sample.KeptBytes, Held - Noise, Held + Noise);
+        Assert.InRange(sample.KeptBytes, Held - Tolerance, Held + Tolerance);
         Assert.Null(sample.Tally.Kept);
     }
 
@@ -45,7 +48,7 @@ public sealed class TimingTests
                 },
                 CancellationToken.None);
 
-            Assert.InRange(sample.KeptBytes, (Held / 4) - Noise, (Held / 4) + Noise);
+            Assert.InRange(sample.KeptBytes, (Held / 4) - Tolerance, (Held / 4) + Tolerance);
         }
         finally
         {

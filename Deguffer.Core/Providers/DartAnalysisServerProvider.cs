@@ -125,7 +125,7 @@ public sealed class DartAnalysisServerProvider : CleanupProviderBase
     {
         if (NothingToPlanFor(
                 _root,
-                "The Dart analysis server has no cache directory for this user.") is { } nothing)
+                "The Dart analysis server has no cache directory for this user.", out var rootIsLink) is { } nothing)
         {
             return nothing;
         }
@@ -134,7 +134,7 @@ public sealed class DartAnalysisServerProvider : CleanupProviderBase
         // small system disk. The walk below would decline it too, but this says so about the whole
         // store in one sentence, and makes no claim about a .prompts that only resolves through the
         // link.
-        if (LongPath.IsReparsePoint(_root))
+        if (rootIsLink)
         {
             return UnexaminedPlan(
                 $"Leaving '{_root}' alone: it is a link to somewhere else, and Deguffer does not look "

@@ -136,25 +136,25 @@ public class MftDirectorySearchTests
     }
 
     /// <summary>
-    /// The source discovery's search never enters <c>.git</c> or <c>node_modules</c>, and the index
-    /// stops there exactly as the walk does. A name being sought overrides that: a search for
-    /// <c>node_modules</c> finds it and goes no further.
+    /// Every name the search refuses stops the index as it stops the walk, and the <c>obj</c> that
+    /// Mercurial mirrors from the project is not offered (§5.6). Sought, the name is found and still
+    /// not descended.
     /// </summary>
-    [Fact]
-    public void NeverEntersWhatTheSearchRefusesUnlessItIsSought()
+    [Theory]
+    [MemberData(nameof(NeverEnteredNames.All), MemberType = typeof(NeverEnteredNames))]
+    public void NeverEntersAnyNameTheSearchRefusesUnlessItIsSought(string name)
     {
         var index = Build(Tree()
-            .AddDirectory(30, FirstProject, ".git")
-            .AddDirectory(31, 30, "obj")
-            .AddDirectory(32, FirstProject, "node_modules")
-            .AddDirectory(33, 32, "left-pad")
-            .AddDirectory(34, 33, "obj"));
+            .AddDirectory(30, FirstProject, name)
+            .AddDirectory(31, 30, "store")
+            .AddDirectory(32, 31, "data")
+            .AddDirectory(33, 32, "obj"));
 
         var obj = SourceTreeBoundary.Searching(FrozenSet.Create(StringComparer.OrdinalIgnoreCase, "obj"));
-        var both = SourceTreeBoundary.Searching(FrozenSet.Create(StringComparer.OrdinalIgnoreCase, "obj", "node_modules"));
+        var both = SourceTreeBoundary.Searching(FrozenSet.Create(StringComparer.OrdinalIgnoreCase, "obj", name));
 
         Assert.Equal(["obj"], Joined(index.TryFindDirectories(Example, obj)));
-        Assert.Equal(["node_modules", "obj"], Joined(index.TryFindDirectories(Example, both)));
+        Assert.Equal(new[] { name, "obj" }.Order(StringComparer.Ordinal), Joined(index.TryFindDirectories(Example, both)));
     }
 
     /// <summary>

@@ -1,4 +1,5 @@
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -17,7 +18,7 @@ public sealed class StatByNameTests
         var file = temp.CreateFile(10_000, "store", "blob.bin");
         HardLink.To(file, Path.Combine(temp.CreateDirectory("project"), "blob.bin"));
 
-        var reading = StatByName.Read(LongPath.Extended(file), out var byName);
+        var reading = StatByName.Read(0, LongPath.ObjectManagerForm(file), out var byName);
 
         using var handle = FileInformation.Open(LongPath.Extended(file), HandleUse.Describe);
         Assert.True(FileInformation.TryStandard(handle, out var byHandle));
@@ -42,7 +43,7 @@ public sealed class StatByNameTests
         var link = Path.Combine(temp.CreateDirectory("store"), "blob.bin");
         SymbolicLink.ToFile(link, target);
 
-        var reading = StatByName.Read(LongPath.Extended(link), out var info);
+        var reading = StatByName.Read(0, LongPath.ObjectManagerForm(link), out var info);
 
         Assert.Equal(ByNameReading.Read, reading);
         Assert.Equal(0, info.EndOfFile);
@@ -53,8 +54,8 @@ public sealed class StatByNameTests
     {
         using var temp = new TempDirectory();
 
-        Assert.Equal(ByNameReading.Gone, StatByName.Read(LongPath.Extended(Path.Combine(temp.Path, "nowhere.bin")), out _));
-        Assert.Equal(ByNameReading.Gone, StatByName.Read(LongPath.Extended(Path.Combine(temp.Path, "nowhere", "a.bin")), out _));
+        Assert.Equal(ByNameReading.Gone, StatByName.Read(0, LongPath.ObjectManagerForm(Path.Combine(temp.Path, "nowhere.bin")), out _));
+        Assert.Equal(ByNameReading.Gone, StatByName.Read(0, LongPath.ObjectManagerForm(Path.Combine(temp.Path, "nowhere", "a.bin")), out _));
     }
 
     /// <summary>
@@ -69,11 +70,65 @@ public sealed class StatByNameTests
     public void ANameTooLongForTheNativeStringIsRefused()
     {
         using var temp = new TempDirectory();
-        var file = LongPath.Extended(temp.CreateFile(4096, "a.bin"));
+        var file = LongPath.ObjectManagerForm(temp.CreateFile(4096, "a.bin"));
         var name = file + @"\" + new string('a', 32_767);
 
-        Assert.Equal(ByNameReading.Read, StatByName.Read(file, out _));
-        Assert.Equal(ByNameReading.Refused, StatByName.Read(name, out _));
+        Assert.Equal(ByNameReading.Read, StatByName.Read(0, file, out _));
+        Assert.Equal(ByNameReading.Refused, StatByName.Read(0, name, out _));
+    }
+
+    /// <summary>
+    /// A file named by its bare name relative to a handle on its folder, as the hard-link-aware walk
+    /// names each file it listed, is read as it is by its full path.
+    /// </summary>
+    [Fact]
+    public void ReadsAFileByItsNameRelativeToItsFolderAsByItsFullPath()
+    {
+        using var temp = new TempDirectory();
+        var file = temp.CreateFile(10_000, "store", "blob.bin");
+        HardLink.To(file, Path.Combine(temp.CreateDirectory("project"), "blob.bin"));
+        using var folder = Opened(Path.Combine(temp.Path, "store"));
+
+        var relative = StatByName.Read(folder.Handle, "blob.bin", out var byName);
+        var full = StatByName.Read(0, LongPath.ObjectManagerForm(file), out var byPath);
+
+        Assert.Equal(ByNameReading.Read, relative);
+        Assert.Equal(ByNameReading.Read, full);
+        Assert.Equal(2u, byName.NumberOfLinks);
+        Assert.Equal(byPath, byName);
+    }
+
+    [Fact]
+    public void AFileAbsentFromTheFolderItIsReadRelativeToIsGone()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile(4096, "store", "blob.bin");
+        using var folder = Opened(Path.Combine(temp.Path, "store"));
+
+        Assert.Equal(ByNameReading.Gone, StatByName.Read(folder.Handle, "nowhere.bin", out _));
+    }
+
+    /// <summary>
+    /// The folder a file is read relative to is the one the walk listed, even where that folder was
+    /// moved away and a junction to somewhere else put at its name since. The same file read by its
+    /// full path is read through the junction, from outside the tree. (Windows refuses to move a folder
+    /// above one held open, so the folder held is the one that can be swapped.)
+    /// </summary>
+    [Fact]
+    public void AFileReadRelativeToItsFolderIsReadThereAfterTheFolderIsReplacedByAJunction()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile(10_000, "store", "pkg", "blob.bin");
+        temp.CreateFile(1, "elsewhere", "blob.bin");
+        using var folder = Opened(Path.Combine(temp.Path, "store", "pkg"));
+
+        Directory.Move(Path.Combine(temp.Path, "store", "pkg"), Path.Combine(temp.Path, "store", "moved"));
+        Junction.ToDirectory(Path.Combine(temp.Path, "store", "pkg"), Path.Combine(temp.Path, "elsewhere"));
+
+        Assert.Equal(ByNameReading.Read, StatByName.Read(folder.Handle, "blob.bin", out var relative));
+        Assert.Equal(ByNameReading.Read, StatByName.Read(0, LongPath.ObjectManagerForm(Path.Combine(temp.Path, "store", "pkg", "blob.bin")), out var throughJunction));
+        Assert.Equal(10_000, relative.EndOfFile);
+        Assert.Equal(1, throughJunction.EndOfFile);
     }
 
     /// <summary>
@@ -92,5 +147,18 @@ public sealed class StatByNameTests
     public void SaysWhetherTheFileSystemOrTheFileRefused(int status, string expected)
     {
         Assert.Equal(expected, StatByName.Answer(status).ToString());
+    }
+
+    /// <summary><paramref name="folder"/> listed from the disk with its handle kept, as the hard-link-aware walk keeps it.</summary>
+    private static ListedDirectoryHandle Opened(string folder)
+    {
+        using var memory = new ListingMemory(WalkTuning.MinimumListingBuffer);
+        var held = new ListedDirectoryHandle();
+        var request = new ListingRequest(memory, memory.Bytes, FollowsLink: true, FileNames.All) { Holder = held };
+
+        Assert.Equal(ListingEnd.Listed, DirectoryQuery.List(LongPath.Extended(folder), request, []));
+        Assert.NotEqual(0, held.Handle);
+
+        return held;
     }
 }

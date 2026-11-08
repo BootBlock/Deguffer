@@ -47,6 +47,35 @@ public sealed class FakeProcessRunnerTests
         Assert.False(held.StartedTogether);
     }
 
+    /// <summary>A run held by a task replies only once that task completes, as the program's replies say.</summary>
+    [Fact]
+    public async Task ARunHeldByATaskRepliesOnlyOnceItCompletes()
+    {
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var runner = new FakeProcessRunner().Responding(Tool, "query", "answer").Holding(Tool, "query", release.Task, Deadline);
+
+        var run = runner.RunAsync(Tool, "query", ToolRun.Query, CancellationToken.None);
+
+        Assert.False(run.IsCompleted, "A run held by a task replied before the task completed.");
+
+        release.SetResult();
+        var reply = await run.WaitAsync(Deadline * 2);
+
+        Assert.Equal("answer", reply.StandardOutput);
+    }
+
+    /// <summary>A run whose task never completes fails at the deadline, naming the run, rather than hanging.</summary>
+    [Fact]
+    public async Task ARunHeldByATaskThatNeverCompletesFailsAtTheDeadline()
+    {
+        var runner = new FakeProcessRunner().Holding(Tool, "query", new TaskCompletionSource().Task, TimeSpan.FromMilliseconds(200));
+
+        var failure = await Assert.ThrowsAsync<TimeoutException>(
+            () => runner.RunAsync(Tool, "query", ToolRun.Query, CancellationToken.None));
+
+        Assert.Contains("'query' was not released within 0.2 s", failure.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>A run that arrives once its set has been released replies at once, as an unheld run does.</summary>
     [Fact]
     public async Task ARunAfterTheSetIsReleasedRepliesAtOnce()

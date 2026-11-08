@@ -11,8 +11,9 @@ namespace Deguffer.Benchmark;
 /// table makes it.
 ///
 /// <para>It visits fewer folders than <see cref="WalkRoute"/>: it stops at each folder it finds and
-/// never enters <c>.git</c> or <c>node_modules</c>, so the bare walk of the same folder says little
-/// about what the search costs.</para>
+/// never enters a folder <see cref="SourceTreeBoundary"/> refuses, such as <c>.git</c> or
+/// <c>node_modules</c>, so the bare walk of the same folder says little about what the search
+/// costs.</para>
 /// </summary>
 internal static class SourcesRoute
 {

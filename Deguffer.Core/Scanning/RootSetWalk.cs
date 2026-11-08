@@ -66,16 +66,18 @@ internal static class RootSetWalk
     /// Called as <see cref="BoundedFileWalk"/>'s progress is, and once more at the end of each further
     /// walk a nested root needs.
     /// </param>
+    /// <param name="hold">Whether each directory stays open while <paramref name="onDirectory"/> reads it.</param>
     public static void Visit<TFolder>(
         IReadOnlyList<WalkRoot> roots,
         WalkTuning tuning,
         FileNames files,
+        DirectoryHold hold,
         Func<int, TFolder?, DirectoryContents, IReadOnlySet<string>?, TFolder> onDirectory,
         Action onProgress,
         TimeProvider clock,
         CancellationToken ct)
         where TFolder : class =>
-        Visit(roots, tuning, files, DirectoryQuery.List, onDirectory, onProgress, clock, ct);
+        Visit(roots, tuning, files, hold, DirectoryQuery.List, onDirectory, onProgress, clock, ct);
 
     /// <summary>
     /// The walk above, listing each directory through <paramref name="list"/>: the seam a test lists a
@@ -85,6 +87,7 @@ internal static class RootSetWalk
         IReadOnlyList<WalkRoot> roots,
         WalkTuning tuning,
         FileNames files,
+        DirectoryHold hold,
         ListDirectory list,
         Func<int, TFolder?, DirectoryContents, IReadOnlySet<string>?, TFolder> onDirectory,
         Action onProgress,
@@ -103,6 +106,7 @@ internal static class RootSetWalk
                 round.Seeds,
                 tuning,
                 files,
+                hold,
                 list,
                 (Frame<TFolder>[] frames, DirectoryContents contents, Action<WalkEntry, Frame<TFolder>[]> descend) =>
                     Read(roots, round, frames, contents, descend, onDirectory),
@@ -132,8 +136,15 @@ internal static class RootSetWalk
                 list(directory, folders.Contains(directory) ? request with { Files = FileNames.All } : request, into);
     }
 
-    /// <summary>One directory, for every root it lies in, and the roots each of its children lies in.</summary>
-    private static void Read<TFolder>(
+    /// <summary>
+    /// One directory, for every root it lies in, and the roots each of its children lies in.
+    ///
+    /// <para>A child that every root continues into and no root starts at lies in exactly the roots its
+    /// directory does, which is nearly every child. Those children share one array, built the first time
+    /// one is met: it is never written once handed on, and one each would be an allocation a directory
+    /// walked, carried on the work-stealing stacks until the child is read.</para>
+    /// </summary>
+    internal static void Read<TFolder>(
         IReadOnlyList<WalkRoot> roots,
         Round<TFolder> round,
         Frame<TFolder>[] frames,
@@ -152,6 +163,8 @@ internal static class RootSetWalk
             var left = roots[root].LeftOut?.NamesIn(contents);
             opened[i] = (root, onDirectory(root, holder, contents, left), left);
         }
+
+        Frame<TFolder>[]? everyRoot = null;
 
         foreach (var entry in contents.Entries)
         {
@@ -178,6 +191,12 @@ internal static class RootSetWalk
                 continue;
             }
 
+            if (continuing == opened.Length && starting.Count == 0)
+            {
+                descend(entry, everyRoot ??= EveryRoot(opened));
+                continue;
+            }
+
             var below = new Frame<TFolder>[continuing + starting.Count];
             var next = 0;
 
@@ -198,15 +217,29 @@ internal static class RootSetWalk
         }
     }
 
+    /// <summary>The frames of a child that lies in every root its directory does, and starts none.</summary>
+    private static Frame<TFolder>[] EveryRoot<TFolder>((int Root, TFolder Folder, IReadOnlySet<string>? Left)[] opened)
+        where TFolder : class
+    {
+        var below = new Frame<TFolder>[opened.Length];
+
+        for (var i = 0; i < opened.Length; i++)
+        {
+            below[i] = new Frame<TFolder>(opened[i].Root, opened[i].Folder);
+        }
+
+        return below;
+    }
+
     /// <summary>One root a directory lies in, and the caller's value for the directory's parent there.</summary>
-    private readonly record struct Frame<TFolder>(int Root, TFolder? Holder)
+    internal readonly record struct Frame<TFolder>(int Root, TFolder? Holder)
         where TFolder : class;
 
     /// <summary>
     /// One walk of the roots still waiting: the outermost of them seeded, and the rest found where the
     /// walk meets them.
     /// </summary>
-    private sealed class Round<TFolder>
+    internal sealed class Round<TFolder>
         where TFolder : class
     {
         private static readonly IReadOnlyList<int> None = [];
@@ -257,7 +290,7 @@ internal static class RootSetWalk
         {
             var places = waiting
                 .GroupBy(root => roots[root].Path, StringComparer.Ordinal)
-                .Select(same => (Path: same.Key, Below: Below(same.Key), Roots: same.ToArray()))
+                .Select(same => (Path: same.Key, Below: LongPath.Below(same.Key), Roots: same.ToArray()))
                 .OrderBy(place => place.Below, StringComparer.Ordinal);
 
             var reached = new int[roots.Count];
@@ -284,9 +317,5 @@ internal static class RootSetWalk
 
             return new Round<TFolder>(seeds, nested, reached);
         }
-
-        /// <summary>The prefix every path below <paramref name="path"/> starts with. A drive's root already ends in one.</summary>
-        private static string Below(string path) =>
-            path.EndsWith(System.IO.Path.DirectorySeparatorChar) ? path : path + System.IO.Path.DirectorySeparatorChar;
     }
 }

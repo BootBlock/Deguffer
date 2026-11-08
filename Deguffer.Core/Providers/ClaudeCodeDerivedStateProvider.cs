@@ -270,12 +270,12 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
 
         if (NothingToPlanFor(
                 home,
-                $"Claude Code has kept no folder for this user — no {home} directory.") is { } nothing)
+                $"Claude Code has kept no folder for this user — no {home} directory.", out var homeIsLink) is { } nothing)
         {
             return nothing;
         }
 
-        if (LongPath.IsReparsePoint(home))
+        if (homeIsLink)
         {
             return UnexaminedPlan(
                 $"Leaving '{home}' alone: it is a link to somewhere else, and Deguffer does not look through a link.");
@@ -464,8 +464,8 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
     private Survey? Examine(CancellationToken ct)
     {
         if (ClaudeCodeHome.Resolve(Environment, _system, Volumes) is not { } home
-            || !LongPath.DirectoryExists(home)
-            || LongPath.IsReparsePoint(home))
+            || LongPath.ProbeDirectory(home, out var homeIsLink) is not PathPresence.Present
+            || homeIsLink is true)
         {
             return null;
         }

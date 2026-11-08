@@ -1,5 +1,6 @@
 using System.Collections.Specialized;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Scanning;
 using Deguffer.Testing;
 using Microsoft.UI.Xaml.Controls;
 
@@ -30,6 +31,30 @@ public class CleanViewModelScanTests
         Assert.True(row.IsSelected);
         Assert.Equal("2 KB", page.ViewModel.SelectedTotalLabel);
         Assert.True(page.ViewModel.CanClean);
+    }
+
+    /// <summary>
+    /// §5.5: while a provider measures, the bar names it with the bytes it has counted so far, as the
+    /// planner reports them, so a long walk shows something moving.
+    /// </summary>
+    [Fact]
+    public void TheBarShowsWhatAProviderHasCountedWhileItIsChecked()
+    {
+        var cache = new FakeCleanupProvider("cache") { Counted = [1024, 3 * 1024] };
+        using var page = new StoragePage([cache]);
+        var statuses = new List<string>();
+        page.ViewModel.PropertyChanged += (_, changed) =>
+        {
+            if (changed.PropertyName == nameof(page.ViewModel.Status))
+            {
+                statuses.Add(page.ViewModel.Status);
+            }
+        };
+
+        page.Scan();
+
+        Assert.Contains($"Checking cache ({FreeSpace.Format(1024)} counted so far)…", statuses);
+        Assert.Contains($"Checking cache ({FreeSpace.Format(3 * 1024)} counted so far)…", statuses);
     }
 
     /// <summary>

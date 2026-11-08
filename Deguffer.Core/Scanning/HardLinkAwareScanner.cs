@@ -61,45 +61,88 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
         _files = files;
     }
 
-    public ValueTask<ScanResult> MeasureAsync(
+    public async ValueTask<ScanResult> MeasureAsync(
         string path,
         MinimumAge keep = default,
         ScanBounds bounds = default,
         IProgress<ScanSize>? progress = null,
-        CancellationToken ct = default) =>
-        new(WorkerThreads.Shared.RunAsync(() => MeasureNow([new ScanRequest(path, bounds)], [keep], progress, ct)[0][0], ct));
+        CancellationToken ct = default)
+    {
+        ScanRequest[] asked = [new(path, bounds)];
+
+        return (await MeasureEachAsync(asked, [keep], RunningTotal.Over(asked, progress), ct).ConfigureAwait(false))[0][0];
+    }
 
     /// <summary>
-    /// Every directory among <paramref name="asked"/> in one walk, as <see cref="RootSetWalk"/> walks
-    /// them, and every file in a read of its own.
+    /// Every directory among <paramref name="asked"/> in one walk for each set of values, as
+    /// <see cref="RootSetWalk"/> walks them, and every file in a read of its own.
     /// </summary>
-    public ValueTask<IReadOnlyList<ScanResult>> MeasureManyAsync(
+    public async ValueTask<IReadOnlyList<ScanResult>> MeasureManyAsync(
         IReadOnlyList<ScanRequest> asked,
         MinimumAge keep = default,
+        IProgress<ScanSize>? progress = null,
         CancellationToken ct = default) =>
-        new(WorkerThreads.Shared.RunAsync(() => (IReadOnlyList<ScanResult>)[.. MeasureNow(asked, [keep], progress: null, ct).Select(readings => readings[0])], ct));
+        [.. (await MeasureEachAsync(asked, [keep], RunningTotal.Over(asked, progress), ct).ConfigureAwait(false)).Select(readings => readings[0])];
 
     /// <summary>One walk, tallied twice. See <see cref="IDirectoryScanner.MeasureAgedAsync"/>.</summary>
-    public ValueTask<AgedScan> MeasureAgedAsync(string path, MinimumAge age, CancellationToken ct = default) =>
-        new(WorkerThreads.Shared.RunAsync(() => AgedScan.Of(MeasureNow([new ScanRequest(path)], AgedScan.Keeps(age), progress: null, ct)[0]), ct));
+    public async ValueTask<AgedScan> MeasureAgedAsync(
+        string path, MinimumAge age, IProgress<ScanSize>? progress = null, CancellationToken ct = default)
+    {
+        ScanRequest[] asked = [new(path)];
+
+        return AgedScan.Of((await MeasureEachAsync(asked, AgedScan.Keeps(age), RunningTotal.Over(asked, progress), ct).ConfigureAwait(false))[0]);
+    }
 
     /// <summary>
-    /// The directory is asked about first, and the file only where no directory is there, so each
+    /// Each of <paramref name="asked"/> measured once for each of <paramref name="keeps"/>, in their
+    /// orders, from one reading of it: a file read directly, and every directory walked with the others
+    /// on drives of its kind, the walks on separate disks at the same time
+    /// (<see cref="DirectoryWalks"/>), as <see cref="ParallelEnumerationScanner"/> walks.
+    /// </summary>
+    /// <param name="running">Where each path's first reading goes as it rises.</param>
+    private async Task<ScanResult[][]> MeasureEachAsync(
+        IReadOnlyList<ScanRequest> asked,
+        MinimumAge[] keeps,
+        RunningPaths running,
+        CancellationToken ct)
+    {
+        var (results, owns, walks) = await WorkerThreads.Shared.RunAsync(() => Probe(asked, keeps, running, ct), ct).ConfigureAwait(false);
+
+        // Each walk writes the slots of its own paths, which no other walk writes.
+        await DirectoryWalks.RunAsync(
+            walks,
+            (walk, stop) =>
+            {
+                var each = walk.Indexes;
+                var walked = Measure([.. each.Select(i => asked[i])], [.. each.Select(i => owns[i])], keeps, walk.Tuning, _files, running.Of(each), stop);
+
+                for (var j = 0; j < each.Count; j++)
+                {
+                    results[each[j]] = walked[j];
+                }
+            },
+            ct).ConfigureAwait(false);
+
+        return results;
+    }
+
+    /// <summary>
+    /// Each path asked about that is not a directory, answered, with each directory's slot left for its
+    /// walk, and the walks the directories need. On a worker thread, because it reads each path and
+    /// asks each volume's device.
+    ///
+    /// <para>The directory is asked about first, and the file only where no directory is there, so each
     /// path costs one attribute read in the ordinary case and a refusal is met once. The read fails
     /// the same way whichever kind is asked for, so a refused file is answered here as a refused
-    /// directory would be.
+    /// directory would be.</para>
     ///
     /// <para>One reading for each of <paramref name="keeps"/>, in their order, from one reading of each
     /// path.</para>
     /// </summary>
-    /// <param name="progress">
-    /// The running total of the first path's first reading, for <see cref="MeasureAsync"/>, which asks
-    /// about one.
-    /// </param>
-    private ScanResult[][] MeasureNow(
+    private (ScanResult[][] Results, long[] Owns, IReadOnlyList<IReadOnlyList<DirectoryWalk>> Walks) Probe(
         IReadOnlyList<ScanRequest> asked,
         MinimumAge[] keeps,
-        IProgress<ScanSize>? progress,
+        RunningPaths running,
         CancellationToken ct)
     {
         var results = new ScanResult[asked.Count][];
@@ -125,6 +168,9 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
             {
                 results[i] = [.. MeasureFile(path, keeps, _files)
                     .Select(file => ScanResult.Direct(file.Size, file.WithheldRecent) with { MailStores = file.MailStores })];
+
+                // A file is read whole, so its reading is final, and it counts before any walk starts.
+                running.Report(i, results[i][0].Size);
                 continue;
             }
 
@@ -136,19 +182,7 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
             results[i] = [.. keeps.Select(_ => nothing)];
         }
 
-        // One walk for each set of values, as ParallelEnumerationScanner walks.
-        foreach (var walk in directories.GroupBy(i => _tuner.For(asked[i].Path).Walk))
-        {
-            var each = walk.ToList();
-            var walked = Measure([.. each.Select(i => asked[i])], [.. each.Select(i => owns[i])], keeps, walk.Key, _files, progress, ct);
-
-            for (var j = 0; j < each.Count; j++)
-            {
-                results[each[j]] = walked[j];
-            }
-        }
-
-        return results;
+        return (results, owns, DirectoryWalks.Plan(asked, directories, _tuner));
     }
 
     /// <summary>Always null — this scanner holds no index. See <see cref="ParallelEnumerationScanner"/>.</summary>
@@ -159,7 +193,7 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
 
     /// <summary>Nothing is remembered here, so every reading is already taken from the disk.</summary>
     public ValueTask<IReadOnlyList<ScanResult>> MeasureFromDiskAsync(IReadOnlyList<ScanRequest> asked, CancellationToken ct = default) =>
-        MeasureManyAsync(asked, MinimumAge.Off, ct);
+        MeasureManyAsync(asked, MinimumAge.Off, ct: ct);
 
     /// <summary>Nothing is retained between calls, so there is nothing to drop.</summary>
     public void Invalidate()
@@ -171,7 +205,7 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
 
     /// <summary>
     /// The walk of every directory in <paramref name="asked"/> Windows describes, at once, each to a
-    /// figure of its own for each of <paramref name="keeps"/>. See <see cref="MeasureNow"/>.
+    /// figure of its own for each of <paramref name="keeps"/>. See <see cref="Probe"/>.
     ///
     /// <para>An entry a root's bounds leave out is passed over, neither read nor entered, as the other
     /// walk passes it. A kept root needs nothing here, because this figure counts no entries.</para>
@@ -191,17 +225,19 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
         MinimumAge[] keeps,
         WalkTuning tuning,
         FileInformation files,
-        IProgress<ScanSize>? progress,
+        RunningPaths running,
         CancellationToken ct)
     {
         var roots = asked.Select((_, i) => new RootTally(owns[i], keeps)).ToArray();
         var route = new ByNameRoute();
 
-        // Every name, because each file counted is opened by its path to ask what else links it.
+        // Every name, because each file counted is asked what else links it by its name, relative to
+        // the directory the walk holds open while this reads it.
         RootSetWalk.Visit<RootTally>(
             [.. asked.Select(question => WalkRoot.Of(question.Path, question.Bounds))],
             tuning,
             FileNames.All,
+            DirectoryHold.DuringCallback,
             (root, holder, contents, left) =>
             {
                 var measured = holder ?? roots[root];
@@ -255,7 +291,7 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
 
                         if (!read)
                         {
-                            info = files.Standard(file.FullName, route);
+                            info = files.Standard(contents.Handle, file, route);
                             read = true;
                         }
 
@@ -285,7 +321,7 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
                 return measured;
             },
             // §5.5: stream partial results, at the walk's interval rather than per file.
-            () => progress?.Report(roots[0].Tallies[0].Size),
+            () => running.Report(roots.Length, i => roots[i].Tallies[0].Size),
             TimeProvider.System,
             ct);
 

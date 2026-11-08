@@ -114,9 +114,22 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
 
     public Task<bool> IsPresentAsync(CancellationToken ct = default) => Task.FromResult(IsPresent);
 
-    public Task<CleanupPlan> PlanAsync(MinimumAge keep = default, CancellationToken ct = default)
+    /// <summary>
+    /// The running figures its plan reports as counted so far, in order, before <see cref="WhilePlanning"/>
+    /// runs: a provider part-way through measuring a large location.
+    /// </summary>
+    public IReadOnlyList<long> Counted { get; set; } = [];
+
+    public Task<CleanupPlan> PlanAsync(
+        MinimumAge keep = default, IProgress<ScanSize>? counted = null, CancellationToken ct = default)
     {
         PlanCount++;
+
+        foreach (var bytes in Counted)
+        {
+            counted?.Report(ScanSize.FromLengths(bytes));
+        }
+
         WhilePlanning?.Invoke();
 
         return PlanFailure is { } failure

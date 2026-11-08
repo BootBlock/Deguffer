@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Runtime.InteropServices;
+using Deguffer.Core.Scanning;
 using Microsoft.Win32.SafeHandles;
 
 namespace Deguffer.Core.Safety;
@@ -167,22 +168,55 @@ internal sealed unsafe partial class FileInformation
     /// gets the same answer whichever route gave it.</para>
     /// </summary>
     /// <param name="extendedPath">The path in the extended form §6.3 requires.</param>
-    public FileStandardInfo? Standard(string extendedPath, ByNameRoute route)
+    public FileStandardInfo? Standard(string extendedPath, ByNameRoute route) =>
+        !route.Declined && TryByName(0, LongPath.ObjectManagerForm(extendedPath), route, out var answer)
+            ? answer
+            : ThroughHandle(extendedPath);
+
+    /// <summary>
+    /// <see cref="Standard(string, ByNameRoute)"/> for a file a walk listed, read by its bare name
+    /// relative to <paramref name="directory"/>, the handle the walk holds open on the directory it
+    /// listed, so neither the file's full path nor its name for the object manager is built. The full
+    /// path is built only where a handle must answer, or where <paramref name="directory"/> is zero,
+    /// as it is for a listing that opened nothing.
+    /// </summary>
+    /// <param name="directory">
+    /// <see cref="DirectoryContents.Handle"/> of the listing <paramref name="file"/> came from.
+    /// </param>
+    public FileStandardInfo? Standard(nint directory, in WalkEntry file, ByNameRoute route)
     {
-        if (!route.Declined)
+        if (directory == 0)
         {
-            switch (_readByName(extendedPath, out var read))
-            {
-                case ByNameReading.Read:
-                    return read;
-                case ByNameReading.Gone:
-                    return null;
-                case ByNameReading.Unsupported:
-                    route.Decline();
-                    break;
-            }
+            return Standard(file.FullName, route);
         }
 
+        return !route.Declined && TryByName(directory, file.NameSpan, route, out var answer)
+            ? answer
+            : ThroughHandle(file.FullName);
+    }
+
+    /// <summary>
+    /// Whether one read by name settled the file: read, or gone, which is <paramref name="answer"/>
+    /// null. A file system that does not answer the class declines <paramref name="route"/>, and that
+    /// or any other refusal leaves the file to a handle.
+    /// </summary>
+    private bool TryByName(nint directory, ReadOnlySpan<char> name, ByNameRoute route, out FileStandardInfo? answer)
+    {
+        var reading = _readByName(directory, name, out var read);
+
+        if (reading is ByNameReading.Unsupported)
+        {
+            route.Decline();
+        }
+
+        answer = reading is ByNameReading.Read ? read : null;
+
+        return reading is ByNameReading.Read or ByNameReading.Gone;
+    }
+
+    /// <summary>The link count and sizes read through a handle opened to describe the file, or null.</summary>
+    private FileStandardInfo? ThroughHandle(string extendedPath)
+    {
         using var handle = _open(extendedPath, HandleUse.Describe);
 
         return !handle.IsInvalid && TryStandard(handle, out var info) ? info : null;

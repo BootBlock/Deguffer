@@ -224,7 +224,7 @@ public sealed class RunChangesTests
 
         public Task<bool> IsPresentAsync(CancellationToken ct = default) => throw new NotSupportedException();
 
-        public Task<CleanupPlan> PlanAsync(MinimumAge keep = default, CancellationToken ct = default) =>
+        public Task<CleanupPlan> PlanAsync(MinimumAge keep = default, IProgress<ScanSize>? counted = null, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
         public Task<CleanupResult> ExecuteAsync(

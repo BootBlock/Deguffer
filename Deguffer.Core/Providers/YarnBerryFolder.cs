@@ -78,7 +78,7 @@ internal sealed record YarnBerryFolder(
         YarnBerryFolder Found(YarnBerryCacheState state, string? cause = null) =>
             new(globalFolder, cache, state, cause, siblings);
 
-        switch (LongPath.ProbeDirectory(cache))
+        switch (LongPath.ProbeDirectory(cache, out var cacheIsLink))
         {
             case PathPresence.Absent:
                 return Found(YarnBerryCacheState.Absent);
@@ -86,7 +86,7 @@ internal sealed record YarnBerryFolder(
                 return Found(YarnBerryCacheState.Refused, cache);
         }
 
-        if (LongPath.IsReparsePoint(cache))
+        if (cacheIsLink is true)
         {
             return Found(YarnBerryCacheState.Link, cache);
         }

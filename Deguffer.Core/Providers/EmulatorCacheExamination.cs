@@ -186,7 +186,7 @@ internal sealed class EmulatorCacheExamination
     /// </returns>
     private bool Reports(EmulatorLayout layout, string root, Func<string, string?> whyNotOwned)
     {
-        switch (LongPath.ProbeDirectory(root))
+        switch (LongPath.ProbeDirectory(root, out var rootIsLink))
         {
             case PathPresence.Absent:
                 return false;
@@ -206,7 +206,7 @@ internal sealed class EmulatorCacheExamination
                 return true;
         }
 
-        if (LongPath.IsReparsePoint(root))
+        if (rootIsLink is true)
         {
             DeclineLink(root);
             return true;
@@ -304,7 +304,7 @@ internal sealed class EmulatorCacheExamination
     {
         var layout = root.Layout;
 
-        switch (LongPath.ProbeDirectory(folder.Path))
+        switch (LongPath.ProbeDirectory(folder.Path, out var folderIsLink))
         {
             case PathPresence.Absent:
                 return null;
@@ -314,7 +314,7 @@ internal sealed class EmulatorCacheExamination
                 return null;
         }
 
-        if (LongPath.IsReparsePoint(folder.Path))
+        if (folderIsLink is true)
         {
             DeclineLink(folder.Path);
             return null;

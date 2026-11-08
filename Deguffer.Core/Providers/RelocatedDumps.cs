@@ -266,7 +266,7 @@ internal static class RelocatedDumps
             return;
         }
 
-        switch (LongPath.ProbeFile(file))
+        switch (LongPath.ProbeFile(file, out var fileIsLink))
         {
             case PathPresence.Absent:
                 scan.Notes.Add(new PlanNote(PlanNoteSeverity.Information, $"{lead} There is no dump there now."));
@@ -277,7 +277,7 @@ internal static class RelocatedDumps
                 return;
         }
 
-        if (LongPath.IsReparsePoint(file))
+        if (fileIsLink is true)
         {
             scan.Declined(file, lead);
             return;

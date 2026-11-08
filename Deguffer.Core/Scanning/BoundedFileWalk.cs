@@ -107,23 +107,25 @@ internal static class BoundedFileWalk
         Action<bool> onProgress,
         TimeProvider clock,
         CancellationToken ct) =>
-        Visit([(root, rootState)], tuning, files, list, onDirectory, onProgress, clock, ct);
+        Visit([(root, rootState)], tuning, files, DirectoryHold.None, list, onDirectory, onProgress, clock, ct);
 
     /// <summary>
     /// The walk above over several roots at once, each with its own value, sharing one set of
     /// workers. For a caller with many small trees to read, each of which alone would leave most of
     /// the threads idle. See <see cref="RootSetWalk"/>.
     /// </summary>
+    /// <param name="hold">Whether each directory stays open while <paramref name="onDirectory"/> reads it.</param>
     public static void Visit<TState>(
         IReadOnlyList<(string Root, TState State)> roots,
         WalkTuning tuning,
         FileNames files,
+        DirectoryHold hold,
         ListDirectory list,
         Action<TState, DirectoryContents, Action<WalkEntry, TState>> onDirectory,
         Action<bool> onProgress,
         TimeProvider clock,
         CancellationToken ct) =>
-        Visit(roots, tuning, files, ListingBudget.Shared, list, onDirectory, onProgress, clock, ct);
+        Visit(roots, tuning, files, hold, ListingBudget.Shared, list, onDirectory, onProgress, clock, ct);
 
     /// <summary>
     /// The walk above, its listings counted against <paramref name="budget"/> rather than the
@@ -134,6 +136,7 @@ internal static class BoundedFileWalk
         IReadOnlyList<(string Root, TState State)> roots,
         WalkTuning tuning,
         FileNames files,
+        DirectoryHold hold,
         ListingBudget budget,
         ListDirectory list,
         Action<TState, DirectoryContents, Action<WalkEntry, TState>> onDirectory,
@@ -155,7 +158,7 @@ internal static class BoundedFileWalk
                     tuning.Threads,
                     descend =>
                     {
-                        var listing = new WalkListing(buffer, budgeted, files);
+                        var listing = new WalkListing(buffer, budgeted, files, hold);
                         lock (listings)
                         {
                             listings.Add(listing);
@@ -201,6 +204,17 @@ internal static class BoundedFileWalk
             }
         };
 
-        return (path, at) => onDirectory(at.State, listing.Read(path, followsLink: !at.Descended), descendUnlessLink);
+        return (path, at) =>
+        {
+            try
+            {
+                onDirectory(at.State, listing.Read(path, followsLink: !at.Descended), descendUnlessLink);
+            }
+            finally
+            {
+                // The contents are over with, so a handle held for the callback is too (DirectoryHold).
+                listing.Release();
+            }
+        };
     }
 }

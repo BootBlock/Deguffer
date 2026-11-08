@@ -59,13 +59,19 @@ public interface IDirectoryScanner
     ///
     /// <para>Each answer is the whole of what <see cref="MeasureAsync"/> would have said of its path:
     /// its own <see cref="ScanResult.Root"/>, mail stores, fallback reason and
-    /// <see cref="ScanResult.WithheldRecent"/>. No progress is reported, because no caller of a list has
-    /// one figure to show.</para>
+    /// <see cref="ScanResult.WithheldRecent"/>.</para>
     /// </summary>
     /// <param name="keep">The guard every path is measured under, as <see cref="MeasureAsync"/> applies it.</param>
+    /// <param name="progress">
+    /// The bytes counted so far across every path, reported as the figure rises and never after this
+    /// returns: each path's latest reading added up, with a path inside another left out because the
+    /// outer path counts its files. A lower bound for the preview to show while a large location is
+    /// walked, never a figure to act on, so nothing remembered from an earlier run is reported here.
+    /// </param>
     ValueTask<IReadOnlyList<ScanResult>> MeasureManyAsync(
         IReadOnlyList<ScanRequest> asked,
         MinimumAge keep = default,
+        IProgress<ScanSize>? progress = null,
         CancellationToken ct = default);
 
     /// <summary>
@@ -81,10 +87,14 @@ public interface IDirectoryScanner
     ///
     /// <para>Each reading is exactly what <see cref="MeasureAsync"/> would return for it, entry
     /// count included, because the folders an age keeps standing are counted apart from the ones the
-    /// whole tree's removal takes. A remembered figure is never shown, because nothing reports
-    /// progress here.</para>
+    /// whole tree's removal takes.</para>
     /// </summary>
-    ValueTask<AgedScan> MeasureAgedAsync(string path, MinimumAge age, CancellationToken ct = default);
+    /// <param name="progress">
+    /// The bytes of the whole tree counted so far, on the terms <see cref="MeasureManyAsync"/> reports
+    /// them, so nothing remembered is shown.
+    /// </param>
+    ValueTask<AgedScan> MeasureAgedAsync(
+        string path, MinimumAge age, IProgress<ScanSize>? progress = null, CancellationToken ct = default);
 
     /// <summary>
     /// Measure each of <paramref name="asked"/> without consulting anything remembered from before now,

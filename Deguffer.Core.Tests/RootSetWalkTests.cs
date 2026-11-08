@@ -38,6 +38,7 @@ public sealed class RootSetWalkTests
                 [.. leaves.Select(leaf => new WalkRoot(LongPath.Extended(leaf), LeftOut: null))],
                 new WalkTuning(Threads, WalkTuning.MinimumListingBuffer),
                 FileNames.All,
+                DirectoryHold.None,
                 tree.List,
                 static (_, _, _, _) => new object(),
                 static () => { },
@@ -140,6 +141,82 @@ public sealed class RootSetWalkTests
         Assert.False(tree.Listings.ContainsKey(LongPath.Extended(@"Z:\a\link")));
     }
 
+    /// <summary>
+    /// The children of a folder that lie in exactly the roots it lies in, which in one root with nothing
+    /// nested or left out is every child, are handed one array between them rather than one each.
+    /// </summary>
+    [Fact]
+    public void ChildrenLyingInEveryRootTheirFolderDoesShareOneFrameArray()
+    {
+        var descended = Read([WalkRoot.Of(@"Z:\a", default)], @"Z:\a", "b", "c", "d");
+
+        Assert.Equal(["b", "c", "d"], descended.Select(child => child.Name));
+        Assert.All(descended, child => Assert.Same(descended[0].Frames, child.Frames));
+        Assert.Equal([new RootSetWalk.Frame<string>(0, @"0:Z:\a")], descended[0].Frames);
+    }
+
+    /// <summary>
+    /// A child a root starts at lies in one more root than its folder, so it is handed an array of its
+    /// own holding both, and its siblings still share theirs.
+    /// </summary>
+    [Fact]
+    public void AChildARootStartsAtHasFramesOfItsOwnAndItsSiblingsShare()
+    {
+        var descended = Read([WalkRoot.Of(@"Z:\a", default), WalkRoot.Of(@"Z:\a\b", default)], @"Z:\a", "b", "c", "d");
+        var (b, c, d) = (descended[0].Frames, descended[1].Frames, descended[2].Frames);
+
+        Assert.Equal([new RootSetWalk.Frame<string>(0, @"0:Z:\a"), new RootSetWalk.Frame<string>(1, null)], b);
+        Assert.Same(c, d);
+        Assert.Equal([new RootSetWalk.Frame<string>(0, @"0:Z:\a")], c);
+    }
+
+    /// <summary>
+    /// A child one root leaves out lies in fewer roots than its folder, so it is handed an array of its
+    /// own without that root, and its siblings still share theirs with both.
+    /// </summary>
+    [Fact]
+    public void AChildOneRootLeavesOutHasFramesOfItsOwnAndItsSiblingsShare()
+    {
+        var sparing = WalkRoot.Of(@"Z:\a", new ScanBounds(KeepRoot: false, LeftOut: [@"Z:\a\b"]));
+        var descended = Read([sparing, WalkRoot.Of(@"Z:\a", default)], @"Z:\a", "b", "c", "d");
+        var (b, c, d) = (descended[0].Frames, descended[1].Frames, descended[2].Frames);
+
+        Assert.Equal([new RootSetWalk.Frame<string>(1, @"1:Z:\a")], b);
+        Assert.Same(c, d);
+        Assert.Equal([new RootSetWalk.Frame<string>(0, @"0:Z:\a"), new RootSetWalk.Frame<string>(1, @"1:Z:\a")], c);
+    }
+
+    /// <summary>
+    /// <paramref name="folder"/>, holding the folders <paramref name="children"/>, read as the first
+    /// seed of a walk of <paramref name="roots"/>, with each child as it was descended into. The value
+    /// each root keeps for a folder is the root's index and the folder's path.
+    /// </summary>
+    private static List<(string Name, RootSetWalk.Frame<string>[] Frames)> Read(
+        WalkRoot[] roots,
+        string folder,
+        params string[] children)
+    {
+        var round = RootSetWalk.Round<string>.Of(roots, [.. Enumerable.Range(0, roots.Length)]);
+        var directory = LongPath.Extended(folder);
+        var contents = new DirectoryContents(
+            directory,
+            [.. children.Select(child => new WalkEntry(directory, child, FileAttributes.Directory, 0, default, default))],
+            [],
+            [],
+            ListingEnd.Listed);
+        var descended = new List<(string, RootSetWalk.Frame<string>[])>();
+
+        RootSetWalk.Read(
+            roots,
+            round,
+            round.Seeds[0].State,
+            contents,
+            (entry, frames) => descended.Add((entry.Name, frames)),
+            (root, _, listed, _) => $"{root}:{LongPath.Display(listed.Directory)}");
+
+        return descended;
+    }
+
     /// <summary>Each visit as the root it was for, the folder, and whether it was that root's top.</summary>
     private static List<(int Root, string Folder, bool IsTop)> Walk(FakeTree tree, params string[] roots)
     {
@@ -149,6 +226,7 @@ public sealed class RootSetWalkTests
             [.. roots.Select(root => WalkRoot.Of(root, default))],
             new WalkTuning(Threads, WalkTuning.MinimumListingBuffer),
             FileNames.All,
+            DirectoryHold.None,
             tree.List,
             (root, holder, contents, _) =>
             {
