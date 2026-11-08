@@ -235,9 +235,12 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
         // two PlatformIO start-ups, not their sum plus the cache walk. Two pio processes at once is safe.
         // The dry run returns its candidates before any uninstall, and both commands write appstate.json
         // only under PlatformIO's own lock file, which waits for the other rather than failing.
+        // The package half is started first: where an earlier question this pass already resolved the
+        // locations, the cache half probes and starts its walk before its first yield, and the dry run
+        // would wait behind it.
         var pending = ResolveLocationsAsync(pio, ct);
-        var cacheHalf = PlanCacheAsync(pio, pending, ct);
         var packagesHalf = PlanUnusedPackagesAsync(pio, pending, ct);
+        var cacheHalf = PlanCacheAsync(pio, pending, ct);
 
         await Task.WhenAll(cacheHalf, packagesHalf).ConfigureAwait(false);
 

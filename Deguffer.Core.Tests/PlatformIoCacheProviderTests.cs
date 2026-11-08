@@ -566,8 +566,10 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
 
     /// <summary>
     /// The cache half does not wait for PlatformIO's answer about the packages: the dry run is held
-    /// open until the cache has been measured, which never happens if the halves are planned one
-    /// after the other. Both halves still land, in the same order, with the same figures.
+    /// open until the cache has been measured, which never happens if the package half has to finish
+    /// before the cache half begins. The opposite order, the cache half finishing before the dry run
+    /// is asked, is what <see cref="AsksForTheDryRunWithoutWaitingForSystemInfo"/> catches. Both
+    /// halves still land, in the same order, with the same figures.
     /// </summary>
     [Fact]
     public async Task MeasuresTheCacheWhileTheDryRunIsStillOpen()
@@ -592,6 +594,41 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
         Assert.Empty(plan.TargetedPaths);
         Assert.All(siblings.Append(provider.CoreRoot), survivor => Assert.Contains(plan.ProtectedPaths, p =>
             p.Path.Equals(survivor, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present));
+    }
+
+    /// <summary>
+    /// Where an earlier question this pass already resolved the locations, nothing holds the cache
+    /// half back, and it would probe and begin its walk before the dry run was even asked. The dry
+    /// run is asked first, so PlatformIO is working while Deguffer walks the cache.
+    /// </summary>
+    [Fact]
+    public async Task AsksForTheDryRunBeforeWalkingTheCacheWhenTheLocationsAreAlreadyKnown()
+    {
+        _environment.WithExecutable("pio");
+        var cache = CreateCache();
+        CreateInstalledToolchains();
+        var scanner = new FakeDirectoryScanner();
+        bool? cacheMeasuredWhenAsked = null;
+        var runner = new FakeProcessRunner()
+            .Responding(Pio, "system info", string.Empty)
+            .Replying(Pio, arguments =>
+            {
+                if (!arguments.Contains("--dry-run", StringComparison.Ordinal))
+                {
+                    return null;
+                }
+
+                cacheMeasuredWhenAsked = scanner.Measured.Contains(cache, StringComparer.OrdinalIgnoreCase);
+                return new CommandOutcome(0, ASupersededToolchain, string.Empty);
+            });
+        var provider = new PlatformIoCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, scanner);
+
+        await provider.CleanedPlacesAsync();
+        var plan = await provider.PlanAsync();
+
+        Assert.Single(runner.Invocations, i => i.Arguments.Contains("system info", StringComparison.Ordinal));
+        Assert.False(cacheMeasuredWhenAsked, "The cache was walked before PlatformIO was asked for its dry run.");
+        Assert.Equal(2, plan.Steps.OfType<RunCommandStep>().Count());
     }
 
     /// <summary>
