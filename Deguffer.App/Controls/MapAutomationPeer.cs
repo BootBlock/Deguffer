@@ -99,6 +99,14 @@ internal sealed partial class MapAutomationPeer : FrameworkElementAutomationPeer
         return peers;
     }
 
+    /// <summary>
+    /// The sibling one step from <paramref name="peer"/>, which is at <paramref name="index"/> among
+    /// <paramref name="folder"/>'s shapes. See <see cref="MapTreeSteps.Sibling"/>. After the last shape at
+    /// the top of the picture come the controls the map holds, as <see cref="GetChildrenCore"/> gives them.
+    /// </summary>
+    public AutomationPeer? SiblingOf(MapShapeAutomationPeer peer, int? folder, int index, bool forward) =>
+        MapTreeSteps.Sibling<AutomationPeer>(Children(folder), index, peer, forward, folder is null ? FirstHeld : static () => null);
+
     /// <summary>The peer of the shape <paramref name="node"/> in <paramref name="folder"/>, or null where the drawing on screen does not list it.</summary>
     public MapShapeAutomationPeer? PeerOf(int? folder, int node)
     {
@@ -213,6 +221,9 @@ internal sealed partial class MapAutomationPeer : FrameworkElementAutomationPeer
         _map.Reader?.FocusedShape() is { } focused && PeerOf(focused.Folder, focused.Node) is { } peer
             ? peer
             : base.GetFocusedElementCore();
+
+    /// <summary>The first of the controls the map holds, which follow its shapes in the tree.</summary>
+    private AutomationPeer? FirstHeld() => base.GetChildrenCore() is [var first, ..] ? first : null;
 
     /// <summary>
     /// A peer of <paramref name="shape"/>, under <paramref name="holder"/>, kept for as long as the drawing
