@@ -132,8 +132,15 @@ internal static class RootSetWalk
                 list(directory, folders.Contains(directory) ? request with { Files = FileNames.All } : request, into);
     }
 
-    /// <summary>One directory, for every root it lies in, and the roots each of its children lies in.</summary>
-    private static void Read<TFolder>(
+    /// <summary>
+    /// One directory, for every root it lies in, and the roots each of its children lies in.
+    ///
+    /// <para>A child that every root continues into and no root starts at lies in exactly the roots its
+    /// directory does, which is nearly every child. Those children share one array, built the first time
+    /// one is met: it is never written once handed on, and one each would be an allocation a directory
+    /// walked, carried on the work-stealing stacks until the child is read.</para>
+    /// </summary>
+    internal static void Read<TFolder>(
         IReadOnlyList<WalkRoot> roots,
         Round<TFolder> round,
         Frame<TFolder>[] frames,
@@ -152,6 +159,8 @@ internal static class RootSetWalk
             var left = roots[root].LeftOut?.NamesIn(contents);
             opened[i] = (root, onDirectory(root, holder, contents, left), left);
         }
+
+        Frame<TFolder>[]? everyRoot = null;
 
         foreach (var entry in contents.Entries)
         {
@@ -178,6 +187,12 @@ internal static class RootSetWalk
                 continue;
             }
 
+            if (continuing == opened.Length && starting.Count == 0)
+            {
+                descend(entry, everyRoot ??= EveryRoot(opened));
+                continue;
+            }
+
             var below = new Frame<TFolder>[continuing + starting.Count];
             var next = 0;
 
@@ -198,15 +213,29 @@ internal static class RootSetWalk
         }
     }
 
+    /// <summary>The frames of a child that lies in every root its directory does, and starts none.</summary>
+    private static Frame<TFolder>[] EveryRoot<TFolder>((int Root, TFolder Folder, IReadOnlySet<string>? Left)[] opened)
+        where TFolder : class
+    {
+        var below = new Frame<TFolder>[opened.Length];
+
+        for (var i = 0; i < opened.Length; i++)
+        {
+            below[i] = new Frame<TFolder>(opened[i].Root, opened[i].Folder);
+        }
+
+        return below;
+    }
+
     /// <summary>One root a directory lies in, and the caller's value for the directory's parent there.</summary>
-    private readonly record struct Frame<TFolder>(int Root, TFolder? Holder)
+    internal readonly record struct Frame<TFolder>(int Root, TFolder? Holder)
         where TFolder : class;
 
     /// <summary>
     /// One walk of the roots still waiting: the outermost of them seeded, and the rest found where the
     /// walk meets them.
     /// </summary>
-    private sealed class Round<TFolder>
+    internal sealed class Round<TFolder>
         where TFolder : class
     {
         private static readonly IReadOnlyList<int> None = [];
