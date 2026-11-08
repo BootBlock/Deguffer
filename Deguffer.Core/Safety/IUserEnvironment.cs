@@ -754,7 +754,8 @@ public sealed partial class UserEnvironment : IUserEnvironment
         return values;
     }
 
-    private static IReadOnlyDictionary<string, string> ProcessEnvironment()
+    /// <summary>This process's own variables as they stand now, which is what a tool it starts inherits.</summary>
+    internal static IReadOnlyDictionary<string, string> ProcessEnvironment()
     {
         var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
