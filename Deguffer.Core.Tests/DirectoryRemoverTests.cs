@@ -114,6 +114,88 @@ public sealed class DirectoryRemoverTests : IDisposable
         Assert.All(fs.Paths, path => Assert.StartsWith(@"\\?\", path, StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A file symbolic link that has taken the directory's name is a file there, as the plain file
+    /// above is: not the directory gone, and not a directory link to remove. The directory probe
+    /// calls it absent, so an answer taken from that probe alone would report the root removed.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LeavesAFileLinkWhereTheDirectoryWasAndWhatItPointsAt(bool keepRoot)
+    {
+        var target = _temp.CreateFile(1024, "elsewhere", "cache.bin");
+        var link = Path.Combine(_temp.Path, "cache");
+        SymbolicLink.ToFile(link, target);
+
+        var outcome = await DirectoryRemover.RemoveAsync(
+            link, fileSystem: WindowsFileSystem.Default, bounds: new RemovalBounds(KeepRoot: keepRoot, []));
+
+        Assert.True(outcome.NotADirectory);
+        Assert.False(outcome.RootRemoved);
+        Assert.Equal(0, outcome.EntriesRemoved);
+
+        // §5.6: the link and what it points at are both left alone.
+        Assert.True(LongPath.IsReparsePoint(link), "the file link where the directory was was removed");
+        Assert.Equal(1024, new FileInfo(target).Length);
+    }
+
+    /// <summary>What a removal root is, for <see cref="DescribesTheRootOnceWhateverStandsThere"/>.</summary>
+    public enum RootShape
+    {
+        Nothing,
+        Directory,
+        Junction,
+        DirectorySymbolicLink,
+        File,
+        FileSymbolicLink,
+    }
+
+    /// <summary>
+    /// What stands at a removal root, its kind and whether it is a link all come from one read. Two
+    /// reads of one path can describe two entries, and a folder replaced by a junction between them
+    /// would pass the presence read as the folder and the link read as the junction.
+    /// </summary>
+    [Theory]
+    [InlineData(RootShape.Nothing, typeof(GatheredRemoval.Gone))]
+    [InlineData(RootShape.Directory, null)]
+    [InlineData(RootShape.Junction, typeof(GatheredRemoval.Link))]
+    [InlineData(RootShape.DirectorySymbolicLink, typeof(GatheredRemoval.Link))]
+    [InlineData(RootShape.File, typeof(GatheredRemoval.NotAFolder))]
+    [InlineData(RootShape.FileSymbolicLink, typeof(GatheredRemoval.NotAFolder))]
+    public void DescribesTheRootOnceWhateverStandsThere(RootShape shape, Type? expected)
+    {
+        var root = Path.Combine(_temp.Path, "cache");
+        var elsewhere = _temp.CreateDirectory("elsewhere");
+        var file = _temp.CreateFile(16, "elsewhere", "a.bin");
+
+        switch (shape)
+        {
+            case RootShape.Directory:
+                Directory.CreateDirectory(root);
+                break;
+            case RootShape.Junction:
+                DirectoryLink.Create(DirectoryLinkKind.Junction, root, elsewhere);
+                break;
+            case RootShape.DirectorySymbolicLink:
+                DirectoryLink.Create(DirectoryLinkKind.SymbolicLink, root, elsewhere);
+                break;
+            case RootShape.File:
+                File.WriteAllBytes(root, new byte[16]);
+                break;
+            case RootShape.FileSymbolicLink:
+                SymbolicLink.ToFile(root, file);
+                break;
+        }
+
+        var fs = new RecordingFileSystem(WindowsFileSystem.Default);
+
+        var found = GatheredRemoval.Probe(LongPath.Extended(root), MinimumAge.Off, RemovalBounds.None, fs);
+
+        Assert.Equal(expected, found?.GetType());
+        Assert.Equal(LongPath.Extended(root), Assert.Single(fs.Described));
+    }
+
     /// <summary>A path already gone was not removed by this run, so nothing is counted for it.</summary>
     [Fact]
     public async Task CountsNothingForATreeThatWasAlreadyGone() =>

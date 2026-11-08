@@ -113,6 +113,17 @@ public sealed record BuildDirectoryKind
     public IReadOnlyList<string> ProtectedSiblings { get; init; } = [];
 
     /// <summary>
+    /// What inside a recognised directory a row offers, given the directory. Null where the directory
+    /// is removed whole, which is every kind whose directory holds nothing but its tool's output.
+    ///
+    /// <para>For a directory the tool writes into but does not keep to itself. Cargo is the case: its
+    /// <c>target</c> is also where a project's own scripts put release archives and downloaded
+    /// toolchains, so it is treated as a tool root and only the children Cargo is recognised to have
+    /// written are offered. The directory itself then survives, and §5.6 says so.</para>
+    /// </summary>
+    public Func<string, CancellationToken, BuildDirectoryParts>? Parts { get; init; }
+
+    /// <summary>
     /// Files the tool holds open while it is using this directory, relative to it. Handed to
     /// <see cref="Safety.ILiveTreeInspector"/>; see <see cref="Safety.LiveTreeQuery.LockFileNames"/>
     /// for why they are declared rather than discovered.

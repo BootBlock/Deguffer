@@ -12,13 +12,12 @@ namespace Deguffer.Testing;
 /// <param name="replaced">The directory to replace, in the extended form a removal asks in (§6.3).</param>
 public sealed class ReplacingFileSystem(IFileSystem inner, string replaced) : IFileSystem
 {
-    public bool DirectoryExists(string path) => inner.DirectoryExists(path);
-
     public PathPresence ProbeDirectory(string path) => inner.ProbeDirectory(path);
 
     public PathPresence ProbeEntry(string path) => inner.ProbeEntry(path);
 
-    public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
+    public PathPresence ProbeEntry(string path, out bool? isDirectory, out bool? isLink) =>
+        inner.ProbeEntry(path, out isDirectory, out isLink);
 
     public ListingEnd ListEntries(string directory, ListingRequest request, List<WalkEntry> into) =>
         inner.ListEntries(directory, request, into);

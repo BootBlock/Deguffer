@@ -20,13 +20,12 @@ public sealed class FirstDeletionHooks(IFileSystem inner, IReadOnlyDictionary<st
     /// <summary>Every path a deletion was asked for, in display form, in the order the deletions began.</summary>
     public IReadOnlyCollection<string> Deleted => _deleted;
 
-    public bool DirectoryExists(string path) => inner.DirectoryExists(path);
-
     public PathPresence ProbeDirectory(string path) => inner.ProbeDirectory(path);
 
     public PathPresence ProbeEntry(string path) => inner.ProbeEntry(path);
 
-    public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
+    public PathPresence ProbeEntry(string path, out bool? isDirectory, out bool? isLink) =>
+        inner.ProbeEntry(path, out isDirectory, out isLink);
 
     public ListingEnd ListEntries(string directory, ListingRequest request, List<WalkEntry> into) =>
         inner.ListEntries(directory, request, into);

@@ -84,20 +84,19 @@ internal static class RefusalCheck
 
         var extendedRoot = LongPath.Extended(root);
 
-        // Settled before the link question, which fails closed: a root Windows would not describe
-        // answers "a link" there, which reads as "nothing here will be refused". Nothing beneath it
-        // can be asked about either, so the finding says that rather than a clean answer.
-        if (fs.ProbeDirectory(extendedRoot) is PathPresence.Refused)
+        switch (fs.ProbeEntry(extendedRoot, out _, out var rootIsLink))
         {
-            return Nothing with { Undescribed = [root] };
-        }
+            // Nothing beneath a root Windows would not describe can be asked about either, so the
+            // finding says that rather than a clean answer.
+            case PathPresence.Refused:
+                return Nothing with { Undescribed = [root] };
 
-        // A root that is a link is removed as a link, or left alone where it must stay, and never
-        // entered — so nothing beneath it is anything the removal would attempt. Asking about the far
-        // side would open files nobody classified and take them out of a figure about somewhere else.
-        if (fs.IsReparsePoint(extendedRoot))
-        {
-            return Nothing;
+            // A root that is a link, of either kind, is removed as a link, or left alone where it must
+            // stay, and never entered — so nothing beneath it is anything the removal would attempt.
+            // Asking about the far side would open files nobody classified and take them out of a
+            // figure about somewhere else.
+            case PathPresence.Present when rootIsLink is true:
+                return Nothing;
         }
 
         var bounds = clear is not null
@@ -190,22 +189,21 @@ internal static class RefusalCheck
         IFileSystem fs,
         CancellationToken ct)
     {
-        // Kind-agnostic, although it is the directory probe: a refusal is decided before the kind is
-        // read, so a place that is a file refuses here too. Asked first for the reason the root is.
-        var presence = fs.ProbeDirectory(extended);
+        var presence = fs.ProbeEntry(extended, out var isDirectory, out var isLink);
 
         if (presence is PathPresence.Refused)
         {
             return PlaceCheck.CouldNotAsk;
         }
 
-        // A link is removed as a link and holds nothing the estimate counted.
-        if (fs.IsReparsePoint(extended))
+        // A link is removed as a link and holds nothing the estimate counted. A file symbolic link at
+        // the place is one too, which is why the kind is not asked first.
+        if (isLink is true)
         {
             return PlaceCheck.Clear;
         }
 
-        if (presence is PathPresence.Present)
+        if (isDirectory is true)
         {
             var root = RemovalWalk.Gather(extended, keep, bounds, fs, ct);
             var counter = new RefusalCounter();

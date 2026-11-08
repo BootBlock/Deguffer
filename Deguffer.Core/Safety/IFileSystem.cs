@@ -19,37 +19,38 @@ namespace Deguffer.Core.Safety;
 /// </summary>
 public interface IFileSystem
 {
-    bool DirectoryExists(string path);
-
     /// <summary>
     /// What Windows says is at <paramref name="path"/>, keeping "nothing is there" apart from
     /// "Windows would not say". See <see cref="PathPresence"/>.
     ///
-    /// <para>A removal asks this rather than <see cref="DirectoryExists"/> whenever the answer
-    /// becomes a claim that the directory went. A refused probe answers false there, and
-    /// <see cref="Execution.RemovalOutcome.RootRemoved"/> then reports a directory that is still
-    /// standing as one this run took away.</para>
+    /// <para>Asked where only a directory answers the question, such as whether a folder beside a
+    /// removal survived it (§5.6). A file in the folder's place is a folder gone.</para>
     /// </summary>
     PathPresence ProbeDirectory(string path);
 
     /// <summary>
     /// The same three-state answer for anything at <paramref name="path"/>, a file included. See
-    /// <see cref="LongPath.ProbeEntry"/>.
+    /// <see cref="LongPath.ProbeEntry(string)"/>.
     ///
-    /// <para>Asked wherever an absence becomes a claim that a directory went. The directory probe
-    /// answers <see cref="PathPresence.Absent"/> for a file, so a file that has taken a directory's
-    /// name would otherwise be reported as the directory removed.</para>
+    /// <para>Asked wherever an absence becomes a claim that a directory went. A two-state existence
+    /// check answers false for a directory that is standing and refusing, and the directory probe
+    /// answers <see cref="PathPresence.Absent"/> for a file, so either would report a path that is
+    /// still occupied as the directory removed.</para>
     /// </summary>
     PathPresence ProbeEntry(string path);
 
     /// <summary>
-    /// Whether <paramref name="path"/> is a junction or symbolic link.
+    /// The same answer, with which kind the entry is and whether it is a junction or symbolic link,
+    /// all from one attribute read. Both are null where Windows described nothing. See
+    /// <see cref="LongPath.ProbeEntry(string, out bool?, out bool?)"/>.
     ///
-    /// Asked of the removal root, which is the one entry no enumeration ever classifies: every
-    /// other entry arrives through <see cref="ListEntries"/> carrying
-    /// <see cref="WalkEntry.IsReparsePoint"/> already.
+    /// <para>Asked of a path no enumeration classified: a removal root, a place a previous clean
+    /// recorded, a file a step names. Every other entry arrives through <see cref="ListEntries"/>
+    /// carrying <see cref="WalkEntry.IsReparsePoint"/> already. The seam has no separate link check,
+    /// because two reads of one path can describe two entries, and a folder replaced by a junction
+    /// between them would pass the first as the folder and the second as the junction.</para>
     /// </summary>
-    bool IsReparsePoint(string path);
+    PathPresence ProbeEntry(string path, out bool? isDirectory, out bool? isLink);
 
     /// <summary>
     /// List the immediate children of <paramref name="directory"/> into <paramref name="into"/>, and
@@ -158,13 +159,12 @@ public sealed class WindowsFileSystem : IFileSystem
     {
     }
 
-    public bool DirectoryExists(string path) => Directory.Exists(path);
-
     public PathPresence ProbeDirectory(string path) => LongPath.ProbeDirectory(path);
 
     public PathPresence ProbeEntry(string path) => LongPath.ProbeEntry(path);
 
-    public bool IsReparsePoint(string path) => LongPath.IsReparsePoint(path);
+    public PathPresence ProbeEntry(string path, out bool? isDirectory, out bool? isLink) =>
+        LongPath.ProbeEntry(path, out isDirectory, out isLink);
 
     public ListingEnd ListEntries(string directory, ListingRequest request, List<WalkEntry> into) =>
         DirectoryQuery.List(directory, request, into);

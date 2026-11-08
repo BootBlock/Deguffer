@@ -40,6 +40,7 @@ public class StepGrainTests
             "autodesk-installers",
             "azure-functions-tools", "capcut-superseded-builds",
             "capture-one-cache",
+            "cargo-incremental",
             "cargo-target",
             "claude-code-conversations",
             "claude-code-file-history",
