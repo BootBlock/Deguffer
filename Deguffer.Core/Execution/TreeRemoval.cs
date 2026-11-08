@@ -38,6 +38,7 @@ internal sealed class TreeRemoval
     // Cancelled where the removal is, and also where a deletion failed, so the walk stops either way.
     private readonly CancellationTokenSource _stop;
     private readonly Func<bool> _readyToLook;
+    private readonly Action _offered;
 
     private readonly RemovalTally _tally;
     private readonly TimeProvider _time;
@@ -76,6 +77,7 @@ internal sealed class TreeRemoval
 
         Action drain = Drain;
         _crew = new WorkerCrew(DirectoryRemover.MostAtOnce, () => drain, () => !Stopping && !_queue.IsEmpty, deletions);
+        _offered = () => _crew.TryStartHelper();
         _readyToLook = () => !_queue.IsEmpty || Stopping || Volatile.Read(ref _pending) == 0;
     }
 
@@ -125,6 +127,10 @@ internal sealed class TreeRemoval
     private RemovalOutcome Run(RemovalFolder root, Action<Action<RemovalFolder>, CancellationToken> walk, PassTiming? gathered)
     {
         using var wake = _crew.WakeOn(_ct);
+
+        // A place another removal gives back starts a helper here while work is queued. Without it, work
+        // queued while every place was taken would be left to the threads this removal already has.
+        using var offered = _deletions.WhenReturned(_offered);
 
         var walked = false;
         var walkStarted = _time.GetTimestamp();
@@ -176,16 +182,11 @@ internal sealed class TreeRemoval
         };
     }
 
-    /// <summary>
-    /// Take queued work on the thread that ran the walk until none is left or the removal is stopping.
-    /// A place another removal gave back since a helper last failed to start is taken here too, because
-    /// nothing else asks for one once the walk has stopped handing over work.
-    /// </summary>
+    /// <summary>Take queued work on the thread that ran the walk until none is left or the removal is stopping.</summary>
     private void DrainToTheEnd()
     {
         while (!Stopping)
         {
-            StartHelpers(int.MaxValue);
             Drain();
 
             if (Volatile.Read(ref _pending) == 0)

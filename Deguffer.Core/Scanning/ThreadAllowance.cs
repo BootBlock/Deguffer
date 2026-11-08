@@ -13,11 +13,22 @@ namespace Deguffer.Core.Scanning;
 ///
 /// <para>A run that takes no place from an allowance shared with nothing is bounded by its own crew
 /// alone, so a removal outside a clean is given an allowance of its own.</para>
+///
+/// <para><b>A place given back is offered at once.</b> A crew asks for a helper's place when work
+/// arrives, and work that arrived while every place was taken would otherwise wait for the threads
+/// the crew already has. A large tree that started while small ones held every place would then be
+/// removed by one thread from start to end, where alone it would have had the whole bound. So each
+/// run with work waiting is told whenever a place comes back: see <see cref="WhenReturned"/>.</para>
 /// </summary>
 public sealed class ThreadAllowance
 {
     // Never disposed: nothing asks it for the wait handle that disposal would free.
     private readonly SemaphoreSlim _places;
+    private readonly Lock _gate = new();
+
+    // Replaced whole under the lock and read without it, so a place given back never waits for a
+    // run joining or leaving.
+    private Action[] _offers = [];
 
     /// <param name="places">How many threads may be at work at once across every run sharing it.</param>
     public ThreadAllowance(int places)
@@ -54,6 +65,46 @@ public sealed class ThreadAllowance
     /// </summary>
     public Task TakeAsync(CancellationToken ct) => _places.WaitAsync(ct);
 
-    /// <summary>Give back a place taken by <see cref="TryTake"/>, <see cref="Take"/> or <see cref="TakeAsync"/>.</summary>
-    public void Return() => _places.Release();
+    /// <summary>
+    /// Give back a place taken by <see cref="TryTake"/>, <see cref="Take"/> or <see cref="TakeAsync"/>,
+    /// and offer it to every run listening through <see cref="WhenReturned"/>.
+    /// </summary>
+    public void Return()
+    {
+        _places.Release();
+
+        foreach (var offer in Volatile.Read(ref _offers))
+        {
+            offer();
+        }
+    }
+
+    /// <summary>
+    /// Call <paramref name="offer"/> each time a place is given back, until the result is disposed. The
+    /// offer runs on the thread giving the place back, so it must not block or throw: a crew offers it
+    /// to <see cref="WorkerCrew.TryStartHelper"/>, which does neither, and which takes the place only
+    /// where the crew has work waiting.
+    /// </summary>
+    internal IDisposable WhenReturned(Action offer)
+    {
+        lock (_gate)
+        {
+            _offers = [.. _offers, offer];
+        }
+
+        return new Listening(this, offer);
+    }
+
+    private void StopOffering(Action offer)
+    {
+        lock (_gate)
+        {
+            _offers = [.. _offers.Where(listening => !ReferenceEquals(listening, offer))];
+        }
+    }
+
+    private sealed class Listening(ThreadAllowance allowance, Action offer) : IDisposable
+    {
+        public void Dispose() => allowance.StopOffering(offer);
+    }
 }

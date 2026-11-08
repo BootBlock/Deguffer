@@ -44,6 +44,36 @@ public sealed class RemovalAllowanceTests : IDisposable
         Assert.True(allowance.TryTake(), "The removal kept a place after it ended.");
     }
 
+    /// <summary>
+    /// A removal that started while every place was taken, as a large tree does behind small ones, takes
+    /// each place as it is given back rather than deleting with one thread to its end. The second place
+    /// comes back during the removal's first deletion, which is held until a second deletion begins:
+    /// only a helper started by that place can begin it.
+    /// </summary>
+    [Fact]
+    public async Task ARemovalTakesAPlaceTheMomentOneIsGivenBack()
+    {
+        var tree = _temp.CreateDirectory("cache");
+        for (var i = 0; i < 40; i++)
+        {
+            _temp.CreateFile(16, "cache", $"d{i % 4}", $"f{i}.bin");
+        }
+
+        var allowance = new ThreadAllowance(2);
+        Assert.True(allowance.TryTake());
+        Assert.True(allowance.TryTake());
+
+        var watched = new WatchedDeletions(WindowsFileSystem.Default, TimeSpan.FromMilliseconds(1));
+        var fs = new FirstDeletionHooks(watched, new Dictionary<string, Action> { [tree] = allowance.Return });
+
+        var removal = DirectoryRemover.RemoveAsync(tree, fileSystem: fs, deletions: allowance);
+        allowance.Return();
+        var outcome = await removal;
+
+        Assert.True(outcome.RootRemoved);
+        Assert.Equal(2, watched.MostAtOnce);
+    }
+
     [Fact]
     public async Task ALinkIsNotRemovedWhileEveryPlaceIsTaken()
     {
