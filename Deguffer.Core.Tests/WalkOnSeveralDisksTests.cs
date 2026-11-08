@@ -96,14 +96,16 @@ public sealed class WalkOnSeveralDisksTests : IDisposable
             new FileInformation(
                 FileInformation.Open,
                 FileInformation.ReadIdentity,
-                readByName: (string path, out FileInformation.FileStandardInfo info) =>
+                readByName: (nint directory, ReadOnlySpan<char> name, out FileInformation.FileStandardInfo info) =>
                 {
-                    if (IsAsked(path))
+                    // Read relative to its directory, so the file is known by its name alone: one
+                    // in each of the two directories that must meet.
+                    if (name.SequenceEqual("one.bin") || name.SequenceEqual("two.bin"))
                     {
                         company.Wait(wait);
                     }
 
-                    return StatByName.Read(path, out info);
+                    return StatByName.Read(directory, name, out info);
                 }));
 
     [Fact]
