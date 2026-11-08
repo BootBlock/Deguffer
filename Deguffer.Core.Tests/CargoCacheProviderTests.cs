@@ -44,6 +44,20 @@ public sealed class CargoCacheProviderTests : IDisposable
             .Select(name => Path.Combine(level.Resolve(Home), name))),
     ];
 
+    /// <summary>
+    /// The layout was observed on a real Cargo home, so the row may start ticked like any other
+    /// observed Tier 1 row rather than waiting for the user to vouch for it.
+    /// </summary>
+    [Fact]
+    public void TheRowRestsOnAnObservedLayoutAndMayStartTicked()
+    {
+        var provider = CreateProvider();
+
+        Assert.Equal(ProviderBasis.Observed, provider.Basis);
+        Assert.True(provider.Basis.PermitsPreSelection());
+        Assert.Equal(SafetyTier.RegenerableCache, provider.Tier);
+    }
+
     /// <summary>A directory holding one file, so it measures above zero and is selectable.</summary>
     private static string Populate(string directory, int bytes = 4096)
     {

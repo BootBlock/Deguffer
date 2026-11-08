@@ -6,8 +6,10 @@ namespace Deguffer.Core.Providers;
 
 /// <summary>
 /// Cargo's downloaded crate archives, the sources unpacked from them, and the working copies of its
-/// git dependencies. Reported to reach 50 GB on a working Rust machine; researched rather than
-/// measured, because no Rust toolchain was installed on the machine this was written against.
+/// git dependencies. Reported to reach 50 GB on a working Rust machine. Written from Cargo's
+/// documentation, then observed on a Windows machine running Cargo 1.98 that builds GPUI
+/// applications: every folder named here was there, the plan over it took 2.16 GB of the
+/// home's 2.57 GB, and the 0.49 GB of bare clones, the largest of them a GPUI dependency's, stayed.
 ///
 /// <para><b>§5.1 was asked and the answer is no.</b> Cargo's garbage collection is still unstable —
 /// it is reached through <c>-Z gc</c> on a nightly toolchain — so there is no command a released
@@ -165,7 +167,7 @@ public sealed class CargoCacheProvider : CleanupProviderBase
         + "spends longer fetching before it compiles. Registry metadata, the clones of git "
         + "dependencies, your configuration and anything installed with 'cargo install' are untouched.";
 
-    public override ProviderBasis Basis => ProviderBasis.Researched;
+    public override ProviderBasis Basis => ProviderBasis.Observed;
 
     public override ProviderDescription Description { get; } = new()
     {

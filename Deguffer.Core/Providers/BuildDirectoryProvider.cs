@@ -6,8 +6,10 @@ using Deguffer.Core.Scanning;
 namespace Deguffer.Core.Providers;
 
 /// <summary>
-/// A whole build directory that a toolchain regenerates, found inside the source folders the user
-/// approved — Unity's <c>Library</c>, Cargo's <c>target</c>, a <c>node_modules</c>, a <c>.venv</c>.
+/// A build directory that a toolchain regenerates, found inside the source folders the user
+/// approved — Unity's <c>Library</c>, a <c>node_modules</c>, a <c>.venv</c> — or the parts of one the
+/// toolchain is recognised to have written, as with Cargo's <c>target</c>
+/// (<see cref="BuildDirectoryKind.Parts"/>).
 ///
 /// <para>Four things are the same for every one of them and are done here: search the approved roots
 /// and nowhere else, prove the directory's identity from the project around it, refuse anything
@@ -71,8 +73,9 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
     protected BuildDirectoryKind Kind { get; }
 
     /// <summary>
-    /// One step per project, for every kind of build directory. Sealed, because what makes it true is
-    /// the search this class does, and a subclass is a declaration of a directory name.
+    /// One step per project, or for a kind that offers parts, one per part, each named with its
+    /// project. Sealed, because what makes it true is the search this class does, and a subclass is a
+    /// declaration of a directory name.
     /// </summary>
     public sealed override StepGrain Grain => StepGrain.Items;
 
