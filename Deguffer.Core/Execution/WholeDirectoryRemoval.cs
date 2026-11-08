@@ -1,4 +1,5 @@
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Execution;
 
@@ -25,6 +26,7 @@ internal static class WholeDirectoryRemoval
 
     /// <param name="refusals">Where each removal records the places Windows refused.</param>
     /// <param name="runResidue">Where each removal records what it left standing, for §5.6.</param>
+    /// <param name="deletions">Where each removal's deletions take their places, shared with the steps beside this one.</param>
     public static async Task<StepOutcome> RemoveAsync(
         DeleteDirectoryStep step,
         MinimumAge keep,
@@ -33,6 +35,7 @@ internal static class WholeDirectoryRemoval
         IProgress<double>? progress,
         IFileSystem fs,
         TimeProvider time,
+        ThreadAllowance deletions,
         CancellationToken ct)
     {
         var (guard, how) = step.GoesWholeOrNotAtAll
@@ -63,14 +66,14 @@ internal static class WholeDirectoryRemoval
         // The index first, and the directory it indexes only once all of it is gone. See
         // DeleteDirectoryStep.IndexedBy.
         var index = await IndexRemoval.RemoveAsync(
-            step, [.. gathered.Take(step.IndexedBy.Count)], refusals, runResidue, fs, time, ct).ConfigureAwait(false);
+            step, [.. gathered.Take(step.IndexedBy.Count)], refusals, runResidue, fs, time, deletions, ct).ConfigureAwait(false);
 
         if (!index.Complete)
         {
             return index.Stopped(step);
         }
 
-        var removal = await DirectoryRemover.DeleteAsync(gathered[^1], progress, fs, time, ct).ConfigureAwait(false);
+        var removal = await DirectoryRemover.DeleteAsync(gathered[^1], progress, fs, time, deletions, ct).ConfigureAwait(false);
 
         refusals.Record(step.Path, removal);
         runResidue.Record(step.Path, removal.LeftStanding);

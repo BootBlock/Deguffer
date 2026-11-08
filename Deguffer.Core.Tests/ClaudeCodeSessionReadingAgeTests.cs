@@ -20,6 +20,8 @@ public sealed class ClaudeCodeSessionReadingAgeTests : IDisposable
 {
     private const int EndedProcess = 7001;
     private const int ResumedProcess = 4242;
+    private const string OrderingTool = "tool";
+    private const string OrderingCommand = "noop";
 
     private readonly TempDirectory _temp = new();
     private readonly FakeUserEnvironment _environment;
@@ -77,11 +79,13 @@ public sealed class ClaudeCodeSessionReadingAgeTests : IDisposable
 
         var result = await Execute(
             Removal(ended, SessionB),
+            Then(),
             Meanwhile(() =>
             {
                 Resume(SessionA);
                 _clock.Advance(IUseCheck.ReadingLimit + TimeSpan.FromTicks(1));
             }),
+            Then(),
             Removal(resumed, SessionA));
 
         Assert.False(File.Exists(ended), "an ended session's events were kept");
@@ -104,7 +108,9 @@ public sealed class ClaudeCodeSessionReadingAgeTests : IDisposable
 
         var result = await Execute(
             Removal(first, SessionA),
+            Then(),
             Meanwhile(() => File.Delete(unreadable)),
+            Then(),
             Removal(second, SessionB));
 
         Assert.True(File.Exists(first), "events were removed on a list nobody could read");
@@ -171,9 +177,17 @@ public sealed class ClaudeCodeSessionReadingAgeTests : IDisposable
             UseCheck = new ChangingCheck(change),
         };
 
+    /// <summary>
+    /// A tool's command between two steps. It runs alone, so the step before it has ended before the
+    /// step after it is asked anything: removals of files apart would otherwise start together, and the
+    /// order the checks are asked in, which these tests are about, would be the scheduler's.
+    /// </summary>
+    private static RunCommandStep Then() =>
+        new(OrderingTool, OrderingCommand, "A command between two steps") { WhenCancelled = CancelledCommand.Ended };
+
     private Task<CleanupResult> Execute(params IReadOnlyList<CleanupStep> steps) =>
         new PlanExecutor(
-                new FakeProcessRunner(),
+                new FakeProcessRunner().Responding(OrderingTool, OrderingCommand, string.Empty),
                 ParallelEnumerationScanner.Default,
                 RefusalRecord.For(_environment))
             .ExecuteAsync(

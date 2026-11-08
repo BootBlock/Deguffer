@@ -123,7 +123,8 @@ public sealed class PlanExecutor(
     /// cancellation would wait for. See <see cref="CommandUnderway"/>.
     /// </param>
     /// <param name="ct">
-    /// Stops the plan between steps, and inside a step that can stop. <b>Never thrown:</b> the result
+    /// Stops new steps from starting, and each step under way that can stop. The steps run several at
+    /// once where they are apart (see <see cref="PlanSteps"/>). <b>Never thrown:</b> the result
     /// holds the steps that ran, is <see cref="CleanupResult.Interrupted"/>, and is verified like any
     /// other, because what a cancelled clean already took is what §5.6 has to answer for.
     /// </param>
@@ -145,78 +146,38 @@ public sealed class PlanExecutor(
 
         var runResidue = residue ?? RunResidue.Begin([plan]);
         var started = _time.GetTimestamp();
-        var outcomes = new List<StepOutcome>(plan.Steps.Count);
-        var heldAtClean = new List<ProtectedPath>();
 
-        // The same weighting the planner applies to whole plans, for the same reason: one obj
+        // What each step's use check held back, one list a step so the steps running at once share
+        // nothing, and read in the plan's order once they have all ended.
+        var heldAtClean = new List<ProtectedPath>[plan.Steps.Count];
+
+        // One bound on the deletions of every step, so steps that run at once share the disk's queue
+        // rather than each filling it. Plans run one at a time, so this is the bound for the run.
+        var deletions = new ThreadAllowance(DirectoryRemover.MostAtOnce);
+
+        // The bar is weighted as the planner weights whole plans, for the same reason: one obj
         // directory of 4 GB and five of 20 MB are six steps, and splitting the bar six ways would
-        // crawl through the first sixth and then jump the rest.
-        var weights = ProgressWeights.For(plan.Steps.Select(s => s.EstimatedBytes));
-        var total = weights.Sum();
-        var done = 0.0;
-
-        // Set when the clean is cancelled before every step has run to its end.
-        var interrupted = false;
-
-        for (var i = 0; i < plan.Steps.Count; i++)
-        {
-            // Stopped here rather than thrown, so what the steps before this one did is still verified
-            // below.
-            if (ct.IsCancellationRequested)
-            {
-                interrupted = true;
-                break;
-            }
-
-            // Each step's own 0-to-1 becomes its slice of this plan's 0-to-1.
-            var stepProgress = ScaledProgress.Within(progress, done / total, weights[i] / total);
-
-            StepOutcome outcome;
-            var clock = new StepClock(_time);
-
-            try
-            {
-                outcome = await RunStepAsync(plan, plan.Steps[i], heldAtClean, runResidue, clock, stepProgress, underway, ct)
-                    .ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                // A step that throws when cancelled cannot say what it did first. A tool's command can
-                // have removed part of its cache, and nothing counted it.
-                outcome = new StepOutcome(
-                    plan.Steps[i].Description,
-                    Succeeded: false,
-                    BytesReclaimed: 0,
-                    Refusals.None,
-                    "Stopped when the clean was cancelled. What it had removed by then is not counted.",
-                    Interrupted: true);
-            }
-
-            outcome = outcome with { Timing = clock.Read() };
-            outcomes.Add(outcome);
-
-            if (outcome.Interrupted)
-            {
-                interrupted = true;
-                break;
-            }
-
-            // Reported from here rather than trusted from the step: a command step reports nothing
-            // at all while it runs, and a removal that ends early would leave a gap that never
-            // closes.
-            done += weights[i];
-            progress?.Report(done / total);
-        }
+        // crawl through the first sixth and then jump the rest. A step's whole weight is added when it
+        // ends rather than trusted from the step: a command step reports nothing while it runs, and a
+        // removal that ends early would leave a gap that never closes.
+        var run = await PlanSteps.RunAsync(
+            plan.Steps,
+            StepOverlap.Of(plan.Steps, _volumes, _fileSystem),
+            (index, stepProgress, stop) => RunTimedStepAsync(
+                plan, index, heldAtClean[index] = [], runResidue, deletions, stepProgress, underway, stop),
+            progress,
+            ct).ConfigureAwait(false);
 
         var duration = _time.GetElapsedTime(started);
+        var held = heldAtClean.Take(run.Outcomes.Count).SelectMany(step => step).ToList();
 
         return new CleanupResult
         {
             ProviderId = plan.ProviderId,
             ProviderName = plan.ProviderName,
-            Steps = outcomes,
+            Steps = run.Outcomes,
             Duration = duration,
-            Interrupted = interrupted,
+            Interrupted = run.Interrupted,
 
             // §5.6 is not a separate user action: acting and proving what survived are one step. What a
             // use check held back is proved standing with everything the plan protected.
@@ -228,7 +189,7 @@ public sealed class PlanExecutor(
             // and drives the reads of a release step's files. See ListWorkers.
             Verification = await WorkerThreads.Shared.RunAsync(
                 () => PlanVerifier.Verify(
-                    heldAtClean.Count == 0 ? plan : plan with { ProtectedPaths = [.. plan.ProtectedPaths, .. heldAtClean] },
+                    held.Count == 0 ? plan : plan with { ProtectedPaths = [.. plan.ProtectedPaths, .. held] },
                     runReach,
                     runResidue,
                     CancellationToken.None,
@@ -241,15 +202,56 @@ public sealed class PlanExecutor(
     }
 
     /// <summary>
+    /// Carry out the step at <paramref name="index"/>, timed from its first check to its outcome, and
+    /// reported as stopped where it throws because the clean was cancelled.
+    /// </summary>
+    private async Task<StepOutcome> RunTimedStepAsync(
+        CleanupPlan plan,
+        int index,
+        List<ProtectedPath> heldAtClean,
+        RunResidue runResidue,
+        ThreadAllowance deletions,
+        IProgress<double>? progress,
+        IProgress<CommandUnderway?>? underway,
+        CancellationToken ct)
+    {
+        var step = plan.Steps[index];
+        var clock = new StepClock(_time);
+        StepOutcome outcome;
+
+        try
+        {
+            outcome = await RunStepAsync(plan, step, heldAtClean, runResidue, deletions, clock, progress, underway, ct)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // A step that throws when cancelled cannot say what it did first. A tool's command can
+            // have removed part of its cache, and nothing counted it.
+            outcome = new StepOutcome(
+                step.Description,
+                Succeeded: false,
+                BytesReclaimed: 0,
+                Refusals.None,
+                "Stopped when the clean was cancelled. What it had removed by then is not counted.",
+                Interrupted: true);
+        }
+
+        return outcome with { Timing = clock.Read() };
+    }
+
+    /// <summary>
     /// Carry out one step, or say why it did not run. What a use check holds back is added to
     /// <paramref name="heldAtClean"/>, because it is proved standing afterwards. The use check and any
-    /// look are timed on <paramref name="clock"/>.
+    /// look are timed on <paramref name="clock"/>, and each deletion takes its place in
+    /// <paramref name="deletions"/>.
     /// </summary>
     private async Task<StepOutcome> RunStepAsync(
         CleanupPlan plan,
         CleanupStep step,
         List<ProtectedPath> heldAtClean,
         RunResidue runResidue,
+        ThreadAllowance deletions,
         StepClock clock,
         IProgress<double>? progress,
         IProgress<CommandUnderway?>? underway,
@@ -302,9 +304,9 @@ public sealed class PlanExecutor(
         return step switch
         {
             RunCommandStep command => await RunCommandAsync(command, clock, underway, ct).ConfigureAwait(false),
-            ClearDirectoryStep clear => await ClearAsync(clear, plan.Keep, runResidue, progress, ct).ConfigureAwait(false),
-            DeleteDirectoryStep delete => await DeleteAsync(delete, plan.Keep, runResidue, progress, ct).ConfigureAwait(false),
-            DeleteFileStep delete => await DeleteAsync(delete, plan.Keep, progress, ct).ConfigureAwait(false),
+            ClearDirectoryStep clear => await ClearAsync(clear, plan.Keep, runResidue, deletions, progress, ct).ConfigureAwait(false),
+            DeleteDirectoryStep delete => await DeleteAsync(delete, plan.Keep, runResidue, deletions, progress, ct).ConfigureAwait(false),
+            DeleteFileStep delete => await DeleteAsync(delete, plan.Keep, deletions, progress, ct).ConfigureAwait(false),
             EmptyRecycleBinStep empty => await EmptyAsync(empty, plan.Keep, clock, progress, ct).ConfigureAwait(false),
             DiskCleanupStep handler => await DiskCleanupRun.RunAsync(_handlers!, scanner, handler, plan.Keep, clock, progress, ct).ConfigureAwait(false),
             ReleaseLocalCopiesStep release => await LocalCopyRelease.RunAsync(_cloud!, release, plan.Keep, progress, ct).ConfigureAwait(false),
@@ -769,18 +771,19 @@ public sealed class PlanExecutor(
         DeleteDirectoryStep step,
         MinimumAge keep,
         RunResidue runResidue,
+        ThreadAllowance deletions,
         IProgress<double>? progress,
         CancellationToken ct)
     {
         if (WholeDirectoryRemoval.Applies(step))
         {
             return await WholeDirectoryRemoval.RemoveAsync(
-                    step, keep, refusals, runResidue, progress, _fileSystem, _time, ct)
+                    step, keep, refusals, runResidue, progress, _fileSystem, _time, deletions, ct)
                 .ConfigureAwait(false);
         }
 
         var removal = await DirectoryRemover.RemoveAsync(
-                step.Path, keep, progress, ct, _fileSystem, time: _time, plannedEntries: step.Estimated.Entries)
+                step.Path, keep, progress, ct, _fileSystem, time: _time, plannedEntries: step.Estimated.Entries, deletions: deletions)
             .ConfigureAwait(false);
 
         refusals.Record(step.Path, removal);
@@ -857,7 +860,7 @@ public sealed class PlanExecutor(
     /// <summary>
     /// Empty a directory and leave it standing, sparing the entries the plan named.
     ///
-    /// <para>The same removal as <see cref="DeleteAsync(DeleteDirectoryStep, MinimumAge, RunResidue, IProgress{double}?, CancellationToken)"/>
+    /// <para>The same removal as <see cref="DeleteAsync(DeleteDirectoryStep, MinimumAge, RunResidue, ThreadAllowance, IProgress{double}?, CancellationToken)"/>
     /// under different bounds, rather than a second walk of its own: §6.3's extended-length paths,
     /// §5.3's skip on a refusal, the guard on recently changed files and the refusal to follow a
     /// link are all properties of that one removal, and a parallel implementation is where one of
@@ -872,6 +875,7 @@ public sealed class PlanExecutor(
         ClearDirectoryStep step,
         MinimumAge keep,
         RunResidue runResidue,
+        ThreadAllowance deletions,
         IProgress<double>? progress,
         CancellationToken ct)
     {
@@ -883,7 +887,8 @@ public sealed class PlanExecutor(
             _fileSystem,
             new RemovalBounds(KeepRoot: true, step.Spared, step.OwnedElsewhere, step.UserWork),
             _time,
-            step.Estimated.Entries).ConfigureAwait(false);
+            step.Estimated.Entries,
+            deletions).ConfigureAwait(false);
 
         refusals.Record(step.Path, removal);
         runResidue.Record(step.Path, removal.LeftStanding);
@@ -977,10 +982,11 @@ public sealed class PlanExecutor(
     private async Task<StepOutcome> DeleteAsync(
         DeleteFileStep step,
         MinimumAge keep,
+        ThreadAllowance deletions,
         IProgress<double>? progress,
         CancellationToken ct)
     {
-        var removal = await FileRemover.RemoveAsync(step.Path, keep, ct, _fileSystem).ConfigureAwait(false);
+        var removal = await FileRemover.RemoveAsync(step.Path, keep, ct, _fileSystem, deletions).ConfigureAwait(false);
 
         // One file, so there is no fraction to report along the way — only the end of it.
         progress?.Report(1.0);

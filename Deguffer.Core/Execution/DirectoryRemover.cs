@@ -15,7 +15,8 @@ public static class DirectoryRemover
     /// <summary>
     /// The most deletions a removal runs at once, files and folders alike. Each is a short wait on
     /// the disk rather than work for a processor, so it runs several to a processor, up to a ceiling
-    /// that keeps one removal from flooding the disk's queue.
+    /// that keeps one removal from flooding the disk's queue. The removals of one plan that run at once
+    /// share it rather than each taking it: see <see cref="ThreadAllowance"/>.
     /// </summary>
     internal static readonly int MostAtOnce = Math.Min(Environment.ProcessorCount * 4, 32);
 
@@ -49,6 +50,11 @@ public static class DirectoryRemover
     /// The clock <see cref="RemovalOutcome.Passes"/> is measured on. Defaults to the system clock. The
     /// executor hands over its own, so a step and the passes inside it are read from one clock.
     /// </param>
+    /// <param name="deletions">
+    /// Where each thread that deletes takes its place, shared with the removals that run beside this
+    /// one: see <see cref="ThreadAllowance"/>. Null gives the removal an allowance of
+    /// <see cref="MostAtOnce"/> of its own.
+    /// </param>
     public static Task<RemovalOutcome> RemoveAsync(
         string path,
         MinimumAge keep = default,
@@ -57,7 +63,8 @@ public static class DirectoryRemover
         IFileSystem? fileSystem = null,
         RemovalBounds? bounds = null,
         TimeProvider? time = null,
-        long plannedEntries = 0) =>
+        long plannedEntries = 0,
+        ThreadAllowance? deletions = null) =>
         // Not handed the token: a task handed one is cancelled where the token is before the work
         // starts, which would break the contract above at its first step. On a thread of its own,
         // because the walk holds the thread that drives it for the whole removal.
@@ -70,21 +77,24 @@ public static class DirectoryRemover
                 plannedEntries,
                 fileSystem ?? WindowsFileSystem.Default,
                 time ?? TimeProvider.System,
+                deletions ?? new ThreadAllowance(MostAtOnce),
                 ct),
             CancellationToken.None);
 
     /// <summary>
     /// Delete what <paramref name="gathered"/> holds, on the terms of
-    /// <see cref="RemoveAsync(string, MinimumAge, IProgress{double}?, CancellationToken, IFileSystem?, RemovalBounds?, TimeProvider?, long)"/>,
-    /// whose cancellation is never thrown either, with its passes timed on <paramref name="time"/>.
+    /// <see cref="RemoveAsync(string, MinimumAge, IProgress{double}?, CancellationToken, IFileSystem?, RemovalBounds?, TimeProvider?, long, ThreadAllowance?)"/>,
+    /// whose cancellation is never thrown either, with its passes timed on <paramref name="time"/> and
+    /// its deletions counted in <paramref name="deletions"/>.
     /// </summary>
     internal static Task<RemovalOutcome> DeleteAsync(
         GatheredRemoval gathered,
         IProgress<double>? progress,
         IFileSystem fs,
         TimeProvider time,
+        ThreadAllowance deletions,
         CancellationToken ct) =>
-        WorkerThreads.Shared.RunAsync(() => Delete(gathered, progress, fs, time, ct), CancellationToken.None);
+        WorkerThreads.Shared.RunAsync(() => Delete(gathered, progress, fs, time, deletions, ct), CancellationToken.None);
 
     private static RemovalOutcome Remove(
         string path,
@@ -94,6 +104,7 @@ public static class DirectoryRemover
         long plannedEntries,
         IFileSystem fs,
         TimeProvider time,
+        ThreadAllowance deletions,
         CancellationToken ct)
     {
         if (ct.IsCancellationRequested)
@@ -105,7 +116,7 @@ public static class DirectoryRemover
 
         if (GatheredRemoval.Probe(extended, keep, bounds, fs) is { } notATree)
         {
-            return Delete(notATree, progress, fs, time, ct);
+            return Delete(notATree, progress, fs, time, deletions, ct);
         }
 
         // Deleted while it is listed: each folder's files as soon as its own listing is complete. See
@@ -121,6 +132,7 @@ public static class DirectoryRemover
             fs,
             time,
             gathered: null,
+            deletions,
             ct);
     }
 
@@ -129,6 +141,7 @@ public static class DirectoryRemover
         IProgress<double>? progress,
         IFileSystem fs,
         TimeProvider time,
+        ThreadAllowance deletions,
         CancellationToken ct)
     {
         if (ct.IsCancellationRequested)
@@ -159,6 +172,7 @@ public static class DirectoryRemover
                     fs,
                     time,
                     tree.Walk,
+                    deletions,
                     ct);
 
             case GatheredRemoval.NotAFolder:
@@ -199,7 +213,26 @@ public static class DirectoryRemover
             // directory, and a link has no inside — following it would empty whatever it points at, and
             // deleting it would destroy the very path the caller said must survive.
             case GatheredRemoval.Link:
-                var linkStayed = !bounds.KeepRoot && DirectoryDeletion.TryDelete(extended, fs) is not null;
+                // One deletion, which counts toward the bound the removals beside this one share as a
+                // crew's deletions do. A removal cancelled while it waits for a place has done nothing.
+                if (!bounds.KeepRoot && !deletions.Take(ct))
+                {
+                    return NothingDone;
+                }
+
+                bool linkStayed;
+
+                try
+                {
+                    linkStayed = !bounds.KeepRoot && DirectoryDeletion.TryDelete(extended, fs) is not null;
+                }
+                finally
+                {
+                    if (!bounds.KeepRoot)
+                    {
+                        deletions.Return();
+                    }
+                }
 
                 progress?.Report(1.0);
 

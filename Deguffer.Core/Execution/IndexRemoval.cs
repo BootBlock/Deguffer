@@ -1,4 +1,5 @@
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Execution;
 
@@ -64,6 +65,7 @@ internal sealed record IndexRemoval(
         RunResidue leftStanding,
         IFileSystem fs,
         TimeProvider time,
+        ThreadAllowance deletions,
         CancellationToken ct)
     {
         // Zip would stop at the shorter list, and an index left out is one the directory it indexes
@@ -79,7 +81,7 @@ internal sealed record IndexRemoval(
 
         foreach (var (index, gathered) in step.IndexedBy.Zip(indexes))
         {
-            var removal = await DirectoryRemover.DeleteAsync(gathered, progress: null, fs, time, ct).ConfigureAwait(false);
+            var removal = await DirectoryRemover.DeleteAsync(gathered, progress: null, fs, time, deletions, ct).ConfigureAwait(false);
 
             refusals.Record(index, removal);
             leftStanding.Record(index, removal.LeftStanding);

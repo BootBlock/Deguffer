@@ -1,4 +1,5 @@
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Execution;
 
@@ -58,12 +59,35 @@ public static class FileRemover
     /// because the two moments are minutes apart and the file may have been written in between —
     /// the same reason §7.1 has Explore decide a refusal again at the point of deletion.
     /// </param>
-    public static Task<FileRemovalOutcome> RemoveAsync(
+    /// <param name="deletions">
+    /// Where the removal takes its place for as long as it runs, shared with the removals beside it:
+    /// see <see cref="ThreadAllowance"/>. Null where nothing runs beside it.
+    /// </param>
+    public static async Task<FileRemovalOutcome> RemoveAsync(
         string path,
         MinimumAge keep = default,
         CancellationToken ct = default,
-        IFileSystem? fileSystem = null) =>
-        Task.Run(() => Remove(path, keep, fileSystem ?? WindowsFileSystem.Default), ct);
+        IFileSystem? fileSystem = null,
+        ThreadAllowance? deletions = null)
+    {
+        var fs = fileSystem ?? WindowsFileSystem.Default;
+
+        if (deletions is null)
+        {
+            return await Task.Run(() => Remove(path, keep, fs), ct).ConfigureAwait(false);
+        }
+
+        await deletions.TakeAsync(ct).ConfigureAwait(false);
+
+        try
+        {
+            return await Task.Run(() => Remove(path, keep, fs), ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            deletions.Return();
+        }
+    }
 
     private static FileRemovalOutcome Remove(string path, MinimumAge keep, IFileSystem fs)
     {

@@ -43,11 +43,16 @@ namespace Deguffer.Core.Execution;
 /// held to before the first deletion, and a path absent then is one no removal in the run can have
 /// taken, under any spelling or through any link.</para>
 ///
-/// <para>Not safe for concurrent use. A run executes one step at a time, which makes that step's
-/// executor the only writer.</para>
+/// <para><b>Safe for concurrent use.</b> The steps of a plan that destroy unrelated folders run at
+/// once, and each records its own removal as it ends. What the removals record is read and written
+/// under one lock, which costs nothing a removal would notice: each records once for each tree it removes, and §5.6 reads
+/// once the steps are over. What had gone before the run is written only by <see cref="Begin"/>, before
+/// anything else can see the record.</para>
 /// </summary>
 public sealed class RunResidue
 {
+    private readonly Lock _gate = new();
+
     /// <summary>
     /// Every folder recorded, kept per removal root. Each set is closed upwards as far as its own
     /// root and no further, which is what lets a record stop climbing at the first folder its set
@@ -145,22 +150,24 @@ public sealed class RunResidue
         }
 
         var top = Normalised(root);
+        var folders = leftStanding.Select(Normalised).ToList();
 
-        if (!_byRoot.TryGetValue(top, out var inside))
+        lock (_gate)
         {
-            inside = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            _byRoot[top] = inside;
-        }
-
-        foreach (var directory in leftStanding)
-        {
-            var folder = Normalised(directory);
-
-            // Strictly below the root means the folder has a parent, so the climb always has
-            // somewhere to go until it reaches the root and stops.
-            while (IsStrictlyBelow(top, folder) && inside.Add(folder))
+            if (!_byRoot.TryGetValue(top, out var inside))
             {
-                folder = Path.GetDirectoryName(folder)!;
+                inside = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                _byRoot[top] = inside;
+            }
+
+            foreach (var standing in folders)
+            {
+                // Strictly below the root means the folder has a parent, so the climb always has
+                // somewhere to go until it reaches the root and stops.
+                for (var folder = standing; IsStrictlyBelow(top, folder) && inside.Add(folder);)
+                {
+                    folder = Path.GetDirectoryName(folder)!;
+                }
             }
         }
     }
@@ -176,14 +183,18 @@ public sealed class RunResidue
         ArgumentNullException.ThrowIfNull(leftAlone);
 
         var top = Normalised(root);
+        var entries = new HashSet<string>(leftAlone.Select(Normalised), StringComparer.OrdinalIgnoreCase);
 
-        if (!_leftAloneByRoot.TryGetValue(top, out var removals))
+        lock (_gate)
         {
-            removals = [];
-            _leftAloneByRoot[top] = removals;
-        }
+            if (!_leftAloneByRoot.TryGetValue(top, out var removals))
+            {
+                removals = [];
+                _leftAloneByRoot[top] = removals;
+            }
 
-        removals.Add(new HashSet<string>(leftAlone.Select(Normalised), StringComparer.OrdinalIgnoreCase));
+            removals.Add(entries);
+        }
     }
 
     /// <summary>
@@ -196,14 +207,13 @@ public sealed class RunResidue
     /// </summary>
     public bool LeftAlone(string root, string path)
     {
-        if (!_leftAloneByRoot.TryGetValue(Normalised(root), out var removals))
+        var (top, key) = (Normalised(root), Normalised(path));
+
+        lock (_gate)
         {
-            return false;
+            return _leftAloneByRoot.TryGetValue(top, out var removals)
+                && removals.TrueForAll(entries => entries.Any(entry => LongPath.Contains(entry, key)));
         }
-
-        var key = Normalised(path);
-
-        return removals.TrueForAll(entries => entries.Any(entry => LongPath.Contains(entry, key)));
     }
 
     /// <summary>
@@ -211,7 +221,16 @@ public sealed class RunResidue
     /// so a caller can name a folder below each root as the root names itself before asking
     /// <see cref="Entered"/> about it.
     /// </summary>
-    public IEnumerable<string> EnteredRoots => _byRoot.Keys;
+    public IReadOnlyList<string> EnteredRoots
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return [.. _byRoot.Keys];
+            }
+        }
+    }
 
     /// <summary>
     /// Whether a removal rooted above <paramref name="folder"/> went into it, and left something
@@ -222,7 +241,10 @@ public sealed class RunResidue
     {
         var key = Normalised(folder);
 
-        return _byRoot.Values.Any(inside => inside.Contains(key));
+        lock (_gate)
+        {
+            return _byRoot.Values.Any(inside => inside.Contains(key));
+        }
     }
 
     private static bool IsStrictlyBelow(string root, string path) =>

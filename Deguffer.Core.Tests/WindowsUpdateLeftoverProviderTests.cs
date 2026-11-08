@@ -1,6 +1,7 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -274,6 +275,7 @@ public sealed class WindowsUpdateLeftoverProviderTests : IDisposable
             progress: null,
             new UnlistableFileSystem(WindowsFileSystem.Default, scratch),
             TimeProvider.System,
+            new ThreadAllowance(DirectoryRemover.MostAtOnce),
             CancellationToken.None);
 
         Assert.False(outcome.Succeeded);

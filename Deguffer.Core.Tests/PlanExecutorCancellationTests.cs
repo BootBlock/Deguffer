@@ -22,7 +22,12 @@ public sealed class PlanExecutorCancellationTests : IDisposable
 
     /// <summary>
     /// The removal is stopped with most of its tree still to go, the next step never starts, and the
-    /// tool's own folder (§5.2) and the file beside the targets are proved standing all the same.
+    /// tool's own folder (§5.2), the file beside the targets and an unrecognised sibling are proved
+    /// standing all the same.
+    ///
+    /// <para>The next step is the tool's command, which runs alone, so it waits for the removal to
+    /// end and the cancellation is what it meets. A second removal of a folder beside the first would
+    /// start with it: see <see cref="PlanExecutorStepOverlapTests"/>.</para>
     /// </summary>
     [Fact]
     public async Task APlanStoppedPartWayReportsWhatItDidAndIsStillVerified()
@@ -34,10 +39,11 @@ public sealed class PlanExecutorCancellationTests : IDisposable
         _temp.CreateFile(64, "tool", "logs", "today.log");
 
         using var cts = new CancellationTokenSource();
+        var runner = new FakeProcessRunner();
 
-        var result = await Executor().ExecuteAsync(
+        var result = await new PlanExecutor(runner, ParallelEnumerationScanner.Default, RefusalLog).ExecuteAsync(
             Plan(
-                [new DeleteDirectoryStep(cache, "The cache"), new DeleteDirectoryStep(logs, "The logs")],
+                [new DeleteDirectoryStep(cache, "The cache"), new RunCommandStep("tool", "prune", "Prune the logs") { WhenCancelled = CancelledCommand.Ended }],
                 new ProtectedPath(root, "The tool's own folder.", PathPresence.Present),
                 new ProtectedPath(settings, "The tool's settings.", PathPresence.Present)),
             runReach: null,
@@ -54,9 +60,10 @@ public sealed class PlanExecutorCancellationTests : IDisposable
         Assert.InRange(stopped.BytesReclaimed, 1, (4 * FilesPerFolder * 16) - 1);
         Assert.StartsWith("Stopped part-way when the clean was cancelled", stopped.Message);
 
-        Assert.True(Directory.Exists(logs), "a step the cancelled plan never started was carried out");
+        Assert.Empty(runner.Invocations);
 
         // §5.6's negative, on the disk and in the verdict.
+        Assert.True(File.Exists(Path.Combine(logs, "today.log")), "an unrecognised sibling of the stopped removal went");
         Assert.True(Directory.Exists(root));
         Assert.True(File.Exists(settings));
 
@@ -333,7 +340,7 @@ public sealed class PlanExecutorCancellationTests : IDisposable
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        var removal = await IndexRemoval.RemoveAsync(step, gathered, RefusalLog, new RunResidue(), WindowsFileSystem.Default, TimeProvider.System, cts.Token);
+        var removal = await IndexRemoval.RemoveAsync(step, gathered, RefusalLog, new RunResidue(), WindowsFileSystem.Default, TimeProvider.System, new ThreadAllowance(DirectoryRemover.MostAtOnce), cts.Token);
 
         Assert.True(removal.Interrupted);
         Assert.False(removal.Complete);
