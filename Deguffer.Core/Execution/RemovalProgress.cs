@@ -9,9 +9,8 @@ namespace Deguffer.Core.Execution;
 /// (<see cref="Scanning.ScanSize.Entries"/>), or of what the walk has found so far where that is
 /// already more. Once the walk is over, the count it made takes over.</para>
 ///
-/// <para><b>Never moves backwards.</b> A plan that measured too little would otherwise pull the bar
-/// back each time the walk found more than it promised. A report that would fall below the last one
-/// is held at it instead.</para>
+/// <para><b>Never moves backwards</b> (<see cref="ForwardProgress"/>). A plan that measured too little
+/// would otherwise pull the bar back each time the walk found more than it promised.</para>
 /// </summary>
 /// <param name="progress">Where the fraction goes, or null where nobody is watching.</param>
 /// <param name="planned">How many entries the plan measured, or zero where it measured none.</param>
@@ -23,12 +22,11 @@ internal sealed class RemovalProgress(IProgress<double>? progress, long planned)
     /// </summary>
     private const int ReportEvery = 256;
 
-    private readonly Lock _reporting = new();
+    private readonly ForwardProgress _forward = new(progress);
 
     private long _found;
     private long _done;
     private bool _counted;
-    private double _reported;
 
     /// <summary>Count <paramref name="entries"/> more as found by the walk and handed to the removal.</summary>
     public void Found(long entries) => Interlocked.Add(ref _found, entries);
@@ -46,32 +44,13 @@ internal sealed class RemovalProgress(IProgress<double>? progress, long planned)
     }
 
     /// <summary>Report the removal finished.</summary>
-    public void Finished() => Report(1.0);
+    public void Finished() => _forward.Report(1.0);
 
     private void Report()
     {
         var found = Interlocked.Read(ref _found);
         var whole = Volatile.Read(ref _counted) ? found : Math.Max(planned, found);
 
-        Report(whole == 0 ? 1.0 : Math.Min(1.0, (double)Interlocked.Read(ref _done) / whole));
-    }
-
-    private void Report(double fraction)
-    {
-        if (progress is null)
-        {
-            return;
-        }
-
-        lock (_reporting)
-        {
-            if (fraction <= _reported && fraction < 1.0)
-            {
-                return;
-            }
-
-            _reported = fraction;
-            progress.Report(fraction);
-        }
+        _forward.Report(whole == 0 ? 1.0 : Math.Min(1.0, (double)Interlocked.Read(ref _done) / whole));
     }
 }

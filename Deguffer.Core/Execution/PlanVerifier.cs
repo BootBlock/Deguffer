@@ -1,6 +1,7 @@
 using Deguffer.Core.Cloud;
 using Deguffer.Core.Profiles;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 using Deguffer.Core.SystemProtection;
 
 namespace Deguffer.Core.Execution;
@@ -61,10 +62,11 @@ public static class PlanVerifier
 
         foreach (var release in plan.Steps.OfType<ReleaseLocalCopiesStep>())
         {
-            foreach (var file in release.Files)
+            var readings = ReadReleased(release, cloud ?? CloudFiles.Default, ct);
+
+            for (var i = 0; i < readings.Length; i++)
             {
-                ct.ThrowIfCancellationRequested();
-                checks.Add(CheckReleased(file.Path, release.SyncApp, cloud ?? CloudFiles.Default, places, residue));
+                checks.Add(CheckReleased(release.Files[i].Path, readings[i], release.SyncApp, places, residue));
             }
         }
 
@@ -84,6 +86,27 @@ public static class PlanVerifier
     }
 
     /// <summary>
+    /// What each file a release named is now, in the order the step named them, read up to
+    /// <see cref="LocalCopyRelease.ReleasesAtOnce"/> at a time.
+    ///
+    /// <para><b>Only the readings go to other threads.</b> Each is an open and a describe that waits on
+    /// the disk, and a large account names tens of thousands. Judging a missing file asks
+    /// <see cref="RunPlaces"/>, which follows each folder once and is not shared between threads, so
+    /// the checks are made afterwards, here, in the step's order: a run reports the same list however
+    /// the threads interleaved.</para>
+    /// </summary>
+    private static PlaceholderReading[] ReadReleased(ReleaseLocalCopiesStep release, ICloudFiles cloud, CancellationToken ct)
+    {
+        var readings = new PlaceholderReading[release.Files.Count];
+
+        // On threads of the proof's own, never the pool's: each open blocks its thread on the disk.
+        // See ListWorkers.
+        ListWorkers.Run(readings.Length, LocalCopyRelease.ReleasesAtOnce, index => readings[index] = cloud.Read(release.Files[index].Path), ct);
+
+        return readings;
+    }
+
+    /// <summary>
     /// §5.6 for a file whose local copy was to be released: it must still be there, and still be a file
     /// the sync app can hand back.
     ///
@@ -98,13 +121,12 @@ public static class PlanVerifier
     /// </summary>
     private static VerificationCheck CheckReleased(
         string path,
+        PlaceholderReading reading,
         string syncApp,
-        ICloudFiles cloud,
         RunPlaces places,
         RunResidue? residue)
     {
         var reason = $"A file {syncApp} was asked to keep only in the cloud. The file itself must stay.";
-        var reading = cloud.Read(path);
 
         return reading switch
         {

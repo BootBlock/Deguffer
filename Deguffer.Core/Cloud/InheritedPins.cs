@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Cloud;
@@ -10,10 +11,13 @@ namespace Deguffer.Core.Cloud;
 /// while the preview sits on screen has just said its files stay, and the files inside record nothing
 /// of it: a scratch sync root showed a file under a pinned folder still reporting no pin of its own.
 /// </para>
+///
+/// <para><b>Shared by the threads of one release.</b> Each folder is read once whichever thread asks
+/// first, and a thread asking while it is read waits for that reading rather than making its own.</para>
 /// </summary>
 public sealed class InheritedPins(ICloudFiles cloud, string syncRoot)
 {
-    private readonly Dictionary<string, PinState> _passedOn = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, Lazy<PinState>> _passedOn = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _root = Path.TrimEndingDirectorySeparator(LongPath.Display(syncRoot));
 
     /// <summary>The pin a file directly inside <paramref name="directory"/> inherits.</summary>
@@ -21,11 +25,12 @@ public sealed class InheritedPins(ICloudFiles cloud, string syncRoot)
     {
         var folder = Path.TrimEndingDirectorySeparator(LongPath.Display(directory));
 
-        if (_passedOn.TryGetValue(folder, out var known))
-        {
-            return known;
-        }
+        return _passedOn.GetOrAdd(folder, static (key, pins) => new Lazy<PinState>(() => pins.Read(key)), this).Value;
+    }
 
+    /// <summary>What <paramref name="folder"/> passes on, read from the disk under what its parent passes on.</summary>
+    private PinState Read(string folder)
+    {
         // Nothing above the sync root passes a pin into it, and a folder outside it is not one any
         // plan names.
         var inherited = !string.Equals(folder, _root, StringComparison.OrdinalIgnoreCase)
@@ -34,7 +39,7 @@ public sealed class InheritedPins(ICloudFiles cloud, string syncRoot)
                 ? For(parent)
                 : PinState.Unspecified;
 
-        return _passedOn[folder] = Own(cloud, folder, inherited);
+        return Own(cloud, folder, inherited);
     }
 
     /// <summary>
