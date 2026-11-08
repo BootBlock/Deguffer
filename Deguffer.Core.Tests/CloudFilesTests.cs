@@ -184,7 +184,7 @@ public sealed class CloudFilesTests : IDisposable
 
         Assert.Equal(PathPresence.Absent, LongPath.ProbeEntry(unopened));
         Assert.Equal(PathPresence.Absent, _cloud.Read(unopened).Presence);
-        Assert.Equal(ReleaseResult.Gone, _cloud.Release(unopened, unopened, _ => true).Result);
+        Assert.Equal(ReleaseResult.Gone, _cloud.Release(unopened, ResolvedAt(unopened), _ => true).Result);
 
         using var denied = DeniedDirectory.WithUnreadableFile(refused);
 
@@ -284,7 +284,7 @@ public sealed class CloudFilesTests : IDisposable
     {
         var missing = _root.At("missing.bin");
 
-        Assert.Equal(ReleaseResult.Gone, _cloud.Release(missing, missing, _ => true).Result);
+        Assert.Equal(ReleaseResult.Gone, _cloud.Release(missing, ResolvedAt(missing), _ => true).Result);
     }
 
     /// <summary>
@@ -305,6 +305,40 @@ public sealed class CloudFilesTests : IDisposable
 
         Assert.Equal(ReleaseResult.NoLongerEligible, answer.Result);
         Assert.Equal(PinState.Unspecified, _cloud.Read(real).Placeholder!.Pin);
+    }
+
+    /// <summary>
+    /// A root the user reaches through a link of their own: the file named through the link resolves to
+    /// its place under the root's own location, so it is released.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public void ReleaseUnpinsAFileUnderARootReachedThroughALinkOfTheUsersOwn(DirectoryLinkKind kind)
+    {
+        var real = _root.LocalCopy("file.bin", Megabyte);
+        var alias = Path.Join(_temp.Path, "Alias");
+        DirectoryLink.Create(kind, alias, _root.Path);
+        var named = Path.Join(alias, "file.bin");
+        _root.Disconnect();
+
+        var resolved = _cloud.Resolve(alias)!.Value.Join("file.bin");
+        var answer = _cloud.Release(named, resolved, _ => true);
+
+        Assert.Equal(new ReleaseAnswer(ReleaseResult.Requested, Megabyte), answer);
+        Assert.Equal(PinState.Unpinned, _cloud.Read(real).Placeholder!.Pin);
+    }
+
+    /// <summary>
+    /// The root is named from its volume's device, the form every file a release checks is compared in,
+    /// so no comparison makes Windows name the volume by its drive letter.
+    /// </summary>
+    [Fact]
+    public void ResolveNamesARootFromItsVolumesDevice()
+    {
+        var resolved = _cloud.Resolve(_root.Path)!.Value.Value;
+
+        Assert.StartsWith(@"\Device\", resolved, StringComparison.OrdinalIgnoreCase);
+        Assert.EndsWith(@"\Synced", resolved, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -338,8 +372,8 @@ public sealed class CloudFilesTests : IDisposable
     /// root's resolved location. The scratch folder can be named in its short form, which Windows
     /// resolves to the long one.
     /// </summary>
-    private string ResolvedAt(string path) =>
-        Path.Join(_cloud.Resolve(_root.Path), Path.GetRelativePath(_root.Path, path));
+    private VolumeDevicePath ResolvedAt(string path) =>
+        _cloud.Resolve(_root.Path)!.Value.Join(Path.GetRelativePath(_root.Path, path));
 
     private object Shape(string path) => _cloud.Read(path).Placeholder is { } p
         ? new { OnDisk = p.OnDiskBytes, Modified = p.ModifiedBytes, p.InSync, p.Pin }
