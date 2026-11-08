@@ -230,10 +230,20 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
             return EmptyPlan("PlatformIO is not installed on this machine.");
         }
 
-        var locations = await ResolveLocationsAsync(pio, ct).ConfigureAwait(false);
+        // Each half is handed the pending answer rather than waiting for it here, because the package
+        // dry run needs nothing from system info: started together, this row's length is the slower of
+        // two PlatformIO start-ups, not their sum plus the cache walk. Two pio processes at once is safe.
+        // The dry run returns its candidates before any uninstall, and both commands write appstate.json
+        // only under PlatformIO's own lock file, which waits for the other rather than failing.
+        var pending = ResolveLocationsAsync(pio, ct);
+        var cacheHalf = PlanCacheAsync(pio, pending, ct);
+        var packagesHalf = PlanUnusedPackagesAsync(pio, pending, ct);
 
-        var cache = await PlanCacheAsync(pio, locations, ct).ConfigureAwait(false);
-        var packages = await PlanUnusedPackagesAsync(pio, locations, ct).ConfigureAwait(false);
+        await Task.WhenAll(cacheHalf, packagesHalf).ConfigureAwait(false);
+
+        var locations = await pending.ConfigureAwait(false);
+        var cache = await cacheHalf.ConfigureAwait(false);
+        var packages = await packagesHalf.ConfigureAwait(false);
 
         var steps = new List<CleanupStep>(2);
         if (cache.Step is { } cacheStep)
@@ -278,9 +288,11 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
     /// </summary>
     private async Task<PlanPart> PlanCacheAsync(
         string pio,
-        PlatformIoLocations locations,
+        Task<PlatformIoLocations> pending,
         CancellationToken ct)
     {
+        var locations = await pending.ConfigureAwait(false);
+
         if (LongPath.ProbeDirectory(locations.CacheDirectory) is var presence
             && presence is not PathPresence.Present)
         {
@@ -353,10 +365,13 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
     /// carries PlatformIO's estimate and Deguffer's own probe of the same directory as separate
     /// figures: the probe is the "before" that the executor subtracts its re-measurement from, and
     /// subtracting from the estimate instead would report a reclaim of minus five gigabytes.</para>
+    ///
+    /// <para>The dry run starts before the locations are awaited, because its arguments are a
+    /// constant and the locations only name and measure the folder its answer is about.</para>
     /// </summary>
     private async Task<PlanPart> PlanUnusedPackagesAsync(
         string pio,
-        PlatformIoLocations locations,
+        Task<PlatformIoLocations> pending,
         CancellationToken ct)
     {
         var outcome = await Runner
@@ -364,6 +379,7 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
             .ConfigureAwait(false);
 
         var preview = PlatformIoPruneReport.TryRead(outcome.StandardOutput);
+        var locations = await pending.ConfigureAwait(false);
 
         if (preview is null)
         {
@@ -512,6 +528,8 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
     /// The two halves are assembled rather than built by one long method, because the cache and the
     /// packages are independent subjects. A machine with an empty cache can still hold superseded
     /// toolchains, and returning early for the first would silently withhold the larger of the two.
+    /// Being independent, they are also planned at the same time, and assembled cache first whichever
+    /// finishes first, so the plan reads the same either way.
     /// </summary>
     /// <param name="Unreachable">
     /// Whether Windows would not describe this half's directory. It travels with the notes because

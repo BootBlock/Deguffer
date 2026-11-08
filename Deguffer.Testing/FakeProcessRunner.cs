@@ -69,8 +69,34 @@ public sealed class FakeProcessRunner : IProcessRunner
     /// </summary>
     public FakeProcessRunner Holding(string fileName, string argumentMatch, HeldRuns held)
     {
-        For(fileName).Holds.Add((argumentMatch, held));
+        For(fileName).Holds.Add(new RunHold(argumentMatch, held.EnterAsync, held.Leave));
         return this;
+    }
+
+    /// <summary>
+    /// Keep each run of <paramref name="fileName"/> whose arguments contain
+    /// <paramref name="argumentMatch"/> open until <paramref name="released"/> completes, then reply
+    /// as the program's other replies say, so a test can prove other work happened while the run was
+    /// open. A run still open at <paramref name="deadline"/>, <see cref="HeldRuns.DefaultDeadline"/> unless
+    /// given, throws rather than hangs.
+    /// </summary>
+    public FakeProcessRunner Holding(string fileName, string argumentMatch, Task released, TimeSpan? deadline = null)
+    {
+        For(fileName).Holds.Add(new RunHold(argumentMatch, () => WaitForRelease(fileName, argumentMatch, released, deadline ?? HeldRuns.DefaultDeadline), static () => { }));
+        return this;
+    }
+
+    private static async Task WaitForRelease(string fileName, string argumentMatch, Task released, TimeSpan deadline)
+    {
+        try
+        {
+            await released.WaitAsync(deadline).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            throw new TimeoutException(
+                $"The run of '{fileName}' with '{argumentMatch}' was not released within {deadline.TotalSeconds:0.#} s.");
+        }
     }
 
     /// <summary>
@@ -142,10 +168,10 @@ public sealed class FakeProcessRunner : IProcessRunner
 
         public Func<string, ToolRun, CommandOutcome?>? Reply { get; set; }
 
-        public List<(string ArgumentMatch, HeldRuns Held)> Holds { get; } = [];
+        public List<RunHold> Holds { get; } = [];
 
-        public HeldRuns? HoldFor(string arguments) =>
-            Holds.FirstOrDefault(hold => arguments.Contains(hold.ArgumentMatch, StringComparison.OrdinalIgnoreCase)).Held;
+        public RunHold? HoldFor(string arguments) =>
+            Holds.FirstOrDefault(hold => arguments.Contains(hold.ArgumentMatch, StringComparison.OrdinalIgnoreCase));
 
         public CommandOutcome ReplyTo(string arguments, ToolRun run)
         {
@@ -166,6 +192,9 @@ public sealed class FakeProcessRunner : IProcessRunner
         }
     }
 }
+
+/// <summary>What keeps a matching run open: awaited before the reply, and told once the reply is made.</summary>
+internal sealed record RunHold(string ArgumentMatch, Func<Task> EnterAsync, Action Leave);
 
 /// <summary>One program the code under test ran, and how it asked for it to be run.</summary>
 public sealed record Invocation(string FileName, string Arguments, ToolRun Run);
