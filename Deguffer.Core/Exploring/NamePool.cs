@@ -147,8 +147,8 @@ internal sealed class NamePool
     /// </summary>
     public static Frozen Keeping(Frozen names, Span<int> nameNumbers)
     {
-        // One bit a name, so that marking a whole volume's names costs a few hundred kilobytes, and
-        // a pool handed back as it was costs nothing more.
+        // One bit a name, so that marking a whole volume's names costs under 200 KB, and a pool
+        // handed back as it was costs nothing more.
         var used = new ulong[(names.Count + 63) >> 6];
 
         foreach (var number in nameNumbers)

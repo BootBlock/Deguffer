@@ -395,12 +395,11 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
     /// <para><b>Only the nodes the root reaches are kept</b>, renumbered by <see cref="ReachedNodes"/>
     /// in the order the reader numbered them, with their names kept as <see cref="NamePool.Keeping"/>
     /// decides. The file table's reader sizes its arrays to every record on the volume and names
-    /// every one in use, so a tree
-    /// of one folder kept as read would hold the whole volume's records and names for as long as it
-    /// is shown, and a rescan two of them. Kept for a whole volume too, which drops the free records
-    /// and those no folder reaches. A tree's node numbers are therefore its own: the same folder in two
-    /// scans of one place can have two numbers, and is found in the other by its path
-    /// (<see cref="ExploreCounterparts"/>). Nothing for the walk, whose every node is reached.</para>
+    /// every one in use, so a tree of one folder kept as read would hold the whole volume's records
+    /// and names for as long as it is shown, and a rescan two of them. Kept for a whole volume too,
+    /// which drops the free records and those no folder reaches. A tree's node numbers are therefore
+    /// its own: the same folder in two scans of one place can have two numbers, and is found in the
+    /// other by its path (<see cref="ExploreCounterparts"/>). Nothing for the walk, whose every node is reached.</para>
     ///
     /// <paramref name="flags"/> says, by <see cref="ExploreNodeFlags.Present"/>, which slots the reader
     /// actually filled. The walk fills every one; the table leaves free and unreadable records empty,

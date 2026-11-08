@@ -176,9 +176,10 @@ public class NamePoolTests
     {
         const int Distinct = 100_000;
 
-        Keeping(Distinct);
+        KeepEveryName(NumberedNames(Distinct));
 
-        var (names, nameNumbers) = Keeping(Distinct);
+        var (names, numbers) = NumberedNames(Distinct);
+        var nameNumbers = KeepEveryName((names, numbers)).NameNumbers;
         var asRead = nameNumbers.ToArray();
 
         var before = GC.GetAllocatedBytesForCurrentThread();
@@ -187,29 +188,52 @@ public class NamePoolTests
 
         Assert.Equal(names.Count, kept.Count);
         Assert.Equal(asRead, nameNumbers);
-        Assert.Equal("name-41234.dat", kept[nameNumbers[41_233]].ToString());
+        Assert.Equal("name-041234.dat", kept[nameNumbers[41_233]].ToString());
 
         // From the bits alone, so a measurement that missed the large object heap, where a copy's
         // map would be, fails rather than passing at nothing. The bound leaves an array's header.
         var bits = ((names.Count + 63) / 64) * sizeof(ulong);
         Assert.InRange(allocated, bits, bits + 32);
 
-        // Every name but the last is used by two nodes, as a name repeats on a disk.
-        static (NamePool.Frozen Names, int[] NameNumbers) Keeping(int distinct)
+        // Every name but the one left out is used by two nodes, as a name repeats on a disk. Called
+        // once untimed so that the pass is compiled before it is measured.
+        static (NamePool.Frozen Kept, int[] NameNumbers) KeepEveryName((NamePool.Frozen Names, int[] Numbers) pool)
         {
-            var pool = new NamePool();
-            var nameNumbers = new int[distinct * 2];
-
-            for (var i = 0; i < distinct; i++)
-            {
-                var number = pool.Intern($"name-{i + 1:D5}.dat");
-                nameNumbers[i] = number;
-                nameNumbers[distinct + i] = number;
-            }
-
-            pool.Intern("left-out.dat");
-            return (pool.Freeze(), nameNumbers);
+            int[] nameNumbers = [.. pool.Numbers, .. pool.Numbers];
+            return (NamePool.Keeping(pool.Names, nameNumbers), nameNumbers);
         }
+    }
+
+    /// <summary>
+    /// #552: a copy of the few names a folder's tree uses costs those names and a bit and a count
+    /// for each of the pool's names, not a map from every name in the pool to its new number, which
+    /// at four bytes a name was 5 MB for a system volume however few names were kept.
+    /// </summary>
+    [Fact]
+    public void KeepingFewNamesAllocatesNoMapTheSizeOfThePool()
+    {
+        const int Distinct = 200_000;
+        const int UsedEvery = 100;
+
+        KeepFew(NumberedNames(Distinct));
+
+        var (names, numbers) = NumberedNames(Distinct);
+        var nameNumbers = numbers.Where((_, i) => i % UsedEvery == 0).ToArray();
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var kept = NamePool.Keeping(names, nameNumbers);
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.Equal(1 + (Distinct / UsedEvery), kept.Count);
+        Assert.Equal("name-000101.dat", kept[nameNumbers[1]].ToString());
+
+        // A map would be four bytes a name. Half that leaves the bits, the counts, and the copy's
+        // first chunk of characters and of entries, whatever the few names kept.
+        Assert.InRange(allocated, 1, names.Count * 2L);
+
+        // Called once untimed so that the pass is compiled before it is measured.
+        static void KeepFew((NamePool.Frozen Names, int[] Numbers) pool) =>
+            NamePool.Keeping(pool.Names, pool.Numbers.Where((_, i) => i % UsedEvery == 0).ToArray());
     }
 
     /// <summary>
@@ -258,5 +282,23 @@ public class NamePoolTests
 
         Assert.Equal(copied ? 1 + usedIndices.Length : names.Count, kept.Count);
         Assert.Equal(usedIndices.Select(index => held[index]), nameNumbers.Select(number => kept[number].ToString()));
+    }
+
+    /// <summary>
+    /// A pool of <paramref name="distinct"/> names, <c>name-000001.dat</c> onwards, and one more no
+    /// node uses, with each of the first's numbers in order.
+    /// </summary>
+    private static (NamePool.Frozen Names, int[] Numbers) NumberedNames(int distinct)
+    {
+        var pool = new NamePool();
+        var numbers = new int[distinct];
+
+        for (var i = 0; i < distinct; i++)
+        {
+            numbers[i] = pool.Intern($"name-{i + 1:D6}.dat");
+        }
+
+        pool.Intern("left-out.dat");
+        return (pool.Freeze(), numbers);
     }
 }
