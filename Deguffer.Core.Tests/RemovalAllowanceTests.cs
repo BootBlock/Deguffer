@@ -47,11 +47,16 @@ public sealed class RemovalAllowanceTests : IDisposable
     /// <summary>
     /// A removal that started while every place was taken, as a large tree does behind small ones, takes
     /// each place as it is given back rather than deleting with one thread to its end. The second place
-    /// comes back during the removal's first deletion, which is held until a second deletion begins:
-    /// only a helper started by that place can begin it.
+    /// comes back during the removal's first deletion, which is held until a second deletion begins.
+    ///
+    /// <para>Both places are taken while the tree is walked, so no helper starts then. The first comes
+    /// back as the walk ends, before the walk's thread asks for one, and the second during the first
+    /// deletion. Whichever thread makes that deletion, the other can only begin the second if the place
+    /// given back was offered to the removal: the walk's thread, once it holds a place, asks for no
+    /// other.</para>
     /// </summary>
     [Fact]
-    public async Task ARemovalTakesAPlaceTheMomentOneIsGivenBack()
+    public void ARemovalTakesAPlaceTheMomentOneIsGivenBack()
     {
         var tree = _temp.CreateDirectory("cache");
         for (var i = 0; i < 40; i++)
@@ -65,10 +70,23 @@ public sealed class RemovalAllowanceTests : IDisposable
 
         var watched = new WatchedDeletions(WindowsFileSystem.Default, TimeSpan.FromMilliseconds(1));
         var fs = new FirstDeletionHooks(watched, new Dictionary<string, Action> { [tree] = allowance.Return });
+        var root = new RemovalFolder(LongPath.Extended(tree), parent: null);
 
-        var removal = DirectoryRemover.RemoveAsync(tree, fileSystem: fs, deletions: allowance);
-        allowance.Return();
-        var outcome = await removal;
+        var outcome = TreeRemoval.Run(
+            root,
+            RemovalBounds.None,
+            (listed, stop) =>
+            {
+                RemovalWalk.Visit(root, MinimumAge.Off, RemovalBounds.None, fs, WalkTuning.Default, listed, stop);
+                allowance.Return();
+            },
+            progress: null,
+            planned: 0,
+            fs,
+            TimeProvider.System,
+            gathered: null,
+            allowance,
+            CancellationToken.None);
 
         Assert.True(outcome.RootRemoved);
         Assert.Equal(2, watched.MostAtOnce);
