@@ -131,7 +131,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
 
     /// <summary>
     /// Every path from the table where it can answer, and every path it cannot in one walk for each
-    /// reason it could not. Each figure is remembered as <see cref="MeasureAsync"/> remembers it, and
+    /// reason it could not on each set of disks, the sets at the same time. Each figure is remembered as <see cref="MeasureAsync"/> remembers it, and
     /// none is shown first: <paramref name="progress"/> counts what this measurement has read, and a
     /// figure from an earlier run is not that.
     /// </summary>
@@ -284,8 +284,14 @@ public sealed class DirectoryScanner : IDirectoryScanner
     /// <para>A path the index cannot answer for is not the same as an empty one. The tree changed under
     /// the index, or the path runs through a link, or something below it does not establish its own
     /// size — so it is walked rather than reported as zero, which would render as "this cache is
-    /// already clear" and quietly hide gigabytes. Every path walked for the same reason shares one walk.
-    /// </para>
+    /// already clear" and quietly hide gigabytes. Every path of one set of disks walked for the same
+    /// reason shares one walk.</para>
+    ///
+    /// <para><b>Disks at once, volumes on one disk in turn</b> (#470). The paths on each set of physical
+    /// disks are measured at the same time as those on every other set (<see cref="FolderPipelines"/>,
+    /// <see cref="PipelinesAtOnce"/>), so paths on two disks cost the longer of the two measurements,
+    /// not their sum. Within a set, each volume's table is raced or read in turn, then the set's walks
+    /// run, because starting a volume's table read is what starts it reading the disk.</para>
     /// </summary>
     /// <param name="running">
     /// Where each path's first reading goes, from whichever route gives it: the table's answer once it
@@ -298,8 +304,38 @@ public sealed class DirectoryScanner : IDirectoryScanner
         CancellationToken ct)
     {
         var results = new ScanResult[asked.Count][];
+
+        // Asks a device only where the paths are on more than one volume, which a measurement of one
+        // path never is. Each volume's first table read asks the same cache for its tuning anyway.
+        var pipelines = FolderPipelines.Of([.. asked.Select(question => question.Path)], _tuner.StorageOf);
+
+        // Each pipeline writes the slots of its own paths, which no other pipeline writes. One of
+        // several is started on a worker thread of its own, because a volume's table is opened on the
+        // thread that first asks for it, and the next pipeline must not wait for that open to start.
+        // A lone pipeline runs here, as every measurement ran before.
+        await PipelinesAtOnce.RunAsync(
+            pipelines,
+            (pipeline, stop) => pipelines.Count == 1
+                ? MeasurePipelineAsync(pipeline, asked, keeps, running, results, stop)
+                : WorkerThreads.Shared.RunAsync(() => MeasurePipelineAsync(pipeline, asked, keeps, running, results, stop), stop).Unwrap(),
+            ct).ConfigureAwait(false);
+
+        return results;
+    }
+
+    /// <summary>
+    /// One pipeline's volumes, one after another: each volume's table raced or read for every path on
+    /// it, then one walk for each reason a path of the pipeline was left to the walk.
+    /// </summary>
+    private async Task MeasurePipelineAsync(
+        IReadOnlyList<VolumeFolders> pipeline,
+        IReadOnlyList<ScanRequest> asked,
+        MinimumAge[] keeps,
+        RunningPaths running,
+        ScanResult[][] results,
+        CancellationToken ct)
+    {
         var walks = new Dictionary<FallbackReason, List<int>>();
-        var onVolumes = new Dictionary<char, List<(int Index, Asked Asked)>>();
 
         void Walk(FallbackReason reason, int index)
         {
@@ -311,31 +347,27 @@ public sealed class DirectoryScanner : IDirectoryScanner
             indexes.Add(index);
         }
 
-        for (var i = 0; i < asked.Count; i++)
+        foreach (var volume in pipeline)
         {
-            var (path, bounds) = asked[i];
+            ct.ThrowIfCancellationRequested();
 
-            if (!VolumePath.TryParse(path, out var volumePath))
+            if (volume.DriveLetter is not { } driveLetter || _tuner.WalkOnly)
             {
-                Walk(FallbackReason.VolumeNotAddressable, i);
-            }
-            else if (_tuner.WalkOnly)
-            {
-                Walk(FallbackReason.WalkChosen, i);
-            }
-            else
-            {
-                if (!onVolumes.TryGetValue(volumePath.DriveLetter, out var questions))
+                var reason = volume.DriveLetter is null ? FallbackReason.VolumeNotAddressable : FallbackReason.WalkChosen;
+
+                foreach (var folder in volume.Folders)
                 {
-                    onVolumes[volumePath.DriveLetter] = questions = [];
+                    Walk(reason, folder.Index);
                 }
 
-                questions.Add((i, new Asked(path, volumePath, keeps, bounds)));
+                continue;
             }
-        }
 
-        foreach (var (driveLetter, questions) in onVolumes)
-        {
+            List<(int Index, Asked Asked)> questions =
+            [
+                .. volume.Folders.Select(folder => (folder.Index, new Asked(asked[folder.Index].Path, folder.Volume!.Value, keeps, asked[folder.Index].Bounds))),
+            ];
+
             var building = _volumes.Get(driveLetter);
 
             // Raced only while the table is still being read, and only where the user has not asked for
@@ -373,8 +405,6 @@ public sealed class DirectoryScanner : IDirectoryScanner
                 results[indexes[j]] = walked[j];
             }
         }
-
-        return results;
     }
 
     /// <summary>

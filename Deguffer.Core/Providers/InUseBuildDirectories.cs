@@ -1,5 +1,6 @@
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Providers;
 
@@ -52,6 +53,7 @@ internal static class InUseBuildDirectories
     /// refuse to search declares nothing either — see <see cref="SourceDirectoryDiscovery.Searches"/>.
     /// </param>
     /// <param name="names">The directory names the provider seeks.</param>
+    /// <param name="tuning">What the walks of each volume run with, which bounds how many candidates are judged at once.</param>
     /// <param name="recognise">
     /// The provider's identification of a candidate, answering with its project folder or null. The
     /// same call its plan makes, so a directory the plan declines is never declared as in use.
@@ -65,6 +67,7 @@ internal static class InUseBuildDirectories
         SourceDirectoryDiscovery discovery,
         IReadOnlyList<SourceRoot> roots,
         IReadOnlyList<string> names,
+        ScanTuner tuning,
         Func<string, string?> recognise,
         Func<CancellationToken, LiveTreeQuestion> questions,
         CancellationToken ct)
@@ -121,28 +124,25 @@ internal static class InUseBuildDirectories
                 root.Path));
         }
 
+        IReadOnlyList<string> judging = [.. candidates];
+        var judged = await DiskBoundWork.EachAsync(judging, tuning, candidate => Judge(candidate, recognise), ct)
+            .ConfigureAwait(false);
+
         var recognised = new List<RecognisedBuildDirectory>();
         var unreached = new List<string>();
 
-        foreach (var candidate in candidates)
+        for (var index = 0; index < judging.Count; index++)
         {
-            ct.ThrowIfCancellationRequested();
-
-            // Existence is asked here because discovery only ever returns what is on disk, and a
-            // recogniser that reads siblings alone would otherwise accept a directory that is not
-            // there. The recogniser refuses a link at the directory or at its project, as it does for
-            // the plan. A link further up is followed here where the plan's walk stops at it, which
-            // refuses a directory the plan never reaches rather than allowing one it holds back.
-            switch (LongPath.ProbeDirectory(candidate))
+            switch (judged[index])
             {
                 // Neither recognised nor ruled out, so whether it is in use is a question nothing could
                 // answer. Read as absent, Explore allowed it.
-                case PathPresence.Refused:
-                    unreached.Add(candidate);
+                case { Presence: PathPresence.Refused }:
+                    unreached.Add(judging[index]);
                     break;
 
-                case PathPresence.Present when recognise(candidate) is { } project:
-                    recognised.Add(new RecognisedBuildDirectory(candidate, project));
+                case { Project: { } project }:
+                    recognised.Add(new RecognisedBuildDirectory(judging[index], project));
                     break;
             }
         }
@@ -157,6 +157,25 @@ internal static class InUseBuildDirectories
             .. searched.NotSearchedRoots.Select(root => new ToolRoot(root, NotSearchedReason, static _ => false)),
         ];
     }
+
+    /// <summary>
+    /// Whether <paramref name="candidate"/> is there, and the project it belongs to where it is.
+    ///
+    /// <para>Existence is asked here because discovery only ever returns what is on disk, and a
+    /// recogniser that reads siblings alone would otherwise accept a directory that is not there. The
+    /// recogniser refuses a link at the directory or at its project, as it does for the plan. A link
+    /// further up is followed here where the plan's walk stops at it, which refuses a directory the
+    /// plan never reaches rather than allowing one it holds back.</para>
+    /// </summary>
+    private static Judgement Judge(string candidate, Func<string, string?> recognise)
+    {
+        var presence = LongPath.ProbeDirectory(candidate);
+
+        return new Judgement(presence, presence is PathPresence.Present ? recognise(candidate) : null);
+    }
+
+    /// <summary>What <see cref="Judge"/> found of one candidate. A project only where it is present and recognised.</summary>
+    private readonly record struct Judgement(PathPresence Presence, string? Project);
 
     /// <summary>Why Explore refuses an approved root the search did not look in.</summary>
     private const string NotSearchedReason =

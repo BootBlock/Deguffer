@@ -716,15 +716,11 @@ public abstract class CleanupProviderBase : ICleanupProvider
 
     /// <summary>
     /// The age of each of <paramref name="directories"/>, in their order, read as many at once as
-    /// this provider's walks of each volume run (<see cref="DirectoryAge.OfEach"/>). For a provider
+    /// this provider's walks of each volume run (<see cref="DiskBoundWork"/>). For a provider
     /// whose decision depends on the age, or whose step is not a <see cref="DeletionTarget"/>'s.
     /// </summary>
     protected Task<IReadOnlyList<DateTime?>> DateAsync(IReadOnlyList<string> directories, CancellationToken ct) =>
-        directories.Count == 0
-            ? Task.FromResult<IReadOnlyList<DateTime?>>([])
-
-            // On a thread of its own: the listings block it on the disk. See DirectoryAge.OfEach.
-            : WorkerThreads.Shared.RunAsync(() => DirectoryAge.OfEach(directories, Scanner.Tuning, ct), ct);
+        DiskBoundWork.EachAsync(directories, Scanner.Tuning, directory => DirectoryAge.Of(directory, ct), ct);
 
     /// <summary>
     /// Measure every directory each Disk Cleanup handler would clear, and turn each handler into the

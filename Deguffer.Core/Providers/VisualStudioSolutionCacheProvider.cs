@@ -148,6 +148,7 @@ public sealed class VisualStudioSolutionCacheProvider : CleanupProviderBase
             _discovery,
             ApprovedRoots,
             DirectoryNames,
+            Scanner.Tuning,
             candidate => VisualStudioSolutionFolder.TryRecognise(candidate)?.Folder,
             Questions,
             ct);
@@ -175,17 +176,18 @@ public sealed class VisualStudioSolutionCacheProvider : CleanupProviderBase
         var recognised = new List<VisualStudioSolutionFolder>();
         var declined = new List<string>();
 
-        foreach (var candidate in discovered.Named(DirectoryNames))
-        {
-            ct.ThrowIfCancellationRequested();
+        var candidates = discovered.Named(DirectoryNames);
+        var folders = await DiskBoundWork.EachAsync(candidates, Scanner.Tuning, VisualStudioSolutionFolder.TryRecognise, ct).ConfigureAwait(false);
 
-            if (VisualStudioSolutionFolder.TryRecognise(candidate) is { } folder)
+        for (var index = 0; index < candidates.Count; index++)
+        {
+            if (folders[index] is { } folder)
             {
                 recognised.Add(folder);
             }
             else
             {
-                declined.Add(candidate);
+                declined.Add(candidates[index]);
             }
         }
 
