@@ -63,7 +63,7 @@ public sealed class CleanupPlanner
     /// terms before being added. Their reasoning and their rejected alternatives are in
     /// <c>docs/cache-locations.md</c>.
     ///
-    /// Tier 1 throughout except Unity, Unreal's per-project intermediate files and derived data, Cargo's per-project target, node_modules, Python virtual
+    /// Tier 1 throughout except Unity, Unreal's per-project intermediate files and derived data, Cargo's per-project build output apart from its incremental compilation caches, node_modules, Python virtual
     /// environments, conda, Maven, vcpkg, Steam's shader caches, the shared Unreal Engine derived data cache, Unity's GI cache, Affinity's models, Topaz Labs' models, Capture One's previews, DaVinci Resolve's render cache, PlatformIO, the STM32Cube firmware zips, the global cache of Yarn 2 and later, Playwright, Puppeteer, the Azure Functions Core Tools
     /// releases, the graphics driver installer files, the installer downloads in the temporary folders, the superseded Squirrel builds, the local copies of cloud files, the Dropbox cache and the component store's cleanup, which are Tier 2, and the
     /// Recycle Bins, the component store's reset, the File History target, the crash dumps, the servicing logs, the Epic
@@ -183,25 +183,34 @@ public sealed class CleanupPlanner
         SourceDirectoryDiscovery sourceTrees,
         ILiveTreeInspector liveTrees,
         IUserEnvironment environment,
-        IDirectoryScanner scanner) =>
-    [
-        new DotNetObjProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-        new VisualStudioSolutionCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-        new UnityLibraryProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-        new UnrealIntermediateProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-        new UnrealProjectDerivedDataProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-        new CargoTargetProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-        new NodeModulesProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-        new PythonVirtualEnvironmentProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-        new PytestCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-        new MypyCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-        new RuffCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-        new ToxEnvironmentProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-        new NoxEnvironmentProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-        new DartToolProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-        new NxWorkspaceCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-        new GitLfsObjectProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
-    ];
+        IDirectoryScanner scanner)
+    {
+        // One reading of each Cargo target directory for both Rust rows, which divide it between them:
+        // the build output row leaves each profile's incremental cache to the other, and that holds
+        // only while both read the same layout.
+        var cargoTargets = new CargoTargetSurvey();
+
+        return
+        [
+            new DotNetObjProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+            new VisualStudioSolutionCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+            new UnityLibraryProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+            new UnrealIntermediateProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+            new UnrealProjectDerivedDataProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+            new CargoTargetProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner, targets: cargoTargets),
+            new CargoIncrementalProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner, targets: cargoTargets),
+            new NodeModulesProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+            new PythonVirtualEnvironmentProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+            new PytestCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+            new MypyCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+            new RuffCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+            new ToxEnvironmentProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+            new NoxEnvironmentProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+            new DartToolProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+            new NxWorkspaceCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+            new GitLfsObjectProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
+        ];
+    }
 
     private static IReadOnlyList<ICleanupProvider> CacheProviders(
         IUserEnvironment environment,

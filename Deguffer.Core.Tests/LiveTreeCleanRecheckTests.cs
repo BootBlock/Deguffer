@@ -526,10 +526,14 @@ public sealed class LiveTreeCleanRecheckTests : IDisposable
         return root;
     }
 
+    /// <summary>
+    /// A project this toolchain's recogniser accepts, returning what its row offers: the build
+    /// directory, or for Cargo, whose <c>target</c> is a tool root, the one profile inside it.
+    /// </summary>
     private static string CreateRecognised(Toolchain toolchain, string project) => toolchain switch
     {
         Toolchain.Unity => BuildDirectoryFixture.CreateUnityProject(project),
-        Toolchain.Cargo => BuildDirectoryFixture.CreateCargoProject(project),
+        Toolchain.Cargo => Path.Combine(BuildDirectoryFixture.CreateCargoProject(project), "debug"),
         Toolchain.Node => BuildDirectoryFixture.CreateNodeProject(project),
         Toolchain.Python => BuildDirectoryFixture.CreatePythonProject(project),
         Toolchain.UnrealIntermediate => BuildDirectoryFixture.CreateUnrealProject(project),
