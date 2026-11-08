@@ -21,10 +21,6 @@ public sealed class UndescribableDirectoryFileSystem(IFileSystem inner, string r
     /// <summary>Every path this fake was asked to describe, in the form it was asked in (§6.3).</summary>
     public List<string> Probed { get; } = [];
 
-    // Delegated rather than derived from the probe below, because WindowsFileSystem.DirectoryExists
-    // does not extend and ProbeDirectory does — a fake that closed that gap would hide it.
-    public bool DirectoryExists(string path) => inner.DirectoryExists(path);
-
     public PathPresence ProbeDirectory(string path)
     {
         Probed.Add(path);
@@ -40,13 +36,23 @@ public sealed class UndescribableDirectoryFileSystem(IFileSystem inner, string r
     }
 
     /// <summary>
-    /// True for the refused directory, because that is what <see cref="LongPath.IsReparsePoint"/>
-    /// answers for a path it could not read: it fails closed. Delegating instead would answer false
-    /// for the real directory underneath, and a caller that asked this before the probe would look
-    /// correct against the fake while reading a refusal as a link against Windows.
+    /// Refused for the refused directory, with neither the kind nor the link known, as
+    /// <see cref="LongPath.ProbeEntry(string, out bool?, out bool?)"/> answers for a path it could not
+    /// read. Delegating would describe the real directory underneath.
     /// </summary>
-    public bool IsReparsePoint(string path) =>
-        IsRefused(path) || inner.IsReparsePoint(path);
+    public PathPresence ProbeEntry(string path, out bool? isDirectory, out bool? isLink)
+    {
+        Probed.Add(path);
+
+        if (IsRefused(path))
+        {
+            (isDirectory, isLink) = (null, null);
+
+            return PathPresence.Refused;
+        }
+
+        return inner.ProbeEntry(path, out isDirectory, out isLink);
+    }
 
     public ListingEnd ListEntries(string directory, ListingRequest request, List<WalkEntry> into) =>
         inner.ListEntries(directory, request, into);

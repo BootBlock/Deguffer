@@ -25,13 +25,12 @@ public sealed class ConfinedFileSystem(IFileSystem inner, string root) : IFileSy
         .. new[] { root, LongPath.Unaliased(root), ShortPath.Of(root) ?? root }.Distinct(StringComparer.OrdinalIgnoreCase),
     ];
 
-    public bool DirectoryExists(string path) => For(path).DirectoryExists(path);
-
     public PathPresence ProbeDirectory(string path) => For(path).ProbeDirectory(path);
 
     public PathPresence ProbeEntry(string path) => For(path).ProbeEntry(path);
 
-    public bool IsReparsePoint(string path) => For(path).IsReparsePoint(path);
+    public PathPresence ProbeEntry(string path, out bool? isDirectory, out bool? isLink) =>
+        For(path).ProbeEntry(path, out isDirectory, out isLink);
 
     public ListingEnd ListEntries(string directory, ListingRequest request, List<WalkEntry> into) =>
         For(directory).ListEntries(directory, request, into);

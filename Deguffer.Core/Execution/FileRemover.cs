@@ -93,13 +93,18 @@ public static class FileRemover
     {
         var extended = LongPath.Extended(path);
 
-        // §9: an Outlook mail store is never removed, whoever named it. Asked before the link question,
+        // One read answers both the kind and the link, so the two cannot describe two entries.
+        var presence = fs.ProbeEntry(extended, out var describedAsDirectory, out var describedAsLink);
+        var isDirectory = describedAsDirectory is true;
+
+        // §9: an Outlook mail store is never removed, whoever named it. Decided before the link answer,
         // because the mark Windows puts on a link is also on files that are not links — a OneDrive
         // placeholder, a deduplicated file — and deleting one of those deletes its content, so a file
-        // named like a store is left whatever it carries. Asked before the guard, because the rule is
+        // named like a store is left whatever it carries. Decided before the guard, because the rule is
         // unconditional and the guard is a preference. A folder that has taken the name is not a store,
-        // and the branches below answer it.
-        if (MailStore.Is(extended) && !fs.DirectoryExists(extended))
+        // and the branches below answer it. A path Windows would not describe is not known to be a
+        // folder, so it is left as a store.
+        if (MailStore.Is(extended) && !isDirectory)
         {
             return new FileRemovalOutcome(0, Refusals.None, Removed: false, MailStore: true);
         }
@@ -113,14 +118,17 @@ public static class FileRemover
         // behaviour and not this code's, and a safety property riding on an unstated one is exactly
         // how the shader caches came to enumerate through a junction. Stated here, the zero and the
         // link-not-target removal are decisions a reader can check.
-        var isLink = fs.IsReparsePoint(extended);
+        //
+        // A path Windows would not describe reads as a link, which fails closed: it is not measured,
+        // so nothing on the far side of a link nobody could see is counted as reclaimed.
+        var isLink = presence is PathPresence.Refused || describedAsLink is true;
 
         // Something that is not a file has taken the name. Not this step's to remove, and the
         // read-only retry below would otherwise clear a directory's own attributes on the way to
         // failing anyway. A link to a directory skips this branch and goes to the deletion as a
         // link, which Windows refuses for a directory link, so it stays and the step reports a
         // refusal.
-        if (!isLink && fs.DirectoryExists(extended))
+        if (!isLink && isDirectory)
         {
             return new FileRemovalOutcome(0, Refusals.None, Removed: false);
         }

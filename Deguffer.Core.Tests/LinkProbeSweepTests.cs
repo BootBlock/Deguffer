@@ -14,8 +14,13 @@ namespace Deguffer.Core.Tests;
 /// both from one read.</para>
 ///
 /// <para>A link check with no probe before it in the same member is a different question, asked of a
-/// path nothing has described yet, and is left alone. So is the removal's <c>IFileSystem</c> seam,
-/// whose link check also answers for a file at a directory's path.</para>
+/// path nothing has described yet, and is left alone.</para>
+///
+/// <para>The removal's <c>IFileSystem</c> seam has no link check to sweep for: its
+/// <c>ProbeEntry(path, out isDirectory, out isLink)</c> is the only way it answers one, so the
+/// compiler holds that rule there. What it cannot see is a removal reaching past the seam to
+/// <c>LongPath</c>, which this sweep reads for, and <see cref="NoRemovalAsksLongPathAboutALinkPastItsSeam"/>
+/// reads for a link check anywhere in a removal.</para>
 /// </summary>
 public sealed partial class LinkProbeSweepTests
 {
@@ -60,6 +65,42 @@ public sealed partial class LinkProbeSweepTests
     }
 
     /// <summary>
+    /// A removal asks whether a path is a link only through its <c>IFileSystem</c> seam, whose one
+    /// answer comes from the read that gave the presence and the kind. <c>LongPath.IsReparsePoint</c>
+    /// past the seam is a second read of a path the seam's probe already described, and one that a
+    /// test wrapping the seam never sees.
+    /// </summary>
+    [Fact]
+    public void NoRemovalAsksLongPathAboutALinkPastItsSeam()
+    {
+        var removals = 0;
+        var bypasses = new List<string>();
+
+        foreach (var file in ProductSources.Files())
+        {
+            var code = ProductSources.Code(File.ReadAllText(file)).ToList();
+
+            if (!code.Any(line => FileSystemSeam().IsMatch(line)))
+            {
+                continue;
+            }
+
+            removals++;
+
+            var name = Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file).Replace('\\', '/');
+
+            bypasses.AddRange(code
+                .Where(line => AnyLinkCheck().IsMatch(line))
+                .Select(line => $"{name}: {line.Trim()}"));
+        }
+
+        // The sweep is worth nothing if it stops finding the removal's files. Fifteen named the seam
+        // when this was written.
+        Assert.True(removals > 10, $"Only {removals} files name IFileSystem, so the sweep is no longer reading the source.");
+        Assert.Empty(bypasses);
+    }
+
+    /// <summary>
     /// A probe that reads a path's attributes: the three-state probes, the two-state forms built on
     /// them, and the base plan that asks one.
     /// </summary>
@@ -68,6 +109,14 @@ public sealed partial class LinkProbeSweepTests
 
     [GeneratedRegex(@"\bLongPath\s*\.\s*IsReparsePoint\(\s*(?<path>[\w.]+)\s*\)")]
     private static partial Regex LinkCheck();
+
+    /// <summary>A call to <c>LongPath.IsReparsePoint</c>, whatever its argument is.</summary>
+    [GeneratedRegex(@"\bLongPath\s*\.\s*IsReparsePoint\s*\(")]
+    private static partial Regex AnyLinkCheck();
+
+    /// <summary>A line of code that names the removal's file-system seam.</summary>
+    [GeneratedRegex(@"\bIFileSystem\b")]
+    private static partial Regex FileSystemSeam();
 
     /// <summary>
     /// A line that opens a member, which starts a new window: a probe in one method says nothing about
