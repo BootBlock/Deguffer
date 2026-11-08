@@ -36,8 +36,10 @@ internal static class PlanSteps
     ///
     /// <para><b>Eight is chosen, not tuned.</b> It is the top of the range the audit that found the
     /// cost (#494) estimated, and no other count has been measured. The benchmark's clean route (#502),
-    /// 500 build folders of 100 files on a fixed NTFS drive with 32 logical processors, took a median
-    /// of 2.86 s at eight against 4.12 s one at a time.</para>
+    /// on a fixed NTFS drive with 32 logical processors and other work running, alternating the two in
+    /// two rounds: 500 build folders of 100 files took medians of 3.73 and 3.00 s at eight against 5.80
+    /// and 4.73 s one at a time, and 8 folders of 20,000 files 9.12 and 8.98 s against 16.30 and
+    /// 16.48 s.</para>
     /// </summary>
     public const int MostAtOnce = 8;
 
