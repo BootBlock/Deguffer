@@ -136,16 +136,25 @@ public class MftExploreReaderTests
     /// pool as read would hold the name of every file on the disk to show a few under one folder.
     /// The names counted are the folder's path, which the root carries, and the three below it, with
     /// the empty name every pool begins with.</para>
+    ///
+    /// <para>The files beside the folder are the rest of the volume, whose names on any disk hold
+    /// far more text than one folder's do. A tree keeps the reader's pool whole where they would not
+    /// (#552), so without them this would test that rule rather than this one.</para>
     /// </summary>
     [Fact]
     public void AFolderRootedTreeKeepsNoRecordOrNameFromOutsideTheFolder()
     {
-        using var source = Tree()
+        var fixture = Tree()
             .AddFile(20, Cache, "a.tgz", allocated: 4096, logical: 4000)
             .AddFile(21, Nested, "sha512.tgz", allocated: 2048, logical: 1500)
-            .AddFile(22, Sibling, "settings.json", allocated: 1024, logical: 1000)
-            .AddUnused(70_000)
-            .Build();
+            .AddFile(22, Sibling, "settings.json", allocated: 1024, logical: 1000);
+
+        for (uint record = 30; record < 40; record++)
+        {
+            fixture.AddFile(record, Sibling, $"outside-{record}.json", allocated: 1024, logical: 1000);
+        }
+
+        using var source = fixture.AddUnused(70_000).Build();
 
         var tree = MftExploreReader.Read(source, CachePath, CacheComponents, TableTuning.Default, progress: null, default).Tree!;
 
@@ -982,7 +991,9 @@ public class MftExploreReaderTests
         Assert.Equal(oneThread.NamesHeld, fourThreads.NamesHeld);
 
         // The empty name, the root's, each folder's, the shared names once, and the rest once each.
-        Assert.Equal(2 + Folders + FilesPerFolder / 2 + Folders * FilesPerFolder / 2, fourThreads.NamesHeld);
+        // The root record's own name, which its node does not use because it carries the root's
+        // path instead, is one more: a tree of the whole volume keeps the reader's pool (#552).
+        Assert.Equal(3 + Folders + FilesPerFolder / 2 + Folders * FilesPerFolder / 2, fourThreads.NamesHeld);
 
         static string[] Drawn(ExploreTree tree) =>
             [.. Reachable(tree).Select(node => $"{tree.PathOf(node)}|{tree.SizeOf(node)}|{tree.LengthOf(node)}").Order(StringComparer.Ordinal)];

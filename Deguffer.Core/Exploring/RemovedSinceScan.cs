@@ -125,7 +125,8 @@ internal sealed class RemovedSinceScan
         }
 
         var children = new Dictionary<int, int[]>(earlier?._children ?? []);
-        Comparison<int> byName = tree.CompareByName;
+        Comparison<int> compare = tree.CompareByName;
+        Action<Span<int>> byName = siblings => siblings.Sort(compare);
 
         foreach (var folder in reordered)
         {

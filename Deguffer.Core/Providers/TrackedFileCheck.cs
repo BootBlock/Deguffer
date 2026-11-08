@@ -1,3 +1,4 @@
+using System.Text;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Providers;
@@ -106,7 +107,7 @@ public sealed class TrackedFileCheck(IUserEnvironment environment, IProcessRunne
             }
 
             var relative = repository.ToDictionary(
-                candidate => ToPathspec(root, candidate),
+                candidate => ToGitPath(root, candidate),
                 candidate => candidate,
                 StringComparer.OrdinalIgnoreCase);
 
@@ -114,28 +115,27 @@ public sealed class TrackedFileCheck(IUserEnvironment environment, IProcessRunne
             {
                 ct.ThrowIfCancellationRequested();
 
-                // --literal-pathspecs, because these are paths rather than patterns. Without it a
-                // project directory containing a glob metacharacter — `App[Legacy]`, `Debug*` — is
-                // parsed as a pattern, matches nothing, and the check reports "no tracked files" for
-                // a directory it never actually examined. This safeguard failing open is worse than
-                // it failing loudly, so the ambiguity is removed rather than assumed away.
+                // --no-literal-pathspecs, because GIT_LITERAL_PATHSPECS=1 inherited from the user's
+                // environment stops git reading the magic GitPathspec writes. Every pathspec is
+                // then taken as a path beginning ":(", matches nothing, and git answers "nothing
+                // tracked" successfully for every candidate.
                 var outcome = await runner.RunAsync(
                     git,
-                    $"--literal-pathspecs -C \"{root}\" ls-files -z --{string.Concat(batch.Keys.Select(p => $" \"{p}\""))}",
+                    $"--no-literal-pathspecs -C \"{root}\" ls-files -z --{batch.Pathspecs}",
                     GitRun.Query,
                     ct).ConfigureAwait(false);
 
                 if (!outcome.Succeeded)
                 {
                     // A batch git would not answer for — a broken index, a partial clone, a launch
-                    // that failed. The same reasoning as --literal-pathspecs applies: reporting "no
-                    // tracked files" for directories that were never examined is precisely the
-                    // failure this check exists to prevent, so they are declined rather than passed.
-                    unanswered.UnionWith(batch.Values);
+                    // that failed. Reporting "no tracked files" for directories that were never
+                    // examined is precisely the failure this check exists to prevent, so they are
+                    // declined rather than passed.
+                    unanswered.UnionWith(batch.ByPath.Values);
                     continue;
                 }
 
-                MarkTracked(outcome.StandardOutput, batch, tracked);
+                MarkTracked(outcome.StandardOutput, batch.ByPath, tracked);
             }
         }
 
@@ -143,39 +143,43 @@ public sealed class TrackedFileCheck(IUserEnvironment environment, IProcessRunne
     }
 
     /// <summary>
-    /// Split the pathspecs into invocations that each fit <see cref="PathspecBudget"/>.
+    /// Split the candidates into invocations whose pathspecs each fit <see cref="PathspecBudget"/>,
+    /// each with its pathspecs already written as arguments.
     ///
     /// A repository contributing a few hundred deep paths overruns a single command line, and the
     /// launch failure that follows is indistinguishable at the call site from a clean "nothing is
     /// tracked". Grouping by repository is preserved: batching exists to keep the command line
     /// legal, not to reintroduce the process-per-directory cost that grouping avoids.
     /// </summary>
-    private static IEnumerable<Dictionary<string, string>> Batch(IReadOnlyDictionary<string, string> byPathspec)
+    private static IEnumerable<(Dictionary<string, string> ByPath, string Pathspecs)> Batch(
+        IReadOnlyDictionary<string, string> byPath)
     {
         var batch = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var length = 0;
+        var pathspecs = new StringBuilder();
 
-        foreach (var (pathspec, candidate) in byPathspec)
+        foreach (var (path, candidate) in byPath)
         {
-            // The separating space, and the two quotes the argument string wraps the path in.
+            var pathspec = GitPathspec.For(path);
+
+            // The separating space, and the two quotes the argument string wraps the pathspec in.
             var cost = pathspec.Length + 3;
 
             // A single pathspec over the budget on its own still goes out alone rather than being
             // dropped: git is then the one that refuses it, and a refusal declines the candidate.
-            if (batch.Count > 0 && length + cost > PathspecBudget)
+            if (batch.Count > 0 && pathspecs.Length + cost > PathspecBudget)
             {
-                yield return batch;
+                yield return (batch, pathspecs.ToString());
                 batch = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                length = 0;
+                pathspecs.Clear();
             }
 
-            batch.Add(pathspec, candidate);
-            length += cost;
+            batch.Add(path, candidate);
+            pathspecs.Append(" \"").Append(pathspec).Append('"');
         }
 
         if (batch.Count > 0)
         {
-            yield return batch;
+            yield return (batch, pathspecs.ToString());
         }
     }
 
@@ -186,14 +190,16 @@ public sealed class TrackedFileCheck(IUserEnvironment environment, IProcessRunne
     /// </summary>
     private static void MarkTracked(
         string output,
-        IReadOnlyDictionary<string, string> byPathspec,
+        IReadOnlyDictionary<string, string> byPath,
         HashSet<string> tracked)
     {
         foreach (var line in output.Split('\0', StringSplitOptions.RemoveEmptyEntries))
         {
-            foreach (var (pathspec, candidate) in byPathspec)
+            // Ignoring case in every letter, as Windows does: this is also what discards the paths a
+            // GitPathspec glob matches beyond its candidate.
+            foreach (var (path, candidate) in byPath)
             {
-                if (line.StartsWith(pathspec + '/', StringComparison.OrdinalIgnoreCase))
+                if (line.StartsWith(path + '/', StringComparison.OrdinalIgnoreCase))
                 {
                     tracked.Add(candidate);
                 }
@@ -202,7 +208,7 @@ public sealed class TrackedFileCheck(IUserEnvironment environment, IProcessRunne
     }
 
     /// <summary>A repository-relative path in the form git speaks: forward slashes, no drive.</summary>
-    private static string ToPathspec(string repositoryRoot, string candidate) =>
+    private static string ToGitPath(string repositoryRoot, string candidate) =>
         LongPath.Relative(repositoryRoot, candidate).Replace(Path.DirectorySeparatorChar, '/');
 
     /// <summary>

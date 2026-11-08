@@ -393,13 +393,13 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
     /// for a scan scoped to one.
     ///
     /// <para><b>Only the nodes the root reaches are kept</b>, renumbered by <see cref="ReachedNodes"/>
-    /// in the order the reader numbered them, with the names they use and no others. The file table's
-    /// reader sizes its arrays to every record on the volume and names every one in use, so a tree
-    /// of one folder kept as read would hold the whole volume's records and names for as long as it
-    /// is shown, and a rescan two of them. Kept for a whole volume too, which drops the free records
-    /// and those no folder reaches. A tree's node numbers are therefore its own: the same folder in two
-    /// scans of one place can have two numbers, and is found in the other by its path
-    /// (<see cref="ExploreCounterparts"/>). Nothing for the walk, whose every node is reached.</para>
+    /// in the order the reader numbered them, with their names kept as <see cref="NamePool.Keeping"/>
+    /// decides. The file table's reader sizes its arrays to every record on the volume and names
+    /// every one in use, so a tree of one folder kept as read would hold the whole volume's records
+    /// and names for as long as it is shown, and a rescan two of them. Kept for a whole volume too,
+    /// which drops the free records and those no folder reaches. A tree's node numbers are therefore
+    /// its own: the same folder in two scans of one place can have two numbers, and is found in the
+    /// other by its path (<see cref="ExploreCounterparts"/>). Nothing for the walk, whose every node is reached.</para>
     ///
     /// <paramref name="flags"/> says, by <see cref="ExploreNodeFlags.Present"/>, which slots the reader
     /// actually filled. The walk fills every one; the table leaves free and unreadable records empty,
@@ -691,10 +691,13 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
     }
 
     /// <summary>
-    /// How many threads order the children of a tree at once. Measured on a synthetic tree of 2.4
-    /// million nodes, 240 thousand of them folders: one thread took about 250 ms, two about 130 and
-    /// four about 95, and thirty-two no less than four. Threads past four would only be taken from a
-    /// scan of another volume, which the duplicate search runs beside this one.
+    /// How many threads order the children of a tree at once. Measured on a real system volume of 2.6
+    /// million nodes, 282 thousand of them folders (#553): one thread took about 345 ms, two about 145
+    /// and four about 95, the name keys made included. Comparing names in place of the keys took 830,
+    /// 340 and 245, two and a half times the 95 ms a synthetic tree of that size had recorded, because
+    /// its siblings rarely shared a size. On that synthetic tree thirty-two threads took no less than
+    /// four. Threads past four would only be taken from a scan of another volume, which the duplicate
+    /// search runs beside this one.
     /// </summary>
     private static readonly int SortWorkers = Math.Min(Environment.ProcessorCount, 4);
 
@@ -712,7 +715,8 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
     /// <para>Each node here is one the root reaches (<see cref="ReachedNodes"/>), so a scan of one
     /// folder sorts that folder's tree and not the volume around it. Each folder's children are
     /// ordered apart from every other folder's, so the folders are shared among
-    /// <see cref="SortWorkers"/> threads.</para>
+    /// <see cref="SortWorkers"/> threads. Names are put in order by <see cref="NameSortKeys"/>, which
+    /// says why they are not compared as they are.</para>
     /// </summary>
     private static void SortChildren(
         int[] childStart,
@@ -724,18 +728,18 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
         CancellationToken ct)
     {
         var bySize = childOrder is ExploreChildOrder.BySize;
+        var nameKeys = NameSortKeys.Of(nameNumbers, names, SortWorkers, ct);
 
-        // One delegate each for the whole tree rather than one per directory. A volume has hundreds
-        // of thousands of directories (G5).
-        var byName = ByName(nameNumbers, names);
+        // One delegate for the whole tree rather than one per directory. A volume has hundreds of
+        // thousands of directories (G5).
         Func<int, long> sizeOf = node => sizes[node];
 
-        // One key buffer for each thread, sized to the largest folder, rather than one per folder.
-        // Only sizes are keyed: names are compared where they are.
+        // One pair of key buffers for each thread, sized to the largest folder, rather than one per
+        // folder.
         var most = 0;
         var nodeCount = childStart.Length - 1;
 
-        for (var node = 0; bySize && node < nodeCount; node++)
+        for (var node = 0; node < nodeCount; node++)
         {
             most = Math.Max(most, childStart[node + 1] - childStart[node]);
         }
@@ -743,8 +747,8 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
         Parallel.ForEach(
             Partitioner.Create(0, nodeCount, NodesPerShare),
             new ParallelOptions { MaxDegreeOfParallelism = SortWorkers, CancellationToken = ct },
-            () => new long[most],
-            (share, _, keys) =>
+            () => new SortBuffers(most, nameKeys),
+            (share, _, buffers) =>
             {
                 for (var node = share.Item1; node < share.Item2; node++)
                 {
@@ -760,29 +764,51 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
 
                     if (bySize)
                     {
-                        OrderBySize(siblings, keys, sizeOf, byName);
+                        OrderBySize(siblings, buffers.SizeKeys, sizeOf, buffers.ByName);
                     }
                     else
                     {
-                        siblings.Sort(byName);
+                        buffers.ByName(siblings);
                     }
                 }
 
-                return keys;
+                return buffers;
             },
             static _ => { });
     }
 
     /// <summary>
+    /// What one sorting thread orders its folders with: a key buffer for sizes, one for names, and the
+    /// name order that writes to the second, made once for the thread rather than once per folder.
+    /// </summary>
+    private sealed class SortBuffers
+    {
+        public SortBuffers(int most, NameSortKeys nameKeys)
+        {
+            var nameKeyBuffer = new UInt128[most];
+
+            SizeKeys = new long[most];
+            ByName = siblings => nameKeys.Order(siblings, nameKeyBuffer);
+        }
+
+        public long[] SizeKeys { get; }
+
+        public Action<Span<int>> ByName { get; }
+    }
+
+    /// <summary>
     /// Put <paramref name="siblings"/> in <see cref="ExploreChildOrder.BySize"/>, in place: the largest
     /// first, and siblings of one size in name order. The one statement of that order, for a tree as
-    /// it is scanned and for the child lists a removal changes (<see cref="Without"/>).
+    /// it is scanned, for the child lists a removal changes (<see cref="Without"/>), and for the steps
+    /// of a growth replay (<see cref="History.GrowthReplayFrame"/>). Those two order a few folders,
+    /// so they compare names as they are.
     /// </summary>
     /// <param name="keyBuffer">
     /// Room for at least one key per sibling, overwritten. Passed in so that a caller ordering many
     /// lists allocates it once.
     /// </param>
-    internal static void OrderBySize(Span<int> siblings, Span<long> keyBuffer, Func<int, long> sizeOf, Comparison<int> byName)
+    /// <param name="byName">Puts the siblings it is given in name order, in place.</param>
+    internal static void OrderBySize(Span<int> siblings, Span<long> keyBuffer, Func<int, long> sizeOf, Action<Span<int>> byName)
     {
         var length = siblings.Length;
         var keys = keyBuffer[..length];
@@ -807,33 +833,18 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
 
             if (end - start > 1)
             {
-                MemoryExtensions.Sort(siblings[start..end], byName);
+                byName(siblings[start..end]);
             }
         }
     }
 
-    /// <summary>
-    /// Compare two siblings by name, ordinally and without regard to case, and break a tie by node
-    /// number.
-    ///
-    /// <para>Ordinal so that the same disk draws the same picture on every machine. Without regard
-    /// to case because the alternative sorts every capitalised name ahead of every lower-case one,
-    /// which reads as no order at all to somebody looking at the list.</para>
-    ///
-    /// <para>The tie-break is what makes this a total order rather than one whose equal cases fall
-    /// to whatever the sort does with them. Two siblings can compare equal — a directory with case
-    /// sensitivity enabled holds <c>Cache</c> and <c>cache</c> at once — and the size path three
-    /// lines below says why an unspecified order among equals is not good enough here.</para>
-    /// </summary>
-    private static Comparison<int> ByName(int[] nameNumbers, NamePool.Frozen names) =>
-        (left, right) => CompareByName(nameNumbers, names, left, right);
-
-    /// <summary>Two siblings of this tree in name order. See <see cref="ByName"/>.</summary>
+    /// <summary>Two siblings of this tree in name order. See <see cref="CompareByName(ReadOnlySpan{char}, int, ReadOnlySpan{char}, int)"/>.</summary>
     internal int CompareByName(int left, int right) => CompareByName(_nameNumbers, _names, left, right);
 
     /// <summary>
     /// Two nodes in name order, for a caller holding the arrays a tree is made from. One number is one
-    /// name, so two siblings sharing a number are ordered by node without reading it.
+    /// name, so two siblings sharing a number are ordered by node without reading it. See
+    /// <see cref="CompareByName(ReadOnlySpan{char}, int, ReadOnlySpan{char}, int)"/>.
     /// </summary>
     internal static int CompareByName(int[] nameNumbers, NamePool.Frozen names, int left, int right) =>
         nameNumbers[left] == nameNumbers[right]
@@ -841,8 +852,18 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
             : CompareByName(names[nameNumbers[left]], left, names[nameNumbers[right]], right);
 
     /// <summary>
-    /// Two siblings in name order, by name and node number, for a caller that has the names before
-    /// there is a tree to hold them. See <see cref="ByName"/>.
+    /// Two siblings in name order: by name, ordinally and without regard to case, and by node number
+    /// where the names tie. The one statement of name order, which <see cref="NameSortKeys"/> reaches
+    /// faster and must agree with.
+    ///
+    /// <para>Ordinal so that the same disk draws the same picture on every machine. Without regard
+    /// to case because the alternative sorts every capitalised name ahead of every lower-case one,
+    /// which reads as no order at all to somebody looking at the list.</para>
+    ///
+    /// <para>The tie-break is what makes this a total order rather than one whose equal cases fall
+    /// to whatever the sort does with them. Two siblings can compare equal — a directory with case
+    /// sensitivity enabled holds <c>Cache</c> and <c>cache</c> at once — and
+    /// <see cref="OrderBySize"/> says why an unspecified order among equals is not good enough here.</para>
     /// </summary>
     internal static int CompareByName(ReadOnlySpan<char> leftName, int left, ReadOnlySpan<char> rightName, int right)
     {
