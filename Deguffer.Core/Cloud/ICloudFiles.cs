@@ -26,8 +26,9 @@ public interface ICloudFiles
 
     /// <summary>
     /// Where <paramref name="path"/> really is once every link on the way to it is followed, named from
-    /// its volume's device, or null where Windows would not open it. Resolved once for a whole release,
-    /// so the volume is named once rather than for every file <see cref="Release"/> compares with it.
+    /// its volume's device, or null where Windows would not open it. Every file <see cref="Release"/>
+    /// checks is compared in the same form, which Windows gives without asking the mount manager for the
+    /// volume's drive letter.
     /// </summary>
     VolumeDevicePath? Resolve(string path);
 
