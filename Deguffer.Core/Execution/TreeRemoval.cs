@@ -77,7 +77,7 @@ internal sealed class TreeRemoval
 
         Action drain = Drain;
         _crew = new WorkerCrew(DirectoryRemover.MostAtOnce, () => drain, () => !Stopping && !_queue.IsEmpty, deletions);
-        _offered = () => _crew.TryStartHelper();
+        _offered = _crew.OfferPlace;
         _readyToLook = () => !_queue.IsEmpty || Stopping || Volatile.Read(ref _pending) == 0;
     }
 
@@ -128,8 +128,8 @@ internal sealed class TreeRemoval
     {
         using var wake = _crew.WakeOn(_ct);
 
-        // A place another removal gives back starts a helper here while work is queued. Without it, work
-        // queued while every place was taken would be left to the threads this removal already has.
+        // A place another removal gives back starts a helper here where this removal was refused one for
+        // work it still has queued. Without it, that work would be left to the threads it already has.
         using var offered = _deletions.WhenReturned(_offered);
 
         var walked = false;

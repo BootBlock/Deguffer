@@ -34,6 +34,10 @@ internal sealed class WorkerCrew
     private readonly Action _help;
 
     private int _helpers;
+
+    // Set where the shared allowance last refused a helper this crew had work for, and cleared once the
+    // crew has every helper it may have or no work for another. See OfferPlace.
+    private bool _refusedAPlace;
     private ExceptionDispatchInfo? _failure;
 
     /// <summary>
@@ -71,6 +75,21 @@ internal sealed class WorkerCrew
         _help = Help;
 
         Made.Value?.Invoke(Thread.CurrentThread.IsThreadPoolThread);
+    }
+
+    /// <summary>
+    /// Start a helper with a place just given back to the shared allowance, where the allowance last
+    /// refused this crew one it had work for. A crew that was never short of a place is left alone, so a
+    /// place given back does not start a helper for every crew with a moment's work queued, which on many
+    /// small removals costs more thread starts than it saves deletions. Never throws, as
+    /// <see cref="TryStartHelper"/> does not.
+    /// </summary>
+    public void OfferPlace()
+    {
+        if (Volatile.Read(ref _refusedAPlace))
+        {
+            TryStartHelper();
+        }
     }
 
     /// <summary>Whether a worker has failed, after which the run is stopping.</summary>
@@ -192,6 +211,8 @@ internal sealed class WorkerCrew
             var running = Volatile.Read(ref _helpers);
             if (running >= _helpersAllowed || !_hasWork())
             {
+                // Not short of a place: the crew has every helper it may have, or nothing for another.
+                Volatile.Write(ref _refusedAPlace, false);
                 return false;
             }
 
@@ -209,6 +230,7 @@ internal sealed class WorkerCrew
             // thread asking may be a helper about to end or a read's completion, and the work stays
             // queued for this crew's other threads. Signalled, because Finish may have seen the count
             // this claim raised and be waiting for it to fall.
+            Volatile.Write(ref _refusedAPlace, true);
             Interlocked.Decrement(ref _helpers);
             _changed.Set();
             return false;
