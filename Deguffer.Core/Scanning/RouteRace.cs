@@ -84,8 +84,10 @@ internal static class RouteRace
         finally
         {
             await stop.CancelAsync().ConfigureAwait(false);
-            await SettleAsync(reading).ConfigureAwait(false);
-            await SettleAsync(walking).ConfigureAwait(false);
+
+            // Both waited for before either's failure leaves: a route that failed must not leave the
+            // other still reading the disk, or reporting, behind a race that has ended.
+            await Task.WhenAll(SettleAsync(reading), SettleAsync(walking)).ConfigureAwait(false);
         }
     }
 
