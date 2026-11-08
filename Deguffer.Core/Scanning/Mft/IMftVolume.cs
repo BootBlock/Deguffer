@@ -28,4 +28,12 @@ public interface IMftVolume : IDisposable
     /// </summary>
     /// <exception cref="InvalidOperationException">The table was read already, or the volume closed.</exception>
     IMftSource? TryReadTable(out FallbackReason reason);
+
+    /// <summary>
+    /// Serve the reads of this volume's table at <paramref name="priority"/> from now on, including
+    /// those of the source <see cref="TryReadTable"/> handed it to. A hint, and nothing once the
+    /// volume or its source is closed. A volume reads at <see cref="ReadPriority.Normal"/> until this
+    /// is called.
+    /// </summary>
+    void Prioritise(ReadPriority priority);
 }

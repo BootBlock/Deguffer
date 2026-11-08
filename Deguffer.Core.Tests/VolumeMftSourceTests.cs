@@ -344,6 +344,8 @@ public class VolumeMftSourceTests
             }
         }
 
+        public void Prioritise(ReadPriority priority) => inner.Prioritise(priority);
+
         private bool IsRefused(long offset)
         {
             if (offset < refusedFrom)

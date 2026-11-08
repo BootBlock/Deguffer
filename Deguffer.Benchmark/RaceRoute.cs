@@ -48,6 +48,10 @@ internal sealed class RaceRoute
     /// against the index of <paramref name="buildDrive"/>, with <paramref name="beforePart"/> run
     /// before each part where it is given.
     /// </summary>
+    /// <param name="buildYields">
+    /// Whether the build reads at low priority while the walk runs, as <see cref="BuildYields"/>
+    /// decides, or at normal priority throughout.
+    /// </param>
     public static RaceRoute On(
         IMftSourceFactory volumes,
         string folder,
@@ -55,6 +59,7 @@ internal sealed class RaceRoute
         WalkTuning walk,
         char buildDrive,
         TableTuning table,
+        bool buildYields,
         string? beforePart)
     {
         Func<CancellationToken, RunTally> walker = racer switch
@@ -64,11 +69,58 @@ internal sealed class RaceRoute
             _ => throw new ArgumentOutOfRangeException(nameof(racer), racer, "The race walks with the walk route or the sources route."),
         };
 
-        return new RaceRoute(
-            racer,
+        var (walking, building) = Yielding(
             walker,
-            ct => TableRoutes.Run(Route.Index, volumes, $@"{buildDrive}:\", table, ct),
-            beforePart is null ? null : PartCommand.For(beforePart).Run);
+            (opened, ct) => TableRoutes.Run(Route.Index, volumes, $@"{buildDrive}:\", table, opened, ct),
+            buildYields);
+
+        return new RaceRoute(racer, walking, building, beforePart is null ? null : PartCommand.For(beforePart).Run);
+    }
+
+    /// <summary>
+    /// Whether the race's build yields to its walk: where it was <paramref name="asked"/> to, unless it
+    /// reads a volume on another disk, which shares nothing the hint could protect, so Auto would not
+    /// lower it either. The one rule the route and its description both follow.
+    /// </summary>
+    public static bool BuildYields(bool asked, DiskRelation relation) => asked && relation is not DiskRelation.OtherDisk;
+
+    /// <summary>
+    /// <paramref name="walk"/> and <paramref name="build"/>, the build reading at low priority while
+    /// the walk runs and at normal priority otherwise where <paramref name="yields"/>, through the
+    /// priorities a scan's builds use (<see cref="BuildPriorities"/>). The disks are taken to be shared,
+    /// which the caller has decided.
+    /// </summary>
+    /// <param name="build">The build, handed what to call with its volume once the volume is open.</param>
+    internal static (Func<CancellationToken, RunTally> Walk, Func<CancellationToken, RunTally> Build) Yielding(
+        Func<CancellationToken, RunTally> walk,
+        Func<Action<IMftVolume>?, CancellationToken, RunTally> build,
+        bool yields)
+    {
+        if (!yields)
+        {
+            return (walk, ct => build(null, ct));
+        }
+
+        var priorities = new BuildPriorities();
+
+        return (
+            ct =>
+            {
+                using var walking = priorities.Walking(disks: null);
+                return walk(ct);
+            },
+            ct =>
+            {
+                try
+                {
+                    return build(volume => priorities.Yield(new BuildPriorities.Build(), volume, disks: null), ct);
+                }
+                finally
+                {
+                    // One build a part, so none outlives its own.
+                    priorities.Forget();
+                }
+            });
     }
 
     /// <returns>The walk alone's count, complete only where every part was.</returns>

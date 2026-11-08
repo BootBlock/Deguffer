@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Deguffer.Core.Scanning.Mft;
@@ -15,6 +16,8 @@ namespace Deguffer.Testing;
 /// </summary>
 internal sealed class SectorStrictVolume(byte[] image, int bytesPerSector) : IRawVolume
 {
+    private readonly ConcurrentQueue<ReadPriority> _priorities = new();
+
     public int Read(Span<byte> destination, long offset)
     {
         if (offset % bytesPerSector != 0
@@ -49,6 +52,11 @@ internal sealed class SectorStrictVolume(byte[] image, int bytesPerSector) : IRa
             return ValueTask.FromException<int>(ex);
         }
     }
+
+    /// <summary>Every priority the volume was asked for, in order.</summary>
+    public IReadOnlyList<ReadPriority> Priorities => [.. _priorities];
+
+    public void Prioritise(ReadPriority priority) => _priorities.Enqueue(priority);
 
     public void Dispose()
     {

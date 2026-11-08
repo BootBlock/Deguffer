@@ -39,16 +39,23 @@ internal static class RouteRace
     /// the disk, or reporting progress, once its question has been answered. Each route is given a
     /// token cancelled for that, and a route must stop at it without treating it as a failure.</para>
     /// </summary>
+    /// <param name="tableAlone">
+    /// Called where the walk finishes first without an answer, before the table is waited for: the
+    /// table is then the only route left answering, and has stopped being the speculative side of the
+    /// race (<see cref="Mft.BuildPriorities"/>).
+    /// </param>
     public static async Task<Raced<T>> FirstAsync<T>(
         Func<CancellationToken, Task<T?>> table,
         Func<CancellationToken, Task<T>> walk,
         Func<T, bool> answers,
+        Action tableAlone,
         CancellationToken ct)
         where T : class
     {
         ArgumentNullException.ThrowIfNull(table);
         ArgumentNullException.ThrowIfNull(walk);
         ArgumentNullException.ThrowIfNull(answers);
+        ArgumentNullException.ThrowIfNull(tableAlone);
 
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
@@ -57,10 +64,14 @@ internal static class RouteRace
 
         try
         {
-            if (await Task.WhenAny((Task)reading, walking).ConfigureAwait(false) == walking
-                && answers(await walking.ConfigureAwait(false)))
+            if (await Task.WhenAny((Task)reading, walking).ConfigureAwait(false) == walking)
             {
-                return new Raced<T>(walking.Result, RaceOutcome.WalkAnsweredFirst);
+                if (answers(await walking.ConfigureAwait(false)))
+                {
+                    return new Raced<T>(walking.Result, RaceOutcome.WalkAnsweredFirst);
+                }
+
+                tableAlone();
             }
 
             if (await reading.ConfigureAwait(false) is { } fromTable)

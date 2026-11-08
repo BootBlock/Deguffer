@@ -198,6 +198,20 @@ public sealed class ReportTests
             "2048 KiB reads, 8 in flight, parsed on 3 threads, 24 list reads in flight",
             Deguffer.Benchmark.Tuning.Describe(Route.Index, WalkTuning.Default, new TableTuning(2048 * 1024, 8, 3, 24), snapshots: true, LinkRead.Name, BenchmarkRequest.DefaultTree, trees: 1));
 
+    /// <summary>
+    /// A race names the priority its build read at, because a result read at one priority says
+    /// nothing about the other.
+    /// </summary>
+    [Theory]
+    [InlineData(true, "1024 KiB reads at low priority while the walk runs,")]
+    [InlineData(false, "1024 KiB reads at normal priority,")]
+    public void ARaceNamesThePriorityItsBuildReadAt(bool yields, string reads) =>
+        Assert.Contains(
+            reads,
+            Deguffer.Benchmark.Tuning.DescribeRace(
+                Route.Sources, WalkTuning.Default, 'C', DiskRelation.SameDisk, new TableTuning(1024 * 1024, 8, 4, 32), yields, beforePart: false),
+            StringComparison.Ordinal);
+
     [Fact]
     public void ADebugBuildIsCalledOut()
     {
