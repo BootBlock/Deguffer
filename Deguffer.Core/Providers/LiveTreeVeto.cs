@@ -28,7 +28,9 @@ public sealed record ClearedBuildDirectory(string Path, string Project, IUseChec
 /// machine as well as from the project: the check at the clean reads the process table again once
 /// the preview's is past <see cref="IUseCheck.ReadingLimit"/>, and a question built from the
 /// preview's reading would ask about the preview's machine. A provider hands
-/// the veto the rule that builds one, never one already built.</para>
+/// the veto the rule that builds one, never one already built. Within one reading every check shares
+/// the one built for it (see <see cref="LiveTreeQuestionSource"/>), so a rule reads per directory,
+/// in <see cref="Ask"/>, whatever must be read again immediately before each removal.</para>
 /// </summary>
 /// <param name="Ask">The query for one directory.</param>
 internal sealed record LiveTreeQuestion(Func<RecognisedBuildDirectory, LiveTreeQuery> Ask)
@@ -149,12 +151,15 @@ internal static class LiveTreeVeto
         var unused = candidates.Where(c => !findings.IsLive(c.Path)).ToList();
 
         // The same rule for the question, not the question it produced, because the question is read
-        // from the project and the machine, and an editor opened after the preview changes both.
+        // from the project and the machine, and an editor opened after the preview changes both. One
+        // source for every check, so the clean builds it once per reading rather than once per step.
+        var atClean = new LiveTreeQuestionSource(questions);
+
         return new LiveTreeVetoResult(
             [
                 .. unused
                     .Where(c => findings.IsAnswered(c.Path))
-                    .Select(c => new ClearedBuildDirectory(c.Path, c.Project, new LiveTreeCheck(inspector, c, questions))),
+                    .Select(c => new ClearedBuildDirectory(c.Path, c.Project, new LiveTreeCheck(inspector, c, atClean))),
             ],
             findings.Live,
             [.. unused.Where(c => !findings.IsAnswered(c.Path)).Select(c => c.Path)]);

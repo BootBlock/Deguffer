@@ -19,6 +19,12 @@ internal sealed class TimedReading<T>(TimeProvider time)
     private T? _reading;
     private long _began;
 
+    /// <summary>
+    /// How many readings have been taken, which names the one held: a reading dropped and taken again
+    /// is a different number, so what an owner derives from one can be kept for exactly as long.
+    /// </summary>
+    public long Number { get; private set; }
+
     /// <summary>The reading held, or <paramref name="read"/>'s, which is then held.</summary>
     public T Get(Func<T> read)
     {
@@ -30,6 +36,7 @@ internal sealed class TimedReading<T>(TimeProvider time)
         var began = time.GetTimestamp();
         var reading = read();
         _began = began;
+        Number++;
         return _reading = reading;
     }
 

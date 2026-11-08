@@ -221,6 +221,15 @@ public sealed class LiveTreeInspector : ILiveTreeInspector
 
     public ReachedFolder Reach(string path) => Match.Reach(path);
 
+    public LiveTreeReading Reading(CancellationToken ct = default)
+    {
+        lock (_gate)
+        {
+            Snapshot(ct);
+            return new LiveTreeReading(_snapshot.Number);
+        }
+    }
+
     public void Invalidate()
     {
         lock (_gate)
