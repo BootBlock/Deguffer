@@ -184,15 +184,20 @@ public sealed class PlanExecutor(
             //
             // Never cancelled, because a cancelled clean is the one that most needs it: something has
             // gone, and the user chose where it stopped without knowing what it had reached.
-            Verification = PlanVerifier.Verify(
-                held.Count == 0 ? plan : plan with { ProtectedPaths = [.. plan.ProtectedPaths, .. held] },
-                runReach,
-                runResidue,
-                CancellationToken.None,
-                _cloud,
-                _protection,
-                _volumes,
-                _profiles),
+            //
+            // On a thread of the proof's own, never the pool's: it probes the disk for every survivor
+            // and drives the reads of a release step's files. See ListWorkers.
+            Verification = await WorkerThreads.Shared.RunAsync(
+                () => PlanVerifier.Verify(
+                    held.Count == 0 ? plan : plan with { ProtectedPaths = [.. plan.ProtectedPaths, .. held] },
+                    runReach,
+                    runResidue,
+                    CancellationToken.None,
+                    _cloud,
+                    _protection,
+                    _volumes,
+                    _profiles),
+                CancellationToken.None).ConfigureAwait(false),
         };
     }
 
