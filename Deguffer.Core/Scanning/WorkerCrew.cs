@@ -84,13 +84,8 @@ internal sealed class WorkerCrew
     /// small removals costs more thread starts than it saves deletions. Never throws, as
     /// <see cref="TryStartHelper"/> does not.
     /// </summary>
-    public void OfferPlace()
-    {
-        if (Volatile.Read(ref _refusedAPlace))
-        {
-            TryStartHelper();
-        }
-    }
+    /// <returns>Whether a helper took the place.</returns>
+    public bool OfferPlace() => Volatile.Read(ref _refusedAPlace) && TryStartHelper();
 
     /// <summary>Whether a worker has failed, after which the run is stopping.</summary>
     public bool Failed => Volatile.Read(ref _failure) is not null;

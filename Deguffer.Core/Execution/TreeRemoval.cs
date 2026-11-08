@@ -38,7 +38,7 @@ internal sealed class TreeRemoval
     // Cancelled where the removal is, and also where a deletion failed, so the walk stops either way.
     private readonly CancellationTokenSource _stop;
     private readonly Func<bool> _readyToLook;
-    private readonly Action _offered;
+    private readonly Func<bool> _offered;
 
     private readonly RemovalTally _tally;
     private readonly TimeProvider _time;
