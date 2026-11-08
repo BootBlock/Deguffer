@@ -19,13 +19,13 @@ A refactor loses these most easily.
 
 ## G6: work in a git worktree
 
-Several agents work here at once, and a shared checkout loses edits without any error. Before your
+Several agents work here at once, and a shared checkout loses edits silently. Before your
 first edit, run `git worktree add ../Deguffer-<topic> -b feature/<topic>` and work only there. The
 primary checkout is for reading and integrating, and you never switch its branch.
 
 - One worktree, one branch, one task. Never adopt or remove another agent's tree.
 - Edit through absolute paths inside your tree. The Bash tool's working directory drifts.
-- Keep trees beside the repository, never inside it, where builds and test discovery would see them.
+- Keep trees beside the repository, never inside it.
 - Never run `git clean -ffdx`. The second `-f` lets git descend into a nested repository.
 
 ## G1: one responsibility per type and per file
@@ -100,6 +100,9 @@ site, test and document it implies, and delete what it supersedes. Complete is m
 defect, not everything nearby. If the right fix is too large or needs someone else's decision, say
 so and leave the defect documented.
 
+A provider added or removed republishes the wiki's provider list (`SupportedProvidersPageTests`).
+Memory note: *Publish Deguffer's provider list to the wiki*.
+
 ## Work is not done until it has landed
 
 The session that does the work lands it before it reports done, without being asked. Make small,
@@ -138,7 +141,7 @@ output, logs, fixtures and screenshots are full of real usernames, machine names
 
 ## Public-repository hygiene
 
-Code, comments, commit messages, branch names and history are world-readable.
+Everything committed is world-readable.
 
 - Stay professional and neutral. No TODO names or blames a person.
 - No internal references: private ticket IDs, internal URLs or hosts, or agent process such as
@@ -172,9 +175,8 @@ Every `.md` under `docs/todo/` opens with a `> **Status:**` banner, and a finish
 
 ## Keep this file small
 
-This file holds only rules that apply to every change, each in a few lines. Put detail for one
-kind of change in a memory note that a short rule names. Shorten or replace a rule before you add
-one, and never append an explanation.
+Only rules for every change belong here, each in a few lines. Move detail for one kind of change
+to a memory note a short rule names, and shorten a rule before you add one.
 [AGENTS.md](AGENTS.md) stays a pointer to this file. `AgentGuideBudgetTests` fails past 10,000
 characters here, 1,200 in a section, or 600 in `AGENTS.md`. Never raise a budget without asking the
 maintainer.
