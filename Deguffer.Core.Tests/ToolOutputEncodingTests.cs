@@ -20,7 +20,7 @@ public sealed class ToolOutputEncodingTests : IDisposable
     /// <summary>The OEM code page of Western European consoles, in which UTF-8's non-ASCII bytes read as box drawing.</summary>
     private const uint Oem850 = 850;
 
-    /// <summary>Text whose UTF-8 bytes read differently in <see cref="Oem850"/>, one letter of it outside that page altogether.</summary>
+    /// <summary>Text whose UTF-8 bytes read differently in <see cref="Oem850"/>, two of its letters outside that page altogether.</summary>
     private const string NonAscii = "Übung café 日本";
 
     private static readonly string Cmd = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe");
