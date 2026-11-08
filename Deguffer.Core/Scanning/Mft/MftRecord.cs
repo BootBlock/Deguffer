@@ -4,8 +4,9 @@ namespace Deguffer.Core.Scanning.Mft;
 /// One parsed MFT entry, reduced to what a scan needs: where it sits in the tree, how much space it
 /// occupies, and when it was made and last written.
 ///
-/// <para>Its name travels beside it rather than in it, as the UTF-16 the record holds. Most callers
-/// keep few names, so a string for every record would be built only to be thrown away.</para>
+/// <para>Its names travel beside it rather than in it, as the UTF-16 the record holds: the one it is
+/// placed by, and its other links as <see cref="MftOtherLinks"/>. Most callers keep few names, so a
+/// string for every name would be built only to be thrown away.</para>
 ///
 /// Deliberately not a general-purpose NTFS record. Security descriptors, named streams and reparse
 /// data are all present on disk and all irrelevant here; carrying them would cost memory per record
@@ -52,11 +53,6 @@ namespace Deguffer.Core.Scanning.Mft;
 /// dates and the storage come from, so the table answers it for nothing more than the read it
 /// already makes.
 /// </param>
-/// <param name="OtherLinks">
-/// The file's other names, each in the directory that holds it, or null where the file has only the
-/// one it travels with. See <see cref="MftLink"/>. Null rather than empty, because almost no record
-/// has one and an empty list for each would be allocated only to be thrown away.
-/// </param>
 public readonly record struct MftRecord(
     uint ParentRecordNumber,
     ScanSize? Size,
@@ -65,8 +61,7 @@ public readonly record struct MftRecord(
     long CreatedFileTime,
     long LastWrittenFileTime,
     FileStorage Storage = FileStorage.Plain,
-    FileVisibility Visibility = FileVisibility.Shown,
-    IReadOnlyList<MftLink>? OtherLinks = null)
+    FileVisibility Visibility = FileVisibility.Shown)
 {
     /// <summary>
     /// The root directory always occupies record 5. Path resolution starts here, and the root is

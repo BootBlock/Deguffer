@@ -113,8 +113,10 @@ internal static class MftExploreReader
 
         // Each of a file's other names, met on whichever parse thread, with the record it names. Each
         // becomes a node of its own once the table is read, so the file is drawn under every folder
-        // that names it, as the walk draws it. See MftLink.
-        var linksMet = new ConcurrentQueue<(int Record, MftRecord Described, MftLink Link)>();
+        // that names it, as the walk draws it. See MftLink. The name is interned as the link is met,
+        // because the parse thread hands it on as it sits in a buffer read into again once the
+        // handler returns, and the pool copies it once however many links share it.
+        var linksMet = new ConcurrentQueue<(int Record, MftRecord Described, uint Parent, int Name)>();
 
         // Nothing is taken on the reporting thread, which is a parse thread holding its slot: the
         // copy of the columns is the assembling's, away from the read.
@@ -133,7 +135,7 @@ internal static class MftExploreReader
                 source,
                 records,
                 tuning,
-                (number, outcome, in record, name) =>
+                (number, outcome, in record, name, otherLinks) =>
                 {
                     if (outcome != MftParseOutcome.Parsed)
                     {
@@ -170,11 +172,11 @@ internal static class MftExploreReader
                     // mid-read, or a table that grew after its size was measured. Such a name cannot
                     // be reached from the root, so it draws nothing and dropping it costs nothing.
                     // The file's other names are judged one by one.
-                    foreach (var link in record.OtherLinks ?? [])
+                    foreach (var link in otherLinks)
                     {
                         if (link.ParentRecordNumber < (uint)count)
                         {
-                            linksMet.Enqueue(((int)number, record, link));
+                            linksMet.Enqueue(((int)number, record, link.ParentRecordNumber, names.Intern(link.Name)));
                         }
                     }
 
@@ -211,11 +213,14 @@ internal static class MftExploreReader
         }
 
         // In record order, then by folder and name, so one table always numbers its links alike
-        // whatever order the parse threads met them in.
+        // whatever order the parse threads met them in. By the name's characters and never by its
+        // number, which is the order the threads first met each name in. One number is one name,
+        // so two equal numbers are equal without reading either.
+        var linkNames = names.Freeze();
         var links = linksMet
             .OrderBy(met => met.Record)
-            .ThenBy(met => met.Link.ParentRecordNumber)
-            .ThenBy(met => met.Link.Name, StringComparer.Ordinal)
+            .ThenBy(met => met.Parent)
+            .ThenBy(met => met.Name, Comparer<int>.Create((a, b) => a == b ? 0 : linkNames[a].SequenceCompareTo(linkNames[b])))
             .ToArray();
 
         // Columns of their own, sized to the links. The record columns are sized to every record on
@@ -231,10 +236,10 @@ internal static class MftExploreReader
 
             for (var i = 0; i < links.Length; i++)
             {
-                var (_, described, link) = links[i];
+                var (_, described, parent, name) = links[i];
 
-                linkColumns.NameNumbers[i] = names.Intern(link.Name);
-                linkColumns.Describe(i, described, (int)link.ParentRecordNumber);
+                linkColumns.NameNumbers[i] = name;
+                linkColumns.Describe(i, described, (int)parent);
             }
         }
 

@@ -37,7 +37,7 @@ public sealed class MftStageTimingsTests
         var timings = new MftStageTimings();
 
         Assert.True(MftRecordStream.TryReadAll(
-            source, (int)source.RecordCount, TableTuning.Default, static (_, _, in _, _) => true, onProgress: null, default, timings));
+            source, (int)source.RecordCount, TableTuning.Default, static (_, _, in _, _, _) => true, onProgress: null, default, timings));
 
         Assert.Equal(ReadStages, timings.Stages.Select(timed => timed.Stage));
         Assert.Equal(1, timings.DeferredRecords);
@@ -96,7 +96,7 @@ public sealed class MftStageTimingsTests
         var timings = new MftStageTimings();
 
         Assert.False(MftRecordStream.TryReadAll(
-            source, (int)source.RecordCount, TableTuning.Default, static (_, _, in _, _) => false, onProgress: null, default, timings));
+            source, (int)source.RecordCount, TableTuning.Default, static (_, _, in _, _, _) => false, onProgress: null, default, timings));
 
         Assert.Equal([MftBuildStage.BitmapRead, MftBuildStage.FirstPass], timings.Stages.Select(timed => timed.Stage));
         Assert.Equal(TimeSpan.Zero, timings.Of(MftBuildStage.DeferredRecords));

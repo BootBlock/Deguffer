@@ -38,7 +38,13 @@ public static class MftVolumeIndexBuilder
         var tree = new MftVolumeTree(count);
 
         if (!MftRecordStream.TryReadAll(
-                source, count, tuning, (number, outcome, in record, name) => Place(tree, number, outcome, in record, name), onProgress: null, ct, timings))
+                source,
+                count,
+                tuning,
+                (number, outcome, in record, name, otherLinks) => Place(tree, number, outcome, in record, name, otherLinks),
+                onProgress: null,
+                ct,
+                timings))
         {
             return false;
         }
@@ -67,7 +73,8 @@ public static class MftVolumeIndexBuilder
     /// <para>Called from several threads at once, each with its own record, which is all
     /// <see cref="MftVolumeTree.Set"/> needs.</para>
     /// </summary>
-    private static bool Place(MftVolumeTree tree, long number, MftParseOutcome outcome, in MftRecord record, ReadOnlySpan<char> name)
+    private static bool Place(
+        MftVolumeTree tree, long number, MftParseOutcome outcome, in MftRecord record, ReadOnlySpan<char> name, MftOtherLinks otherLinks)
     {
         if (outcome == MftParseOutcome.NotAnEntry)
         {
@@ -106,7 +113,7 @@ public static class MftVolumeIndexBuilder
 
         // A parent outside the table is a different thing entirely, and an ordinary one on a live
         // volume, which the tree drops name by name. See MftVolumeTree.Set.
-        tree.Set(number, in record, name);
+        tree.Set(number, in record, name, otherLinks);
         return true;
     }
 

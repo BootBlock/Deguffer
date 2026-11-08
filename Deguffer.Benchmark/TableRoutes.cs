@@ -134,5 +134,5 @@ internal static class TableRoutes
     /// Read and parse every record and keep none of them: the floor the two structures are built on.
     /// </summary>
     private static bool ReadOnly(IMftSource source, int count, TableTuning tuning, MftStageTimings timings, CancellationToken ct) =>
-        MftRecordStream.TryReadAll(source, count, tuning, static (_, _, in _, _) => true, onProgress: null, ct, timings);
+        MftRecordStream.TryReadAll(source, count, tuning, static (_, _, in _, _, _) => true, onProgress: null, ct, timings);
 }

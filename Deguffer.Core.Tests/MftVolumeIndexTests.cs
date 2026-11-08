@@ -477,6 +477,44 @@ public class MftVolumeIndexTests
     }
 
     /// <summary>
+    /// A file whose names fill its own record and an extension record keeps every link of each,
+    /// not only the best: both records outlive the buffers they were read into before the file is
+    /// finished, so each link is copied out of its record while that record is still in hand.
+    /// </summary>
+    [Fact]
+    public void CountsAFileUnderEveryNameOfEachRecordItsNamesFill()
+    {
+        var index = Build(Tree()
+            .AddHardLinkedFileWithTwoNamesInEachRecord(
+                21,
+                ownNames: ((Cache, "a.dll"), (Sibling, "a.dll")),
+                otherNames: ((Cache, "b.dll"), (Sibling, "b.dll")),
+                logical: 5000,
+                extension: 22));
+
+        Assert.Equal(10_000, index.TryMeasure(["Users", "testuser", ".npm-cache"])!.Value.Logical);
+        Assert.Equal(10_000, index.TryMeasure(["Users", "testuser", ".config"])!.Value.Logical);
+        Assert.Equal(20_000, index.TryMeasure(["Users", "testuser"])!.Value.Logical);
+    }
+
+    /// <summary>
+    /// Where the name a file is placed by is in a folder outside the table, the name that stands in
+    /// for it is judged a store by itself, as the walk judges each name it lists. Judged by the lost
+    /// name instead, a store would be counted, and its path would not be protected.
+    /// </summary>
+    [Fact]
+    public void JudgesTheNameStandingInForOneOutsideTheTableAsAStoreByItself()
+    {
+        var index = Build(Tree()
+            .AddHardLinkedFile(21, [(5_000, "data.bin"), (Sibling, "outlook.pst")], allocated: 4096, logical: 4000));
+
+        var config = index.TryMeasure(["Users", "testuser", ".config"], MinimumAge.Off, out _, out var stores);
+
+        Assert.Equal(0, config!.Value.Logical);
+        Assert.Equal(["Users", "testuser", ".config", "outlook.pst"], Assert.Single(stores));
+    }
+
+    /// <summary>
     /// Where that extension record, or the list naming it, cannot be established, one of the file's
     /// names is lost, and the folder it would count in could be any on the volume. The index is
     /// refused, as for a file whose only name is lost.

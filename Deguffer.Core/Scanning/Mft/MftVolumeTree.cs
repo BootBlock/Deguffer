@@ -160,26 +160,32 @@ public sealed class MftVolumeTree(int count)
     /// out.</para>
     /// </summary>
     /// <param name="name">The record's name, copied only where it is kept.</param>
-    public void Set(long number, in MftRecord record, ReadOnlySpan<char> name)
+    /// <param name="otherLinks">The file's other names, each copied only where it is a mail store's.</param>
+    public void Set(long number, in MftRecord record, ReadOnlySpan<char> name, MftOtherLinks otherLinks)
     {
-        var links = record.OtherLinks ?? [];
         var parent = record.ParentRecordNumber;
         var standIn = -1;
 
         if (parent >= (uint)Count)
         {
-            for (var i = 0; i < links.Count && standIn < 0; i++)
+            var at = 0;
+
+            foreach (var link in otherLinks)
             {
-                standIn = links[i].ParentRecordNumber < (uint)Count ? i : -1;
+                if (link.ParentRecordNumber < (uint)Count)
+                {
+                    (standIn, parent) = (at, link.ParentRecordNumber);
+                    name = link.Name;
+                    break;
+                }
+
+                at++;
             }
 
             if (standIn < 0)
             {
                 return;
             }
-
-            parent = links[standIn].ParentRecordNumber;
-            name = links[standIn].Name;
         }
 
         _parent[number] = parent;
@@ -204,12 +210,14 @@ public sealed class MftVolumeTree(int count)
 
         _flags[number] = flags;
 
-        for (var i = 0; i < links.Count; i++)
+        var i = 0;
+
+        foreach (var link in otherLinks)
         {
-            if (i != standIn && links[i].ParentRecordNumber < (uint)Count)
+            if (i++ != standIn && link.ParentRecordNumber < (uint)Count)
             {
                 _met.Enqueue(new LinkNode(
-                    (uint)number, links[i].ParentRecordNumber, MailStore.Is(links[i].Name) ? links[i].Name : null));
+                    (uint)number, link.ParentRecordNumber, MailStore.Is(link.Name) ? link.Name.ToString() : null));
             }
         }
     }

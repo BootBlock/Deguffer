@@ -339,6 +339,49 @@ public static class MftListedFiles
             mismatch);
 
     /// <summary>
+    /// A file with four hard links, all in the best namespace: its own record keeps the two in
+    /// <paramref name="ownNames"/>, and the two in <paramref name="otherNames"/> moved to
+    /// <paramref name="extension"/>. Each record holds a link besides the best of its names, so each
+    /// has to keep that link past the buffer it was read into until the file is finished.
+    /// </summary>
+    public static MftFixture AddHardLinkedFileWithTwoNamesInEachRecord(
+        this MftFixture fixture,
+        uint number,
+        ((uint Parent, string Name) First, (uint Parent, string Name) Second) ownNames,
+        ((uint Parent, string Name) First, (uint Parent, string Name) Second) otherNames,
+        long logical,
+        uint extension)
+    {
+        var (self, listed) = PlaceExtension(fixture, number, extension, mismatch: null, BothNames(otherNames, logical));
+
+        return fixture.Add(number, MftRecordBytes.Compose(
+            isDirectory: false,
+            baseReference: 0,
+            MftRecordBytes.Sequence,
+            fixture.BytesPerRecord,
+            t => MftAttributeBytes.WriteStandardInformation(t, 0, 0),
+            BothNames(ownNames, logical),
+            t => MftAttributeBytes.WriteAttributeList(t,
+            [
+                new ListedAttribute(StandardInformation, self),
+                new ListedAttribute(FileName, self),
+                new ListedAttribute(FileName, self),
+                .. listed.Select(l => new ListedAttribute(FileName, l)),
+                .. listed.Select(l => new ListedAttribute(FileName, l)),
+                new ListedAttribute(Data, self),
+            ]),
+            t => MftAttributeBytes.WriteNonResidentData(t, logical, logical, startVirtualCluster: 0)));
+
+        static AttributeWriter BothNames(((uint Parent, string Name) First, (uint Parent, string Name) Second) names, long logical) =>
+            t =>
+            {
+                var written = MftAttributeBytes.WriteFileName(t, MftFixture.Reference(names.First.Parent), names.First.Name, logical, logical);
+                return written + MftAttributeBytes.WriteFileName(
+                    t[written..], MftFixture.Reference(names.Second.Parent), names.Second.Name, logical, logical);
+            };
+    }
+
+    /// <summary>
     /// A file whose <c>$ATTRIBUTE_LIST</c> cannot be read: its one entry declares a length that
     /// runs past the end of the list. A list read in part may have lost the very entry saying
     /// where the size went.
