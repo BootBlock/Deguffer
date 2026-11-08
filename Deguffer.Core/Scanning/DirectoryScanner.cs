@@ -131,7 +131,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
 
     /// <summary>
     /// Every path from the table where it can answer, and every path it cannot in one walk for each
-    /// reason it could not. Each figure is remembered as <see cref="MeasureAsync"/> remembers it, and
+    /// reason it could not on each set of disks, the sets at the same time. Each figure is remembered as <see cref="MeasureAsync"/> remembers it, and
     /// none is shown first: <paramref name="progress"/> counts what this measurement has read, and a
     /// figure from an earlier run is not that.
     /// </summary>

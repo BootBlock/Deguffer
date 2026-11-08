@@ -76,7 +76,7 @@ Each needs #466 for its test.
 | Issue | Note |
 | --- | --- |
 | #467 | Every listing that ends wakes every waiting walk on its volume. |
-| #470 | Volumes, and fallback walks, measured one after another. |
+| #470 | Volumes, and fallback walks, measured one after another. Done: a measurement runs one pipeline for each set of physical disks at the same time, the volumes of one set in turn, and the walking scanners run the walks of separate disks at the same time. Where any disk is not known, everything stays in turn. |
 | #471 | Approved source folders searched one after another. |
 | #469 | The hard-link-aware scan builds two paths and a by-name read per file. |
 | #468 | Open each directory relative to its parent. Measure with #476 first. `safety`. |

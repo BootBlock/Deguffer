@@ -36,10 +36,14 @@ public sealed class WalkOnSeveralDisksTests : IDisposable
     private readonly string _first;
     private readonly string _second;
 
+    /// <summary>A second directory on the first volume, so the walks of a disk set come in an order the request does not.</summary>
+    private readonly string _alsoFirst;
+
     public WalkOnSeveralDisksTests()
     {
         _first = Path.GetDirectoryName(_temp.CreateFile(1024, "first", "cache", "one.bin"))!;
         _second = Path.GetDirectoryName(_temp.CreateFile(2048, "second", "cache", "two.bin"))!;
+        _alsoFirst = Path.GetDirectoryName(_temp.CreateFile(4096, "first", "other", "three.bin"))!;
     }
 
     public void Dispose() => _temp.Dispose();
@@ -126,9 +130,9 @@ public sealed class WalkOnSeveralDisksTests : IDisposable
     [Fact]
     public async Task TheWalkResultsComeInTheOrderAsked()
     {
-        var results = await Listing(Tuner(secondSaid: true), new Company(), Deadline).MeasureManyAsync([new(_second), new(_first)]);
+        var results = await Listing(Tuner(secondSaid: true), new Company(), Deadline).MeasureManyAsync([new(_first), new(_second), new(_alsoFirst)]);
 
-        Assert.Equal([2048L, 1024L], results.Select(result => result.Size.Logical));
+        Assert.Equal([1024L, 2048L, 4096L], results.Select(result => result.Size.Logical));
     }
 
     [Fact]
@@ -154,8 +158,8 @@ public sealed class WalkOnSeveralDisksTests : IDisposable
     [Fact]
     public async Task TheHardLinkWalkResultsComeInTheOrderAsked()
     {
-        var results = await Reading(Tuner(secondSaid: true), new Company(), Deadline).MeasureManyAsync([new(_second), new(_first)]);
+        var results = await Reading(Tuner(secondSaid: true), new Company(), Deadline).MeasureManyAsync([new(_first), new(_second), new(_alsoFirst)]);
 
-        Assert.Equal([2048L, 1024L], results.Select(result => result.Size.Logical));
+        Assert.Equal([1024L, 2048L, 4096L], results.Select(result => result.Size.Logical));
     }
 }

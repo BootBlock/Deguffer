@@ -104,8 +104,9 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner
     }
 
     /// <summary>
-    /// Every directory among <paramref name="asked"/> in one walk, as <see cref="RootSetWalk"/> walks
-    /// them, and every file in a read of its own, as <see cref="MeasureAsync"/> reads one.
+    /// Every directory among <paramref name="asked"/> in one walk for each set of values, as
+    /// <see cref="RootSetWalk"/> walks them, the walks on separate disks at the same time, and every
+    /// file in a read of its own, as <see cref="MeasureAsync"/> reads one.
     /// </summary>
     public async ValueTask<IReadOnlyList<ScanResult>> MeasureManyAsync(
         IReadOnlyList<ScanRequest> asked,
