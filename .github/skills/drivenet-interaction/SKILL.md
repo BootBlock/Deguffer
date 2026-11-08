@@ -1,6 +1,6 @@
 ---
 name: drivenet-interaction
-description: "Use this skill to interact with UI elements in a Windows desktop app through Drive.NET. Covers the 'interact' MCP tool (click, doubleClick, rightClick, type, clear, sendKeys, select, toggle, expand, collapse, scrollIntoView, dragTo, mouseDown, mouseUp, hover, mouseMove, moveTo, diagnose, setFocus, highlight, clipboard read/write, fallback re-resolution, effect observation including `contextMenuOpened`, same-process popup replacement diagnostics, and click diagnostics with native/UIA reconciliation) and the 'inspect' MCP tool (exhaustive element info, supported patterns, available actions, current value, toggle/expand state). Keywords: Drive.NET, interact, inspect, click, type, sendKeys, select, toggle, expand, collapse, drag, mouseDown, mouseUp, mouseMove, moveTo, hover, smooth mouse, clipboard, highlight, focus, fallback, stale element, effect observation, contextMenuOpened, popup replacement, patterns, actions, value, escalate, confidence, click diagnostics."
+description: "Use this skill to interact with UI elements in a Windows desktop app through Drive.NET. Covers the 'interact' MCP tool (click, doubleClick, rightClick, type, clear, sendKeys, keyDown, keyUp, select, toggle, expand, collapse, scrollIntoView, dragTo, mouseDown, mouseUp, hover, mouseMove, pointerPath, moveTo, diagnose, setFocus, highlight, clipboard read/write, fallback re-resolution, effect observation including `contextMenuOpened`, same-process popup replacement diagnostics, and click diagnostics with native/UIA reconciliation) and the 'inspect' MCP tool (exhaustive element info, supported patterns, available actions, current value, toggle/expand state). Keywords: Drive.NET, interact, inspect, click, type, sendKeys, select, toggle, expand, collapse, drag, held drag, mouseDown, mouseUp, mouseMove, pointerPath, keyDown, keyUp, moveTo, hover, smooth mouse, clipboard, highlight, focus, fallback, stale element, effect observation, contextMenuOpened, popup replacement, patterns, actions, value, escalate, confidence, click diagnostics."
 argument-hint: "[goal] [action like click/type/select] [target element]"
 user-invocable: true
 ---
@@ -22,7 +22,7 @@ Get exhaustive information about a single element before interacting. Returns su
 
 ### Response Fields
 
-`elementId`, `controlType`, `name`, `automationId`, `className`, `boundingRect`, `isEnabled`, `isOffscreen`, `childCount`, `helpText`, `acceleratorKey`, `accessKey`, `itemStatus`, `itemType`, `labeledBy`, `currentValue`, `toggleState`, `expandCollapseState`, `supportedPatterns`, `availableActions`.
+`elementId`, `controlType`, `name`, `automationId`, `runtimeId`, `className`, `boundingRect`, `isEnabled`, `isOffscreen`, `childCount`, `helpText`, `acceleratorKey`, `accessKey`, `itemStatus`, `itemType`, `labeledBy`, `currentValue`, `toggleState`, `expandCollapseState`, `supportedPatterns`, `availableActions`.
 
 ### When To Inspect
 
@@ -40,9 +40,9 @@ Perform UI interactions on elements.
 |---|---|---|---|---|
 | `sessionId` | string | Yes | — | Session ID from `session connect`. |
 | `action` | string | Yes | — | Action to perform (see table below). |
-| `elementId` | string | No* | — | Element ID. Required for all actions except `clipboard`, `mouseMove`, `mouseDown`, `mouseUp`, and window-level `sendKeys`/`type`. |
+| `elementId` | string | No* | — | Element ID. Required for all actions except `clipboard`, `mouseMove`, `pointerPath`, `mouseDown`, `mouseUp`, `keyDown`, `keyUp`, and window-level `sendKeys`/`type`. |
 | `value` | string | No | — | Text for `type`, item name for `select`. |
-| `keys` | string | No | — | Key combination for `sendKeys` (e.g. `"Ctrl+S"`, `"Alt+F4"`, `"Enter"`). |
+| `keys` | string | No | — | Key combination for `sendKeys` (e.g. `"Ctrl+S"`, `"Alt+F4"`, `"Enter"`), or the keys to hold or release for `keyDown` and `keyUp` (e.g. `"Ctrl"`, `"Ctrl+Shift"`). |
 | `targetElementId` | string | No | — | Drop target element ID for `dragTo`. |
 | `clipboardAction` | string | No | — | `"read"` or `"write"` for `clipboard` action. |
 | `clipboardText` | string | No | — | Text to write for clipboard `write`. |
@@ -50,12 +50,12 @@ Perform UI interactions on elements.
 | `destinationY` | int | No | — | Destination Y screen coordinate for `mouseMove`, `mouseDown`, or `mouseUp`. |
 | `sourceX` | int | No | — | Source X screen coordinate for `mouseMove`. Omit to start from current cursor position. |
 | `sourceY` | int | No | — | Source Y screen coordinate for `mouseMove`. Omit to start from current cursor position. |
-| `mouseButton` | string | No | `"none"` or `"left"` | Mouse button for `mouseMove`, `mouseDown`, or `mouseUp`: `none`, `left`, `right`, `middle`. `mouseMove` defaults to `none`; `mouseDown` and `mouseUp` default to `left`. |
+| `mouseButton` | string | No | `"none"` or `"left"` | Mouse button for `mouseMove`, `pointerPath`, `mouseDown`, or `mouseUp`: `none`, `left`, `right`, `middle`. `mouseMove` and `pointerPath` default to `none`; `mouseDown` and `mouseUp` default to `left`. For `mouseMove` and `pointerPath`, a button already held stays held; a button that is up is pressed at the start and released at the end. |
 | `durationMs` | int | No | `1400` | Duration of the smooth mouse move in milliseconds (range: 50–10000). |
-| `motionProfile` | string | No | `"natural"` | Humanized movement profile for `mouseMove`, `hover`, and `moveTo`: `steady`, `natural`, `exaggerated`, or `hesitant`. |
+| `motionProfile` | string | No | `"natural"` | Humanized movement profile for `mouseMove`, `pointerPath`, `hover`, and `moveTo`: `steady`, `natural`, `exaggerated`, or `hesitant`. |
 | `motionExaggeration` | int | No | profile-dependent | How exaggerated the humanized path should be (range: 0–100). Higher values increase curve width, timing variability, and correction intensity. |
 | `highlight` | bool | No | `false` | Flash the element before performing the action. |
-| `windowHandle` | string | No | — | Window handle to scope resolution to a specific window. For window-level `sendKeys`/`type` (no `elementId`) it targets that window directly (default: session main window). For **selector-based** interact (selector fields, no `elementId`) it scopes the selector search to that window's UIA root instead of the session root — pass the handle of a secondary window, dialog, or popup (from `window list`) so selectors like `name="Close"` resolve inside it. |
+| `windowHandle` | string | No | — | Window handle to scope resolution to a specific window. For window-level `sendKeys`/`type` (no `elementId` and no selector fields) it targets that window directly (default: session main window). For **selector-based** interact (selector fields, no `elementId`) it scopes the selector search to that window's UIA root instead of the session root — pass the handle of a secondary window, dialog, or popup (from `window list`) so selectors like `name="Close"` resolve inside it. |
 | `dwellMs` | int | No | `500` | Dwell time in milliseconds for `hover` (range: 50–10000). |
 | `hoverMode` | string | No | `"default"` | Hover mode: `"default"` (move away then onto the element) or `"transit"` (approach from outside with a realistic boundary crossing). |
 | `approachFrom` | string | No | `"top"` | Transit-hover entry direction: `top`, `bottom`, `left`, `right`, `top-left`, `top-right`, `bottom-left`, `bottom-right`. |
@@ -84,6 +84,8 @@ Perform UI interactions on elements.
 | `type` | Clear then type text | `value` |
 | `clear` | Clear the element's text | — |
 | `sendKeys` | Send keyboard shortcut or append text | `keys` |
+| `keyDown` | Hold keys (e.g. `Ctrl`) through SendInput until `keyUp`; no focus change | `keys` |
+| `keyUp` | Release held keys in reverse order | `keys` |
 | `select` | Select an item by name (combo box, list) | `value` |
 | `toggle` | Toggle a checkbox or toggle control | — |
 | `expand` | Expand a collapsible element | — |
@@ -93,7 +95,8 @@ Perform UI interactions on elements.
 | `mouseDown` | Press and hold a mouse button at the current cursor position or optional coordinates | optional `destinationX`, `destinationY`, `mouseButton` |
 | `mouseUp` | Release a mouse button at the current cursor position or optional coordinates | optional `destinationX`, `destinationY`, `mouseButton` |
 | `hover` | Move away, enter the element, and dwell | optional `dwellMs`, `hoverMode`, `approachFrom`, `velocityMs`, `motionProfile`, `motionExaggeration` |
-| `mouseMove` | Smoothly move the cursor with optional held button | `destinationX`, `destinationY` |
+| `mouseMove` | Smoothly move the cursor; with `mouseButton`, a held button stays held, an up button is pressed and released | `destinationX`, `destinationY` |
+| `pointerPath` | Move through waypoints as one gesture, pressing and releasing a button once | `waypoints` (JSON array of `{x, y, durationMs?, dwellMs?}`) |
 | `moveTo` | Move the pointer to a semantic position relative to the element | `position` plus optional motion settings |
 | `diagnose` | Capture element metadata, window inventory, and cursor state in one call | — |
 | `setFocus` | Set keyboard focus | — |
@@ -120,6 +123,10 @@ interact sessionId="..." action="dragTo" elementId="e_src" targetElementId="e_de
 interact sessionId="..." action="mouseMove" destinationX=500 destinationY=300
 interact sessionId="..." action="mouseMove" destinationX=800 destinationY=600 sourceX=100 sourceY=200 mouseButton="left" durationMs=1000
 interact sessionId="..." action="mouseMove" destinationX=920 destinationY=460 motionProfile="exaggerated" motionExaggeration=85
+interact sessionId="..." action="mouseMove" destinationX=920 destinationY=460 mouseButton="left"
+interact sessionId="..." action="keyDown" keys="Ctrl"
+interact sessionId="..." action="keyUp" keys="Ctrl"
+interact sessionId="..." action="pointerPath" waypoints='[{"x":400,"y":300},{"x":920,"y":460,"durationMs":600}]' mouseButton="left"
 interact sessionId="..." action="hover" elementId="e_btn1" dwellMs=1000
 interact sessionId="..." action="hover" elementId="e_btn1" motionProfile="hesitant" motionExaggeration=75
 interact sessionId="..." action="hover" elementId="e_btn1" hoverMode="transit" approachFrom="left" velocityMs=300
@@ -141,6 +148,8 @@ interact sessionId="..." action="clipboard" clipboardAction="read"
 
 For `click`, `doubleClick`, and `rightClick`, the response can include `targetElement`, click-point diagnostics, hit-test evidence, and optional `sameWindowEffect` or `effectObservation` metadata. Successful stale-element recovery adds `retriedAfterStaleElement: true`. Heuristic fallback recovery adds `fallbackUsed`, `fallbackConfidence`, and `originalSelectorDiagnostic`.
 
+Set `detail` to choose how much a `click`, `doubleClick`, `rightClick` or `hover` returns. `minimal` returns `success`, `message`, the click or hover point and `effectType`, plus any sign that the action reached a different element. `standard` (the default) returns every diagnostic once: `windowInteractionMode` for the session's window on the first pointer action and when its mode changes, and window classification lists as handles. Other actions always return the full response. `full` repeats everything and adds `otherProcessAppearedElements`. Use `minimal` for long runs of clicks and `full` to investigate one that misbehaves.
+
 Popup-host hit-test evidence can also include `nativeWindowHandle`, `nativeClassName`, `reconciliation`, and `hitRelation="popupHostAncestor"` when the click lands inside the requested popup target bounds but UIA resolves the popup host bridge rather than the leaf element.
 
 When popup handoff is detected, the inline or explicit effect block can also include `openedSameProcessWindows`, `reusedSameProcessWindows`, `closedSameProcessWindows`, and `replacedWindowPairs` so agents can diagnose same-process popup replacement even when the visible window count stays flat. Auto-observation can classify those replacements as `popupReplaced` or `windowReplaced`, while the legacy explicit effect name `sameProcessWindowReplaced` remains supported.
@@ -160,14 +169,15 @@ If the target process exits during an interaction, the response can also append 
 - After reconnecting a session, all element IDs must be reacquired.
 - For context menus or ambiguous hit targets, prefer `rightClick` with `expectedEffect="contextMenuOpened"` and inspect the returned click diagnostics plus any `contextMenuCandidates`, `openedSameProcessWindows`, or `replacedWindowPairs`.
 - Use `mouseDown` and `mouseUp` for held-button workflows such as crosshair pickers or multi-step drags. When you omit coordinates, Drive.NET uses the current cursor position.
-- Use `mouseMove` to relocate the cursor for drag-and-drop or visual verification. Set `mouseButton` to `"left"` to simulate a held drag.
+- `mouseMove` with `mouseButton="left"` is a whole drag when the button is up (pressed at the start, released at the end). After `mouseDown` the button stays held through each move, so a drag spans several calls until `mouseUp`; the response says which with `buttonHandling` (`pressedAndReleased` or `keptHeld`).
+- Hold a modifier during a drag with `keyDown` and `keyUp` (`keys="Ctrl"`). Cancel a held drag with window-level `sendKeys` (`keys="Escape"`) before `mouseUp`. The session releases any button or key still held when it ends.
 - Generic held-button drags are proven on plain WinUI pointer surfaces, but popup-hosted flyouts or detached popup windows may still apply app-specific release or capture logic on `mouseUp`. Always verify the post-release popup visibility, bounds, or app state instead of assuming the drop persisted.
 - For popup-hosted drags, capture the popup `windowHandle` first, query against that window, and compare `window list` before and after release.
 - Use `motionProfile` to set the baseline feel of `mouseMove`, `hover`, and `moveTo`: `steady` stays straighter, `natural` is the default, `exaggerated` uses broader arcs and correction, and `hesitant` introduces more uneven cadence.
 - Use `motionExaggeration` to adjust how much drift, timing variation, and corrective motion Drive.NET adds on top of the selected profile.
 - For selector-based interact (selector fields instead of `elementId`), pass `windowHandle` to scope resolution to a secondary window, dialog, or popup — the same window root `query find` uses. A selector that targets a secondary window resolves to nothing under the session root, so scope it with `windowHandle` (the zero-match error hints this when no handle was supplied).
 - When a selector matches more than one element, interact returns `matchCount` and a `candidates` array instead of acting; set `matchIndex` (1-based) to pick one, or narrow the selector — no need to re-run `query find`.
-- `sendKeys` and `type` can be used without `elementId` to send keystrokes directly to the foreground window — useful for browser content or other surfaces with no UIA element tree.
+- `sendKeys` and `type` can be used without `elementId` or selector fields to send keystrokes directly to the foreground window — useful for browser content or other surfaces with no UIA element tree.
 - When using window-level `sendKeys` or `type`, pair with `window bringToFront` to ensure the correct window has focus.
 - Coordinates in `mouseMove`, `hover`, and `boundingRect` use the same DPI-aware screen coordinate space.
 - Pointer actions include click or hover diagnostics such as `clickPoint`, `clickResolution`, `elementAtClickPoint`, and hit-test evidence.

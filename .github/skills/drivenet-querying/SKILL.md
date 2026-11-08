@@ -27,6 +27,7 @@ Use this skill when you need to find UI elements, understand why a selector does
 | `maxNodes` | int | No | `250` | Maximum number of returned nodes for `tree` before the response is truncated in-band (1-5000). |
 | `detail` | string | No | `summary` | `summary` or `verbose`. |
 | `annotateArtifacts` | bool | No | `false` | For `tree`, annotate probable framework/provider artefacts such as offscreen WinUI placeholders without changing tree membership. |
+| `view` | string | No | `control` | For `tree`, the UI Automation view to walk: `control`, `content`, or `raw`. `raw` also returns the elements a provider excludes from the accessibility views, which no other view can reach; pair it with `detail=verbose` to read each element's `accessibilityView`. |
 | `scope` | string | No | `descendants` | `descendants`, `children`, or `subtree`. |
 | `maxResults` | int | No | engine default | Maximum results for `find` or `explain` (1-5000). |
 | `fallback` | bool | No | `false` | For `find` and `resolve`, try alternative selector strategies if the primary selector returns no matches. |
@@ -90,7 +91,7 @@ When `truncated` is `true`, pick one of the returned `continuationHints[*].eleme
 
 When `searchAllWindows=true`, `tree` returns `windowTrees` instead of one merged tree so you can inspect each visible window independently while the overall node budget stays bounded.
 
-When a `windowHandle`-rooted tree query detects that the popup window exposes significantly more elements through targeted search than through recursive tree walking (a known WinUI/UIA provider behavior), a `popupTreeDiagnostic` block is included with `treeNodeCount`, `searchableDescendantCount`, and guidance to use `find` or `resolve` for element discovery on that popup.
+A `windowHandle`-rooted tree query can report a popup provider that hides content from a recursive walk. The check compares the walk against a flat descendant search, which enumerates the window a second time, so it runs only when the handle names a popup surface (a popup-styled window, or one whose class name marks it as a popup, flyout, or menu host) and the walk reached every node. An ordinary window pays nothing for it. A walk that `maxDepth` cut short skips the check as well, because a shorter walk and a flat search disagree for a reason the provider did not cause; raise `maxDepth` until no node reports children the walk did not return, and the check runs again. When the check runs and the flat search finds at least three more elements than the walk, the response includes a `popupTreeDiagnostic` block with `treeNodeCount` (the nodes the walk reached, before `maxNodes` bounds the response), `searchableDescendantCount`, and guidance to use `find` or `resolve` for element discovery on that popup.
 
 When a browser session has its accessibility runtime disabled (e.g. Firefox with `accessibility.force_disabled = 1`), `tree` responses include a `browserAccessibilityDiagnostic` block explaining why page content is not queryable. `find` queries against such a browser short-circuit to empty results with the same diagnostic, preventing unreliable chrome-only matches from being returned.
 
@@ -114,7 +115,7 @@ query sessionId="..." action="bounds" elementId="e_abc123"
 
 ### `properties`
 
-Return verbose single-element detail, including `className`, `helpText`, supported patterns, and other diagnostic properties.
+Return verbose single-element detail, including `runtimeId`, `className`, `helpText`, supported patterns, and other diagnostic properties. Compare `runtimeId` across two queries to tell an element the app kept from one it recreated: element ids are new on each query, and a recreated element keeps its name and automation id.
 
 ```
 query sessionId="..." action="properties" elementId="e_abc123"

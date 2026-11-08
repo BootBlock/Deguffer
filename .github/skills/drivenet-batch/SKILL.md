@@ -1,6 +1,6 @@
 ---
 name: drivenet-batch
-description: "Use this skill to execute multi-step UI automation sequences atomically through Drive.NET. Covers the 'batch' MCP tool which chains query, interact, wait_for, assert, and report steps with variable binding (saveAs, save, ${name} references), timing control (startDelayMs, endDelayMs, delayBeforeMs, delayAfterMs), conditional execution (`when`), retries, per-step session overrides, per-step error handling, and pointer-button control via mouseDown and mouseUp. Keywords: Drive.NET, batch, multi-step, form fill, automation, saveAs, save, variable, chain, sequence, atomic, assert, report, steps, delay, timing, integration test, dialog, wizard, retry, when, continueOnError, explain, mouseDown, mouseUp."
+description: "Use this skill to execute multi-step UI automation sequences atomically through Drive.NET. Covers the 'batch' MCP tool which chains query, interact, wait_for, assert, and report steps with variable binding (saveAs, save, ${name} references), timing control (startDelayMs, endDelayMs, delayBeforeMs, delayAfterMs), conditional execution (`when`), retries, per-step session overrides, per-step error handling, and held pointer and key input via mouseDown, mouseUp, keyDown and keyUp. Keywords: Drive.NET, batch, multi-step, form fill, automation, saveAs, save, variable, chain, sequence, atomic, assert, report, steps, delay, timing, integration test, dialog, wizard, retry, when, continueOnError, explain, mouseDown, mouseUp, keyDown, keyUp, pointerPath."
 argument-hint: "[goal] [sequence of actions to batch]"
 user-invocable: true
 ---
@@ -123,7 +123,7 @@ Most batch `interact` steps target an `elementId` saved from an earlier `query` 
 { "tool": "interact", "action": "type", "elementId": "${name_field}", "value": "Alice" }
 ```
 
-Batch also supports window-level `sendKeys` and `type`, clipboard actions, `mouseDown`, `mouseUp`, `mouseMove`, and the batch-only `pointerPath` action for multi-waypoint pointer traces.
+Batch also supports window-level `sendKeys` and `type`, clipboard actions, `mouseDown`, `mouseUp`, `mouseMove`, `keyDown`, `keyUp`, and `pointerPath` for multi-waypoint pointer traces.
 
 Batch also supports `moveTo` with `position`, `offsetPx`, optional `durationMs`, and optional `motionProfile` / `motionExaggeration`, while `hover` accepts `dwellMs` plus optional `hoverMode`, `approachFrom`, `velocityMs`, `motionProfile`, and `motionExaggeration`.
 
@@ -140,6 +140,13 @@ The `mouseDown` and `mouseUp` actions also work without an `elementId`, which is
 ```json
 { "tool": "interact", "action": "mouseDown", "mouseButton": "left" }
 { "tool": "interact", "action": "mouseUp", "destinationX": 920, "destinationY": 460, "mouseButton": "left" }
+```
+
+After `mouseDown`, a `mouseMove` or `pointerPath` step with the same `mouseButton` keeps the button held, so a drag spans several steps until `mouseUp`; with the button up, the move presses it at the start and releases it at the end. `keyDown` and `keyUp` hold and release `keys` such as `"Ctrl"` around a drag (`${var}` substitution applies). The session releases any button or key still held when it ends.
+
+```json
+{ "tool": "interact", "action": "keyDown", "keys": "Ctrl" }
+{ "tool": "interact", "action": "keyUp", "keys": "Ctrl" }
 ```
 
 The `pointerPath` action scripts a multi-waypoint pointer trace with optional per-waypoint dwell:
@@ -162,22 +169,22 @@ The `moveTo` action uses semantic positions relative to an element and can keep 
 { "tool": "interact", "action": "moveTo", "elementId": "${menu}", "position": "outside-right", "offsetPx": 24, "durationMs": 400, "motionProfile": "steady" }
 ```
 
-`pointerPath` also accepts `motionProfile` and `motionExaggeration`, which Drive.NET applies to each segment between waypoints.
+`pointerPath` also accepts `motionProfile` and `motionExaggeration`, which Drive.NET applies to each segment between waypoints. It presses `mouseButton` once for the whole path and releases it once at the end.
 
 For `hover`, the default movement is edge-aware, including the smooth exit plus horizontal re-approach used for top-edge appbar targets. Batch hover results stay lightweight step messages. If you need richer MCP `interact` diagnostics such as `sameWindowEffect`, `effectObservation`, `replacedWindowPairs`, or `windowTimeline`, use the standalone `interact` tool instead of `batch`.
 
-The `sendKeys` and `type` actions can also work without `elementId` to send input directly to the foreground window:
+The `sendKeys` and `type` actions can also work without `elementId` or selector fields to send input directly to the foreground window:
 
 ```json
 { "tool": "interact", "action": "sendKeys", "keys": "Ctrl+Shift+K" }
 { "tool": "interact", "action": "type", "value": "console.log('hello')" }
 ```
 
-When no `elementId` is provided, the session's main window (or an explicit `windowHandle`) receives focus before input is sent. This is useful for browser content areas and other surfaces without UIA elements.
+When neither `elementId` nor a selector field is provided, the session's main window (or an explicit `windowHandle`) receives focus before input is sent. This is useful for browser content areas and other surfaces without UIA elements.
 
-For `type`, registered secret references such as `secret:...` are resolved before typing, including window-level typing when no `elementId` is provided.
+For `type`, registered secret references such as `secret:...` are resolved before typing, including window-level typing when neither `elementId` nor a selector field is provided.
 
-Batching same-process work is also the preferred way to avoid repeated CLI re-attach overhead and repeated 1-second session-start warning toasts across follow-up actions.
+Batching same-process work is also the preferred way to avoid repeated CLI re-attach overhead, and, with the `toast` or `persistent` warning mode, repeated 1-second session-start warnings across follow-up actions. On the automation overlay, each batch step appears indented under the batch, and the progress bar shows "step N of M". Call `overlay action="begin"` before the work and `overlay action="finish"` after it, so the overlay also stays between the batch and the commands around it.
 
 ### Wait Steps
 

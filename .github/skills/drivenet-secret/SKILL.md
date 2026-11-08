@@ -46,7 +46,7 @@ interact sessionId="session-1" action="type" value="secret:abc123..." windowHand
 secret action="revoke" referenceId="secret:abc123..."
 ```
 
-The same `secret:` reference works for element-targeted typing and window-level typing when no `elementId` is provided.
+The same `secret:` reference works for element-targeted typing and window-level typing when neither `elementId` nor a selector field is provided.
 
 ## Rules
 
@@ -54,6 +54,7 @@ The same `secret:` reference works for element-targeted typing and window-level 
 - Treat `referenceId` as transient. It is valid only while the current server process remains alive.
 - Secrets are automatically lost on server restart and automatically cleared on server shutdown.
 - Use `revoke` when one secret is done and `revokeAll` when the whole workflow is complete.
+- Reading the field back, with `query action="properties"` for example, returns `[REDACTED]`. Assert on that, never on the plaintext.
 - Prefer the `secret` MCP tool for agent-driven flows that already have the secret value in memory.
 - For terminal-only CLI flows, `DriveNet.Cli.exe interact --secret` reads the typed value from stdin instead of using the MCP secret store.
 - Batch steps can reuse a registered `secret:` reference by passing it as the `value` of an `interact` `type` step.

@@ -18,10 +18,10 @@ Use this skill when you need to list, reposition, resize, or manage the state of
 | `sessionId` | string | Yes | — | Session ID from `session connect`. |
 | `action` | string | Yes | — | `"list"`, `"activePopup"`, `"blockers"`, `"dismissBlocker"`, `"resize"`, `"move"`, `"minimize"`, `"maximize"`, `"restore"`, `"close"`, or `"bringToFront"`. |
 | `windowHandle` | string | No | — | Window handle from a `list` result. Required for `resize`, `move`, `minimize`, `maximize`, `restore`, `close`, and `bringToFront`; optional for `dismissBlocker`. Not used by `list`, `activePopup`, or `blockers`. |
-| `width` | int | No | — | New width in pixels (for `resize`). |
+| `width` | int | No | — | New width in pixels (for `resize`). A minimized window stays minimized and takes the new size when restored. |
 | `height` | int | No | — | New height in pixels (for `resize`). |
-| `x` | int | No | — | New X position in pixels (for `move`). |
-| `y` | int | No | — | New Y position in pixels (for `move`). |
+| `x` | int | No | — | New X position in screen pixels (for `move`). A minimized window stays minimized and takes the new position when restored. |
+| `y` | int | No | — | New Y position in screen pixels (for `move`). |
 | `buttonName` | string | No | — | Preferred button caption or automation ID for `dismissBlocker`, for example `"Continue"`. |
 | `includeHidden` | bool | No | `false` | When `true`, the `list` action includes hidden and zero-size windows in addition to visible ones. Hidden windows have `isVisible: false`. Useful for discovering popup host windows that an app creates but keeps invisible until triggered. |
 | `className` | string | No | — | Exact class-name filter for `list` or `activePopup`. Useful for narrowing popup-host families such as `PopupWindowSiteBridge` or `Pop-upHost`. |
@@ -97,14 +97,18 @@ When an interaction opens a dialog, flyout, or settings pane, determine whether 
 
 - Always `list` first to get window handles before other window actions.
 - Use `activePopup` when the process keeps reused popup hosts around and you need the best current popup candidate with freshness metadata in one call.
-- `resize` requires both `width` and `height`; `move` requires both `x` and `y`.
+- `resize` requires both `width` and `height`; `move` requires both `x` and `y`. Both read the window back and return `bounds` and `windowState`, with `success: false` when the window did not take the requested geometry. On a minimized window they set the rectangle it takes when restored (`boundsKind: "restored"`) and leave it minimized.
 - Use `className`, `ownerHandle`, and `visibleOnly` together to isolate popup or flyout families when historical popup hosts remain listed as hidden windows.
 - Use `roleFilter="popups"` to list only owned popup/flyout hosts, or `roleFilter="appWindows"` to list only real app windows. Both drop system/IME noise (`Default IME`, `MSCTFIME UI`, `GDI+ Window`, `.NET-BroadcastEventWindow`) that `includeHidden=true` otherwise returns.
 - Check `isModal` in the list response — modal dialogs block interaction with other windows.
 - Use `blockers` when you want a focused summary of blocking modal windows and suggested recovery actions.
-- Use `dismissBlocker` for one-shot blocker recovery. If you know the preferred button text or automation ID, pass it as `buttonName`; otherwise Drive.NET clicks the recommended dismiss action.
+- Use `dismissBlocker` for one-shot blocker recovery. If you know the preferred button text or automation ID, pass it as `buttonName`; otherwise Drive.NET clicks the button that closes the dialog without acting on its content, preferring Cancel, Close, OK, Continue and No in that order (on a Win32 `#32770` dialog it recognises Cancel by AutomationId `2` in any language). When no such button exists it clicks nothing and fails with a message listing the buttons to pass as `buttonName`.
+- `dismissBlocker` reports `success: true` only when the blocker closed within 2 seconds of the click; otherwise `success` is `false` and the message says the blocker is still open.
+- When the session window renders Chromium content, `blockers` also reports a modal web dialog (`role="dialog"` with `aria-modal="true"`) as a blocker with `classification: "contentDialog"`, `ownerRelationship: "contentOfSessionRoot"`, the session window's `windowHandle` and a `dialogElementId`. Top-level window blockers are listed first.
 - Use `bringToFront` before `capture` to ensure the window is visible. The result includes `foregroundOutcome` (`foregroundConfirmed`, `foregroundTransient`, or `foregroundLost`) and, when focus was stolen, a `competingWindow` block identifying the window that took focus.
 - Use `restore` to un-minimize a window before interacting with its elements.
+- `minimize`, `maximize`, and `restore` report the observed `windowState` and the `expectedState`, and `close` reports `closeOutcome` (`closed`, `hidden`, or `stillOpen`) and `isEnabled`. `success` is `false` when the window did not change state or did not close, so read it before assuming the window is gone.
+- When `close` returns `closeOutcome: "stillOpen"` with `isEnabled: false`, the application opened a prompt over the window: find it with `blockers` and answer it with `dismissBlocker`. With `isEnabled: true`, run `list` again after a short delay if the application may still be closing.
 - When popup-host geometry looks suspicious, compare `nativeWindowRect`, `uiaBoundingRect`, `dwmExtendedFrameBounds`, and `appMetadataBounds` first. Drive.NET usually reports the native window rect as authoritative, but on reused popup hosts it can prefer `uiaBoundingRect`, `dwmExtendedFrameBounds`, or `appMetadata` when the popup subtree exposes better geometry.
 - For popup-hosted drag workflows, snapshot `list` before the release and again after `mouseUp`. If the same popup host moved while held but returns hidden at its anchor after release, the app's own popup release or capture logic rejected or reverted the drop.
 - When `boundsSource` is `appMetadata`, Drive.NET used popup geometry parsed from app-emitted UIA metadata because the raw Win32/UIA/DWM path stayed on the hidden-popup sentinel.

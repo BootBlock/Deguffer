@@ -17,9 +17,9 @@ List running processes that have visible windows.
 
 | Parameter | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `filter` | string | No | — | Filter processes by name substring (case-insensitive). |
+| `filter` | string | No | — | Filter processes by name, process ID, window title or window handle substring (case-insensitive). A filter that names an automation branch, such as `electron` or `firefox`, also matches every process that branch claims. |
 | `dotnetOnly` | bool | No | `false` | Only show .NET processes. |
-| `includeWindows` | bool | No | `false` | Include all visible top-level windows owned by each process. |
+| `includeWindows` | bool | No | `true` for an `electron` or `firefox` filter, otherwise `false` | Include all visible top-level windows owned by each process. An explicit `false` wins, except with `hierarchical=true`, whose nodes always carry their windows. |
 | `hierarchical` | bool | No | `false` | Group child processes beneath parents and include ancestor context. |
 
 ### Response
@@ -37,7 +37,7 @@ List running processes that have visible windows.
 
 When `includeWindows=true` or `hierarchical=true`, the response upgrades to richer process target objects that can include `parentProcessId`, `parentProcessName`, `executablePath`, `startTimeUtc`, `commandLine`, `profileDirectory`, `automationBranch`, `windows` (with per-window `windowHandle` and `windowTitle`), and `children`.
 
-When `filter="firefox"` or `filter="electron"`, Drive.NET automatically returns the richer process-target shape with visible windows and `automationBranch` even when `includeWindows` is omitted.
+When `filter="firefox"` or `filter="electron"`, Drive.NET returns the richer process-target shape with `automationBranch`, and includes visible `windows` unless `includeWindows=false`. The filter also matches every process the branch claims, so `filter="electron"` finds a packaged Electron app whatever its executable is called: the Electron branch recognises an app by the files Electron installs (`resources\app.asar`, a `resources\app` folder or `resources\default_app.asar`, with `resources.pak`).
 
 ## `session` Tool
 
@@ -54,7 +54,7 @@ Connect to, retarget, or disconnect from a target process. The returned `session
 | `executablePath` | string | No | Restrict `connect` or `connectNewest` to a specific executable path. |
 | `commandLineContains` | string | No | Restrict `connect` or `connectNewest` to processes whose command line contains this substring. |
 | `sessionStartWarning` | bool | No | Override the session-start warning UI on connect. Omit to use the configured default (enabled by default). |
-| `sessionStartWarningMode` | string | No | Warning display mode: `toast` or `persistent`. Providing a mode also enables the warning unless `sessionStartWarning=false` is set. |
+| `sessionStartWarningMode` | string | No | Warning display mode: `overlay` (the default), `toast` or `persistent`. Providing a mode also enables the warning unless `sessionStartWarning=false` is set. |
 | `sessionId` | string | No | Required for disconnect, retarget, status, reconnect, `addToGroup`, or `removeFromGroup`. |
 | `windowHandle` | string | No | Required for retarget. For `connect`/`connectNewest`/`connectLatest`, auto-retargets to this window after attaching to its process. Use a top-level handle from `window list`, or a previously saved alias name. |
 | `alias` | string | No | Friendly name to assign to the window after retarget (e.g. `"settings"`, `"dialog"`). |
@@ -82,6 +82,8 @@ Connect to, retarget, or disconnect from a target process. The returned `session
 When connecting to a browser process (Firefox, Chrome, Edge, Brave, Vivaldi, Opera), the response also includes `addressBarUrl` if the address bar is accessible via UI Automation. When the address bar is not accessible (e.g. accessibility disabled), Drive.NET attempts keyboard+clipboard URL recovery automatically and returns the result with `addressBarUrlSource: "keyboardClipboard"`. When Drive.NET detects that the browser's accessibility runtime is disabled, a `browserHealth` block is included warning that page content will not be queryable.
 
 When accessibility **is** working (no `browserHealth` block), the response also includes `tabMetadata` with `tabCount` (number of open tabs) and `activeTabTitle` (the selected tab's title).
+
+When the session window renders Chromium content (Electron, CEF, WebView2 or a Chromium browser), Drive.NET sends `WM_GETOBJECT` to each render widget on connect and retarget, as a screen reader does, and waits up to 3 seconds for the web document to expose elements; the app needs no `--force-renderer-accessibility` switch. The `connect` and `status` responses then include `"chromiumAccessibility": { "state": "...", "renderWidgets": 1, "elapsedMs": 120 }`, where `state` is `alreadyActive` (nothing sent), `activated`, `noContent` (no element exposed within 3 seconds) or `noReply` (no render widget answered). With `noContent` or `noReply`, a query may find only the window frame.
 
 ### Retarget Response
 
@@ -180,7 +182,7 @@ When `status` is `terminated`, the response also includes process-exit metadata 
 
 - Use `discover` first when the process name is ambiguous or you need window inventory before attaching.
 - If you already have a deterministic PID or a narrow attach filter set, direct `connect` is fine without a prior `discover` call.
-- `connect` shows a one-time non-activating warning by default before automation starts. The default `toast` mode uses a 1-second top-centre countdown. Set `sessionStartWarningMode="persistent"` for a bottom-right card that stays visible until the session disconnects.
+- `connect` shows a non-activating warning by default before automation starts. The default `overlay` mode shows the agent's automation overlay, one window per agent that lists its commands and stays while a session is open; it waits 1 second only when it newly appears. Call `overlay action="begin"` before the first command of a piece of work and `overlay action="finish"` after the last, so the overlay stays on screen between sessions and pauses. Set `sessionStartWarningMode="toast"` for a 1-second top-centre countdown, or `sessionStartWarningMode="persistent"` for a bottom-right card that stays visible until the session disconnects. See the `drivenet-overlay` skill.
 - Set `sessionStartWarning=false` to skip that warning for a specific session.
 - `connectNewest` and `connectLatest` are synonyms. Use them when several matching processes may already be running and you want the newest remaining match after all filters are applied. When the best candidate becomes inaccessible, the next-best match is tried automatically.
 - `connectWait` polls for a matching process until one appears or `timeoutMs` expires. Use after launching an app (e.g., via `lifecycle launch`) when the process may not be visible yet. The response includes `waitedMs` and `attempts`.
@@ -199,10 +201,10 @@ When `status` is `terminated`, the response also includes process-exit metadata 
 - Sessions auto-cleanup when the target process exits, and later errors can include that termination reason.
 - If `interact`, `wait_for`, `window`, or `batch` reports `processExited: true`, call `session status` on the same `sessionId` before reconnecting. That terminated-session response is the durable agent-facing place to read `crashEvidence` and decide whether the app needs relaunch, triage, or both.
 - If multiple processes share a name, use `processId` for disambiguation.
-- Firefox and Electron session attaches use dedicated automation branches that adjust window resolution and blocker classification. `discover filter="firefox"` and `discover filter="electron"` also auto-enrich the response with visible windows. Do not assume `filter="win32"` selects a session branch; it is just a normal discover filter string unless the target process name actually matches it.
-- **VS Code / Electron extension hosts**: VS Code enforces a platform-level singleton mutex, so a second `Code.exe` instance always fails to start. Use `connect` with `processName="Code"` and `windowTitleRegex="\\[Extension Development Host\\]"` to attach to an F5-launched host window. See [docs/yaml-test-runner.md — Testing VS Code / Electron Extensions](../../../docs/yaml-test-runner.md#testing-vs-code--electron-extensions) for the full YAML pattern.
+- Firefox and Electron session attaches use dedicated automation branches that adjust window resolution and blocker classification. `discover filter="firefox"` and `discover filter="electron"` also auto-enrich the response with visible windows and match every process their branch claims. `filter="win32"` or `filter="mfc"` does not auto-enrich; it matches Win32-branch processes only in the richer listing (`includeWindows=true` or `hierarchical=true`).
+- **VS Code / Electron extension hosts**: VS Code holds a single-instance lock, so a second `Code.exe` instance always fails to start, even with a unique `--user-data-dir`. An Electron app that uses Electron's own `app.requestSingleInstanceLock()` takes the lock per profile folder, so its own `--user-data-dir` starts an isolated instance. Use `connect` with `processName="Code"` and `windowTitleRegex="\\[Extension Development Host\\]"` to attach to an F5-launched host window. See [docs/yaml-test-runner.md — Testing VS Code / Electron Extensions](../../../docs/yaml-test-runner.md#testing-vs-code--electron-extensions) for the full YAML pattern.
 
-Global configuration can disable the default warning via `DriveNet__SessionStartWarning__Enabled=false` and can set the default display mode via `DriveNet__SessionStartWarning__Mode=toast|persistent`.
+Global configuration can disable the default warning via `DriveNet__SessionStartWarning__Enabled=false` and can set the default display mode via `DriveNet__SessionStartWarning__Mode=overlay|toast|persistent` (default: `overlay`).
 
 ## Integration Testing Workflow
 

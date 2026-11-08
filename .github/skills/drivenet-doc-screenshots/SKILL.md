@@ -31,19 +31,34 @@ Use this skill when the end goal is not just a screenshot, but a checked-in docu
 - `gradientBackdrop` is enabled by default and places a rainbow gradient behind acrylic or transparent window regions. Pass `gradientBackdrop=false` when you want to preserve raw alpha or when the app window is fully opaque.
 - Prefer `imageFormat=\"png\"` (default) for docs assets since PNG preserves sharp text and transparency. Use `imageFormat=\"jpg\"` only when file size is a priority and transparency is not needed.
 - Prefer stable filenames that describe the UI state, such as `login-dialog.png` or `workspace-fix-banner.png`.
-- Keep screenshots free of real user data. Use fictional names, emails, tokens, and paths in captured UI.
+- Keep screenshots free of private data. Stage the UI with fictional data before capturing; see **Private Data** below.
 - Do not assume `docs/images` is correct. Inspect the repo and follow the existing asset pattern.
 - Use standard Markdown image syntax for docs: `![alt text](path/to/image.png)`. Do not use HTML `<img>` or `<p>` tags.
 
-### PII Screening
+### Private Data
 
-After every capture, visually inspect the screenshot for personally identifiable information — real names, email addresses, file paths containing usernames, authentication tokens, IP addresses, or any other data that could identify a real person or system.
+A documentation screenshot publishes the desktop it was taken on. Once the image is committed, everything in it is as public as the docs, and a README image is usually mirrored wherever the README is published.
 
-If PII is found:
+Private data is anything that belongs to the person or the machine taking the capture rather than to the product. It is wider than personal data:
 
-1. Note the full file path of the captured image so the user knows exactly which screenshot is affected.
-2. Use the `askQuestions` tool to prompt the user, providing the file path and a description of the PII detected, and ask whether to keep or discard the screenshot.
-3. If the user chooses to discard, delete the staged image and recapture after the PII has been removed or replaced with fictional data.
+- user names, including inside paths such as `C:\Users\<name>\...`;
+- project, repository, workspace and folder names, and the layout of a source tree;
+- window titles of other applications, and browser tab titles and address bars, wherever they appear: process lists, target pickers, window lists, title bars;
+- log lines, file names, command lines, clipboard content, email addresses, tokens, IP addresses and host names.
+
+Stage the state before capturing. Do not rely on noticing private data afterwards:
+
+1. Fill lists from fictional data made for the capture: fictional project and workspace names (Contoso, Fabrikam, Northwind) under a neutral root, such as a drive letter mapped with `subst`, and a scratch data directory when the app supports one.
+2. For a list of running processes or windows, launch the apps you want shown and apply a filter that matches only them. Never capture an unfiltered list of the real desktop.
+3. Choose a page that does not show machine paths, or stage those paths too. An install location, a log path or a settings page usually contains the user name.
+4. Navigate the staged app through UI Automation patterns rather than pointer clicks, and keep its window in front while you do. `interact action="select"` on a navigation list, with the item's name as `value`, selects the item through its selection pattern, and element-targeted `type` sets a box's value directly. `click` uses an element's Invoke pattern when it has one, but sends a real pointer click to a Windows Forms button or to an element without Invoke, and `select` does the same for an item with neither pattern. A pointer click lands in whatever window covers that point of the screen.
+
+Before promoting a capture:
+
+1. Open the staged image and read every row, title bar, status bar and log line in it.
+2. If any private data appears, discard the capture, restage the UI, and capture again. Do not crop or blur a committed image instead: the original stays in version history.
+3. If a private image was already committed or published, replace it, and tell the user that the old image remains in the history of every repository and mirror it reached.
+4. Tell the user which file was affected and what it showed, and do not keep a capture with private data in it on your own judgement.
 
 ## Taking Effective Screenshots
 

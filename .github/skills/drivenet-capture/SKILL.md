@@ -36,13 +36,18 @@ Capture screenshots of windows or specific UI elements. Window captures automati
 
 ### Base64 Response (default)
 
-Returns an image object viewable inline by AI agents:
+The result holds two content blocks. The first is an MCP `image` block, which a client shows to
+the model as a picture:
+
+```json
+{ "type": "image", "mimeType": "image/png", "data": "iVBORw0KGgo..." }
+```
+
+The second is a `text` block that describes the image. It holds no image data:
 
 ```json
 {
-  "type": "image",
   "mimeType": "image/png",
-  "data": "iVBORw0KGgo...",
   "width": 800,
   "height": 600,
   "sizeBytes": 45678
@@ -63,8 +68,8 @@ Returns an image object viewable inline by AI agents:
 ### Oversized base64 auto-fallback
 
 When the default `base64` format is used and the encoded image would exceed the inline response
-budget, Drive.NET saves a decoded PNG under `.drive-net` and returns the file path instead of a
-JSON-wrapped base64 blob you would have to hand-decode:
+budget, Drive.NET saves a decoded PNG under `.drive-net` and returns the file path instead of an
+image block:
 
 ```json
 {
@@ -110,7 +115,7 @@ capture sessionId="..." target="element" elementId="e_panel1" padding=20 borderT
 - For README assets shown on GitHub, prefer `shadow=false` unless you verify the rendered page. GitHub dark theme can make a dark drop shadow read like a heavy border after inline scaling.
 - `gradientBackdrop` is enabled by default and composites a rainbow gradient behind windows with transparent or semi-transparent pixels (e.g. acrylic glass). Disable with `gradientBackdrop=false` to preserve raw alpha. The gradient is applied before shadow and border.
 - `imageFormat="jpg"` discards alpha and flattens transparency onto white before encoding. Use PNG (default) when alpha matters.
-- After capturing, visually inspect the screenshot for personally identifiable information (real names, emails, file paths with usernames, tokens). If PII is found, note the full file path and prompt the user via `askQuestions` before keeping or discarding the image.
+- A capture shows everything on screen. Before you keep or share one, read it for private data: user names and the paths that contain them, project, repository and folder names, other applications' window titles, and log lines, tokens or addresses. For a screenshot that will be published, stage the UI with fictional data before capturing, as the `drivenet-doc-screenshots` skill describes. If private data appears, tell the user which file it is and what it shows, and recapture rather than keep it.
 
 ## Complex Capture Patterns
 

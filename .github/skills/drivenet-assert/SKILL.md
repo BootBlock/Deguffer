@@ -33,7 +33,7 @@ Evaluate one or more assertion clauses against a connected session.
 | `windowHandle` | string | No | Scope the clause to one top-level window. |
 | `matchIndex` | int | No | 0-based match position when multiple elements match. |
 | `condition` | string | No | Condition to evaluate. Defaults to `exists`. |
-| `expected` | string | No | Expected value for comparison-style conditions. |
+| `expected` | string, boolean or number | No | Expected value for comparison-style conditions. A boolean or a number is converted to its text form, so `false` and `"false"` mean the same thing. |
 | `property` | string | No | Property name used by `propertyEquals`. |
 | `label` | string | No | Human-readable label for the clause result. |
 
@@ -73,6 +73,9 @@ assert sessionId="session-1" clauses=[{"path":"Button[name=OK]","matchIndex":0,"
 ### Rules
 
 - Use `assert` instead of `query` plus manual string parsing when the workflow only needs pass/fail verification.
+- Spell every clause field exactly as one of `automationId`, `name`, `nameContains`, `nameStartsWith`, `nameRegex`, `controlType`, `className`, `helpText`, `path`, `matchIndex`, `elementId`, `windowHandle`, `condition`, `expected` (or its alias `expectedValue`), `property` and `label`. A misspelt name, a name in the wrong case, and a value of the wrong JSON type are all errors that name the field, never a silently dropped clause.
+- Assert a disabled or off-screen element with `expected` set to `false` or `"false"`. `isEnabled` and `isVisible` accept only `true`, `false`, `1` and `0`.
+- Write a boolean UIA property as `"True"` or `"False"` under `propertyEquals`, which compares the property text exactly.
 - Add `label` to every clause that matters so failure output is readable in agent logs and CI.
 - Remember that `matchIndex` here is 0-based. This differs from `query` path resolution, which uses 1-based `matchIndex`.
 - Prefer `helpTextEquals`, `helpTextContains`, `itemStatusEquals`, and `itemStatusContains` over generic `propertyEquals` when those dedicated accessibility properties are what you actually care about.

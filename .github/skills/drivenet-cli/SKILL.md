@@ -1,6 +1,6 @@
 ---
 name: drivenet-cli
-description: "Use this skill to run Drive.NET CLI commands for one-shot desktop automation tasks from the terminal. Covers doctor, discover, pick, desktop, windows/window, find, inspect, interact, tree, wait_for, batch, playback, capture, demo, report, snapshot, test, lifecycle, assert, observe, record, and scaffold workflows, including window blocker assessment, selector diagnostics via --explain, deterministic target selection, replay helpers, session-start warning mode selection, mouseDown and mouseUp pointer-button control, and native-vs-UIA window-bounds provenance in `windows --json`. Keywords: Drive.NET, CLI, command line, terminal, doctor, discover, pick, desktop, windows, blockers, find, inspect, interact, tree, wait_for, batch, playback, capture, demo, report, snapshot, test, lifecycle, assert, observe, record, scaffold, explain, path, retry, DriveNet.Cli, dotnet run, one-shot, session-start-warning-mode, mouseDown, mouseUp, boundsSource, boundsNote, appMetadataBounds."
+description: "Use this skill to run Drive.NET CLI commands for one-shot desktop automation tasks from the terminal. Covers doctor, discover, pick, desktop, windows/window, find, inspect, interact, tree, wait_for, batch, playback, capture, demo, report, snapshot, test, lifecycle, assert, observe, record, overlay, and scaffold workflows, including window blocker assessment, selector diagnostics via --explain, deterministic target selection, replay helpers, session-start warning mode selection, automation overlay begin/finish workflow and progress, mouseDown, mouseUp, keyDown and keyUp held input, and native-vs-UIA window-bounds provenance in `windows --json`. Keywords: Drive.NET, CLI, command line, terminal, doctor, discover, pick, desktop, windows, blockers, find, inspect, interact, tree, wait_for, batch, playback, capture, demo, report, snapshot, test, lifecycle, assert, observe, record, overlay, scaffold, explain, path, retry, DriveNet.Cli, dotnet run, one-shot, session-start-warning-mode, mouseDown, mouseUp, keyDown, keyUp, pointerPath, boundsSource, boundsNote, appMetadataBounds."
 argument-hint: "[CLI command] [target process] [options]"
 user-invocable: true
 ---
@@ -11,7 +11,15 @@ Use this skill when you need quick one-shot automation or analysis from a termin
 
 Each process-targeting CLI command opens its own short-lived session internally when it needs to attach to a process.
 Separate Drive.NET controller processes can run concurrently against different target processes, but attach is exclusive per target process. If another MCP/CLI/VS Code instance is already attached to the same target process, the later attach fails fast with: *"Process '…' (PID …) is already connected by another Drive.NET MCP/CLI controller."* Disconnect the first controller or target a different process. This most commonly occurs when an IDE MCP session is active against the same app you are testing from the terminal.
-By default, that session shows a non-activating warning toast with a 1-second progress countdown before automation begins.
+By default, that session shows the agent's non-activating automation overlay: one window per agent that lists each command. It waits 1 second only when it newly appears. Because each command's session ends when the command exits, the overlay closes a few seconds after each command unless the agent holds it, so follow the overlay workflow below.
+
+## Overlay Workflow (Every Piece of Work)
+
+1. Before the first command that drives an application, run `DriveNet.Cli.exe overlay --action begin --label "<what the work is>"`. When you know how many commands the work takes, run `overlay --action plan --total <n> --label "<what the work is>"` instead; it holds the overlay in the same way and adds a progress bar.
+2. Run the commands. The overlay stays on screen between them, however long you pause to think, build or read output.
+3. After the last command, run `DriveNet.Cli.exe overlay --action finish`. Run it also when the work stops early on an error, before you report back.
+
+Without step 1 the overlay disappears and appears again between bursts of commands, and each new appearance costs the 1-second warning again. If you forget step 3, the overlay closes when the agent exits or after 10 minutes without a Drive.NET command (the user's idle limit). `overlay` commands are not listed on the overlay and start no session.
 `lifecycle --action launch` also uses the same warning configuration before Drive.NET launches a target app that may take focus.
 
 For iterative crash triage against an application under test, prefer a long-lived MCP session over repeated one-shot CLI commands. MCP `session status` on a terminated session preserves the durable `crashEvidence` block for the crashed target process, including correlated dumps, crash logs, and Windows Application event entries when available.
@@ -47,11 +55,11 @@ dotnet test tests/DriveNet.Tests.Integration/DriveNet.Tests.Integration.csproj -
 - Process-targeting commands require exactly one of `--process-name` (`-n`) or `--process-id` (`-p`).
 - Use `pick` when several matching processes exist and you want one exact PID before a later command attaches.
 - Different VS Code or terminal controller processes can automate different target processes at the same time, but the same target process can only be attached by one Drive.NET controller at a time.
-- Batch same-process work into one `batch` command whenever possible so the attach cost and 1-second warning toast happen only once.
+- Batch same-process work into one `batch` command whenever possible so the attach cost happens only once.
 - Use `playback` as the CLI replay entry point for recorded batch JSON, YAML suites, and YAML manifests.
-- After the first user-visible warning has already been shown, continuation CLI commands can pass `--continuation` (alias: `--no-session-start-warning`) to skip the repeated warning for that command.
-- Process-targeting commands also accept `--session-start-warning-mode toast|persistent` to choose the warning UI. The `persistent` mode keeps the bottom-right warning card visible for the lifetime of the command's session, and providing a mode also enables the warning unless `--no-session-start-warning` is present.
-- In text mode, one-shot process-targeting commands print a reuse hint after attach so terminal users get nudged toward `batch`, `playback`, or `--continuation`.
+- Process-targeting commands also accept `--session-start-warning-mode overlay|toast|persistent` to choose the warning UI. `overlay` is the default. The `toast` mode shows a 1-second top-centre countdown before each command's session, the `persistent` mode keeps the bottom-right warning card visible for the lifetime of the command's session, and providing a mode also enables the warning unless `--no-session-start-warning` is present.
+- With the `toast` or `persistent` mode, after the first user-visible warning has already been shown, continuation CLI commands can pass `--continuation` (alias: `--no-session-start-warning`) to skip the repeated warning for that command. The default `overlay` mode does not need it.
+- In text mode with the `toast` or `persistent` mode, one-shot process-targeting commands print a reuse hint after attach so terminal users get nudged toward `batch`, `playback`, or `--continuation`.
 - Process-targeting commands also accept `--session-start-warning` to force the warning back on for a specific command.
 - Selector-based commands accept either flat selectors (`--automation-id`, `--name`, `--control-type`, `--class-name`) or a hierarchical `--path`; do not mix them in the same command.
 - Use `--match-index` only when duplicate matches are expected and stable in order.
@@ -130,9 +138,9 @@ List or manage visible windows for a target process.
 | `--process-id`, `-p` | Target process ID. |
 | `--action` | `list` (default), `blockers`, `dismissBlocker`, `resize`, `move`, `minimize`, `maximize`, `restore`, `close`, or `bringToFront`. |
 | `--window-handle` | Required for actions other than `list` and `blockers`, optional for `dismissBlocker`. |
-| `--button-name` | Preferred button caption or automation ID for `dismissBlocker`. |
-| `--width`, `--height` | Required for `resize`. |
-| `--x`, `--y` | Required for `move`. |
+| `--button-name` | Preferred button caption or automation ID for `dismissBlocker`. When omitted, Drive.NET picks the button that closes the dialog without acting on its content, or fails and lists the buttons if there is none. |
+| `--width`, `--height` | Required for `resize`. A minimized window stays minimized and takes the new size when restored. |
+| `--x`, `--y` | Required for `move`, in screen pixels. A minimized window stays minimized and takes the new position when restored. |
 | `--json` | JSON output. |
 
 ```bash
@@ -143,7 +151,7 @@ DriveNet.Cli.exe windows -p 12345 --json
 DriveNet.Cli.exe windows -n DriveNet.TestApp.WinForms --action bringToFront --window-handle 0x2A
 ```
 
-Output includes window handle, state, bounds, title, and in `--json` mode the same native-vs-UIA-vs-DWM-vs-app-metadata bounds provenance exposed by the MCP `window list` tool (`boundsSource`, `boundsNote`, `nativeWindowRect`, optional `uiaBoundingRect`, optional `boundsDeltaFromNative`, optional `dwmExtendedFrameBounds`, optional `appMetadataBounds`). On reused popup hosts, `boundsSource` can be `uiaBoundingRect`, `dwmExtendedFrameBounds`, or `appMetadata` when the native rect still exposes the hidden-popup origin sentinel rather than the anchored popup position. When `suspectReusedPopup` is `true` and `appMetadataBounds` is absent, inspect app-emitted `helpText` or `itemStatus` directly for authoritative popup geometry. For `--action blockers`, the command returns a focused blocking-window assessment and exits with code `1` when a blocking window is present.
+Output includes window handle, state, bounds, title, and in `--json` mode the same native-vs-UIA-vs-DWM-vs-app-metadata bounds provenance exposed by the MCP `window list` tool (`boundsSource`, `boundsNote`, `nativeWindowRect`, optional `uiaBoundingRect`, optional `boundsDeltaFromNative`, optional `dwmExtendedFrameBounds`, optional `appMetadataBounds`). On reused popup hosts, `boundsSource` can be `uiaBoundingRect`, `dwmExtendedFrameBounds`, or `appMetadata` when the native rect still exposes the hidden-popup origin sentinel rather than the anchored popup position. When `suspectReusedPopup` is `true` and `appMetadataBounds` is absent, inspect app-emitted `helpText` or `itemStatus` directly for authoritative popup geometry. For `--action blockers`, the command returns a focused blocking-window assessment and exits with code `1` when a blocking window is present. `--action resize`, `move`, `minimize`, `maximize`, `restore` and `close` read the window back and report what they observed, and exit with code `1` when the window did not take the requested position or size, reach the expected state, or close. `move` and `resize` return `windowState`, `boundsKind` and `bounds`.
 
 For popup-hosted drags, diff `windows --json` before and after `mouseUp`. If the same popup host moved while held but comes back hidden at its anchor after release, the app rejected or reverted the drop during its own release or capture handling.
 
@@ -195,7 +203,7 @@ If the selector matches more than one element, run `find` with `--explain` first
 
 ### `interact`
 
-Perform one action against a uniquely matched element, or use the clipboard, mouseDown, mouseUp, or mouseMove without attaching to an element.
+Perform one action against a uniquely matched element, or use the clipboard, mouseDown, mouseUp, mouseMove, pointerPath, keyDown, or keyUp without attaching to an element.
 
 ```bash
 DriveNet.Cli.exe interact -n MyApp --action click --automation-id SubmitButton
@@ -207,12 +215,15 @@ DriveNet.Cli.exe interact --action mouseUp --destination-x 920 --destination-y 4
 DriveNet.Cli.exe interact --action mouseMove --destination-x 500 --destination-y 300
 DriveNet.Cli.exe interact --action mouseMove --source-x 100 --source-y 200 --destination-x 800 --destination-y 600 --mouse-button left --duration-ms 1000
 DriveNet.Cli.exe interact --action mouseMove --destination-x 900 --destination-y 420 --duration-ms 800 --motion-profile exaggerated --motion-exaggeration 85
+DriveNet.Cli.exe interact --action pointerPath --waypoints '[{"x":400,"y":300},{"x":900,"y":420,"durationMs":600}]' --mouse-button left
+DriveNet.Cli.exe interact --action keyDown --keys Ctrl
+DriveNet.Cli.exe interact --action keyUp --keys Ctrl
 DriveNet.Cli.exe interact -n MyApp --action hover --automation-id SubmitButton --dwell-ms 1000 --motion-profile hesitant --motion-exaggeration 70
 DriveNet.Cli.exe interact -n MyApp --action hover --automation-id SubmitButton --hover-mode transit --approach-from left --velocity-ms 300 --dwell-ms 1000
 DriveNet.Cli.exe interact -n MyApp --action moveTo --automation-id SubmitButton --position outside-right --offset-px 24 --duration-ms 400 --motion-profile steady
 ```
 
-Use `--target-*` selector options for `dragTo`, `--highlight` to flash the source element before the action, and `--dwell-ms` to control hover duration. `mouseDown` and `mouseUp` are useful for held-button workflows such as crosshair pickers or multi-step drags; when you omit coordinates, Drive.NET uses the current cursor position. `--motion-profile` and `--motion-exaggeration` tune the humanized pointer path for `mouseMove`, `hover`, and `moveTo`: `steady` stays straighter, `natural` is the default, `exaggerated` adds broader arcs and correction, and `hesitant` introduces more uneven cadence. Set `--mouse-button left` to simulate a held drag during `mouseMove`. `--hover-mode transit` plus `--approach-from` and `--velocity-ms` gives the CLI the same authentic boundary-crossing hover path as MCP `interact`. `--position` and `--offset-px` make `moveTo` useful for parking the pointer outside a control without raw coordinates. For top-edge appbar elements, Drive.NET automatically uses a horizontal approach path to avoid crossing the popup zone below; for neighbouring flyout panels, the smooth exit path ensures clean `WM_MOUSELEAVE` triggering for popup handoff.
+Use `--target-*` selector options for `dragTo`, `--highlight` to flash the source element before the action, and `--dwell-ms` to control hover duration. `mouseDown` and `mouseUp` are useful for held-button workflows such as crosshair pickers or multi-step drags; when you omit coordinates, Drive.NET uses the current cursor position. `--motion-profile` and `--motion-exaggeration` tune the humanized pointer path for `mouseMove`, `hover`, and `moveTo`: `steady` stays straighter, `natural` is the default, `exaggerated` adds broader arcs and correction, and `hesitant` introduces more uneven cadence. With `--mouse-button left`, `mouseMove` and `pointerPath` press and release the button when it is up, and keep it held after `mouseDown`, so a drag can span several commands until `mouseUp`. `keyDown` and `keyUp` hold a modifier such as `Ctrl` around a drag. A CLI command has no session, so a button or key it holds stays held after the process exits until `mouseUp` or `keyUp`. `--hover-mode transit` plus `--approach-from` and `--velocity-ms` gives the CLI the same authentic boundary-crossing hover path as MCP `interact`. `--position` and `--offset-px` make `moveTo` useful for parking the pointer outside a control without raw coordinates. For top-edge appbar elements, Drive.NET automatically uses a horizontal approach path to avoid crossing the popup zone below; for neighbouring flyout panels, the smooth exit path ensures clean `WM_MOUSELEAVE` triggering for popup handoff.
 
 Generic held-button drags are supported, but popup-hosted flyouts can still apply app-specific release or capture logic on `mouseUp`. Prefer one MCP session or a `batch` flow when you need to compare `windows --json` before and after release and re-query popup content against the popup `--window-handle`.
 
@@ -231,6 +242,7 @@ Render the UI Automation tree for a process root or a specific matched subtree.
 | `--max-nodes` | Maximum returned nodes before the tree is truncated in-band (1-5000, default: 250). |
 | `--detail` | `summary` (default) or `verbose`. |
 | `--annotate-probable-artifacts` | Annotate framework/provider artifacts like WinUI TitleBar placeholders. |
+| `--view` | UI Automation view to walk: `control` (default), `content`, or `raw`. `raw` also returns the elements a provider excludes from the accessibility views; pair it with `--detail verbose`. |
 | `--json` | JSON output. |
 
 ```bash
@@ -283,7 +295,7 @@ DriveNet.Cli.exe batch -n MyApp --steps '[{"tool":"query","action":"explain","pa
 
 Exactly one of `--steps` or `--steps-file` is required.
 
-The CLI batch contract matches the MCP `batch` tool contract, including `saveAs`, `save`, `${name}` substitution, `when`, `retry`, `continueOnError`, per-step `delayBeforeMs` / `delayAfterMs`, and the batch-only `pointerPath` action.
+The CLI batch contract matches the MCP `batch` tool contract, including `saveAs`, `save`, `${name}` substitution, `when`, `retry`, `continueOnError`, per-step `delayBeforeMs` / `delayAfterMs`, `keyDown` and `keyUp`, and `pointerPath`.
 
 Query batch steps also support `action: "resolve"` when you want one fresh element id or a fast ambiguity error instead of a larger `find` result.
 
@@ -339,7 +351,7 @@ DriveNet.Cli.exe capture -n MyApp --border-thickness 3 --border-color "#336699"
 DriveNet.Cli.exe capture -n MyApp --shadow --image-format jpg -o evidence/screenshot.jpg
 ```
 
-When no selector or window handle is given, the command captures the main window. Window captures automatically trim invisible non-client resize borders when DWM reports a tighter visible frame. Use `--format base64 --json` when a workflow needs the inline image payload and metadata instead of a file write. `--border-thickness` and `--shadow` can be combined; shadow is rendered first, then the border frames the result. For README assets shown on GitHub, prefer omitting `--shadow` unless you verify the rendered page. `--image-format jpg` flattens transparency onto white; file extensions are adjusted automatically. After capturing, visually inspect the screenshot for personally identifiable information (real names, emails, file paths with usernames, tokens). If PII is found, note the full file path and prompt the user before keeping or discarding the image.
+When no selector or window handle is given, the command captures the main window. Window captures automatically trim invisible non-client resize borders when DWM reports a tighter visible frame. Use `--format base64 --json` when a workflow needs the inline image payload and metadata instead of a file write. `--border-thickness` and `--shadow` can be combined; shadow is rendered first, then the border frames the result. For README assets shown on GitHub, prefer omitting `--shadow` unless you verify the rendered page. `--image-format jpg` flattens transparency onto white; file extensions are adjusted automatically. A capture shows everything on screen. Before you keep or share one, read it for private data: user names and the paths that contain them, project, repository and folder names, other applications' window titles, and log lines, tokens or addresses. For a screenshot that will be published, stage the UI with fictional data before capturing, as the `drivenet-doc-screenshots` skill describes. If private data appears, tell the user which file it is and what it shows, and recapture rather than keep it.
 
 ### `report`
 
@@ -386,7 +398,7 @@ Launch, stop, or inspect a target application's process state directly from the 
 | `--single-instance` | Policy for existing instances: `reuse` or `restart`. |
 | `--process-name` | Process name for single-instance family matching. |
 | `--process-id` | Process ID (required for `stop` and `status`). |
-| `--grace-period-ms` | Wait time before force-kill on `stop` (default: 5000). |
+| `--grace-period-ms` | Wait time before force-kill on `stop` (default: 5000), shared by `WM_CLOSE` to every visible window and then `WM_QUERYENDSESSION`/`WM_ENDSESSION` to every top-level window. The JSON output reports `stoppedBy`, each attempt in `attempts`, and a `warning` after a forced kill. |
 | `--json` | JSON output. |
 
 ```bash
@@ -433,7 +445,7 @@ DriveNet.Cli.exe test --manifest tests/definitions/companion/manifest.yaml --res
 
 Use `--result-json` whenever an agent or script will inspect the run afterward.
 
-For VS Code extension testing, spawn the Extension Development Host via F5 and use `attach_only: true` with `process_name: Code` and `window_title_regex: '\[Extension Development Host\]'` in the suite's `app` block. Do not use `lifecycle launch` for VS Code — Electron's singleton mutex prevents a second instance. Ensure no other Drive.NET session is attached to the same `Code` PID before running the test. See [docs/yaml-test-runner.md — Testing VS Code / Electron Extensions](../../../docs/yaml-test-runner.md#testing-vs-code--electron-extensions) for a full YAML pattern.
+For VS Code extension testing, spawn the Extension Development Host via F5 and use `attach_only: true` with `process_name: Code` and `window_title_regex: '\[Extension Development Host\]'` in the suite's `app` block. Do not use `lifecycle launch` for VS Code: its single-instance lock prevents a second instance, even with a unique `--user-data-dir`. Ensure no other Drive.NET session is attached to the same `Code` PID before running the test. See [docs/yaml-test-runner.md — Testing VS Code / Electron Extensions](../../../docs/yaml-test-runner.md#testing-vs-code--electron-extensions) for a full YAML pattern.
 
 ### `record`
 
@@ -446,6 +458,21 @@ DriveNet.Cli.exe record --action start --process-name MyApp --format yaml_suite 
 ```
 
 Use `record` when you want to capture a reproducible workflow first, then refine the generated batch or YAML output afterward. Replay the result with `playback --input ...`.
+
+### `overlay`
+
+Hold, show progress on, move, or close the automation overlay of the agent that runs the command.
+
+```bash
+DriveNet.Cli.exe overlay --action begin --label "Verify the settings page"
+DriveNet.Cli.exe overlay --action plan --total 12 --label "Fill in the order form"
+DriveNet.Cli.exe overlay --action step
+DriveNet.Cli.exe overlay --action move --corner topLeft --monitor 1
+DriveNet.Cli.exe overlay --action status --json
+DriveNet.Cli.exe overlay --action finish
+```
+
+`begin` shows the overlay and holds it on screen between commands until `finish`. `plan` declares how many commands the work will take and holds the overlay in the same way, and each later command fills one step; `--total 0` clears the plan but keeps the hold. `step` advances by one, or sets `--completed`. `move` takes `bottomRight`, `topRight`, `bottomLeft`, `topLeft`, or `auto`, but a position the user dragged the overlay to, or a corner fixed in the Helper's settings, wins. `finish` ends the hold and closes the overlay now. `status` reports `held` in its JSON. `overlay` calls are not listed and do not count as steps. The command fails when `DriveNet.Overlay.exe` is missing beside the CLI or cannot start. See the `drivenet-overlay` skill.
 
 ### `demo`
 
