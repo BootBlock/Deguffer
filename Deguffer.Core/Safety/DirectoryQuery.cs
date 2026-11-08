@@ -26,9 +26,9 @@ namespace Deguffer.Core.Safety;
 /// the same processor time, 9.5 seconds on one thread. That tree took 6.8 to 9.1 seconds on one thread
 /// either way, against 3.4 to 7.6 for the same 80,000 folders two deep, so depth may cost something,
 /// but not in parsing the name passed here. Cold was not timed: the parent was listed moments before
-/// its child is opened, so its part of the path is probably cached either way. The change would also hold a
-/// counted handle open on every directory with children still waiting, which can delay the removal of
-/// a directory a tool deletes and recreates during a scan.</para>
+/// its child is opened, so its part of the path is probably cached either way. The change would also
+/// hold a counted handle open on every directory with children still waiting, which can delay the
+/// removal of a directory a tool deletes and recreates during a scan.</para>
 ///
 /// <para><b>§5.3: nothing throws.</b> Every failure is read as the Win32 error its <c>NTSTATUS</c> maps
 /// to, which is the error <c>CreateFileW</c> and the runtime's read reported, so
