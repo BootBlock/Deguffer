@@ -274,6 +274,18 @@ public interface ILiveTreeInspector
     ReachedFolder Reach(string path);
 
     /// <summary>
+    /// The reading the next answer comes from: the snapshot held, or one taken now where none is.
+    ///
+    /// <para>For a caller that builds something from what this inspector reads, and asks the same
+    /// question many times within one reading. The check at the clean builds a provider's question
+    /// from where programs are, which for <c>obj</c> means listing folders and parsing solutions, and
+    /// a clean of hundreds of steps would otherwise build it again for every step from an identical
+    /// reading. Asked after <see cref="DiscardOlderThan"/>, so what is kept against it is never older
+    /// than the bound that call kept.</para>
+    /// </summary>
+    LiveTreeReading Reading(CancellationToken ct = default);
+
+    /// <summary>
     /// Discard any cached snapshot, so every provider in one planning pass sees the same machine.
     /// The same contract as <see cref="IProcessInspector.Invalidate"/>.
     /// </summary>

@@ -22,16 +22,17 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 /// <param name="directory">The directory the veto asked about, and the project it belongs to.</param>
 /// <param name="questions">
-/// The veto's own rule for what to ask, applied again rather than its answer remembered. Unreal's
-/// logs are found by listing the project's <c>Saved\Logs</c>, and an editor opened on the project
-/// after the preview may have written the first one there. A solution's folder is a workspace only
-/// while a program is in it and only for the projects the solution names now, and Visual Studio
-/// opened after the preview, or a project added to its solution since, is the one this is for.
+/// The veto's own rule for what to ask, applied again for each reading rather than its answer at the
+/// preview remembered, and shared with every other check the veto handed out. Unreal's logs are found
+/// by listing the project's <c>Saved\Logs</c>, and an editor opened on the project after the preview
+/// may have written the first one there. A solution's folder is a workspace only while a program is
+/// in it and only for the projects the solution names now, and Visual Studio opened after the
+/// preview, or a project added to its solution since, is the one this is for.
 /// </param>
 internal sealed class LiveTreeCheck(
     ILiveTreeInspector inspector,
     RecognisedBuildDirectory directory,
-    Func<CancellationToken, LiveTreeQuestion> questions) : IUseCheck
+    LiveTreeQuestionSource questions) : IUseCheck
 {
     public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
     {
@@ -40,7 +41,7 @@ internal sealed class LiveTreeCheck(
         // because building it can read the table.
         inspector.DiscardOlderThan(IUseCheck.ReadingLimit);
 
-        var query = questions(ct).Ask(directory);
+        var query = questions.For(inspector.Reading(ct), ct).Ask(directory);
         var findings = inspector.FindLive([query], ct);
 
         IReadOnlyList<InUseNow> live =

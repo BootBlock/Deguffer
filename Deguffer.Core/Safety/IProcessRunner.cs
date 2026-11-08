@@ -148,7 +148,7 @@ public sealed class ProcessRunner : IProcessRunner
 
         string? environment = null;
 
-        if (run.Environment is { } variables && (environment = ToolEnvironmentText.Encode(variables, out var refused)) is null)
+        if (EnvironmentFor(run) is { } variables && (environment = ToolEnvironmentText.Encode(variables, out var refused)) is null)
         {
             return new CommandOutcome(
                 -1,
@@ -216,6 +216,31 @@ public sealed class ProcessRunner : IProcessRunner
 
             return new CommandOutcome(tool.ExitCode, tool.StandardOutput, tool.StandardError);
         }
+    }
+
+    /// <summary>
+    /// Every variable the tool is to start with, or null where it inherits this process's own block
+    /// unchanged. A run that unsets a variable is given a block of its own even when it names none,
+    /// because inheriting would hand the tool the very value it was to start without.
+    /// </summary>
+    private static IReadOnlyDictionary<string, string>? EnvironmentFor(ToolRun run)
+    {
+        if (run.Unset.Count == 0)
+        {
+            return run.Environment;
+        }
+
+        var kept = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        foreach (var (name, value) in run.Environment ?? UserEnvironment.ProcessEnvironment())
+        {
+            if (!run.Unset.Contains(name))
+            {
+                kept[name] = value;
+            }
+        }
+
+        return kept;
     }
 
     /// <summary>

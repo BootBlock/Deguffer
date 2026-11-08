@@ -63,14 +63,78 @@ public sealed class ProcessRunnerTests : IDisposable
 
         Assert.True(outcome.Succeeded, outcome.Message);
 
-        var names = outcome.StandardOutput
-            .Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries)
-            .Select(line => line[..line.IndexOf('=', 1)])
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var names = NamesIn(outcome.StandardOutput);
 
         Assert.Contains("DEGUFFER_STARTED_WITH=given", outcome.StandardOutput, StringComparison.Ordinal);
         Assert.DoesNotContain(own, names);
     }
+
+    /// <summary>
+    /// A variable a run unsets is not handed on from Deguffer's own block, whatever case it is named
+    /// in, while every other variable Deguffer has still is.
+    ///
+    /// <para>Set on this process under a name no other test uses, so the tests running beside this one
+    /// start their tools as they always did.</para>
+    /// </summary>
+    [Fact]
+    public async Task AProgramStartedWithoutAVariableDoesNotInheritItAndInheritsTheRest()
+    {
+        const string inherited = "DEGUFFER_RUNNER_UNSET_TEST";
+        const string own = "USERPROFILE";
+        Assert.NotNull(Environment.GetEnvironmentVariable(own));
+        Environment.SetEnvironmentVariable(inherited, "inherited");
+
+        try
+        {
+            var outcome = await new ProcessRunner(Path.Combine(_temp.Path, "tools")).RunAsync(
+                Cmd,
+                "/d /c set",
+                ToolRun.Query.Without(new HashSet<string> { inherited.ToLowerInvariant() }),
+                CancellationToken.None);
+
+            Assert.True(outcome.Succeeded, outcome.Message);
+
+            var names = NamesIn(outcome.StandardOutput);
+
+            Assert.DoesNotContain(inherited, names);
+            Assert.Contains(own, names);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(inherited, null);
+        }
+    }
+
+    /// <summary>A run given an environment of its own and told to unset a variable starts with the rest of that one.</summary>
+    [Fact]
+    public async Task AProgramStartedWithAnEnvironmentAndWithoutAVariableReadsTheRestOfThatOne()
+    {
+        var environment = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["SystemRoot"] = Environment.GetEnvironmentVariable("SystemRoot")!,
+            ["DEGUFFER_KEPT"] = "kept",
+            ["DEGUFFER_DROPPED"] = "dropped",
+        };
+
+        var outcome = await new ProcessRunner(Path.Combine(_temp.Path, "tools")).RunAsync(
+            Cmd,
+            "/d /c set",
+            ToolRun.Query.StartedWith(environment).Without(new HashSet<string> { "DEGUFFER_DROPPED" }),
+            CancellationToken.None);
+
+        Assert.True(outcome.Succeeded, outcome.Message);
+
+        var names = NamesIn(outcome.StandardOutput);
+
+        Assert.Contains("DEGUFFER_KEPT", names);
+        Assert.DoesNotContain("DEGUFFER_DROPPED", names);
+        Assert.DoesNotContain("USERPROFILE", names);
+    }
+
+    private static HashSet<string> NamesIn(string set) =>
+        set.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line[..line.IndexOf('=', 1)])
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// An environment holding a variable Windows cannot hand on whole is not passed on in part: the

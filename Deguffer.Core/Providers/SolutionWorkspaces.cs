@@ -13,6 +13,11 @@ namespace Deguffer.Core.Providers;
 /// added a project to, between the two is what that check is for, and a reading kept from the preview
 /// would not name the new project.</para>
 ///
+/// <para><b>Kept for exactly as long as the table is.</b> Every check at the clean that answers from
+/// one reading of the table shares the one built from it (see <see cref="LiveTreeQuestionSource"/>),
+/// so a solution changed or opened during a clean is read again within
+/// <see cref="Execution.IUseCheck.ReadingLimit"/>, the bound the table itself is read again within.</para>
+///
 /// <para><b>Only the places a program is</b>, because a folder with no program in it is no evidence
 /// whatever its solutions say. <b>Only inside an approved root</b>, the consent every source-tree rule
 /// keeps: a program somewhere else is no reason to look inside its folder.</para>
