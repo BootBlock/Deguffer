@@ -77,8 +77,9 @@ public sealed class TrackedFileCheckGitTests : IDisposable
 
     /// <summary>
     /// Ignoring case must not loosen what is found tracked. A name holding glob characters is still
-    /// found in another case. A sibling whose name only begins with the candidate's is not inside
-    /// it. A directory holding only untracked files holds nothing tracked, which is what lets the
+    /// found in another case, whether it is asked about literally or, outside ASCII, by a glob in
+    /// which those characters are escaped. A sibling whose name only begins with the candidate's is
+    /// not inside it. A directory holding only untracked files holds nothing tracked, which is what lets the
     /// check clear ordinary intermediate output at all, and that holds where the glob asked about
     /// <c>Ärger</c> also lists the tracked files of <c>Berger</c>.
     /// </summary>
@@ -88,17 +89,19 @@ public sealed class TrackedFileCheckGitTests : IDisposable
         await CommitAsync(
             Path.Combine("App[Legacy]", "obj", "committed.props"),
             Path.Combine("Lib", "objects", "committed.props"),
-            Path.Combine("Berger", "obj", "committed.props"));
+            Path.Combine("Berger", "obj", "committed.props"),
+            Path.Combine("Ä[b]x", "obj", "committed.props"));
         Write(Path.Combine("Lib", "obj", "untracked.props"));
         Write(Path.Combine("Ärger", "obj", "untracked.props"));
 
         var glob = Path.Combine(_repository, "APP[legacy]", "OBJ");
+        var escaped = Path.Combine(_repository, "ä[B]X", "obj");
         var prefix = Path.Combine(_repository, "Lib", "obj");
         var lookalike = Path.Combine(_repository, "Ärger", "obj");
 
-        var findings = await CheckAsync([glob, prefix, lookalike]);
+        var findings = await CheckAsync([glob, escaped, prefix, lookalike]);
 
-        Assert.Equal([glob], findings.Tracked);
+        Assert.Equal([glob, escaped], findings.Tracked.Order(StringComparer.OrdinalIgnoreCase));
         Assert.Empty(findings.Unanswered);
     }
 
