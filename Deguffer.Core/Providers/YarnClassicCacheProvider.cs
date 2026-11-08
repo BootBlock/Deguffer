@@ -179,12 +179,12 @@ public sealed class YarnClassicCacheProvider : CleanupProviderBase
             return EmptyPlan(declined);
         }
 
-        if (NothingToPlanFor(root, $"Yarn is installed but has cached nothing yet ({root} does not exist).") is { } nothing)
+        if (NothingToPlanFor(root, $"Yarn is installed but has cached nothing yet ({root} does not exist).", out var rootIsLink) is { } nothing)
         {
             return nothing;
         }
 
-        switch (WhyNotRemoved(root))
+        switch (WhyNotRemoved(root, rootIsLink))
         {
             case { Unlisted: true }:
                 return UnreadableRootPlan(root);
@@ -272,9 +272,10 @@ public sealed class YarnClassicCacheProvider : CleanupProviderBase
     /// deletes every entry in it, so a link or anything but a versioned cache folder would go through
     /// a rule that cannot name it.
     /// </summary>
-    private static (bool Unlisted, string? Why) WhyNotRemoved(string root)
+    /// <param name="isLink">Whether the root is a link, from the probe that found it there.</param>
+    private static (bool Unlisted, string? Why) WhyNotRemoved(string root, bool isLink)
     {
-        if (LongPath.IsReparsePoint(root))
+        if (isLink)
         {
             return (false, $"Leaving '{root}' alone: it is a link to somewhere else, and Deguffer does not look through a link.");
         }

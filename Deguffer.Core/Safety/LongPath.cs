@@ -286,6 +286,20 @@ public static partial class LongPath
     public static PathPresence ProbeFile(string path) => Probe(path, EntryKind.File, out _, out _);
 
     /// <summary>
+    /// The same answer for a file, with whether it is a link taken from the same attribute read, as
+    /// <see cref="ProbeDirectory(string, out bool?)"/> gives it for a directory and with the same
+    /// null.
+    /// </summary>
+    public static PathPresence ProbeFile(string path, out bool? isLink)
+    {
+        var presence = Probe(path, EntryKind.File, out var described, out _);
+
+        isLink = described?.HasFlag(FileAttributes.ReparsePoint);
+
+        return presence;
+    }
+
+    /// <summary>
     /// The same three-state answer for a path that may be either kind, which is what §5.6 asks of a
     /// protected path. <see cref="PathPresence.Present"/> exactly where
     /// <c>FileExists || DirectoryExists</c> is true, so it answers everything that pair answers and

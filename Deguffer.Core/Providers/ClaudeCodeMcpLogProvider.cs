@@ -149,12 +149,12 @@ public sealed class ClaudeCodeMcpLogProvider : CleanupProviderBase
     {
         var cache = CacheFolder;
 
-        if (NothingToPlanFor(cache, "Claude Code has written no MCP server logs for this user.") is { } nothing)
+        if (NothingToPlanFor(cache, "Claude Code has written no MCP server logs for this user.", out var cacheIsLink) is { } nothing)
         {
             return nothing;
         }
 
-        if (LongPath.IsReparsePoint(cache))
+        if (cacheIsLink)
         {
             return UnexaminedPlan(
                 $"Leaving '{cache}' alone: it is a link to somewhere else, and Deguffer does not look through a link.");
@@ -237,7 +237,7 @@ public sealed class ClaudeCodeMcpLogProvider : CleanupProviderBase
     {
         var cache = CacheFolder;
 
-        if (!LongPath.DirectoryExists(cache) || LongPath.IsReparsePoint(cache))
+        if (LongPath.ProbeDirectory(cache, out var cacheIsLink) is not PathPresence.Present || cacheIsLink is true)
         {
             return null;
         }

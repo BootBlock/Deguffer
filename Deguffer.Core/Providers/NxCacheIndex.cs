@@ -76,7 +76,7 @@ internal sealed partial record NxCacheIndex(NxIndexReading Reading, IReadOnlyLis
     /// <summary>Read the databases in <paramref name="folder"/>.</summary>
     public static NxCacheIndex Read(string folder)
     {
-        switch (LongPath.ProbeDirectory(folder))
+        switch (LongPath.ProbeDirectory(folder, out var folderIsLink))
         {
             case PathPresence.Absent:
                 return new NxCacheIndex(NxIndexReading.Absent, []);
@@ -86,7 +86,7 @@ internal sealed partial record NxCacheIndex(NxIndexReading Reading, IReadOnlyLis
         }
 
         // A link would make the folder somewhere else's, and what is there was never classified.
-        if (LongPath.IsReparsePoint(folder) || FolderEntries.Of(folder) is not { } entries)
+        if (folderIsLink is true || FolderEntries.Of(folder) is not { } entries)
         {
             return new NxCacheIndex(NxIndexReading.Unknown, []);
         }

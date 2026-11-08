@@ -201,12 +201,12 @@ public sealed class ComposerCacheProvider : CleanupProviderBase
 
         var cache = settings.Cache.Folder!;
 
-        if (NothingToPlanFor(cache, $"Composer is installed but has cached nothing yet ({cache} does not exist).") is { } nothing)
+        if (NothingToPlanFor(cache, $"Composer is installed but has cached nothing yet ({cache} does not exist).", out var cacheIsLink) is { } nothing)
         {
             return nothing;
         }
 
-        switch (WhyNotEmptied(cache))
+        switch (WhyNotEmptied(cache, cacheIsLink))
         {
             case { Unlisted: true }:
                 return UnreadableRootPlan(cache);
@@ -309,9 +309,10 @@ public sealed class ComposerCacheProvider : CleanupProviderBase
     /// clear-cache follows a link to empty what it points at, and empties every entry it finds, so a
     /// link or an entry Composer did not make would be removed through a rule that cannot name it.
     /// </summary>
-    private static (bool Unlisted, string? Why) WhyNotEmptied(string cache)
+    /// <param name="isLink">Whether the cache is a link, from the probe that found it there.</param>
+    private static (bool Unlisted, string? Why) WhyNotEmptied(string cache, bool isLink)
     {
-        if (LongPath.IsReparsePoint(cache))
+        if (isLink)
         {
             return (false, $"Leaving '{cache}' alone: it is a link to somewhere else, and Composer's clear-cache would "
                 + "empty the folder it points at.");

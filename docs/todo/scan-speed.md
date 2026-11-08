@@ -96,7 +96,7 @@ Each needs #466 for its test.
 
 | Issue | Note |
 | --- | --- |
-| #478 | Low I/O priority for a raced build. #477 found the disk queue a cause only cold, for a build of another volume on the walk's disk. |
+| #478 | Low I/O priority for a raced build. #477 found the disk queue a cause only cold, for a build of another volume on the walk's disk. Done: a build reads at low priority only while a walk on one of its disks is in flight, because one read low throughout took 2 to 11 times as long with nothing racing it. Cold, a walk beside another volume's build went from 2.68 and 3.03 times as long as alone to 0.99 and 1.03 (`after-the-scanner.md` item 7). |
 | #481 | One subtree traversal for every age guard. |
 | #483 | A string decoded for each hard link's name and almost never kept. |
 | #544 | A read through a volume's handle slows the next walk of that volume without reading the drive: the cause #477 found. Done: NTFS flushes the volume at a handle's first read past 8 KiB, which no other way of reading the table avoids, so the build now makes that read beside the raced walk rather than before it (`after-the-scanner.md` item 7). The first walk of the volume after the flush still waits on a checkpoint of its log. |

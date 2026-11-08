@@ -77,6 +77,12 @@ finally
 
 static int Benchmark(BenchmarkRequest request, ScanTuner tuner, RemovalSite? site, TableCensus? census)
 {
+    var built = $@"{request.Drive}:\";
+    var relation = request.Route is Route.Race
+        ? DiskRelations.Of(request.Path[0], tuner.StorageOf(request.Path), request.Drive, tuner.StorageOf(built))
+        : DiskRelation.Unknown;
+    var buildYields = RaceRoute.BuildYields(request.BuildYields, relation);
+
     var route = request.Route switch
     {
         Route.Walk => new RouteRun(ct => WalkRoute.Run(request.Path, request.Walk, ct)),
@@ -89,9 +95,17 @@ static int Benchmark(BenchmarkRequest request, ScanTuner tuner, RemovalSite? sit
         Route.Clean => new CleanRoute(
             site!, request.Trees, request.Tree, UserEnvironment.Current, SystemDirectories.Current, VolumeInventory.Current).Timed,
         Route.Race => RaceRoute.On(
-            VolumeMftSourceFactory.Default, request.Path, request.Racer, request.Walk, request.Drive, request.Table, request.BeforePart).Timed,
+            VolumeMftSourceFactory.Default,
+            request.Path,
+            request.Racer,
+            request.Walk,
+            request.Drive,
+            request.Table,
+            buildYields,
+            request.BeforePart).Timed,
         Route.Scan => AutoScanRoute.On(VolumeMftSourceFactory.Default, request.Path, tuner),
-        _ => new RouteRun(ct => TableRoutes.Run(request.Route, VolumeMftSourceFactory.Default, request.Path, request.Table, ct)),
+        _ => new RouteRun(ct => TableRoutes.Run(
+            request.Route, VolumeMftSourceFactory.Default, request.Path, request.Table, opened: null, ct)),
     };
 
     using var cancel = new CancellationTokenSource();
@@ -148,8 +162,6 @@ static int Benchmark(BenchmarkRequest request, ScanTuner tuner, RemovalSite? sit
         return 4;
     }
 
-    var built = $@"{request.Drive}:\";
-
     Console.Out.Write(Report.Render(
         request.Route,
         request.Route is Route.Race
@@ -157,8 +169,9 @@ static int Benchmark(BenchmarkRequest request, ScanTuner tuner, RemovalSite? sit
                 request.Racer,
                 request.Walk,
                 request.Drive,
-                DiskRelations.Of(request.Path[0], tuner.StorageOf(request.Path), request.Drive, tuner.StorageOf(built)),
+                relation,
                 request.Table,
+                buildYields,
                 request.BeforePart is not null)
             : Tuning.Describe(request.Route, request.Walk, request.Table, request.Snapshots, request.ReadBy, request.Tree, request.Trees),
         [.. request.Folders.Concat(request.Route is Route.Race ? [built] : []).Select(MeasuredPlace.Of).Distinct()],

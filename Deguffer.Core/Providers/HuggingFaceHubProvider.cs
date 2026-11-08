@@ -263,12 +263,12 @@ public sealed class HuggingFaceHubProvider : CleanupProviderBase
                 + $"{declined} It is leaving it alone.");
         }
 
-        if (NothingToPlanFor(hub, $"The Hugging Face tool has downloaded nothing yet ({hub} does not exist).") is { } nothing)
+        if (NothingToPlanFor(hub, $"The Hugging Face tool has downloaded nothing yet ({hub} does not exist).", out var hubIsLink) is { } nothing)
         {
             return nothing;
         }
 
-        if (LongPath.IsReparsePoint(hub))
+        if (hubIsLink)
         {
             return UnexaminedPlan(
                 $"Leaving '{hub}' alone: it is a link to somewhere else, and Deguffer does not look through a link.");

@@ -11,6 +11,10 @@ internal sealed class OpenedVolume(IRawVolume volume, NtfsBootSector geometry, M
     // one owner at every moment: this, then the source, or nobody once it is closed.
     private IRawVolume? _volume = volume;
 
+    // The volume as it was opened, for its priority alone: a caller raises the priority while the
+    // source the volume went to is reading, and a closed volume ignores it.
+    private readonly IRawVolume _reads = volume;
+
     public IMftSource? TryReadTable(out FallbackReason reason) =>
         VolumeMftSource.TryReadTable(
             Interlocked.Exchange(ref _volume, null)
@@ -18,6 +22,8 @@ internal sealed class OpenedVolume(IRawVolume volume, NtfsBootSector geometry, M
             geometry,
             out reason,
             timings);
+
+    public void Prioritise(ReadPriority priority) => _reads.Prioritise(priority);
 
     public void Dispose() => Interlocked.Exchange(ref _volume, null)?.Dispose();
 }

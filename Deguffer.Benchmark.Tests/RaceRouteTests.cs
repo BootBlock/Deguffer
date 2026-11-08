@@ -156,7 +156,7 @@ public sealed class RaceRouteTests : IDisposable
             .WithoutBitmap();
 
         var route = RaceRoute.On(
-            FakeMftSourceFactory.Serving(Drive, volume), root, Route.Walk, WalkTuning.Default, Drive, TableTuning.Default, beforePart: null);
+            FakeMftSourceFactory.Serving(Drive, volume), root, Route.Walk, WalkTuning.Default, Drive, TableTuning.Default, buildYields: false, beforePart: null);
 
         var tally = route.Run(CancellationToken.None);
         var race = tally.Race!;
@@ -185,11 +185,93 @@ public sealed class RaceRouteTests : IDisposable
             WalkTuning.Default,
             Drive,
             TableTuning.Default,
+            buildYields: false,
             $"echo part>> \"{marker}\"");
 
         route.Run(CancellationToken.None);
 
         Assert.Equal(3, File.ReadAllLines(marker).Length);
+    }
+
+    /// <summary>
+    /// A build yields where it was asked to, unless it reads a volume on another disk, as Auto's would
+    /// not, and the route and its description follow the same answer.
+    /// </summary>
+    [Fact]
+    public void ABuildYieldsWhereAskedUnlessItIsOfAnotherDisk()
+    {
+        Assert.True(RaceRoute.BuildYields(asked: true, DiskRelation.SameVolume));
+        Assert.True(RaceRoute.BuildYields(asked: true, DiskRelation.SameDisk));
+        Assert.True(RaceRoute.BuildYields(asked: true, DiskRelation.Unknown));
+        Assert.False(RaceRoute.BuildYields(asked: true, DiskRelation.OtherDisk));
+        Assert.False(RaceRoute.BuildYields(asked: false, DiskRelation.SameVolume));
+    }
+
+    /// <summary>
+    /// A yielding build reads at low priority while the walk runs beside it and at normal priority once
+    /// it ends, as a scan's build does. The walk runs inside the build here, so the two overlap
+    /// whatever the machine's timing.
+    /// </summary>
+    [Fact]
+    public void AYieldingBuildReadsAtLowPriorityOnlyWhileTheWalkRuns()
+    {
+        var volume = new ServedVolume(new MftFixture().WithoutBitmap().Build());
+        var (_, building) = WalkInsideBuild(volume, yields: true);
+
+        building(CancellationToken.None);
+
+        Assert.Equal([ReadPriority.Low, ReadPriority.Normal], volume.Priorities);
+    }
+
+    /// <summary>A build that does not yield is never lowered, though the walk runs inside it.</summary>
+    [Fact]
+    public void ABuildThatDoesNotYieldIsNeverLowered()
+    {
+        var volume = new ServedVolume(new MftFixture().WithoutBitmap().Build());
+        var (_, building) = WalkInsideBuild(volume, yields: false);
+
+        building(CancellationToken.None);
+
+        Assert.Empty(volume.Priorities);
+    }
+
+    /// <summary>A walk with no build beside it, as the walk alone runs, lowers no later build.</summary>
+    [Fact]
+    public void AWalkAloneLowersNoLaterBuild()
+    {
+        var volume = new ServedVolume(new MftFixture().WithoutBitmap().Build());
+        var (walking, building) = RaceRoute.Yielding(
+            _ => Tally(),
+            (opened, _) =>
+            {
+                opened?.Invoke(volume);
+                return Tally();
+            },
+            yields: true);
+
+        walking(CancellationToken.None);
+        building(CancellationToken.None);
+
+        Assert.Empty(volume.Priorities);
+    }
+
+    /// <summary>The race's two parts, the walk run from inside the build after the build opens <paramref name="volume"/>.</summary>
+    private static (Func<CancellationToken, RunTally> Walk, Func<CancellationToken, RunTally> Build) WalkInsideBuild(
+        ServedVolume volume, bool yields)
+    {
+        Func<CancellationToken, RunTally>? walk = null;
+        var parts = RaceRoute.Yielding(
+            _ => Tally(),
+            (opened, ct) =>
+            {
+                opened?.Invoke(volume);
+                walk!(ct);
+                return Tally();
+            },
+            yields);
+        walk = parts.Walk;
+
+        return parts;
     }
 
     private static RaceRoute Logging(ConcurrentQueue<string> log, Action<CancellationToken>? beforePart) =>

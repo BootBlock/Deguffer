@@ -107,6 +107,8 @@ public sealed class TableReadBesideTheWalkTests
             return inner.TryReadTable(out reason);
         }
 
+        public void Prioritise(ReadPriority priority) => inner.Prioritise(priority);
+
         public void Dispose() => inner.Dispose();
     }
 
@@ -116,6 +118,10 @@ public sealed class TableReadBesideTheWalkTests
         {
             reason = FallbackReason.MasterFileTableIncomplete;
             return null;
+        }
+
+        public void Prioritise(ReadPriority priority)
+        {
         }
 
         public void Dispose()

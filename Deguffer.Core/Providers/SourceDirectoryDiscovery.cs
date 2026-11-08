@@ -423,6 +423,10 @@ public sealed class SourceDirectoryDiscovery
     {
         if (!_scanner.RacesTheWalk)
         {
+            // Before the question, which can start a build that would otherwise yield to walks this
+            // search is not making.
+            _scanner.NeedIndex(root);
+
             return await FromIndexAsync(search, root, ct).ConfigureAwait(false)
                 ?? (await WorkerThreads.Shared.RunAsync(() => Walk(search, root, ct), ct).ConfigureAwait(false)) with { FellBack = true };
         }
@@ -431,6 +435,7 @@ public sealed class SourceDirectoryDiscovery
             stop => FromIndexAsync(search, root, stop),
             stop => WorkerThreads.Shared.RunAsync(() => Walk(search, root, stop), stop),
             walked => walked.RootListed,
+            () => _scanner.NeedIndex(root),
             ct).ConfigureAwait(false);
 
         return raced.Outcome is RaceOutcome.TableDeclined ? raced.Answer with { FellBack = true } : raced.Answer;
@@ -449,9 +454,16 @@ public sealed class SourceDirectoryDiscovery
             ? new RootSearch(indexed, [], RootListed: true)
             : null;
 
-    /// <summary>The guaranteed route: enumerate the root ourselves.</summary>
-    private RootSearch Walk(DirectorySearch search, string root, CancellationToken ct) =>
-        FromListing(SourceTreeWalk.Under(root, search, _tuning.For(root).Walk, ct));
+    /// <summary>
+    /// The guaranteed route: enumerate the root ourselves, telling the scanner so for the length of the
+    /// walk, so a volume index read on the same disk reads after it.
+    /// </summary>
+    private RootSearch Walk(DirectorySearch search, string root, CancellationToken ct)
+    {
+        using var walking = _scanner.Walking(root);
+
+        return FromListing(SourceTreeWalk.Under(root, search, _tuning.For(root).Walk, ct));
+    }
 
     private static RootSearch FromListing(WalkedSourceTree walked) =>
         new(walked.Candidates, walked.Unreadable, walked.RootListed);
