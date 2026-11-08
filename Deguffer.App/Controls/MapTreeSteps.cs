@@ -6,8 +6,8 @@ namespace Deguffer.App.Controls;
 ///
 /// <para>A search of the window walks a folder's shapes one sibling at a time. The framework's own step
 /// finds the peer it starts from by reading its parent's children from the first, one call across the
-/// boundary each, so a walk through a folder of n shapes cost n squared of them, and a folder of tens of
-/// thousands on the keyboard's path stopped the window answering. A peer knows its own place among its
+/// boundary each, so a walk through a folder of n shapes costs n squared of them, and a folder of tens of
+/// thousands on the keyboard's path stops the window answering. A peer knows its own place among its
 /// folder's shapes, so the step reads the shapes either side of that place and nothing else.</para>
 /// </summary>
 internal static class MapTreeSteps

@@ -12,7 +12,7 @@ public sealed class MapTreeStepsTests
 {
     private const int Count = 50_000;
 
-    /// <summary>A walk forward from the first shape visits every shape in order, then what follows them, and reads each shape at most twice.</summary>
+    /// <summary>A walk forward from the first shape visits every shape in order, then what follows them, reading no more than twice as many shapes as there are.</summary>
     [Fact]
     public void AWalkForwardReadsEachShapeABoundedNumberOfTimes()
     {
@@ -39,7 +39,7 @@ public sealed class MapTreeStepsTests
         });
     }
 
-    /// <summary>A walk back from the last shape visits every shape in reverse, stops at the first, and reads each shape at most twice.</summary>
+    /// <summary>A walk back from the last shape visits every shape in reverse, stops at the first, reading no more than twice as many shapes as there are.</summary>
     [Fact]
     public void AWalkBackReadsEachShapeABoundedNumberOfTimes()
     {
