@@ -388,7 +388,10 @@ public sealed class CleanupPlanner
     }
 
     /// <summary>
-    /// How many providers a pass plans at once.
+    /// How many providers a pass plans at once. Also the bound on what a pass does for several rows or
+    /// folders at once on the same reasoning: reading each row's declared roots
+    /// (<see cref="DeclaredRoots"/>), and searching the approved source folders
+    /// (<see cref="SourceDirectoryDiscovery"/>).
     ///
     /// <para>Measured on one machine of 32 logical processors and two NVMe drives, 82 providers, warm
     /// and unelevated, four passes each: one at a time took 22.8 to 27.2 s, four 8.7 to 10.8 s, eight
