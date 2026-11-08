@@ -125,7 +125,7 @@ Each of these changes a recorded design choice or what Deguffer finds, so each i
 | #455 | Ask Conan for its store and its home at once, against the documented order. |
 | #459 | Ask the driver-package cleanup at the same time as pnputil, against the order recorded as deliberate. |
 | #465 | One walk of a replaced JetBrains version for its age and its size. Needs a scanner seam. |
-| #474 | Never enter `.hg`, `.svn`, `.bzr` or `__pycache__` in source discovery. |
+| #474 | Never enter `.hg`, `.svn`, `.bzr` or `__pycache__` in source discovery. Done: those four, `.jj` and `_darcs` join `.git` and `node_modules` in `SourceTreeBoundary`, and §5.2 states the rule a name must meet to join. |
 | #475 | Stream the bytes counted so far into the Clean preview (`scan-progress.md` route B). |
 | #484 | Start a volume's index build when the pass starts (`after-the-scanner.md` item 7's G1 question). |
 | #487 | Race the walk against the table for an Explore scan of a folder. |

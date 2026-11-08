@@ -294,6 +294,13 @@ waiting.
 Rule: **never delete a tool's root directory.** Enumerate known-disposable children explicitly, and
 treat anything unrecognised as Tier 4.
 
+The same holds for a tool's store inside an approved source folder, such as a repository's `.git`
+or `.hg`. A search for build output never enters one, on any route, so nothing inside it can become
+a candidate ([#474](https://github.com/BootBlock/Deguffer/issues/474)). A name joins that list
+only when all three hold: it is the private store of one tool, nothing below it is ever build
+output or holds any, and entering it costs listings. The list and the reason for each name are in
+`SourceTreeBoundary`.
+
 ### 5.3 Temp is not free real estate
 
 Blanket-clearing `%LOCALAPPDATA%\Temp` is the classic mistake. Observed: an active agent session
