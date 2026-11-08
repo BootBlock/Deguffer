@@ -2,7 +2,9 @@
 
 > **Status:** 🟢 ACTIVE — an audit of where a Clean preview and an Explore scan spend their time,
 > verified against the code and filed as #441 to #492, and a second audit of the clean, the
-> duplicate search, start-up and file I/O, filed as #494 to #537. Work each in its own order below:
+> duplicate search, start-up and file I/O, filed as #494 to #537, and a third audit of the map's
+> drawing, Explore's lists and removal, the duplicate search's memory and the shell's lists, filed as
+> #676 to #690. Work each in its own order below:
 > the measurements in each stage 0 decide the larger items after them. Flip to ✅ COMPLETE and
 > `git mv` into `done/` when every issue below is closed or rejected, or supersede it with a newer
 > plan.
@@ -270,3 +272,60 @@ Each keeps what it proves and proves it more cheaply. All are `safety`.
 | Provider reads (Claude Code transcripts and session folders, Conan, Arduino, Dart, Chromium roots, Maven, restore points, temporary roots, Steam, Squirrel, RetroArch and Mozilla discovery) | Once per pass on small files or few folders, already memoised, or covered by #455, #460, #461 or #462. |
 | The Visual Studio and Nx rows recognise candidates one at a time | The same loop as #462, and fixed with it. |
 | Two process listings, and four small `Safety` micro-costs | Milliseconds per pass, or the cheaper form would not prove the same thing. |
+
+## Third audit: the map's drawing, Explore's lists and removal, and the shell's lists
+
+A third audit read, in six parallel lanes, what the first two touched least: the map's per-frame and
+per-pointer work (`Exploring/Rendering`, `Exploring/Layout`, the App's map controls), Explore's data
+and its list and removal path, the per-entry primitives again, the Clean pipeline and the providers
+again, the shell outside Explore, and the Core subsystems outside Clean and Explore. Each finding was
+checked against every open and closed issue, against both earlier audits' tables, and against the
+code. Most figures were timed with throwaway programs outside Deguffer, against copies of the code or
+the Release `Deguffer.Core.dll`, on a synthetic tree of a million nodes or a real WinUI 3 window, on
+a shared machine. Each issue says which of its figures were timed and which are estimates. No change
+was measured inside Deguffer.
+
+### What it found, in one paragraph
+
+**The per-entry paths are lean. The costs left are per frame, per hover and per selection.** While
+the map moves, each frame that wants tiles starts its tile workers' threads again on the UI thread,
+and each hover passes over every rectangle of the drawing. Each drawing gives a hue to every child of
+every folder above a drawn shape, and rebuilds the names a smaller drawing removed. Explore's list
+formats every row again at each snapshot, and a removal compares the selection pair by pair and asks
+the policy twice on the UI thread. The duplicate search builds a list for every distinct size and a
+group card builds every copy at once. The rest are small allocation wins.
+
+### Order of work
+
+| Issue | Note |
+| --- | --- |
+| #676 | Tile workers started as new threads for each frame that wants tiles. The largest gain while the map moves. |
+| #689 | A group of hundreds of copies stops the window for seconds. `status: needs-design`: the card's look. |
+| #681, #682 | An Explore removal compares the selection pair by pair, and asks the policy twice, on the UI thread. `safety`. |
+| #688 | Narrowing a plan to the ticked steps is quadratic, on the UI thread. `safety`. |
+| #678 | Each hover passes over every rectangle of the drawing. |
+| #677 | The branch colouring divides every child of every folder above a drawn shape. |
+| #680 | The List layout formats every row again at each snapshot of a scan. |
+| #679 | Map names reused by position, and rebuilt after a smaller drawing. Measure with #525 first. |
+| #683 | The duplicate search groups by size with a list per distinct size, and a 112-byte `FoundFile`. |
+| #687 | The Hugging Face row lists the whole hub before and after each repository it removes. |
+| #684 | Checksums held as hexadecimal strings for the session. |
+| #685 | `LongPath.Resolved` rebuilds every ordinary path. |
+| #686 | The hard-link-aware scan builds a string per name. |
+| #690 | The list animation reads every row after an insert-only change. |
+
+### Checked and not filed
+
+| Finding | Why no issue |
+| --- | --- |
+| The map's hit test, `MapTiling.Covering`, tile layout, a full layout per drawing | 0.1-0.8 µs per hit test, 0.01-0.08 ms per covering, 0.02-0.3 ms per tile on workers, 9-34 ms per drawing on a worker. |
+| Name placement and fading, `ExploreDescent.OnFrame`, `ExploreMap.Place` per frame | In compositor expressions, a few operations per frame, or writes of equal values that raise no change. |
+| `ExploreLift`'s mask resized per hover, the pointer light's full clear | Plausible GPU costs that a console program cannot time. Revisit with #678. |
+| Explore's carry work per snapshot, `DominantTypes`, `LargestFiles`, `SizeOf` after a removal | A few ms, off the UI thread, or 2-3 ns per call. |
+| `SetThreadErrorMode` per attribute read, the MFT parse, `MftVolumeIndex.TryResolve`, `MftSubtreeTally` | Inside the noise, or tens of ms per pass at most. The rest of the parse is #482, #483 and #486. |
+| `FileRemover` reading a file's attributes three times | The delete dominates: 370-612 ms against 384-819 ms for 3,000 files. |
+| `Protect()` probes in series, `DriverStore.FolderOf` per package, `StepOverlap.Of`'s final paths | 20-60 ms once per pass, or under 0.3 s for 5,000 steps. #516's counts decide the last. |
+| Repeated listings in the VS Code, Steam, packaged-app, Bun and Yarn 1 rows | About 5-40 ms per pass each. |
+| The Memory page's refresh and tree, `LiveList.Reorder`, marking totals, preference writes | Sub-millisecond per tick or click, or bounded lists. |
+| The item-list search, one change per item | About 4 µs per change: 19-31 ms to hide 4,990 of 5,000, against a rebuild that breaks the in-place rule. |
+| Startup's shortcut reads, installed apps, diagnostics, `BusyWork`, the star field | Once per reading off the UI thread, or bounded. |
