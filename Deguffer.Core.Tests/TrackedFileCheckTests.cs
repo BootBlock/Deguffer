@@ -99,8 +99,29 @@ public sealed class TrackedFileCheckTests : IDisposable
 
         Assert.Equal(candidates.Count, asked.Count);
         Assert.Equal(
-            candidates.Select(Pathspec).Order(StringComparer.OrdinalIgnoreCase),
+            candidates.Select(Asked).Order(StringComparer.OrdinalIgnoreCase),
             asked.Order(StringComparer.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Every pathspec carries its own magic, and git is told to read it. A literal pathspec with no
+    /// <c>icase</c> matches the index case-sensitively, so a directory the index spells in another
+    /// case reads as holding nothing tracked. Global literal mode, from <c>--literal-pathspecs</c> or
+    /// from <c>GIT_LITERAL_PATHSPECS=1</c> in the user's environment, makes git take the magic as
+    /// part of the path, which matches nothing at all.
+    /// </summary>
+    [Fact]
+    public async Task AsksAboutEachCandidateLiterallyAndWithoutRegardToCase()
+    {
+        var candidates = Candidates(3);
+        var runner = GitListingNothing();
+
+        await Create(runner).FindTrackedAsync(candidates);
+
+        var asked = Assert.Single(runner.Invocations);
+        Assert.Equal(
+            $"--no-literal-pathspecs -C \"{_repository}\" ls-files -z --{string.Concat(candidates.Select(c => $" \"{Asked(c)}\""))}",
+            asked.Arguments);
     }
 
     /// <summary>
@@ -213,11 +234,11 @@ public sealed class TrackedFileCheckTests : IDisposable
         Assert.Equal(2, runner.Invocations.Count);
         Assert.Contains(runner.Invocations, i =>
             i.Arguments.Contains($"-C \"{inner}\"", StringComparison.OrdinalIgnoreCase)
-            && i.Arguments.Contains("\"src/A/obj\"", StringComparison.Ordinal)
-            && i.Arguments.Contains("\"src/C/obj\"", StringComparison.Ordinal));
+            && i.Arguments.Contains($"\"{Magic}src/A/obj\"", StringComparison.Ordinal)
+            && i.Arguments.Contains($"\"{Magic}src/C/obj\"", StringComparison.Ordinal));
         Assert.Contains(runner.Invocations, i =>
             i.Arguments.Contains($"-C \"{_repository}\"", StringComparison.OrdinalIgnoreCase)
-            && i.Arguments.Contains("\"external/B/obj\"", StringComparison.Ordinal)
+            && i.Arguments.Contains($"\"{Magic}external/B/obj\"", StringComparison.Ordinal)
             && !i.Arguments.Contains("src/", StringComparison.Ordinal));
     }
 
@@ -243,7 +264,7 @@ public sealed class TrackedFileCheckTests : IDisposable
         Assert.Equal([underInner], findings.Unanswered);
         var asked = Assert.Single(runner.Invocations);
         Assert.Contains($"-C \"{_repository}\"", asked.Arguments, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("\"external/B/obj\"", asked.Arguments, StringComparison.Ordinal);
+        Assert.Contains($"\"{Magic}external/B/obj\"", asked.Arguments, StringComparison.Ordinal);
         Assert.DoesNotContain("src/A/obj", asked.Arguments, StringComparison.Ordinal);
     }
 
@@ -270,6 +291,12 @@ public sealed class TrackedFileCheckTests : IDisposable
         Assert.Single(runner.Invocations);
     }
 
+    /// <summary>The magic a candidate is asked about with when its path is all ASCII, as these are.</summary>
+    private const string Magic = ":(literal,icase)";
+
     private string Pathspec(string candidate) =>
         Path.GetRelativePath(_repository, candidate).Replace(Path.DirectorySeparatorChar, '/');
+
+    /// <summary>A candidate as it appears in the command line, magic included.</summary>
+    private string Asked(string candidate) => Magic + Pathspec(candidate);
 }

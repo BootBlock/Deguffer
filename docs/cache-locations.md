@@ -7555,7 +7555,8 @@ Every condition has to hold. A directory that fails any of them is left alone, a
 how many were left and why. `obj`, `.dart_tool`, `.vs` and Nx's `cache` carry an extra check: git is asked whether the
 directory holds any tracked file, because the tool's output never should, and one that does is not
 the tool's output whatever stands beside it. For `.dart_tool` this was found, not imagined: test
-fixtures holding one are committed into the Flutter SDK's own repository. The check needs git on `PATH`. Where git
+fixtures holding one are committed into the Flutter SDK's own repository. The directory is matched without regard to
+case, as Windows matches it, so a folder the repository spells in another case still counts. The check needs git on `PATH`. Where git
 is installed but cannot answer, the directory is left alone. Where git cannot be found at all, the
 conditions above decide alone, as they do for every other directory here, and for a directory inside
 a repository the scan says that the tracked-file check did not run.
