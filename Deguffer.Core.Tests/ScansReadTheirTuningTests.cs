@@ -101,8 +101,9 @@ public sealed class ScansReadTheirTuningTests : IDisposable
     /// <summary>
     /// Every scan walks through the overload that takes the tuner, so the walk is held here to the
     /// thread count the tuner resolves. One thread lists every folder on the calling thread, and
-    /// many spread them across the pool, which the second walk shows the tree is wide and slow
-    /// enough to do.
+    /// many spread them across the pool. Where more than one thread is allowed, the first folder
+    /// listed below the root is held until a second has begun, which only another thread can do while
+    /// the first is held.
     /// </summary>
     [Fact]
     public void TheWalkRunsWithTheThreadCountTheTunerResolves()
@@ -130,21 +131,29 @@ public sealed class ScansReadTheirTuningTests : IDisposable
             new FakeVolumeInventory());
         var listing = new System.Collections.Concurrent.ConcurrentDictionary<int, bool>();
 
+        // One thread has no second listing to wait for.
+        var listings = new HeldOverlap(threads > 1 ? TimeSpan.FromSeconds(10) : TimeSpan.Zero);
+
         BoundedFileWalk.Visit(
             root,
             rootState: 0,
             tuner,
             FileNames.All,
-            (_, contents, descend) =>
+            (depth, contents, descend) =>
             {
                 listing.TryAdd(Environment.CurrentManagedThreadId, true);
 
-                // Long enough that a pool worker is started while the calling thread is still here.
-                Thread.Sleep(5);
+                // The root's folders are handed to the walk only once its own listing returns, so a
+                // hold there would leave nothing for a second thread to list.
+                if (depth > 0)
+                {
+                    listings.Begin();
+                    listings.End();
+                }
 
                 foreach (var entry in contents.Entries.Where(entry => entry.IsDirectory))
                 {
-                    descend(entry, 0);
+                    descend(entry, depth + 1);
                 }
             },
             static () => { },

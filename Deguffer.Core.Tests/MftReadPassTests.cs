@@ -527,12 +527,11 @@ public sealed class MftReadPassTests
     public void ParsesOnAsManyThreadsAtOnceAsAllowed(int parseThreads)
     {
         using var source = LargeTable().Build();
-        using var overlapped = new ManualResetEventSlim();
         var caller = Environment.CurrentManagedThreadId;
         var threads = new ConcurrentDictionary<int, bool>();
-        var parsing = 0;
-        var mostAtOnce = 0;
-        var held = 0;
+
+        // One parse thread has no second to wait for.
+        var parsing = new HeldOverlap(parseThreads > 1 ? TimeSpan.FromSeconds(20) : TimeSpan.Zero);
 
         MftRecordStream.TryReadAll(
             source,
@@ -542,23 +541,9 @@ public sealed class MftReadPassTests
             {
                 threads.TryAdd(Environment.CurrentManagedThreadId, true);
 
-                var now = Interlocked.Increment(ref parsing);
-                for (var most = Volatile.Read(ref mostAtOnce); now > most; most = Volatile.Read(ref mostAtOnce))
-                {
-                    Interlocked.CompareExchange(ref mostAtOnce, now, most);
-                }
-
-                if (now > 1)
-                {
-                    overlapped.Set();
-                }
-                else if (parseThreads > 1 && Interlocked.Exchange(ref held, 1) == 0)
-                {
-                    overlapped.Wait(TimeSpan.FromSeconds(20));
-                }
-
+                parsing.Begin();
                 Thread.SpinWait(50_000);
-                Interlocked.Decrement(ref parsing);
+                parsing.End();
                 return true;
             },
             onProgress: null,
@@ -572,7 +557,7 @@ public sealed class MftReadPassTests
         }
         else
         {
-            Assert.InRange(mostAtOnce, 2, parseThreads);
+            Assert.InRange(parsing.MostAtOnce, 2, parseThreads);
         }
     }
 
