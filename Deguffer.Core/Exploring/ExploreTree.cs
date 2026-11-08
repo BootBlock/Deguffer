@@ -421,6 +421,12 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
     /// of its cost. The file table reads a folder's children in record order, scattered through the
     /// table, so it has no ranks to give, and its snapshots are sorted by name here instead.
     ///
+    /// <paramref name="links"/> are the file table's further names of its hard-linked files, each a
+    /// node numbered after every slot of the other columns, in columns of their own so the reader
+    /// never grows those to make room. The nodes kept are copied from both at once. The walk lists a
+    /// file under each of its names as it meets them, so it has none, and nor has a reader that ranks
+    /// its names.
+    ///
     /// <paramref name="snapshot"/> says the tree is of a scan still running (<see cref="IsSnapshot"/>).
     ///
     /// <paramref name="ct"/> is asked between the passes and by the sort, so a snapshot of a walk that
@@ -443,29 +449,39 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
         ExploreChildOrder childOrder,
         IReadOnlyCollection<int>? listingRefused = null,
         int[]? nameRanks = null,
+        MftExploreColumns? links = null,
         bool snapshot = false,
         CancellationToken ct = default)
     {
-        var (childStart, children) = InvertParentLinks(parents, flags, nameRanks);
+        if (links is not null && nameRanks is not null)
+        {
+            throw new ArgumentException("Names ranked by the reader leave no place for a file's further names.", nameof(links));
+        }
+
+        var after = links ?? MftExploreColumns.None;
+
+        var (childStart, children) = InvertParentLinks(parents, flags, after, nameRanks);
         ct.ThrowIfCancellationRequested();
 
         var order = TopDownOrder(childStart, children, rootNode);
         ct.ThrowIfCancellationRequested();
 
-        if (order.Length < parents.Length)
+        // Wherever there are links, even with every node reached, because only this joins their
+        // slots to the others.
+        if (after.Count > 0 || order.Length < parents.Length)
         {
-            var reached = new ReachedNodes(order, parents.Length);
+            var reached = new ReachedNodes(order, parents.Length, after.Count);
 
-            nameNumbers = reached.Keep(nameNumbers);
+            nameNumbers = reached.Keep(nameNumbers, after.NameNumbers);
             names = NamePool.Keeping(names, nameNumbers);
-            parents = reached.Parents(parents);
-            sizes = reached.Keep(sizes);
-            lengths = reached.Keep(lengths);
-            storage = reached.Keep(storage);
-            flags = reached.Keep(flags);
-            created = reached.Keep(created);
-            modified = reached.Keep(modified);
-            visibility = reached.Keep(visibility);
+            parents = reached.Parents(parents, after.Parents);
+            sizes = reached.Keep(sizes, after.Sizes);
+            lengths = reached.Keep(lengths, after.Lengths);
+            storage = reached.Keep(storage, after.Storage);
+            flags = reached.Keep(flags, after.Flags);
+            created = reached.Keep(created, after.Created);
+            modified = reached.Keep(modified, after.Modified);
+            visibility = reached.Keep(visibility, after.Visibility);
             (childStart, children) = reached.Links(childStart, children);
             listingRefused = listingRefused is { Count: > 0 } ? reached.KeepOnly(listingRefused) : null;
             reached.Renumber(order);
@@ -498,29 +514,19 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
     /// range rather than after the sibling placed before it, so the ranges come out in name order.
     /// Without, each parent's own start is the cursor that places its children, and the starts are
     /// moved back afterwards: one pass rather than a cursor array the size of the tree.</para>
+    ///
+    /// <para>The nodes of <paramref name="links"/> are numbered after those of
+    /// <paramref name="parents"/>, so each pass runs over the one and then the other, and each child
+    /// list holds them in that order.</para>
     /// </summary>
-    private static (int[] Start, int[] Children) InvertParentLinks(int[] parents, ExploreNodeFlags[] flags, int[]? nameRanks)
+    private static (int[] Start, int[] Children) InvertParentLinks(
+        int[] parents, ExploreNodeFlags[] flags, MftExploreColumns links, int[]? nameRanks)
     {
-        var count = parents.Length;
+        var count = parents.Length + links.Count;
         var start = new int[count + 1];
 
-        // A node that is its own parent is not linked to anything, because linking it would make
-        // the tree cyclic and the walk below would never terminate. Every reader marks its scan root
-        // that way, so this is how the root stays out of its own child list.
-        //
-        // Stated as the shape rather than as "is it the root", because a scan rooted at a folder
-        // leaves the volume's own root somewhere above it — still present, still its own parent, and
-        // still unreachable from the scan's root. Testing the node number alone would link that one
-        // under itself.
-        bool IsLinked(int node) => (flags[node] & ExploreNodeFlags.Present) != 0 && parents[node] != node;
-
-        for (var i = 0; i < count; i++)
-        {
-            if (IsLinked(i))
-            {
-                start[parents[i] + 1]++;
-            }
-        }
+        CountChildren(parents, flags, first: 0, start);
+        CountChildren(links.Parents, links.Flags, first: parents.Length, start);
 
         for (var i = 0; i < count; i++)
         {
@@ -531,9 +537,9 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
 
         if (nameRanks is not null)
         {
-            for (var i = 0; i < count; i++)
+            for (var i = 0; i < parents.Length; i++)
             {
-                if (IsLinked(i))
+                if (IsLinked(parents, flags, i, i))
                 {
                     children[start[parents[i]] + nameRanks[i]] = i;
                 }
@@ -542,13 +548,8 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
             return (start, children);
         }
 
-        for (var i = 0; i < count; i++)
-        {
-            if (IsLinked(i))
-            {
-                children[start[parents[i]]++] = i;
-            }
-        }
+        PlaceChildren(parents, flags, first: 0, start, children);
+        PlaceChildren(links.Parents, links.Flags, first: parents.Length, start, children);
 
         // Each start has advanced to the end of its range, which is where the next node's range
         // starts, so every start now sits one place early. The last never moved, because no node
@@ -561,6 +562,52 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
         start[0] = 0;
 
         return (start, children);
+    }
+
+    /// <summary>
+    /// Whether the node in <paramref name="slot"/> of these columns, numbered <paramref name="node"/>,
+    /// is some node's child.
+    ///
+    /// <para>A node that is its own parent is not linked to anything, because linking it would make
+    /// the tree cyclic and the walk below would never terminate. Every reader marks its scan root
+    /// that way, so this is how the root stays out of its own child list.</para>
+    ///
+    /// <para>Stated as the shape rather than as "is it the root", because a scan rooted at a folder
+    /// leaves the volume's own root somewhere above it — still present, still its own parent, and
+    /// still unreachable from the scan's root. Testing the node number alone would link that one
+    /// under itself.</para>
+    /// </summary>
+    private static bool IsLinked(int[] parents, ExploreNodeFlags[] flags, int slot, int node) =>
+        (flags[slot] & ExploreNodeFlags.Present) != 0 && parents[slot] != node;
+
+    /// <summary>
+    /// Count each node's children among columns whose first slot is node <paramref name="first"/>,
+    /// each one place along in <paramref name="start"/>, ready for the sum that makes them starts.
+    /// </summary>
+    private static void CountChildren(int[] parents, ExploreNodeFlags[] flags, int first, int[] start)
+    {
+        for (var i = 0; i < parents.Length; i++)
+        {
+            if (IsLinked(parents, flags, i, first + i))
+            {
+                start[parents[i] + 1]++;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Place each node of columns whose first slot is node <paramref name="first"/> after its
+    /// parent's children placed so far, moving that parent's start along.
+    /// </summary>
+    private static void PlaceChildren(int[] parents, ExploreNodeFlags[] flags, int first, int[] start, int[] children)
+    {
+        for (var i = 0; i < parents.Length; i++)
+        {
+            if (IsLinked(parents, flags, i, first + i))
+            {
+                children[start[parents[i]]++] = first + i;
+            }
+        }
     }
 
     /// <summary>

@@ -119,7 +119,7 @@ internal static class MftExploreReader
         // copy of the columns is the assembling's, away from the read.
         var snapshots = progress is not null && snapshotAssembly is not null
             ? new ScanSnapshots(
-                order => stopped => Snapshot(columns, names, rootPath, components, count, order, stopped),
+                order => stopped => Snapshot(columns, names, rootPath, components, order, stopped),
                 clock ?? TimeProvider.System,
                 snapshotAssembly)
             : null;
@@ -210,23 +210,30 @@ internal static class MftExploreReader
         }
 
         // In record order, then by folder and name, so one table always numbers its links alike
-        // whatever order the parse threads met them in. Grown once, and only where a link was met.
+        // whatever order the parse threads met them in.
         var links = linksMet
             .OrderBy(met => met.Record)
             .ThenBy(met => met.Link.ParentRecordNumber)
             .ThenBy(met => met.Link.Name, StringComparer.Ordinal)
             .ToArray();
 
+        // Columns of their own, sized to the links. The record columns are sized to every record on
+        // the volume, and every system volume has links, so growing those to hold them would copy
+        // each one whole on the large object heap, which ExploreTree.Create then copies again to keep
+        // what the root reaches. Each link is numbered after every record all the same, and Create
+        // compacts the two sets into one copy.
+        MftExploreColumns? linkColumns = null;
+
         if (links.Length > 0)
         {
-            columns.Grow(count + links.Length);
+            linkColumns = new MftExploreColumns(links.Length);
 
             for (var i = 0; i < links.Length; i++)
             {
                 var (_, described, link) = links[i];
 
-                columns.NameNumbers[count + i] = names.Intern(link.Name);
-                columns.Describe(count + i, described, (int)link.ParentRecordNumber);
+                linkColumns.NameNumbers[i] = names.Intern(link.Name);
+                linkColumns.Describe(i, described, (int)link.ParentRecordNumber);
             }
         }
 
@@ -246,11 +253,11 @@ internal static class MftExploreReader
         var rootName = names.Intern(rootPath);
         var (tree, reason) = MftExploreRooting.Assemble(
             columns,
+            linkColumns,
             names.Freeze(),
             rootName,
             rootPath,
             components,
-            count,
             new MftExploreRooting.AssembledAs(ExploreChildOrder.BySize, LowerBound: couldNotReadWholeTable || sawUnreadableRecord, MatchCaseOnly: false, Snapshot: false),
             ct);
         timings?.End(MftBuildStage.TreeAssembly);
@@ -286,7 +293,6 @@ internal static class MftExploreReader
         NamePool names,
         string rootPath,
         IReadOnlyList<string> components,
-        int records,
         ExploreChildOrder order,
         CancellationToken stopped)
     {
@@ -300,11 +306,11 @@ internal static class MftExploreReader
 
         return MftExploreRooting.Assemble(
             copy,
+            links: null,
             frozen,
             rootName,
             rootPath,
             components,
-            records,
             new MftExploreRooting.AssembledAs(order, LowerBound: true, MatchCaseOnly: true, Snapshot: true),
             stopped).Tree;
     }
