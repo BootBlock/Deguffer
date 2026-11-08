@@ -149,15 +149,15 @@ internal sealed class CandidateWalk
 
         var visibility = tree.VisibilityOf(file);
 
-        if ((visibility.HasFlag(FileVisibility.Hidden) && !_search.SearchHidden)
-            || (visibility.HasFlag(FileVisibility.System) && !_search.SearchSystem)
+        if (((visibility & FileVisibility.Hidden) != 0 && !_search.SearchHidden)
+            || ((visibility & FileVisibility.System) != 0 && !_search.SearchSystem)
             || !_search.Sizes.Admits(length)
             || !_search.Extensions.Admits(name))
         {
             return;
         }
 
-        if (tree.StorageOf(file).HasFlag(FileStorage.CloudOnly) && _search.Criteria.ReadsContent())
+        if ((tree.StorageOf(file) & FileStorage.CloudOnly) != 0 && _search.Criteria.ReadsContent())
         {
             _onlyInTheCloud++;
             return;

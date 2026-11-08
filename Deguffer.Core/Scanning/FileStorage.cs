@@ -71,12 +71,12 @@ public static class StorageAttributes
 
         var storage = FileStorage.Plain;
 
-        if (attributes.HasFlag(FileAttributes.Compressed))
+        if ((attributes & FileAttributes.Compressed) != 0)
         {
             storage |= FileStorage.Compressed;
         }
 
-        if (attributes.HasFlag(FileAttributes.SparseFile))
+        if ((attributes & FileAttributes.SparseFile) != 0)
         {
             storage |= FileStorage.Sparse;
         }

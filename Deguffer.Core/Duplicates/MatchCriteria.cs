@@ -36,16 +36,16 @@ public static class MatchCriteriaRules
     public static bool GroupsBySize(this MatchCriteria criteria) =>
         (criteria & (MatchCriteria.Size | MatchCriteria.Content)) != 0;
 
-    public static bool GroupsByName(this MatchCriteria criteria) => criteria.HasFlag(MatchCriteria.Name);
+    public static bool GroupsByName(this MatchCriteria criteria) => (criteria & MatchCriteria.Name) != 0;
 
-    public static bool GroupsByTime(this MatchCriteria criteria) => criteria.HasFlag(MatchCriteria.Modified);
+    public static bool GroupsByTime(this MatchCriteria criteria) => (criteria & MatchCriteria.Modified) != 0;
 
     /// <summary>
     /// Whether the bytes are compared, which is what a file not on this device must never be read
     /// for. A cloud file that is online-only can be matched by its name, size or time, and never by
     /// its content.
     /// </summary>
-    public static bool ReadsContent(this MatchCriteria criteria) => criteria.HasFlag(MatchCriteria.Content);
+    public static bool ReadsContent(this MatchCriteria criteria) => (criteria & MatchCriteria.Content) != 0;
 
     /// <summary>The criteria in words, such as "the name, size and last-modified time", for the page's sentences.</summary>
     public static string Described(this MatchCriteria criteria)

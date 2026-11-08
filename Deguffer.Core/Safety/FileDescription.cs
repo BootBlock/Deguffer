@@ -77,7 +77,7 @@ public record FileState(
     private const uint NameSurrogate = 0x2000_0000;
 
     /// <summary>Whether the path names a folder or a link rather than a file that holds data.</summary>
-    public bool IsFile => !Attributes.HasFlag(FileAttributes.Directory) && (ReparseTag & NameSurrogate) == 0;
+    public bool IsFile => (Attributes & FileAttributes.Directory) == 0 && (ReparseTag & NameSurrogate) == 0;
 }
 
 /// <summary>A file as an attributes-only handle describes it, at the moment it was asked, and where the handle says it is.</summary>

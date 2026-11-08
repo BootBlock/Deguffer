@@ -54,7 +54,7 @@ public sealed partial class OccupancyProbe : IOccupancyProbe
 
     public Occupancy? Measure(string path, FileAttributes attributes)
     {
-        if (attributes.HasFlag(FileAttributes.ReparsePoint))
+        if ((attributes & FileAttributes.ReparsePoint) != 0)
         {
             if (ReparseTagOf(path) is not { } tag)
             {

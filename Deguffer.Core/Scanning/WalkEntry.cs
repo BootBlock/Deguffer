@@ -50,7 +50,7 @@ public readonly record struct WalkEntry
         DateTime lastWriteTimeUtc)
     {
         // The walk enters a directory by its name, so one without a name is a listing gone wrong.
-        if (!name.Exists && attributes.HasFlag(FileAttributes.Directory))
+        if (!name.Exists && (attributes & FileAttributes.Directory) != 0)
         {
             throw new ArgumentException("A directory is always listed with its name.", nameof(name));
         }
@@ -89,10 +89,10 @@ public readonly record struct WalkEntry
 
     public DateTime LastWriteTimeUtc { get; }
 
-    public bool IsDirectory => Attributes.HasFlag(FileAttributes.Directory);
+    public bool IsDirectory => (Attributes & FileAttributes.Directory) != 0;
 
     /// <summary>A junction, a symbolic link, or a file carrying any other reparse point.</summary>
-    public bool IsReparsePoint => Attributes.HasFlag(FileAttributes.ReparsePoint);
+    public bool IsReparsePoint => (Attributes & FileAttributes.ReparsePoint) != 0;
 
     /// <summary>
     /// Whether this is an Outlook data file (§9), whatever mark it carries. Answered for a file listed

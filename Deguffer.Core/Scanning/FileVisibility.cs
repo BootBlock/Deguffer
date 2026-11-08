@@ -29,6 +29,6 @@ public enum FileVisibility : byte
 public static class FileVisibilities
 {
     public static FileVisibility Of(FileAttributes attributes) =>
-        (attributes.HasFlag(FileAttributes.Hidden) ? FileVisibility.Hidden : FileVisibility.Shown)
-        | (attributes.HasFlag(FileAttributes.System) ? FileVisibility.System : FileVisibility.Shown);
+        ((attributes & FileAttributes.Hidden) != 0 ? FileVisibility.Hidden : FileVisibility.Shown)
+        | ((attributes & FileAttributes.System) != 0 ? FileVisibility.System : FileVisibility.Shown);
 }

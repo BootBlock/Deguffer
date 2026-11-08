@@ -358,7 +358,7 @@ public static class NonSdkIntermediateSignature
 
         while (listing.MoveNext())
         {
-            if (listing.Current.Attributes.HasFlag(FileAttributes.ReparsePoint))
+            if ((listing.Current.Attributes & FileAttributes.ReparsePoint) != 0)
             {
                 return null;
             }
