@@ -281,7 +281,10 @@ public sealed class GitLfsObjectProviderTests : IDisposable
         Assert.Equal(CancelledCommand.Ended, step.WhenCancelled);
     }
 
-    /// <summary>The dry run is pinned exactly as the prune is, forces the progress that lists every object, and only reads.</summary>
+    /// <summary>
+    /// The dry run is pinned exactly as the prune is, forces the progress that lists every object, only
+    /// reads, and is read as the UTF-8 git writes.
+    /// </summary>
     [Fact]
     public async Task TheDryRunIsPinnedToTheSameStoreAndIsAQuery()
     {
@@ -299,7 +302,7 @@ public sealed class GitLfsObjectProviderTests : IDisposable
             + $"-c \"lfs.storage={Forward(Path.Combine(gitDirectory, "lfs"))}\" "
             + "-c \"lfs.pruneremotetocheck=origin\" -c lfs.forceprogress=true lfs prune --dry-run --verbose",
             dryRun.Arguments);
-        Assert.Equal(ToolRun.Query, dryRun.Run);
+        Assert.Equal(ToolRun.Query.WritingIn(ToolOutputEncoding.Utf8), dryRun.Run);
     }
 
     /// <summary>
