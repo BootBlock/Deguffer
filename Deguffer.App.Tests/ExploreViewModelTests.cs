@@ -524,7 +524,7 @@ public sealed class ExploreViewModelTests : IDisposable
     public void CancellingAScanTakesItsSnapshotOffTheScreen() => UiThread.Run(async () =>
     {
         _explore.Volumes.With(@"C:\");
-        var page = _explore.Page();
+        var page = _explore.Listed();
         var builder = new ExploreTreeBuilder(@"C:\");
         builder.AddChildren(ExploreTreeBuilder.RootNode, [ExploreFixture.Folder("Users")]);
 
@@ -534,6 +534,7 @@ public sealed class ExploreViewModelTests : IDisposable
         await Task.Yield();
 
         Assert.NotNull(page.Tree);
+        Assert.NotEmpty(page.Listing.Rows);
 
         page.ScanCancelCommand.Execute(null);
         await running;

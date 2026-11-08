@@ -785,8 +785,8 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
 
         events.SelectionStop();
         events.RowsStart();
-        Listing.Show(tree, position, volume, redraw.KeepsRows);
-        events.RowsStop(Listing.Rows.Count);
+        var listed = Listing.Show(tree, position, volume, redraw.KeepsRows);
+        events.RowsStop(listed);
         Files.Show(tree, position.Node);
         Types.Show(tree, position.Node);
         FollowReplay();
@@ -798,7 +798,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         ViewChanged?.Invoke(this, EventArgs.Empty);
         events.HandoffStop();
 
-        events.ShowStop(cause, Listing.Rows.Count);
+        events.ShowStop(cause, listed);
     }
 
     /// <summary>

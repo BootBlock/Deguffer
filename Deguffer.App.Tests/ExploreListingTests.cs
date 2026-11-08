@@ -7,10 +7,9 @@ using static Deguffer.App.Tests.CollectionChanges;
 namespace Deguffer.App.Tests;
 
 /// <summary>
-/// The folder's rows are written only while the List layout is on screen. Nothing else reads them,
-/// and on a map a step into a folder of tens of thousands of entries, and every snapshot while one
-/// is on screen, wrote a row for each for a list that was collapsed. The trail is above the map too,
-/// so it moves whatever is on screen.
+/// The folder's rows are written only while the List layout is on screen, because nothing else reads
+/// them and a folder can hold tens of thousands of entries. The trail is above the map too, so it
+/// moves whatever is on screen.
 /// </summary>
 public sealed class ExploreListingTests : IDisposable
 {
@@ -137,11 +136,33 @@ public sealed class ExploreListingTests : IDisposable
 
     /// <summary>
     /// A step taken under the map makes the rows held a list about another folder, so the list that
-    /// comes back is rebuilt for the folder on screen in one reset, even after a step back out to the
-    /// folder the rows were about: that is a step too, and starts the list afresh.
+    /// comes back is rebuilt for the folder on screen in one reset.
     /// </summary>
     [Fact]
     public void AStepUnderTheMapRebuildsTheListWhenItComesBack() => UiThread.Run(async () =>
+    {
+        _explore.Volumes.With(@"C:\");
+        var page = _explore.Listed();
+
+        await _explore.ScanAsync(page, ExploreScan.Fast(Drive(out var users).Build(ExploreChildOrder.BySize)));
+
+        var changes = Watch(page.Listing.Rows);
+
+        page.SelectedView = ExploreView.Treemap;
+        page.Descend(users);
+        page.SelectedView = ExploreView.List;
+
+        Assert.Equal([NotifyCollectionChangedAction.Reset], changes);
+        Assert.Equal(["testuser", "Public"], page.Listing.Rows.Select(row => row.Name));
+    });
+
+    /// <summary>
+    /// Out and back under the map ends in the folder the rows were about, but each step starts the
+    /// list afresh, as it does with the list on screen, so the rows that come back are new rows rather
+    /// than the old ones reconciled.
+    /// </summary>
+    [Fact]
+    public void AStepInAndOutUnderTheMapStillRebuildsTheList() => UiThread.Run(async () =>
     {
         _explore.Volumes.With(@"C:\");
         var page = _explore.Listed();
@@ -153,15 +174,11 @@ public sealed class ExploreListingTests : IDisposable
 
         page.SelectedView = ExploreView.Treemap;
         page.Descend(users);
-        page.SelectedView = ExploreView.List;
-
-        Assert.Equal(["testuser", "Public"], page.Listing.Rows.Select(row => row.Name));
-
-        page.SelectedView = ExploreView.Treemap;
         page.AscendCommand.Execute(null);
         page.SelectedView = ExploreView.List;
 
-        Assert.Equal([NotifyCollectionChangedAction.Reset, NotifyCollectionChangedAction.Reset], changes);
+        Assert.Equal([NotifyCollectionChangedAction.Reset], changes);
+        Assert.Equal(["Users", "pagefile.sys"], page.Listing.Rows.Select(row => row.Name));
         Assert.NotSame(before, page.Listing.Rows.Single(row => row.Name == "Users"));
     });
 

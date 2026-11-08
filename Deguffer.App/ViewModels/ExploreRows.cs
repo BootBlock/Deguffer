@@ -86,9 +86,9 @@ public sealed class ExploreRows
     /// <see cref="Core.Exploring.Rendering.ExploreDisplay.ListsRows"/>).
     ///
     /// <para>Nothing reads <see cref="Rows"/> but the list, and a map is on screen by default. A row
-    /// costs a path, a lookup in the guide and five formatted strings, so a step into a folder of
-    /// twenty thousand entries, and every snapshot while one is on screen, did all of that for a
-    /// control that was collapsed or never bound. Listed again, the rows are brought to the folder
+    /// costs a path, a lookup in the guide and five formatted strings, so writing them on a step into
+    /// a folder of twenty thousand entries, and on every snapshot while one is on screen, is that
+    /// work twenty thousand times for a control that is collapsed or never bound. Listed again, the rows are brought to the folder
     /// on screen: in place where they are still the same list, so a reader who went to the map and
     /// back without moving keeps their place in it, and rebuilt where they are not.</para>
     /// </summary>
@@ -129,14 +129,21 @@ public sealed class ExploreRows
     /// up would keep a highlight the user put on a different folder, and the scroll position is
     /// about content that is no longer there.</para>
     /// </param>
-    public void Show(ExploreTree tree, ExplorePosition position, VolumeSpace volume, bool reconcile)
+    /// <returns>
+    /// How many rows this wrote, which is none while the rows are not listed: what <see cref="Rows"/>
+    /// holds then was written for an earlier show.
+    /// </returns>
+    public int Show(ExploreTree tree, ExplorePosition position, VolumeSpace volume, bool reconcile)
     {
         _tree = tree;
         _node = position.Node;
 
+        var written = 0;
+
         if (IsActive)
         {
             Write(tree, position.Node, reconcile);
+            written = Rows.Count;
         }
         else
         {
@@ -145,6 +152,8 @@ public sealed class ExploreRows
 
         // The trail is above the map as well as the list, so it is brought up to date either way.
         ShowTrail(tree, position, volume);
+
+        return written;
     }
 
     /// <summary>Empty the list and the trail, where nothing is on screen to describe.</summary>
