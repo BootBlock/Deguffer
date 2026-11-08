@@ -539,6 +539,99 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The package dry run takes nothing from <c>system info</c>, so the two PlatformIO start-ups
+    /// overlap rather than add up. Held until both have started, a dry run asked only once the
+    /// locations came back never starts, and the hold gives up. The plan still reads cache first.
+    /// </summary>
+    [Fact]
+    public async Task AsksForTheDryRunWithoutWaitingForSystemInfo()
+    {
+        _environment.WithExecutable("pio");
+        CreateCache();
+        CreateInstalledToolchains();
+        var together = new HeldRuns(together: 2);
+        var runner = Reporting(ASupersededToolchain)
+            .Holding(Pio, "system info", together)
+            .Holding(Pio, "--dry-run", together);
+
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.True(together.StartedTogether, "The dry run waited for system info to return.");
+        Assert.Equal(2, together.MostAtOnce);
+        Assert.Collection(
+            plan.Steps.OfType<RunCommandStep>(),
+            cache => Assert.Contains("--cache", cache.Arguments, StringComparison.Ordinal),
+            packages => Assert.Contains("--core-packages", packages.Arguments, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The cache half does not wait for PlatformIO's answer about the packages: the dry run is held
+    /// open until the cache has been measured, which never happens if the package half has to finish
+    /// before the cache half begins. The opposite order, the cache half finishing before the dry run
+    /// is asked, is what <see cref="AsksForTheDryRunWithoutWaitingForSystemInfo"/> catches. Both
+    /// halves still land, in the same order, with the same figures.
+    /// </summary>
+    [Fact]
+    public async Task MeasuresTheCacheWhileTheDryRunIsStillOpen()
+    {
+        _environment.WithExecutable("pio");
+        var cache = CreateCache(bytes: 4096);
+        var siblings = CreateInstalledToolchains();
+        var scanner = new FakeDirectoryScanner();
+        var runner = Reporting(ASupersededToolchain).Holding(Pio, "--dry-run", scanner.WhenMeasured(cache));
+        var provider = new PlatformIoCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, scanner);
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Collection(
+            plan.Steps.OfType<RunCommandStep>(),
+            step =>
+            {
+                Assert.Equal([cache], step.MeasuredPaths);
+                Assert.Equal(4096, step.EstimatedBytes);
+            },
+            step => Assert.Equal(SupersededToolchainBytes, step.EstimatedBytes));
+        Assert.Empty(plan.TargetedPaths);
+        Assert.All(siblings.Append(provider.CoreRoot), survivor => Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(survivor, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present));
+    }
+
+    /// <summary>
+    /// Where an earlier question this pass already resolved the locations, nothing holds the cache
+    /// half back, and it would probe and begin its walk before the dry run was even asked. The dry
+    /// run is asked first, so PlatformIO is working while Deguffer walks the cache.
+    /// </summary>
+    [Fact]
+    public async Task AsksForTheDryRunBeforeWalkingTheCacheWhenTheLocationsAreAlreadyKnown()
+    {
+        _environment.WithExecutable("pio");
+        var cache = CreateCache();
+        CreateInstalledToolchains();
+        var scanner = new FakeDirectoryScanner();
+        bool? cacheMeasuredWhenAsked = null;
+        var runner = new FakeProcessRunner()
+            .Responding(Pio, "system info", string.Empty)
+            .Replying(Pio, arguments =>
+            {
+                if (!arguments.Contains("--dry-run", StringComparison.Ordinal))
+                {
+                    return null;
+                }
+
+                cacheMeasuredWhenAsked = scanner.Measured.Contains(cache, StringComparer.OrdinalIgnoreCase);
+                return new CommandOutcome(0, ASupersededToolchain, string.Empty);
+            });
+        var provider = new PlatformIoCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, scanner);
+
+        await provider.CleanedPlacesAsync();
+        var plan = await provider.PlanAsync();
+
+        Assert.Single(runner.Invocations, i => i.Arguments.Contains("system info", StringComparison.Ordinal));
+        Assert.False(cacheMeasuredWhenAsked, "The cache was walked before PlatformIO was asked for its dry run.");
+        Assert.Equal(2, plan.Steps.OfType<RunCommandStep>().Count());
+    }
+
+    /// <summary>
     /// §5.1 and §5.6 with the package row in play, which is when the negative is worth most: the
     /// step reaches inside <c>packages</c>, so every sibling and the folder itself are asserted to
     /// survive rather than merely left unmentioned.

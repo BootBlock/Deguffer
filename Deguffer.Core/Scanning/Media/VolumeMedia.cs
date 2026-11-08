@@ -23,4 +23,13 @@ public readonly record struct VolumeMedia(
     StorageMedia Class,
     IReadOnlyList<int> PhysicalDisks,
     MediaUnknownReason Reason = MediaUnknownReason.None,
-    int Win32Error = 0);
+    int Win32Error = 0)
+{
+    /// <summary>
+    /// Whether the volume is on solid state with its disks listed, so more than one reader or walk
+    /// may work on it at once. Without its disks a volume cannot be placed with the others on its
+    /// disk, and several at once there could be several on one disk from more than one set.
+    /// </summary>
+    public bool IsKnownSolidState =>
+        Class is StorageMedia.Nvme or StorageMedia.SolidState && PhysicalDisks.Count > 0;
+}

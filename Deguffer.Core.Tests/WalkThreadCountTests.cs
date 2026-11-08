@@ -61,6 +61,7 @@ public sealed class WalkThreadCountTests
                 [(Root, 0)],
                 new WalkTuning(WalkTuning.MaximumThreads, WalkTuning.MinimumListingBuffer),
                 FileNames.All,
+                DirectoryHold.None,
                 new ListingBudget(),
                 tree.List,
                 static (_, contents, descend) =>

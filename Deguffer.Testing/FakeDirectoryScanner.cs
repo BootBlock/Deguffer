@@ -22,6 +22,7 @@ public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) 
     public ScanTuner Tuning => ScanTuner.Shipped;
 
     private readonly ConcurrentQueue<string> _measured = new();
+    private readonly ConcurrentDictionary<string, TaskCompletionSource> _measuredSignals = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentQueue<(string Root, DirectorySearch Search)> _asked = new();
     private int _holds;
     private int _taken;
@@ -40,6 +41,22 @@ public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) 
     /// </summary>
     public IReadOnlyCollection<string> Measured => _measured;
 
+    /// <summary>
+    /// Completes once <paramref name="path"/> is first measured, by either route, so a test can hold
+    /// other work until a measurement has begun and prove the two overlapped by the order things
+    /// happened in.
+    /// </summary>
+    public Task WhenMeasured(string path) => MeasuredSignal(path).Task;
+
+    private void Record(string path)
+    {
+        _measured.Enqueue(path);
+        MeasuredSignal(path).TrySetResult();
+    }
+
+    private TaskCompletionSource MeasuredSignal(string path) =>
+        _measuredSignals.GetOrAdd(path, static _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
+
     public ValueTask<ScanResult> MeasureAsync(
         string path,
         MinimumAge keep = default,
@@ -47,7 +64,7 @@ public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) 
         IProgress<ScanSize>? progress = null,
         CancellationToken ct = default)
     {
-        _measured.Enqueue(path);
+        Record(path);
         return ParallelEnumerationScanner.Default.MeasureAsync(path, keep, bounds, progress, ct);
     }
 
@@ -66,7 +83,7 @@ public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) 
 
         foreach (var question in asked)
         {
-            _measured.Enqueue(question.Path);
+            Record(question.Path);
         }
 
         return ParallelEnumerationScanner.Default.MeasureManyAsync(asked, keep, progress, ct);
@@ -76,7 +93,7 @@ public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) 
     public ValueTask<AgedScan> MeasureAgedAsync(
         string path, MinimumAge age, IProgress<ScanSize>? progress = null, CancellationToken ct = default)
     {
-        _measured.Enqueue(path);
+        Record(path);
         return ParallelEnumerationScanner.Default.MeasureAgedAsync(path, age, progress, ct);
     }
 
@@ -92,11 +109,18 @@ public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) 
 
         foreach (var question in asked)
         {
-            _measured.Enqueue(question.Path);
+            Record(question.Path);
         }
 
         return ParallelEnumerationScanner.Default.MeasureFromDiskAsync(asked, ct);
     }
+
+    /// <summary>
+    /// Awaited with the root and the caller's token once a question to the index is recorded and
+    /// before it is answered, so a test can hold one search until another has started, or fail one.
+    /// Where none is given, the answer is given at once.
+    /// </summary>
+    public Func<string, CancellationToken, Task>? Answering { get; init; }
 
     /// <summary>
     /// Null when this fake has no index, matching the contract the real scanner uses to tell the
@@ -111,19 +135,32 @@ public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) 
     {
         _asked.Enqueue((root, search));
 
+        return Answering is { } answering
+            ? new(AnswerAfterAsync(answering(root, ct), search, root))
+            : new(Answer(search, root));
+    }
+
+    private async Task<IReadOnlyList<string>?> AnswerAfterAsync(Task held, DirectorySearch search, string root)
+    {
+        await held.ConfigureAwait(false);
+        return Answer(search, root);
+    }
+
+    private IReadOnlyList<string>? Answer(DirectorySearch search, string root)
+    {
         if (indexed is null)
         {
-            return new((IReadOnlyList<string>?)null);
+            return null;
         }
 
         var prefix = root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
 
-        return new((IReadOnlyList<string>?)indexed
+        return indexed
             .Where(p => p.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             .Where(p => SourceTreeBoundary.IsInsideTheSearch(p, root, search)
                 && search.Meet(Path.GetFileName(p.TrimEnd(Path.DirectorySeparatorChar))) is SearchStep.Found)
             .Order(StringComparer.Ordinal)
-            .ToList());
+            .ToList();
     }
 
     public void Invalidate() => InvalidateCount++;

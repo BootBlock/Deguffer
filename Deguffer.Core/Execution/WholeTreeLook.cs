@@ -99,6 +99,7 @@ public sealed record WholeTreeLook(
             [.. paths.Select(path => WalkRoot.Of(path, default))],
             tuning,
             FileNames.Stores,
+            DirectoryHold.None,
             fs.ListEntries,
             (_, _, contents, _) =>
             {

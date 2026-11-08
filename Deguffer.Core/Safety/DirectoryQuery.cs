@@ -25,6 +25,10 @@ namespace Deguffer.Core.Safety;
 /// (<see cref="ListingRequest.FollowsLink"/>). Its parent's listing said it was no link, and a junction
 /// put at its name since would otherwise be followed, and its target listed under the child's path,
 /// which the removal walk lists through too.</para>
+///
+/// <para><b>The handle is closed once the directory is listed</b>, unless the request names a
+/// <see cref="ListingRequest.Holder"/>, which keeps it for the walk's callback to read each file
+/// relative to (<see cref="DirectoryHold.DuringCallback"/>).</para>
 /// </summary>
 internal static unsafe partial class DirectoryQuery
 {
@@ -103,15 +107,33 @@ internal static unsafe partial class DirectoryQuery
             return Ended(status, whileReading: false);
         }
 
+        var held = false;
+
         try
         {
-            return Read(handle, directory, request, into);
+            var end = Read(handle, directory, request, into);
+
+            // Kept after a listing that failed part-way too: what was listed before it is still
+            // handed to the callback, and is read relative to this handle as the rest would be.
+            if (request.Holder is { } holder)
+            {
+                holder.Hold(handle);
+                held = true;
+            }
+
+            return end;
         }
         finally
         {
-            _ = NtClose(handle);
+            if (!held)
+            {
+                Close(handle);
+            }
         }
     }
+
+    /// <summary>Close a handle this listing opened, which <see cref="ListedDirectoryHandle"/> may have kept.</summary>
+    internal static void Close(nint handle) => _ = NtClose(handle);
 
     /// <summary>
     /// The name <paramref name="directory"/> is opened by, written into the memory's own room, or
