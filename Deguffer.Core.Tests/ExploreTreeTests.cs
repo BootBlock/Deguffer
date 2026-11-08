@@ -93,6 +93,44 @@ public class ExploreTreeTests
     }
 
     /// <summary>
+    /// Siblings whose names share a long prefix, as a component store's do, or differ only past ASCII,
+    /// are in the order their names put them in, in both orders a tree is assembled in. The sort
+    /// reaches that order by a key of each name's first characters (<see cref="NameSortKeys"/>), and
+    /// these are the names a key alone cannot order.
+    /// </summary>
+    [Theory]
+    [InlineData(ExploreChildOrder.BySize)]
+    [InlineData(ExploreChildOrder.ByName)]
+    public void EqualSizedSiblingsAlikeForTheirFirstCharactersAreStillInNameOrder(ExploreChildOrder order)
+    {
+        var builder = new ExploreTreeBuilder(Root);
+
+        builder.AddChildren(ExploreTreeBuilder.RootNode, [
+            File("amd64_microsoft-windows-zipfldr.manifest", 4096),
+            File("AMD64_Microsoft-Windows-Audio.manifest", 4096),
+            File("amd64_microsoft-windows-\u00E9tat.manifest", 4096),
+            File("amd64_microsoft-windows-audio.cat", 4096),
+            File("r\u00E9sum\u00E9-2.txt", 4096),
+            File("r\u00E9sum\u00E9-1.txt", 4096),
+            File("amd64_microsoft-windows-b.manifest", 4096),
+        ]);
+
+        var tree = builder.Build(order);
+
+        Assert.Equal(
+            [
+                "amd64_microsoft-windows-audio.cat",
+                "AMD64_Microsoft-Windows-Audio.manifest",
+                "amd64_microsoft-windows-b.manifest",
+                "amd64_microsoft-windows-zipfldr.manifest",
+                "amd64_microsoft-windows-\u00E9tat.manifest",
+                "r\u00E9sum\u00E9-1.txt",
+                "r\u00E9sum\u00E9-2.txt",
+            ],
+            NamesOfChildren(tree, tree.RootNode));
+    }
+
+    /// <summary>
     /// The name order of equal siblings holds in a directory large enough that the runtime sorts it
     /// rather than inserting it, where the sort itself is unstable. Recorded in an order neither
     /// sorted nor reversed, so only the tie-break can put them in name order: a tie broken by
@@ -460,7 +498,8 @@ public class ExploreTreeTests
     /// <para>What is kept is the child starts and the child list, four bytes a node each. The order
     /// is four more, so twelve in all, and the bound leaves one for the key buffer and the tree
     /// itself. A tree whose every node is reached keeps the arrays it was handed, so nothing is
-    /// copied for one.</para>
+    /// copied for one. The sort's name keys are sixteen bytes a distinct name rather than a node, and
+    /// this tree's files share one name.</para>
     /// </summary>
     [Theory]
     [InlineData(ExploreChildOrder.BySize)]

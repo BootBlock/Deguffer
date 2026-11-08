@@ -17,7 +17,7 @@ public sealed class GrowthReplayFrame : ITrackedTree
 {
     private readonly ConcurrentDictionary<int, int[]> _children = new();
 
-    private readonly Comparison<int> _byName;
+    private readonly Action<Span<int>> _byName;
 
     private readonly Func<int, long> _sizeOf;
 
@@ -27,7 +27,8 @@ public sealed class GrowthReplayFrame : ITrackedTree
         Step = step;
         _sizeOf = SizeOf;
 
-        _byName = replay.CompareByName;
+        Comparison<int> compare = replay.CompareByName;
+        _byName = siblings => siblings.Sort(compare);
     }
 
     public GrowthReplay Replay { get; }
