@@ -1,3 +1,6 @@
+using System.Numerics;
+using System.Runtime.CompilerServices;
+
 namespace Deguffer.Core.Exploring;
 
 /// <summary>
@@ -53,6 +56,7 @@ internal sealed class NamePool
     private char[][] _chunks = [];
     private int _chunkCount;
     private int _used;
+    private long _textLength;
 
     public NamePool()
     {
@@ -117,45 +121,95 @@ internal sealed class NamePool
     {
         lock (_gate)
         {
-            return new Frozen(_chunks, _entries.Freeze());
+            return new Frozen(_chunks, _entries.Freeze(), _textLength);
         }
     }
 
     /// <summary>
-    /// A pool holding only the names <paramref name="nameNumbers"/> use, each copied once, with every
-    /// number in <paramref name="nameNumbers"/> rewritten to its name's number there.
+    /// The names <paramref name="nameNumbers"/> use: a pool holding only those, each copied once, with
+    /// every number in <paramref name="nameNumbers"/> rewritten to its name's number there, or
+    /// <paramref name="names"/> itself, with the numbers left as they are, where the names left out
+    /// hold no more than the names kept.
     ///
     /// <para>For a tree that keeps fewer nodes than its reader numbered names for. The file table's
     /// reader names every record on the volume, so a tree of one folder would otherwise keep every
-    /// name on the disk to show the few under it. No name is looked up: each was distinct in
-    /// <paramref name="names"/>, so each stays distinct, and the pool is handed back frozen because
-    /// one that could intern more would hold nothing to find these by.</para>
+    /// name on the disk to show the few under it. A tree of the whole volume uses all but a handful,
+    /// and copying 1.4 million names to drop one cost 180 to 420 ms and 98 MiB on a system volume, so
+    /// a copy is made only where the names left out hold more than the names kept. What a tree
+    /// keeps beyond the names it uses is then never more than those names hold.</para>
+    ///
+    /// <para>No name is looked up: each was distinct in <paramref name="names"/>, so each stays
+    /// distinct. They are copied in the order <paramref name="names"/> numbers them, so a kept name's
+    /// new number is the count of kept names before it. A node's number is rewritten from that
+    /// count, kept for each 64 names, so no map the size of <paramref name="names"/> is made, and only
+    /// the names kept are read. The copy is handed back frozen because a pool that could intern more
+    /// would hold nothing to find these by.</para>
     /// </summary>
     public static Frozen Keeping(Frozen names, Span<int> nameNumbers)
     {
-        var kept = new NamePool();
+        // One bit a name, so that marking a whole volume's names costs under 200 KB, and a pool
+        // handed back as it was costs nothing more.
+        var used = new ulong[(names.Count + 63) >> 6];
 
-        // Zero in the map is "not copied yet", which the empty name, number zero in both pools,
-        // never needs to be.
-        var renumbered = new int[names.Count];
+        foreach (var number in nameNumbers)
+        {
+            used[number >> 6] |= 1UL << number;
+        }
+
+        // The empty name is number zero in both pools, whether a node uses it or not.
+        used[0] |= 1;
+
+        var keptCount = 0;
+        long keptLength = 0;
+
+        for (var word = 0; word < used.Length; word++)
+        {
+            for (var bits = used[word]; bits != 0; bits &= bits - 1)
+            {
+                keptLength += names[(word << 6) | BitOperations.TrailingZeroCount(bits)].Length;
+                keptCount++;
+            }
+        }
+
+        var keptBytes = HeldBytes(keptLength, keptCount);
+        if (HeldBytes(names.TextLength, names.Count) - keptBytes <= keptBytes)
+        {
+            return names;
+        }
+
+        var kept = new NamePool();
+        var keptBefore = new int[used.Length];
+        var counted = 0;
+
+        for (var word = 0; word < used.Length; word++)
+        {
+            keptBefore[word] = counted;
+
+            for (var bits = used[word]; bits != 0; bits &= bits - 1)
+            {
+                var number = (word << 6) | BitOperations.TrailingZeroCount(bits);
+
+                if (number != Empty)
+                {
+                    kept.Append(names[number]);
+                }
+
+                counted++;
+            }
+        }
 
         foreach (ref var number in nameNumbers)
         {
-            if (number == Empty)
-            {
-                continue;
-            }
-
-            if (renumbered[number] == Empty)
-            {
-                renumbered[number] = kept.Append(names[number]);
-            }
-
-            number = renumbered[number];
+            var word = number >> 6;
+            number = keptBefore[word] + BitOperations.PopCount(used[word] & ((1UL << number) - 1));
         }
 
         return kept.Freeze();
     }
+
+    /// <summary>What a pool holds for <paramref name="count"/> names of <paramref name="textLength"/> characters in all: their characters and their entries.</summary>
+    private static long HeldBytes(long textLength, int count) =>
+        (textLength * sizeof(char)) + ((long)count * Unsafe.SizeOf<Entry>());
 
     private static long Slot(int hash, int number) => ((long)hash << 32) | (uint)(number + 1);
 
@@ -263,6 +317,7 @@ internal sealed class NamePool
 
         name.CopyTo(_chunks[chunk].AsSpan(_used));
         _entries.Add() = new Entry((chunk << ChunkShift) | _used, name.Length);
+        _textLength += name.Length;
 
         // A chunk given to one long name is full with it.
         _used = name.Length > ChunkLength ? ChunkLength : _used + name.Length;
@@ -279,13 +334,17 @@ internal sealed class NamePool
         private readonly char[][] _chunks;
         private readonly AppendOnlyChunks<Entry>.Prefix _entries;
 
-        internal Frozen(char[][] chunks, AppendOnlyChunks<Entry>.Prefix entries)
+        internal Frozen(char[][] chunks, AppendOnlyChunks<Entry>.Prefix entries, long textLength)
         {
             _chunks = chunks;
             _entries = entries;
+            TextLength = textLength;
         }
 
         public int Count => _entries.Count;
+
+        /// <summary>How many characters the names hold in all.</summary>
+        public long TextLength { get; }
 
         public ReadOnlySpan<char> this[int number] => Read(_chunks, in _entries[number]);
     }
