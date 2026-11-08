@@ -122,8 +122,10 @@ public static class ExploreRouteText
             FallbackReason.WalkChosen =>
                 "Scanned by walking directories, because Settings asks for the walk only.",
 
-            // Cannot arise here either. Explore reads the table and never races it, because the walk
-            // it would race is the whole volume.
+            // A scan of a folder that walked while the table was read, and finished first. Nothing
+            // was lost and nothing is on offer: the table opened, so the process already has the
+            // rights, and the walk listed the folder itself, so its tree is as whole as the table's
+            // and names any folder below it that it was refused.
             FallbackReason.WalkAnsweredFirst => null,
 
             _ => throw new ArgumentOutOfRangeException(nameof(reason)),

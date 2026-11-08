@@ -22,8 +22,8 @@ internal readonly record struct Raced<T>(T Answer, RaceOutcome Outcome);
 ///
 /// <para>One place for every question that races, so that what counts as an answer, and that the
 /// loser is stopped and waited for before the winner is returned, is one rule rather than one per
-/// caller. Nothing about a route is chosen here: <see cref="DirectoryScanner"/> still decides
-/// whether a question races at all.</para>
+/// caller. Nothing about a route is chosen here: <see cref="DirectoryScanner"/> and
+/// <see cref="Exploring.ExploreScanner"/> still decide whether a question races at all.</para>
 /// </summary>
 internal static class RouteRace
 {

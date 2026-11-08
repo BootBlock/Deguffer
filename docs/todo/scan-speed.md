@@ -128,7 +128,7 @@ Each of these changes a recorded design choice or what Deguffer finds, so each i
 | #474 | Never enter `.hg`, `.svn`, `.bzr` or `__pycache__` in source discovery. Done: those four, `.jj` and `_darcs` join `.git` and `node_modules` in `SourceTreeBoundary`, and §5.2 states the rule a name must meet to join. |
 | #475 | Stream the bytes counted so far into the Clean preview (`scan-progress.md` route B). |
 | #484 | Start a volume's index build when the pass starts (`after-the-scanner.md` item 7's G1 question). |
-| #487 | Race the walk against the table for an Explore scan of a folder. |
+| #487 | Race the walk against the table for an Explore scan of a folder. Done: under Auto a folder is raced through `RouteRace` and a volume's root still reads the table alone. The page is told about the walk while both run, and about the table once the walk ends without listing the folder. A walk that answers first carries no note. Table keeps the old behaviour. |
 | #491 | Draw the last kept scan of a drive while a new scan runs. |
 | #492 | Draw snapshots during the file-table read. |
 

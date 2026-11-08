@@ -1,3 +1,4 @@
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Mft;
@@ -35,10 +36,18 @@ public class ExploreScannerTests
     /// A scanner whose walk reads nothing, for a scan of <see cref="DriveLetters.Faked"/> or of a
     /// share. See <see cref="WalkRecorder"/>.
     /// </summary>
-    private static ExploreScanner OnTheFakes(IMftSourceFactory sources, WalkRecorder? walks = null) =>
-        new(sources) { Walker = (walks ?? new WalkRecorder()).Walk };
+    private static ExploreScanner OnTheFakes(IMftSourceFactory sources, WalkRecorder? walks = null, ScanTuner? tuning = null) =>
+        new(sources, tuning: tuning) { Walker = (walks ?? new WalkRecorder()).Walk };
 
-    private static MftFixture Volume() => new MftFixture()
+    /// <summary>
+    /// <see cref="OnTheFakes"/> under <see cref="ScanRoute.Table"/>, for a test of what the table says
+    /// about a folder. Under Auto the recorded walk would race the table and could answer first.
+    /// Raced scans are in <see cref="ExploreFolderRaceTests"/>.
+    /// </summary>
+    private static ExploreScanner WaitingForTheTable(IMftSourceFactory sources, WalkRecorder? walks = null) =>
+        OnTheFakes(sources, walks, ExploreFolderRaceTests.Tuner(ScanRoute.Table));
+
+    internal static MftFixture Volume() => new MftFixture()
         .AddDirectory(Users, MftRecord.RootRecordNumber, "Users")
         .AddDirectory(Profile, Users, "testuser")
         .AddDirectory(Cache, Profile, ".npm-cache")
@@ -110,7 +119,7 @@ public class ExploreScannerTests
     public async Task ReadsTheTableForAFolderBelowTheVolumeRoot()
     {
         const char letter = DriveLetters.Faked;
-        var scanner = OnTheFakes(FakeMftSourceFactory.Serving(letter, Volume()));
+        var scanner = WaitingForTheTable(FakeMftSourceFactory.Serving(letter, Volume()));
 
         var scan = await scanner.ScanAsync($@"{letter}:\Users\testuser\.npm-cache");
 
@@ -138,7 +147,7 @@ public class ExploreScannerTests
     public async Task NamesAFolderInTheFormAPersonReadsWhateverFormItWasGiven()
     {
         const char letter = DriveLetters.Faked;
-        var scanner = OnTheFakes(FakeMftSourceFactory.Serving(letter, Volume()));
+        var scanner = WaitingForTheTable(FakeMftSourceFactory.Serving(letter, Volume()));
 
         var scan = await scanner.ScanAsync($@"\\?\{letter}:\Users\testuser\.npm-cache");
 
@@ -190,7 +199,7 @@ public class ExploreScannerTests
 
         var walks = new WalkRecorder();
 
-        var scan = await OnTheFakes(sources, walks).ScanAsync($@"{letter}:\Users\testuser\linked-cache");
+        var scan = await WaitingForTheTable(sources, walks).ScanAsync($@"{letter}:\Users\testuser\linked-cache");
 
         Assert.Equal(1, sources.OpenCount);
         Assert.Equal(ScanStrategy.ParallelEnumeration, scan.Strategy);
@@ -212,7 +221,7 @@ public class ExploreScannerTests
 
         var walks = new WalkRecorder();
 
-        var scan = await OnTheFakes(sources, walks).ScanAsync($@"{letter}:\Users\testuser\.pnpm-store");
+        var scan = await WaitingForTheTable(sources, walks).ScanAsync($@"{letter}:\Users\testuser\.pnpm-store");
 
         Assert.Equal(ScanStrategy.ParallelEnumeration, scan.Strategy);
         Assert.Equal(FallbackReason.MasterFileTableIncomplete, scan.Fallback);
@@ -501,7 +510,7 @@ public class ExploreScannerTests
     /// rather than two: a read of larger blocks makes its last report at the end of the table rather
     /// than at the second interval, and that report carries no snapshot.
     /// </summary>
-    private static MftFixture LongVolume() => Volume().AddUnused((3 * MftPassProgress.Interval) + 10).WithoutBitmap();
+    internal static MftFixture LongVolume() => Volume().AddUnused((3 * MftPassProgress.Interval) + 10).WithoutBitmap();
 
     /// <summary>
     /// A scanner that assembles each snapshot by <paramref name="assemble"/>, on the spot where it is
