@@ -17,7 +17,7 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>Only the build is shared.</b> <see cref="LiveTreeQuestion.Ask"/> runs for every check, so a
 /// fact a rule reads per directory, such as Unreal's logs or a staging directory's last write, is
-/// read again immediately before each removal, as before.</para>
+/// read again immediately before each removal.</para>
 ///
 /// <para>Kept against the reading named before the build, so a reading dropped by another check while
 /// this one builds leaves the question at least as new as the reading it is kept for, never older.</para>

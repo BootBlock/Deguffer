@@ -152,7 +152,8 @@ internal static class LiveTreeVeto
 
         // The same rule for the question, not the question it produced, because the question is read
         // from the project and the machine, and an editor opened after the preview changes both. One
-        // source for every check, so the clean builds it once per reading rather than once per step.
+        // source for every check, because every check answering from one reading would build the same
+        // question.
         var atClean = new LiveTreeQuestionSource(questions);
 
         return new LiveTreeVetoResult(

@@ -65,18 +65,22 @@ public sealed class LiveTreeQuestionPerReadingTests : IDisposable
     }
 
     /// <summary>
-    /// The bound kept. One step's check builds the question, and the next, within the same reading,
-    /// answers from it. A project is then added to the open solution and the reading passes the
-    /// limit, so the next check reads the solution again: the added project keeps its <c>obj</c>, §5.6
-    /// proves it standing, and the project the solution never named is still cleaned.
+    /// The bound kept. The checks of the first two steps answer from one reading, so the solution is
+    /// read once for both. The project the third step removes is then added to the open solution and
+    /// the reading passes the limit, so the third step's check reads the solution again and holds its
+    /// <c>obj</c> back. The clean that follows keeps it, and §5.6 proves it standing.
+    ///
+    /// <para>Each check is asked directly, in order, because the clean runs several steps at once and
+    /// so fixes no order between two checks a test could place the change in.</para>
     /// </summary>
     [Fact]
-    public async Task AReadingDroppedBetweenTwoStepsReadsTheSolutionAgainAndHoldsBackAProjectAddedSince()
+    public async Task AReadingDroppedBetweenTwoChecksReadsTheSolutionAgainAndHoldsBackAProjectAddedSince()
     {
         var solution = Path.Combine(ApproveRoot(), "Solution");
         var open = ProjectFixture.CreateProject(Path.Combine(solution, "Open"), "Open");
+        var first = ProjectFixture.CreateProject(Path.Combine(solution, "First"), "First");
+        var second = ProjectFixture.CreateProject(Path.Combine(solution, "Second"), "Second");
         var added = ProjectFixture.CreateProject(Path.Combine(solution, "Added"), "Added");
-        var other = ProjectFixture.CreateProject(Path.Combine(solution, "Other"), "Other");
         var openProject = Path.Combine(solution, "Open", "Open.csproj");
         ProjectFixture.CreateSolution(solution, "Solution", xml: false, openProject);
         _liveTrees.WithProgram("devenv", workingDirectory: solution);
@@ -87,24 +91,25 @@ public sealed class LiveTreeQuestionPerReadingTests : IDisposable
 
         var before = _liveTrees.OccupiedAskedCount;
 
-        Assert.Empty(Ask(plan, other));
-        Assert.Equal(1, _liveTrees.OccupiedAskedCount - before);
-
-        Assert.Empty(Ask(plan, added));
+        Assert.Empty(Ask(plan, first));
+        Assert.Empty(Ask(plan, second));
         Assert.Equal(1, _liveTrees.OccupiedAskedCount - before);
 
         ProjectFixture.CreateSolution(
             solution, "Solution", xml: false, openProject, Path.Combine(solution, "Added", "Added.csproj"));
         _liveTrees.PassTheReadingLimit();
 
+        Assert.Contains(Ask(plan, added), held => held.Reason.Contains("devenv", StringComparison.Ordinal));
+        Assert.Equal(2, _liveTrees.OccupiedAskedCount - before);
+
         var result = await provider.ExecuteAsync(plan);
 
         Assert.True(Directory.Exists(added), "an obj whose project was added to the open solution after the reading was dropped was removed");
-        Assert.False(Directory.Exists(other), "an obj the solution does not name was kept");
+        Assert.False(Directory.Exists(first), "an obj the solution never named was kept");
+        Assert.False(Directory.Exists(second), "an obj the solution never named was kept");
         Assert.True(Directory.Exists(open), "an obj the plan held back was removed");
         Assert.Contains(result.Steps, step => step.Message == "Nothing was removed: devenv is working in Solution.");
         AssertProvedStanding(result, added);
-        Assert.Equal(2, _liveTrees.OccupiedAskedCount - before);
     }
 
     /// <summary>

@@ -187,7 +187,7 @@ Each keeps what it proves and proves it more cheaply. All are `safety`.
 | --- | --- |
 | #514 | One Restart Manager session for all candidates, and one per candidate only where something holds a file. The largest single gain. |
 | #512 | The mount point under a path, from its folders' attributes where no level is a link. |
-| #498 | The `obj` use check lists folders and parses solutions again for every step. |
+| #498 | The `obj` use check lists folders and parses solutions again for every step. Done: every check a veto handed out shares the question built for the inspector's current reading, and a new reading builds it again. |
 | #515 | Every candidate matched against every process, with lookups repeated per pair. |
 
 #### 2. The clean
