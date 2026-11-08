@@ -187,7 +187,7 @@ public sealed class GradleCacheProvider : CleanupProviderBase
 
         if (NothingToPlanFor(
                 home,
-                $"Gradle has not run for this user — no {home} directory.") is { } nothing)
+                $"Gradle has not run for this user — no {home} directory.", out var homeIsLink) is { } nothing)
         {
             return nothing;
         }
@@ -195,7 +195,7 @@ public sealed class GradleCacheProvider : CleanupProviderBase
         // Moving .gradle onto another drive with a junction is common. The walk below would decline
         // it too, but this says so about the whole folder in one sentence, and makes no claim about
         // a gradle.properties that only resolves through the link.
-        if (LongPath.IsReparsePoint(home))
+        if (homeIsLink)
         {
             return UnexaminedPlan(
                 $"Leaving '{home}' alone: it is a link to somewhere else, and Deguffer does not look "

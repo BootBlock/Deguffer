@@ -127,7 +127,7 @@ public static class TopazLayout
     /// <summary>Look at the vendor folder and every product folder in it, never through a link.</summary>
     public static TopazSurvey Survey(string root, TopazInstallations installations, CancellationToken ct)
     {
-        switch (LongPath.ProbeDirectory(root))
+        switch (LongPath.ProbeDirectory(root, out var rootIsLink))
         {
             case PathPresence.Absent:
                 return new TopazSurvey(root, TopazRootReach.Absent, [], [], []);
@@ -136,7 +136,7 @@ public static class TopazLayout
                 return new TopazSurvey(root, TopazRootReach.Refused, [], [], []);
         }
 
-        if (LongPath.IsReparsePoint(root))
+        if (rootIsLink is true)
         {
             return new TopazSurvey(root, TopazRootReach.Link, [], [], []);
         }

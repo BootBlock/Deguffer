@@ -110,14 +110,14 @@ public sealed class IvyCacheProvider : CleanupProviderBase
     {
         var home = Home;
 
-        if (NothingToPlanFor(home, $"Ivy has not run for this user — no {home} directory.") is { } nothing)
+        if (NothingToPlanFor(home, $"Ivy has not run for this user — no {home} directory.", out var homeIsLink) is { } nothing)
         {
             return nothing;
         }
 
         // A home moved to another drive with a junction is the usual reason it is a link. Said once
         // about the whole folder, with no claim about a .credentials that resolves only through it.
-        if (LongPath.IsReparsePoint(home))
+        if (homeIsLink)
         {
             return UnexaminedPlan(
                 $"Leaving '{home}' alone: it is a link to somewhere else, and Deguffer does not look "

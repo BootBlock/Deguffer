@@ -69,7 +69,7 @@ internal sealed class RetroArchReading
     /// </summary>
     public IReadOnlyList<FileSystemInfo>? Entries(string folder)
     {
-        switch (LongPath.ProbeDirectory(folder))
+        switch (LongPath.ProbeDirectory(folder, out var folderIsLink))
         {
             case PathPresence.Absent:
                 return null;
@@ -79,7 +79,7 @@ internal sealed class RetroArchReading
                 return null;
         }
 
-        if (LongPath.IsReparsePoint(folder))
+        if (folderIsLink is true)
         {
             DeclineLink(folder);
             return null;

@@ -150,7 +150,7 @@ public sealed partial class ElectronCacheProvider : CleanupProviderBase
                 + $"cache: {setting.Declined} It is leaving it alone.");
         }
 
-        if (NothingToPlanFor(root, $"Electron has not downloaded anything for this user — no {root} directory.") is { } nothing)
+        if (NothingToPlanFor(root, $"Electron has not downloaded anything for this user — no {root} directory.", out var rootIsLink) is { } nothing)
         {
             return nothing;
         }
@@ -158,7 +158,7 @@ public sealed partial class ElectronCacheProvider : CleanupProviderBase
         // The root arrives by name, so nothing has classified it. A junctioned root hands back the far
         // side's ordinary directories, and every survivor named for this root would resolve through
         // the same link and pass.
-        if (LongPath.IsReparsePoint(root))
+        if (rootIsLink)
         {
             return UnexaminedPlan(
                 $"Leaving '{root}' alone: it is a link to somewhere else, and Deguffer does not look "

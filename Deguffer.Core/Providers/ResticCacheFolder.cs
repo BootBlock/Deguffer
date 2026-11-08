@@ -39,7 +39,7 @@ internal sealed record ResticCacheFolder(
     /// <summary>The folder at <paramref name="root"/>, or null where there is no folder there.</summary>
     public static ResticCacheFolder? Read(string root)
     {
-        switch (LongPath.ProbeDirectory(root))
+        switch (LongPath.ProbeDirectory(root, out var rootIsLink))
         {
             case PathPresence.Absent:
                 return null;
@@ -50,7 +50,7 @@ internal sealed record ResticCacheFolder(
 
         // The folder arrives by name, from a variable or a default, so nothing has classified it, and a
         // repository's cache on the far side of a link would be cleared through it.
-        if (LongPath.IsReparsePoint(root))
+        if (rootIsLink is true)
         {
             return new ResticCacheFolder(root, [], [(root, CacheLevelWalk.LinkReason)], [], [CacheLevelWalk.Note(root)], Unreadable: false);
         }

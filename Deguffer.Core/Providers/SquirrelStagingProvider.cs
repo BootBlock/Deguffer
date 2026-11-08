@@ -404,7 +404,7 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
             return new Collected([], Unreadable: false, Declined: 1);
         }
 
-        switch (LongPath.ProbeDirectory(root))
+        switch (LongPath.ProbeDirectory(root, out var rootIsLink))
         {
             // Windows would not say whether the staging folder is there, so nothing under it was
             // examined and the figures are short by an amount nobody can state — the same thing to
@@ -421,7 +421,7 @@ public sealed partial class SquirrelStagingProvider : CleanupProviderBase
         // classified it. A junctioned root hands back the far side's ordinary directories, and a
         // recognised name among them would be removed while every survivor named for this root
         // resolved through the same link and passed — the vacuous negative.
-        if (LongPath.IsReparsePoint(root))
+        if (rootIsLink is true)
         {
             notes.Add(CacheLevelWalk.Note(root));
             survivors.Add((root, CacheLevelWalk.LinkReason));

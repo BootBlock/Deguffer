@@ -169,12 +169,12 @@ public sealed class BunInstallCacheProvider : CleanupProviderBase
             return EmptyPlan(declined);
         }
 
-        if (NothingToPlanFor(cache, $"Bun is installed but has cached nothing yet ({cache} does not exist).") is { } nothing)
+        if (NothingToPlanFor(cache, $"Bun is installed but has cached nothing yet ({cache} does not exist).", out var cacheIsLink) is { } nothing)
         {
             return nothing;
         }
 
-        if (LongPath.IsReparsePoint(cache))
+        if (cacheIsLink)
         {
             return EmptyPlan($"Leaving '{cache}' alone: it is a link to somewhere else, and Deguffer does not look through a link.");
         }

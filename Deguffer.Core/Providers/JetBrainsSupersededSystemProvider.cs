@@ -204,7 +204,7 @@ public sealed class JetBrainsSupersededSystemProvider : CleanupProviderBase
     private static IEnumerable<string> OfferedChildren(string version) =>
         DerivedChildren
             .Select(child => Path.Combine(version, child))
-            .Where(child => LongPath.ProbeDirectory(child) is PathPresence.Present && !LongPath.IsReparsePoint(child));
+            .Where(child => LongPath.ProbeDirectory(child, out var isLink) is PathPresence.Present && isLink is false);
 
     /// <summary>
     /// §5.6. Each vendor folder, every child of it that is not offered, the folder of every version

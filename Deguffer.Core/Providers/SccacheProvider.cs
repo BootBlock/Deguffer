@@ -162,14 +162,14 @@ public sealed class SccacheProvider : CleanupProviderBase
                 + $"cache: {setting.Declined} It is leaving it alone.");
         }
 
-        if (NothingToPlanFor(root, $"sccache has not cached anything for this user — no {root} directory.") is { } nothing)
+        if (NothingToPlanFor(root, $"sccache has not cached anything for this user — no {root} directory.", out var rootIsLink) is { } nothing)
         {
             return nothing;
         }
 
         // The root arrives by name, from an environment variable or a default, so nothing has classified
         // it, and a recognised name on the far side of a link would be removed through it.
-        if (LongPath.IsReparsePoint(root))
+        if (rootIsLink)
         {
             return UnexaminedPlan(
                 $"Leaving '{root}' alone: it is a link to somewhere else, and Deguffer does not look "

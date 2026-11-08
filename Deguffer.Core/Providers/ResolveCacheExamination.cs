@@ -59,7 +59,7 @@ internal sealed class ResolveCacheExamination
     {
         var cache = Path.Combine(folder, ResolveCacheLayout.CacheFolderName);
 
-        switch (LongPath.ProbeDirectory(cache))
+        switch (LongPath.ProbeDirectory(cache, out var cacheIsLink))
         {
             case PathPresence.Absent:
                 return;
@@ -71,7 +71,7 @@ internal sealed class ResolveCacheExamination
                 return;
         }
 
-        if (LongPath.IsReparsePoint(cache))
+        if (cacheIsLink is true)
         {
             DeclineLink(cache);
             return;

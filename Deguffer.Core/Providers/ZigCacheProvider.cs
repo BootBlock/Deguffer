@@ -208,7 +208,7 @@ public sealed class ZigCacheProvider : CleanupProviderBase
                 + $"{setting.Declined} It is leaving it alone.");
         }
 
-        if (NothingToPlanFor(root, $"Zig has not built anything for this user — no {root} directory.") is { } nothing)
+        if (NothingToPlanFor(root, $"Zig has not built anything for this user — no {root} directory.", out var rootIsLink) is { } nothing)
         {
             return nothing;
         }
@@ -217,7 +217,7 @@ public sealed class ZigCacheProvider : CleanupProviderBase
         // it. A junctioned root hands back the far side's ordinary directories, and a recognised name
         // among them would be targeted while every survivor named for this root resolved through the
         // same link and passed.
-        if (LongPath.IsReparsePoint(root))
+        if (rootIsLink)
         {
             return UnexaminedPlan(
                 $"Leaving '{root}' alone: it is a link to somewhere else, and Deguffer does not look "

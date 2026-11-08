@@ -211,7 +211,7 @@ public sealed class RetroArchDiscovery
     /// </summary>
     private string? Program(string candidate, RetroArchReading found)
     {
-        switch (LongPath.ProbeDirectory(candidate))
+        switch (LongPath.ProbeDirectory(candidate, out var candidateIsLink))
         {
             case PathPresence.Absent:
                 return null;
@@ -231,7 +231,7 @@ public sealed class RetroArchDiscovery
                 return null;
         }
 
-        if (LongPath.IsReparsePoint(candidate))
+        if (candidateIsLink is true)
         {
             found.DeclineLink(candidate);
             return null;

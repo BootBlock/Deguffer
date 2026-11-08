@@ -204,7 +204,7 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
 
         if (NothingToPlanFor(
                 root,
-                $"Playwright has not downloaded any browsers on this machine ({root}).") is { } nothing)
+                $"Playwright has not downloaded any browsers on this machine ({root}).", out var rootIsLink) is { } nothing)
         {
             return nothing;
         }
@@ -214,7 +214,7 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
         // directory it was handed, so a junctioned root hands back the far side's ordinary
         // directories — a recognised name among them would be targeted while every survivor named
         // for this root resolved through the same link and passed.
-        if (LongPath.IsReparsePoint(root))
+        if (rootIsLink)
         {
             return UnexaminedPlan(
                 $"Leaving '{root}' alone: it is a link to somewhere else, and Deguffer does not look "
