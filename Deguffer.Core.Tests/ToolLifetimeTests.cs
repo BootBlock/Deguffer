@@ -10,14 +10,18 @@ namespace Deguffer.Core.Tests;
 ///
 /// <para>Each tool is a <c>.cmd</c> shim whose real work is a PowerShell beneath it, the shape of
 /// every Node tool Deguffer runs: the process Deguffer starts is <c>cmd.exe</c>, and the one that has
-/// to be ended is its child. The child writes its process id, so the test can hold it.</para>
+/// to be ended is its child. The child writes its process id, so the test can hold it, and then waits
+/// to be released, so it cannot finish, exit and give up its id before the test holds it.</para>
 /// </summary>
 public sealed class ToolLifetimeTests : IDisposable
 {
     private static readonly string PowerShell = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe");
 
-    /// <summary>Far longer than any test waits, so a child still running at the end was not ended.</summary>
+    /// <summary>
+    /// How long a child waits to be released before it exits without finishing. Far longer than any
+    /// test waits, so a child still running at the end was not ended.
+    /// </summary>
     private const int ChildSeconds = 120;
 
     private static readonly TimeSpan StartWait = TimeSpan.FromSeconds(60);
@@ -49,11 +53,11 @@ public sealed class ToolLifetimeTests : IDisposable
     [Fact]
     public async Task ACancelledQueryEndsTheToolTheShimStartedBeforeItReturns()
     {
-        var (shim, pidFile, _) = Shim(seconds: ChildSeconds);
+        var tool = Shim();
         using var cts = new CancellationTokenSource();
 
-        var run = Runner().RunAsync(shim, string.Empty, ToolRun.Query, cts.Token);
-        var child = await ChildAsync(pidFile, run);
+        var run = Runner().RunAsync(tool.Shim, string.Empty, ToolRun.Query, cts.Token);
+        var child = await ChildAsync(tool, run);
 
         await cts.CancelAsync();
 
@@ -69,12 +73,12 @@ public sealed class ToolLifetimeTests : IDisposable
     [Fact]
     public async Task AQueryPastItsLimitIsEndedWithTheToolItStartedAndFailsSayingSo()
     {
-        var (shim, pidFile, _) = Shim(seconds: ChildSeconds);
+        var tool = Shim();
         var limit = TimeSpan.FromSeconds(15);
         var started = Stopwatch.StartNew();
 
-        var run = Runner().RunAsync(shim, string.Empty, ToolRun.QueryWithin(limit), CancellationToken.None);
-        var child = await ChildAsync(pidFile, run);
+        var run = Runner().RunAsync(tool.Shim, string.Empty, ToolRun.QueryWithin(limit), CancellationToken.None);
+        var child = await ChildAsync(tool, run);
         var outcome = await run;
 
         Assert.Equal(-1, outcome.ExitCode);
@@ -86,17 +90,19 @@ public sealed class ToolLifetimeTests : IDisposable
     [Fact]
     public async Task ACommandLeftToFinishIsNotEndedByTheCancellation()
     {
-        var (shim, pidFile, finished) = Shim(seconds: 3);
+        var tool = Shim();
         using var cts = new CancellationTokenSource();
 
-        var run = Runner().RunAsync(shim, string.Empty, ToolRun.Command(CancelledCommand.Finishes), cts.Token);
-        await ChildAsync(pidFile, run);
+        var run = Runner().RunAsync(tool.Shim, string.Empty, ToolRun.Command(CancelledCommand.Finishes), cts.Token);
+        await ChildAsync(tool, run);
 
+        // Released only after the cancellation, so the command is still at work when it comes.
         await cts.CancelAsync();
+        tool.Release();
         var outcome = await run;
 
         Assert.True(outcome.Succeeded, outcome.Message);
-        Assert.True(File.Exists(finished), "The command was stopped before it finished.");
+        Assert.True(File.Exists(tool.Finished), "The command was stopped before it finished.");
     }
 
     [Fact]
@@ -104,10 +110,10 @@ public sealed class ToolLifetimeTests : IDisposable
     {
         // What Windows does to the shared job when Deguffer exits, however it exits.
         var lifetime = ToolJob.Create(killOnClose: true);
-        var (shim, pidFile, _) = Shim(seconds: ChildSeconds);
+        var tool = Shim();
 
-        var run = Runner(() => lifetime).RunAsync(shim, string.Empty, ToolRun.Command(CancelledCommand.Ended), CancellationToken.None);
-        var child = await ChildAsync(pidFile, run);
+        var run = Runner(() => lifetime).RunAsync(tool.Shim, string.Empty, ToolRun.Command(CancelledCommand.Ended), CancellationToken.None);
+        var child = await ChildAsync(tool, run);
 
         lifetime.Dispose();
 
@@ -119,29 +125,31 @@ public sealed class ToolLifetimeTests : IDisposable
     public async Task ClosingTheLifetimeJobLeavesACommandThatFinishes()
     {
         var lifetime = ToolJob.Create(killOnClose: true);
-        var (shim, pidFile, finished) = Shim(seconds: 3);
+        var tool = Shim();
 
-        var run = Runner(() => lifetime).RunAsync(shim, string.Empty, ToolRun.Command(CancelledCommand.Finishes), CancellationToken.None);
-        await ChildAsync(pidFile, run);
+        var run = Runner(() => lifetime).RunAsync(tool.Shim, string.Empty, ToolRun.Command(CancelledCommand.Finishes), CancellationToken.None);
+        await ChildAsync(tool, run);
 
+        // Released only after the job is closed, so the command is still at work when it closes.
         lifetime.Dispose();
+        tool.Release();
         var outcome = await run;
 
         Assert.True(outcome.Succeeded, outcome.Message);
-        Assert.True(File.Exists(finished), "Closing Deguffer stopped a command that must be left to finish.");
+        Assert.True(File.Exists(tool.Finished), "Closing Deguffer stopped a command that must be left to finish.");
     }
 
     [Fact]
     public async Task ARunCancelledBeforeItStartsNeverStartsTheTool()
     {
-        var (shim, pidFile, _) = Shim(seconds: 0);
+        var tool = Shim();
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => Runner().RunAsync(shim, string.Empty, ToolRun.Command(CancelledCommand.Finishes), cts.Token));
+            () => Runner().RunAsync(tool.Shim, string.Empty, ToolRun.Command(CancelledCommand.Finishes), cts.Token));
 
-        Assert.False(File.Exists(pidFile), "A tool was started for a run already cancelled.");
+        Assert.False(File.Exists(tool.PidFile), "A tool was started for a run already cancelled.");
     }
 
     [Fact]
@@ -207,26 +215,34 @@ public sealed class ToolLifetimeTests : IDisposable
             : new ProcessRunner(_temp.CreateDirectory("tools"), lifetime);
 
     /// <summary>
-    /// A shim that starts a PowerShell, which writes its process id, waits <paramref name="seconds"/>
-    /// and then writes the finished marker.
+    /// A shim that starts a PowerShell, which writes its process id and waits to be released. Once
+    /// released it writes the finished marker. Never released, it exits after
+    /// <see cref="ChildSeconds"/> without writing it.
     /// </summary>
-    private (string Shim, string PidFile, string Finished) Shim(int seconds)
+    private ShimTool Shim()
     {
         var folder = _temp.CreateDirectory("shim-" + Guid.NewGuid().ToString("N"));
-        var pidFile = Path.Combine(folder, "child.pid");
-        var finished = Path.Combine(folder, "finished");
-        var shim = Path.Combine(folder, "tool.cmd");
+        var tool = new ShimTool(
+            Path.Combine(folder, "tool.cmd"),
+            Path.Combine(folder, "child.pid"),
+            Path.Combine(folder, "release"),
+            Path.Combine(folder, "finished"));
 
         File.WriteAllText(
-            shim,
-            $"@\"{PowerShell}\" -NoProfile -NonInteractive -Command \"[IO.File]::WriteAllText('{pidFile}', $PID); "
-            + $"Start-Sleep -Seconds {seconds}; [IO.File]::WriteAllText('{finished}', 'done')\"\r\n");
+            tool.Shim,
+            $"@\"{PowerShell}\" -NoProfile -NonInteractive -Command \"[IO.File]::WriteAllText('{tool.PidFile}', $PID); "
+            + $"$until = (Get-Date).AddSeconds({ChildSeconds}); "
+            + $"while (-not (Test-Path -LiteralPath '{tool.ReleaseFile}') -and ((Get-Date) -lt $until)) {{ Start-Sleep -Milliseconds 50 }}; "
+            + $"if (Test-Path -LiteralPath '{tool.ReleaseFile}') {{ [IO.File]::WriteAllText('{tool.Finished}', 'done') }}\"\r\n");
 
-        return (shim, pidFile, finished);
+        return tool;
     }
 
-    /// <summary>The PowerShell the shim started, once it has said who it is.</summary>
-    private async Task<Process> ChildAsync(string pidFile, Task run)
+    /// <summary>
+    /// The PowerShell the shim started, once it has said who it is, held open so that its id cannot
+    /// pass to another process while the test has it.
+    /// </summary>
+    private async Task<Process> ChildAsync(ShimTool tool, Task run)
     {
         var waited = Stopwatch.StartNew();
 
@@ -238,17 +254,45 @@ public sealed class ToolLifetimeTests : IDisposable
                 Assert.Fail("The tool finished before its child said who it was.");
             }
 
-            if (File.Exists(pidFile) && int.TryParse(await ReadSharedAsync(pidFile), out var pid))
+            if (File.Exists(tool.PidFile) && int.TryParse(await ReadSharedAsync(tool.PidFile), out var pid))
             {
-                var child = Process.GetProcessById(pid);
-                _children.Add(child);
-                return child;
+                return Hold(pid, File.GetLastWriteTimeUtc(tool.PidFile));
             }
 
             await Task.Delay(50);
         }
 
         throw new TimeoutException("The shim's child never said who it was.");
+    }
+
+    /// <summary>
+    /// Opens the child by its id and keeps the handle, because Windows gives no other process the id
+    /// while a handle is open. A process that started after the child wrote its id is a stranger given
+    /// the id once the child had gone, and must never be killed in the child's place.
+    /// </summary>
+    private Process Hold(int pid, DateTime idWrittenUtc)
+    {
+        Process child;
+
+        try
+        {
+            child = Process.GetProcessById(pid);
+            _ = child.SafeHandle;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            // The child waits to be released, so only the run under test can have ended it this soon.
+            throw new InvalidOperationException($"The shim's child ({pid}) ended before the test could hold it.", ex);
+        }
+
+        if (child.StartTime.ToUniversalTime() > idWrittenUtc)
+        {
+            child.Dispose();
+            throw new InvalidOperationException($"The shim's child ({pid}) ended, and its id went to another process, before the test could hold it.");
+        }
+
+        _children.Add(child);
+        return child;
     }
 
     private static async Task<string> ReadSharedAsync(string path)
@@ -264,5 +308,10 @@ public sealed class ToolLifetimeTests : IDisposable
             // Still being written.
             return string.Empty;
         }
+    }
+
+    private sealed record ShimTool(string Shim, string PidFile, string ReleaseFile, string Finished)
+    {
+        public void Release() => File.WriteAllText(ReleaseFile, string.Empty);
     }
 }
