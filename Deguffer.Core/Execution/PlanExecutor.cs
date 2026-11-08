@@ -460,7 +460,7 @@ public sealed class PlanExecutor(
             return Retargeted(step, retargetedSince);
         }
 
-        var run = ToolRun.Command(step.WhenCancelled).WritingIn(step.Output);
+        var run = ToolRun.Command(step.WhenCancelled).WritingIn(step.Output).Without(step.Unset);
 
         // Around the tool alone, rather than the whole step: the look and the measurement above stop
         // when the clean is cancelled, and only the tool can hold the run past a press of Cancel.

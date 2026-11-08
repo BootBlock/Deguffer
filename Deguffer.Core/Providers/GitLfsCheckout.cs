@@ -8,8 +8,9 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>Every argument names its target, so nothing is left for git to work out.</b> git is
 /// started in Deguffer's own folder (<see cref="ProcessRunner"/>), so <c>--git-dir</c> and
-/// <c>--work-tree</c> are given rather than <c>-C</c>, which a <c>GIT_DIR</c> in Deguffer's own
-/// environment would override. <c>lfs.storage</c> is set on the command line to the store the plan
+/// <c>--work-tree</c> are given rather than <c>-C</c>, which leaves git to find them. It starts without
+/// the variables that name another index, object store or set of refs (<see cref="GitRun"/>),
+/// which git reads over these arguments. <c>lfs.storage</c> is set on the command line to the store the plan
 /// measured, because git-lfs otherwise reads it from configuration when it runs: a value set after the
 /// preview would send prune to a store shared with other repositories, which its manual says must
 /// never be pruned. Observed against git-lfs 3.8.1: with <c>lfs.storage</c> configured elsewhere,
