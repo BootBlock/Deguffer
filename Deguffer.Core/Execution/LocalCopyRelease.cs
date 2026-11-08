@@ -18,6 +18,15 @@ internal static class LocalCopyRelease
     private const int ProgressInterval = 256;
 
     /// <summary>
+    /// How many files are asked about at once, the calling thread included. Each request waits on the
+    /// disk and on the cloud files filter rather than on a processor, and nothing in one depends on
+    /// another's answer, so a step of a large account asked one file after another spent nearly all of
+    /// its time waiting. Kept small because every request also reaches the sync app's own filter, which
+    /// is somebody else's process.
+    /// </summary>
+    internal const int ReleasesAtOnce = 8;
+
+    /// <summary>
     /// Ask a sync app to release each file the plan named that still meets the rules, and report what
     /// was asked for.
     ///
@@ -60,7 +69,10 @@ internal static class LocalCopyRelease
                 $"Nothing was asked: Windows would not open {LongPath.Display(step.SyncRoot)}.");
         }
 
-        var tally = await Task.Run(() => Request(cloud, step, resolvedRoot, keep, progress, ct), ct).ConfigureAwait(false);
+        // On a thread of the run's own, never the pool's: it drives the requests and waits for them all.
+        // See ListWorkers.
+        var tally = await WorkerThreads.Shared.RunAsync(() => Request(cloud, step, resolvedRoot, keep, progress, ct), ct)
+            .ConfigureAwait(false);
 
         progress?.Report(1.0);
 
@@ -89,9 +101,12 @@ internal static class LocalCopyRelease
     }
 
     /// <summary>
-    /// The requests themselves, off the calling thread. Every file is judged again by
-    /// <see cref="ReleaseRules.Hold"/> through the handle that unpins it, under the pin its folders pass
-    /// on now and the guard fixed when the plan was made.
+    /// The requests themselves, off the calling thread and up to <see cref="ReleasesAtOnce"/> at a time.
+    /// Every file is judged again by <see cref="ReleaseRules.Hold"/> through the handle that unpins it,
+    /// under the pin its folders pass on now and the guard fixed when the plan was made.
+    ///
+    /// <para><b>Each answer is kept in the file's own slot</b> and the slots are summed once every
+    /// request is over, so the tally is the same however the threads interleaved.</para>
     /// </summary>
     private static Dictionary<ReleaseResult, HeldTally> Request(
         ICloudFiles cloud,
@@ -102,27 +117,31 @@ internal static class LocalCopyRelease
         CancellationToken ct)
     {
         var pins = new InheritedPins(cloud, step.SyncRoot);
+        var root = LongPath.Display(step.SyncRoot);
+        var answers = new ReleaseAnswer[step.Files.Count];
+        var forward = new ForwardProgress(progress);
+        var finished = 0;
+
+        ListWorkers.Run(step.Files.Count, ReleasesAtOnce, index =>
+        {
+            var path = step.Files[index].Path;
+            var shown = LongPath.Display(path);
+            var inherited = Path.GetDirectoryName(shown) is { } folder ? pins.For(folder) : PinState.Pinned;
+
+            var resolved = Path.Join(resolvedRoot, LongPath.Relative(root, shown));
+            answers[index] = cloud.Release(path, resolved, now => ReleaseRules.Hold(now, inherited, keep) is null);
+
+            if (Interlocked.Increment(ref finished) is var done && done % ProgressInterval == 0)
+            {
+                forward.Report((double)done / answers.Length);
+            }
+        }, ct);
+
         var tally = new Dictionary<ReleaseResult, HeldTally>();
 
-        for (var i = 0; i < step.Files.Count; i++)
+        foreach (var answer in answers)
         {
-            ct.ThrowIfCancellationRequested();
-
-            var file = step.Files[i];
-            var inherited = Path.GetDirectoryName(LongPath.Display(file.Path)) is { } folder
-                ? pins.For(folder)
-                : PinState.Pinned;
-
-            var resolved = Path.Join(
-                resolvedRoot, LongPath.Relative(LongPath.Display(step.SyncRoot), LongPath.Display(file.Path)));
-            var answer = cloud.Release(file.Path, resolved, now => ReleaseRules.Hold(now, inherited, keep) is null);
-
             tally[answer.Result] = tally.GetValueOrDefault(answer.Result) + answer.RequestedBytes;
-
-            if (i % ProgressInterval == 0)
-            {
-                progress?.Report((double)i / step.Files.Count);
-            }
         }
 
         return tally;
