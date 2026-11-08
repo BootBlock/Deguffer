@@ -63,9 +63,36 @@ internal static class SourceTreeBoundary
     /// and never entered, so no search reaches inside a repository's git directory whether or not
     /// <c>.git</c> is sought, and the directory itself is never a target: the provider sends
     /// <c>git lfs prune</c> to the repository and deletes no path (§5.1, §5.2).</para>
+    ///
+    /// <para>The other version-control stores are here for the same reason as <c>.git</c>, and one
+    /// of them for a stronger one. Mercurial's <c>.hg\store\data</c> mirrors the directory names of
+    /// every tracked file, so a repository that tracks a file under <c>src\obj</c> also holds
+    /// <c>.hg\store\data\src\obj</c>: a candidate by name, kept out of the plan only by a
+    /// recogniser. A Darcs repository in the old format keeps a copy of the working tree in
+    /// <c>_darcs\pristine</c> in the same way. Subversion's <c>.svn\pristine</c> is 256 hashed
+    /// folders, Bazaar's <c>.bzr</c> holds its repository and checkout state, and Jujutsu's
+    /// <c>.jj\repo\store</c> can hold a whole git object store of its own. None holds build
+    /// output.</para>
+    ///
+    /// <para><c>__pycache__</c> holds only the bytecode its interpreter compiled, and no folders, so
+    /// skipping it saves one listing each. Python trees hold many.</para>
+    ///
+    /// <para>A name joins this set only when all three hold: it is the private store of one tool,
+    /// nothing below it is ever build output or holds any, so no provider may find a candidate
+    /// inside it on any route, and entering it costs listings. A name that fails the first two is
+    /// guesswork, and one that fails the last buys nothing. The directory itself may still be
+    /// sought, as <c>.git</c> is, and being sought overrides this set as above (§5.2).</para>
     /// </summary>
-    private static readonly FrozenSet<string> NeverEntered =
-        FrozenSet.Create(StringComparer.OrdinalIgnoreCase, ".git", "node_modules");
+    private static readonly FrozenSet<string> NeverEntered = FrozenSet.Create(
+        StringComparer.OrdinalIgnoreCase,
+        "node_modules",
+        ".git",
+        ".hg",
+        ".svn",
+        ".bzr",
+        ".jj",
+        "_darcs",
+        "__pycache__");
 
     /// <summary>
     /// The search for <paramref name="names"/> through a source folder: it finds a directory of any
