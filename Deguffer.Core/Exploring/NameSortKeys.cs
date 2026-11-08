@@ -9,10 +9,12 @@ namespace Deguffer.Core.Exploring;
 /// <para>Most siblings on a real volume share their size with another, because a size is allocated
 /// clusters: on one system volume of 2.6 million nodes, four in five siblings were in a run of one
 /// size, and putting those runs in name order by comparing the names was nine tenths of the sort
-/// (#553). The cost was where the names are rather than what comparing them does: a tree's node
-/// numbers scatter its siblings, and so their names, through tens of megabytes, so each name a
-/// comparison read was a read from memory rather than the cache. Each name is made a number here in
-/// one pass through the pool in the order it holds them, and a sort then reads those numbers.</para>
+/// (#553). The cost was where the names are rather than what comparing them does: the pool holds
+/// names in the order the reader first met them, so siblings' names lie far apart in tens of
+/// megabytes, and each name a comparison read was a read from memory rather than the cache.
+/// Numbering the nodes so that siblings were adjacent made no difference. Each name is made a
+/// number here in one pass through the pool in the order it holds them, and a sort then reads those
+/// numbers.</para>
 ///
 /// <para>A number is the name's first <see cref="KeyLength"/> characters, upper-cased, a byte each,
 /// the first in the highest byte. It orders as the names do wherever two of them differ, because
