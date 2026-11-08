@@ -257,7 +257,7 @@ internal static class RootSetWalk
         {
             var places = waiting
                 .GroupBy(root => roots[root].Path, StringComparer.Ordinal)
-                .Select(same => (Path: same.Key, Below: Below(same.Key), Roots: same.ToArray()))
+                .Select(same => (Path: same.Key, Below: LongPath.Below(same.Key), Roots: same.ToArray()))
                 .OrderBy(place => place.Below, StringComparer.Ordinal);
 
             var reached = new int[roots.Count];
@@ -284,9 +284,5 @@ internal static class RootSetWalk
 
             return new Round<TFolder>(seeds, nested, reached);
         }
-
-        /// <summary>The prefix every path below <paramref name="path"/> starts with. A drive's root already ends in one.</summary>
-        private static string Below(string path) =>
-            path.EndsWith(System.IO.Path.DirectorySeparatorChar) ? path : path + System.IO.Path.DirectorySeparatorChar;
     }
 }

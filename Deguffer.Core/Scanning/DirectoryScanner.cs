@@ -102,10 +102,10 @@ public sealed class DirectoryScanner : IDirectoryScanner
             progress?.Report(remembered);
         }
 
-        var asked = new ScanRequest(path, bounds);
-        var result = (await MeasureFreshAsync([asked], [keep], progress, ct).ConfigureAwait(false))[0][0];
+        ScanRequest[] asked = [new(path, bounds)];
+        var result = (await MeasureFreshAsync(asked, [keep], RunningTotal.Over(asked, progress), ct).ConfigureAwait(false))[0][0];
 
-        Remember(asked, keep, result);
+        Remember(asked[0], keep, result);
 
         return result;
     }
@@ -115,15 +115,16 @@ public sealed class DirectoryScanner : IDirectoryScanner
     /// for each reading, or one walk. The whole is remembered as <see cref="MeasureAsync"/> remembers an
     /// unguarded figure, because it is one.
     /// </summary>
-    public async ValueTask<AgedScan> MeasureAgedAsync(string path, MinimumAge age, CancellationToken ct = default)
+    public async ValueTask<AgedScan> MeasureAgedAsync(
+        string path, MinimumAge age, IProgress<ScanSize>? progress = null, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-        var asked = new ScanRequest(path);
+        ScanRequest[] asked = [new(path)];
         var keeps = AgedScan.Keeps(age);
-        var readings = (await MeasureFreshAsync([asked], keeps, progress: null, ct).ConfigureAwait(false))[0];
+        var readings = (await MeasureFreshAsync(asked, keeps, RunningTotal.Over(asked, progress), ct).ConfigureAwait(false))[0];
 
-        Remember(asked, keeps[0], readings[0]);
+        Remember(asked[0], keeps[0], readings[0]);
 
         return AgedScan.Of(readings);
     }
@@ -131,18 +132,20 @@ public sealed class DirectoryScanner : IDirectoryScanner
     /// <summary>
     /// Every path from the table where it can answer, and every path it cannot in one walk for each
     /// reason it could not. Each figure is remembered as <see cref="MeasureAsync"/> remembers it, and
-    /// none is shown first, because nothing shows a list's progress.
+    /// none is shown first: <paramref name="progress"/> counts what this measurement has read, and a
+    /// figure from an earlier run is not that.
     /// </summary>
     public async ValueTask<IReadOnlyList<ScanResult>> MeasureManyAsync(
         IReadOnlyList<ScanRequest> asked,
         MinimumAge keep = default,
+        IProgress<ScanSize>? progress = null,
         CancellationToken ct = default)
     {
         ThrowIfAnyPathIsBlank(asked);
 
         using var remembering = _estimates?.Hold() ?? PassHold.Nothing;
 
-        var results = await MeasureFreshAsync(asked, [keep], progress: null, ct).ConfigureAwait(false);
+        var results = await MeasureFreshAsync(asked, [keep], RunningTotal.Over(asked, progress), ct).ConfigureAwait(false);
 
         for (var i = 0; i < asked.Count; i++)
         {
@@ -183,7 +186,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
 
         var results = await _fallback
             .Because(FallbackReason.FreshReadingRequired)
-            .MeasureManyAsync(asked, MinimumAge.Off, ct)
+            .MeasureManyAsync(asked, MinimumAge.Off, ct: ct)
             .ConfigureAwait(false);
 
         for (var i = 0; i < asked.Count; i++)
@@ -284,14 +287,14 @@ public sealed class DirectoryScanner : IDirectoryScanner
     /// already clear" and quietly hide gigabytes. Every path walked for the same reason shares one walk.
     /// </para>
     /// </summary>
-    /// <param name="progress">
-    /// The running figure of a measurement of one path under one guard, which is the only one that
-    /// reports any.
+    /// <param name="running">
+    /// Where each path's first reading goes, from whichever route gives it: the table's answer once it
+    /// is read, and a walk's subtotals as they rise.
     /// </param>
     private async ValueTask<ScanResult[][]> MeasureFreshAsync(
         IReadOnlyList<ScanRequest> asked,
         MinimumAge[] keeps,
-        IProgress<ScanSize>? progress,
+        RunningPaths running,
         CancellationToken ct)
     {
         var results = new ScanResult[asked.Count][];
@@ -339,14 +342,14 @@ public sealed class DirectoryScanner : IDirectoryScanner
             // the table to be waited for. A table already read answers in a lookup, and one that could not
             // be read has a reason the walk has to carry, which a race would let a quick walk hide.
             var answered = !building.IsCompleted && _tuner.Route is ScanRoute.Auto
-                ? await RaceAsync(asked, questions, keeps, building, progress, ct).ConfigureAwait(false)
+                ? await RaceAsync(asked, questions, keeps, building, running, ct).ConfigureAwait(false)
                 : FromIndex((await building.WaitAsync(ct).ConfigureAwait(false)).Index, questions);
 
             for (var j = 0; j < questions.Count; j++)
             {
                 if (answered[j] is { } answer)
                 {
-                    progress?.Report(answer[0].Size);
+                    running.Report(questions[j].Index, answer[0].Size);
                     results[questions[j].Index] = answer;
                 }
                 else
@@ -362,7 +365,7 @@ public sealed class DirectoryScanner : IDirectoryScanner
         {
             var walked = await _fallback
                 .Because(reason)
-                .MeasureEachAsync([.. indexes.Select(i => asked[i])], keeps, progress, ct)
+                .MeasureEachAsync([.. indexes.Select(i => asked[i])], keeps, running.Of(indexes), ct)
                 .ConfigureAwait(false);
 
             for (var j = 0; j < indexes.Count; j++)
@@ -394,14 +397,18 @@ public sealed class DirectoryScanner : IDirectoryScanner
         IReadOnlyList<(int Index, Asked Asked)> questions,
         MinimumAge[] keeps,
         Task<MftVolumeIndexCache.Built> building,
-        IProgress<ScanSize>? progress,
+        RunningPaths running,
         CancellationToken ct)
     {
         var raced = await RouteRace.FirstAsync<IReadOnlyList<ScanResult[]?>>(
             async stop => Answered(FromIndex((await building.WaitAsync(stop).ConfigureAwait(false)).Index, questions)),
             async stop => await _fallback
                 .Because(FallbackReason.WalkAnsweredFirst)
-                .MeasureEachAsync([.. questions.Select(question => asked[question.Index])], keeps, progress, stop)
+                .MeasureEachAsync(
+                    [.. questions.Select(question => asked[question.Index])],
+                    keeps,
+                    running.Of([.. questions.Select(question => question.Index)]),
+                    stop)
                 .ConfigureAwait(false),
             walked => walked.All(readings => readings![0].WasReached),
             ct).ConfigureAwait(false);

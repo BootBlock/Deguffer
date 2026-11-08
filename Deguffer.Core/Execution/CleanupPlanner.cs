@@ -547,7 +547,7 @@ public sealed class CleanupPlanner
 
             try
             {
-                finding = await PlanOneAsync(provider, registered, volumes, keep, token).ConfigureAwait(false);
+                finding = await PlanOneAsync(provider, registered, volumes, keep, checking.Counted(provider), token).ConfigureAwait(false);
                 planned = true;
             }
             finally
@@ -583,6 +583,7 @@ public sealed class CleanupPlanner
         RegisteredStorage registered,
         IVolumeInventory volumes,
         MinimumAge keep,
+        IProgress<ScanSize> counted,
         CancellationToken ct)
     {
         var present = await provider.IsPresentAsync(ct).ConfigureAwait(false);
@@ -599,7 +600,7 @@ public sealed class CleanupPlanner
 
         // Applied here rather than inside the provider: the set is the pass's, gathered from every row
         // that registers storage, and no row can see another's records. See VirtualMachineStoragePlan.
-        var plan = VirtualMachineStoragePlan.Apply(await provider.PlanAsync(keep, ct).ConfigureAwait(false), registered, volumes);
+        var plan = VirtualMachineStoragePlan.Apply(await provider.PlanAsync(keep, counted, ct).ConfigureAwait(false), registered, volumes);
 
         return new Finding(provider, present, plan, awaitingFolders);
     }

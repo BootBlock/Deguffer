@@ -290,6 +290,9 @@ passes `progress: null`. `CleanupProviderBase.MeasureAllAsync` is the only provi
 and it passes null, so the preview cannot currently show even "bytes seen so far" — which is the one
 thing §5.5 asks for by name, and the readout Filelight, ncdu and gdu all settle on.
 
+> **Since this was written:** this gap is closed (#475). `CleanupProviderBase` now passes a sink
+> to every measurement it makes, and the preview shows the bytes counted so far. See route B in §6.
+
 **The walk has no denominator at any layer, and the obvious heuristic is not monotone.**
 `BoundedFileWalk.Visit` drains a queue level by level, so at the start of each level it knows that
 level's width exactly and knows nothing at all about the next one. The fraction
@@ -312,6 +315,14 @@ It does **not** justify a bar. Ordinal position is a truthful count and a false 
 exactly the reason §4 measures.
 
 ### B. Wire the progress sink that already exists
+
+> **Since this was written:** route B shipped (#475). `CleanupPlanner` hands each provider a sink,
+> `CleanupProviderBase` passes it to `MeasureManyAsync` and `MeasureAgedAsync`, and the scanners
+> report the sum of every path's latest reading (`RunningTotal`), a nested path left out and the sum
+> never falling. The status line names each provider under way with "(N counted so far)". The figure
+> is a count of work done, so it is never cached, never the plan's figure, and never called what a
+> clean would free. The info bar that shows it speaks when it opens, not as its message changes, so
+> the figure does not flood Narrator. What Narrator says for the ring itself is still unobserved.
 
 Pass a real `IProgress<ScanSize>` down from the planner through `CleanupProviderBase`, so the
 preview shows bytes accumulating while a large location is measured. This restores the behaviour

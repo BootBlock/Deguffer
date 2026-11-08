@@ -148,6 +148,38 @@ public class ParallelEnumerationScannerTests
     }
 
     /// <summary>
+    /// A list measured in one walk reports what it has counted of every path, not of the first alone, so
+    /// a provider measuring many paths has a running figure that moves for all of them. A file asked
+    /// about beside the directories counts too, and a path inside another is not counted twice.
+    /// </summary>
+    [Fact]
+    public async Task AListReportsTheSumOfEveryPath()
+    {
+        using var temp = new TempDirectory();
+        temp.CreateFile(1000, "a", "one.bin");
+        temp.CreateFile(2000, "b", "nested", "two.bin");
+        temp.CreateFile(4000, "c", "three.bin");
+        var dump = temp.CreateFile(8000, "loose.dmp");
+
+        var progress = new ProgressRecorder<ScanSize>();
+
+        var results = await Scanner.MeasureManyAsync(
+            [
+                new ScanRequest(Path.Combine(temp.Path, "a")),
+                new ScanRequest(Path.Combine(temp.Path, "b")),
+                new ScanRequest(Path.Combine(temp.Path, "b", "nested")),
+                new ScanRequest(Path.Combine(temp.Path, "c")),
+                new ScanRequest(dump),
+            ],
+            MinimumAge.Off,
+            progress);
+
+        Assert.Equal([1000L, 2000L, 2000L, 4000L, 8000L], results.Select(result => result.Size.Reclaimable));
+        Assert.Equal(15000, progress.Reports[^1].Reclaimable);
+        Assert.All(progress.Reports.Zip(progress.Reports.Skip(1)), pair => Assert.True(pair.Second.Reclaimable > pair.First.Reclaimable));
+    }
+
+    /// <summary>
     /// A scan cancelled once its walk is under way stops rather than finishing it.
     ///
     /// <para>Cancelled from the first report, which follows the first folder read, not before the
