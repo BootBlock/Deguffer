@@ -206,18 +206,13 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
 
         var live = LiveTreeVeto.Apply(LiveTrees, recognised, Questions, ct);
 
-        var (steps, measured) = await PlanDeletionsAsync(
-            [
-                .. live.Cleared.Select(target => new DeletionTarget(
-                    target.Path,
-                    $"{Subject} for {Path.GetFileName(target.Project)}",
-                    DatedOneLevelDown: true,
-                    Facets: [new ItemFacet("Project", Path.GetFileName(target.Project))],
-                    Group: ApprovedRootHeading.For(ApprovedRoots, target.Path),
-                    UseCheck: target.StillUnused)),
-            ],
-            keep,
-            ct).ConfigureAwait(false);
+        var parts = Kind.Parts is { } partsOf
+            ? await DiskBoundWork.EachAsync([.. live.Cleared.Select(target => target.Path)], Scanner.Tuning, path => partsOf(path, ct), ct).ConfigureAwait(false)
+            : null;
+
+        var (steps, measured) = await PlanDeletionsAsync(TargetsOf(live.Cleared, parts), keep, ct).ConfigureAwait(false);
+
+        var unreadableParts = parts?.SelectMany(p => p.Unreadable).ToList() ?? [];
 
         return new CleanupPlan
         {
@@ -226,7 +221,7 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(live, declined, siblingFiles),
+            ProtectedPaths = BuildProtectedPaths(live, declined, siblingFiles, parts),
             Notes = SourceTreePlanNotes.For(
                 discovered,
                 Kind.DisplayNames,
@@ -242,10 +237,11 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
                 [
                     .. git is null ? [] : TrackedFilePlanNotes.ForGit(git.Tracked.Count, git.Unanswered.Count, git.Unasked.Count),
                     .. steps.Count > 0 && BuildRunningProcessNote() is { } running ? [running] : Array.Empty<PlanNote>(),
+                    .. unreadableParts.Select(UnreadableRoot.Note),
                 ]),
             Fallback = measured.Fallback,
             HasUnreadableRoot =
-                discovered.UnreadableDirectories.Count > 0 || discovered.UnreachedRoots.Count > 0,
+                discovered.UnreadableDirectories.Count > 0 || discovered.UnreachedRoots.Count > 0 || unreadableParts.Count > 0,
 
             // A row whose only approved folder is on a refused mount would otherwise render as
             // "Already clear", which is a claim about a folder nothing looked inside. It is
@@ -253,6 +249,48 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
             // rather than on HasUnreadableRoot — CleanupPlan says why the two are separate flags.
             WasNotExamined = steps.Count == 0 && discovered.RefusedRoots.Count > 0,
         };
+    }
+
+    /// <summary>
+    /// One target for each directory the veto cleared, or, for a kind that offers parts, one for each
+    /// part. <paramref name="parts"/> is null for a kind removed whole, and otherwise positional with
+    /// <paramref name="cleared"/>.
+    ///
+    /// <para>Every part carries its directory's use check, because the veto's answer was about the
+    /// directory and what is using it is using every part of it.</para>
+    /// </summary>
+    private IReadOnlyList<DeletionTarget> TargetsOf(
+        IReadOnlyList<ClearedBuildDirectory> cleared,
+        IReadOnlyList<BuildDirectoryParts>? parts)
+    {
+        var targets = new List<DeletionTarget>(cleared.Count);
+
+        for (var index = 0; index < cleared.Count; index++)
+        {
+            var directory = cleared[index];
+            var project = Path.GetFileName(directory.Project);
+
+            DeletionTarget Target(string path, string what, IReadOnlyList<string>? ownedElsewhere = null) => new(
+                path,
+                $"{what} for {project}",
+                Kind: ownedElsewhere is { Count: > 0 } ? TargetKind.DirectoryContents : TargetKind.Directory,
+                DatedOneLevelDown: true,
+                Facets: [new ItemFacet("Project", project)],
+                Group: ApprovedRootHeading.For(ApprovedRoots, directory.Path),
+                UseCheck: directory.StillUnused,
+                OwnedElsewhere: ownedElsewhere is { Count: > 0 } ? ownedElsewhere : null);
+
+            if (parts is null)
+            {
+                targets.Add(Target(directory.Path, Subject));
+            }
+            else
+            {
+                targets.AddRange(parts[index].Offered.Select(part => Target(part.Path, part.What, part.OwnedElsewhere)));
+            }
+        }
+
+        return targets;
     }
 
     /// <summary>
@@ -293,12 +331,19 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
     /// declined or held back is protected by name: they are directories of the same name, often in
     /// the same tree, separated from the targets only by evidence, which is exactly the situation
     /// where an over-broad rule takes one with the other.
+    ///
+    /// <para>For a kind that offers parts, a fourth: the directory itself, which only loses its parts,
+    /// and everything inside it the parts leave alone.</para>
     /// </summary>
     private IReadOnlyList<ProtectedPath> BuildProtectedPaths(
         LiveTreeVetoResult live,
         IReadOnlyList<string> declined,
-        IReadOnlyDictionary<string, IReadOnlyList<string>> siblingFiles) => Protect(
+        IReadOnlyDictionary<string, IReadOnlyList<string>> siblingFiles,
+        IReadOnlyList<BuildDirectoryParts>? parts) => Protect(
     [
+        .. parts is null ? [] : live.Cleared.Select(directory =>
+            (directory.Path, $"Only what the toolchain is recognised to have written inside {Path.GetFileName(directory.Path)} is removed, and the folder itself stays.")),
+        .. parts?.SelectMany(p => p.LeftAlone) ?? [],
         .. live.Cleared.SelectMany(target => new[]
         {
             (target.Project, $"The project folder for {Path.GetFileName(target.Project)} — only its build output is removed."),

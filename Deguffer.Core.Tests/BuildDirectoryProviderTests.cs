@@ -57,7 +57,8 @@ public sealed class BuildDirectoryProviderTests : IDisposable
 
         var plan = await PlanWith(Cargo);
 
-        Assert.Equal([target], plan.TargetedPaths);
+        Assert.Equal([Path.Combine(target, "debug")], plan.TargetedPaths);
+        Assert.True(plan.EstimatedBytes > 0);
         Assert.Equal(SafetyTier.RegenerableWithCost, plan.Tier);
     }
 
@@ -219,7 +220,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
             "Signature: 8a477f597d28d172789f06886806bc55\n# This file is a cache directory tag created by cargo.\n"
             + "# For information about cache directory tags see https://bford.info/cachedir/\n");
 
-        Assert.Equal([target], (await PlanWith(Cargo)).TargetedPaths);
+        Assert.Equal([Path.Combine(target, "debug")], (await PlanWith(Cargo)).TargetedPaths);
     }
 
     /// <summary>
@@ -343,7 +344,8 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         var result = await provider.ExecuteAsync(plan);
 
         Assert.True(result.Succeeded);
-        Assert.False(LongPath.DirectoryExists(target));
+        Assert.False(LongPath.DirectoryExists(Path.Combine(target, "debug")));
+        Assert.True(LongPath.DirectoryExists(target));
         Assert.True(LongPath.FileExists(Path.Combine(project, "Cargo.toml")));
         Assert.True(LongPath.FileExists(Path.Combine(project, "Cargo.lock")));
         Assert.True(LongPath.FileExists(Path.Combine(project, "src", "main.rs")));
@@ -688,7 +690,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
 
         // The premise: this is the directory the plan holds back, and the other is one it offers.
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(busy, StringComparison.OrdinalIgnoreCase));
-        Assert.Equal([idle], plan.TargetedPaths);
+        Assert.Equal([Offered(toolchain, idle)], plan.TargetedPaths);
 
         // What stays allowed first, so a declaration reaching wider than the directory in use is
         // reported as that, rather than as a refusal worded for something else.
@@ -816,7 +818,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         var plan = await provider.PlanAsync();
         var policy = await ExplorePolicy(provider);
 
-        Assert.Equal([build], plan.TargetedPaths);
+        Assert.Equal([Offered(toolchain, build)], plan.TargetedPaths);
         Assert.True(policy.MayRemove(build).IsAllowed);
     }
 
@@ -892,11 +894,11 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         var provider = Cargo();
         var plan = await provider.PlanAsync();
 
-        Assert.Equal([target], plan.TargetedPaths);
+        Assert.Equal([Path.Combine(target, "debug")], plan.TargetedPaths);
         Assert.True(plan.EstimatedBytes > 0);
 
         Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
-        Assert.False(LongPath.DirectoryExists(target));
+        Assert.False(LongPath.DirectoryExists(Path.Combine(target, "debug")));
         Assert.True(LongPath.FileExists(Path.Combine(deep, "src", "main.rs")));
     }
 
@@ -949,7 +951,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         var inner = BuildDirectoryFixture.CreateCargoProject(Path.Combine(outer, "vendored"));
 
         Assert.True(LongPath.DirectoryExists(inner), "the fixture did not build the nested case");
-        Assert.Equal([outer], (await PlanWith(Cargo)).TargetedPaths);
+        Assert.Equal([Path.Combine(outer, "debug")], (await PlanWith(Cargo)).TargetedPaths);
     }
 
     /// <summary>
@@ -966,7 +968,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
 
         var plan = await PlanWith(Cargo, new FakeDirectoryScanner([outer, inner]));
 
-        Assert.Equal([outer], plan.TargetedPaths);
+        Assert.Equal([Path.Combine(outer, "debug")], plan.TargetedPaths);
     }
 
     /// <summary>
@@ -1186,6 +1188,13 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         Toolchain.Unreal => BuildDirectoryFixture.CreateUnrealProject(project),
         _ => throw new ArgumentOutOfRangeException(nameof(toolchain), toolchain, null),
     };
+
+    /// <summary>
+    /// What the toolchain's row offers from a build directory <see cref="CreateRecognised"/> made: the
+    /// directory itself, or for Cargo, whose <c>target</c> is a tool root, the one profile inside it.
+    /// </summary>
+    private static string Offered(Toolchain toolchain, string build) =>
+        toolchain == Toolchain.Cargo ? Path.Combine(build, "debug") : build;
 
     /// <summary>
     /// A project whose build directory has the right name and lacks one piece of the evidence, so
