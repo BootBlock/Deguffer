@@ -120,7 +120,7 @@ internal sealed class SymbolStoreExamination
 
     private void Collect(SymbolStore store, CancellationToken ct)
     {
-        switch (LongPath.ProbeDirectory(store.Path))
+        switch (LongPath.ProbeDirectory(store.Path, out var storeIsLink))
         {
             case PathPresence.Absent:
                 return;
@@ -134,7 +134,7 @@ internal sealed class SymbolStoreExamination
 
         // A setting's own folder is taken as the setting gives it, as a debugger opens it. A link there is
         // declined all the same, because what it leads to was never named by anything.
-        if (LongPath.IsReparsePoint(store.Path))
+        if (storeIsLink is true)
         {
             DeclineLink(store.Path);
             return;

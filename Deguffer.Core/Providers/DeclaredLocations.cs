@@ -109,7 +109,7 @@ public static class DeclaredLocations
         {
             ct.ThrowIfCancellationRequested();
 
-            switch (LongPath.ProbeDirectory(root.Path))
+            switch (LongPath.ProbeDirectory(root.Path, out var rootIsLink))
             {
                 case PathPresence.Refused:
                     Unreachable(root.Path, unreachable, protectedPaths, notes);
@@ -122,7 +122,7 @@ public static class DeclaredLocations
             // The root arrives by name, so nothing has classified it. A junctioned root hands back
             // the far side's ordinary directories, which would be targeted while every survivor
             // named for it resolves through the link and passes — the vacuous negative.
-            if (LongPath.IsReparsePoint(root.Path))
+            if (rootIsLink is true)
             {
                 Decline(root.Path, declined, protectedPaths, notes);
                 continue;
@@ -185,7 +185,7 @@ public static class DeclaredLocations
         {
             current = Path.Combine(current, segments[i]);
 
-            switch (LongPath.ProbeDirectory(current))
+            switch (LongPath.ProbeDirectory(current, out var currentIsLink))
             {
                 case PathPresence.Refused:
                     Unreachable(current, unreachable, protectedPaths, notes);
@@ -195,7 +195,7 @@ public static class DeclaredLocations
                     return;
             }
 
-            if (LongPath.IsReparsePoint(current))
+            if (currentIsLink is true)
             {
                 Decline(current, declined, protectedPaths, notes);
                 return;
@@ -209,7 +209,9 @@ public static class DeclaredLocations
         var path = Path.Combine(root.Path, location.RelativePath);
         var isFile = location.Kind == DeclaredLocationKind.File;
 
-        switch (isFile ? LongPath.ProbeFile(path) : LongPath.ProbeDirectory(path))
+        bool? pathIsLink;
+
+        switch (isFile ? LongPath.ProbeFile(path, out pathIsLink) : LongPath.ProbeDirectory(path, out pathIsLink))
         {
             case PathPresence.Refused:
                 Unreachable(path, unreachable, protectedPaths, notes);
@@ -219,7 +221,7 @@ public static class DeclaredLocations
                 return;
         }
 
-        if (LongPath.IsReparsePoint(path))
+        if (pathIsLink is true)
         {
             Decline(path, declined, protectedPaths, notes);
             return;

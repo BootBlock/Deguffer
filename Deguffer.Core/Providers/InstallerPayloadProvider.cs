@@ -290,7 +290,7 @@ public abstract class InstallerPayloadProvider : CleanupProviderBase
 
         foreach (var path in (IEnumerable<string>)[.. root.Containers, root.Path])
         {
-            switch (LongPath.ProbeDirectory(path))
+            switch (LongPath.ProbeDirectory(path, out var pathIsLink))
             {
                 case PathPresence.Refused:
                     notes.Add(UnreadableRoot.UnreachedNote(LongPath.Display(path)));
@@ -301,7 +301,7 @@ public abstract class InstallerPayloadProvider : CleanupProviderBase
                     return Reached.Absent;
             }
 
-            if (LongPath.IsReparsePoint(path))
+            if (pathIsLink is true)
             {
                 notes.Add(new PlanNote(
                     PlanNoteSeverity.Information,

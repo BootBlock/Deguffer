@@ -106,7 +106,8 @@ public sealed class NxSharedCacheProvider : CleanupProviderBase
     /// </summary>
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
     {
-        if (!LongPath.DirectoryMayExist(Root) || LongPath.IsReparsePoint(Root))
+        // A refusal offers no roots, as an absence does: nothing behind it was classified.
+        if (LongPath.ProbeDirectory(Root, out var rootIsLink) is not PathPresence.Present || rootIsLink is true)
         {
             return Task.FromResult<IReadOnlyList<ToolRoot>>([]);
         }
@@ -127,14 +128,14 @@ public sealed class NxSharedCacheProvider : CleanupProviderBase
     {
         var root = Root;
 
-        if (NothingToPlanFor(root, $"Nx has not kept a cache in your profile: there is no {root} folder.") is { } nothing)
+        if (NothingToPlanFor(root, $"Nx has not kept a cache in your profile: there is no {root} folder.", out var rootIsLink) is { } nothing)
         {
             return nothing;
         }
 
         // The root arrives by name, so nothing has classified it, and a cache behind a link would be
         // removed through it.
-        if (LongPath.IsReparsePoint(root))
+        if (rootIsLink)
         {
             return UnexaminedPlan(CacheLevelWalk.Note(root).Message);
         }

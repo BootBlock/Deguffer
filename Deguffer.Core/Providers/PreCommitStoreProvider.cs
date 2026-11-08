@@ -177,11 +177,11 @@ public sealed partial class PreCommitStoreProvider : CleanupProviderBase
     /// count as present, because only the plan can say that it left them alone.
     /// </summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
-        Task.FromResult(ResolveStore() is { } store && LongPath.ProbeDirectory(store) switch
+        Task.FromResult(ResolveStore() is { } store && LongPath.ProbeDirectory(store, out var storeIsLink) switch
         {
             PathPresence.Absent => false,
             PathPresence.Refused => true,
-            _ => LongPath.IsReparsePoint(store) || FolderEntries.Of(store) is not { } entries || entries.Any(IsRepository),
+            _ => storeIsLink is true || FolderEntries.Of(store) is not { } entries || entries.Any(IsRepository),
         });
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
@@ -195,12 +195,12 @@ public sealed partial class PreCommitStoreProvider : CleanupProviderBase
                 + $"as pre-commit's store: {setting.Declined} It is leaving it alone.");
         }
 
-        if (NothingToPlanFor(store, $"pre-commit has not installed any hooks for this user — no {store} directory.") is { } nothing)
+        if (NothingToPlanFor(store, $"pre-commit has not installed any hooks for this user — no {store} directory.", out var storeIsLink) is { } nothing)
         {
             return nothing;
         }
 
-        if (LongPath.IsReparsePoint(store))
+        if (storeIsLink)
         {
             return UnexaminedPlan(
                 $"Leaving '{store}' alone: it is a link to somewhere else, and Deguffer does not look through a link.");

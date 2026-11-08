@@ -396,12 +396,33 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// </summary>
     /// <param name="root">The directory the provider reaches by name before it classifies anything.</param>
     /// <param name="absent">What to tell the user where the root is genuinely not there.</param>
-    protected CleanupPlan? NothingToPlanFor(string root, string absent) => LongPath.ProbeDirectory(root) switch
+    protected CleanupPlan? NothingToPlanFor(string root, string absent) => NothingToPlanFor(root, absent, out _);
+
+    /// <summary>
+    /// The same plan, with whether <paramref name="root"/> is a link taken from the same attribute
+    /// read, for a provider that declines a linked root before it lists anything.
+    ///
+    /// <para>One read rather than this and a separate link check, so the two answers describe one
+    /// entry. Asked apart, they can describe two: a folder replaced by a junction between them passes
+    /// the presence check as the folder and the link check as the junction.</para>
+    /// </summary>
+    /// <param name="isLink">
+    /// True only where the root is there and is a link. Read only where this returns null, because
+    /// the other two answers are settled here.
+    /// </param>
+    protected CleanupPlan? NothingToPlanFor(string root, string absent, out bool isLink)
     {
-        PathPresence.Absent => EmptyPlan(absent),
-        PathPresence.Refused => UnreadableRootPlan(root),
-        _ => null,
-    };
+        var presence = LongPath.ProbeDirectory(root, out var link);
+
+        isLink = link is true;
+
+        return presence switch
+        {
+            PathPresence.Absent => EmptyPlan(absent),
+            PathPresence.Refused => UnreadableRootPlan(root),
+            _ => null,
+        };
+    }
 
     /// <summary>
     /// The same for a provider whose tool names several locations: null where any of them is there,

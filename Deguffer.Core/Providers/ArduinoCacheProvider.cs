@@ -433,12 +433,14 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
                 continue;
             }
 
-            if (LongPath.ProbeDirectory(cache) is PathPresence.Absent)
+            if (LongPath.ProbeDirectory(cache, out var cacheIsLink) is PathPresence.Absent)
             {
                 continue;
             }
 
-            if (LongPath.IsReparsePoint(cache))
+            // Not false rather than true: a folder Windows would not describe reaches this line, and
+            // is declined with the link because nothing in it was classified.
+            if (cacheIsLink is not false)
             {
                 notes.Add(new PlanNote(
                     PlanNoteSeverity.Information,

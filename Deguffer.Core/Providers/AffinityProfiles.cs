@@ -116,7 +116,7 @@ public static partial class AffinityProfiles
         {
             ct.ThrowIfCancellationRequested();
 
-            switch (LongPath.ProbeDirectory(root))
+            switch (LongPath.ProbeDirectory(root, out var rootIsLink))
             {
                 // Windows would not say whether the root is there, so nothing under it was examined
                 // and dropping it would let the plan report Affinity as never run on a machine that
@@ -131,7 +131,14 @@ public static partial class AffinityProfiles
                     continue;
             }
 
-            found.Add(Classify(root, ct));
+            // Moving a profile folder onto another drive with a junction is ordinary, and the
+            // enumeration in Classify never classifies the directory it is handed: it would hand back
+            // the far side's children, and every §5.6 assertion named for this root would pass because
+            // each survivor resolves through the same link. Both levels can be moved that way, so both
+            // are asked.
+            found.Add(rootIsLink is true
+                ? new AffinityCommonTree(root, null, [], [], [], Unreadable: false, LinkedAway: root)
+                : Classify(root, ct));
         }
 
         return found;
@@ -139,19 +146,9 @@ public static partial class AffinityProfiles
 
     private static AffinityCommonTree Classify(string root, CancellationToken ct)
     {
-        // Moving a profile folder onto another drive with a junction is ordinary, and the
-        // enumeration below never classifies the directory it is handed: it would hand back the far
-        // side's children, and every §5.6 assertion named for this root would pass because each
-        // survivor resolves through the same link. Both levels can be moved that way, so both are
-        // asked.
-        if (LongPath.IsReparsePoint(root))
-        {
-            return new AffinityCommonTree(root, null, [], [], [], Unreadable: false, LinkedAway: root);
-        }
-
         var common = Path.Combine(root, CommonName);
 
-        switch (LongPath.ProbeDirectory(common))
+        switch (LongPath.ProbeDirectory(common, out var commonIsLink))
         {
             // Common stays null, because nothing below it was classified. The caller asserts it
             // survived through Unreached, as a path Windows would not describe.
@@ -165,7 +162,7 @@ public static partial class AffinityProfiles
                 return new AffinityCommonTree(root, null, [], [], [], Unreadable: false, LinkedAway: null);
         }
 
-        if (LongPath.IsReparsePoint(common))
+        if (commonIsLink is true)
         {
             return new AffinityCommonTree(root, common, [], [], [], Unreadable: false, LinkedAway: common);
         }

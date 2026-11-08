@@ -181,7 +181,7 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
     {
         if (NothingToPlanFor(
                 _root,
-                "Visual Studio has not downloaded the Azure Functions Core Tools on this machine.") is { } noTooling)
+                "Visual Studio has not downloaded the Azure Functions Core Tools on this machine.", out var rootIsLink) is { } noTooling)
         {
             return noTooling;
         }
@@ -191,19 +191,19 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
         // directory it is handed: it would return the far side's ordinary children, target the ones
         // whose names look like versions, and pass every §5.6 assertion, because each survivor named
         // here resolves through the same link. Both levels can be moved that way, so both are asked.
-        if (LongPath.IsReparsePoint(_root))
+        if (rootIsLink)
         {
             return LinkedAway(_root);
         }
 
         if (NothingToPlanFor(
                 _releases,
-                $"The Azure Functions tooling has downloaded no releases ({_releases}).") is { } noReleases)
+                $"The Azure Functions tooling has downloaded no releases ({_releases}).", out var releasesIsLink) is { } noReleases)
         {
             return noReleases;
         }
 
-        if (LongPath.IsReparsePoint(_releases))
+        if (releasesIsLink)
         {
             return LinkedAway(_releases);
         }
