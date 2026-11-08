@@ -208,7 +208,9 @@ public sealed class LocalCopyReleaseTests : IDisposable
         };
 
         var result = await provider.ExecuteAsync(plan);
-        var verified = await provider.VerifyAsync(plan);
+        // Asked from the pool, as an async caller does once it has resumed there, so the proof's own
+        // calling thread is only off the pool where the verification starts it off the pool.
+        var verified = await Task.Run(() => provider.VerifyAsync(plan));
 
         Assert.True(result.Verification!.Passed);
         Assert.True(verified.Passed);
