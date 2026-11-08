@@ -56,10 +56,11 @@ internal static class MftExploreReader
     /// lead to it — and which those are is not known until they have been read.</para>
     ///
     /// <para>So a folder small enough to walk quickly is answered more slowly this way than by
-    /// walking it. That is the trade §5.5 states in the other direction and it is taken knowingly:
-    /// the route is chosen before anything is known about the folder's size, the table's cost is
-    /// bounded by the volume rather than by the folder, and the case it exists for is the folder
-    /// large enough that walking it is the ten minutes §5.5 measured.</para>
+    /// walking it, and nothing before the read knows the folder's size. That is why
+    /// <see cref="ExploreScanner.ScanAsync"/> races this read against a walk of the folder under
+    /// <see cref="Configuration.ScanRoute.Auto"/>: the walk answers a small folder, and this answers
+    /// a large one in a time bounded by the volume rather than by the folder. A volume's root is
+    /// read here alone, because walking it is the ten minutes §5.5 measured.</para>
     ///
     /// <para>Best effort by design. A record this cannot read is skipped and the tree says its
     /// totals are lower bounds; a region that cannot be read at all ends the pass and keeps what was

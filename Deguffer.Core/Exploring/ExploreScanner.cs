@@ -1,3 +1,4 @@
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Mft;
 
@@ -41,7 +42,7 @@ public sealed class ExploreScanner(
     internal Func<Action, Task> AssembleSnapshot { get; init; } = ScanSnapshots.InBackground;
 
     /// <summary>
-    /// How a folder the table does not answer for is walked. A test sets one that records the folder
+    /// How a folder is walked, where the table does not answer for it or is raced. A test sets one that records the folder
     /// and reads nothing, so a scan of a drive letter or a share only the fakes stand for never walks
     /// whatever the machine running the suite has there, or looks a share's server up on the network.
     /// </summary>
@@ -53,6 +54,15 @@ public sealed class ExploreScanner(
     ///
     /// <paramref name="progress"/> receives running counts, and occasionally a snapshot of the tree
     /// so far — §5.5: never block on a complete scan.
+    ///
+    /// <para><b>A folder is raced, a volume is read.</b> Under <see cref="ScanRoute.Auto"/>, where the
+    /// table opens, a scan of a folder walks the folder while the table is read and takes whichever
+    /// answers first (<see cref="RouteRace"/>). The table's cost is the volume's whatever is asked of
+    /// it (<see cref="MftExploreReader.Read"/>), so a small folder is answered by the walk in a
+    /// fraction of it, and a large one by the table. A scan of a volume's root is not raced, because
+    /// the walk it would race is the whole volume, which §5.5 measured at over ten minutes.
+    /// <see cref="ScanRoute.Table"/> reads the table for a folder too, waited for while it is
+    /// read.</para>
     /// </summary>
     public async ValueTask<ExploreScan> ScanAsync(
         string root,
@@ -62,11 +72,42 @@ public sealed class ExploreScanner(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(root);
 
-        // Both routes are synchronous and long: reading a table is millions of records, and the
-        // walk enumerates before its first yield. On the caller's thread that is a frozen window
-        // for the length of the scan, which is the one thing §5.5 asks a scanner not to be. On a pool
-        // thread it is a thread held for as long, which the pool has too few of (WorkerThreads).
-        return await WorkerThreads.Shared.RunAsync(() => Scan(root, progress, snapshotOrder, ct), ct).ConfigureAwait(false);
+        var snapshots = new SnapshotAssembly(AssembleSnapshot, snapshotOrder ?? SnapshotAssembly.ByName.Order);
+        var opened = await OnWorker(() => Open(root), ct).ConfigureAwait(false);
+
+        if (opened.Source is not { } source)
+        {
+            return await OnWorker(() => Walk(root, opened.Reason, progress, snapshots, ct), ct).ConfigureAwait(false);
+        }
+
+        FallbackReason declined;
+
+        try
+        {
+            if (opened.Volume.Components.Count > 0 && _tuning.Route is ScanRoute.Auto)
+            {
+                return await RaceAsync(root, opened.Volume, source, progress, snapshots, ct).ConfigureAwait(false);
+            }
+
+            var read = await OnWorker(() => ReadTable(source, opened.Volume, progress, snapshots, ct), ct).ConfigureAwait(false);
+
+            if (read.Scan is { } scan)
+            {
+                return scan;
+            }
+
+            declined = read.Declined;
+        }
+        finally
+        {
+            // Every read of it has ended by here, a raced read that lost included, which the race
+            // waits for before it returns.
+            source.Dispose();
+        }
+
+        // After the volume is closed deliberately. The walk can run for minutes on a full drive, and
+        // holding a raw volume handle open across it serves nothing once the table has been given up on.
+        return await OnWorker(() => Walk(root, declined, progress, snapshots, ct), ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -241,17 +282,25 @@ public sealed class ExploreScanner(
         }
     }
 
-    private ExploreScan Scan(
-        string root,
-        IProgress<ExploreProgress>? progress,
-        Func<ExploreChildOrder>? snapshotOrder,
-        CancellationToken ct)
-    {
-        var snapshots = new SnapshotAssembly(AssembleSnapshot, snapshotOrder ?? SnapshotAssembly.ByName.Order);
+    /// <summary>
+    /// Run one step of a scan on a thread of its own. Every step is synchronous and long, or waits on
+    /// a device: reading a table is millions of records, the walk enumerates before its first yield,
+    /// and opening a volume waits on it. On the caller's thread that is a frozen window for the
+    /// length of the scan, which is the one thing §5.5 asks a scanner not to be. On a pool thread it
+    /// is a thread held for as long, which the pool has too few of (<see cref="WorkerThreads"/>).
+    /// </summary>
+    private static Task<T> OnWorker<T>(Func<T> step, CancellationToken ct) => WorkerThreads.Shared.RunAsync(step, ct);
 
+    /// <summary>
+    /// The volume <paramref name="root"/> is on, with its table opened, or the reason the walk answers
+    /// alone: the path is on no volume this process can address, Settings asks for the walk, or the
+    /// table would not open.
+    /// </summary>
+    private Opened Open(string root)
+    {
         if (!VolumePath.TryParse(root, out var volume))
         {
-            return Walk(root, FallbackReason.VolumeNotAddressable, progress, snapshots, ct);
+            return new Opened(volume, null, FallbackReason.VolumeNotAddressable);
         }
 
         // Each scan is a look at the machine of its own, so a drive attached since the last one is
@@ -260,44 +309,95 @@ public sealed class ExploreScanner(
 
         if (_tuning.WalkOnly)
         {
-            return Walk(root, FallbackReason.WalkChosen, progress, snapshots, ct);
+            return new Opened(volume, null, FallbackReason.WalkChosen);
         }
 
         var source = _sources.TryOpenTable(volume.DriveLetter, out var reason);
-        if (source is null)
+
+        return new Opened(volume, source, reason);
+    }
+
+    /// <summary>A scan's volume and its opened table, or why there is no table to read.</summary>
+    private readonly record struct Opened(VolumePath Volume, IMftSource? Source, FallbackReason Reason);
+
+    /// <summary>
+    /// The scan the table answered with, or null and why it declined: it read and could not root a
+    /// tree where the scan was pointed, or a read failed part way through.
+    /// </summary>
+    private (ExploreScan? Scan, FallbackReason Declined) ReadTable(
+        IMftSource source,
+        VolumePath volume,
+        IProgress<ExploreProgress>? progress,
+        SnapshotAssembly? snapshots,
+        CancellationToken ct)
+    {
+        try
         {
-            return Walk(root, reason, progress, snapshots, ct);
-        }
+            var read = Read(source, volume, _tuning.ForVolume(volume.DriveLetter).Table, progress, snapshots, ct);
 
-        using (source)
+            // Where the table could not root a tree, whether that is a route lost or a route that
+            // never existed is the reader's judgement, not this one's — a folder reached through a
+            // junction has no record whose subtree is its content, and offering administrator rights
+            // for that would be an apology for a choice nobody made.
+            return read.Tree is { } tree
+                ? (ExploreScan.Fast(tree, fromIncompleteTable: !read.EveryRecordRead), FallbackReason.None)
+                : (null, read.Reason);
+        }
+        catch (IOException)
         {
-            try
-            {
-                var read = Read(source, volume, _tuning.ForVolume(volume.DriveLetter).Table, progress, snapshots, ct);
-
-                if (read.Tree is { } tree)
-                {
-                    return ExploreScan.Fast(tree, fromIncompleteTable: !read.EveryRecordRead);
-                }
-
-                // The table read and could not root a tree where the scan was pointed. Whether that
-                // is a route lost or a route that never existed is the reader's judgement, not this
-                // one's — a folder reached through a junction has no record whose subtree is its
-                // content, and offering administrator rights for that would be an apology for a
-                // choice nobody made.
-                reason = read.Reason;
-            }
-            catch (IOException)
-            {
-                // The volume went away mid-scan, or the driver refused a read. Neither should take
-                // the window down, and the walk still answers.
-                reason = FallbackReason.MasterFileTableIncomplete;
-            }
+            // The volume went away mid-scan, or the driver refused a read. Neither should take the
+            // window down, and the walk still answers.
+            return (null, FallbackReason.MasterFileTableIncomplete);
         }
+    }
 
-        // Outside the using deliberately. The walk can run for minutes on a full drive, and holding
-        // a raw volume handle open across it serves nothing once the table has been given up on.
-        return Walk(root, reason, progress, snapshots, ct);
+    /// <summary>
+    /// Walk the folder at <paramref name="root"/> while its volume's table is read, and take whichever
+    /// answers first. See <see cref="ScanAsync"/>.
+    ///
+    /// <para>The walk answers only where it listed the folder itself. One it could not list, or that
+    /// is not there, has said nothing the table cannot say better, so the table is waited for, as
+    /// <see cref="RouteRace"/> says. The walk's tree is taken only if the table declines too, with the
+    /// table's reason, as a walk after a declined read carries it.</para>
+    ///
+    /// <para>While both run the walk is what the caller is told about (<see cref="HeldTableReports"/>).
+    /// A snapshot it drew is replaced by the table's tree where the table answers first, as any
+    /// snapshot is replaced by the finished tree.</para>
+    ///
+    /// <para>The table reads at normal priority, unlike an index build raced for a measurement
+    /// (<see cref="Scanning.Mft.BuildPriorities"/>). That race is over a dozen small paths. This one may
+    /// be over a folder large enough that the table is the quicker route, and a low-priority read of
+    /// the table was measured at three to seven times as long as a normal one even with nothing else
+    /// reading the disk, which would make a large folder slower to scan than it is without the
+    /// race.</para>
+    /// </summary>
+    private async Task<ExploreScan> RaceAsync(
+        string root,
+        VolumePath volume,
+        IMftSource source,
+        IProgress<ExploreProgress>? progress,
+        SnapshotAssembly snapshots,
+        CancellationToken ct)
+    {
+        var held = progress is null ? null : new HeldTableReports(progress, snapshots);
+        var declined = FallbackReason.None;
+
+        var raced = await RouteRace.FirstAsync(
+            async stop =>
+            {
+                var read = await OnWorker(() => ReadTable(source, volume, held, held?.Snapshots, stop), stop).ConfigureAwait(false);
+                declined = read.Declined;
+                return read.Scan;
+            },
+            stop => OnWorker(() => Walk(root, FallbackReason.WalkAnsweredFirst, progress, snapshots, stop), stop),
+            walked => !walked.Tree.ListingWasRefused(walked.Tree.RootNode),
+            () => held?.TableAlone(),
+            ct).ConfigureAwait(false);
+
+        // The table has ended by the time it declines, so its reason has been written.
+        return raced.Outcome is RaceOutcome.TableDeclined
+            ? ExploreScan.Walked(raced.Answer.Tree, declined)
+            : raced.Answer;
     }
 
     private MftExploreRead Read(

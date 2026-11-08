@@ -13,7 +13,8 @@ public enum ScanRoute
     /// Both routes at once where the file table can be read, and the walk where it cannot. A volume's
     /// table is read in the background from the first question about the volume, and each question
     /// takes whichever route answers it first: the walk while the table is being read, and the table
-    /// once it is.
+    /// once it is. An Explore scan of a folder races the two routes the same way, and a scan of a
+    /// whole volume reads the table, because the walk it would race is the whole volume.
     ///
     /// <para>Measured, neither route wins alone. On one machine an elevated preview took about 24
     /// seconds walking and 30 reading the table with the disk cache warm, and about 42 against 35

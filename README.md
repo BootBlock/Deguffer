@@ -292,7 +292,8 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 ## Explore
 
 Explore reads the drive's file table when Deguffer is running as administrator, and walks the
-folders when it is not. You can view a whole drive or a single folder as a treemap, an icicle, a
+folders when it is not. As administrator, a scan of a single folder walks the folder while the
+table is read and shows whichever finishes first. You can view a whole drive or a single folder as a treemap, an icicle, a
 sunburst or a list, and colour it by folder, age, growth, file type or depth. The Files view lists
 the largest files at any depth, and you can filter it by name or wildcard, type, size, and how long
 ago each file was last written.

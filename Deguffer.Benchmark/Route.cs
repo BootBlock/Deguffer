@@ -20,8 +20,9 @@ internal enum Route
 
     /// <summary>
     /// Build the Explore tree for one folder from its volume's file table: the route an elevated
-    /// Explore of a folder takes. It reads the whole table, as <see cref="Explore"/> does, and keeps
-    /// only the folder.
+    /// Explore of a folder takes under the Table route, and the table's side of the race it runs
+    /// under Auto. It reads the whole table, as <see cref="Explore"/> does, and keeps only the
+    /// folder.
     /// </summary>
     ExploreFolder,
 

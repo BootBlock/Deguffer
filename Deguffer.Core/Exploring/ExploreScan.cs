@@ -78,9 +78,10 @@ public sealed record ScannedFolder(
 /// reason. That one qualifies the measurement of a dozen named caches, where building the table
 /// costs a pass over the whole volume to answer a handful of questions — which is why the walk
 /// races the table there, and why its sentence is careful not to promise a speed-up.
-/// Here the table answers for every directory on the disk from that same single pass, and the walk
-/// it replaces is the one §5.5 measured at over ten minutes. The same fact, and opposite
-/// advice.</para>
+/// Here the table answers for every directory on the disk from that same single pass, and for a
+/// whole volume the walk it replaces is the one §5.5 measured at over ten minutes. The same fact,
+/// and opposite advice. A scan of a folder races the two routes as the clean does, and a walk that
+/// wins there says nothing, for the reason its arm below gives.</para>
 /// </summary>
 public static class ExploreRouteText
 {
@@ -122,8 +123,10 @@ public static class ExploreRouteText
             FallbackReason.WalkChosen =>
                 "Scanned by walking directories, because Settings asks for the walk only.",
 
-            // Cannot arise here either. Explore reads the table and never races it, because the walk
-            // it would race is the whole volume.
+            // A scan of a folder that walked while the table was read, and finished first. Nothing
+            // was lost and nothing is on offer: the table opened, so the process already has the
+            // rights, and the walk listed the folder itself, so its tree is as whole as the table's
+            // and names any folder below it that it was refused.
             FallbackReason.WalkAnsweredFirst => null,
 
             _ => throw new ArgumentOutOfRangeException(nameof(reason)),
