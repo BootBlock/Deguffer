@@ -290,6 +290,9 @@ passes `progress: null`. `CleanupProviderBase.MeasureAllAsync` is the only provi
 and it passes null, so the preview cannot currently show even "bytes seen so far" — which is the one
 thing §5.5 asks for by name, and the readout Filelight, ncdu and gdu all settle on.
 
+> **Since this was written:** this gap is closed (#475). `CleanupProviderBase` now passes a sink
+> to every measurement it makes, and the preview shows the bytes counted so far. See route B in §6.
+
 **The walk has no denominator at any layer, and the obvious heuristic is not monotone.**
 `BoundedFileWalk.Visit` drains a queue level by level, so at the start of each level it knows that
 level's width exactly and knows nothing at all about the next one. The fraction

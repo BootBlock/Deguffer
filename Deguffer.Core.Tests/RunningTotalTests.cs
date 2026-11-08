@@ -58,6 +58,22 @@ public class RunningTotalTests
         Assert.Equal(5100, progress.Reports[^1].Reclaimable);
     }
 
+    /// <summary>
+    /// A volume's root keeps its separator, so the prefix below it must not gain a second one, which
+    /// nothing inside the volume would start with.
+    /// </summary>
+    [Fact]
+    public void APathInsideAVolumeRootIsNotCountedTwice()
+    {
+        var progress = new ProgressRecorder<ScanSize>();
+        var running = RunningTotal.Over(Asked(@"C:\", @"C:\Users\testuser\cache"), progress);
+
+        running.Report(0, ScanSize.FromLengths(9000));
+        running.Report(1, ScanSize.FromLengths(4000));
+
+        Assert.Equal([9000L], progress.Reports.Select(size => size.Reclaimable));
+    }
+
     [Fact]
     public void APathAskedAboutTwiceIsCountedOnce()
     {

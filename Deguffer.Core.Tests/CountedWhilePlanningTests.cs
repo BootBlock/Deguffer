@@ -21,8 +21,9 @@ public sealed class CountedWhilePlanningTests
     /// folder below the third. The line shows the sum of all three before the walk ends, then nothing
     /// once the finding is reported.
     ///
-    /// <para>Every report moves the walk's clock on by its interval, so the next folder read is due to
-    /// report too, and whichever of the three is read last reports a sum that holds all of them.</para>
+    /// <para>The walk's clock moves on by a whole interval each time it is read, so every folder read
+    /// finds a report due, whatever another worker is reporting at the time. The last report made
+    /// for the three folders follows all three readings, so it holds all of them.</para>
     /// </summary>
     [Fact]
     public async Task AProviderMeasuringThreePathsShowsTheirSumBeforeItsWalkEnds()
@@ -34,7 +35,6 @@ public sealed class CountedWhilePlanningTests
         var held = Path.GetDirectoryName(temp.CreateFile(8192, "c", "held", "four.bin"))!;
 
         using var release = new ManualResetEventSlim();
-        var clock = new ManualTimeProvider();
 
         ListDirectory holding = (directory, request, into) =>
         {
@@ -53,8 +53,6 @@ public sealed class CountedWhilePlanningTests
             {
                 lines.Add(line);
             }
-
-            clock.Advance(BoundedFileWalk.ProgressInterval);
         });
 
         var linesWhenFound = -1;
@@ -68,7 +66,7 @@ public sealed class CountedWhilePlanningTests
 
         var provider = new TargetsProvider(
             new FakeUserEnvironment(temp.CreateDirectory("profile")),
-            new ParallelEnumerationScanner(ScanTuner.Shipped, holding, clock),
+            new ParallelEnumerationScanner(ScanTuner.Shipped, holding, new IntervalPerRead()),
             [.. new[] { a, b, c }.Select(path => new DeletionTarget(path, "Measured"))]);
 
         var pass = new CleanupPlanner([provider]).PlanAllAsync(MinimumAge.Off, status, found);
@@ -157,5 +155,18 @@ public sealed class CountedWhilePlanningTests
 
         Assert.Equal(4000, plan.EstimatedBytes);
         Assert.Equal(4000, counted.Reports[^1].Reclaimable);
+    }
+
+    /// <summary>
+    /// A clock a whole progress interval later at every read, so a walk timed by it finds a report due
+    /// after every folder it reads.
+    /// </summary>
+    private sealed class IntervalPerRead : TimeProvider
+    {
+        private long _ticks;
+
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
+        public override long GetTimestamp() => Interlocked.Add(ref _ticks, BoundedFileWalk.ProgressInterval.Ticks);
     }
 }

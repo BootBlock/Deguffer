@@ -490,6 +490,14 @@ public static partial class LongPath
     internal static bool EndsWithSeparator(string path) =>
         path.EndsWith(Path.DirectorySeparatorChar) || path.EndsWith(Path.AltDirectorySeparatorChar);
 
+    /// <summary>
+    /// The prefix every path below <paramref name="path"/> starts with: the path and one separator.
+    /// A volume root already ends in one, and a second would build a prefix nothing below it matches,
+    /// as <see cref="Contains(string, string)"/> warns.
+    /// </summary>
+    internal static string Below(string path) =>
+        EndsWithSeparator(path) ? path : path + Path.DirectorySeparatorChar;
+
     /// <summary>The kind of entry a probe asks about.</summary>
     private enum EntryKind
     {

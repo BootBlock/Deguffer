@@ -79,7 +79,9 @@ internal sealed class RunningTotal
     ///
     /// <para>Sorted rather than compared in pairs, because a provider can ask about thousands of paths.
     /// Every path below another starts with that path and its separator, so it sorts into one run
-    /// straight after it, and one pass over the sorted keys finds them all.</para>
+    /// straight after it, and one pass over the sorted keys finds them all, as
+    /// <see cref="RootSetWalk"/> finds the roots it does not seed. Unlike the walk, which has to match a
+    /// folder exactly as it lists it, this ignores case, so it can only err low.</para>
     /// </summary>
     private static bool[] Outermost(IReadOnlyList<ScanRequest> asked)
     {
@@ -87,8 +89,7 @@ internal sealed class RunningTotal
 
         for (var i = 0; i < keys.Length; i++)
         {
-            keys[i] = (Path.TrimEndingDirectorySeparator(LongPath.Extended(asked[i].Path)) + Path.DirectorySeparatorChar)
-                .ToUpperInvariant();
+            keys[i] = LongPath.Below(Path.TrimEndingDirectorySeparator(LongPath.Extended(asked[i].Path))).ToUpperInvariant();
         }
 
         var counts = new bool[keys.Length];
