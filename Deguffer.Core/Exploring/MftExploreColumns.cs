@@ -21,7 +21,10 @@ internal sealed class MftExploreColumns
     // The token is asked once every 65,536 slots copied, as ExploreTreeCapture asks it.
     private const int CancellationMask = (1 << 16) - 1;
 
-    /// <param name="count">How many slots: one a record, and one a further name of a hard-linked file.</param>
+    /// <param name="count">
+    /// How many slots: one a record, or, for the columns a read places a hard-linked file's further
+    /// names in, one a name.
+    /// </param>
     public MftExploreColumns(int count)
     {
         // A number per record into one pool of names, rather than a string per record. See NamePool.
@@ -54,26 +57,34 @@ internal sealed class MftExploreColumns
     }
 
     /// <summary>
+    /// No slots: what <see cref="ExploreTree.Create"/> reads where a read placed no further names.
+    /// </summary>
+    public static MftExploreColumns None { get; } = new(0);
+
+    /// <summary>How many slots there are.</summary>
+    public int Count => Parents.Length;
+
+    /// <summary>
     /// Each slot's name, as numbered in the read's <see cref="NamePool"/>. Written for a record
     /// before <see cref="Describe"/> is, so the flags' release store publishes it too.
     /// </summary>
-    public int[] NameNumbers { get; private set; }
+    public int[] NameNumbers { get; }
 
-    public int[] Parents { get; private set; }
+    public int[] Parents { get; }
 
-    public long[] Sizes { get; private set; }
+    public long[] Sizes { get; }
 
-    public long[] Lengths { get; private set; }
+    public long[] Lengths { get; }
 
-    public FileStorage[] Storage { get; private set; }
+    public FileStorage[] Storage { get; }
 
-    public ExploreNodeFlags[] Flags { get; private set; }
+    public ExploreNodeFlags[] Flags { get; }
 
-    public ExploreTimestamp[] Created { get; private set; }
+    public ExploreTimestamp[] Created { get; }
 
-    public ExploreTimestamp[] Modified { get; private set; }
+    public ExploreTimestamp[] Modified { get; }
 
-    public FileVisibility[] Visibility { get; private set; }
+    public FileVisibility[] Visibility { get; }
 
     /// <summary>
     /// Write one slot: a record under the name it was placed by, or one of a file's other names,
@@ -100,23 +111,6 @@ internal sealed class MftExploreColumns
     }
 
     /// <summary>
-    /// Make room for <paramref name="count"/> slots, keeping every one written. Only once the read
-    /// has ended, because each column is replaced by a longer one.
-    /// </summary>
-    public void Grow(int count)
-    {
-        NameNumbers = Resized(NameNumbers, count);
-        Parents = Resized(Parents, count);
-        Sizes = Resized(Sizes, count);
-        Lengths = Resized(Lengths, count);
-        Storage = Resized(Storage, count);
-        Flags = Resized(Flags, count);
-        Created = Resized(Created, count);
-        Modified = Resized(Modified, count);
-        Visibility = Resized(Visibility, count);
-    }
-
-    /// <summary>
     /// The slots described so far, copied into columns of their own while the parse threads go on
     /// writing these. A slot not yet marked <see cref="ExploreNodeFlags.Present"/> is left empty in
     /// the copy, and so is drawn as a record the read has not reached.
@@ -128,7 +122,7 @@ internal sealed class MftExploreColumns
     /// <param name="ct">Asked every so many slots, so a snapshot the scan has finished with stops.</param>
     public MftExploreColumns CopyPresent(CancellationToken ct)
     {
-        var count = Parents.Length;
+        var count = Count;
         var copy = new MftExploreColumns(count);
 
         for (var i = 0; i < count; i++)
@@ -161,10 +155,4 @@ internal sealed class MftExploreColumns
     // Volatile has no overload for an enum, and the flags are one byte each.
     private static ref byte FlagsByte(ExploreNodeFlags[] flags, int node) =>
         ref Unsafe.As<ExploreNodeFlags, byte>(ref flags[node]);
-
-    private static T[] Resized<T>(T[] column, int count)
-    {
-        Array.Resize(ref column, count);
-        return column;
-    }
 }
