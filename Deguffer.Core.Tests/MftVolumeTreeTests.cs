@@ -22,9 +22,9 @@ public class MftVolumeTreeTests
 
         // A store with every mark at once: the index leaves a store whatever reparse point it
         // carries, so the combination is one it has to read.
-        tree.Set(16, new MftRecord(Profile, Size: null, IsDirectory: false, IsReparsePoint: true, 0, 0), "outlook.ost");
-        tree.Set(17, new MftRecord(Profile, new ScanSize(4096, 4000), IsDirectory: false, IsReparsePoint: false, 0, 0), "a.tgz");
-        tree.Set(18, new MftRecord(Profile, ScanSize.Zero, IsDirectory: true, IsReparsePoint: false, 0, 0), "cache");
+        tree.Set(16, new MftRecord(Profile, Size: null, IsDirectory: false, IsReparsePoint: true, 0, 0), "outlook.ost", MftOtherLinks.None);
+        tree.Set(17, new MftRecord(Profile, new ScanSize(4096, 4000), IsDirectory: false, IsReparsePoint: false, 0, 0), "a.tgz", MftOtherLinks.None);
+        tree.Set(18, new MftRecord(Profile, ScanSize.Zero, IsDirectory: true, IsReparsePoint: false, 0, 0), "cache", MftOtherLinks.None);
 
         Assert.True(tree.IsMailStore(16));
         Assert.True(tree.IsReparsePoint(16));

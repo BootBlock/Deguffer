@@ -145,8 +145,8 @@ internal sealed class MftDeferredRecord
     /// </summary>
     public void Fail(MftAttributeKinds needs) => Lost |= needs;
 
-    public MftParseOutcome Finish(out MftRecord result, out ReadOnlySpan<char> name) =>
-        _draft.Finish(_isDirectory, new MftListFindings(_declaresUnnamedData, Lost), record: default, out result, out name);
+    public MftParseOutcome Finish(out MftRecord result, out ReadOnlySpan<char> name, out MftOtherLinks otherLinks) =>
+        _draft.Finish(_isDirectory, new MftListFindings(_declaresUnnamedData, Lost), record: default, out result, out name, out otherLinks);
 
     /// <summary>
     /// The list itself could not be trusted, so anything the base record did not settle could have

@@ -19,7 +19,9 @@ namespace Deguffer.Core.Scanning.Mft;
 /// is read into again once the handler returns, so a handler that keeps the name copies it, and
 /// one that does not keep it pays for no string.
 /// </param>
-internal delegate bool MftRecordHandler(long number, MftParseOutcome outcome, in MftRecord record, ReadOnlySpan<char> name);
+/// <param name="otherLinks">The file's other names, on the same terms as <paramref name="name"/>.</param>
+internal delegate bool MftRecordHandler(
+    long number, MftParseOutcome outcome, in MftRecord record, ReadOnlySpan<char> name, MftOtherLinks otherLinks);
 
 /// <summary>
 /// Reads a table from end to end, parsing each record in use and handing it on.
@@ -111,9 +113,9 @@ internal static class MftRecordStream
 
         foreach (var held in first.Deferred)
         {
-            var outcome = held.Finish(out var record, out var name);
+            var outcome = held.Finish(out var record, out var name, out var otherLinks);
 
-            if (!onRecord(held.Self.Record, outcome, in record, name))
+            if (!onRecord(held.Self.Record, outcome, in record, name, otherLinks))
             {
                 return false;
             }

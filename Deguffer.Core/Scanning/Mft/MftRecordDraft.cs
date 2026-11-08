@@ -46,7 +46,13 @@ internal struct MftRecordDraft
     private int _nameLength;
     private string? _name;
 
-    // Null until a second link is met, which almost no record has.
+    // The other links are left where they sit in the record last absorbed, counted, until Keep
+    // decodes them into _otherLinks with the name. MftOtherLinks finds them again by walking the
+    // record from _firstAttributeOffset.
+    private int _firstAttributeOffset;
+    private int _linkCount;
+
+    // Null until a kept draft has a second link, which almost no record has.
     private List<MftLink>? _otherLinks;
 
     private ScanSize? _size;
@@ -93,6 +99,7 @@ internal struct MftRecordDraft
     {
         supplied = MftAttributeKinds.None;
         attributeList = null;
+        _firstAttributeOffset = firstAttributeOffset;
 
         var walk = new MftAttributeEnumerator(record, firstAttributeOffset);
         var offset = firstAttributeOffset;
@@ -121,25 +128,20 @@ internal struct MftRecordDraft
                     // fail against the name the user actually typed. Strictly better only, so a tie
                     // keeps the name read first, and the base record is always read first.
                     //
-                    // Every name that is not an alias is a link of its own, and the one this does not
-                    // place the file by is kept as one of its other links. A draft absorbs one record,
-                    // so the name displaced is still in that record to be read.
+                    // Every name that is not an alias is a link of its own, and each but the one this
+                    // places the file by is one of its other links. Only counted here: a draft absorbs
+                    // one record, so every one of them is still in that record to be read.
                     var rank = MftRecordParser.RankOf(candidate.Namespace);
-                    var at = offset + candidate.NameOffset;
+
+                    if (MftRecordParser.IsLink(rank))
+                    {
+                        _linkCount++;
+                    }
 
                     if (rank < _bestRank)
                     {
-                        if (IsLink(_bestRank))
-                        {
-                            AddOtherLink(_parent, new string(MftRecordParser.NameAt(record, _nameOffset, _nameLength)));
-                        }
-
                         (_parent, _bestRank, _name) = (candidate.Parent, rank, null);
-                        (_nameOffset, _nameLength) = (at, candidate.NameLength);
-                    }
-                    else if (IsLink(rank))
-                    {
-                        AddOtherLink(candidate.Parent, new string(MftRecordParser.NameAt(record, at, candidate.NameLength)));
+                        (_nameOffset, _nameLength) = (offset + candidate.NameOffset, candidate.NameLength);
                     }
 
                     break;
@@ -188,6 +190,12 @@ internal struct MftRecordDraft
             offset += walk.Current.Length;
         }
 
+        // The name the file is placed by is the one link that is not another.
+        if (MftRecordParser.IsLink(_bestRank))
+        {
+            _linkCount--;
+        }
+
         if (isBase)
         {
             BaseRank = _bestRank;
@@ -198,16 +206,23 @@ internal struct MftRecordDraft
     }
 
     /// <summary>
-    /// Decode the best name, so the draft can outlive <paramref name="record"/>, the record it was
-    /// last absorbed from. Only a draft that has to wait for other records, or one that is such a
-    /// record's contribution, pays for a string here.
+    /// Decode the best name and the other links, so the draft can outlive <paramref name="record"/>,
+    /// the record it was last absorbed from. Only a draft that has to wait for other records, or one
+    /// that is such a record's contribution, pays for strings here.
     /// </summary>
     public void Keep(ReadOnlySpan<byte> record)
     {
-        if (_name is null && _bestRank != NoName)
+        if (_name is not null || _bestRank == NoName)
         {
-            _name = new string(MftRecordParser.NameAt(record, _nameOffset, _nameLength));
+            return;
         }
+
+        foreach (var link in OtherLinksIn(record))
+        {
+            AddOtherLink(link.ParentRecordNumber, link.Name.ToString());
+        }
+
+        _name = new string(MftRecordParser.NameAt(record, _nameOffset, _nameLength));
     }
 
     /// <summary>
@@ -228,14 +243,14 @@ internal struct MftRecordDraft
         // by MftExtensionRecord.
         if (extension._bestRank < _bestRank)
         {
-            if (IsLink(_bestRank))
+            if (MftRecordParser.IsLink(_bestRank))
             {
                 AddOtherLink(_parent, _name!);
             }
 
             (_parent, _name, _bestRank) = (extension._parent, extension._name, extension._bestRank);
         }
-        else if (IsLink(extension._bestRank))
+        else if (MftRecordParser.IsLink(extension._bestRank))
         {
             AddOtherLink(extension._parent, extension._name!);
         }
@@ -263,11 +278,18 @@ internal struct MftRecordDraft
     /// The record this draft last absorbed, where its name has not been kept; empty where it has.
     /// </param>
     /// <param name="name">The file's name, which can point into <paramref name="record"/>.</param>
+    /// <param name="otherLinks">The file's other names, which can point into <paramref name="record"/>.</param>
     public readonly MftParseOutcome Finish(
-        bool isDirectory, MftListFindings? list, ReadOnlySpan<byte> record, out MftRecord result, out ReadOnlySpan<char> name)
+        bool isDirectory,
+        MftListFindings? list,
+        ReadOnlySpan<byte> record,
+        out MftRecord result,
+        out ReadOnlySpan<char> name,
+        out MftOtherLinks otherLinks)
     {
         result = default;
         name = default;
+        otherLinks = default;
 
         // No name anywhere: a record in use claiming no identity. Without a list it points nowhere
         // else for one, which no healthy volume produces. With one, the names were in records that
@@ -289,15 +311,26 @@ internal struct MftRecordDraft
         // walk.
         var isReparsePoint = _isReparsePoint && list?.Lost.HasFlag(MftAttributeKinds.ReparsePoint) != true;
 
-        name = _name ?? MftRecordParser.NameAt(record, _nameOffset, _nameLength);
+        if (_name is not null)
+        {
+            name = _name;
+            otherLinks = new MftOtherLinks(_otherLinks);
+        }
+        else
+        {
+            name = MftRecordParser.NameAt(record, _nameOffset, _nameLength);
+            otherLinks = OtherLinksIn(record);
+        }
+
         result = new MftRecord(
             _parent, SizeFor(isDirectory, list), isDirectory, isReparsePoint, _created, _lastWritten, StorageOf(isDirectory),
-            FileVisibilities.Of(_attributes), _otherLinks);
+            FileVisibilities.Of(_attributes));
         return MftParseOutcome.Parsed;
     }
 
-    /// <summary>Whether a name of this rank is a link of its own rather than an 8.3 alias, or no name.</summary>
-    private static bool IsLink(int rank) => rank < MftRecordParser.RankOf(MftRecordParser.FileNameNamespace.Dos);
+    /// <summary>The other links as they sit in <paramref name="record"/>, the record last absorbed.</summary>
+    private readonly MftOtherLinks OtherLinksIn(ReadOnlySpan<byte> record) =>
+        new(record, _firstAttributeOffset, _nameOffset, _linkCount);
 
     private void AddOtherLink(uint parent, string name) => (_otherLinks ??= []).Add(new MftLink(parent, name));
 

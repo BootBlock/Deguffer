@@ -41,6 +41,10 @@ internal static class MftRecordParser
     /// It can point into <paramref name="record"/>, so it is good only while the caller holds that
     /// buffer, and a caller that keeps the name copies it.
     /// </param>
+    /// <param name="otherLinks">
+    /// Where the outcome is <see cref="MftParseOutcome.Parsed"/>, the file's other names, on the same
+    /// terms as <paramref name="name"/>; otherwise none.
+    /// </param>
     /// <param name="deferred">
     /// Where the outcome is <see cref="MftParseOutcome.Continued"/>, what has to be read from other
     /// records before this one can be answered; otherwise null.
@@ -55,11 +59,13 @@ internal static class MftRecordParser
         long number,
         out MftRecord result,
         out ReadOnlySpan<char> name,
+        out MftOtherLinks otherLinks,
         out MftDeferredRecord? deferred,
         out MftExtensionRecord? extension)
     {
         result = default;
         name = default;
+        otherLinks = default;
         deferred = null;
         extension = null;
 
@@ -88,7 +94,7 @@ internal static class MftRecordParser
 
         if (listAt is not { } list)
         {
-            return draft.Finish(header.IsDirectory, list: null, used, out result, out name);
+            return draft.Finish(header.IsDirectory, list: null, used, out result, out name, out otherLinks);
         }
 
         var pending = new MftDeferredRecord(number, header.Sequence, header.IsDirectory, draft, used);
@@ -111,7 +117,7 @@ internal static class MftRecordParser
 
         if (pending.IsComplete)
         {
-            return pending.Finish(out result, out name);
+            return pending.Finish(out result, out name, out otherLinks);
         }
 
         deferred = pending;
@@ -310,8 +316,9 @@ internal static class MftRecordParser
     ///
     /// <para>A record carries several names, an 8.3 alias beside almost every long one, and the file
     /// is placed by the best of them, so the names are ranked here without decoding any. The winner
-    /// is read as it sits, by <see cref="NameAt"/>. Only a name that is another link
-    /// (<see cref="MftLink"/>) is turned into a string, and almost no record has one.</para>
+    /// is read as it sits, by <see cref="NameAt"/>, and so is every other link (<see cref="MftLink"/>),
+    /// through <see cref="MftOtherLinks"/>. A string is made only by a caller that keeps a name, or for a
+    /// record that has to outlive the buffer it was read into.</para>
     /// </summary>
     /// <param name="result">
     /// <c>NameOffset</c> is in bytes from the start of <paramref name="attribute"/>, and
@@ -378,6 +385,12 @@ internal static class MftRecordParser
         FileNameNamespace.Posix => 2,
         _ => 3,
     };
+
+    /// <summary>
+    /// Whether a name of this rank is a link of its own rather than an 8.3 alias, or no name at all.
+    /// A listing never shows the alias as an entry of its own.
+    /// </summary>
+    internal static bool IsLink(int rank) => rank < RankOf(FileNameNamespace.Dos);
 
     /// <summary>The values NTFS stores in the namespace byte. See <see cref="RankOf"/> for preference.</summary>
     internal enum FileNameNamespace : byte

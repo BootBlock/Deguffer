@@ -114,7 +114,7 @@ public sealed class MftReadPassTests
             source,
             (int)source.RecordCount,
             new TableTuning(TableTuning.MinimumReadBytes, 4, 2, 4),
-            (number, _, in _, _) =>
+            (number, _, in _, _, _) =>
             {
                 handed.Add(number);
                 return true;
@@ -140,7 +140,7 @@ public sealed class MftReadPassTests
             source,
             (int)source.RecordCount,
             new TableTuning(TableTuning.MinimumReadBytes, 8, 4, 8),
-            (number, outcome, in _, _) =>
+            (number, outcome, in _, _, _) =>
             {
                 if (outcome == MftParseOutcome.Parsed)
                 {
@@ -198,7 +198,7 @@ public sealed class MftReadPassTests
             source,
             (int)source.RecordCount,
             new TableTuning(64 * 1024, ReadsInFlight, 2, ReadsInFlight),
-            (number, _, in _, _) =>
+            (number, _, in _, _, _) =>
             {
                 handed.Add(number);
                 return true;
@@ -323,7 +323,7 @@ public sealed class MftReadPassTests
             source,
             (int)source.RecordCount,
             new TableTuning(TableTuning.MinimumReadBytes, 8, 4, 8),
-            (number, _, in _, _) => number == 1_202 ? throw new InvalidOperationException() : true,
+            (number, _, in _, _, _) => number == 1_202 ? throw new InvalidOperationException() : true,
             onProgress: null,
             default));
     }
@@ -339,7 +339,7 @@ public sealed class MftReadPassTests
             source,
             (int)source.RecordCount,
             new TableTuning(TableTuning.MinimumReadBytes, 2, 1, 2),
-            (number, _, in _, _) =>
+            (number, _, in _, _, _) =>
             {
                 Interlocked.Increment(ref handed);
                 return number != 100;
@@ -376,7 +376,7 @@ public sealed class MftReadPassTests
             source,
             (int)source.RecordCount,
             new TableTuning(64 * 1024, 4, 1, 4),
-            (number, _, in _, _) =>
+            (number, _, in _, _, _) =>
             {
                 if (number != 20)
                 {
@@ -413,7 +413,7 @@ public sealed class MftReadPassTests
             source,
             (int)source.RecordCount,
             new TableTuning(TableTuning.MinimumReadBytes, TableTuning.MaximumReadsInFlight, TableTuning.MaximumParseThreads, TableTuning.MaximumListReadsInFlight),
-            static (_, _, in _, _) => true,
+            static (_, _, in _, _, _) => true,
             done =>
             {
                 overlapped |= Interlocked.Increment(ref reporting) > 1;
@@ -497,7 +497,7 @@ public sealed class MftReadPassTests
             source,
             (int)source.RecordCount,
             new TableTuning(64 * 1024, 4, 2, 4),
-            static (_, _, in _, _) => true,
+            static (_, _, in _, _, _) => true,
             done =>
             {
                 if (done > 0)
@@ -537,7 +537,7 @@ public sealed class MftReadPassTests
             source,
             (int)source.RecordCount,
             new TableTuning(TableTuning.MinimumReadBytes, 8, parseThreads, 8),
-            (_, _, in _, _) =>
+            (_, _, in _, _, _) =>
             {
                 threads.TryAdd(Environment.CurrentManagedThreadId, true);
 
@@ -600,7 +600,7 @@ public sealed class MftReadPassTests
             source,
             (int)source.RecordCount,
             tuning,
-            (number, outcome, in record, name) =>
+            (number, outcome, in record, name, _) =>
             {
                 Assert.True(handed.TryAdd(number, outcome == MftParseOutcome.Parsed ? (outcome, record, name.ToString()) : (outcome, default, null)), $"record {number} was handed on twice");
                 return true;

@@ -43,14 +43,15 @@ internal readonly record struct MftExtensionRecord(
         var attributes = new MftRecordDraft();
         var supplied = MftAttributeKinds.None;
 
+        var used = record[..header.UsedLength];
         var readable = outcome == MftParseOutcome.Parsed
-            && attributes.TryAbsorb(record[..header.UsedLength], header.FirstAttributeOffset, isBase: false, out supplied, out _);
+            && attributes.TryAbsorb(used, header.FirstAttributeOffset, isBase: false, out supplied, out _);
 
         // Kept past the buffer it was read from, until its owner is finished. One that cannot be read
-        // is refused by every owner, so its name is never wanted.
+        // is refused by every owner, so its names are never wanted.
         if (readable)
         {
-            attributes.Keep(record);
+            attributes.Keep(used);
         }
 
         return new MftExtensionRecord(number, header.Sequence, header.BaseReference, readable, supplied, attributes);
