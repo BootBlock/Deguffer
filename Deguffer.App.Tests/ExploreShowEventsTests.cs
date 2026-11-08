@@ -1,5 +1,6 @@
 using Deguffer.App.Diagnostics;
 using Deguffer.App.ViewModels;
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
 
 namespace Deguffer.App.Tests;
@@ -34,7 +35,7 @@ public sealed class ExploreShowEventsTests : IDisposable
     public void AStepIsOneShowWithItsCauseAndNoNameFromTheTree() => UiThread.Run(async () =>
     {
         _explore.Volumes.With(@"C:\");
-        var page = _explore.Page();
+        var page = _explore.Listed();
         var tree = Drive();
 
         await _explore.ScanAsync(page, ExploreScan.Fast(tree));
@@ -48,10 +49,36 @@ public sealed class ExploreShowEventsTests : IDisposable
 
         var rows = page.Listing.Rows.Count;
 
+        Assert.NotEqual(0, rows);
         Assert.Equal([(int)ShowCause.Step, tree.NodeCount], recorder.Events[0].Numbers);
         Assert.Equal([rows], recorder.Events[4].Numbers);
         Assert.Equal([(int)ShowCause.Step, rows], recorder.Events[^1].Numbers);
         Assert.DoesNotContain(recorder.Events.SelectMany(raised => raised.Payload), value => value is string);
+    });
+
+    /// <summary>
+    /// Under a map a step lists no rows, and its show says so rather than counting the rows the list
+    /// last held for another folder.
+    /// </summary>
+    [Fact]
+    public void AStepUnderAMapListsNoRows() => UiThread.Run(async () =>
+    {
+        _explore.Volumes.With(@"C:\");
+        var page = _explore.Listed();
+        var tree = Drive();
+
+        await _explore.ScanAsync(page, ExploreScan.Fast(tree));
+
+        Assert.NotEmpty(page.Listing.Rows);
+
+        page.SelectedView = ExploreView.Treemap;
+        using var recorder = new ShellEventRecorder();
+
+        page.Descend(tree.ChildrenOf(tree.RootNode)[0]);
+
+        Assert.Equal(OneShow, recorder.Names);
+        Assert.Equal([0], recorder.Events[4].Numbers);
+        Assert.Equal([(int)ShowCause.Step, 0], recorder.Events[^1].Numbers);
     });
 
     /// <summary>

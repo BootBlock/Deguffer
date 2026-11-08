@@ -23,9 +23,9 @@ parameter that is not a number or an enum.
 | `Launch` | `App.OnLaunched` is called | the main window's first frame after it is activated has been handed to the compositor | none |
 | `Window` | inside `Launch`: the main window is about to be built, with the page it opens on | the window is built | none |
 | `ToolWindows` | after `Launch`, once the first frame is drawn: a tool window left open last session is about to open again | it is open | none |
-| `Show` | the Explore page is about to show a tree | the tree is shown and handed to the map | start: cause, node total. Stop: cause, rows listed |
+| `Show` | the Explore page is about to show a tree | the tree is shown and handed to the map | start: cause, node total. Stop: cause, rows listed, which is 0 while a map is on screen |
 | `Selection` | inside `Show`: what is picked is about to be carried to the tree or cleared | done | none |
-| `Rows` | inside `Show`: the rows are about to be brought up to date or rebuilt | done | stop: rows listed |
+| `Rows` | inside `Show`: the trail, and the rows while the List layout is on screen, are about to be brought up to date or rebuilt | done | stop: rows listed, which is 0 while a map is on screen |
 | `Handoff` | inside `Show`: the page is about to hand the tree to the map | the map has taken it and asked for its drawing, and the list has marked what is picked again | none |
 | `Picture` | the map is handed a new picture (another tree, folder or view) | the first frame after a drawing of it is presented has been handed to the compositor, or the next picture is handed over first | start: picture number, view. Stop: picture number, outcome. Every map in the app counts from one shared number |
 | `Groups` | the Duplicates page starts to apply a batch of confirmed groups | the batch and its figures are applied | stop: groups in the batch |

@@ -96,6 +96,25 @@ public sealed class ExploreDisplayTests
     }
 
     /// <summary>
+    /// The folder is listed a row per entry only in the List layout, before anything has been
+    /// scanned as well as after, so the rows are written as the scan's first tree arrives. The
+    /// pictures and the Files layout read none of them.
+    /// </summary>
+    [Theory]
+    [InlineData(ExploreView.Treemap)]
+    [InlineData(ExploreView.Icicle)]
+    [InlineData(ExploreView.Sunburst)]
+    [InlineData(ExploreView.Tree)]
+    [InlineData(ExploreView.Files)]
+    public void TheFolderIsListedOnlyInTheListLayout(ExploreView view)
+    {
+        Assert.True(Display(null, ExploreView.List, ExploreColouring.Branch).ListsRows);
+        Assert.True(Display(Partial, ExploreView.List, ExploreColouring.Type).ListsRows);
+        Assert.False(Display(Finished, view, ExploreColouring.Branch).ListsRows);
+        Assert.False(Display(null, view, ExploreColouring.Branch).ListsRows);
+    }
+
+    /// <summary>
     /// Only a treemap drawn as one zooms, so only it offers the line naming its mouse controls. A
     /// running scan draws the icicle whatever was asked for.
     /// </summary>

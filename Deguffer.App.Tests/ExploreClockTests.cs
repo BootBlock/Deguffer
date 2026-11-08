@@ -34,7 +34,7 @@ public sealed class ExploreClockTests : IDisposable
         ]);
 
         var tree = builder.Build(ExploreChildOrder.BySize);
-        var page = _explore.Page();
+        var page = _explore.Listed();
 
         page.Targeting.ScopeTo(root);
         await _explore.ScanAsync(page, ExploreScan.Fast(tree));

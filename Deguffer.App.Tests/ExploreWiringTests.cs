@@ -115,7 +115,7 @@ public sealed class ExploreWiringTests : IDisposable
     public void TheListIsMarkedAsRewrittenForEveryChangeTheRewriteMakes() => UiThread.Run(async () =>
     {
         _explore.Volumes.With(@"C:\");
-        var page = _explore.Page();
+        var page = _explore.Listed();
         var during = new List<bool>();
 
         page.Listing.Rows.CollectionChanged += (_, _) => during.Add(page.IsShowingRows);

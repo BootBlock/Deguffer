@@ -8,6 +8,7 @@ using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Memory;
 using Deguffer.Core.Memory.Acting;
 using Deguffer.Testing;
+using static Deguffer.App.Tests.CollectionChanges;
 
 namespace Deguffer.App.Tests;
 
@@ -112,14 +113,6 @@ public sealed class MemoryViewModelTests : IDisposable
         await leave.CancelAsync();
         await watching;
     });
-
-    private static List<NotifyCollectionChangedAction> Watch(INotifyCollectionChanged list)
-    {
-        var told = new List<NotifyCollectionChangedAction>();
-        list.CollectionChanged += (_, changed) => told.Add(changed.Action);
-
-        return told;
-    }
 
     [Fact]
     public void TheFirstReadingIsShownOnceWithItsHeadlineItsPartsAndATrailOfOne() => UiThread.Run(async () =>
