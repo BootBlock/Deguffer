@@ -3,8 +3,8 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Providers;
 
 /// <summary>
-/// What Cargo is recognised to have written inside one <c>target</c> directory, read once and divided
-/// between the two rows that offer it: the build output (<see cref="CargoTargetProvider"/>) and the
+/// What Cargo is recognised to have written inside one <c>target</c> directory, divided between the
+/// two rows that offer it, which read it through one <see cref="CargoTargetSurvey"/> a pass: the build output (<see cref="CargoTargetProvider"/>) and the
 /// incremental compilation caches inside it (<see cref="CargoIncrementalProvider"/>).
 ///
 /// <para><b>Why <c>target</c> is a tool root rather than a disposable directory.</b> Cargo's own tag
@@ -95,6 +95,14 @@ public sealed class CargoTargetLayout
     private const string TooDeepReason =
         "A target folder nested deeper than Deguffer looks, so nothing inside it was examined.";
 
+    private const string FileReason =
+        "A file Cargo keeps beside its builds, such as its cache tag or its record of the compiler. "
+        + "Only folders are removed from here.";
+
+    private const string RefusedIncrementalReason =
+        "Windows would not say whether this build holds an incremental cache, so it is left alone: "
+        + "that cache is a row of its own, and neither row can tell which of them would take it.";
+
     private readonly List<Profile> _profiles = [];
     private readonly List<BuildDirectoryPart> _otherOutput = [];
     private readonly List<(string Path, string Reason)> _leftAlone = [];
@@ -157,6 +165,12 @@ public sealed class CargoTargetLayout
         // The listing hands back extended-length paths, and a plan never holds one.
         _leftAlone.AddRange(scan.Links.Select(link => (LongPath.Display(link.FullName), LinkReason)));
 
+        if (!NameFiles(directory))
+        {
+            _unreadable.Add(directory);
+            return;
+        }
+
         foreach (var child in scan.Directories)
         {
             var name = child.Name;
@@ -165,7 +179,7 @@ public sealed class CargoTargetLayout
 
             if (IsProfile(path))
             {
-                _profiles.Add(new Profile(path, label, IncrementalCacheIn(path)));
+                AddProfile(path, label);
             }
             else if (name.Equals("tmp", StringComparison.OrdinalIgnoreCase))
             {
@@ -202,15 +216,57 @@ public sealed class CargoTargetLayout
         IsFile(Path.Combine(path, ".lock")) && IsFile(Path.Combine(path, "crates.js"));
 
     /// <summary>
-    /// The profile's incremental cache, or null where it has none. A link of that name is not one: the
-    /// row offering it would remove what it points at, so it is left to the profile's own removal, which
-    /// takes the link and never what is behind it.
+    /// Names every file directly inside <paramref name="directory"/> as left alone, so §5.6 asserts each
+    /// survived. False where the listing failed, so nothing it would have named was.
     /// </summary>
-    private static string? IncrementalCacheIn(string profile)
+    private bool NameFiles(string directory)
     {
-        var path = Path.Combine(profile, Incremental);
+        using var files = new DirectoryListing<string>(
+            directory,
+            static (ref System.IO.Enumeration.FileSystemEntry entry) => entry.FileName.ToString(),
+            static (ref System.IO.Enumeration.FileSystemEntry entry) => !entry.IsDirectory);
 
-        return LongPath.ProbeDirectory(path, out var isLink) is PathPresence.Present && isLink is false ? path : null;
+        var names = new List<string>();
+
+        while (files.MoveNext())
+        {
+            names.Add(files.Current);
+        }
+
+        if (files.Outcome is not PathPresence.Present)
+        {
+            return false;
+        }
+
+        _leftAlone.AddRange(names.Select(name => (Path.Combine(directory, name), FileReason)));
+        return true;
+    }
+
+    /// <summary>
+    /// Adds a recognised profile with its incremental cache, where it has one.
+    ///
+    /// <para>The probe decides whether the cache exists, so a refusal is not read as absence: a
+    /// profile offered whole would hand the cache to the build output row while the incremental row
+    /// said nothing of it. A link of that name is not a cache: the row offering it would remove what it
+    /// points at, so it is left to the profile's own removal, which takes the link and never what is
+    /// behind it.</para>
+    /// </summary>
+    private void AddProfile(string profile, string label)
+    {
+        var incremental = Path.Combine(profile, Incremental);
+
+        switch (LongPath.ProbeDirectory(incremental, out var isLink))
+        {
+            case PathPresence.Refused:
+                _leftAlone.Add((profile, RefusedIncrementalReason));
+                break;
+            case PathPresence.Present when isLink is false:
+                _profiles.Add(new Profile(profile, label, incremental));
+                break;
+            default:
+                _profiles.Add(new Profile(profile, label, IncrementalCache: null));
+                break;
+        }
     }
 
     private static bool IsFile(string path) => LongPath.ProbeFile(path, out var isLink) is PathPresence.Present && isLink is false;

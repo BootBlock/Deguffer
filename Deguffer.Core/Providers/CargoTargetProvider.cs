@@ -35,11 +35,6 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 public sealed class CargoTargetProvider : BuildDirectoryProvider
 {
-    private static readonly BuildDirectoryKind CargoTarget = CargoTargetLayout.Recognition with
-    {
-        Parts = (target, ct) => CargoTargetLayout.Of(target, ct).BuildOutput(),
-    };
-
     public CargoTargetProvider(
         SourceRootStore roots,
         SourceDirectoryDiscovery? discovery = null,
@@ -48,10 +43,30 @@ public sealed class CargoTargetProvider : BuildDirectoryProvider
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
-        IVolumeInventory? volumes = null)
-        : base(CargoTarget, roots, discovery, liveTrees, environment, runner, inspector, scanner, volumes)
+        IVolumeInventory? volumes = null,
+        CargoTargetSurvey? targets = null)
+        : base(KindOver(targets ??= new CargoTargetSurvey()), roots, discovery, liveTrees, environment, runner, inspector, scanner, volumes)
     {
+        _targets = targets;
     }
+
+    private readonly CargoTargetSurvey _targets;
+
+    public override void InvalidateCaches()
+    {
+        base.InvalidateCaches();
+        _targets.Invalidate();
+    }
+
+    /// <summary>
+    /// Recognition shared with the other Rust row, and this row's half of the reading both share. An
+    /// unshared survey is correct and reads each directory for this row alone, which is what a test
+    /// wants; the planner hands both rows one.
+    /// </summary>
+    private static BuildDirectoryKind KindOver(CargoTargetSurvey targets) => CargoTargetLayout.Recognition with
+    {
+        Parts = (target, ct) => targets.Of(target, ct).BuildOutput(),
+    };
 
     public override string Id => "cargo-target";
 

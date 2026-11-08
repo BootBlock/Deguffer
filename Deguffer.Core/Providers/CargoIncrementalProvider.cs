@@ -12,19 +12,15 @@ namespace Deguffer.Core.Providers;
 /// <para><b>Tier 1, where the rest of the profile is Tier 2.</b> rustc writes incremental state for the
 /// workspace's own crates and never for a dependency from a registry, so removing it costs one full
 /// compile of those crates and nothing else: the compiled dependencies beside it stay, and so does
-/// every binary. Measured on one GPUI project's debug profile, it was 1.38 GB of 3.31 GB.</para>
+/// every binary. Measured on one GPUI project's debug profile, it was 1.67 GB of 3.86 GB.</para>
 ///
-/// <para><b>Its own row, and the build output row leaves it alone.</b> Both rows read one
-/// <see cref="CargoTargetLayout"/>, and <see cref="CargoTargetProvider"/> empties each profile around
-/// the <c>incremental</c> offered here, so one folder is offered on one row whichever is ticked.</para>
+/// <para><b>Its own row, and the build output row leaves it alone.</b> Both rows divide one reading of
+/// each directory, taken through the <see cref="CargoTargetSurvey"/> the planner hands them, and
+/// <see cref="CargoTargetProvider"/> empties each profile around the <c>incremental</c> offered here,
+/// so one folder is offered on one row whichever is ticked.</para>
 /// </summary>
 public sealed class CargoIncrementalProvider : BuildDirectoryProvider
 {
-    private static readonly BuildDirectoryKind CargoIncremental = CargoTargetLayout.Recognition with
-    {
-        Parts = (target, ct) => CargoTargetLayout.Of(target, ct).IncrementalCaches(),
-    };
-
     public CargoIncrementalProvider(
         SourceRootStore roots,
         SourceDirectoryDiscovery? discovery = null,
@@ -33,10 +29,30 @@ public sealed class CargoIncrementalProvider : BuildDirectoryProvider
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
-        IVolumeInventory? volumes = null)
-        : base(CargoIncremental, roots, discovery, liveTrees, environment, runner, inspector, scanner, volumes)
+        IVolumeInventory? volumes = null,
+        CargoTargetSurvey? targets = null)
+        : base(KindOver(targets ??= new CargoTargetSurvey()), roots, discovery, liveTrees, environment, runner, inspector, scanner, volumes)
     {
+        _targets = targets;
     }
+
+    private readonly CargoTargetSurvey _targets;
+
+    public override void InvalidateCaches()
+    {
+        base.InvalidateCaches();
+        _targets.Invalidate();
+    }
+
+    /// <summary>
+    /// Recognition shared with the other Rust row, and this row's half of the reading both share. An
+    /// unshared survey is correct and reads each directory for this row alone, which is what a test
+    /// wants; the planner hands both rows one.
+    /// </summary>
+    private static BuildDirectoryKind KindOver(CargoTargetSurvey targets) => CargoTargetLayout.Recognition with
+    {
+        Parts = (target, ct) => targets.Of(target, ct).IncrementalCaches(),
+    };
 
     public override string Id => "cargo-incremental";
 

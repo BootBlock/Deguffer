@@ -375,7 +375,7 @@ and they are never a candidate.
 | --- | --- |
 | **Location** | `%USERPROFILE%\.cargo`, or wherever `CARGO_HOME` points |
 | **Method** | Delete `registry\cache`, `registry\src` and `git\checkouts` |
-| **Typical size** | 2.16 GB of a 2.57 GB home measured on a machine that builds GPUI applications; reported to reach 50 GB on a working Rust machine |
+| **Typical size** | 2.16 GB of a 2.76 GB home measured on a machine that builds GPUI applications; reported to reach 50 GB on a working Rust machine |
 
 ### What it is
 
@@ -7410,8 +7410,8 @@ only copy of a change. So the row is not pre-selected, and is confirmed on its o
 
 ## Per-project build output
 
-**Tier 1 for .NET intermediate output, the caches in Visual Studio's `.vs` folders, Nx's task cache
-and three Python tools' caches, Tier 2 for the rest.** With [Git LFS old file versions](#git-lfs-old-file-versions) and the workspace half of [Nx task caches](#nx-task-caches),
+**Tier 1 for .NET intermediate output, the caches in Visual Studio's `.vs` folders, Nx's task cache,
+Rust's incremental compilation caches and three Python tools' caches, Tier 2 for the rest.** With [Git LFS old file versions](#git-lfs-old-file-versions) and the workspace half of [Nx task caches](#nx-task-caches),
 the only thing Deguffer looks for inside your own folders, and the only thing it will not look for
 anywhere else.
 
@@ -7534,6 +7534,11 @@ includes `package`, which holds the `.crate` archive `cargo publish` uploads, th
 top of `target`, and any link. Each profile's `incremental` folder is a row of its own, Rust
 incremental compilation caches, so the build output row empties each profile around it.
 
+A profile is Cargo's own output folder and is not looked inside further, so anything another tool
+writes into one goes with it. Tauri's bundler is the known case: it writes the installers it builds
+into `target\release\bundle`. They come back with the next `cargo tauri build`, but copy any you
+mean to keep out of `target` first.
+
 **`.dart_tool` is recognised by what pub writes in it.** pub documents `"generator"` as "for `pub`
 this is always `'pub'`"
 ([package_config.dart](https://github.com/dart-lang/pub/blob/master/lib/src/package_config.dart)),
@@ -7544,7 +7549,7 @@ generator alone is not enough: a test fixture inside a published package was fou
 workspace has neither the lock file nor the configuration, which pub keeps at the workspace's root
 only ([workspaces](https://dart.dev/tools/pub/workspaces)), so a member's `.dart_tool` is left alone.
 `flutter clean` would remove the folder, but it runs once per project, inside each one, so Deguffer
-removes the folder itself, as it does Cargo's `target`.
+removes the folder itself.
 
 Every condition has to hold. A directory that fails any of them is left alone, and the scan says
 how many were left and why. `obj`, `.dart_tool`, `.vs` and Nx's `cache` carry an extra check: git is asked whether the

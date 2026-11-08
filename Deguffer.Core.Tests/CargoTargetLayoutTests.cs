@@ -248,7 +248,81 @@ public sealed class CargoTargetLayoutTests : IDisposable
         Assert.Contains(plan.Notes, n => n.Message.Contains(triple, StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The files at the top of a target directory are never removed, and are named so that §5.6
+    /// asserts it: the cache tag that recognised the directory among them.
+    /// </summary>
+    [Fact]
+    public async Task TheFilesBesideCargosBuildsAreNamedAsSurvivors()
+    {
+        var target = CargoProject("app");
+        var info = Path.Combine(target, ".rustc_info.json");
+        File.WriteAllText(info, "{}");
+
+        var provider = BuildOutput();
+        var plan = await provider.PlanAsync();
+
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == Path.Combine(target, "CACHEDIR.TAG") && p.PresenceBefore is PathPresence.Present);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == info && p.PresenceBefore is PathPresence.Present);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+        Assert.True(File.Exists(info));
+    }
+
     // ---- the incremental row -------------------------------------------------------------------
+
+    /// <summary>
+    /// Whether a profile holds an incremental cache decides which row takes it, so a profile whose
+    /// <c>incremental</c> Windows will not describe is offered by neither row rather than whole by one.
+    /// </summary>
+    [Fact]
+    public async Task AProfileWhoseIncrementalCacheCannotBeDescribedIsOfferedByNeitherRow()
+    {
+        var target = CargoProject("app", writeIncremental: true);
+        var debug = Path.Combine(target, "debug");
+        BuildDirectoryFixture.CreateCargoProfile(target, "release");
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(Path.Combine(debug, "incremental"));
+
+        var outputPlan = await BuildOutput().PlanAsync();
+        var incrementalPlan = await Incremental().PlanAsync();
+
+        Assert.Equal([Path.Combine(target, "release")], outputPlan.TargetedPaths);
+        Assert.Empty(incrementalPlan.TargetedPaths);
+        Assert.Contains(outputPlan.ProtectedPaths, p => p.Path == debug && p.Reason.StartsWith("Windows would not say", StringComparison.Ordinal));
+        Assert.Contains(incrementalPlan.ProtectedPaths, p => p.Path == debug);
+    }
+
+    /// <summary>
+    /// Both rows divide one reading of each directory a pass. A profile that appears between the two
+    /// rows' plans is seen by neither until the pass is over, so the build output row cannot have
+    /// offered a profile whole whose incremental cache the other row then offers too.
+    /// </summary>
+    [Fact]
+    public async Task BothRowsDivideOneReadingOfEachDirectoryAPass()
+    {
+        var target = CargoProject("app", writeIncremental: true);
+        var survey = new CargoTargetSurvey();
+        var output = BuildOutput(survey);
+        var incremental = Incremental(survey);
+
+        output.InvalidateCaches();
+        incremental.InvalidateCaches();
+
+        Assert.Equal([Path.Combine(target, "debug")], (await output.PlanAsync()).TargetedPaths);
+
+        var release = BuildDirectoryFixture.CreateCargoProfile(target, "release", writeIncremental: true);
+
+        Assert.Equal([Path.Combine(target, "debug", "incremental")], (await incremental.PlanAsync()).TargetedPaths);
+
+        incremental.InvalidateCaches();
+
+        Assert.Equal(
+            [Path.Combine(target, "debug", "incremental"), Path.Combine(release, "incremental")],
+            (await incremental.PlanAsync()).TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
+    }
 
     /// <summary>
     /// One folder on one row. The incremental row offers each profile's <c>incremental</c> and nothing
@@ -392,21 +466,21 @@ public sealed class CargoTargetLayoutTests : IDisposable
         return target;
     }
 
-    private CargoTargetProvider BuildOutput()
+    private CargoTargetProvider BuildOutput(CargoTargetSurvey? survey = null)
     {
         var scanner = new FakeDirectoryScanner();
 
         return new CargoTargetProvider(
             _roots, new SourceDirectoryDiscovery(scanner, new FakeVolumeInventory()), FakeLiveTreeInspector.NothingLive,
-            _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, scanner);
+            _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, scanner, targets: survey);
     }
 
-    private CargoIncrementalProvider Incremental()
+    private CargoIncrementalProvider Incremental(CargoTargetSurvey? survey = null)
     {
         var scanner = new FakeDirectoryScanner();
 
         return new CargoIncrementalProvider(
             _roots, new SourceDirectoryDiscovery(scanner, new FakeVolumeInventory()), FakeLiveTreeInspector.NothingLive,
-            _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, scanner);
+            _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, scanner, targets: survey);
     }
 }

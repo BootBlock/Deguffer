@@ -9,7 +9,8 @@ namespace Deguffer.Core.Providers;
 /// git dependencies. Reported to reach 50 GB on a working Rust machine. Written from Cargo's
 /// documentation, then observed on a Windows machine running Cargo 1.98 that builds GPUI
 /// applications: every folder named here was there, the plan over it took 2.16 GB of the
-/// home's 2.57 GB, and the 0.49 GB of bare clones, the largest of them a GPUI dependency's, stayed.
+/// home's 2.76 GB, and the 0.53 GB of bare clones, the largest of them a GPUI dependency's, stayed
+/// with the index and 'bin'.
 ///
 /// <para><b>§5.1 was asked and the answer is no.</b> Cargo's garbage collection is still unstable —
 /// it is reached through <c>-Z gc</c> on a nightly toolchain — so there is no command a released
