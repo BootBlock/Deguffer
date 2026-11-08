@@ -169,6 +169,20 @@ internal sealed partial class MapShapeAutomationPeer : AutomationPeer, IInvokePr
     protected override IList<AutomationPeer>? GetChildrenCore() =>
         Current && _shape.IsNode ? [.. _owner.Children(_shape.Node)] : null;
 
+    /// <summary>
+    /// A step to a sibling or a child, read from the shape's own place among its folder's shapes rather
+    /// than found by the framework in its parent's children (<see cref="MapTreeSteps"/>). A step to the
+    /// parent is the framework's, which the peer was given (<see cref="MapAutomationPeer"/>).
+    /// </summary>
+    protected override object? NavigateCore(AutomationNavigationDirection direction) => direction switch
+    {
+        AutomationNavigationDirection.NextSibling => _owner.SiblingOf(this, _folder, _position - 1, forward: true),
+        AutomationNavigationDirection.PreviousSibling => _owner.SiblingOf(this, _folder, _position - 1, forward: false),
+        AutomationNavigationDirection.FirstChild => Child(first: true),
+        AutomationNavigationDirection.LastChild => Child(first: false),
+        _ => base.NavigateCore(direction),
+    };
+
     protected override int GetPositionInSetCore() => _position;
 
     protected override int GetSizeOfSetCore() => _count;
@@ -181,6 +195,10 @@ internal sealed partial class MapShapeAutomationPeer : AutomationPeer, IInvokePr
         PatternInterface.ExpandCollapse => this,
         _ => null,
     };
+
+    /// <summary>The first or last of the shapes <see cref="GetChildrenCore"/> gives.</summary>
+    private MapShapeAutomationPeer? Child(bool first) =>
+        Current && _shape.IsNode ? MapTreeSteps.Child(_owner.Children(_shape.Node), first) : null;
 
     /// <summary>The shapes under this one changed from <paramref name="was"/>, and a screen reader is told so.</summary>
     private void Restructured(ExpandCollapseState was)
