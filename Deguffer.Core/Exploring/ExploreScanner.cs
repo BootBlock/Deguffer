@@ -130,73 +130,18 @@ public sealed class ExploreScanner(
         var scans = new ScannedFolder[folders.Count];
         var sum = progress is null ? null : new FolderScanProgress(progress);
 
-        if (pipelines.Count == 1)
-        {
-            await WorkerThreads.Shared.RunAsync(
+        await PipelinesAtOnce.RunAsync(
+            pipelines,
+            (pipeline, stop) => WorkerThreads.Shared.RunAsync(
                 () =>
                 {
-                    ScanPipeline(pipelines[0], folders, unlisted, scans, sum, ct);
+                    ScanPipeline(pipeline, folders, unlisted, scans, sum, stop);
                     return true;
                 },
-                ct).ConfigureAwait(false);
-            return scans;
-        }
+                stop),
+            ct).ConfigureAwait(false);
 
-        await ScanPipelinesAtOnce(pipelines, folders, unlisted, scans, sum, ct).ConfigureAwait(false);
         return scans;
-    }
-
-    /// <summary>
-    /// Run every pipeline at once, each on a worker thread of its own, as
-    /// <see cref="WorkerThreads"/> says a pass must.
-    ///
-    /// <para><b>Bounded by the disks.</b> There is one pipeline for each set of disks the folders are
-    /// on, one for everything on the network, and one for each optical drive, so never more than the
-    /// machine has disks and optical drives, and one more. Each pass in one bounds its own threads by its
-    /// volume's tuning, as it does when it runs alone.</para>
-    ///
-    /// <para><b>One failure stops the rest.</b> The search has failed once any pipeline has, and the
-    /// others would otherwise read whole volumes for a result nobody receives. What failed is what is
-    /// thrown, never the stop it caused in the others.</para>
-    /// </summary>
-    private async Task ScanPipelinesAtOnce(
-        IReadOnlyList<IReadOnlyList<VolumeFolders>> pipelines,
-        IReadOnlyList<string> folders,
-        IReadOnlyList<LeavesUnlisted?>? unlisted,
-        ScannedFolder[] scans,
-        FolderScanProgress? sum,
-        CancellationToken ct)
-    {
-        using var stopping = CancellationTokenSource.CreateLinkedTokenSource(ct);
-
-        Task<bool>[] running =
-        [
-            .. pipelines.Select(pipeline => WorkerThreads.Shared.RunAsync(
-                () =>
-                {
-                    var finished = false;
-
-                    try
-                    {
-                        ScanPipeline(pipeline, folders, unlisted, scans, sum, stopping.Token);
-                        finished = true;
-                    }
-                    finally
-                    {
-                        if (!finished)
-                        {
-                            stopping.Cancel();
-                        }
-                    }
-
-                    return true;
-                },
-                stopping.Token)),
-        ];
-
-        // A pipeline the stop reached ends cancelled, not faulted, because every pass throws for the
-        // token it was given, and Task.WhenAll throws a failure in preference to a cancellation.
-        await Task.WhenAll(running).ConfigureAwait(false);
     }
 
     /// <summary>
