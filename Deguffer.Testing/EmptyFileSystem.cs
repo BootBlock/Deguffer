@@ -21,13 +21,16 @@ public sealed class EmptyFileSystem : IFileSystem
     {
     }
 
-    public bool DirectoryExists(string path) => false;
-
     public PathPresence ProbeDirectory(string path) => PathPresence.Absent;
 
     public PathPresence ProbeEntry(string path) => PathPresence.Absent;
 
-    public bool IsReparsePoint(string path) => false;
+    public PathPresence ProbeEntry(string path, out bool? isDirectory, out bool? isLink)
+    {
+        (isDirectory, isLink) = (null, null);
+
+        return PathPresence.Absent;
+    }
 
     public ListingEnd ListEntries(string directory, ListingRequest request, List<WalkEntry> into) =>
         new(PathPresence.Absent, ListingRefusal.None, WhileReading: false);

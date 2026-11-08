@@ -32,13 +32,12 @@ public sealed class WatchedDirectoryRemovals(
     /// <summary>Each directory whose removal began while a directory inside it was still there.</summary>
     public IReadOnlyCollection<string> TriedEarly => _triedEarly;
 
-    public bool DirectoryExists(string path) => inner.DirectoryExists(path);
-
     public PathPresence ProbeDirectory(string path) => inner.ProbeDirectory(path);
 
     public PathPresence ProbeEntry(string path) => inner.ProbeEntry(path);
 
-    public bool IsReparsePoint(string path) => inner.IsReparsePoint(path);
+    public PathPresence ProbeEntry(string path, out bool? isDirectory, out bool? isLink) =>
+        inner.ProbeEntry(path, out isDirectory, out isLink);
 
     public ListingEnd ListEntries(string directory, ListingRequest request, List<WalkEntry> into) =>
         inner.ListEntries(directory, request, into);
