@@ -45,15 +45,11 @@ internal static class SourceSearchLanes
     }
 
     /// <summary>
-    /// Whether <paramref name="folder"/> and the top of its volume are both on solid state, with their
-    /// disks listed. The folder can be a mount point of another volume, which its walk reads, while
-    /// the volume index is read from the volume at the top. Without its disks listed a volume cannot
-    /// be placed with the others on its disk, as <see cref="FolderPipelines"/> says.
+    /// Whether <paramref name="folder"/> and the top of its volume are both known to be on solid state
+    /// (<see cref="VolumeMedia.IsKnownSolidState"/>). The folder can be a mount point of another
+    /// volume, which its walk reads, while the volume index is read from the volume at the top.
     /// </summary>
     private static bool IsSolidState(string folder, Func<string, VolumeMedia?> storageOf) =>
-        IsSolidState(storageOf(folder))
-        && (Path.GetPathRoot(folder) is not { Length: > 0 } top || IsSolidState(storageOf(top)));
-
-    private static bool IsSolidState(VolumeMedia? media) =>
-        media is { Class: StorageMedia.Nvme or StorageMedia.SolidState, PhysicalDisks.Count: > 0 };
+        storageOf(folder) is { IsKnownSolidState: true }
+        && (Path.GetPathRoot(folder) is not { Length: > 0 } top || storageOf(top) is { IsKnownSolidState: true });
 }

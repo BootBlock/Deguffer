@@ -66,7 +66,7 @@ internal sealed class ReadingLanes
 
         for (var lane = 0; lane < sets.Count; lane++)
         {
-            readers[lane] = sets[lane].All(volume => IsSolidState(volume.Media)) ? SolidStateReaders : 1;
+            readers[lane] = sets[lane].All(volume => volume.Media.IsKnownSolidState) ? SolidStateReaders : 1;
 
             foreach (var (volume, _) in sets[lane])
             {
@@ -76,11 +76,4 @@ internal sealed class ReadingLanes
 
         return new ReadingLanes(readers, laneOf);
     }
-
-    /// <summary>
-    /// Solid state with its disks listed. Without them the volume cannot be placed with the others
-    /// on its disk, and several readers there could be several on one disk from more than one lane.
-    /// </summary>
-    private static bool IsSolidState(VolumeMedia media) =>
-        media.Class is StorageMedia.Nvme or StorageMedia.SolidState && media.PhysicalDisks.Count > 0;
 }
