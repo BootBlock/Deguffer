@@ -191,13 +191,16 @@ public sealed class AgedScanTests : IDisposable
         Assert.Equal(1, Assert.Single(reads).Value);
     }
 
-    /// <summary>The real reads, each one counted against the path it read.</summary>
+    /// <summary>
+    /// The real reads, each one counted against the name it read: a walked file's bare name, which is
+    /// unique in these trees, or a single file's full path.
+    /// </summary>
     private static FileInformation Counting(ConcurrentDictionary<string, int> reads) => new(
         FileInformation.Open,
         FileInformation.ReadIdentity,
-        readByName: (string path, out FileInformation.FileStandardInfo info) =>
+        readByName: (nint directory, ReadOnlySpan<char> name, out FileInformation.FileStandardInfo info) =>
         {
-            reads.AddOrUpdate(path, 1, (_, count) => count + 1);
-            return StatByName.Read(path, out info);
+            reads.AddOrUpdate(name.ToString(), 1, (_, count) => count + 1);
+            return StatByName.Read(directory, name, out info);
         });
 }
