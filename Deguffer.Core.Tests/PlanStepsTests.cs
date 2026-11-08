@@ -173,6 +173,43 @@ public sealed class PlanStepsTests
     }
 
     /// <summary>
+    /// A step can run to its end though the clean was cancelled while it ran, as a tool's command left
+    /// to finish does. Its outcome is not a stop, and the step after it still never starts.
+    /// </summary>
+    [Fact]
+    public async Task AStepThatFinishesAfterTheCleanIsCancelledStartsNoOther()
+    {
+        CleanupStep[] steps =
+        [
+            new RunCommandStep("tool", "clean", "step 0") { WhenCancelled = CancelledCommand.Finishes },
+            new RunCommandStep("tool", "prune", "step 1") { WhenCancelled = CancelledCommand.Finishes },
+        ];
+
+        using var cts = new CancellationTokenSource();
+        var started = new List<int>();
+
+        var run = await PlanSteps.RunAsync(
+            steps,
+            Overlap(steps),
+            async (index, _, _) =>
+            {
+                lock (started)
+                {
+                    started.Add(index);
+                }
+
+                await cts.CancelAsync();
+                return Outcome(steps[index]);
+            },
+            progress: null,
+            cts.Token);
+
+        Assert.Equal([0], started);
+        Assert.True(run.Interrupted);
+        Assert.False(Assert.Single(run.Outcomes).Interrupted);
+    }
+
+    /// <summary>
     /// A step that throws stops the plan. The steps beside it are told to stop and waited for before the
     /// exception reaches the caller, unchanged, because a removal still running then would be acting on
     /// the disk with nobody left to report it.
