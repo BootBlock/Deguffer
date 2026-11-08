@@ -99,6 +99,13 @@ public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) 
     }
 
     /// <summary>
+    /// Awaited with the root and the caller's token once a question to the index is recorded and
+    /// before it is answered, so a test can hold one search until another has started, or fail one.
+    /// Where none is given, the answer is given at once.
+    /// </summary>
+    public Func<string, CancellationToken, Task>? Answering { get; init; }
+
+    /// <summary>
     /// Null when this fake has no index, matching the contract the real scanner uses to tell the
     /// caller to walk instead. Otherwise the indexed paths <paramref name="search"/> finds below
     /// <paramref name="root"/>, judged as the real one judges them: narrowed to the root, because
@@ -111,19 +118,32 @@ public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) 
     {
         _asked.Enqueue((root, search));
 
+        return Answering is { } answering
+            ? new(AnswerAfterAsync(answering(root, ct), search, root))
+            : new(Answer(search, root));
+    }
+
+    private async Task<IReadOnlyList<string>?> AnswerAfterAsync(Task held, DirectorySearch search, string root)
+    {
+        await held.ConfigureAwait(false);
+        return Answer(search, root);
+    }
+
+    private IReadOnlyList<string>? Answer(DirectorySearch search, string root)
+    {
         if (indexed is null)
         {
-            return new((IReadOnlyList<string>?)null);
+            return null;
         }
 
         var prefix = root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
 
-        return new((IReadOnlyList<string>?)indexed
+        return indexed
             .Where(p => p.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             .Where(p => SourceTreeBoundary.IsInsideTheSearch(p, root, search)
                 && search.Meet(Path.GetFileName(p.TrimEnd(Path.DirectorySeparatorChar))) is SearchStep.Found)
             .Order(StringComparer.Ordinal)
-            .ToList());
+            .ToList();
     }
 
     public void Invalidate() => InvalidateCount++;

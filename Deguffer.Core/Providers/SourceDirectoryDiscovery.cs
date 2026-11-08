@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
@@ -243,24 +244,18 @@ public sealed class SourceDirectoryDiscovery
             }
         }
 
-        foreach (var root in searchable)
+        var found = await SearchEachAsync(search, searchable, ct).ConfigureAwait(false);
+
+        // Joined in the order the folders were approved, whatever order their searches finished in.
+        // No two searches cover one directory (a nested folder is handed off), so this is the answer a
+        // search of one folder after another gives, down to which spelling the distinct step keeps.
+        for (var i = 0; i < searchable.Count; i++)
         {
-            ct.ThrowIfCancellationRequested();
-
-            // Waits for a scan's tree where the scope is a scan's, because only the tree says whether
-            // the scan ended with one.
-            var reach = await _scope.ReachAsync(root, ct).ConfigureAwait(false);
-
-            if (reach.Reach == FolderReach.Outside)
+            if (found[i] is not { } searched)
             {
-                notSearched.Add(root);
+                notSearched.Add(searchable[i]);
                 continue;
             }
-
-            var rootSearch = search.HandingOff(Nested(root, searchable));
-            var searched = reach is { Reach: FolderReach.Listed, Listing: { } tree } && !_listingStale
-                ? FromListing(SourceTreeWalk.In(tree, reach.Node, root, rootSearch, ct))
-                : await SearchAsync(rootSearch, root, ct).ConfigureAwait(false);
 
             candidates.AddRange(searched.Candidates);
             unreadable.AddRange(searched.Unreadable);
@@ -280,6 +275,67 @@ public sealed class SourceDirectoryDiscovery
         };
 
         return result;
+    }
+
+    /// <summary>
+    /// Search every one of <paramref name="searchable"/>, each lane of them at the same time as the
+    /// others (<see cref="SourceSearchLanes"/>), up to <see cref="CleanupPlanner.ProvidersAtOnce"/>
+    /// folders at once.
+    ///
+    /// <para><b>One failure stops the rest.</b> The discovery has failed once any search has, and
+    /// the others would otherwise walk whole folders for a result nobody receives. What failed is
+    /// what is thrown, never the stop it caused in the others.</para>
+    /// </summary>
+    /// <returns>Each folder's search in the slot of its folder, or null for one the scope does not reach.</returns>
+    private async Task<RootSearch?[]> SearchEachAsync(
+        DirectorySearch search, IReadOnlyList<string> searchable, CancellationToken ct)
+    {
+        var found = new RootSearch?[searchable.Count];
+
+        // Planned on a worker thread, because learning which disks a volume is on opens its devices
+        // and waits on them. A single folder has nothing to search beside it.
+        IReadOnlyList<IReadOnlyList<int>> lanes = searchable.Count < 2
+            ? [[.. Enumerable.Range(0, searchable.Count)]]
+            : await WorkerThreads.Shared.RunAsync(() => SourceSearchLanes.Of(searchable, _tuning.StorageOf), ct).ConfigureAwait(false);
+
+        // Parallel.ForEachAsync stops every lane once one throws, and throws the failure ahead of
+        // the cancellations it caused, because it records the failure before it stops the others.
+        await Parallel.ForEachAsync(
+            lanes,
+            new ParallelOptions { MaxDegreeOfParallelism = CleanupPlanner.ProvidersAtOnce, CancellationToken = ct },
+            async (lane, stop) =>
+            {
+                foreach (var index in lane)
+                {
+                    stop.ThrowIfCancellationRequested();
+                    found[index] = await SearchOneAsync(search, searchable[index], searchable, stop).ConfigureAwait(false);
+                }
+            }).ConfigureAwait(false);
+
+        return found;
+    }
+
+    /// <summary>
+    /// Search <paramref name="root"/>, stopping at every other of <paramref name="searchable"/> inside
+    /// it, or null where the scope does not reach it.
+    /// </summary>
+    private async Task<RootSearch?> SearchOneAsync(
+        DirectorySearch search, string root, IReadOnlyList<string> searchable, CancellationToken ct)
+    {
+        // Waits for a scan's tree where the scope is a scan's, because only the tree says whether
+        // the scan ended with one.
+        var reach = await _scope.ReachAsync(root, ct).ConfigureAwait(false);
+
+        if (reach.Reach == FolderReach.Outside)
+        {
+            return null;
+        }
+
+        var rootSearch = search.HandingOff(Nested(root, searchable));
+
+        return reach is { Reach: FolderReach.Listed, Listing: { } tree } && !_listingStale
+            ? FromListing(SourceTreeWalk.In(tree, reach.Node, root, rootSearch, ct))
+            : await SearchAsync(rootSearch, root, ct).ConfigureAwait(false);
     }
 
     /// <summary>
