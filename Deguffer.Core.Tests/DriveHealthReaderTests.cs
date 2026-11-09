@@ -375,7 +375,9 @@ public sealed class DriveHealthReaderTests
     public async Task CancellingStopsFurtherDrivesBeingRead()
     {
         const int Drives = 12;
+        const int MostAtOnce = 4;
         using var cancelled = new CancellationTokenSource();
+        var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var asked = 0;
 
         for (var disk = 0; disk < Drives; disk++)
@@ -384,19 +386,28 @@ public sealed class DriveHealthReaderTests
                 .Answer(disk, DriveQuestion.Device, DriveBytes.Device(DriveBytes.Nvme, "Drive", serial: $"S{disk}"))
                 .Answer(disk, DriveQuestion.NvmeHealth, () =>
                 {
-                    // Any drive that is reached cancels the read, so no later drive may start.
                     Interlocked.Increment(ref asked);
-                    cancelled.Cancel();
+                    held.Task.Wait();
                     return StorageAnswer.Answered(DriveBytes.NvmeHealth());
                 });
         }
 
         var reader = Reader();
+        var reading = reader.ReadAsync(reader.List()!, new Collected<DriveHealth>(), _placed, cancelled.Token);
+        var waited = System.Diagnostics.Stopwatch.StartNew();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => reader.ReadAsync(reader.List()!, new Collected<DriveHealth>(), _placed, cancelled.Token));
+        while (Volatile.Read(ref asked) == 0 && waited.Elapsed < TimeSpan.FromSeconds(10))
+        {
+            await Task.Delay(5);
+        }
 
-        Assert.InRange(Volatile.Read(ref asked), 1, Drives - 1);
+        // Every drive reached is held here, so nothing can move on to the next until after the cancel.
+        await cancelled.CancelAsync();
+        held.SetResult();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => reading);
+
+        Assert.InRange(Volatile.Read(ref asked), 1, MostAtOnce);
     }
 
     [Fact]
