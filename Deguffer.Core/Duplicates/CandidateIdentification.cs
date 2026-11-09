@@ -67,7 +67,7 @@ internal sealed class CandidateIdentification
         // by the minute Windows gives and can still join a file the tree did date.
         if (_criteria.GroupsByTime())
         {
-            await IdentifyAsync(found.Where(file => CandidateGrouping.TreeMinuteOf(file) is null), progress, ct).ConfigureAwait(false);
+            await IdentifyAsync([.. found.Where(file => CandidateGrouping.TreeMinuteOf(file) is null)], progress, ct).ConfigureAwait(false);
         }
 
         var byTheTree = CandidateGrouping.ByTheTree(found, _criteria, file =>
@@ -79,7 +79,7 @@ internal sealed class CandidateIdentification
 
         await IdentifyAsync(grouped, progress, ct).ConfigureAwait(false);
 
-        var groups = CandidateGrouping.ByTheFiles([.. grouped.Select(file => _identified[file]).OfType<IdentifiedFile>()], _criteria);
+        var groups = CandidateGrouping.ByTheFiles(grouped.Select(file => _identified[file]).OfType<IdentifiedFile>(), _criteria);
         var names = await ListNamesAsync(CandidateGrouping.NeedingNames(groups), progress, ct).ConfigureAwait(false);
 
         return [.. groups.Select(group => CandidateGrouping.WithNames(group, file => names[file.Description.Identity]))];
@@ -89,14 +89,16 @@ internal sealed class CandidateIdentification
     /// Every file of <paramref name="files"/> not yet identified, described by Windows now, in lanes
     /// by disk, and remembered once every reader has finished, so each file is asked about once.
     /// </summary>
-    private async Task IdentifyAsync(IEnumerable<FoundFile> files, IProgress<DuplicateSearchProgress>? progress, CancellationToken ct)
+    private async Task IdentifyAsync(IReadOnlyList<FoundFile> files, IProgress<DuplicateSearchProgress>? progress, CancellationToken ct)
     {
-        IReadOnlyList<FoundFile> unasked = [.. files.Where(file => !_identified.ContainsKey(file)).Distinct()];
+        IReadOnlyList<FoundFile> unasked = _identified.Count == 0 ? files : [.. files.Where(file => !_identified.ContainsKey(file))];
 
         if (unasked.Count == 0)
         {
             return;
         }
+
+        _identified.EnsureCapacity(_identified.Count + unasked.Count);
 
         var identified = new IdentifiedFile?[unasked.Count];
 
@@ -162,7 +164,7 @@ internal sealed class CandidateIdentification
     /// can lead to another volume, and a name given from the wrong top would be judged as a place the
     /// file is not (§7.4).
     /// </summary>
-    private string? MountPointOf(IdentifiedFile file, Dictionary<ResolvedLocation, string?> ofLocations) =>
+    private string? MountPointOf(IdentifiedFile file, Dictionary<FoundRoot, string?> ofLocations) =>
         LongPath.Contains(file.Found.Root.Folder, file.Description.Path, StringComparison.Ordinal)
             ? ofLocations[file.Found.Root]
             : _files.MountPointOf(file.Description.Path);
