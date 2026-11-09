@@ -96,6 +96,9 @@ internal sealed class ExploreLabels : Canvas
 
     private readonly MapCamera _camera;
 
+    /// <summary>The map's device, which each name in SpaceMonger's lettering is drawn through.</summary>
+    private readonly CompositionDevice _device;
+
     private readonly IMotionPolicy _motion;
 
     /// <summary>
@@ -131,9 +134,10 @@ internal sealed class ExploreLabels : Canvas
 
     /// <summary>
     /// Names that move with <paramref name="camera"/>, wherever <see cref="Place"/> puts them in the
-    /// picture, and with <paramref name="carried"/> as a folder opening carries the picture.
+    /// picture, and with <paramref name="carried"/> as a folder opening carries the picture. A name in
+    /// SpaceMonger's lettering is drawn through <paramref name="device"/>, the map's own.
     /// </summary>
-    public ExploreLabels(MapCamera camera, Visual carried, IMotionPolicy motion)
+    public ExploreLabels(MapCamera camera, Visual carried, CompositionDevice device, IMotionPolicy motion)
     {
         // Never the thing being clicked. A click that landed on a name rather than the shape under
         // it would select whatever that name happened to overlap.
@@ -142,10 +146,12 @@ internal sealed class ExploreLabels : Canvas
         _compositor = ElementCompositionPreview.GetElementVisual(this).Compositor;
         _camera = camera;
         _carried = carried;
+        _device = device;
         _motion = motion;
 
         // A name in SpaceMonger's lettering is drawn into an image, whose contents a device lost or
-        // replaced takes with it.
+        // replaced takes with it. The map's own device replaced is followed by the map's redraw, which
+        // writes each name again and so draws it on the new device.
         Loaded += (_, _) => CompositionTarget.SurfaceContentsLost += OnContentsLost;
         Unloaded += (_, _) => CompositionTarget.SurfaceContentsLost -= OnContentsLost;
 
@@ -227,7 +233,7 @@ internal sealed class ExploreLabels : Canvas
 
         while (Children.Count < drawing.Labels.Count)
         {
-            var name = new Label(_compositor, _camera.Properties, _placed, _screen, _carried);
+            var name = new Label(_compositor, _device, _camera.Properties, _placed, _screen, _carried);
 
             _names.Add(name);
             Children.Add(name.Text.Element);
@@ -374,12 +380,13 @@ internal sealed class ExploreLabels : Canvas
 
         public Label(
             Compositor compositor,
+            CompositionDevice device,
             CompositionPropertySet camera,
             CompositionPropertySet placed,
             CompositionPropertySet screen,
             Visual carried)
         {
-            Text = new LabelText();
+            Text = new LabelText(device);
 
             Properties = compositor.CreatePropertySet();
             Properties.InsertVector4(Across, Vector4.Zero);
