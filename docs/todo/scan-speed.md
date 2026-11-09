@@ -402,7 +402,7 @@ scan leaves about 600 MB committed (#738), and Classic names draw through a seco
 | #699 | Ask Disk Cleanup's handler for emptiness without its full measure, or take Windows.old's size from the scanner. `safety`. |
 | #702 | The Classic names' look against their cost: two expressions and an image source per name. |
 | #738 | Who owns an `ExploreTree`'s arrays, so that snapshots can share and hand back column buffers instead of allocating new ones. |
-| #739 | Static bounds while the tracker rests: whether a pinch's first frames against the bounds from before it started are invisible. Decided: pinned wide enough for any scale it rests at, so those frames are free rather than held. |
+| #739 | Static bounds while the tracker rests: whether a pinch's first frames against the bounds from before it started are invisible. Decided: pinned wide enough for any scale it rests at, so those frames are free rather than held. An injected pinch at an edge showed no jump and the same frames as the build before it. |
 | #740 | Which signal says a window is covered: its activation state, or a DWM cloak or occlusion signal. |
 | #743 | 35 MB of download and disk against about 65 ms of start-up. |
 
