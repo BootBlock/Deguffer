@@ -63,6 +63,11 @@ public static partial class LongPath
             return Path.GetFullPath(path);
         }
 
+        if (IsAlreadyResolved(path))
+        {
+            return path;
+        }
+
         var root = Path.GetPathRoot(path)!.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
         var names = new List<string>();
 
@@ -92,6 +97,41 @@ public static partial class LongPath
         var resolved = names.Count == 0 ? root : Path.Join(root, string.Join(separator, names));
 
         return EndsWithSeparator(path) && !EndsWithSeparator(resolved) ? resolved + separator : resolved;
+    }
+
+    /// <summary>
+    /// Whether <see cref="Resolved"/> would give <paramref name="path"/> back as it is: one kind of
+    /// separator, one between each name, and no <c>.</c> or <c>..</c>. Nearly every path is, and a
+    /// duplicate search resolves every name of every copy (#706).
+    /// </summary>
+    internal static bool IsAlreadyResolved(string path)
+    {
+        if (path.Contains(Path.AltDirectorySeparatorChar))
+        {
+            return false;
+        }
+
+        var rootLength = Path.GetPathRoot(path.AsSpan()).Length;
+        var names = path.AsSpan(rootLength);
+
+        // A share's root ends at its name, so the separator after it is the root's own.
+        if (rootLength > 0 && path[rootLength - 1] != Path.DirectorySeparatorChar && names.Length > 0 && names[0] == Path.DirectorySeparatorChar)
+        {
+            names = names[1..];
+        }
+
+        // Empty only at the very end, where it is the one trailing separator Resolved keeps.
+        foreach (var range in names.Split(Path.DirectorySeparatorChar))
+        {
+            var name = names[range];
+
+            if (name is "." or ".." || (name.IsEmpty && range.End.GetOffset(names.Length) != names.Length))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>

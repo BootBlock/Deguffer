@@ -12,10 +12,12 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 public sealed record CleanedPlace
 {
-    private CleanedPlace(string path, IReadOnlySet<string>? folderNames)
+    private readonly HashSet<string>? _folderNames;
+
+    private CleanedPlace(string path, HashSet<string>? folderNames)
     {
         Path = path;
-        FolderNames = folderNames;
+        _folderNames = folderNames;
     }
 
     /// <summary>The folder, or the file, the place starts at, as the provider names it.</summary>
@@ -25,7 +27,7 @@ public sealed record CleanedPlace
     /// The names of the folders below <see cref="Path"/> that the clean deletes in, compared ignoring
     /// case, or null where it can delete anything at or below <see cref="Path"/>.
     /// </summary>
-    public IReadOnlySet<string>? FolderNames { get; }
+    public IReadOnlySet<string>? FolderNames => _folderNames;
 
     /// <summary><paramref name="path"/> and everything in it.</summary>
     public static CleanedPlace Whole(string path)
@@ -76,15 +78,24 @@ public sealed record CleanedPlace
             return false;
         }
 
-        if (FolderNames is null)
+        if (_folderNames is null)
         {
             return true;
         }
 
-        var relative = LongPath.Relative(top, target);
+        // Read from the text, where a search asks this of every copy of every group.
+        var names = _folderNames.GetAlternateLookup<ReadOnlySpan<char>>();
+        var below = target.AsSpan(top.Length);
 
-        return relative != "."
-            && relative.Split(System.IO.Path.DirectorySeparatorChar).Any(FolderNames.Contains);
+        foreach (var name in below.Split(System.IO.Path.DirectorySeparatorChar))
+        {
+            if (names.Contains(below[name]))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Whether the clean can delete <paramref name="path"/>, by <see cref="Path"/> as the provider named it.</summary>

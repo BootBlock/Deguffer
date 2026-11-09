@@ -30,7 +30,7 @@ namespace Deguffer.Core.Duplicates;
 public sealed class CopyRefusals
 {
     private readonly ExploreActionPolicy _policy;
-    private readonly IReadOnlyList<ProgramFolder> _programs;
+    private readonly ProgramFolderIndex _programs;
     private readonly ConcurrentDictionary<string, string?> _byPath = new(StringComparer.OrdinalIgnoreCase);
 
     /// <param name="policy">Explore's policy for this machine, the one the search passed over places by.</param>
@@ -43,7 +43,7 @@ public sealed class CopyRefusals
         ArgumentNullException.ThrowIfNull(copies);
 
         _policy = policy.JudgingFiles(copies.SelectMany(copy => copy.Names));
-        _programs = programs;
+        _programs = new ProgramFolderIndex(programs);
     }
 
     /// <summary>Why <paramref name="copy"/> is never marked though it may be kept, or null where nothing stops it.</summary>
@@ -99,7 +99,7 @@ public sealed class CopyRefusals
         var verdict = _policy.MayRemove(path);
         var why = !verdict.IsAllowed
             ? verdict.Reason
-            : _programs.FirstOrDefault(program => program.Holds(path)) is { } held
+            : _programs.FirstHolding(path) is { } held
                 ? $"'{held.Program}' is installed here, and a program's own files are never removed as duplicates: "
                   + "two programs that ship the same file each need their own copy."
                 : null;

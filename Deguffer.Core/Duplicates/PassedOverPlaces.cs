@@ -25,13 +25,13 @@ public sealed record PassedOverPlace(string Path, string Reason);
 internal sealed class PassedOverPlaces
 {
     private readonly ExploreActionPolicy _policy;
-    private readonly IReadOnlyList<ProgramFolder> _programs;
+    private readonly ProgramFolderIndex _programs;
     private readonly IReadOnlyList<string> _programPlaces;
 
     public PassedOverPlaces(ExploreActionPolicy policy, IReadOnlyList<ProgramFolder> programs)
     {
         _policy = policy;
-        _programs = programs;
+        _programs = new ProgramFolderIndex(programs);
         _programPlaces = [.. programs.SelectMany(program => program.Forms).SelectMany(form => form.Places)];
     }
 
@@ -43,8 +43,7 @@ internal sealed class PassedOverPlaces
     public Below Within(string root) => new(this, _policy.WatchBelow(root));
 
     private string? ProgramFolderAt(string path) =>
-        _programs.FirstOrDefault(program => program.Holds(path))
-            is { } held
+        _programs.FirstHolding(path) is { } held
             ? $"'{held.Program}' is installed here. Two programs that ship the same file each need their "
               + "own copy, so a search passes over the folders programs are installed in."
             : null;

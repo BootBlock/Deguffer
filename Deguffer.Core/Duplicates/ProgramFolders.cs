@@ -19,7 +19,7 @@ public sealed record ProgramFolder(string Path, ReachedFolder Reached, string Pr
 
     /// <summary>Whether <paramref name="path"/> is in the folder, at any place it is reachable at.</summary>
     /// <param name="path">A full path, in either form <see cref="LongPath"/> produces.</param>
-    public bool Holds(string path) => Forms.Any(form => form.PathTo(path) is not null);
+    public bool Holds(string path) => Reached.Holds(path) || Final?.Holds(path) == true;
 
     /// <summary>Whether <paramref name="other"/> is the same folder, at any place either is reachable at.</summary>
     internal bool IsSameAs(ProgramFolder other) => Forms.Any(form => other.Forms.Any(form.IsSameAs));

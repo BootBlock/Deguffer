@@ -31,6 +31,7 @@ namespace Deguffer.Core.Exploring.Acting;
 internal sealed class HeldLocations
 {
     private readonly IReadOnlyList<(string Reason, ReachedFolder Folder)> _locations;
+    private readonly FolderIndex<int> _inside;
     private readonly IFileSystem _fileSystem;
 
     /// <param name="locations">
@@ -41,7 +42,7 @@ internal sealed class HeldLocations
     public HeldLocations(IEnumerable<(string Reason, ReachedFolder Folder)> locations, IFileSystem fileSystem)
     {
         _locations = [.. locations];
-
+        _inside = new FolderIndex<int>(Enumerable.Range(0, _locations.Count), position => _locations[position].Folder.PlacesAndAbove());
         _fileSystem = fileSystem;
     }
 
@@ -50,10 +51,28 @@ internal sealed class HeldLocations
     /// <param name="folder">The folder at <paramref name="target"/>, at every path it is reachable at.</param>
     public ExploreVerdict? Refusal(string target, ReachedFolder folder)
     {
+        // Most targets hold nothing refused, so nothing is built until one is found. In the order the
+        // locations were given, so that of two as deep the first is the one shown.
+        SortedSet<int>? inside = null;
+
+        foreach (var place in folder.Places)
+        {
+            foreach (var position in _inside.At(place))
+            {
+                (inside ??= []).Add(position);
+            }
+        }
+
+        if (inside is null)
+        {
+            return null;
+        }
+
         // Strictly inside: a location no levels down is the target itself, which the passes before
         // this one have already answered. Shallowest first by levels rather than by the length of the
         // location's path, which says nothing where the two are named through different letters.
-        var held = _locations
+        var held = inside
+            .Select(position => _locations[position])
             .Select(location => (Location: location, Levels: folder.LevelsTo(location.Folder)))
             .Where(location => location.Levels > 0)
             .OrderBy(location => location.Levels);

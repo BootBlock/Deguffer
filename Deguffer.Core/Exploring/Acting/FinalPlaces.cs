@@ -71,12 +71,11 @@ internal sealed class FinalPlaces(IFileSystem fileSystem, IVolumeInventory volum
     {
         var parent = Path.GetDirectoryName(target)!;
         var extended = LongPath.Extended(parent);
-        var name = Path.GetFileName(target);
 
         switch (HostVolume.Unopened(volumes, parent))
         {
             case UnopenedPlace.Share:
-                return new FarSide(null, OnAShare(name, $"'{parent}' is on a network share or a network drive"));
+                return new FarSide(null, OnAShare(Path.GetFileName(target), $"'{parent}' is on a network share or a network drive"));
 
             case UnopenedPlace.Cloud:
                 return new FarSide(null, null);
@@ -87,9 +86,18 @@ internal sealed class FinalPlaces(IFileSystem fileSystem, IVolumeInventory volum
             return fileSystem.MayExist(extended)
                 ? new FarSide(null, ExploreVerdict.Refuse(
                     $"Windows would not open '{parent}', so Deguffer cannot tell whether a link on the way "
-                    + $"leads somewhere else, or what removing '{name}' would act on, and leaves it alone."))
+                    + $"leads somewhere else, or what removing '{Path.GetFileName(target)}' would act on, and leaves it alone."))
                 : new FarSide(null, null);
         }
+
+        // Windows gave the folder back as it was asked, the ordinary case, so no link is on the way
+        // and the item is where it was named. A device path names no folder, and is refused below.
+        if (final.Equals(extended, StringComparison.OrdinalIgnoreCase) && !LongPath.IsDeviceSpelling(parent))
+        {
+            return new FarSide(target, null);
+        }
+
+        var name = Path.GetFileName(target);
 
         return ReachedFolder.Displayed(final) switch
         {

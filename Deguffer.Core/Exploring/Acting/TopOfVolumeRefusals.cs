@@ -28,17 +28,27 @@ internal static class TopOfVolumeRefusals
         "$Boot", "$BadClus", "$Secure", "$UpCase", "$Extend",
     };
 
+    private static readonly HashSet<string>.AlternateLookup<ReadOnlySpan<char>> NtfsReservedNames =
+        NtfsReserved.GetAlternateLookup<ReadOnlySpan<char>>();
+
     /// <summary>
     /// What Windows and NTFS keep at the top of a volume, and every Recycle Bin, read on every
     /// reading of every path the item is reachable at. Each refuses a name and everything in it.
     /// </summary>
     public static ExploreVerdict? Refusal(IReadOnlyList<VolumePlace> places)
     {
-        IReadOnlyList<string> readings = [.. places.SelectMany(place => place.Readings)];
+        return OnAnyReading(places, ReservedByTheFilesystem)
+            ?? OnAnyReading(places, InARecycleBin)
+            ?? OnAnyReading(places, VolumeReservations.Refusal);
+    }
 
-        return OnAnyReading(readings, ReservedByTheFilesystem)
-            ?? OnAnyReading(readings, InARecycleBin)
-            ?? OnAnyReading(readings, VolumeReservations.Refusal);
+    /// <summary>The first name in <paramref name="below"/>, which is what each rule here asks about.</summary>
+    internal static ReadOnlySpan<char> FirstName(string below)
+    {
+        var names = below.AsSpan().TrimStart(Separators);
+        var separator = names.IndexOfAny(Separators);
+
+        return separator >= 0 ? names[..separator] : names;
     }
 
     /// <summary>
@@ -67,10 +77,9 @@ internal static class TopOfVolumeRefusals
     /// want gone — refusing those would take away a capability rather than add a protection.</para>
     /// </summary>
     private static ExploreVerdict? ReservedByTheFilesystem(string below) =>
-        below.Split(Separators, StringSplitOptions.RemoveEmptyEntries) is [var first, ..]
-        && NtfsReserved.Contains(first)
+        NtfsReservedNames.Contains(FirstName(below))
             ? ExploreVerdict.Refuse(
-                $"'{first}' is part of NTFS itself rather than something stored on the drive — it is "
+                $"'{FirstName(below)}' is part of NTFS itself rather than something stored on the drive — it is "
                 + "how the filesystem records where every other file is. Windows does not let it be "
                 + "deleted, and the space it holds is not recoverable while the drive is in use.")
             : null;
@@ -91,8 +100,7 @@ internal static class TopOfVolumeRefusals
     /// theirs.</para>
     /// </summary>
     private static ExploreVerdict? InARecycleBin(string below) =>
-        below.Split(Separators, StringSplitOptions.RemoveEmptyEntries) is [var first, ..]
-        && first.Equals("$Recycle.Bin", StringComparison.OrdinalIgnoreCase)
+        FirstName(below).Equals("$Recycle.Bin", StringComparison.OrdinalIgnoreCase)
             ? ExploreVerdict.Refuse(
                 "This is the drive's Recycle Bin, where each account on this computer keeps what it "
                 + "deleted. Emptying yours is offered on the Storage page, where Deguffer can tell your "
@@ -100,13 +108,18 @@ internal static class TopOfVolumeRefusals
             : null;
 
     private static ExploreVerdict? OnAnyReading(
-        IReadOnlyList<string> readings, Func<string, ExploreVerdict?> rule)
+        IReadOnlyList<VolumePlace> places, Func<string, ExploreVerdict?> rule)
     {
-        foreach (var below in readings)
+        for (var place = 0; place < places.Count; place++)
         {
-            if (rule(below) is { } refusal)
+            var readings = places[place].Readings;
+
+            for (var reading = 0; reading < readings.Count; reading++)
             {
-                return refusal;
+                if (rule(readings[reading]) is { } refusal)
+                {
+                    return refusal;
+                }
             }
         }
 
