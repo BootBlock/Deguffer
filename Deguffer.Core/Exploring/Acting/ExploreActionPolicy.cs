@@ -189,7 +189,7 @@ public sealed class ExploreActionPolicy
 
         // Each provider's declaration is read in its own slot of the bound, so the walks some of them
         // declare from run beside the other providers' probes rather than in series after all of them.
-        // The probe goes first, because a Chromium row's probe readies the scope its walk reads.
+        // The probe goes first, because a row's probe readies the scope its declaration reads.
         await Parallel.ForAsync(
             0,
             asked.Count,

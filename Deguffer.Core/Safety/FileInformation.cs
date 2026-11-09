@@ -118,6 +118,7 @@ internal sealed unsafe partial class FileInformation
     private readonly NameLister _listNames;
     private readonly StandardByNameReader _readByName;
     private readonly FinalPathReader _finalPath;
+    private readonly Func<string, string?> _mountPointOf;
 
     /// <param name="open">
     /// Opens the handle a path is resolved or described through, given the path in the form it
@@ -144,18 +145,24 @@ internal sealed unsafe partial class FileInformation
     /// Reads where a handle is open on, so a test can see which reads ask Windows for a path, and have
     /// Windows refuse to give one. Where none is given, <see cref="FinalPathOf"/>.
     /// </param>
+    /// <param name="mountPointOf">
+    /// Says where a path's volume is mounted, so a test can count the questions and have Windows
+    /// decline to answer. Where none is given, <see cref="MountPointLookup.MountPointOf"/>.
+    /// </param>
     internal FileInformation(
         HandleOpener open,
         IdentityReader identify,
         NameLister? listNames = null,
         StandardByNameReader? readByName = null,
-        FinalPathReader? finalPath = null)
+        FinalPathReader? finalPath = null,
+        Func<string, string?>? mountPointOf = null)
     {
         _open = open;
         _identify = identify;
         _listNames = listNames ?? ListNames;
         _readByName = readByName ?? StatByName.Read;
         _finalPath = finalPath ?? FinalPathOf;
+        _mountPointOf = mountPointOf ?? MountPointLookup.Machine.MountPointOf;
     }
 
     /// <summary>
@@ -409,18 +416,27 @@ internal sealed unsafe partial class FileInformation
     }
 
     /// <summary>
-    /// Every name of the file at <paramref name="path"/>, in display form, or null where Windows
-    /// would not list them. Windows gives each name from the top of the file's volume, which is
-    /// asked of the same path.
+    /// Where the volume holding <paramref name="path"/> is mounted, in display form, or null where
+    /// Windows will not say: what <see cref="NamesOf"/> gives a file's names from.
     /// </summary>
-    public IReadOnlyList<string>? NamesOf(string path)
+    public string? MountPointOf(string path) => _mountPointOf(path);
+
+    /// <summary>
+    /// Every name of the file at <paramref name="path"/>, in display form, or null where Windows
+    /// would not list them. Windows gives each name from the top of the file's volume.
+    /// </summary>
+    /// <param name="mountPoint">
+    /// Where the file's volume is mounted, as <see cref="MountPointOf"/> answers for the file or for
+    /// a folder it is found under.
+    /// </param>
+    public IReadOnlyList<string>? NamesOf(string path, string mountPoint)
     {
-        if (MountPointLookup.Machine.MountPointOf(path) is not { } top || _listNames(LongPath.Extended(path)) is not { } names)
+        if (_listNames(LongPath.Extended(path)) is not { } names)
         {
             return null;
         }
 
-        return [.. names.Select(name => Path.Join(top, name.TrimStart('\\')))];
+        return [.. names.Select(name => Path.Join(mountPoint, name.TrimStart('\\')))];
     }
 
     /// <summary>Every name of the file at <paramref name="extendedPath"/>, as Windows lists them.</summary>

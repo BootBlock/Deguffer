@@ -390,7 +390,7 @@ public sealed class CleanupPlanner
             new ClaudeCodeMcpLogProvider(environment, scanner: scanner),
             toolLogs,
             new ClaudeCodeFileHistoryProvider(environment, sessions: claudeSessions, scanner: scanner),
-            new ClaudeCodeConversationProvider(environment, projects: claudeProjects, sessions: claudeSessions, scanner: scanner),
+            new ClaudeCodeConversationProvider(environment, projects: claudeProjects, sessions: claudeSessions, scanner: scanner, scope: scope),
             new VirtualDiskProvider(SystemDirectories.Current, environment, scanner: scanner),
             new ModManagerDownloadProvider(SystemDirectories.Current, environment, scanner: scanner),
         ];

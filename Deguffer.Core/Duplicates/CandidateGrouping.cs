@@ -7,6 +7,10 @@ namespace Deguffer.Core.Duplicates;
 /// <summary>A file a walk kept, as Windows described it when it was identified.</summary>
 internal sealed record IdentifiedFile(FoundFile Found, FileDescription Description);
 
+/// <summary>A group of identified files, before the names of those with several have been listed.</summary>
+/// <param name="Files">Each file of the group once, as every path that reached it.</param>
+internal sealed record IdentifiedGroup(long? Length, string? Name, DateTime? Modified, IReadOnlyList<IReadOnlyList<IdentifiedFile>> Files);
+
 /// <summary>
 /// Puts files into groups by what a search compares before it reads their content (§7.4): the length
 /// where the size or the content is a criterion, the name, ordinally and ignoring case, where the name
@@ -30,33 +34,72 @@ internal static class CandidateGrouping
     /// </summary>
     /// <param name="minuteOf">The minute a file is placed by, or null to leave it out.</param>
     public static IReadOnlyList<IReadOnlyList<FoundFile>> ByTheTree(
-        IEnumerable<FoundFile> found,
+        IReadOnlyList<FoundFile> found,
         MatchCriteria criteria,
         Func<FoundFile, int?> minuteOf)
     {
         var bySize = criteria.GroupsBySize();
         var byName = criteria.GroupsByName();
         var byTime = criteria.GroupsByTime();
-        var groups = new Dictionary<GroupKey, List<FoundFile>>(KeyComparer.Instance);
 
-        foreach (var file in found)
+        var placed = new Placement[found.Count];
+        var count = 0;
+
+        for (var index = 0; index < found.Count; index++)
         {
-            long time = 0;
+            var file = found[index];
+            var minute = 0;
 
             if (byTime)
             {
-                if (minuteOf(file) is not { } minute)
+                if (minuteOf(file) is not { } known)
                 {
                     continue;
                 }
 
-                time = minute;
+                minute = known;
             }
 
-            Add(groups, new GroupKey(bySize ? file.Tree.LengthOf(file.Node) : 0, byName ? file : null, time), file);
+            placed[count++] = new Placement(
+                bySize ? file.Tree.LengthOf(file.Node) : 0,
+                minute,
+                byName ? string.GetHashCode(file.Tree.NameSpanOf(file.Node), StringComparison.OrdinalIgnoreCase) : 0,
+                index);
         }
 
-        return [.. groups.Values.Where(group => group.Count > 1)];
+        var order = new PlacementOrder(found, byName);
+        var sorted = placed.AsSpan(0, count);
+        sorted.Sort(order);
+
+        List<(int First, FoundFile[] Files)> groups = [];
+
+        for (int start = 0, end; start < count; start = end)
+        {
+            end = start + 1;
+
+            while (end < count && order.CompareGroups(sorted[start], sorted[end]) == 0)
+            {
+                end++;
+            }
+
+            if (end - start > 1)
+            {
+                var files = new FoundFile[end - start];
+
+                for (var member = start; member < end; member++)
+                {
+                    files[member - start] = found[sorted[member].Index];
+                }
+
+                groups.Add((sorted[start].Index, files));
+            }
+        }
+
+        // In the order they were found, so the order files are identified in does not follow how
+        // their lengths happen to sort.
+        groups.Sort((x, y) => x.First.CompareTo(y.First));
+
+        return [.. groups.Select(group => group.Files)];
     }
 
     /// <summary>The minute the tree holds for a file, or null where it holds none.</summary>
@@ -70,11 +113,7 @@ internal static class CandidateGrouping
     /// The groups of identified files by what Windows said of each, every file once a group,
     /// whatever paths reached it.
     /// </summary>
-    /// <param name="namesOf">Every name of a file with several, given its description.</param>
-    public static IReadOnlyList<CandidateGroup> ByTheFiles(
-        IEnumerable<IdentifiedFile> files,
-        MatchCriteria criteria,
-        Func<IdentifiedFile, IReadOnlyList<string>> namesOf)
+    public static IReadOnlyList<IdentifiedGroup> ByTheFiles(IEnumerable<IdentifiedFile> files, MatchCriteria criteria)
     {
         var bySize = criteria.GroupsBySize();
         var byName = criteria.GroupsByName();
@@ -91,7 +130,7 @@ internal static class CandidateGrouping
                 byTime ? description.Modified.Ticks : 0), file);
         }
 
-        List<CandidateGroup> found = [];
+        List<IdentifiedGroup> found = [];
 
         foreach (var (key, members) in groups)
         {
@@ -99,16 +138,35 @@ internal static class CandidateGrouping
 
             if (distinct.Count > 1)
             {
-                found.Add(new CandidateGroup(
+                found.Add(new IdentifiedGroup(
                     bySize ? key.Length : null,
                     key.Named is { } named ? named.Tree.NameOf(named.Node) : null,
                     byTime ? new DateTime(key.Time, DateTimeKind.Utc) : null,
-                    [.. distinct.Select(paths => Candidate([.. paths], namesOf))]));
+                    [.. distinct.Select(paths => (IReadOnlyList<IdentifiedFile>)[.. paths])]));
             }
         }
 
         return found;
     }
+
+    /// <summary>
+    /// The group a search shows. <paramref name="namesOf"/> is asked about the first path of each file
+    /// with several names, the path <see cref="NeedingNames"/> gives.
+    /// </summary>
+    /// <param name="namesOf">Every name of a file with several, given its description.</param>
+    public static CandidateGroup WithNames(IdentifiedGroup group, Func<IdentifiedFile, IReadOnlyList<string>> namesOf) =>
+        new(group.Length, group.Name, group.Modified, [.. group.Files.Select(paths => Candidate(paths, namesOf))]);
+
+    /// <summary>
+    /// Each file of <paramref name="groups"/> with several names, once however many groups hold it, by
+    /// the path its names are listed through.
+    /// </summary>
+    public static IReadOnlyList<IdentifiedFile> NeedingNames(IEnumerable<IdentifiedGroup> groups) =>
+        [.. groups
+            .SelectMany(group => group.Files)
+            .Select(paths => paths[0])
+            .Where(file => file.Description.Names > 1)
+            .DistinctBy(file => file.Description.Identity)];
 
     /// <summary>
     /// One file from every path that reached it. A reference where any path is in a reference
@@ -151,7 +209,7 @@ internal static class CandidateGrouping
         return now is FileStorage.CloudOnly || scanned is FileStorage.CloudOnly ? now : scanned;
     }
 
-    private static void Add<T>(Dictionary<GroupKey, List<T>> groups, GroupKey key, T member)
+    private static void Add(Dictionary<GroupKey, List<IdentifiedFile>> groups, GroupKey key, IdentifiedFile member)
     {
         if (!groups.TryGetValue(key, out var members))
         {
@@ -162,10 +220,57 @@ internal static class CandidateGrouping
     }
 
     /// <summary>
+    /// A found file by what the tree says places it, flat so a drive's worth sorts with no object for
+    /// each. Its name is held as a hash, so only files that may share a name compare names.
+    /// </summary>
+    /// <param name="Index">Where the file is in the list found, which breaks a tie to keep that order.</param>
+    private readonly record struct Placement(long Length, int Minute, int NameHash, int Index);
+
+    /// <summary>
+    /// Puts files of one group next to each other, in the order they were found. Names are compared
+    /// only where their hashes are equal, ignoring case as the search does (§7.4), so two names that
+    /// share a hash stay apart.
+    /// </summary>
+    private sealed class PlacementOrder(IReadOnlyList<FoundFile> found, bool byName) : IComparer<Placement>
+    {
+        public int Compare(Placement x, Placement y)
+        {
+            var group = CompareGroups(x, y);
+
+            return group != 0 ? group : x.Index.CompareTo(y.Index);
+        }
+
+        public int CompareGroups(Placement x, Placement y)
+        {
+            var order = x.Length.CompareTo(y.Length);
+
+            if (order == 0)
+            {
+                order = x.Minute.CompareTo(y.Minute);
+            }
+
+            if (order == 0)
+            {
+                order = x.NameHash.CompareTo(y.NameHash);
+            }
+
+            return order != 0 || !byName
+                ? order
+                : NameOf(x).CompareTo(NameOf(y), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private ReadOnlySpan<char> NameOf(Placement placement)
+        {
+            var file = found[placement.Index];
+
+            return file.Tree.NameSpanOf(file.Node);
+        }
+    }
+
+    /// <summary>
     /// What a group is keyed by: the length and the time, and where the name is compared, the file
     /// whose name it is. The name is read where the tree holds it rather than made into a string for
-    /// every file found, which a search grouping by name would otherwise do for each file on the
-    /// volume (#345).
+    /// every identified file, of which a search grouping by name can have hundreds of thousands (#345).
     /// </summary>
     private readonly record struct GroupKey(long Length, FoundFile? Named, long Time)
     {

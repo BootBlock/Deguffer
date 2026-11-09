@@ -4,14 +4,6 @@ using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Duplicates;
 
-/// <summary>A file a walk kept, by its place in the tree, so no path is built until it has a match.</summary>
-/// <param name="Route">The route that identifies the files of the volume it was found on.</param>
-/// <param name="Volume">
-/// The volume it was found on: its location's, as the search resolved it, because the enumeration of
-/// a location never crosses into a volume mounted in one of its folders.
-/// </param>
-internal readonly record struct FoundFile(ExploreTree Tree, int Node, LocationRole Role, IdentityRoute Route, LocalVolume Volume);
-
 /// <summary>
 /// Goes through the tree of one searched location and keeps the files a search may match (§7.4).
 ///
@@ -80,6 +72,7 @@ internal sealed class CandidateWalk
         CancellationToken ct)
     {
         var tree = scan.Tree;
+        var found = new FoundRoot(tree, route, root.Volume, root.Folder);
 
         if (scan.FromIncompleteTable)
         {
@@ -121,14 +114,15 @@ internal sealed class CandidateWalk
                 }
                 else
                 {
-                    Consider(tree, child, name, folder.Role, route, root.Volume);
+                    Consider(found, child, name, folder.Role);
                 }
             }
         }
     }
 
-    private void Consider(ExploreTree tree, int file, ReadOnlySpan<char> name, LocationRole role, IdentityRoute route, LocalVolume volume)
+    private void Consider(FoundRoot root, int file, ReadOnlySpan<char> name, LocationRole role)
     {
+        var tree = root.Tree;
         var length = tree.LengthOf(file);
 
         if (length == 0)
@@ -163,7 +157,7 @@ internal sealed class CandidateWalk
             return;
         }
 
-        _found.Add(new FoundFile(tree, file, role, route, volume));
+        _found.Add(new FoundFile(root, file, role));
     }
 
     /// <summary>

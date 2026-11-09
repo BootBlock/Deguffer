@@ -12,11 +12,17 @@ namespace Deguffer.Core.Providers;
 internal sealed class ClaudeCodeSessionStarts
 {
     private readonly ILookup<string, string> _transcripts;
+    private readonly ClaudeCodeTranscriptReader _reader;
     private readonly Dictionary<string, IReadOnlyList<string?>> _read = new(StringComparer.OrdinalIgnoreCase);
     private readonly Lock _gate = new();
 
     /// <param name="transcripts">Every conversation's path, by its session's id, as the preview found them.</param>
-    public ClaudeCodeSessionStarts(ILookup<string, string> transcripts) => _transcripts = transcripts;
+    /// <param name="reader">Where each conversation's first lines are read.</param>
+    public ClaudeCodeSessionStarts(ILookup<string, string> transcripts, ClaudeCodeTranscriptReader reader)
+    {
+        _transcripts = transcripts;
+        _reader = reader;
+    }
 
     /// <summary>
     /// Where each of the session's conversations says it started, with null for one that does not say or
@@ -31,7 +37,7 @@ internal sealed class ClaudeCodeSessionStarts
             {
                 _read[sessionId] = starts =
                 [
-                    .. _transcripts[sessionId].Select(path => ClaudeCodeTranscriptReader.Read(path, ct)?.Project),
+                    .. _transcripts[sessionId].Select(path => _reader.Place(path, ct)?.Project),
                 ];
             }
 

@@ -132,7 +132,7 @@ public sealed class FileInformationTests
             });
 
         Assert.Equal(IdentityRoute.FileId, information.IdentityRouteOf(deep));
-        Assert.Equal([LongPath.Display(FileInformation.Default.FinalPath(file)!)], information.NamesOf(file));
+        Assert.Equal([LongPath.Display(FileInformation.Default.FinalPath(file)!)], information.NamesOf(file, information.MountPointOf(file)!));
         Assert.Equal(LongPath.Extended(deep), Assert.Single(opened));
         Assert.Equal(LongPath.Extended(file), Assert.Single(listed));
     }
@@ -193,7 +193,7 @@ public sealed class FileInformationTests
         Assert.Equal(2, one.Names);
         Assert.Equal(
             new[] { first, second }.Select(name => LongPath.Display(FileInformation.Default.FinalPath(name)!)).Order(StringComparer.Ordinal),
-            FileInformation.Default.NamesOf(first)!.Order(StringComparer.Ordinal));
+            FileInformation.Default.NamesOf(first, FileInformation.Default.MountPointOf(first)!)!.Order(StringComparer.Ordinal));
     }
     /// <summary>
     /// FAT32 and exFAT refuse the reparse-tag class with <c>ERROR_INVALID_PARAMETER</c> and hold no

@@ -24,6 +24,14 @@ namespace Deguffer.Core.Duplicates;
 /// read: a search of a whole drive has hundreds of thousands of files that share a length, and each
 /// is an open and several questions of the file system. A disk not known to be solid state is asked
 /// by one reader, so its file records are never read out of order by several.</para>
+///
+/// <para><b>The names of a file with several are listed in the same lanes, as the last pass of this
+/// stage</b>, because a source tree of hard links holds tens of thousands of such files, each name
+/// costing a path built by the file system, and on one thread that was many seconds in which the
+/// page stood still (#708). The pass comes after the grouping, so a file alone in its group costs
+/// nothing. Each name is given from the top of the file's volume, asked once for each searched
+/// location: a location's enumeration stays on one volume, and a file whose final path lies below
+/// the location's is named through the location's mount point.</para>
 /// </summary>
 internal sealed class CandidateIdentification
 {
@@ -31,7 +39,6 @@ internal sealed class CandidateIdentification
     private readonly MatchCriteria _criteria;
     private readonly VolumeMediaCache _media;
     private readonly Dictionary<FoundFile, IdentifiedFile?> _identified = [];
-    private readonly Dictionary<FileIdentity, IReadOnlyList<string>> _names = [];
 
     private int _empty;
     private int _onlyInTheCloud;
@@ -60,7 +67,7 @@ internal sealed class CandidateIdentification
         // by the minute Windows gives and can still join a file the tree did date.
         if (_criteria.GroupsByTime())
         {
-            await IdentifyAsync(found.Where(file => CandidateGrouping.TreeMinuteOf(file) is null), progress, ct).ConfigureAwait(false);
+            await IdentifyAsync([.. found.Where(file => CandidateGrouping.TreeMinuteOf(file) is null)], progress, ct).ConfigureAwait(false);
         }
 
         var byTheTree = CandidateGrouping.ByTheTree(found, _criteria, file =>
@@ -72,41 +79,118 @@ internal sealed class CandidateIdentification
 
         await IdentifyAsync(grouped, progress, ct).ConfigureAwait(false);
 
-        return CandidateGrouping.ByTheFiles([.. grouped.Select(file => _identified[file]).OfType<IdentifiedFile>()], _criteria, NamesOf);
+        var groups = CandidateGrouping.ByTheFiles(grouped.Select(file => _identified[file]).OfType<IdentifiedFile>(), _criteria);
+        var names = await ListNamesAsync(CandidateGrouping.NeedingNames(groups), progress, ct).ConfigureAwait(false);
+
+        return [.. groups.Select(group => CandidateGrouping.WithNames(group, file => names[file.Description.Identity]))];
     }
 
     /// <summary>
     /// Every file of <paramref name="files"/> not yet identified, described by Windows now, in lanes
     /// by disk, and remembered once every reader has finished, so each file is asked about once.
     /// </summary>
-    private async Task IdentifyAsync(IEnumerable<FoundFile> files, IProgress<DuplicateSearchProgress>? progress, CancellationToken ct)
+    private async Task IdentifyAsync(IReadOnlyList<FoundFile> files, IProgress<DuplicateSearchProgress>? progress, CancellationToken ct)
     {
-        IReadOnlyList<FoundFile> unasked = [.. files.Where(file => !_identified.ContainsKey(file)).Distinct()];
+        IReadOnlyList<FoundFile> unasked = _identified.Count == 0 ? files : [.. files.Where(file => !_identified.ContainsKey(file))];
 
         if (unasked.Count == 0)
         {
             return;
         }
 
-        var identified = new IdentifiedFile?[unasked.Count];
-        var measure = new StageMeasure(DuplicateSearchStage.Identifying, unasked.Count, progress, TimeProvider.System);
-        var lanes = ReadingLanes.Of(unasked.Select(file => file.Volume), _media);
+        _identified.EnsureCapacity(_identified.Count + unasked.Count);
 
-        await new LaneWorkers<int>(lanes.Readers, ct).RunAsync(
-            Enumerable.Range(0, unasked.Count).Select(file => (lanes.LaneOf(unasked[file].Volume), file, Priority: 0L)),
+        var identified = new IdentifiedFile?[unasked.Count];
+
+        await InLanesAsync(
+            unasked,
             file =>
             {
                 var found = unasked[file];
                 identified[file] = Decide(found, _files.Describe(found.Tree.PathOf(found.Node), found.Route));
-                measure.Done(1);
-            }).ConfigureAwait(false);
-
-        measure.Finished();
+            },
+            progress,
+            ct).ConfigureAwait(false);
 
         for (var file = 0; file < unasked.Count; file++)
         {
             _identified[unasked[file]] = identified[file];
         }
+    }
+
+    /// <summary>
+    /// Every name of each of <paramref name="linked"/>, by its identity, listed in lanes by disk. Where
+    /// Windows will not list them, the paths the search reached the file by stand in, so the file is
+    /// never shown with none.
+    /// </summary>
+    private async Task<Dictionary<FileIdentity, IReadOnlyList<string>>> ListNamesAsync(
+        IReadOnlyList<IdentifiedFile> linked,
+        IProgress<DuplicateSearchProgress>? progress,
+        CancellationToken ct)
+    {
+        Dictionary<FileIdentity, IReadOnlyList<string>> names = [];
+
+        if (linked.Count == 0)
+        {
+            return names;
+        }
+
+        var mountPoints = linked.Select(file => file.Found.Root).Distinct().ToDictionary(root => root, root => _files.MountPointOf(root.Folder));
+        var listed = new IReadOnlyList<string>?[linked.Count];
+
+        await InLanesAsync(
+            [.. linked.Select(file => file.Found)],
+            file => listed[file] = MountPointOf(linked[file], mountPoints) is { } mountPoint
+                ? _files.NamesOf(linked[file].Description.Path, mountPoint)
+                : null,
+            progress,
+            ct).ConfigureAwait(false);
+
+        ILookup<FileIdentity, string>? reached = null;
+
+        for (var file = 0; file < linked.Count; file++)
+        {
+            var identity = linked[file].Description.Identity;
+
+            names[identity] = listed[file] ?? [.. (reached ??= PathsReached())[identity].Distinct(StringComparer.Ordinal)];
+        }
+
+        return names;
+    }
+
+    /// <summary>
+    /// Where <paramref name="file"/>'s volume is mounted: as its location was answered, unless Windows
+    /// described the file somewhere outside that location. A folder replaced by a link since the walk
+    /// can lead to another volume, and a name given from the wrong top would be judged as a place the
+    /// file is not (§7.4).
+    /// </summary>
+    private string? MountPointOf(IdentifiedFile file, Dictionary<FoundRoot, string?> ofLocations) =>
+        LongPath.Contains(file.Found.Root.Folder, file.Description.Path, StringComparison.Ordinal)
+            ? ofLocations[file.Found.Root]
+            : _files.MountPointOf(file.Description.Path);
+
+    private ILookup<FileIdentity, string> PathsReached() =>
+        _identified.Values.OfType<IdentifiedFile>().ToLookup(file => file.Description.Identity, file => file.Description.Path);
+
+    /// <summary>Calls <paramref name="work"/> with the index of each of <paramref name="files"/>, in lanes by disk, as one pass of this stage.</summary>
+    private async Task InLanesAsync(
+        IReadOnlyList<FoundFile> files,
+        Action<int> work,
+        IProgress<DuplicateSearchProgress>? progress,
+        CancellationToken ct)
+    {
+        var measure = new StageMeasure(DuplicateSearchStage.Identifying, files.Count, progress, TimeProvider.System);
+        var lanes = ReadingLanes.Of(files.Select(file => file.Volume), _media);
+
+        await new LaneWorkers<int>(lanes.Readers, ct).RunAsync(
+            Enumerable.Range(0, files.Count).Select(file => (lanes.LaneOf(files[file].Volume), file, Priority: 0L)),
+            file =>
+            {
+                work(file);
+                measure.Done(1);
+            }).ConfigureAwait(false);
+
+        measure.Finished();
     }
 
     /// <summary>The file as Windows described it, or null where it is left out and counted. Called from any reader's thread.</summary>
@@ -144,25 +228,5 @@ internal sealed class CandidateIdentification
         }
 
         return new IdentifiedFile(file, description);
-    }
-
-    /// <summary>
-    /// Every name of a file with several, listed once a file. Where Windows will not list them, the
-    /// paths the search reached the file by stand in, so the file is never shown with none.
-    /// </summary>
-    private IReadOnlyList<string> NamesOf(IdentifiedFile file)
-    {
-        var identity = file.Description.Identity;
-
-        if (!_names.TryGetValue(identity, out var names))
-        {
-            _names[identity] = names = _files.NamesOf(file.Description.Path)
-                ?? [.. _identified.Values
-                    .Where(other => other?.Description.Identity == identity)
-                    .Select(other => other!.Description.Path)
-                    .Distinct(StringComparer.Ordinal)];
-        }
-
-        return names;
     }
 }

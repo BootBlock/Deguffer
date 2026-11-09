@@ -3,7 +3,7 @@ namespace Deguffer.Core.Duplicates;
 /// <summary>
 /// How far one stage of a duplicate search has got, in the stage's own unit: what is done, against
 /// what is done and the most still to do (<see cref="DuplicateSearchProgress.Total"/>). Identifying
-/// counts files, each asked about once. Comparing content counts bytes.
+/// counts files, each asked about once in a pass. Comparing content counts bytes.
 ///
 /// <para><b>Comparing content: one measure, though its stages overlap.</b> The first and last blocks
 /// of one group are read beside the whole of another, so neither stage's count says how far the

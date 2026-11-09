@@ -41,6 +41,10 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para>§5.1 was asked, and the answer is no. Claude Code's own purge removes a whole project's
 /// conversations and memory together, and nothing removes one conversation.</para>
+///
+/// <para><b>Only where an answer can matter.</b> A policy built for a scope nothing in
+/// <see cref="ClaudeCodeHome.Projects"/> can be asked about reads no conversation and refuses that folder
+/// whole (<see cref="ProtectionScope"/>). A plan is not scoped.</para>
 /// </summary>
 public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
 {
@@ -54,12 +58,20 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
 
     private const string CredentialsReason = "Your Claude Code sign-in. Deguffer never opens or removes it.";
 
+    private const string NotSearchedReason =
+        "Deguffer did not look at your Claude Code conversations here, because nothing it was asked about was "
+        + "in this folder. Scan or search a folder that holds this one to act on what is inside.";
+
     private readonly ClaudeCodeProjectsDiscovery _projects;
     private readonly ClaudeCodeSessionRegistry _sessions;
     private readonly ISystemDirectories _system;
+    private readonly ProtectionScope _scope;
+    private readonly ClaudeCodeTranscriptReader _transcripts;
 
     private readonly PassMemo<Survey?> _survey = new();
+    private readonly PassMemo<ClaudeCodeClassification> _described = new();
     private readonly PassMemo<IReadOnlyList<ToolRoot>> _toolRoots = new();
+    private readonly PassMemo<Task<string?>> _notSearched = new();
 
     /// <param name="sessions">
     /// Claude Code's list of running sessions, shared with the other providers over Claude Code's folder so
@@ -73,6 +85,8 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
     /// The directories Windows is built out of, which the folder Claude Code is configured to use must not
     /// be or hold. The machine's own by default.
     /// </param>
+    /// <param name="scope">What the declaration will be asked about. <see cref="ProtectionScope.Everything"/> where none is given.</param>
+    /// <param name="transcripts">Where each conversation's lines are read. The disk where none is given.</param>
     public ClaudeCodeConversationProvider(
         IUserEnvironment? environment = null,
         ClaudeCodeSessionRegistry? sessions = null,
@@ -81,7 +95,9 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
         IDirectoryScanner? scanner = null,
         ClaudeCodeProjectsDiscovery? projects = null,
         ISystemDirectories? system = null,
-        IVolumeInventory? volumes = null)
+        IVolumeInventory? volumes = null,
+        ProtectionScope? scope = null,
+        ClaudeCodeTranscriptReader? transcripts = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
@@ -92,6 +108,8 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
         _system = system ?? SystemDirectories.Current;
         _projects = projects ?? new ClaudeCodeProjectsDiscovery(Environment, _system, Volumes);
         _sessions = sessions ?? new ClaudeCodeSessionRegistry(Environment, Inspector, _system, LiveVolumes);
+        _scope = scope ?? ProtectionScope.Everything;
+        _transcripts = transcripts ?? ClaudeCodeTranscriptReader.Default;
     }
 
     public override string Id => "claude-code-conversations";
@@ -142,12 +160,26 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
 
     public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots.Get(Declare);
 
+    /// <summary>
+    /// The conversations folder, refused whole, where the scope cannot ask about anything in it.
+    ///
+    /// <para>Probed rather than declared, so no other row's root inside it can lift the refusal, on the
+    /// reasoning of <see cref="ChromiumUserDataProvider.DiscoverToolRootsAsync"/>. Waits here, without
+    /// holding a thread, for a scan's tree, so that <see cref="ToolRoots"/> finds the answer ready.</para>
+    /// </summary>
+    public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
+        await NotSearchedAsync(ct).ConfigureAwait(false) is { } home
+            ? [new ToolRoot(Path.Combine(home, ClaudeCodeHome.Projects), NotSearchedReason, static _ => false)]
+            : [];
+
     public override void InvalidateCaches()
     {
         _projects.Invalidate();
         _sessions.Invalidate();
         _survey.Forget();
+        _described.Forget();
         _toolRoots.Forget();
+        _notSearched.Forget();
         base.InvalidateCaches();
     }
 
@@ -175,8 +207,14 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
 
         // On a thread of its own, as the declaration reads it (DeclaredRoots): the look reads every
         // conversation it might offer, and each read holds the thread that makes it.
-        var survey = (await WorkerThreads.Shared.RunAsync(() => Look(ct), ct).ConfigureAwait(false))!;
-        var found = survey.Conversations;
+        var (survey, found) = await WorkerThreads.Shared.RunAsync(
+            () =>
+            {
+                var looked = Look(ct)!;
+
+                return (looked, _described.Get(() => ClaudeCodeConversationOffers.Describe(looked.Conversations, looked.Evidence, ct)));
+            },
+            ct).ConfigureAwait(false);
 
         // §5.3's floor travels on the plan as well as into the preview: a session resumed between the two
         // appends to a conversation the preview offered, and the removal has to spare it itself.
@@ -193,7 +231,7 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
 
         var notes = new List<PlanNote>(found.Notes);
 
-        notes.AddRange(EvidenceNotes(survey, offered: steps.Count, recent: recent.Count));
+        notes.AddRange(EvidenceNotes(survey.Evidence, found, offered: steps.Count, recent: recent.Count));
 
         if (measured.Note is { } scanNote)
         {
@@ -261,9 +299,10 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
         return ([.. steps.Except(inUse)], inUse);
     }
 
-    private static IEnumerable<PlanNote> EvidenceNotes(Survey survey, int offered, int recent)
+    private static IEnumerable<PlanNote> EvidenceNotes(
+        ClaudeCodeConversationEvidence evidence, ClaudeCodeClassification found, int offered, int recent)
     {
-        if (!survey.Evidence.Sessions.Complete)
+        if (!evidence.Sessions.Complete)
         {
             yield return new PlanNote(
                 PlanNoteSeverity.Warning,
@@ -284,7 +323,7 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
         {
             yield return new PlanNote(
                 PlanNoteSeverity.Information,
-                survey.Evidence.RetentionDays is { } days
+                evidence.RetentionDays is { } days
                     ? $"Claude Code deletes a conversation itself {days} days after it was last used, so "
                       + "each of these would go by the date under Expires anyway. That date is the one your own Claude "
                       + "Code settings set: a project's settings or your organisation's can set another."
@@ -292,7 +331,7 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
                       + "when Claude Code would delete each of these itself. It is 30 days unless you changed it.");
         }
 
-        if (offered == 0 && recent == 0 && !survey.Conversations.Refused && !survey.Conversations.Unreadable)
+        if (offered == 0 && recent == 0 && !found.Refused && !found.Unreadable)
         {
             yield return new PlanNote(
                 PlanNoteSeverity.Information,
@@ -302,6 +341,16 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
 
     private IReadOnlyList<ToolRoot> Declare()
     {
+        // A caller building protections has waited in DiscoverToolRootsAsync first, so this is already known.
+        if (NotSearchedAsync(CancellationToken.None).GetAwaiter().GetResult() is { } notSearched)
+        {
+            return
+            [
+                new ToolRoot(notSearched, HomeReason, static _ => false),
+                new ToolRoot(Path.Combine(notSearched, ClaudeCodeHome.Projects), ProjectsReason, static _ => false),
+            ];
+        }
+
         if (Look() is not { } survey)
         {
             // Nothing was classified. Where Windows would not describe the way down, the plan names the
@@ -312,19 +361,37 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
                     : [];
         }
 
-        var offered = new TargetedEntries(survey.Conversations.Targets);
+        var offered = new ClaudeCodeOfferedEntries(survey.Conversations.Offers, _transcripts);
 
         return
         [
             new ToolRoot(survey.Home, HomeReason, static _ => false),
             new ToolRoot(Path.Combine(survey.Home, ClaudeCodeHome.Projects), ProjectsReason, static _ => false),
-            .. survey.Conversations.Folders
+            .. survey.Conversations.Sorted.Folders
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Select(folder => new ToolRoot(
                     folder,
                     ProjectsReason,
                     child => offered.Recognises(folder, child))),
         ];
+    }
+
+    /// <summary>
+    /// Claude Code's folder where the scope cannot ask about anything in its conversations folder, and
+    /// null otherwise. Asked once per pass (G4), and waits for a scan's tree where the scope is a scan's.
+    /// </summary>
+    private Task<string?> NotSearchedAsync(CancellationToken ct) => _notSearched.Get(() => AskScopeAsync(ct));
+
+    private async Task<string?> AskScopeAsync(CancellationToken ct)
+    {
+        if (ClaudeCodeHome.Resolve(Environment, _system, Volumes) is not { } home)
+        {
+            return null;
+        }
+
+        var reached = await _scope.ReachAsync(Path.Combine(home, ClaudeCodeHome.Projects), ct).ConfigureAwait(false);
+
+        return reached.Reach == FolderReach.Outside ? home : null;
     }
 
     /// <summary>One look, memoised for the life of a planning pass (G4). The plan and the declaration read it.</summary>
@@ -354,7 +421,8 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
             _sessions,
             now - ClaudeCodeSessionRegistry.RecentWindow,
             ClaudeCodeRetention.Of(home),
-            Scanner.Tuning);
+            Scanner.Tuning,
+            _transcripts);
 
         return new Survey(
             home,
@@ -366,10 +434,10 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
     /// <param name="Home">Claude Code's folder.</param>
     /// <param name="Evidence">What every conversation was judged against.</param>
     /// <param name="Floor">The cut-off recent conversations were held back by, as a guard the removal applies.</param>
-    /// <param name="Conversations">What was decided about each session.</param>
+    /// <param name="Conversations">What was decided about each session, before any title was read.</param>
     private sealed record Survey(
         string Home,
         ClaudeCodeConversationEvidence Evidence,
         MinimumAge Floor,
-        ClaudeCodeClassification Conversations);
+        ClaudeCodeSortedConversations Conversations);
 }

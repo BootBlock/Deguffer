@@ -298,6 +298,8 @@ public sealed class ProviderInvalidationTests : IDisposable
         : parameter == typeof(SourceDirectoryDiscovery)
             ? new SourceDirectoryDiscovery(new FakeDirectoryScanner(), new FakeVolumeInventory())
         : parameter == typeof(ILiveTreeInspector) ? FakeLiveTreeInspector.NothingLive
+        : parameter == typeof(ProtectionScope) ? ProtectionScope.Everything
+        : parameter == typeof(ClaudeCodeTranscriptReader) ? ClaudeCodeTranscriptReader.Default
         : parameter == typeof(SquirrelDiscovery) ? new SquirrelDiscovery(_environment)
         : parameter == typeof(SteamDiscovery) ? new SteamDiscovery(_environment)
         : parameter == typeof(CargoTargetSurvey) ? new CargoTargetSurvey()
