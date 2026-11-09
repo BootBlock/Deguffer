@@ -385,20 +385,22 @@ public sealed class DuplicateIdentityTests : IDisposable
         var tree = MftExploreReader.Read(fixture.Build(), @"X:\", [], TableTuning.Default, progress: null, default).Tree!;
         var data = MftExploreRooting.Locate(tree, ["Data"]).Node!.Value;
 
+        var root = new ResolvedLocation(new(@"X:\Data"), @"X:\Data", ReachedFolder.At(@"X:\Data", _tree.Volumes), LocationRole.Search, DriveX);
+
         IdentifiedFile Identified(string name, FileAttributes attributes, int number) => new(
-            new FoundFile(tree, tree.ChildrenOf(data).ToArray().Single(child => tree.NameOf(child) == name), LocationRole.Search, IdentityRoute.FileId, DriveX),
+            new FoundFile(tree, tree.ChildrenOf(data).ToArray().Single(child => tree.NameOf(child) == name), LocationRole.Search, IdentityRoute.FileId, root),
             new FileDescription(
                 new FileState(new FileIdentity(1, (UInt128)number), 100, 4096, 1, DateTime.UnixEpoch, DateTime.UnixEpoch, attributes, ReparseTag: 0),
                 Path.Combine(@"X:\Data", name)));
 
-        var files = Assert.Single(CandidateGrouping.ByTheFiles(
+        var group = Assert.Single(CandidateGrouping.ByTheFiles(
             [
                 Identified("went.bin", FileAttributes.Offline, 1),
                 Identified("came.bin", FileAttributes.Normal, 2),
                 Identified("packed.bin", FileAttributes.Normal, 3),
             ],
-            MatchCriteria.Size,
-            _ => [])).Files;
+            MatchCriteria.Size));
+        var files = CandidateGrouping.WithNames(group, _ => []).Files;
 
         Assert.Equal(FileStorage.CloudOnly, files.Single(file => file.Name == "went.bin").Storage);
         Assert.Equal(FileStorage.Plain, files.Single(file => file.Name == "came.bin").Storage);

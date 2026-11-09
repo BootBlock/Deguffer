@@ -7,6 +7,10 @@ namespace Deguffer.Core.Duplicates;
 /// <summary>A file a walk kept, as Windows described it when it was identified.</summary>
 internal sealed record IdentifiedFile(FoundFile Found, FileDescription Description);
 
+/// <summary>A group of identified files, before the names of those with several have been listed.</summary>
+/// <param name="Files">Each file of the group once, as every path that reached it.</param>
+internal sealed record IdentifiedGroup(long? Length, string? Name, DateTime? Modified, IReadOnlyList<IReadOnlyList<IdentifiedFile>> Files);
+
 /// <summary>
 /// Puts files into groups by what a search compares before it reads their content (§7.4): the length
 /// where the size or the content is a criterion, the name, ordinally and ignoring case, where the name
@@ -70,11 +74,7 @@ internal static class CandidateGrouping
     /// The groups of identified files by what Windows said of each, every file once a group,
     /// whatever paths reached it.
     /// </summary>
-    /// <param name="namesOf">Every name of a file with several, given its description.</param>
-    public static IReadOnlyList<CandidateGroup> ByTheFiles(
-        IEnumerable<IdentifiedFile> files,
-        MatchCriteria criteria,
-        Func<IdentifiedFile, IReadOnlyList<string>> namesOf)
+    public static IReadOnlyList<IdentifiedGroup> ByTheFiles(IEnumerable<IdentifiedFile> files, MatchCriteria criteria)
     {
         var bySize = criteria.GroupsBySize();
         var byName = criteria.GroupsByName();
@@ -91,7 +91,7 @@ internal static class CandidateGrouping
                 byTime ? description.Modified.Ticks : 0), file);
         }
 
-        List<CandidateGroup> found = [];
+        List<IdentifiedGroup> found = [];
 
         foreach (var (key, members) in groups)
         {
@@ -99,16 +99,35 @@ internal static class CandidateGrouping
 
             if (distinct.Count > 1)
             {
-                found.Add(new CandidateGroup(
+                found.Add(new IdentifiedGroup(
                     bySize ? key.Length : null,
                     key.Named is { } named ? named.Tree.NameOf(named.Node) : null,
                     byTime ? new DateTime(key.Time, DateTimeKind.Utc) : null,
-                    [.. distinct.Select(paths => Candidate([.. paths], namesOf))]));
+                    [.. distinct.Select(paths => (IReadOnlyList<IdentifiedFile>)[.. paths])]));
             }
         }
 
         return found;
     }
+
+    /// <summary>
+    /// The group a search shows. <paramref name="namesOf"/> is asked about the first path of each file
+    /// with several names, the path <see cref="NeedingNames"/> gives.
+    /// </summary>
+    /// <param name="namesOf">Every name of a file with several, given its description.</param>
+    public static CandidateGroup WithNames(IdentifiedGroup group, Func<IdentifiedFile, IReadOnlyList<string>> namesOf) =>
+        new(group.Length, group.Name, group.Modified, [.. group.Files.Select(paths => Candidate(paths, namesOf))]);
+
+    /// <summary>
+    /// Each file of <paramref name="groups"/> with several names, once however many groups hold it, by
+    /// the path its names are listed through.
+    /// </summary>
+    public static IReadOnlyList<IdentifiedFile> NeedingNames(IEnumerable<IdentifiedGroup> groups) =>
+        [.. groups
+            .SelectMany(group => group.Files)
+            .Select(paths => paths[0])
+            .Where(file => file.Description.Names > 1)
+            .DistinctBy(file => file.Description.Identity)];
 
     /// <summary>
     /// One file from every path that reached it. A reference where any path is in a reference
