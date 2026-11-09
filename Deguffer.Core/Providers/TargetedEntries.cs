@@ -13,6 +13,20 @@ internal sealed class TargetedEntries
     private readonly Dictionary<string, ChildKind> _kinds = new(StringComparer.OrdinalIgnoreCase);
 
     public TargetedEntries(IEnumerable<DeletionTarget> targets)
+        : this(Entries(targets))
+    {
+    }
+
+    /// <param name="entries">Each entry a plan would target, for a row that decides them before it builds its targets.</param>
+    public TargetedEntries(IEnumerable<(string Path, ChildKind Kind)> entries)
+    {
+        foreach (var (path, kind) in entries)
+        {
+            _kinds[path] = kind;
+        }
+    }
+
+    private static IEnumerable<(string Path, ChildKind Kind)> Entries(IEnumerable<DeletionTarget> targets)
     {
         foreach (var target in targets)
         {
@@ -27,7 +41,7 @@ internal sealed class TargetedEntries
 
             if (kind is { } known)
             {
-                _kinds[target.Path] = known;
+                yield return (target.Path, known);
             }
         }
     }

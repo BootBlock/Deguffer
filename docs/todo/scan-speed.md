@@ -371,7 +371,8 @@ scan leaves about 600 MB committed (#738), and Classic names draw through a seco
 | #706 | The removal policy's per-file check is linear in its rules: 72 GB allocated judging one drive's duplicates. `safety`. |
 | #692 | Delivery Optimization starts PowerShell in every preview for one WMI number: 1.1-1.9 s against 16-30 ms in process. |
 | #695, #694 | `Protect` probes in series (1.2-3.6 s for a Claude Code row), and `IsPresent(WinSxS)` walks breadth-first (8.8 MB per call, 5-7 calls per pass). `safety`. |
-| #707, #696, #697 | Claude Code transcripts: read again for Explore's policy on the duplicate search's critical path, read again every pass, and read 64 KiB at each end to use about 15 KiB. #696 waits on a decision. |
+| #707 | Explore's policy read every Claude Code transcript's head and tail on the duplicate search's critical path. Done: the declaration reads each transcript's first lines only, a title is read only for a plan and only for what it offers, and a scope that cannot reach the conversations reads none of them. |
+| #696, #697 | Claude Code transcripts: read again every pass, and read 64 KiB at the tail to use about 15 KiB. #696 waits on a decision. |
 | #708 | The duplicate search lists hard-link names in series after identifying: an 18-36 s gap on a source tree. |
 | #709 | The x86 build is not large-address-aware: a duplicate search runs out of memory in 15 s. |
 | #737 | Every closed map appearance window and every Settings visit leaves its map alive, held by native references the collector cannot see. `type: bug`. Done: the tracker and every dispatcher timer hold their owners weakly, the window binds nothing and takes its handlers off as it closes. After 5 opens and closes of the window and 5 Settings visits, a heap dump once finalisers had run held no `MapAppearanceWindow`, `MapPreview` or `SettingsPage`, and only Explore's own `ExploreMap`. |
