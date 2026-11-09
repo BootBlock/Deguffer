@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using Deguffer.Core.Duplicates;
 using Deguffer.Core.Exploring;
@@ -250,6 +251,41 @@ public sealed class DuplicateIdentityTests : IDisposable
     }
 
     /// <summary>
+    /// A file identified early for its time is in the tree's grouping too, and is not asked about
+    /// again: a file gone by the second asking would be counted as gone, and each asking is an open.
+    /// </summary>
+    [Fact]
+    public async Task AFileIdentifiedForItsTimeIsNotIdentifiedAgain()
+    {
+        var instant = new DateTime(2026, 3, 14, 15, 9, 26, DateTimeKind.Utc).AddTicks(5_358_979);
+        File.SetLastWriteTimeUtc(_tree.File(10, "Data", "a.bin"), instant);
+        File.SetLastWriteTimeUtc(_tree.File(20, "Data", "b.bin"), instant);
+        var directory = MftRecord.ReservedRecordCount;
+        var fixture = new MftFixture()
+            .AddDirectory(directory, MftRecord.RootRecordNumber, "Data")
+            .AddFileWithNoTimestamps(directory + 1, directory, "a.bin", logical: 10)
+            .AddFile(directory + 2, directory, "b.bin", allocated: 4096, logical: 20, lastWritten: instant);
+
+        ConcurrentDictionary<string, int> asked = new(StringComparer.Ordinal);
+        var counting = new FileInformation(
+            (path, use) =>
+            {
+                if (use is HandleUse.Describe)
+                {
+                    asked.AddOrUpdate(Path.GetFileName(LongPath.Display(path)), 1, (_, times) => times + 1);
+                }
+
+                return FileInformation.Open(path, use);
+            },
+            FileInformation.ReadIdentity);
+
+        Assert.Single(await IdentifyAsync(Walk(fixture, _tree.Top), MatchCriteria.Modified, counting));
+
+        Assert.Equal(1, asked["a.bin"]);
+        Assert.Equal(1, asked["b.bin"]);
+    }
+
+    /// <summary>
     /// Without an identity a file reached by two paths cannot be told from two copies, so a volume
     /// where none can be had is not searched, and every location on it is named, a reference too.
     /// </summary>
@@ -386,7 +422,7 @@ public sealed class DuplicateIdentityTests : IDisposable
         var data = MftExploreRooting.Locate(tree, ["Data"]).Node!.Value;
 
         IdentifiedFile Identified(string name, FileAttributes attributes, int number) => new(
-            new FoundFile(tree, tree.ChildrenOf(data).ToArray().Single(child => tree.NameOf(child) == name), LocationRole.Search, IdentityRoute.FileId, DriveX),
+            new FoundFile(new FoundRoot(tree, IdentityRoute.FileId, DriveX), tree.ChildrenOf(data).ToArray().Single(child => tree.NameOf(child) == name), LocationRole.Search),
             new FileDescription(
                 new FileState(new FileIdentity(1, (UInt128)number), 100, 4096, 1, DateTime.UnixEpoch, DateTime.UnixEpoch, attributes, ReparseTag: 0),
                 Path.Combine(@"X:\Data", name)));
@@ -422,6 +458,6 @@ public sealed class DuplicateIdentityTests : IDisposable
         return walk.Found;
     }
 
-    private static Task<IReadOnlyList<CandidateGroup>> IdentifyAsync(IReadOnlyList<FoundFile> found, MatchCriteria criteria) =>
-        new CandidateIdentification(FileInformation.Default, criteria, new VolumeMediaCache(new FakeStorageQueries())).GroupAsync(found, progress: null, default);
+    private static Task<IReadOnlyList<CandidateGroup>> IdentifyAsync(IReadOnlyList<FoundFile> found, MatchCriteria criteria, FileInformation? files = null) =>
+        new CandidateIdentification(files ?? FileInformation.Default, criteria, new VolumeMediaCache(new FakeStorageQueries())).GroupAsync(found, progress: null, default);
 }
