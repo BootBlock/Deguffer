@@ -1,6 +1,6 @@
 # Stage 01: the device seam
 
-> **Status:** 🟢 ACTIVE — stage complete 2026-11-09, within the open plan in [00-overview.md](00-overview.md). Prerequisites: none.
+> **Status:** ✅ COMPLETE — 2026-11-09. Prerequisites: none.
 
 ## Touch points
 

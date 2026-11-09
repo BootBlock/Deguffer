@@ -1,6 +1,6 @@
 # Stage 05: elevation
 
-> **Status:** 🟢 ACTIVE — stage complete 2026-11-09, within the open plan in [00-overview.md](00-overview.md). Prerequisites: stage 04.
+> **Status:** ✅ COMPLETE — 2026-11-09. Prerequisites: stage 04.
 
 ## Touch points
 

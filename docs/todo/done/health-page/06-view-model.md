@@ -1,6 +1,6 @@
 # Stage 06: the view-model
 
-> **Status:** 🟢 ACTIVE — stage complete 2026-11-09, within the open plan in [00-overview.md](00-overview.md). Prerequisites: stage 05.
+> **Status:** ✅ COMPLETE — 2026-11-09. Prerequisites: stage 05.
 
 ## Touch points
 
