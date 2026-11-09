@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Deguffer.App.Shell;
 using Deguffer.Core.Diagnostics;
 using Deguffer.Testing;
@@ -5,9 +6,9 @@ using Deguffer.Testing;
 namespace Deguffer.App.Tests;
 
 /// <summary>
-/// How a fault in work queued on the dispatcher reaches <c>crash.log</c>. The callback is run directly
-/// rather than through a real queue, because a fault that escapes one ends the process, and the test
-/// host with it.
+/// How a fault in work queued on the dispatcher reaches <c>crash.log</c>, and how a timer's tick holds
+/// what it runs on. A faulting callback is run directly rather than through a real queue, because a
+/// fault that escapes one ends the process, and the test host with it.
 /// </summary>
 public sealed class DispatcherFaultsTests : IDisposable
 {
@@ -67,5 +68,65 @@ public sealed class DispatcherFaultsTests : IDisposable
 
         Assert.True(ran);
         Assert.False(File.Exists(_faults.FilePath));
+    }
+
+    [Fact]
+    public void ATimersOwnerIsCollectedWhileTheTimerLives()
+    {
+        // The timer is a native object that holds its handler as a root the collector cannot see past,
+        // so a handler that reached the owner kept it for the life of the process (#737).
+        var (timer, owner) = CompositionThread.Run(GuardedTimer);
+
+        Assert.True(Collector.Reclaims(owner));
+        GC.KeepAlive(timer);
+    }
+
+    [Fact]
+    public async Task ATickThatFindsItsOwnerGoneStopsTheTimer()
+    {
+        var (timer, owner) = CompositionThread.Run(GuardedTimer);
+
+        Assert.True(Collector.Reclaims(owner));
+
+        CompositionThread.Run(() =>
+        {
+            timer.Start();
+            return true;
+        });
+
+        await Eventually.HoldsAsync(() => !CompositionThread.Run(() => timer.IsRunning), "the timer stopped");
+    }
+
+    [Fact]
+    public void ACallbackThatCapturesIsRefused()
+    {
+        var ticks = 0;
+
+        var refused = CompositionThread.Run(() => Record.Exception(() =>
+            CompositionThread.Queue.CreateTimer().TickGuarded(new Owner(), _ => ticks++)));
+
+        Assert.IsType<ArgumentException>(refused);
+    }
+
+    /// <summary>
+    /// A repeating timer ticking on an owner nothing else holds. Not inlined, so nothing on the test's
+    /// own stack holds the owner.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static (Microsoft.UI.Dispatching.DispatcherQueueTimer Timer, WeakReference Owner) GuardedTimer()
+    {
+        var timer = CompositionThread.Queue.CreateTimer();
+        var owner = new Owner();
+
+        timer.Interval = TimeSpan.FromMilliseconds(1);
+        timer.IsRepeating = true;
+        timer.TickGuarded(owner, static owner => owner.Ticks++);
+
+        return (timer, new WeakReference(owner));
+    }
+
+    private sealed class Owner
+    {
+        public int Ticks;
     }
 }
