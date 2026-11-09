@@ -134,6 +134,12 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     /// </summary>
     public MapOrigin Origin => _origin.Origin;
 
+    /// <summary>
+    /// The compositor's tracker, for a test that holds it to show it does not keep this zoom alive
+    /// (#737). Nothing in the app reads it from outside.
+    /// </summary>
+    internal InteractionTracker Tracker => _tracker;
+
     /// <summary>The viewport on screen at this moment.</summary>
     public MapViewport Shown { get; private set; }
 

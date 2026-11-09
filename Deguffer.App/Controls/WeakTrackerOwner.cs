@@ -9,7 +9,7 @@ namespace Deguffer.App.Controls;
 /// <para>A tracker is a native object that holds its owner with a plain COM reference, which the
 /// collector treats as a root and which WinUI's reference tracking does not see. A map's
 /// <see cref="ExploreZoom"/> given to the tracker as its owner kept itself, and through its events the
-/// whole map, alive for the life of the process (#737). The tracker holds this instead, which reaches
+/// whole map, alive for the life of the process (#737). The tracker holds this, which reaches
 /// the zoom only weakly, so the zoom goes with the map that holds it. A report that arrives after it
 /// has gone is dropped: nothing is left to move.</para>
 /// </summary>

@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Deguffer.App.Controls;
+using Microsoft.UI.Composition.Interactions;
 
 namespace Deguffer.App.Tests;
 
@@ -14,7 +15,7 @@ public sealed class ExploreZoomRetentionTests
     [Fact]
     public async Task AZoomNothingHoldsIsCollectedWhileItsCameraAndTrackerLive()
     {
-        var (zoom, camera) = CompositionThread.Run(Build);
+        var (zoom, camera, tracker) = CompositionThread.Run(Build);
 
         // The tracker is handed the camera's bounds and the jump the resize asked for at the next
         // commit, so it is a live tracker, not a request still to be sent, that is asked to let go.
@@ -22,11 +23,12 @@ public sealed class ExploreZoomRetentionTests
 
         Assert.True(Collector.Reclaims(zoom));
         GC.KeepAlive(camera);
+        GC.KeepAlive(tracker);
     }
 
     /// <summary>Not inlined, so nothing on the test's own stack holds the zoom.</summary>
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static (WeakReference Zoom, MapCamera Camera) Build()
+    private static (WeakReference Zoom, MapCamera Camera, InteractionTracker Tracker) Build()
     {
         var compositor = CompositionThread.Compositor;
         var camera = new MapCamera(compositor);
@@ -34,6 +36,6 @@ public sealed class ExploreZoomRetentionTests
 
         zoom.Resize(800, 600);
 
-        return (new WeakReference(zoom), camera);
+        return (new WeakReference(zoom), camera, zoom.Tracker);
     }
 }
