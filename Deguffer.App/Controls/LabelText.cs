@@ -1,6 +1,4 @@
 using Deguffer.Core.Configuration;
-using Microsoft.Graphics.Canvas;
-using Microsoft.Graphics.Canvas.Text;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -18,30 +16,21 @@ namespace Deguffer.App.Controls;
 ///
 /// <para>An image for SpaceMonger's because its type is drawn without smoothing, pixel for pixel, and
 /// a text block cannot be asked to draw without it. Win2D can, through the drawing session it draws
-/// the text with. The image is drawn again only when the text, its size or its colour changes.</para>
+/// the text with: see <see cref="ClassicName{TImage}"/>.</para>
 /// </summary>
 internal sealed class LabelText
 {
-    /// <summary>SpaceMonger's type: its own bitmap font is one DirectWrite cannot draw, and this is the outline font Windows ships in its place.</summary>
-    private const string ClassicFont = "Microsoft Sans Serif";
-
-    /// <summary>SpaceMonger's 8 point type, in device-independent pixels.</summary>
-    private const float ClassicSize = 11;
-
-    /// <summary>How far down a line of the classic type its baseline is, as a fraction of the line's height.</summary>
-    private const float ClassicBaseline = 0.8f;
-
     private readonly TextBlock _block;
 
     private readonly Image _image;
 
-    private CanvasImageSource? _source;
+    private readonly ClassicName<CanvasImageSource> _classic;
 
-    /// <summary>What the image was last drawn with, so it is drawn again only when that changes, or when its contents are lost.</summary>
-    private (string Text, float Width, float Height, float Spacing, bool Centred, Color Colour, double Scale)? _drawn;
-
-    public LabelText()
+    /// <summary>A name whose SpaceMonger lettering is drawn through <paramref name="device"/>, the map's own.</summary>
+    public LabelText(CompositionDevice device)
     {
+        _classic = new ClassicName<CanvasImageSource>(device, ImageSourceCanvas.Instance);
+
         _block = new TextBlock
         {
             FontSize = 12,
@@ -96,11 +85,8 @@ internal sealed class LabelText
     /// <summary>Draw the image again from what it was last drawn with, for a device that lost its contents.</summary>
     public void Redraw()
     {
-        if (_drawn is { } drawn)
-        {
-            _drawn = null;
-            Draw(drawn.Text, drawn.Width, drawn.Centred, drawn.Colour, drawn.Spacing, drawn.Scale);
-        }
+        _classic.Redraw();
+        Show();
     }
 
     private Size Set(string text, double room, Color colour)
@@ -119,56 +105,21 @@ internal sealed class LabelText
 
     private Size Draw(string text, float room, bool centred, Color colour, float spacing, double scale)
     {
-        var device = CanvasDevice.GetSharedDevice();
-        var lines = text.Length == 0 ? 0 : text.Count(c => c == '\n') + 1;
+        var size = _classic.Draw(text, room, centred, colour, spacing, scale);
 
-        using var format = new CanvasTextFormat
+        Show();
+        _image.Width = size.Width;
+        _image.Height = size.Height;
+
+        return size;
+    }
+
+    /// <summary>Show the image the name is drawn into now, which a replaced device makes anew.</summary>
+    private void Show()
+    {
+        if (!ReferenceEquals(_image.Source, _classic.Image))
         {
-            FontFamily = ClassicFont,
-            FontSize = ClassicSize,
-            WordWrapping = CanvasWordWrapping.NoWrap,
-            LineSpacingMode = CanvasLineSpacingMode.Uniform,
-            LineSpacing = spacing,
-            LineSpacingBaseline = spacing * ClassicBaseline,
-        };
-
-        float natural;
-
-        using (var measuring = new CanvasTextLayout(device, text, format, float.MaxValue, float.MaxValue))
-        {
-            natural = (float)Math.Ceiling(measuring.LayoutBounds.Width);
+            _image.Source = _classic.Image;
         }
-
-        // Centred in its box where it fits; where it does not, from the box's left, cut off at its
-        // right, as SpaceMonger writes a name too long for its box.
-        var fits = natural <= room;
-        var width = Math.Max(1, fits ? natural : room);
-        var height = Math.Max(1, lines * spacing);
-
-        format.HorizontalAlignment = centred && fits ? CanvasHorizontalAlignment.Center : CanvasHorizontalAlignment.Left;
-
-        var wanted = (text, width, height, spacing, centred, colour, scale);
-
-        if (_drawn != wanted)
-        {
-            if (_source is null || _source.Size.Width != width || _source.Size.Height != height || _source.Dpi != 96 * (float)scale)
-            {
-                _source = new CanvasImageSource(device, width, height, 96 * (float)scale);
-                _image.Source = _source;
-            }
-
-            using var layout = new CanvasTextLayout(device, text, format, width, height);
-            using var session = _source.CreateDrawingSession(Microsoft.UI.Colors.Transparent);
-
-            session.TextAntialiasing = CanvasTextAntialiasing.Aliased;
-            session.DrawTextLayout(layout, 0, 0, colour);
-
-            _drawn = wanted;
-        }
-
-        _image.Width = width;
-        _image.Height = height;
-
-        return new Size(width, height);
     }
 }
