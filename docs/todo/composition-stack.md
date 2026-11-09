@@ -514,6 +514,17 @@ and minimised included.
   point far from the edge it pulls away from, which only live bounds hold: with the expressions not
   started again, the same zoom left a gap past the right and bottom of the picture. A pinch was not
   injected.
+- **Driven after it landed, with a touch pinch injected through `InjectTouchInput`** on one machine and the
+  fixture folder, from a pinch in at a corner where the picture's edges sat on the map's and a pinch out
+  about the far top-left corner, the right edge sampled every 4-10 ms. The start of the pinch showed no jump.
+  A pinch out past the fitted picture shrinks it under the hand, 823 px clear of the right edge at its
+  widest, and it springs back as the fingers lift. The build from before this change gave the same run of
+  gaps at the same times, so that is the tracker's stretch under a hand and not the pinned bounds. The rest
+  was on the map's edges, and the map at rest spent 0.06-0.13 s of the process in 30 s with no time on the
+  compositor thread, though the older build showed none either in these samples, so they do not compare the
+  two: the 60 s rounds above do. With animation effects off, the Ctrl+wheel zooms and the pinches both ended on the edges,
+  and no frame of the pinch out showed a gap. A Ctrl+wheel zoom reaches the tracker's coast directly and a
+  pinch reaches it through the tracker's hand state, so the two share `TakenByHand` and not the way there.
 - **The UI thread cannot see an expression on a bound.** `TryGetAnimationController` is null for one,
   and the property reads back its last written value. A value written over a running expression ends
   it: with the `StopAnimation` calls removed the compositor thread still did no work at rest.
