@@ -375,7 +375,7 @@ scan leaves about 600 MB committed (#738), and Classic names draw through a seco
 | #708 | The duplicate search lists hard-link names in series after identifying: an 18-36 s gap on a source tree. |
 | #709 | The x86 build is not large-address-aware: a duplicate search runs out of memory in 15 s. |
 | #737 | Every closed map appearance window and every Settings visit leaves its map alive, held by native references the collector cannot see. `type: bug`. Done: the tracker and every dispatcher timer hold their owners weakly, the window binds nothing and takes its handlers off as it closes. After 5 opens and closes of the window and 5 Settings visits, a heap dump once finalisers had run held no `MapAppearanceWindow`, `MapPreview` or `SettingsPage`, and only Explore's own `ExploreMap`. |
-| #739 | After the first map, the camera's bounds and tracking keep the compositor recalculating every frame: 5.4-12.7 s of processor time a minute on an idle page, about 0.2 s without. Waits on a decision. |
+| #739 | After the first map, the camera's bounds and tracking keep the compositor recalculating every frame: 5.4-12.7 s of processor time a minute on an idle page, about 0.2 s without. Done: the bounds are pinned while the tracker rests ([composition-stack.md](composition-stack.md#what-landing-739-found)). |
 | #740 | A covered About page holds about one core (52-62 s a minute). Waits on a decision. |
 | #741 | Classic names draw through a second Direct3D device: about 53 driver threads and 74 MB of GPU memory for the life of the process. Done: each name is drawn through the map's own device, and drawn again on the device that replaces a lost one. After Settings draws its map preview, Classic lettering runs 126 threads against 127 for Standard, where it ran 179. |
 | #738 | A scan leaves about 600 MB committed: one collection at idle takes it from 946 to 338 MB. The structural part waits on a decision. |
@@ -402,7 +402,7 @@ scan leaves about 600 MB committed (#738), and Classic names draw through a seco
 | #699 | Ask Disk Cleanup's handler for emptiness without its full measure, or take Windows.old's size from the scanner. `safety`. |
 | #702 | The Classic names' look against their cost: two expressions and an image source per name. |
 | #738 | Who owns an `ExploreTree`'s arrays, so that snapshots can share and hand back column buffers instead of allocating new ones. |
-| #739 | Static bounds while the tracker rests: whether a pinch's first frames against the bounds from before it started are invisible. |
+| #739 | Static bounds while the tracker rests: whether a pinch's first frames against the bounds from before it started are invisible. Decided: pinned wide enough for any scale it rests at, so those frames are free rather than held. |
 | #740 | Which signal says a window is covered: its activation state, or a DWM cloak or occlusion signal. |
 | #743 | 35 MB of download and disk against about 65 ms of start-up. |
 

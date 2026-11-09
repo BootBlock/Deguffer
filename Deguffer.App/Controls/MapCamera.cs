@@ -41,6 +41,15 @@ internal sealed class MapCamera
     /// <summary>The least magnification <see cref="Unmagnified"/> divides by, so a picture shrunk to nothing divides by no zero.</summary>
     private const string LeastMagnification = "0.0001";
 
+    /// <summary>
+    /// How many times the <see cref="Ceiling"/> the bounds pinned at rest are worked out for (see
+    /// <see cref="PinBounds"/>). The tracker can rest at the ceiling against an edge, where bounds for
+    /// exactly that scale, worked out here in double precision, could fall a rounding error inside where
+    /// the compositor held it in single precision. Twice the scale puts the far bound a screen or more
+    /// past it, since the origin is always a screen's corner, and doubles the near one.
+    /// </summary>
+    private const double PinnedScales = 2;
+
     private readonly Compositor _compositor;
 
     /// <summary>The batch a spring back is played in, until it ends, so a press can tell it is on.</summary>
@@ -48,6 +57,17 @@ internal sealed class MapCamera
 
     /// <summary>The origin the camera is measured from, which the tracker's bounds settle on.</summary>
     private MapOrigin _origin;
+
+    /// <summary>The origin before, which the tracker's bounds still take in until <see cref="Settle"/>.</summary>
+    private MapOrigin _former;
+
+    /// <summary>The map's size and the zoom's ceiling, as the property set has them, for the bounds pinned at rest.</summary>
+    private (double Width, double Height) _size;
+
+    private double _ceiling;
+
+    /// <summary>The tracker <see cref="Bound"/> keeps inside the picture, and its bounds as expressions of its scale.</summary>
+    private (InteractionTracker Tracker, ExpressionAnimation Least, ExpressionAnimation Most)? _bounds;
 
     private readonly ExpressionAnimation _scale;
 
@@ -79,16 +99,31 @@ internal sealed class MapCamera
     /// </summary>
     public CompositionPropertySet Properties { get; }
 
+    /// <summary>
+    /// Whether the tracker's bounds are pinned for a tracker at rest, rather than following its scale.
+    /// See <see cref="PinBounds"/>.
+    /// </summary>
+    public bool BoundsPinned { get; private set; }
+
     /// <summary>Hand the expressions the map's size, which the tracker's bounds are worked out from.</summary>
-    public void Resize(double width, double height) =>
+    public void Resize(double width, double height)
+    {
+        _size = (width, height);
         Properties.InsertVector2(nameof(Visual.Size), new Vector2((float)width, (float)height));
+        Repin();
+    }
 
     /// <summary>
     /// Hold the zoom to <paramref name="ceiling"/> from now on, where the camera holds it at all: see
     /// <see cref="Track"/>. Read by the expression rather than written into it, so the ceiling moves
     /// with each drawing without the camera being started again.
     /// </summary>
-    public void Limit(double ceiling) => Properties.InsertScalar(Ceiling, (float)ceiling);
+    public void Limit(double ceiling)
+    {
+        _ceiling = ceiling;
+        Properties.InsertScalar(Ceiling, (float)ceiling);
+        Repin();
+    }
 
     /// <summary>
     /// Put the whole picture where <paramref name="tracker"/> holds it, from now on.
@@ -123,6 +158,7 @@ internal sealed class MapCamera
     /// Keep <paramref name="tracker"/> inside the picture from now on, at whatever scale it is: its
     /// position goes from the picture's near edges to where its far edges meet the screen's, measured
     /// from the camera's origin, by <see cref="MapOrigin.Least{T}"/> and <see cref="MapOrigin.Most{T}"/>.
+    /// It starts at rest, with the bounds pinned (see <see cref="PinBounds"/>).
     ///
     /// <para>While the origin moves the bounds take in both the old origin's and the new one's, so the
     /// tracker is inside them whichever of the two it is measured from at that moment: the bounds and
@@ -134,8 +170,8 @@ internal sealed class MapCamera
         var least = Expression($"Vector3({Least("X")}, {Least("Y")}, 0)", tracker);
         var most = Expression($"Vector3({Most("X")}, {Most("Y")}, 0)", tracker);
 
-        tracker.StartAnimation(nameof(InteractionTracker.MinPosition), least);
-        tracker.StartAnimation(nameof(InteractionTracker.MaxPosition), most);
+        _bounds = (tracker, least, most);
+        PinBounds();
 
         static ExpressionScalar Least(string axis) => ExpressionScalar.Min(
             MapOrigin.Least(Camera($"{Near}.{axis}"), TrackerScale, Camera($"Size.{axis}")),
@@ -147,6 +183,67 @@ internal sealed class MapCamera
     }
 
     /// <summary>
+    /// The tracker is at rest: its bounds stop following its scale, and hold every position it can take
+    /// at any scale up to <see cref="PinnedScales"/> times the ceiling, until <see cref="UnpinBounds"/>.
+    /// A change to what they are worked out from pins them again where it is.
+    ///
+    /// <para>Bounds that are an expression of the tracker's own scale have the compositor work the
+    /// tracker out again at every frame, and with it everything that reads it: the camera, and every
+    /// name, outline and frame that follows the camera. Nothing ever stops that while the expressions
+    /// run, off screen and minimised included. Pinned wider than any scale the tracker rests at, the
+    /// bounds never move a tracker at rest, and they leave the first frames of a hand that takes it,
+    /// before <see cref="UnpinBounds"/> reaches the compositor, free rather than held by the wrong
+    /// scale.</para>
+    /// </summary>
+    public void PinBounds()
+    {
+        if (BoundsPinned || _bounds is not { } bounds)
+        {
+            return;
+        }
+
+        bounds.Tracker.StopAnimation(nameof(InteractionTracker.MinPosition));
+        bounds.Tracker.StopAnimation(nameof(InteractionTracker.MaxPosition));
+        BoundsPinned = true;
+        Repin();
+    }
+
+    /// <summary>
+    /// The tracker is about to move by itself, under a hand or through a glide or a fling: its bounds
+    /// follow its scale again, until <see cref="PinBounds"/>.
+    /// </summary>
+    public void UnpinBounds()
+    {
+        if (!BoundsPinned || _bounds is not { } bounds)
+        {
+            return;
+        }
+
+        BoundsPinned = false;
+        bounds.Tracker.StartAnimation(nameof(InteractionTracker.MinPosition), bounds.Least);
+        bounds.Tracker.StartAnimation(nameof(InteractionTracker.MaxPosition), bounds.Most);
+    }
+
+    /// <summary>Write the pinned bounds afresh from what they are worked out from, where they are pinned.</summary>
+    private void Repin()
+    {
+        if (!BoundsPinned || _bounds is not { } bounds)
+        {
+            return;
+        }
+
+        var scale = PinnedScales * _ceiling;
+        var across = Widest(_origin.Across(scale, _size.Width), _former.Across(scale, _size.Width));
+        var down = Widest(_origin.Down(scale, _size.Height), _former.Down(scale, _size.Height));
+
+        bounds.Tracker.MinPosition = new Vector3((float)across.Least, (float)down.Least, 0);
+        bounds.Tracker.MaxPosition = new Vector3((float)across.Most, (float)down.Most, 0);
+
+        static (double Least, double Most) Widest((double Least, double Most) one, (double Least, double Most) other) =>
+            (Math.Min(one.Least, other.Least), Math.Max(one.Most, other.Most));
+    }
+
+    /// <summary>
     /// Measure from <paramref name="origin"/> from now on. The tracker's bounds still take in the
     /// origin before it until <see cref="Settle"/>.
     /// </summary>
@@ -154,10 +251,16 @@ internal sealed class MapCamera
     {
         _origin = origin;
         Measure(Near, Far, origin);
+        Repin();
     }
 
     /// <summary>The tracker is measured from the camera's origin now: its bounds are that origin's alone.</summary>
-    public void Settle() => Measure(FormerNear, FormerFar, _origin);
+    public void Settle()
+    {
+        _former = _origin;
+        Measure(FormerNear, FormerFar, _origin);
+        Repin();
+    }
 
     /// <summary>
     /// Write <paramref name="origin"/> into <paramref name="near"/>, and what is left of the picture

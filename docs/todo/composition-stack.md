@@ -486,6 +486,38 @@ draw from one view's shape to the other's, while the two drawings crossfade unde
   and sunburst to treemap each showed 22 to 26 distinct frames over about 460 ms, and three with
   animation effects off.
 
+## What landing #739 found
+
+The tracker's bounds were expressions of its own scale, and the camera's scale and offset are
+expressions of the tracker. With both running, the compositor worked the tracker, the camera and
+everything that follows the camera out again at every frame, for the life of the process, off screen
+and minimised included.
+
+- **The bounds are pinned while the tracker is at rest.** They follow its scale only from a hand
+  taking it, or a glide or a fling the map asks for, until the tracker reports its rest
+  (`MapTrackerRest`). A jump, a drag's step, a halt and a move of the origin only put the tracker
+  somewhere: from rest it reports no new rest, so they never unpin the bounds.
+- **The pinned bounds are wide, not exact.** They hold every position the tracker can take at any
+  scale up to twice the ceiling. A tracker at rest is a screen or more inside the far bounds, and the
+  near bounds are doubled, or zero in both precisions where the origin is at that edge, so a rounding
+  error between double and single precision cannot make it spring back by itself, which the map
+  would hear as a hand. A hand's first frames, before the expressions reach the compositor, are free
+  rather than held by the scale it rested at.
+- **A change to what they are worked out from pins them again**: the size, the ceiling, and each
+  step of a move of the origin.
+- **Measured** on one shared machine, a 60 s round on Storage after Explore, two rounds of each build:
+  the compositor thread (priority 15) spent 4.1-4.8 s a minute before, visible and minimised alike,
+  and nothing after. The whole process spent 0.08-0.19 s a minute after. A treemap at rest after a
+  Ctrl+wheel zoom, a glide and a drag past an edge spent nothing in 30 s.
+- **Driven:** Ctrl+wheel in and out at a corner, a plain wheel glide, and a drag past the top-left
+  edge each ended with the picture's edges on the map's edges. So did a Ctrl+wheel zoom out about a
+  point far from the edge it pulls away from, which only live bounds hold: with the expressions not
+  started again, the same zoom left a gap past the right and bottom of the picture. A pinch was not
+  injected.
+- **The UI thread cannot see an expression on a bound.** `TryGetAnimationController` is null for one,
+  and the property reads back its last written value. A value written over a running expression ends
+  it: with the `StopAnimation` calls removed the compositor thread still did no work at rest.
+
 ## Still open
 
 The Win2D package's licence, open here until #274, was cleared by the maintainer.
