@@ -11,6 +11,11 @@ namespace Deguffer.App.Tests;
 /// process runs, so at rest they are pinned: wide enough for any scale it rests at, and written afresh
 /// whenever what they are worked out from changes, or a resize or a move of the origin would leave the
 /// tracker outside them and it would spring back by itself.
+///
+/// <para>Whether an expression is attached to a bound cannot be read from the UI thread, so these test
+/// what the camera writes and which state it is in. That the expressions stop at rest and start again
+/// under a hand is observed in the running app, by the compositor thread's work and by the picture's
+/// edges (composition-stack.md, "What landing #739 found").</para>
 /// </summary>
 public sealed class MapCameraBoundsTests
 {
