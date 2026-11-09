@@ -13,13 +13,16 @@ namespace Deguffer.Core.Duplicates;
 /// The volume they were found on: the location's, as the search resolved it, because the enumeration
 /// of a location never crosses into a volume mounted in one of its folders.
 /// </param>
-internal sealed class FoundRoot(ExploreTree tree, IdentityRoute route, LocalVolume volume)
+/// <param name="folder">Where the location really is, in display form, as the search resolved it.</param>
+internal sealed class FoundRoot(ExploreTree tree, IdentityRoute route, LocalVolume volume, string folder)
 {
     public ExploreTree Tree { get; } = tree;
 
     public IdentityRoute Route { get; } = route;
 
     public LocalVolume Volume { get; } = volume;
+
+    public string Folder { get; } = folder;
 }
 
 /// <summary>

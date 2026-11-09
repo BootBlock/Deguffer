@@ -72,7 +72,7 @@ internal sealed class CandidateWalk
         CancellationToken ct)
     {
         var tree = scan.Tree;
-        var found = new FoundRoot(tree, route, root.Volume);
+        var found = new FoundRoot(tree, route, root.Volume, root.Folder);
 
         if (scan.FromIncompleteTable)
         {

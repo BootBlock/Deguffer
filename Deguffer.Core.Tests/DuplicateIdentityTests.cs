@@ -422,19 +422,19 @@ public sealed class DuplicateIdentityTests : IDisposable
         var data = MftExploreRooting.Locate(tree, ["Data"]).Node!.Value;
 
         IdentifiedFile Identified(string name, FileAttributes attributes, int number) => new(
-            new FoundFile(new FoundRoot(tree, IdentityRoute.FileId, DriveX), tree.ChildrenOf(data).ToArray().Single(child => tree.NameOf(child) == name), LocationRole.Search),
+            new FoundFile(new FoundRoot(tree, IdentityRoute.FileId, DriveX, @"X:\Data"), tree.ChildrenOf(data).ToArray().Single(child => tree.NameOf(child) == name), LocationRole.Search),
             new FileDescription(
                 new FileState(new FileIdentity(1, (UInt128)number), 100, 4096, 1, DateTime.UnixEpoch, DateTime.UnixEpoch, attributes, ReparseTag: 0),
                 Path.Combine(@"X:\Data", name)));
 
-        var files = Assert.Single(CandidateGrouping.ByTheFiles(
+        var group = Assert.Single(CandidateGrouping.ByTheFiles(
             [
                 Identified("went.bin", FileAttributes.Offline, 1),
                 Identified("came.bin", FileAttributes.Normal, 2),
                 Identified("packed.bin", FileAttributes.Normal, 3),
             ],
-            MatchCriteria.Size,
-            _ => [])).Files;
+            MatchCriteria.Size));
+        var files = CandidateGrouping.WithNames(group, _ => []).Files;
 
         Assert.Equal(FileStorage.CloudOnly, files.Single(file => file.Name == "went.bin").Storage);
         Assert.Equal(FileStorage.Plain, files.Single(file => file.Name == "came.bin").Storage);
