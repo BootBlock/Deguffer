@@ -1,11 +1,10 @@
 using System.Runtime.InteropServices;
 using Deguffer.Core.Safety;
-using Microsoft.Win32.SafeHandles;
 
 namespace Deguffer.Core.Scanning.Media;
 
 /// <inheritdoc />
-public sealed partial class StorageQueries : IStorageQueries
+public sealed class StorageQueries : IStorageQueries
 {
     /// <summary>The one instance the app runs with (G5). It holds nothing between calls.</summary>
     public static readonly StorageQueries Machine = new();
@@ -16,17 +15,8 @@ public sealed partial class StorageQueries : IStorageQueries
     /// </summary>
     private const uint VolumeGetVolumeDiskExtents = 0x0056_0000;
 
-    /// <summary><c>CTL_CODE(IOCTL_STORAGE_BASE, 0x500, METHOD_BUFFERED, FILE_ANY_ACCESS)</c>.</summary>
-    private const uint StorageQueryProperty = 0x002D_1400;
-
     private const int StorageAdapterProperty = 1;
     private const int StorageDeviceSeekPenaltyProperty = 7;
-
-    /// <summary>
-    /// <c>STORAGE_PROPERTY_QUERY</c>: the property, <c>PropertyStandardQuery</c> (0), and one byte of
-    /// additional parameters, padded to 12.
-    /// </summary>
-    private const int PropertyQueryBytes = 12;
 
     /// <summary>
     /// Room for four extents, which every simple volume and most spanned ones fit. A volume with
@@ -40,9 +30,6 @@ public sealed partial class StorageQueries : IStorageQueries
     /// </summary>
     private const int DescriptorBytes = 64;
 
-    private const uint FileShareRead = 0x0000_0001;
-    private const uint FileShareWrite = 0x0000_0002;
-    private const uint OpenExisting = 3;
     private const int ErrorMoreData = 234;
 
     private StorageQueries()
@@ -60,7 +47,7 @@ public sealed partial class StorageQueries : IStorageQueries
 
         // The trailing separator names the volume's root directory. Without it the name opens the
         // volume device, which is what the query is sent to.
-        using var volume = Open(volumeName.TrimEnd('\\'));
+        using var volume = DeviceCalls.Open(volumeName.TrimEnd('\\'));
 
         if (volume.IsInvalid)
         {
@@ -68,12 +55,12 @@ public sealed partial class StorageQueries : IStorageQueries
         }
 
         var first = new byte[FirstExtentsBytes];
-        var answer = Query(volume, VolumeGetVolumeDiskExtents, [], first);
+        var answer = DeviceCalls.Query(volume, VolumeGetVolumeDiskExtents, [], first);
 
         // The header is written even when the extents do not fit, so the count it declares sizes the
         // retry. A retry that does not fit either fails like any other query.
         return answer.Win32Error == ErrorMoreData && StorageDescriptors.TryReadExtentCount(first, out var count)
-            ? Query(volume, VolumeGetVolumeDiskExtents, [], new byte[StorageDescriptors.ExtentsHeaderBytes + (count * StorageDescriptors.ExtentBytes)])
+            ? DeviceCalls.Query(volume, VolumeGetVolumeDiskExtents, [], new byte[StorageDescriptors.ExtentsHeaderBytes + (count * StorageDescriptors.ExtentBytes)])
             : answer;
     }
 
@@ -83,69 +70,10 @@ public sealed partial class StorageQueries : IStorageQueries
 
     private static StorageAnswer Property(int disk, int property)
     {
-        using var device = Open($@"\\.\PhysicalDrive{disk}");
+        using var device = DeviceCalls.Open(DeviceCalls.DiskName(disk));
 
-        if (device.IsInvalid)
-        {
-            return StorageAnswer.Failed(Marshal.GetLastPInvokeError());
-        }
-
-        var query = new byte[PropertyQueryBytes];
-        BitConverter.TryWriteBytes(query, property);
-
-        return Query(device, StorageQueryProperty, query, new byte[DescriptorBytes]);
+        return device.IsInvalid
+            ? StorageAnswer.Failed(Marshal.GetLastPInvokeError())
+            : DeviceCalls.Query(device, DeviceCalls.StorageQueryProperty, DeviceCalls.PropertyQuery(property), new byte[DescriptorBytes]);
     }
-
-    /// <summary>
-    /// No access rights requested, which is enough for both queries (they are
-    /// <c>FILE_ANY_ACCESS</c>) and needs no administrator. Shared for reading and writing, because
-    /// the system volume and its disk are always open for both.
-    /// </summary>
-    private static SafeFileHandle Open(string device) =>
-        CreateFile(device, 0, FileShareRead | FileShareWrite, nint.Zero, OpenExisting, 0, nint.Zero);
-
-    /// <summary>
-    /// Sends <paramref name="code"/> and returns what the driver wrote into
-    /// <paramref name="output"/>, cut to the length it reported, or the error alone. A failure never
-    /// carries bytes, because bytes a driver did not finish writing read as zeroes, and a zero is an
-    /// answer to every field read here.
-    /// </summary>
-    private static unsafe StorageAnswer Query(SafeFileHandle device, uint code, byte[] input, byte[] output)
-    {
-        bool answered;
-        uint written;
-
-        fixed (byte* inputPointer = input)
-        fixed (byte* outputPointer = output)
-        {
-            answered = DeviceIoControl(
-                device, code, inputPointer, (uint)input.Length, outputPointer, (uint)output.Length, out written, nint.Zero);
-        }
-
-        return answered
-            ? StorageAnswer.Answered(output[..(int)written])
-            : StorageAnswer.Failed(Marshal.GetLastPInvokeError());
-    }
-
-    [LibraryImport("kernel32.dll", EntryPoint = "CreateFileW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
-    private static partial SafeFileHandle CreateFile(
-        string fileName,
-        uint desiredAccess,
-        uint shareMode,
-        nint securityAttributes,
-        uint creationDisposition,
-        uint flagsAndAttributes,
-        nint templateFile);
-
-    [LibraryImport("kernel32.dll", EntryPoint = "DeviceIoControl", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static unsafe partial bool DeviceIoControl(
-        SafeFileHandle device,
-        uint ioControlCode,
-        byte* inBuffer,
-        uint inBufferSize,
-        byte* outBuffer,
-        uint outBufferSize,
-        out uint bytesReturned,
-        nint overlapped);
 }

@@ -47,6 +47,20 @@ public sealed class ElevationRequestTests
     }
 
     [Fact]
+    public void AHealthRequestComesBackAsOne()
+    {
+        Assert.Equal(["--health"], ElevationRequest.Health.ToArguments());
+        Assert.IsType<HealthRequest>(ElevationRequest.From(ElevationRequest.Health.ToArguments()));
+    }
+
+    [Fact]
+    public void HealthWinsOverAPreviewAndLosesToStartup()
+    {
+        Assert.IsType<HealthRequest>(ElevationRequest.From(["--rescan", "--health"]));
+        Assert.IsType<StartupRequest>(ElevationRequest.From(["--health", "--startup"]));
+    }
+
+    [Fact]
     public void StartupWinsOverAPreviewAndLosesToInstalledApps()
     {
         Assert.IsType<StartupRequest>(ElevationRequest.From(["--rescan", "--startup"]));

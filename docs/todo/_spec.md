@@ -14,7 +14,8 @@ the user. It also shows where the machine's memory goes, and its one action ther
 to close itself (§7.2), it clears Windows' list of installed programs of entries for programs that
 are gone (§7.3), it finds the files that are on the disk more than once and removes the copies a
 user marks, never the last one (§7.4), and it lists what starts at sign-in and stops an entry
-starting the way Task Manager does, without removing it (§7.5).
+starting the way Task Manager does, without removing it (§7.5), and it shows what each drive
+reports about its own condition, in plain words, without changing anything on it (§7.6).
 
 ## The name
 
@@ -79,8 +80,13 @@ in a few minutes, without touching a single piece of user data.
 - **Show what starts at sign-in**, beside the memory each program uses now, and stop an entry
   starting the way Task Manager does, by recording the user's choice and leaving the entry alone.
   See §7.5.
+- **Show what each drive reports about its own condition**, in plain words with the numbers behind
+  them, reading only. See §7.6.
 
 **Non-goals**
+
+- Not a disk repair or maintenance tool. Health (§7.6) reads what a drive reports. It never starts a
+  self-test, changes a SMART setting, or sends a drive anything that could change it.
 
 - Not an uninstaller. Installed apps (§7.3) removes entries Windows lists for programs that are
   gone, and for a program that is still there it runs that program's own uninstaller. Deguffer
@@ -1469,6 +1475,65 @@ where it is.
 - No replacement of a `StartupApproved` value in a form not measured.
 - Nothing ordered, offered or recommended by memory use (§2).
 - No elevation asked for to read the list. Unelevated, every source here reads.
+
+---
+
+### 7.6 Health — what each drive reports about itself
+
+Every other page asks what is on a drive. **Health answers "what state is the drive in", from what
+each drive reports about itself, in plain words, with the numbers behind them.** It reads and
+explains. It changes nothing on any drive, and it deletes nothing.
+
+[health-page/00-overview.md](health-page/00-overview.md) records what was measured.
+
+**What is read**
+
+- **Every physical disk Windows lists and numbers**, found through its disk device interfaces and not by
+  counting disk numbers, which can have gaps.
+- **NVMe drives:** the health log, Identify Controller and the self-test log.
+- **SATA and ATA drives:** the drive's own failure prediction and its attribute table, and with
+  administrator rights its failure thresholds, IDENTIFY data, error log count and latest self-test.
+- **Any other connection** (USB, RAID, Storage Spaces, virtual): the drive's details and one
+  sentence saying Windows does not report its health that way.
+
+**What is never sent**
+
+- Everything Health asks a drive about its condition is a request in `DriveRequests`, and all of them
+  read. Which disk holds a volume comes from the existing `StorageQueries`. A test decodes each
+  one. Health never starts a self-test, turns SMART on or off, or sends a vendor command.
+- A handle with write rights is opened only because Windows demands it before passing an ATA read
+  command, and a test holds it to the one type allowed it.
+
+**When it reads**
+
+- Nothing asks a drive anything until the reader opens Health for the first time. The page is then
+  kept: its rows and selection survive a move to another page and back, without a second read.
+- It reads again only when asked. There is no polling, because a read can wake a sleeping disk.
+- Drives are listed first and filled in as each one answers. A drive gets 30 seconds, then reads as
+  not answering. The listing and the volumes have the same limit. A device call cannot be interrupted,
+  so a drive still being asked is not asked again.
+- A read never holds the window open.
+
+**What it says**
+
+- Each reading gets one standing, Normal, Watch or Failing, and a sentence saying why. The drive's
+  verdict is the worst standing.
+- Good needs the drive's own overall signal, its failure prediction or its critical warnings.
+  Without that signal, the verdict is Unknown. Good reads "No problems reported" and never "healthy".
+- The page always says that drives can fail with no warning, and that backups are still needed.
+- An attribute whose meaning differs by manufacturer is shown as reported and judged by nothing
+  beyond the drive's own threshold, unless the manufacturer is named in `AtaVendorOverlay`.
+- A serial number appears on the page and nowhere else: no record prints it, and a drive's key is a hash.
+
+**Elevation**
+
+Elevation is offered only where a drive's reading was refused for want of administrator rights. A
+banner says more is shown as administrator, and the page's button is the same "Reopen as
+administrator" as the other pages. A machine where elevation would add nothing shows neither.
+
+**Not in scope**
+
+History over time, alerts, USB bridge pass-through, and any control over SMART.
 
 ---
 
