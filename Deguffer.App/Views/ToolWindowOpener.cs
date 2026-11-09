@@ -97,6 +97,13 @@ internal sealed class ToolWindowOpener
             _window?.Remember(isOpen: false);
         }
 
+        // Every handler on a closed window's own events is taken off, as the window takes off its own:
+        // the native window holds each as a root the collector cannot see past (#737).
+        if (_window is not null)
+        {
+            _window.Closed -= OnClosed;
+        }
+
         _window = null;
     }
 }
