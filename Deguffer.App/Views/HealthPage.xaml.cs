@@ -23,7 +23,7 @@ public sealed partial class HealthPage : Page
 
         // Assigned before InitializeComponent so no x:Bind evaluates against a null view-model.
         ViewModel = new HealthViewModel(
-            reader.List,
+            reader.ListAsync,
             reader.ReadAsync,
             ElevatedRelaunch.IsElevated,
             ElevatedRelaunch.TryRelaunch,

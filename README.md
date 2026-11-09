@@ -36,7 +36,7 @@ largest files inside it:
 
 ## What it does
 
-Besides Settings and About, Deguffer has six pages:
+Besides Settings and About, Deguffer has seven pages:
 
 - [Storage](#storage) checks 124 sources of waste, from package-manager and browser caches to
   `Windows.old` and old restore points, and puts each one in a [safety tier](#safety-tiers). You
@@ -410,8 +410,8 @@ no warning, so keep backups whatever this page says.
 
 The page reads nothing until you open it, and it reads again only when you press Refresh, because a
 read can wake a sleeping disk. Everything it sends a drive is a read: it never starts a self-test or
-changes a setting. NVMe drives report everything without administrator rights. For a SATA drive,
-restarting as administrator adds its failure limits, link speed, self-test history and error log,
+changes a setting. The NVMe drives it was tried on gave everything without administrator rights. For a SATA drive,
+restarting as administrator adds its failure limits, link speed, latest self-test and error count,
 and a banner says so where it applies. Windows does not report the health of drives on USB, RAID or
 Storage Spaces in this way, so those show only their details.
 

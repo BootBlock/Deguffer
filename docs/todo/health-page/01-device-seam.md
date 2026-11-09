@@ -1,6 +1,6 @@
 # Stage 01: the device seam
 
-> **Status:** 🟢 ACTIVE — in progress. Prerequisites: none.
+> **Status:** 🟢 ACTIVE — stage complete 2026-11-09, within the open plan in [00-overview.md](00-overview.md). Prerequisites: none.
 
 ## Touch points
 
@@ -43,10 +43,10 @@ Read Log is feature `0xD5` with the log address in the sector number register. I
 
 ## Done when
 
-- [ ] `DriveRequestsTests` iterates every `DriveQuestion` and decodes its code, command, feature,
+- [x] `DriveRequestsTests` iterates every `DriveQuestion` and decodes its code, command, feature,
       log address and NVMe page. Only `0xD1`, `0xD5` with logs `0x01` and `0x06`, and `0xEC` are
       allowed.
-- [ ] `DriveHealthSourcesTests` sweeps the source: only `DriveProbe` calls `OpenForCommands`, and
+- [x] `DriveHealthSourcesTests` sweeps the source: only `DriveProbe` calls `OpenForCommands`, and
       only `DriveProbe` and `StorageQueries` call `DeviceCalls.Query`.
-- [ ] `DeviceInterfaces` multi-string parsing is tested on synthetic buffers.
-- [ ] Existing `StorageQueries` callers and tests pass unchanged.
+- [x] `DeviceInterfaces` multi-string parsing is tested on synthetic buffers.
+- [x] Existing `StorageQueries` callers and tests pass unchanged.

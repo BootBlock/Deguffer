@@ -1,6 +1,6 @@
 # Stage 07: the page, the rail and the documents
 
-> **Status:** 🟢 ACTIVE — not started. Prerequisites: stage 06.
+> **Status:** 🟢 ACTIVE — stage complete 2026-11-09, within the open plan in [00-overview.md](00-overview.md). Prerequisites: stage 06.
 
 ## Touch points
 
@@ -23,5 +23,5 @@ selection changes the user did not make.
 
 ## Done when
 
-- [ ] Both projects build.
-- [ ] Spec §7.6 states what is read, what is never sent, and when elevation helps.
+- [x] Both projects build.
+- [x] Spec §7.6 states what is read, what is never sent, and when elevation helps.

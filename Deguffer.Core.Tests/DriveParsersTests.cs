@@ -83,10 +83,9 @@ public sealed class DriveParsersTests
     [Fact]
     public void AnNvmeControllerGivesItsVersionAndLimits()
     {
-        Assert.True(NvmeController.TryRead(DriveBytes.NvmeController(1, 4, warningKelvin: 350, criticalKelvin: 360), out var controller));
+        Assert.True(NvmeController.TryRead(DriveBytes.NvmeController(1, 4, warningKelvin: 350), out var controller));
         Assert.Equal((1, 4), controller.Version);
         Assert.Equal(350, controller.WarningKelvin);
-        Assert.Equal(360, controller.CriticalKelvin);
     }
 
     [Fact]

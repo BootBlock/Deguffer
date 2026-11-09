@@ -54,6 +54,8 @@ public sealed partial class HealthDriveRow : ObservableObject
     /// <summary>Follow the name a fresh listing gives, keeping everything the last reading showed.</summary>
     public void Show(DriveDescription drive) => Title = drive.Name;
 
+    public void Show(DriveVolumes volumes) => Volumes = volumes.Line;
+
     public void Show(DriveHealth report)
     {
         Report = report;
@@ -67,8 +69,7 @@ public sealed partial class HealthDriveRow : ObservableObject
             _ => "Unknown",
         };
         Summary = report.Summary;
-        Volumes = report.Volumes ?? string.Empty;
-        Temperature = report.TemperatureCelsius is { } celsius ? $"{celsius} °C" : string.Empty;
+        Temperature = report.Temperature ?? string.Empty;
 
         LiveList.Rewrite(Findings, report.Findings);
         LiveList.Show(Facts, report.Facts, fact => fact.Label);

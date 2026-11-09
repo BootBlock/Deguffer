@@ -12,7 +12,6 @@ public readonly record struct AtaEntry(byte Id, byte Value, ulong Raw = 0, bool 
 /// </summary>
 public static class DriveBytes
 {
-    public const byte Scsi = 0x01;
     public const byte Usb = 0x07;
     public const byte Sata = 0x0B;
     public const byte Nvme = 0x11;
@@ -112,13 +111,12 @@ public static class DriveBytes
         return bytes;
     }
 
-    public static byte[] NvmeController(int major = 1, int minor = 4, int warningKelvin = 0, int criticalKelvin = 0)
+    public static byte[] NvmeController(int major = 1, int minor = 4, int warningKelvin = 0)
     {
         var bytes = Protocol(4096);
 
         BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(ProtocolHeaderBytes + 80), (uint)((major << 16) | (minor << 8)));
         BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(ProtocolHeaderBytes + 266), (ushort)warningKelvin);
-        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(ProtocolHeaderBytes + 268), (ushort)criticalKelvin);
         return bytes;
     }
 

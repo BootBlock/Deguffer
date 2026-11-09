@@ -67,7 +67,7 @@
             <Button Grid.Column="2" Content="Reopen as administrator" VerticalAlignment="Center"
                     Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
                     Command="{x:Bind ViewModel.ElevateCommand}"
-                    ToolTipService.ToolTip="A SATA drive's failure limits, link speed and self-test history can be read only with administrator rights." />
+                    ToolTipService.ToolTip="A SATA drive's failure limits, link speed, latest self-test and error count can be read only with administrator rights." />
 
             <Button Grid.Column="3" Content="Refresh" VerticalAlignment="Center"
                     Command="{x:Bind ViewModel.RefreshCommand}"
@@ -82,7 +82,7 @@
         <InfoBar Grid.Row="2" Severity="Informational" IsClosable="False"
                  IsOpen="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
                  Title="More is shown when Deguffer runs as administrator"
-                 Message="For SATA drives, that adds failure limits, link speed, self-test history and the drive's error log." />
+                 Message="This adds detail Windows gives only to an administrator, such as a SATA drive's failure limits, link speed, latest self-test and error count." />
 
         <Grid Grid.Row="3" ColumnSpacing="16" ColumnDefinitions="260,*">
             <ListView x:Name="DriveList"

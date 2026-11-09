@@ -1,6 +1,6 @@
 # Stage 06: the view-model
 
-> **Status:** 🟢 ACTIVE — not started. Prerequisites: stage 05.
+> **Status:** 🟢 ACTIVE — stage complete 2026-11-09, within the open plan in [00-overview.md](00-overview.md). Prerequisites: stage 05.
 
 ## Touch points
 
@@ -24,10 +24,10 @@
 
 ## Done when
 
-- [ ] `EnsureRead` twice reads once.
-- [ ] Refresh updates rows with no reset, and keeps the row objects and the selection.
-- [ ] A superseded read's reports are ignored.
-- [ ] A drive gone from phase one leaves, and a failed or cancelled read removes nothing.
-- [ ] If the selected drive goes, the nearest row is selected.
-- [ ] `RunningActions.MayEndProcess` stays true during a read.
-- [ ] The offer follows the reports, and Elevate relaunches with `ElevationRequest.Health`.
+- [x] `EnsureRead` twice reads once.
+- [x] Refresh updates rows with no reset, and keeps the row objects and the selection.
+- [x] A superseded read's reports are ignored.
+- [x] A drive gone from phase one leaves, and a failed or cancelled read removes nothing.
+- [x] If the selected drive goes, the nearest row is selected.
+- [x] `RunningActions.MayEndProcess` stays true during a read.
+- [x] The offer follows the reports, and Elevate relaunches with `ElevationRequest.Health`.

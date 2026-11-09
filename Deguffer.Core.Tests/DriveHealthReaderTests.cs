@@ -18,21 +18,37 @@ public sealed class DriveHealthReaderTests
     private DriveHealthReader Reader(TimeSpan? limit = null) =>
         new(_probe, _volumes, _storage, limit ?? TimeSpan.FromSeconds(30));
 
-    private sealed class Collected : IProgress<DriveHealth>
+    private sealed class Collected<T> : IProgress<T>
     {
-        public System.Collections.Concurrent.ConcurrentBag<DriveHealth> Reports { get; } = [];
+        public System.Collections.Concurrent.ConcurrentBag<T> Reports { get; } = [];
 
-        public void Report(DriveHealth value) => Reports.Add(value);
+        public void Report(T value) => Reports.Add(value);
     }
+
+    /// <summary>Every disk's extents wait until released, standing for a volume that will not answer.</summary>
+    private sealed class StalledStorage(ManualResetEventSlim release) : IStorageQueries
+    {
+        public StorageAnswer DiskExtents(string mountPoint)
+        {
+            release.Wait();
+            return StorageAnswer.Failed(FakeStorageQueries.ErrorFileNotFound);
+        }
+
+        public StorageAnswer Adapter(int disk) => StorageAnswer.Failed(FakeStorageQueries.ErrorFileNotFound);
+
+        public StorageAnswer SeekPenalty(int disk) => StorageAnswer.Failed(FakeStorageQueries.ErrorFileNotFound);
+    }
+
+    private readonly Collected<DriveVolumes> _placed = new();
 
     private async Task<IReadOnlyList<DriveHealth>> ReadAll(DriveHealthReader? reader = null)
     {
         reader ??= Reader();
         var drives = reader.List()!;
-        var collected = new Collected();
+        var collected = new Collected<DriveHealth>();
 
-        await reader.ReadAsync(drives, collected, CancellationToken.None);
-        return [.. collected.Reports.OrderBy(report => report.Disk)];
+        await reader.ReadAsync(drives, collected, _placed, CancellationToken.None);
+        return [.. collected.Reports.OrderBy(report => report.Name, StringComparer.Ordinal)];
     }
 
     private FakeDriveProbe Nvme(int disk, byte[]? health = null, string model = "Test NVMe") =>
@@ -58,7 +74,7 @@ public sealed class DriveHealthReaderTests
     }
 
     [Fact]
-    public void ListingAsksOnlyWhatTheDriverAnswersFromMemory()
+    public void ListingAsksOnlyForTheDeviceDescriptor()
     {
         Nvme(0);
 
@@ -91,7 +107,7 @@ public sealed class DriveHealthReaderTests
         var report = Assert.Single(await ReadAll());
 
         Assert.Equal(DriveVerdict.Good, report.Verdict);
-        Assert.Equal(37, report.TemperatureCelsius);
+        Assert.Equal("37 °C", report.Temperature);
         Assert.False(report.MoreWhenElevated);
     }
 
@@ -156,12 +172,12 @@ public sealed class DriveHealthReaderTests
     public async Task ADriveRejectingEveryQuestionIsUnknownAndDoesNotEndTheOthers()
     {
         _probe.Answer(0, DriveQuestion.Device, DriveBytes.Device(DriveBytes.Nvme, "Silent", serial: "S0"));
-        Nvme(1);
+        Nvme(1, model: "Working");
 
         var reports = await ReadAll();
 
-        Assert.Equal(DriveVerdict.Unknown, reports[0].Verdict);
-        Assert.Equal(DriveVerdict.Good, reports[1].Verdict);
+        Assert.Equal(DriveVerdict.Unknown, reports.Single(report => report.Name == "Silent").Verdict);
+        Assert.Equal(DriveVerdict.Good, reports.Single(report => report.Name == "Working").Verdict);
     }
 
     [Fact]
@@ -170,12 +186,149 @@ public sealed class DriveHealthReaderTests
         Nvme(0);
         var reader = Reader();
         var drives = reader.List()!;
-        var collected = new Collected();
+        var collected = new Collected<DriveHealth>();
 
         _probe.Remove(0);
-        await reader.ReadAsync(drives, collected, CancellationToken.None);
+        await reader.ReadAsync(drives, collected, _placed, CancellationToken.None);
 
-        Assert.Single(collected.Reports);
+        var report = Assert.Single(collected.Reports);
+        Assert.Equal(DriveVerdict.Unknown, report.Verdict);
+        Assert.Empty(report.Attributes);
+    }
+
+    [Fact]
+    public async Task TwoDrivesReportingTheSameSerialAreEachRead()
+    {
+        _probe
+            .Answer(0, DriveQuestion.Device, DriveBytes.Device(DriveBytes.Nvme, "Twin", serial: "SAME"))
+            .Answer(0, DriveQuestion.NvmeHealth, DriveBytes.NvmeHealth(kelvin: 310))
+            .Answer(1, DriveQuestion.Device, DriveBytes.Device(DriveBytes.Nvme, "Twin", serial: "SAME"))
+            .Answer(1, DriveQuestion.NvmeHealth, DriveBytes.NvmeHealth(kelvin: 320));
+
+        var reports = await ReadAll();
+
+        Assert.Equal(2, reports.Select(report => report.Key).Distinct().Count());
+        Assert.Equivalent(new[] { "37 °C", "47 °C" }, reports.Select(report => report.Temperature));
+    }
+
+    [Fact]
+    public async Task EachDetailIsReadFromTheDrive()
+    {
+        Nvme(0)
+            .Answer(0, DriveQuestion.SeekPenalty, DriveBytes.SeekPenalty(false))
+            .Answer(0, DriveQuestion.Trim, DriveBytes.Trim(true))
+            .Answer(0, DriveQuestion.Alignment, DriveBytes.Alignment(512, 4096))
+            .Answer(0, DriveQuestion.Geometry, DriveBytes.Geometry(2L << 30));
+
+        var facts = Assert.Single(await ReadAll()).Facts;
+
+        Assert.Contains(facts, fact => fact is { Label: "Type", Value: "Solid state" });
+        Assert.Contains(facts, fact => fact is { Label: "TRIM", Value: "On" });
+        Assert.Contains(facts, fact => fact is { Label: "Sector size", Value: "512 bytes, 4096 bytes physical" });
+        Assert.Contains(facts, fact => fact is { Label: "Capacity", Value: "2.0 GB" });
+    }
+
+    [Fact]
+    public async Task ALinkSpeedTheDriveDoesNotLimitSaysOnlyWhatItKnows()
+    {
+        Sata(0);
+        _probe.Answer(0, DriveQuestion.AtaIdentify, DriveBytes.Ata(DriveBytes.Identify(1, 0, 2)));
+
+        Assert.Contains(Assert.Single(await ReadAll()).Facts, fact => fact is { Label: "SATA link speed", Value: "3 Gb/s now" });
+    }
+
+    [Fact]
+    public async Task AnNvmeDriveRefusedItsLogOffersElevation()
+    {
+        _probe
+            .Answer(0, DriveQuestion.Device, DriveBytes.Device(DriveBytes.Nvme, "Refused", serial: "S0"))
+            .Refuse(0, DriveQuestion.NvmeHealth, FakeDriveProbe.ErrorAccessDenied);
+
+        Assert.True(Assert.Single(await ReadAll()).MoreWhenElevated);
+    }
+
+    [Fact]
+    public async Task AVolumeThatWillNotAnswerCostsOnlyItsLine()
+    {
+        Nvme(0);
+        _volumes.With(@"C:\");
+        using var release = new ManualResetEventSlim();
+        var reader = new DriveHealthReader(_probe, _volumes, new StalledStorage(release), TimeSpan.FromMilliseconds(50));
+
+        var report = Assert.Single(await ReadAll(reader));
+
+        Assert.Equal(DriveVerdict.Good, report.Verdict);
+        Assert.Empty(_placed.Reports);
+
+        release.Set();
+    }
+
+    [Fact]
+    public async Task ADriveReportsWhileAVolumeIsStillStalled()
+    {
+        Nvme(0);
+        _volumes.With(@"C:\");
+        using var release = new ManualResetEventSlim();
+        using var stop = new CancellationTokenSource();
+        var collected = new Collected<DriveHealth>();
+        var reader = new DriveHealthReader(_probe, _volumes, new StalledStorage(release), TimeSpan.FromMinutes(5));
+
+        var reading = reader.ReadAsync(reader.List()!, collected, _placed, stop.Token);
+        var waited = System.Diagnostics.Stopwatch.StartNew();
+
+        while (collected.Reports.IsEmpty && waited.Elapsed < TimeSpan.FromSeconds(10))
+        {
+            await Task.Delay(10);
+        }
+
+        var arrived = !collected.Reports.IsEmpty;
+
+        await stop.CancelAsync();
+        release.Set();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => reading);
+
+        Assert.True(arrived, "The drive's reading waited for a volume that had not answered.");
+    }
+
+    [Fact]
+    public async Task AListingThatDoesNotAnswerIsNoListing()
+    {
+        using var release = new ManualResetEventSlim();
+
+        _probe.Answer(0, DriveQuestion.Device, () =>
+        {
+            release.Wait();
+            return StorageAnswer.Failed(FakeDriveProbe.ErrorInvalidFunction);
+        });
+
+        Assert.Null(await Reader(TimeSpan.FromMilliseconds(50)).ListAsync(CancellationToken.None));
+
+        release.Set();
+    }
+
+    [Fact]
+    public void ADriveWithNoReportKeepsTheHeadlineFromReassuring()
+    {
+        var unknown = Report(moreWhenElevated: false) with { Verdict = DriveVerdict.Unknown };
+
+        Assert.Equal("2 drives, 1 with no health report.", DriveOverview.Headline(2, [Report(moreWhenElevated: false), unknown]));
+    }
+
+    [Theory]
+    [InlineData(0, 0, 0, "No drives found.")]
+    [InlineData(1, 1, 0, "1 drive, no concerns reported.")]
+    [InlineData(3, 3, 0, "3 drives, no concerns reported.")]
+    [InlineData(3, 1, 0, "Reading 3 drives…")]
+    [InlineData(2, 2, 1, "2 drives, 1 needs attention.")]
+    [InlineData(4, 4, 2, "4 drives, 2 need attention.")]
+    [InlineData(3, 1, 1, "3 drives, 1 needs attention.")]
+    public void TheHeadlineReassuresOnlyOnceEveryDriveHasAnswered(int drives, int read, int concerns, string expected)
+    {
+        var reports = Enumerable.Range(0, read)
+            .Select(index => Report(moreWhenElevated: false) with { Verdict = index < concerns ? DriveVerdict.Watch : DriveVerdict.Good })
+            .ToList();
+
+        Assert.Equal(expected, DriveOverview.Headline(drives, reports));
     }
 
     [Fact]
@@ -187,7 +340,8 @@ public sealed class DriveHealthReaderTests
 
         var report = Assert.Single(await ReadAll());
 
-        Assert.Contains(@"C:\", report.Volumes, StringComparison.Ordinal);
+        Assert.Equal(report.Key, Assert.Single(_placed.Reports).Key);
+        Assert.Contains(@"C:\", _placed.Reports.Single().Line, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -220,13 +374,29 @@ public sealed class DriveHealthReaderTests
     [Fact]
     public async Task CancellingStopsFurtherDrivesBeingRead()
     {
-        Nvme(0);
-        var reader = Reader();
-        var drives = reader.List()!;
+        const int Drives = 12;
         using var cancelled = new CancellationTokenSource();
-        await cancelled.CancelAsync();
+        var asked = 0;
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => reader.ReadAsync(drives, new Collected(), cancelled.Token));
+        for (var disk = 0; disk < Drives; disk++)
+        {
+            _probe
+                .Answer(disk, DriveQuestion.Device, DriveBytes.Device(DriveBytes.Nvme, "Drive", serial: $"S{disk}"))
+                .Answer(disk, DriveQuestion.NvmeHealth, () =>
+                {
+                    // Any drive that is reached cancels the read, so no later drive may start.
+                    Interlocked.Increment(ref asked);
+                    cancelled.Cancel();
+                    return StorageAnswer.Answered(DriveBytes.NvmeHealth());
+                });
+        }
+
+        var reader = Reader();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => reader.ReadAsync(reader.List()!, new Collected<DriveHealth>(), _placed, cancelled.Token));
+
+        Assert.InRange(Volatile.Read(ref asked), 1, Drives - 1);
     }
 
     [Fact]
@@ -241,5 +411,5 @@ public sealed class DriveHealthReaderTests
     }
 
     private static DriveHealth Report(bool moreWhenElevated) =>
-        new(new DriveKey("k"), 0, "n", DriveVerdict.Good, "s", null, [], [], [], moreWhenElevated, null);
+        new(new DriveKey("k"), "n", DriveVerdict.Good, "s", null, [], [], [], moreWhenElevated);
 }

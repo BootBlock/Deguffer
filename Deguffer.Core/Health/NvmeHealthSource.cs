@@ -3,7 +3,7 @@ using Deguffer.Core.Scanning.Media;
 
 namespace Deguffer.Core.Health;
 
-/// <summary>Reads an NVMe drive. Every question here needs no elevation.</summary>
+/// <summary>Reads an NVMe drive. Every question here is an ordinary query, which normally needs no elevation.</summary>
 internal sealed class NvmeHealthSource : IDriveHealthSource
 {
     public bool Reads(StorageBusType bus) => bus is StorageBusType.Nvme;
@@ -17,11 +17,12 @@ internal sealed class NvmeHealthSource : IDriveHealthSource
             ? [new DriveFact("NVMe version", $"{known.Version.Major}.{known.Version.Minor}")]
             : [];
 
+        var answer = device.Ask(DriveQuestion.NvmeHealth);
         NvmeHealthLog? log = null;
 
-        if (device.Ask(DriveQuestion.NvmeHealth).Bytes is not { } health || !NvmeHealthLog.TryRead(health, out log) || log is null)
+        if (answer.Bytes is not { } health || !NvmeHealthLog.TryRead(health, out log) || log is null)
         {
-            return new DriveReadout([], HasPrimarySignal: false, facts, TemperatureCelsius: null, MoreWhenElevated: false);
+            return new DriveReadout([], HasPrimarySignal: false, facts, TemperatureCelsius: null, MoreWhenElevated: answer.Win32Error == DeviceCalls.AccessDenied);
         }
 
         var attributes = NvmeAttributeRows.Of(log, controller);

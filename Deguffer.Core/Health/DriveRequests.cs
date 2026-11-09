@@ -18,8 +18,9 @@ internal enum DriveAccess
 internal sealed record DriveRequest(uint ControlCode, byte[] Input, int OutputBytes, DriveAccess Access);
 
 /// <summary>
-/// The whole of what Deguffer can send a drive (§7.6). Every request reads. <c>DriveRequestsTests</c>
-/// decodes each one, so a command that could change a drive cannot be added without that test saying so.
+/// Everything the Health page asks a drive about its own condition (§7.6). Every request reads.
+/// <c>DriveRequestsTests</c> decodes each one, so a command that could change a drive cannot be added
+/// without that test saying so. Which disk holds a volume comes from <see cref="IStorageQueries"/>.
 /// </summary>
 internal static class DriveRequests
 {

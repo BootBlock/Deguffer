@@ -1488,7 +1488,7 @@ explains. It changes nothing on any drive, and it deletes nothing.
 
 **What is read**
 
-- **Every physical disk Windows lists**, found through its disk device interfaces and not by
+- **Every physical disk Windows lists and numbers**, found through its disk device interfaces and not by
   counting disk numbers, which can have gaps.
 - **NVMe drives:** the health log, Identify Controller and the self-test log.
 - **SATA and ATA drives:** the drive's own failure prediction and its attribute table, and with
@@ -1498,7 +1498,8 @@ explains. It changes nothing on any drive, and it deletes nothing.
 
 **What is never sent**
 
-- Only the requests in `DriveRequests` can reach a drive, and all of them read. A test decodes each
+- Everything Health asks a drive about its condition is a request in `DriveRequests`, and all of them
+  read. Which disk holds a volume comes from the existing `StorageQueries`. A test decodes each
   one. Health never starts a self-test, turns SMART on or off, or sends a vendor command.
 - A handle with write rights is opened only because Windows demands it before passing an ATA read
   command, and a test holds it to the one type allowed it.
@@ -1509,7 +1510,8 @@ explains. It changes nothing on any drive, and it deletes nothing.
   kept: its rows and selection survive a move to another page and back, without a second read.
 - It reads again only when asked. There is no polling, because a read can wake a sleeping disk.
 - Drives are listed first and filled in as each one answers. A drive gets 30 seconds, then reads as
-  not answering. A device call cannot be interrupted, so a drive still being asked is not asked again.
+  not answering. The listing and the volumes have the same limit. A device call cannot be interrupted,
+  so a drive still being asked is not asked again.
 - A read never holds the window open.
 
 **What it says**

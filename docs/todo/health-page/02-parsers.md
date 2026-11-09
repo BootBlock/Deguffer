@@ -1,6 +1,6 @@
 # Stage 02: the parsers
 
-> **Status:** 🟢 ACTIVE — not started. Prerequisites: stage 01.
+> **Status:** 🟢 ACTIVE — stage complete 2026-11-09, within the open plan in [00-overview.md](00-overview.md). Prerequisites: stage 01.
 
 ## Touch points
 
@@ -32,8 +32,8 @@ newest first: 28-byte entries from byte 4, result in the low nibble of entry byt
 
 ## Done when
 
-- [ ] Each parser has a test on synthetic bytes for a good answer and for a truncated one.
-- [ ] A descriptor offset of 0 or beyond the buffer reads as absent, and padding is trimmed.
-- [ ] An ATA answer with its driver error set reads as no answer.
-- [ ] A protocol offset or length outside the buffer reads as no answer.
-- [ ] An all-zero table gives no attributes. A repeated ID gives one attribute.
+- [x] Each parser has a test on synthetic bytes for a good answer and for a truncated one.
+- [x] A descriptor offset of 0 or beyond the buffer reads as absent, and padding is trimmed.
+- [x] An ATA answer with its driver error set reads as no answer.
+- [x] A protocol offset or length outside the buffer reads as no answer.
+- [x] An all-zero table gives no attributes. A repeated ID gives one attribute.

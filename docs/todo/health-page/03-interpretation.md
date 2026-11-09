@@ -1,6 +1,6 @@
 # Stage 03: interpretation
 
-> **Status:** 🟢 ACTIVE — not started. Prerequisites: stage 02.
+> **Status:** 🟢 ACTIVE — stage complete 2026-11-09, within the open plan in [00-overview.md](00-overview.md). Prerequisites: stage 02.
 
 ## Touch points
 
@@ -34,8 +34,8 @@ attribute database is copied.
 
 ## Done when
 
-- [ ] Temperature takes the low byte of a packed raw value.
-- [ ] An unknown ID yields a "vendor-specific" row, and an `Opaque` raw value never makes a row Watch or Failing.
-- [ ] A vendor overlay wins only for its own model prefix.
-- [ ] Each standing rule has a test that fails without it.
-- [ ] `WCTEMP` of 0 and thresholds of 0, 254 and 255 cause no standing.
+- [x] Temperature takes the low byte of a packed raw value.
+- [x] An unknown ID yields a "vendor-specific" row, and an `Opaque` raw value never makes a row Watch or Failing.
+- [x] A vendor overlay wins only for its own model prefix.
+- [x] Each standing rule has a test that fails without it.
+- [x] `WCTEMP` of 0 and thresholds of 0, 254 and 255 cause no standing.

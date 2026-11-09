@@ -24,6 +24,9 @@ internal static partial class DeviceCalls
     private const uint FileShareWrite = 0x0000_0002;
     private const uint OpenExisting = 3;
 
+    /// <summary><c>ERROR_ACCESS_DENIED</c>, which is how a drive says a question needs an administrator.</summary>
+    internal const int AccessDenied = 5;
+
     /// <summary>The name Windows opens physical disk <paramref name="disk"/> by.</summary>
     internal static string DiskName(int disk) => $@"\\.\PhysicalDrive{disk}";
 

@@ -9,8 +9,6 @@ namespace Deguffer.Core.Health;
 /// </summary>
 internal sealed class AtaHealthSource : IDriveHealthSource
 {
-    private const int AccessDenied = 5;
-
     /// <summary>The temperature attributes, the drive's own sensor first.</summary>
     private static readonly byte[] TemperatureIds = [194, 190];
 
@@ -26,7 +24,7 @@ internal sealed class AtaHealthSource : IDriveHealthSource
     public DriveReadout Read(IDriveDevice device, string model)
     {
         var thresholds = device.Ask(DriveQuestion.AtaThresholds);
-        var moreWhenElevated = thresholds.Win32Error == AccessDenied;
+        var moreWhenElevated = thresholds.Win32Error == DeviceCalls.AccessDenied;
         var facts = IdentifyFacts(device);
 
         if (device.Ask(DriveQuestion.PredictFailure).Bytes is not { } prediction
@@ -73,8 +71,9 @@ internal sealed class AtaHealthSource : IDriveHealthSource
 
         if (LinkSpeeds.TryGetValue(identify.CurrentGeneration, out var current))
         {
-            var fastest = LinkSpeeds.GetValueOrDefault(identify.FastestGeneration, current);
-            facts.Add(new DriveFact("SATA link speed", $"{current} now, up to {fastest}"));
+            facts.Add(new DriveFact(
+                "SATA link speed",
+                LinkSpeeds.TryGetValue(identify.FastestGeneration, out var fastest) ? $"{current} now, up to {fastest}" : $"{current} now"));
         }
 
         return facts;

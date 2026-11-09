@@ -139,7 +139,7 @@ public sealed class DriveInterpretationTests
     [Fact]
     public void AnNvmeTemperatureAtItsWarningLimitIsWatch()
     {
-        var limit = new NvmeController((1, 4), WarningKelvin: 350, CriticalKelvin: 360);
+        var limit = new NvmeController((1, 4), WarningKelvin: 350);
 
         Assert.Equal(AttributeStanding.Watch, Find(Nvme(DriveBytes.NvmeHealth(kelvin: 350), limit), "temperature").Standing);
         Assert.Equal(AttributeStanding.Normal, Find(Nvme(DriveBytes.NvmeHealth(kelvin: 349), limit), "temperature").Standing);
@@ -149,7 +149,7 @@ public sealed class DriveInterpretationTests
     public void AWarningLimitOfZeroMeansNoneIsReported() =>
         Assert.Equal(
             AttributeStanding.Normal,
-            Find(Nvme(DriveBytes.NvmeHealth(kelvin: 350), new NvmeController((1, 4), 0, 0)), "temperature").Standing);
+            Find(Nvme(DriveBytes.NvmeHealth(kelvin: 350), new NvmeController((1, 4), 0)), "temperature").Standing);
 
     [Fact]
     public void AFailedSelfTestFails()
@@ -190,15 +190,23 @@ public sealed class DriveInterpretationTests
         Assert.StartsWith("Warm", findings[1], StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ASelectionStillListedStays() =>
+        Assert.Equal("b", DriveSelection.After(["a", "b"], "b", 0));
+
     [Theory]
-    [InlineData(0, 3, 0)]
-    [InlineData(5, 2, 1)]
-    public void TheNearestRowIsKeptInRange(int previous, int count, int expected) =>
-        Assert.Equal(expected, DriveSelection.Nearest(previous, count));
+    [InlineData(0, "a")]
+    [InlineData(5, "b")]
+    public void AnAbsentSelectionMovesToTheNearestRow(int previous, string expected) =>
+        Assert.Equal(expected, DriveSelection.After(["a", "b"], "gone", previous));
+
+    [Fact]
+    public void NothingSelectedTakesTheFirstRow() =>
+        Assert.Equal("a", DriveSelection.After(["a", "b"], null, 0));
 
     [Fact]
     public void NoRowsMeansNoSelection() =>
-        Assert.Null(DriveSelection.Nearest(0, 0));
+        Assert.Null(DriveSelection.After<string>([], "gone", 0));
 
     private static HealthAttribute Plain(AttributeStanding standing, string name = "Reading") =>
         new(name, name, "value", "meaning", standing, "raw");

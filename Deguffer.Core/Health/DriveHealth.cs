@@ -75,21 +75,21 @@ public enum DriveVerdict
 
 /// <summary>One drive's whole reading.</summary>
 /// <param name="Summary">One sentence of what the verdict means.</param>
-/// <param name="TemperatureCelsius">The drive's temperature, or null where it does not report one.</param>
+/// <param name="Temperature">The drive's temperature in words, or null where it does not report one.</param>
 /// <param name="Findings">One sentence per reading of concern, worst first.</param>
 /// <param name="Facts">The drive's details.</param>
 /// <param name="Attributes">Its readings, the primary signal first.</param>
 /// <param name="MoreWhenElevated">Whether administrator rights would show more of this drive.</param>
-/// <param name="Volumes">What is stored on it, as a line of volumes, or null where none is known.</param>
 public sealed record DriveHealth(
     DriveKey Key,
-    int Disk,
     string Name,
     DriveVerdict Verdict,
     string Summary,
-    int? TemperatureCelsius,
+    string? Temperature,
     IReadOnlyList<string> Findings,
     IReadOnlyList<DriveFact> Facts,
     IReadOnlyList<HealthAttribute> Attributes,
-    bool MoreWhenElevated,
-    string? Volumes);
+    bool MoreWhenElevated);
+
+/// <summary>What is stored on one drive, as a line of volumes. Reported apart, because a volume can stall where the drive does not.</summary>
+public sealed record DriveVolumes(DriveKey Key, string Line);

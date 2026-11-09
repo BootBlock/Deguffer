@@ -29,6 +29,8 @@ public sealed class DriveProbe : IDriveProbe
         {
             using var device = DeviceCalls.Open(path);
 
+            // An interface that will not open or give a number has no name a disk query can use,
+            // which is how a disk removed since Windows listed it looks.
             if (device.IsInvalid)
             {
                 continue;
@@ -48,7 +50,7 @@ public sealed class DriveProbe : IDriveProbe
     public IDriveDevice Open(int disk) => new Device(DeviceCalls.DiskName(disk));
 
     /// <summary>
-    /// Each kind of handle is opened at most once, on first need: a reading sends over a dozen
+    /// Each kind of handle is opened at most once, on first need: a reading sends several
     /// questions, and most drives never need the command handle at all.
     /// </summary>
     private sealed class Device(string name) : IDriveDevice

@@ -10,6 +10,7 @@ namespace Deguffer.Testing;
 /// </summary>
 public sealed class FakeDriveProbe : IDriveProbe
 {
+    public const int ErrorFileNotFound = 2;
     public const int ErrorInvalidFunction = 1;
     public const int ErrorAccessDenied = 5;
 
@@ -81,6 +82,12 @@ public sealed class FakeDriveProbe : IDriveProbe
         lock (_gate)
         {
             _asked.Add((disk, question));
+
+            if (!_disks.Contains(disk))
+            {
+                return StorageAnswer.Failed(ErrorFileNotFound);
+            }
+
             _answers.TryGetValue((disk, question), out answer);
         }
 

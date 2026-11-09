@@ -24,16 +24,18 @@ public sealed class HealthViewModelTests
     private int _reads;
     private int _lists;
     private Func<IReadOnlyList<DriveDescription>, IProgress<DriveHealth>, CancellationToken, Task> _reader = ReportAll();
+    private IProgress<DriveVolumes>? _placing;
 
     private HealthViewModel Page(bool isElevated = false) => new(
-        () =>
+        _ =>
         {
             Interlocked.Increment(ref _lists);
-            return _drives;
+            return Task.FromResult(_drives);
         },
-        (drives, progress, ct) =>
+        (drives, progress, volumes, ct) =>
         {
             Interlocked.Increment(ref _reads);
+            _placing = volumes;
             return _reader(drives, progress, ct);
         },
         isElevated,
@@ -59,16 +61,14 @@ public sealed class HealthViewModelTests
     private static DriveHealth Health(DriveDescription drive, DriveVerdict verdict = DriveVerdict.Good, bool moreWhenElevated = false, string reading = "ok") =>
         new(
             drive.Key,
-            drive.Disk,
             drive.Name,
             verdict,
             "summary",
-            40,
+            "40 °C",
             [],
             [new DriveFact("Model", drive.Name)],
             [new HealthAttribute("temperature", "Temperature", reading, "meaning", AttributeStanding.Normal, "raw")],
-            moreWhenElevated,
-            null);
+            moreWhenElevated);
 
     [Fact]
     public void EnsureReadReadsOnceHoweverOftenThePageArrives() => UiThread.Run(async () =>
@@ -182,6 +182,19 @@ public sealed class HealthViewModelTests
 
         Assert.Equal("First", Assert.Single(page.Rows).Title);
         Assert.Equal("First", page.SelectedDrive?.Title);
+    });
+
+    [Fact]
+    public void AVolumeLineReachesItsOwnRow() => UiThread.Run(async () =>
+    {
+        var page = Page();
+        await page.RefreshAsync();
+
+        _placing!.Report(new DriveVolumes(Second.Key, "D: (Data)"));
+        await Eventually.HoldsAsync(() => page.Rows[1].Volumes.Length > 0, "the volume line");
+
+        Assert.Equal("D: (Data)", page.Rows[1].Volumes);
+        Assert.Equal(string.Empty, page.Rows[0].Volumes);
     });
 
     [Fact]

@@ -1,6 +1,7 @@
 # Health page: plan overview
 
-> **Status:** 🟢 ACTIVE — in progress. Governs the Health destination until it ships, then moves to
+> **Status:** 🟢 ACTIVE — shipped 2026-11-09, with one check outstanding: a driven run as administrator
+> on a SATA drive (stage 08), which needs a UAC prompt accepted. Moves to
 > `docs/todo/done/`. Spec section: [_spec.md](../_spec.md) §7.6, added by stage 07.
 
 A new rail destination, **Health**, lists every physical drive with what Windows can report about
@@ -66,7 +67,7 @@ ATA command set.
   attribute. IDENTIFY adds rotation and link speed. Log `0x01` adds the device error count, and log
   `0x06` the latest self-test.
 - **H12. Two-phase, bounded reading.** Phase one enumerates and reads each device descriptor,
-  which the driver answers without touching the media, and shows every drive at once, ordered by
+  which needs no health query and has the same 30-second limit, and shows every drive at once, ordered by
   disk number. Phase two reads each drive in parallel (`MaxDegreeOfParallelism` 4) and fills its
   row. A drive gets 30 seconds, then reads "did not answer". A device call cannot be interrupted,
   so a drive still being asked is joined by the next Refresh and never asked twice.
@@ -93,14 +94,14 @@ ATA command set.
 
 | № | File | Gist | Status |
 | --- | --- | --- | --- |
-| 01 | [01-device-seam.md](01-device-seam.md) | `DeviceCalls`, `IDriveProbe`, `DriveRequests`, enumeration, the fake | in progress |
-| 02 | [02-parsers.md](02-parsers.md) | Pure readers for descriptors, NVMe and ATA structures | not started |
-| 03 | [03-interpretation.md](03-interpretation.md) | ATA catalogue, NVMe rows, plain-language values | not started |
-| 04 | [04-reader.md](04-reader.md) | Sources, assessment, `DriveHealthReader` | not started |
-| 05 | [05-elevation.md](05-elevation.md) | `ElevationRequest.Health`, the offer rule | not started |
-| 06 | [06-view-model.md](06-view-model.md) | Rows and `HealthViewModel` | not started |
-| 07 | [07-page-and-docs.md](07-page-and-docs.md) | Page, rail, spec §7.6, README | not started |
-| 08 | [08-verification.md](08-verification.md) | Full build, tests, driven runs, filing this plan | not started |
+| 01 | [01-device-seam.md](01-device-seam.md) | `DeviceCalls`, `IDriveProbe`, `DriveRequests`, enumeration, the fake | complete |
+| 02 | [02-parsers.md](02-parsers.md) | Pure readers for descriptors, NVMe and ATA structures | complete |
+| 03 | [03-interpretation.md](03-interpretation.md) | ATA catalogue, NVMe rows, plain-language values | complete |
+| 04 | [04-reader.md](04-reader.md) | Sources, assessment, `DriveHealthReader` | complete |
+| 05 | [05-elevation.md](05-elevation.md) | `ElevationRequest.Health`, the offer rule | complete |
+| 06 | [06-view-model.md](06-view-model.md) | Rows and `HealthViewModel` | complete |
+| 07 | [07-page-and-docs.md](07-page-and-docs.md) | Page, rail, spec §7.6, README | complete |
+| 08 | [08-verification.md](08-verification.md) | Full build, tests, driven runs, filing this plan | open: the elevated run |
 
 The stages run in order. `MainWindow.xaml(.cs)` and `ElevationRequest.cs` are also edited by any
 other new destination.
