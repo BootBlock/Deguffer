@@ -29,6 +29,9 @@ internal static class CompositionThread
 
     public static Compositor Compositor => Shared.Value.Compositor;
 
+    /// <summary>The dispatcher queue of the compositor's thread, for a timer that runs on it.</summary>
+    public static DispatcherQueue Queue => Shared.Value.Queue;
+
     /// <summary>Run <paramref name="work"/> on the compositor's thread, and return what it returns or rethrow what it threw.</summary>
     public static T Run<T>(Func<T> work)
     {

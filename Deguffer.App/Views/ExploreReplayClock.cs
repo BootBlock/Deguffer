@@ -26,7 +26,7 @@ internal sealed class ExploreReplayClock
         _replay = replay;
         _ticks = page.DispatcherQueue.CreateTimer();
         _ticks.IsRepeating = true;
-        _ticks.TickGuarded(Tick);
+        _ticks.TickGuarded(this, static clock => clock.Tick());
 
         replay.PropertyChanged += OnReplayChanged;
 

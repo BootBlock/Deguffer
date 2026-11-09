@@ -114,6 +114,14 @@ internal sealed class ToolWindowPlacement
     public void Remember(bool isOpen) => _store.Save(new ToolWindowMetrics(_bounds, isOpen));
 
     /// <summary>
+    /// Stop following the window, which has closed. The <see cref="AppWindow"/> is a native object that
+    /// holds its handlers with a plain COM reference the collector treats as a root, so a handler left
+    /// on it would keep this placement, and the window it holds, alive for the life of the process
+    /// (#737). Where the window was last drawn is kept for <see cref="Remember"/>.
+    /// </summary>
+    public void Detach() => _tool.AppWindow.Changed -= OnChanged;
+
+    /// <summary>
     /// Follow the window as the reader moves and resizes it, and keep its floor at the scale of the
     /// display it is on, which a drag to a display at another scale changes.
     ///

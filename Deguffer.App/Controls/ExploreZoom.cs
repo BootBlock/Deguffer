@@ -83,7 +83,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
 
         var compositor = source.Compositor;
 
-        _tracker = InteractionTracker.CreateWithOwner(compositor, this);
+        _tracker = InteractionTracker.CreateWithOwner(compositor, new WeakTrackerOwner(this));
         _tracker.MinScale = 1;
         _tracker.MaxScale = (float)Ceiling;
         camera.Bound(_tracker);
@@ -95,7 +95,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         _settle = dispatcher.CreateTimer();
         _settle.Interval = JumpSettleTime;
         _settle.IsRepeating = false;
-        _settle.TickGuarded(Settled);
+        _settle.TickGuarded(this, static zoom => zoom.Settled());
 
         FollowMotion();
     }
@@ -133,6 +133,12 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     /// fraction of a pixel at any zoom.
     /// </summary>
     public MapOrigin Origin => _origin.Origin;
+
+    /// <summary>
+    /// The compositor's tracker, for a test that holds it to show it does not keep this zoom alive
+    /// (#737). Nothing in the app reads it from outside.
+    /// </summary>
+    internal InteractionTracker Tracker => _tracker;
 
     /// <summary>The viewport on screen at this moment.</summary>
     public MapViewport Shown { get; private set; }

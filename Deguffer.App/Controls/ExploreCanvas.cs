@@ -72,6 +72,12 @@ internal sealed class ExploreCanvas
 
     private readonly DispatcherQueueTimer _settled;
 
+    /// <summary>
+    /// Draw the map again once a run of size changes has stopped. Held here rather than by the timer,
+    /// which holds only a weak reference to this canvas, because the map's callback reaches the map.
+    /// </summary>
+    private readonly Action _onSettled;
+
     /// <param name="host">The map drawn.</param>
     /// <param name="present">Work from a drawing that has arrived, which is on top of the rest now.</param>
     /// <param name="painting">What the drawing the map works from was drawn from.</param>
@@ -99,7 +105,8 @@ internal sealed class ExploreCanvas
         _settled = host.DispatcherQueue.CreateTimer();
         _settled.Interval = ResizeSettleTime;
         _settled.IsRepeating = false;
-        _settled.TickGuarded(settled);
+        _onSettled = settled;
+        _settled.TickGuarded(this, static canvas => canvas._onSettled());
     }
 
     /// <summary>The display scale the drawings are painted at, read as each redraw of the picture starts.</summary>
