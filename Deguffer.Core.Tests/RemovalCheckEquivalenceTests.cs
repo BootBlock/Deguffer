@@ -85,6 +85,25 @@ public sealed class RemovalCheckEquivalenceTests
         Assert.False(policy.MayRemove(@"D:\Tool").IsAllowed);
     }
 
+    /// <summary>
+    /// A location no levels down is the target itself, which the passes above have answered, and a
+    /// target is not refused for holding itself: here the permission ordered first has answered it.
+    /// </summary>
+    [Fact]
+    public void AnAllowedFolderIsNotRefusedAsHoldingItself()
+    {
+        var policy = new ExploreActionPolicy(
+            [
+                ProtectedRegion.Permitting(@"D:\Shared\a", RegionScope.PathOnly),
+                ProtectedRegion.Refusing(@"D:\Shared\a", RegionScope.PathOnly, "Refused by name only."),
+            ],
+            [],
+            new FakeVolumeInventory(),
+            new EveryPathIsAFolder());
+
+        Assert.True(policy.MayRemove(@"D:\Shared\a").IsAllowed);
+    }
+
     private static List<ProtectedRegion> Regions(Random random)
     {
         List<ProtectedRegion> regions = [];
