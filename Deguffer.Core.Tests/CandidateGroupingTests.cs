@@ -32,9 +32,8 @@ public sealed class CandidateGroupingTests
         Assert.Equal(16, Unsafe.SizeOf<FoundFile>());
 
     /// <summary>
-    /// Most sizes on a disk are held by one file, and nothing is built for those. A list for every
-    /// length, most of them discarded, cost hundreds of bytes a file. What is left is one flat record
-    /// for each file to sort, 2.4 MB here.
+    /// Most sizes on a disk are held by one file, and nothing is built for those. The cost is one
+    /// flat record for each file to sort, 24 bytes each, so 2.4 MB here.
     /// </summary>
     [Fact]
     public void GroupingFilesOfMostlyUniqueLengthsBuildsNothingForTheUniqueOnes()

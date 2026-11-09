@@ -251,8 +251,7 @@ internal static class CandidateGrouping
     /// <summary>
     /// What a group is keyed by: the length and the time, and where the name is compared, the file
     /// whose name it is. The name is read where the tree holds it rather than made into a string for
-    /// every file found, which a search grouping by name would otherwise do for each file on the
-    /// volume (#345).
+    /// every identified file, of which a search grouping by name can have hundreds of thousands (#345).
     /// </summary>
     private readonly record struct GroupKey(long Length, FoundFile? Named, long Time)
     {
