@@ -1,4 +1,3 @@
-using System.Globalization;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -14,13 +13,35 @@ namespace Deguffer.Core.Providers;
 /// How many days Claude Code keeps a conversation nobody uses, or null where Deguffer cannot tell.
 /// </param>
 /// <param name="Tuning">What the provider's walks run with, under which the session folders are dated.</param>
+/// <param name="Reader">Where each conversation's lines are read.</param>
 internal sealed record ClaudeCodeConversationEvidence(
     ClaudeCodeProjects Projects,
     ClaudeCodeSessionList Sessions,
     ClaudeCodeSessionRegistry Registry,
     DateTime RecentSinceUtc,
     long? RetentionDays,
-    ScanTuner Tuning);
+    ScanTuner Tuning,
+    ClaudeCodeTranscriptReader Reader);
+
+/// <summary>A session every rule has passed, and that may be offered.</summary>
+/// <param name="Transcript">The conversation.</param>
+/// <param name="Folders">Its folders, each with when it was last written.</param>
+/// <param name="Placement">What the conversation's first lines say about it.</param>
+internal sealed record ClaudeCodeConversationOffer(
+    ClaudeCodeTranscript Transcript,
+    IReadOnlyList<(ClaudeCodeSidecar Folder, DateTime Written)> Folders,
+    ClaudeCodePlacement Placement);
+
+/// <summary>What was decided about every session, before anything was read for a title.</summary>
+/// <param name="Sorted">Everything left alone, and why. It holds no targets: <paramref name="Offers"/> are those.</param>
+/// <param name="Offers">Every session that may be offered.</param>
+/// <param name="Starts">Where each session started, for the question the clean asks again.</param>
+/// <param name="Unplaced">How many conversations were left alone for not saying which project they belong to.</param>
+internal sealed record ClaudeCodeSortedConversations(
+    ClaudeCodeClassification Sorted,
+    IReadOnlyList<ClaudeCodeConversationOffer> Offers,
+    ClaudeCodeSessionStarts Starts,
+    int Unplaced);
 
 /// <summary>
 /// Decides which of Claude Code's conversations may be offered, one session at a time.
@@ -40,25 +61,22 @@ internal sealed record ClaudeCodeConversationEvidence(
 /// <see cref="ClaudeCodeSessionRegistry.RecentWindow"/>, because a live conversation is appended to
 /// continuously; and a conversation that does not say which project it belongs to, because it cannot be
 /// described well enough to choose.</para>
+///
+/// <para><b>Decided from each conversation's first lines.</b> Nothing here reads a title, so Explore's
+/// declaration reads only the start of each conversation. A plan reads the titles of what is left, in
+/// <see cref="ClaudeCodeConversationOffers"/>, and Explore reads one when it is asked about that
+/// conversation (<see cref="ClaudeCodeOfferedEntries"/>).</para>
 /// </summary>
 internal static class ClaudeCodeConversations
 {
     /// <summary>Enough to keep a disk busy while each read stays small. Most reads stop within a few lines.</summary>
-    private const int ReadParallelism = 4;
+    internal const int ReadParallelism = 4;
+
+    internal const string UnplacedReason =
+        "Deguffer could not tell which project this conversation belongs to, so it cannot describe it well "
+        + "enough for you to choose it.";
 
     private const string MemoryFolder = "memory";
-
-    private const string ConversationReason =
-        "The conversation itself: every message, tool call and result in it. Nothing re-creates it, and "
-        + "Claude Code deletes it itself on the date under Expires.";
-
-    private const string UndatedConversationReason =
-        "The conversation itself: every message, tool call and result in it. Nothing re-creates it, and "
-        + "Claude Code deletes it itself once nobody has used it for as long as your settings say.";
-
-    private const string SessionFolderReason =
-        "The same session's subagent conversations and the tool output it set aside. They go with the "
-        + "conversation, and Claude Code deletes them with it.";
 
     private const string ProjectFolderReason =
         "A project folder. Claude Code keeps this project's conversations and memory in it, so only the "
@@ -77,10 +95,6 @@ internal static class ClaudeCodeConversations
     private const string OccupiedReason =
         "Claude Code is running in the project this conversation belongs to, and could resume it.";
 
-    private const string UnplacedReason =
-        "Deguffer could not tell which project this conversation belongs to, so it cannot describe it well "
-        + "enough for you to choose it.";
-
     private const string DuplicateReason =
         "Claude Code keeps more than one conversation under this session's name, so Deguffer cannot tell "
         + "which of them its folders belong to, and leaves them all alone.";
@@ -92,7 +106,7 @@ internal static class ClaudeCodeConversations
     private const string LinkedPartReason =
         "Part of this session is a link to somewhere else, so Deguffer leaves the whole session alone.";
 
-    public static ClaudeCodeClassification Classify(ClaudeCodeConversationEvidence evidence, CancellationToken ct)
+    public static ClaudeCodeSortedConversations Classify(ClaudeCodeConversationEvidence evidence, CancellationToken ct)
     {
         var sorting = new ClaudeCodeClassificationBuilder();
         var projects = evidence.Projects;
@@ -205,75 +219,34 @@ internal static class ClaudeCodeConversations
             }
         }
 
-        var described = Describe(candidates, ct);
-        var starts = new ClaudeCodeSessionStarts(transcripts);
+        var placed = Placements(candidates, evidence.Reader, ct);
+        var starts = new ClaudeCodeSessionStarts(transcripts, evidence.Reader);
         var occupancy = ClaudeCodeOccupancy.Of(evidence.Sessions, starts, ct);
+        var offers = new List<ClaudeCodeConversationOffer>(candidates.Count);
         var unplaced = 0;
         var occupied = 0;
 
-        foreach (var (candidate, conversation) in candidates.Zip(described))
+        foreach (var (candidate, placement) in candidates.Zip(placed))
         {
-            if (conversation is null)
+            if (placement is null)
             {
                 RefuseAll(sorting, candidate.Session.Parts, UnplacedReason);
                 unplaced++;
             }
-            else if (occupancy.Occupies(conversation.Project))
+            else if (occupancy.Occupies(placement.Project))
             {
                 RefuseAll(sorting, candidate.Session.Parts, OccupiedReason);
                 occupied++;
             }
             else
             {
-                Offer(sorting, candidate, conversation, evidence, starts);
+                offers.Add(new ClaudeCodeConversationOffer(candidate.Session.Transcript, candidate.Folders, placement));
             }
         }
 
-        Summarise(sorting, running, occupied, unplaced, unlisted: !projects.Complete && transcripts.Count > 0);
+        Summarise(sorting, running, occupied, unlisted: !projects.Complete && transcripts.Count > 0);
 
-        return sorting.Build();
-    }
-
-    private static void Offer(
-        ClaudeCodeClassificationBuilder sorting,
-        Candidate candidate,
-        ClaudeCodeConversation conversation,
-        ClaudeCodeConversationEvidence evidence,
-        ClaudeCodeSessionStarts starts)
-    {
-        var transcript = candidate.Session.Transcript;
-        var identity = new ItemIdentity(transcript.SessionId, Name(conversation));
-        var check = ClaudeCodeSessionCheck.Untouched(
-            evidence.Registry, starts, transcript.SessionId, conversation.Project, transcript.Path, transcript.LastWrittenUtc);
-
-        IReadOnlyList<ItemFacet> facets =
-        [
-            new ItemFacet("Title", conversation.Title ?? "Untitled"),
-            new ItemFacet("Started", conversation.Started is { } started ? Date(started.UtcDateTime) : "Unknown"),
-            new ItemFacet("Expires", Expiry(transcript.LastWrittenUtc, evidence.RetentionDays)),
-        ];
-
-        sorting.Offer(new DeletionTarget(
-            transcript.Path,
-            evidence.RetentionDays is null ? UndatedConversationReason : ConversationReason,
-            transcript.LastWrittenUtc,
-            TargetKind.File,
-            Identity: identity,
-            Facets: facets,
-            Group: conversation.Project,
-            UseCheck: check));
-
-        foreach (var (folder, written) in candidate.Folders)
-        {
-            sorting.Offer(new DeletionTarget(
-                folder.Path,
-                SessionFolderReason,
-                written,
-                Identity: identity,
-                Facets: facets,
-                Group: conversation.Project,
-                UseCheck: check));
-        }
+        return new ClaudeCodeSortedConversations(sorting.Build(), offers, starts, unplaced);
     }
 
     /// <summary>
@@ -316,43 +289,23 @@ internal static class ClaudeCodeConversations
     }
 
     /// <summary>
-    /// Every candidate's conversation read at once, bounded (G4), in the candidates' order, on threads
+    /// Every candidate's conversation placed at once, bounded (G4), in the candidates' order, on threads
     /// of the read's own rather than the pool's: each read blocks its thread on the disk. See
     /// <see cref="ListWorkers"/>.
     /// </summary>
-    private static ClaudeCodeConversation?[] Describe(List<Candidate> candidates, CancellationToken ct)
+    private static ClaudeCodePlacement?[] Placements(
+        List<Candidate> candidates, ClaudeCodeTranscriptReader reader, CancellationToken ct)
     {
-        var described = new ClaudeCodeConversation?[candidates.Count];
+        var placed = new ClaudeCodePlacement?[candidates.Count];
 
         ListWorkers.Run(
             candidates.Count,
             ReadParallelism,
-            index => described[index] = ClaudeCodeTranscriptReader.Read(candidates[index].Session.Transcript.Path, ct),
+            index => placed[index] = reader.Place(candidates[index].Session.Transcript.Path, ct),
             ct);
 
-        return described;
+        return placed;
     }
-
-    /// <summary>What the keep list calls the session: its title, or where and when it was held.</summary>
-    private static string Name(ClaudeCodeConversation conversation) =>
-        conversation.Title
-        ?? $"Untitled conversation in {ProjectName(conversation.Project)}"
-           + (conversation.Started is { } started ? $", {Date(started.UtcDateTime)}" : string.Empty);
-
-    private static string ProjectName(string project) =>
-        Path.GetFileName(Path.TrimEndingDirectorySeparator(project)) is { Length: > 0 } name ? name : project;
-
-    /// <summary>When Claude Code would delete a conversation last used at <paramref name="lastUsedUtc"/> itself.</summary>
-    private static string Expiry(DateTime lastUsedUtc, long? retentionDays) => retentionDays switch
-    {
-        null => "Unknown",
-        > ClaudeCodeRetention.LongestShownDays => "Not within 100 years",
-        { } days => Date(lastUsedUtc.AddDays(days)),
-    };
-
-    /// <summary>A day in the user's own time zone, written so that a column of them sorts as text.</summary>
-    private static string Date(DateTime utc) =>
-        utc.ToLocalTime().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
     private static void RefuseAll(ClaudeCodeClassificationBuilder sorting, IEnumerable<string> parts, string reason)
     {
@@ -362,8 +315,7 @@ internal static class ClaudeCodeConversations
         }
     }
 
-    private static void Summarise(
-        ClaudeCodeClassificationBuilder sorting, int running, int occupied, int unplaced, bool unlisted)
+    private static void Summarise(ClaudeCodeClassificationBuilder sorting, int running, int occupied, bool unlisted)
     {
         if (running > 0)
         {
@@ -386,15 +338,6 @@ internal static class ClaudeCodeConversations
                 PlanNoteSeverity.Warning,
                 "Deguffer could not list every Claude Code project folder, so it offers no conversation: it cannot "
                 + "tell which folders belong to each session.");
-        }
-
-        if (unplaced > 0)
-        {
-            sorting.Note(
-                PlanNoteSeverity.Information,
-                $"Left {ClaudeCodeClassificationBuilder.Count(unplaced, "conversation", "conversations")} alone that Deguffer "
-                + "could not read well enough to say which project each belongs to. A newer version of Claude Code "
-                + "may write them differently.");
         }
     }
 

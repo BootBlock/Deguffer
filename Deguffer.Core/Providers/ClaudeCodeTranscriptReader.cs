@@ -18,9 +18,21 @@ namespace Deguffer.Core.Providers;
 /// </param>
 public sealed record ClaudeCodeConversation(string Project, DateTimeOffset? Started, string? Title);
 
+/// <summary>Where and when a conversation was held, which is what its first lines say.</summary>
+/// <param name="Project">The folder the session was started in. See <see cref="ClaudeCodeConversation.Project"/>.</param>
+/// <param name="Started">When the session was started, where a line in its head records it.</param>
+public sealed record ClaudeCodePlacement(string Project, DateTimeOffset? Started);
+
 /// <summary>
 /// Reads a conversation's project, start and title from the head and the tail of its transcript, and
 /// nothing else.
+///
+/// <para><b>Two questions, because only one of them is asked often.</b> Which conversations are
+/// offered depends on each one's project, which is on its first lines: <see cref="Place"/> reads those
+/// and stops. Over 3,212 transcripts the first line holding both fields ended a median 10 KB in. A title
+/// is shown only by the Storage page's preview, so a plan asks for one (<see cref="Describe"/>) only of
+/// what it offers, and Explore only of a conversation it is asked to remove. Explore's policy is built
+/// before every scan and every duplicate search, and asks only the first.</para>
 ///
 /// <para><b>The format is internal to Claude Code and changes between versions</b>, so nothing here is
 /// depended on beyond four fields, and every read fails closed: a transcript this cannot place in a
@@ -39,11 +51,10 @@ public sealed record ClaudeCodeConversation(string Project, DateTimeOffset? Star
 /// fields, and only those fields are taken from it. The last line of a transcript records the last
 /// prompt typed, word for word, and it is never a title.</para>
 ///
-/// <para><b>§6.3.</b> The file is opened through <see cref="LongPath.Extended"/>. What comes back is a
-/// title, a folder and a date, so no test can tell a long path from a short one here: the removals are
-/// covered by the §6.3 assertions on the removal seam, and these reads are not.</para>
+/// <para><b>§6.3.</b> Every file is opened through <see cref="LongPath.Extended"/>.</para>
 /// </summary>
-internal static class ClaudeCodeTranscriptReader
+/// <param name="open">Opens a transcript, given its path in extended form. The file itself where none is given.</param>
+public sealed class ClaudeCodeTranscriptReader(Func<string, Stream>? open = null)
 {
     /// <summary>Far enough into a transcript to find its first title in every one measured.</summary>
     private const int HeadBytes = 1024 * 1024;
@@ -51,38 +62,91 @@ internal static class ClaudeCodeTranscriptReader
     /// <summary>Where Claude Code writes a session's latest title, in nearly every one measured.</summary>
     private const int TailBytes = 64 * 1024;
 
+    /// <summary>Where the head's reads start. Each read doubles, up to <see cref="ChunkBytes"/>.</summary>
+    private const int FirstHeadRead = 4 * 1024;
+
     private const int ChunkBytes = 64 * 1024;
 
     /// <summary>Longer than any title Claude Code writes. A longer one is cut rather than shown whole.</summary>
     private const int MaximumTitleLength = 200;
 
+    private readonly Func<string, Stream> _open = open ?? OpenFile;
+
+    /// <summary>The transcripts on the disk.</summary>
+    public static ClaudeCodeTranscriptReader Default { get; } = new();
+
     private static ReadOnlySpan<byte> TitleMarker => "-title"u8;
 
+    /// <summary>A line of a transcript's head, answering whether everything it is read for has been found.</summary>
+    private delegate bool HeadLine(ReadOnlySpan<byte> line);
+
+    private static FileStream OpenFile(string path) =>
+        new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+
     /// <summary>
-    /// What <paramref name="path"/> records about its session, or null where it cannot be read or does
-    /// not record the folder it was held in.
+    /// Where and when the session of <paramref name="path"/> was held, from its first lines alone, or
+    /// null where it cannot be read or does not record the folder it was held in.
     /// </summary>
-    public static ClaudeCodeConversation? Read(string path, CancellationToken ct)
+    public ClaudeCodePlacement? Place(string path, CancellationToken ct) =>
+        Reading(path, stream =>
+        {
+            string? project = null;
+            DateTimeOffset? started = null;
+
+            ReadHead(
+                stream,
+                line =>
+                {
+                    TakePlacement(line, ref project, ref started);
+                    return project is not null && started is not null;
+                },
+                ct);
+
+            return project is { } found ? new ClaudeCodePlacement(found, started) : null;
+        });
+
+    /// <summary>
+    /// The conversation of <paramref name="path"/>, <paramref name="placement"/> as <see cref="Place"/>
+    /// found it, with the title read from its tail or, where the tail holds none, its head. Null where
+    /// the file cannot be read or a title in it cannot be read as text.
+    /// </summary>
+    public ClaudeCodeConversation? Describe(string path, ClaudeCodePlacement placement, CancellationToken ct) =>
+        Reading(path, stream =>
+        {
+            var titles = new Titles();
+
+            // The tail first: it is where the title Claude Code shows now is, and a title found there
+            // makes the head's titles unnecessary to parse.
+            ReadTail(stream, titles, ct);
+
+            if (!titles.FoundInTail)
+            {
+                ReadHead(
+                    stream,
+                    line =>
+                    {
+                        if (line.IndexOf(TitleMarker) >= 0)
+                        {
+                            titles.Take(line, fromTail: false);
+                        }
+
+                        return false;
+                    },
+                    ct);
+            }
+
+            return new ClaudeCodeConversation(placement.Project, placement.Started, titles.Best);
+        });
+
+    /// <summary>The answer of <paramref name="read"/> over the open file, or null where it could not be read.</summary>
+    private T? Reading<T>(string path, Func<Stream, T?> read)
+        where T : class
     {
         try
         {
-            using var stream = new FileStream(
-                LongPath.Extended(path),
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.ReadWrite | FileShare.Delete);
+            using var stream = _open(LongPath.Extended(path));
 
-            var titles = new Titles();
-
-            // The tail first: it is where the title Claude Code shows now is, and a title found there makes
-            // the head's titles unnecessary to parse.
-            ReadTail(stream, titles, ct);
-
-            var head = ReadHead(stream, titles, ct);
-
-            return head.Project is { } project
-                ? new ClaudeCodeConversation(project, head.Started, titles.Best)
-                : null;
+            return read(stream);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -97,7 +161,7 @@ internal static class ClaudeCodeTranscriptReader
         }
     }
 
-    private static void ReadTail(FileStream stream, Titles titles, CancellationToken ct)
+    private static void ReadTail(Stream stream, Titles titles, CancellationToken ct)
     {
         // One byte before the tail as well, so that a tail starting exactly at a line's start keeps that line:
         // the byte is then the line break before it.
@@ -138,28 +202,15 @@ internal static class ClaudeCodeTranscriptReader
         }
     }
 
-    private static (string? Project, DateTimeOffset? Started) ReadHead(FileStream stream, Titles titles, CancellationToken ct)
+    /// <summary>
+    /// Each line of the first <see cref="HeadBytes"/> of <paramref name="stream"/>, until
+    /// <paramref name="take"/> says it has what it came for. The reads start small and grow, so that a
+    /// transcript whose first lines are short is not read a full chunk at a time, and the budget stays
+    /// for the few whose first lines are long.
+    /// </summary>
+    private static void ReadHead(Stream stream, HeadLine take, CancellationToken ct)
     {
-        string? project = null;
-        DateTimeOffset? started = null;
-
-        // Whether everything this reads the head for has been found.
-        bool Take(ReadOnlySpan<byte> line)
-        {
-            if (project is null || started is null)
-            {
-                Place(line, ref project, ref started);
-            }
-
-            if (!titles.FoundInTail && line.IndexOf(TitleMarker) >= 0)
-            {
-                titles.Take(line, fromTail: false);
-            }
-
-            return project is not null && started is not null && titles.FoundInTail;
-        }
-
-        var buffer = ArrayPool<byte>.Shared.Rent(HeadBytes);
+        var buffer = ArrayPool<byte>.Shared.Rent(FirstHeadRead);
 
         try
         {
@@ -167,12 +218,23 @@ internal static class ClaudeCodeTranscriptReader
 
             var filled = 0;
             var lineStart = 0;
+            var chunk = FirstHeadRead;
 
             while (filled < HeadBytes)
             {
                 ct.ThrowIfCancellationRequested();
 
-                var read = stream.Read(buffer, filled, Math.Min(ChunkBytes, HeadBytes - filled));
+                var wanted = Math.Min(chunk, HeadBytes - filled);
+
+                if (filled + wanted > buffer.Length)
+                {
+                    var larger = ArrayPool<byte>.Shared.Rent(filled + wanted);
+                    buffer.AsSpan(0, filled).CopyTo(larger);
+                    ArrayPool<byte>.Shared.Return(buffer);
+                    buffer = larger;
+                }
+
+                var read = stream.Read(buffer, filled, wanted);
 
                 if (read == 0)
                 {
@@ -180,14 +242,15 @@ internal static class ClaudeCodeTranscriptReader
                     // budget below is never read, because it is not a line.
                     if (lineStart < filled)
                     {
-                        Take(buffer.AsSpan(lineStart, filled - lineStart));
+                        take(buffer.AsSpan(lineStart, filled - lineStart));
                     }
 
-                    break;
+                    return;
                 }
 
                 var scanFrom = filled;
                 filled += read;
+                chunk = Math.Min(chunk * 2, ChunkBytes);
 
                 int end;
                 while ((end = Array.IndexOf(buffer, (byte)'\n', scanFrom, filled - scanFrom)) >= 0)
@@ -195,9 +258,9 @@ internal static class ClaudeCodeTranscriptReader
                     var line = buffer.AsSpan(lineStart, end - lineStart);
                     lineStart = scanFrom = end + 1;
 
-                    if (Take(line))
+                    if (take(line))
                     {
-                        return (project, started);
+                        return;
                     }
                 }
             }
@@ -206,12 +269,10 @@ internal static class ClaudeCodeTranscriptReader
         {
             ArrayPool<byte>.Shared.Return(buffer);
         }
-
-        return (project, started);
     }
 
     /// <summary>The first <c>cwd</c> and the first <c>timestamp</c> in the head, from whichever lines carry them.</summary>
-    private static void Place(ReadOnlySpan<byte> line, ref string? project, ref DateTimeOffset? started)
+    private static void TakePlacement(ReadOnlySpan<byte> line, ref string? project, ref DateTimeOffset? started)
     {
         using var record = Parse(line);
 
