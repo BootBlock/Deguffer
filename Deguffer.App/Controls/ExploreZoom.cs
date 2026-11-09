@@ -59,6 +59,9 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
 
     private readonly MapFling _fling = new();
 
+    /// <summary>Whether the tracker is at rest, which is when its bounds are pinned (see <see cref="MapCamera.PinBounds"/>).</summary>
+    private readonly MapTrackerRest _rest = new();
+
     private readonly ExploreOrigin _origin;
 
     /// <summary>What is moving the camera. Set through <see cref="Become"/>, which runs the jump's settle timer.</summary>
@@ -352,7 +355,7 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
 
             case MapLetGo.Fling:
                 Become(MapMotion.Tracked);
-                _requests.Asked(TrackerMoves.Fling(_tracker, speed), null);
+                _requests.Asked(Launch(tracker => TrackerMoves.Fling(tracker, speed)), null);
                 break;
         }
     }
@@ -405,22 +408,35 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
     {
     }
 
-    void IInteractionTrackerOwner.IdleStateEntered(InteractionTracker sender, InteractionTrackerIdleStateEnteredArgs args)
+    void IInteractionTrackerOwner.IdleStateEntered(InteractionTracker sender, InteractionTrackerIdleStateEnteredArgs args) =>
+        Rested(args.RequestId);
+
+    /// <summary>
+    /// The tracker came to rest, as request <paramref name="id"/> left it. Its bounds are pinned
+    /// first, whatever else the rest means: a move of the origin carried out after a coast's rest
+    /// leaves the tracker at rest, and it reports no rest of its own.
+    /// </summary>
+    internal void Rested(int id)
     {
+        if (_rest.Rested(id))
+        {
+            _camera.PinBounds();
+        }
+
         // A rest before the move is a hand's coast ending. The tracker carries the move out next: it
         // refuses a request only while a hand holds it.
         if (_origin.Pending is { } move)
         {
-            if (!move.CarriedOutBy(args.RequestId))
+            if (!move.CarriedOutBy(id))
             {
-                move.HeardRest(args.RequestId, _requests.Reports(0));
+                move.HeardRest(id, _requests.Reports(0));
                 return;
             }
 
             Carried(move);
         }
 
-        if (!_requests.Reports(args.RequestId))
+        if (!_requests.Reports(id))
         {
             return;
         }
@@ -467,6 +483,8 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
 
     void IInteractionTrackerOwner.RequestIgnored(InteractionTracker sender, InteractionTrackerRequestIgnoredArgs args)
     {
+        _rest.Refused(args.RequestId);
+
         if (_origin.Pending is { } move && move.RefusedBy(args.RequestId))
         {
             Refused(move);
@@ -591,7 +609,21 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         }
 
         Become(MapMotion.Tracked);
-        _requests.Asked(TrackerMoves.Glide(_tracker, Between(Shown, target), motion), target);
+        _requests.Asked(Launch(tracker => TrackerMoves.Glide(tracker, Between(Shown, target), motion)), target);
+    }
+
+    /// <summary>
+    /// Ask the tracker for <paramref name="move"/>, which sets it moving by itself, with its bounds
+    /// following its scale from before it starts. Says which request it made.
+    /// </summary>
+    private int Launch(Func<InteractionTracker, int> move)
+    {
+        _camera.UnpinBounds();
+
+        var request = move(_tracker);
+
+        _rest.Launched(request);
+        return request;
     }
 
     /// <summary>
@@ -748,11 +780,16 @@ internal sealed class ExploreZoom : IInteractionTrackerOwner
         Moved?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>A hand took the camera on the compositor: every request before it is over.</summary>
-    private void TakenByHand()
+    /// <summary>
+    /// A hand took the camera on the compositor: every request before it is over, and the tracker's
+    /// bounds follow its scale until the hand's coast comes to rest.
+    /// </summary>
+    internal void TakenByHand()
     {
         Become(MapMotion.Tracked);
         _requests.Taken();
+        _rest.Taken();
+        _camera.UnpinBounds();
 
         Started?.Invoke(this, EventArgs.Empty);
     }
