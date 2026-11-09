@@ -46,8 +46,8 @@ public sealed class ExploreActionPolicy
     internal const int Discovery = 8;
 
     private readonly RegionTable _regions;
-    private readonly IReadOnlyList<DeclaredRoot> _toolRoots;
-    private readonly IReadOnlyList<DeclaredRoot> _probedRoots;
+    private readonly FolderIndex<DeclaredRoot> _toolRoots;
+    private readonly FolderIndex<DeclaredRoot> _probedRoots;
     private readonly HeldLocations _held;
     private readonly IVolumeInventory _volumes;
     private readonly IFileSystem _fileSystem;
@@ -105,14 +105,17 @@ public sealed class ExploreActionPolicy
         var following = new FinalPlaces(_fileSystem, remembered);
 
         _regions = new RegionTable(regions, remembered, following);
-        _toolRoots = DeclaredRoot.Follow(toolRoots, following);
-        _probedRoots = DeclaredRoot.Follow(probedRoots ?? [], following);
+        var declared = DeclaredRoot.Follow(toolRoots, following);
+        var probed = DeclaredRoot.Follow(probedRoots ?? [], following);
+
+        _toolRoots = new FolderIndex<DeclaredRoot>(declared, root => root.Folder.Places);
+        _probedRoots = new FolderIndex<DeclaredRoot>(probed, root => root.Folder.Places);
 
         // A permitting region protects nothing, and a root that will not resolve names nothing.
         _held = new HeldLocations(
             [
                 .. _regions.Refusing,
-                .. _toolRoots.Concat(_probedRoots).Select(root => (root.Root.Reason, root.Folder)),
+                .. declared.Concat(probed).Select(root => (root.Root.Reason, root.Folder)),
             ],
             _fileSystem);
     }
@@ -305,8 +308,7 @@ public sealed class ExploreActionPolicy
 
         // Where no link leads elsewhere the far side is one of the paths the item is already
         // reachable at, a substituted letter and another mount of its volume included.
-        if (unfollowed is not null || farSide is null
-            || folder.Places.Contains(ReachedFolder.Comparable(farSide), StringComparer.OrdinalIgnoreCase))
+        if (unfollowed is not null || farSide is null || folder.IsAt(ReachedFolder.Comparable(farSide)))
         {
             return (unfollowed, folder);
         }
@@ -419,7 +421,7 @@ public sealed class ExploreActionPolicy
 
         var verdict = _regions.Innermost(target) is { Verdict.IsAllowed: false } refusing
             ? refusing.Verdict
-            : Below(_toolRoots, target, children);
+            : Below(target, children);
 
         // A probed declaration is asked only about what everything above allows, so it can add a
         // refusal and never lift one. Its roots come from what a tool reports and what a setting
@@ -456,48 +458,34 @@ public sealed class ExploreActionPolicy
     /// declaration at that depth is asked, and a child one of them recognises is allowed: each
     /// provider states what it knows, and none has to carry another's table.</para>
     /// </summary>
-    private static ExploreVerdict Below(IReadOnlyList<DeclaredRoot> roots, string target, ToolRootChildren children)
+    private ExploreVerdict Below(string target, ToolRootChildren children)
     {
-        List<DeclaredRoot> innermost = [];
-        int? levels = null;
-
-        foreach (var root in roots)
+        // The deepest folder with a declaration, and only that one: declarations filed together are
+        // one folder, however each is named, and every one of them is asked.
+        foreach (var innermost in _toolRoots.Holding(target))
         {
-            if (root.Folder.LevelsTo(target) is not { } below || below > levels)
+            ExploreVerdict? refusal = null;
+
+            foreach (var owner in innermost)
             {
-                continue;
+                if (children.Refusal(owner, owner.Naming(target)!) is not { } refused)
+                {
+                    // One declaration recognises this child, which settles it: a child is recognised
+                    // however many other providers also own the directory holding it.
+                    return ExploreVerdict.Unclassified;
+                }
+
+                // The first refusal is the one the user is shown, because a reason naming the wrong
+                // provider's rule is worse than either of them alone.
+                refusal ??= refused;
             }
 
-            // Strictly deeper discards what was found before it; equally deep joins it. Two roots
-            // that both hold this folder as many levels up are the same folder, however each is named.
-            if (below != levels)
-            {
-                innermost.Clear();
-                levels = below;
-            }
-
-            innermost.Add(root);
+            return refusal!;
         }
 
-        ExploreVerdict? refusal = null;
-
-        foreach (var owner in innermost)
-        {
-            if (children.Refusal(owner, owner.Naming(target)!) is not { } refused)
-            {
-                // One declaration recognises this child, which settles it: a child is recognised
-                // however many other providers also own the directory holding it.
-                return ExploreVerdict.Unclassified;
-            }
-
-            // The first refusal is the one the user is shown, because a reason naming the wrong
-            // provider's rule is worse than either of them alone.
-            refusal ??= refused;
-        }
-
-        // Null where no declaration covers this path, which is the ordinary case: most of a drive
-        // belongs to no tool root at all.
-        return refusal ?? ExploreVerdict.Unclassified;
+        // No declaration covers this path, which is the ordinary case: most of a drive belongs to no
+        // tool root at all.
+        return ExploreVerdict.Unclassified;
     }
 
     /// <summary>
@@ -522,31 +510,30 @@ public sealed class ExploreActionPolicy
     /// </summary>
     private ExploreVerdict? ProbedRefusal(string target, ToolRootChildren children)
     {
-        ExploreVerdict? refusal = null;
-        int? levels = null;
-
-        foreach (var root in _probedRoots)
+        // The deepest first, and of two at one folder the first declared, so the first refusal found
+        // is the one to give. A root reachable at two of the folders comes up at each, and a root that
+        // refused nothing at the first refuses nothing at the second.
+        foreach (var roots in _probedRoots.Holding(target))
         {
-            if (root.Folder.LevelsTo(target) is not { } below
-                || below >= levels
-                || root.Naming(target) is not { } named
-                || children.Refusal(root, named) is not { } refused)
+            foreach (var root in roots)
             {
-                continue;
+                if (root.Naming(target) is not { } named || children.Refusal(root, named) is not { } refused)
+                {
+                    continue;
+                }
+
+                var name = Path.GetFileName(named);
+
+                return root.Folder.LevelsTo(target) == 0
+                    ? refused
+                    : root.Root.Claim == ToolRootClaim.NamedEntries
+                        ? ExploreVerdict.Refuse($"'{name}' is the tool's, in '{root.Path}': {root.Root.Reason}")
+                        : ExploreVerdict.Refuse(
+                            $"'{name}' is inside '{root.Path}', and Deguffer refuses what is in there "
+                            + $"as well as '{Path.GetFileName(root.Path)}' itself: {root.Root.Reason}");
             }
-
-            var name = Path.GetFileName(named);
-
-            refusal = below == 0
-                ? refused
-                : root.Root.Claim == ToolRootClaim.NamedEntries
-                    ? ExploreVerdict.Refuse($"'{name}' is the tool's, in '{root.Path}': {root.Root.Reason}")
-                    : ExploreVerdict.Refuse(
-                        $"'{name}' is inside '{root.Path}', and Deguffer refuses what is in there "
-                        + $"as well as '{Path.GetFileName(root.Path)}' itself: {root.Root.Reason}");
-            levels = below;
         }
 
-        return refusal;
+        return null;
     }
 }

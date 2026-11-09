@@ -122,7 +122,7 @@ public static class VolumeRoot
     /// </summary>
     public static IReadOnlyList<VolumePlace>? Places(IVolumeInventory volumes, string path)
     {
-        List<VolumePlace> places = [];
+        List<VolumePlace>? places = null;
         string? reached = path;
 
         // One step per drive letter at most, because a substituted letter may stand for a folder
@@ -134,12 +134,23 @@ public static class VolumeRoot
                 return null;
             }
 
-            // A letter standing for a volume's top leads to places its mount points already named.
-            foreach (var place in mounted)
+            // One place on the first step is the ordinary answer, and every removal check asks this,
+            // so that list is the answer rather than the first of two.
+            if (places is null && mounted.Count == 1)
             {
-                if (!places.Exists(known => known.Path.Equals(place.Path, StringComparison.OrdinalIgnoreCase)))
+                places = mounted;
+            }
+            else
+            {
+                places ??= [];
+
+                // A letter standing for a volume's top leads to places its mount points already named.
+                foreach (var place in mounted)
                 {
-                    places.Add(place);
+                    if (!HasPlace(places, place.Path))
+                    {
+                        places.Add(place);
+                    }
                 }
             }
 
@@ -147,13 +158,26 @@ public static class VolumeRoot
 
             // Letters standing for each other come back to a path already read, and reading it
             // again would ask the machine the same questions and add nothing.
-            if (reached is not null && places.Exists(known => known.Path.Equals(reached, StringComparison.OrdinalIgnoreCase)))
+            if (reached is not null && HasPlace(places, reached))
             {
                 break;
             }
         }
 
         return places;
+    }
+
+    private static bool HasPlace(List<VolumePlace> places, string path)
+    {
+        foreach (var place in places)
+        {
+            if (place.Path.Equals(path, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>

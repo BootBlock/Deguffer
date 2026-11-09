@@ -59,13 +59,33 @@ internal static class OutlookDataFiles
                     + "the supported way to make it smaller.");
         }
 
-        return target.Split(Separators, StringSplitOptions.RemoveEmptyEntries)
-            .Contains(SavedDataFilesFolder, StringComparer.OrdinalIgnoreCase)
+        return NamesTheSavedDataFilesFolder(target)
                 ? ExploreVerdict.Refuse(
                     "This is the folder Outlook saves its data files in: archives, and the mail of POP "
                     + "and IMAP accounts. What is in it is often the only copy of that mail, so Deguffer "
                     + "removes nothing here.")
                 : null;
+    }
+
+    /// <summary>Whether one of the names in <paramref name="target"/> is <see cref="SavedDataFilesFolder"/>.</summary>
+    private static bool NamesTheSavedDataFilesFolder(string target)
+    {
+        var rest = target.AsSpan();
+
+        while (!rest.IsEmpty)
+        {
+            var separator = rest.IndexOfAny(Separators);
+            var name = separator >= 0 ? rest[..separator] : rest;
+
+            if (name.Equals(SavedDataFilesFolder, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            rest = separator >= 0 ? rest[(separator + 1)..] : default;
+        }
+
+        return false;
     }
 
     /// <summary>

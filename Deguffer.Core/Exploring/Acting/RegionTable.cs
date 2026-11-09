@@ -20,6 +20,8 @@ namespace Deguffer.Core.Exploring.Acting;
 internal sealed class RegionTable
 {
     private readonly IReadOnlyList<(ProtectedRegion Region, ReachedFolder Folder)> _regions;
+    private readonly FolderIndex<(ProtectedRegion Region, ReachedFolder Folder)> _byFolder;
+    private readonly IReadOnlyList<ReachedFolder> _permitting;
 
     /// <param name="regions">
     /// The table as the caller gave it. A path-only entry is put first among entries for one folder,
@@ -48,6 +50,9 @@ internal sealed class RegionTable
                 .OrderBy(r => r.Scope == RegionScope.PathOnly ? 0 : 1)
                 .Select(r => (r, r.Verdict.IsAllowed ? ReachedFolder.At(r.Path, volumes) : finalPlaces.Rule(r.Path))),
         ];
+
+        _byFolder = new FolderIndex<(ProtectedRegion Region, ReachedFolder Folder)>(_regions, r => r.Folder.Places);
+        _permitting = [.. _regions.Where(r => r.Region.Verdict.IsAllowed).Select(r => r.Folder)];
     }
 
     /// <summary>
@@ -67,25 +72,20 @@ internal sealed class RegionTable
     /// <param name="place">One path the item is reachable at, in <see cref="ReachedFolder.Comparable"/> form.</param>
     public ProtectedRegion? Innermost(string place)
     {
-        ProtectedRegion? innermost = null;
-        int? levels = null;
-
-        foreach (var (region, folder) in _regions)
+        foreach (var regions in _byFolder.Holding(place))
         {
-            // Strictly deeper only, so of two entries for one folder the path-only one, ordered
+            // Filed in the table's order, so of two entries for one folder the path-only one, ordered
             // first, answers for the folder itself.
-            if (folder.LevelsTo(place) is not { } below
-                || (region.Scope == RegionScope.PathOnly && below > 0)
-                || below >= levels)
+            foreach (var (region, folder) in regions)
             {
-                continue;
+                if (region.Scope != RegionScope.PathOnly || folder.LevelsTo(place) == 0)
+                {
+                    return region;
+                }
             }
-
-            innermost = region;
-            levels = below;
         }
 
-        return innermost;
+        return null;
     }
 
     /// <summary>
@@ -107,32 +107,41 @@ internal sealed class RegionTable
     /// <param name="place">One path the item is reachable at, in <see cref="ReachedFolder.Comparable"/> form.</param>
     public ExploreVerdict? RefusingAtAndBelow(string place)
     {
-        ProtectedRegion? innermost = null;
-        int? levels = null;
+        return InnermostCoveringBelow(place) is { Verdict.IsAllowed: false } refusing && !IsCarvedOut(place)
+            ? refusing.Verdict
+            : null;
+    }
 
-        foreach (var (region, folder) in _regions)
+    private ProtectedRegion? InnermostCoveringBelow(string place)
+    {
+        foreach (var regions in _byFolder.Holding(place))
         {
-            if (region.Scope != RegionScope.PathAndBelow
-                || folder.LevelsTo(place) is not { } below
-                || below >= levels)
+            foreach (var (region, _) in regions)
             {
-                continue;
+                if (region.Scope == RegionScope.PathAndBelow)
+                {
+                    return region;
+                }
             }
-
-            innermost = region;
-            levels = below;
         }
 
-        if (innermost is not { Verdict.IsAllowed: false } refusing)
+        return null;
+    }
+
+    /// <summary>Whether a permitting region lies strictly inside <paramref name="place"/>.</summary>
+    private bool IsCarvedOut(string place)
+    {
+        foreach (var folder in _permitting)
         {
-            return null;
+            foreach (var inside in folder.Places)
+            {
+                if (LongPath.Contains(place, inside) && !inside.Equals(place, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
         }
 
-        var carvedOut = _regions.Any(r =>
-            r.Region.Verdict.IsAllowed
-            && r.Folder.Places.Any(inside =>
-                LongPath.Contains(place, inside) && !inside.Equals(place, StringComparison.OrdinalIgnoreCase)));
-
-        return carvedOut ? null : refusing.Verdict;
+        return false;
     }
 }

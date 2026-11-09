@@ -17,6 +17,9 @@ namespace Deguffer.Core.Safety;
 /// </summary>
 public sealed class ReachedFolder
 {
+    private static readonly char[] Separators =
+        [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar];
+
     /// <summary>
     /// <see cref="Places"/> as an array, which <see cref="PathTo(ReachedFolder)"/> and
     /// <see cref="IsSameAs"/> walk without allocating an enumerator. The in-use check asks them for
@@ -75,9 +78,9 @@ public sealed class ReachedFolder
     {
         var reached = Spelled(path, Comparable(path));
 
-        foreach (var place in places.Skip(1))
+        for (var other = 1; other < places.Count; other++)
         {
-            Add(reached, Comparable(place.Path));
+            Add(reached, Comparable(places[other].Path));
         }
 
         return new ReachedFolder(reached, false);
@@ -120,18 +123,28 @@ public sealed class ReachedFolder
     /// that holds at any of them holds. Asked of the item as a whole, the innermost rule at one path
     /// would answer for another, where a different rule is innermost.</para>
     /// </summary>
-    public string? PathTo(string place) =>
-        Places
-            .Where(outer => LongPath.Contains(outer, place))
-            .Select(outer => LongPath.Relative(outer, place))
-            .MinBy(Levels);
+    public string? PathTo(string place) => Nearest(place) is { } outer ? LongPath.Relative(outer, place) : null;
 
     /// <summary>
     /// How many folders below this one <paramref name="inner"/> is, at the first pair of their places
     /// where one holds the other: none where the two are one folder, and null where this folder does
     /// not hold it.
     /// </summary>
-    public int? LevelsTo(ReachedFolder inner) => PathTo(inner) is { } relative ? Levels(relative) : null;
+    public int? LevelsTo(ReachedFolder inner)
+    {
+        foreach (var outer in _places)
+        {
+            foreach (var place in inner._places)
+            {
+                if (LongPath.Contains(outer, place))
+                {
+                    return LevelsBelow(outer, place);
+                }
+            }
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// How many folders below this one <paramref name="place"/> is, from the nearest of this folder's
@@ -141,7 +154,104 @@ public sealed class ReachedFolder
     /// lengths say that only where every one is named the same way, and <c>S:\vcpkg</c> is inside
     /// <c>C:\Users\testuser\src</c> where <c>S:</c> stands for the second.</para>
     /// </summary>
-    public int? LevelsTo(string place) => PathTo(place) is { } relative ? Levels(relative) : null;
+    public int? LevelsTo(string place) => Nearest(place) is { } outer ? LevelsBelow(outer, place) : null;
+
+    /// <summary>Whether <paramref name="place"/>, one path in <see cref="Comparable"/> form, is this folder or is in it.</summary>
+    public bool Holds(string place)
+    {
+        foreach (var outer in _places)
+        {
+            if (LongPath.Contains(outer, place))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Every folder a path holding this folder could be, for filing it in a <see cref="FolderIndex{T}"/>
+    /// that is looked up by what holds it: each of its <see cref="Places"/>, and each folder above each
+    /// of them.
+    /// </summary>
+    internal IEnumerable<string> PlacesAndAbove()
+    {
+        foreach (var place in _places)
+        {
+            var folder = place.TrimEnd(Separators);
+
+            yield return folder;
+
+            for (var separator = folder.LastIndexOfAny(Separators); separator >= 0; separator = folder.LastIndexOfAny(Separators))
+            {
+                folder = folder[..separator];
+
+                yield return folder;
+            }
+        }
+    }
+
+    /// <summary>The place of this folder nearest above <paramref name="place"/>, the first of them where two are as near, or null where none holds it.</summary>
+    private string? Nearest(string place)
+    {
+        string? nearest = null;
+        var fewest = int.MaxValue;
+
+        foreach (var outer in _places)
+        {
+            if (!LongPath.Contains(outer, place))
+            {
+                continue;
+            }
+
+            var levels = LevelsBelow(outer, place);
+
+            if (levels < fewest)
+            {
+                nearest = outer;
+                fewest = levels;
+            }
+        }
+
+        return nearest;
+    }
+
+    /// <summary>
+    /// How many names follow <paramref name="outer"/> in <paramref name="place"/>, which it holds, read
+    /// from the text rather than from <see cref="LongPath.Relative"/>: every removal check asks this of
+    /// every rule that holds the path, and only the rule that answers needs the relative path built.
+    ///
+    /// <para><b>The text is read only where it is already resolved.</b> A place keeps its spelling
+    /// beside its comparable form, so an install location written <c>C:\Users\../Apps</c> matches
+    /// <c>C:\Users</c> as text and is really beside it, which only resolving it can show.</para>
+    /// </summary>
+    private static int LevelsBelow(string outer, string place)
+    {
+        if (!LongPath.IsAlreadyResolved(place))
+        {
+            var relative = LongPath.Relative(outer, place);
+
+            return relative == "." ? 0 : relative.Split(Path.DirectorySeparatorChar).Length;
+        }
+
+        var levels = 0;
+        var inName = false;
+
+        foreach (var character in place.AsSpan(outer.Length))
+        {
+            var isSeparator = character == Path.DirectorySeparatorChar;
+
+            if (!isSeparator && !inName)
+            {
+                levels++;
+            }
+
+            inName = !isSeparator;
+        }
+
+        return levels;
+    }
 
     /// <summary>
     /// <paramref name="place"/> named below this folder the way <paramref name="named"/> names this
@@ -166,8 +276,19 @@ public sealed class ReachedFolder
         _ => Path.Combine(named, relative),
     };
 
-    private static int Levels(string relative) =>
-        relative == "." ? 0 : relative.Split(Path.DirectorySeparatorChar).Length;
+    /// <summary>Whether this folder is reachable at exactly <paramref name="place"/>, one path in <see cref="Comparable"/> form.</summary>
+    internal bool IsAt(string place)
+    {
+        foreach (var known in _places)
+        {
+            if (known.Equals(place, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     /// <summary>Whether this folder and <paramref name="other"/> are one folder reached two ways.</summary>
     public bool IsSameAs(ReachedFolder other)
@@ -304,9 +425,12 @@ public sealed class ReachedFolder
     /// <summary>Adds <paramref name="place"/> where it is not there already, and says whether it was not.</summary>
     private static bool Add(List<string> places, string place)
     {
-        if (places.Contains(place, StringComparer.OrdinalIgnoreCase))
+        foreach (var known in places)
         {
-            return false;
+            if (known.Equals(place, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
         }
 
         places.Add(place);

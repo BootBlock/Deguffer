@@ -28,9 +28,6 @@ namespace Deguffer.Core.Exploring.Acting;
 /// </summary>
 internal static class VolumeReservations
 {
-    private static readonly char[] Separators =
-        [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar];
-
     private static readonly Dictionary<string, string> Reasons = new(StringComparer.OrdinalIgnoreCase)
     {
         ["System Volume Information"] =
@@ -66,10 +63,12 @@ internal static class VolumeReservations
     /// </summary>
     /// <param name="below">Where the path sits below its volume's root, from <see cref="Safety.VolumeRoot"/>.</param>
     public static ExploreVerdict? Refusal(string below) =>
-        below.Split(Separators, StringSplitOptions.RemoveEmptyEntries) is [var first, ..]
-        && Reasons.TryGetValue(first, out var reason)
+        ReasonsByName.TryGetValue(TopOfVolumeRefusals.FirstName(below), out var reason)
             ? ExploreVerdict.Refuse(reason)
             : null;
+
+    private static readonly Dictionary<string, string>.AlternateLookup<ReadOnlySpan<char>> ReasonsByName =
+        Reasons.GetAlternateLookup<ReadOnlySpan<char>>();
 
     private static string Managed(string what) =>
         $"This is {what}. Windows manages it, and its size is changed through the system settings "

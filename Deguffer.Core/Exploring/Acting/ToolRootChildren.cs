@@ -21,8 +21,8 @@ internal sealed class ToolRootChildren(IFileSystem fileSystem)
     private static readonly char[] Separators =
         [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar];
 
-    private readonly Dictionary<string, (PathPresence Presence, ChildKind Kind)> _readings =
-        new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Made at the first child read, because most paths are in no tool root at all.</summary>
+    private Dictionary<string, (PathPresence Presence, ChildKind Kind)>? _readings;
 
     /// <summary>
     /// Why <paramref name="root"/> refuses <paramref name="target"/>, or null where it recognises
@@ -94,6 +94,8 @@ internal sealed class ToolRootChildren(IFileSystem fileSystem)
 
     private (PathPresence Presence, ChildKind Kind) Read(string extended)
     {
+        _readings ??= new(StringComparer.OrdinalIgnoreCase);
+
         if (_readings.TryGetValue(extended, out var reading))
         {
             return reading;
