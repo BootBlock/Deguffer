@@ -4,7 +4,8 @@
 > verified against the code and filed as #441 to #492, and a second audit of the clean, the
 > duplicate search, start-up and file I/O, filed as #494 to #537, and a third audit of the map's
 > drawing, Explore's lists and removal, the duplicate search's memory and the shell's lists, filed as
-> #676 to #690. Work each in its own order below:
+> #676 to #690, and a fourth audit of the running App, real tools, real drives and elevated passes,
+> filed as #691 to #710 and #737 to #743. Work each in its own order below:
 > the measurements in each stage 0 decide the larger items after them. Flip to ✅ COMPLETE and
 > `git mv` into `done/` when every issue below is closed or rejected, or supersede it with a newer
 > plan.
@@ -329,3 +330,124 @@ group card builds every copy at once. The rest are small allocation wins.
 | The Memory page's refresh and tree, `LiveList.Reorder`, marking totals, preference writes | Sub-millisecond per tick or click, or bounded lists. |
 | The item-list search, one change per item | About 4 µs per change: 19-31 ms to hide 4,990 of 5,000, against a rebuild that breaks the in-place rule. |
 | Startup's shortcut reads, installed apps, diagnostics, `BusyWork`, the star field | Once per reading off the UI thread, or bounded. |
+
+## Fourth audit: the running App, real tools, real drives and elevated passes
+
+A fourth audit measured what the first three could not time with throwaway programs: the running App
+(start-up, idle use, frames while the map moves, memory over a long session), every provider read
+one by one against this machine's real data, the real tool starts, real drives cold and warm, and
+elevated passes. It ran in eight parallel lanes over two days on one shared machine (32 hardware
+threads, NVMe solid-state disks only, an RTX 4090, one 5120x1440 display), against a Release
+ReadyToRun publish of the App and harnesses that call the same Core entry points. Figures are
+processor time and allocations where possible, repeated, with the spread. Each issue says which of
+its figures were measured and which are estimates. Instrumentation used to measure was never
+committed.
+
+### What it found, in one paragraph
+
+**An elevated pass holds its largest rows because of its own DISM analysis, and the rest of the cost
+is in a few rows and a few App paths.** DISM's component-store analysis, started at the start of an
+elevated pass since #441, makes the servicing stack create its restart-pending key, so every row
+that checks for an unfinished update holds itself for the whole pass (#691). On real data the costly
+rows are the ones that start PowerShell or pnputil for one number (#692, #693), that probe protected
+paths one at a time or breadth-first through `WinSxS` (#694, #695), that read every Claude Code
+transcript again in every pass and twice more for Explore's policy (#696, #697, #707), and that
+measure Windows.old in full only to ask whether it is empty (#699). Explore's removal policy is
+linear in its rules for every file a duplicate search judges (#706), and the duplicate search lists
+hard-link names in series after identifying (#708). The x86 build runs out of address space (#709).
+In the App, the Classic names hold most of a core while the map pans (#702), and a few UI-thread
+paths do work for every tile, row or snapshot that they need only once (#703, #704, #705). Idle, the
+App is not idle: once a map has been built, its camera keeps the compositor recalculating every
+frame for the life of the process (#739), and a covered About page flies its star field at a core
+(#740). Every closed map appearance window and every Settings visit leaves its map alive (#737), a
+scan leaves about 600 MB committed (#738), and Classic names draw through a second Direct3D device
+(#741). Start-up spends about a third of its time before the App's own timing begins (#742, #541).
+
+### Order of work
+
+| Issue | Note |
+| --- | --- |
+| #691 | DISM's analysis creates the restart-pending key that holds the component store, driver store, Windows.old and Windows Update rows in every elevated pass. `type: bug`, `safety`. First, because it changes what an elevated pass offers. |
+| #706 | The removal policy's per-file check is linear in its rules: 72 GB allocated judging one drive's duplicates. `safety`. |
+| #692 | Delivery Optimization starts PowerShell in every preview for one WMI number: 1.1-1.9 s against 16-30 ms in process. |
+| #695, #694 | `Protect` probes in series (1.2-3.6 s for a Claude Code row), and `IsPresent(WinSxS)` walks breadth-first (8.8 MB per call, 5-7 calls per pass). `safety`. |
+| #707, #696, #697 | Claude Code transcripts: read again for Explore's policy on the duplicate search's critical path, read again every pass, and read 64 KiB at each end to use about 15 KiB. #696 waits on a decision. |
+| #708 | The duplicate search lists hard-link names in series after identifying: an 18-36 s gap on a source tree. |
+| #709 | The x86 build is not large-address-aware: a duplicate search runs out of memory in 15 s. |
+| #737 | Every closed map appearance window and every Settings visit leaves its map alive, held by native references the collector cannot see. `type: bug`. |
+| #739 | After the first map, the camera's bounds and tracking keep the compositor recalculating every frame: 5.4-12.7 s of processor time a minute on an idle page, about 0.2 s without. Waits on a decision. |
+| #740 | A covered About page holds about one core (52-62 s a minute). Waits on a decision. |
+| #741 | Classic names draw through a second Direct3D device: about 53 driver threads and 74 MB of GPU memory for the life of the process. |
+| #738 | A scan leaves about 600 MB committed: one collection at idle takes it from 946 to 338 MB. The structural part waits on a decision. |
+| #742 | The Launch timing pair misses the 380-823 ms before `OnLaunched`. Do it before measuring #541. |
+| #743 | A composite ReadyToRun publish jits about 540 methods fewer, for 35 MB. Measure again after #541. Waits on a decision. |
+| #703 | Each tile arrival rereads the pointer and rebuilds the outline: 746 ms of UI thread over three maximized zoom cycles. |
+| #704 | `RowGhosts.Leave` lays out the whole tree for each leaving row: 65-260 ms per change. |
+| #705 | `ExploreRow` builds every row's full path at build time: 161-171 ms per rescan of 22,431 rows. |
+| #701 | The Hugging Face row's live-tree query omits `LockFilesListed`: 20,100 probes, 117-221 ms and 40 MB. |
+| #710 | MFT attribute lists are read one cluster at a time. Merging touching clusters halves the reads. |
+| #698 | The Topaz row reads 383 uninstall keys before it probes its folder: 28-42 ms. |
+| #700 | The Capture One row examines its sessions twice per pass (code-read estimate). |
+| #693 | pnputil `/devices` costs about 1 s of kernel processor time per pass. Waits on a decision. |
+| #699 | Windows.old is measured in full (96-172 s elevated) to ask whether it is empty. Waits on a decision. |
+| #702 | The Classic names hold 79-83% of a core while a maximized map pans. Waits on a decision. |
+
+### Waiting on a decision
+
+| Issue | The decision |
+| --- | --- |
+| #691 | How to tell DISM's own restart-pending key from a real unfinished update: read the key before the analysis starts, run the analysis after the hold checks, or stop starting it at the pass start. |
+| #693 | Keep pnputil's `/devices` answer, or read device properties in process and accept that extension INFs need their own source. `safety`. |
+| #696 | Keep transcript readings across passes, keyed by length and write time, against the recorded "read afresh" (#531). |
+| #699 | Ask Disk Cleanup's handler for emptiness without its full measure, or take Windows.old's size from the scanner. `safety`. |
+| #702 | The Classic names' look against their cost: two expressions and an image source per name. |
+| #738 | Who owns an `ExploreTree`'s arrays, so that snapshots can share and hand back column buffers instead of allocating new ones. |
+| #739 | Static bounds while the tracker rests: whether a pinch's first frames against the bounds from before it started are invisible. |
+| #740 | Which signal says a window is covered: its activation state, or a DWM cloak or occlusion signal. |
+| #743 | 35 MB of download and disk against about 65 ms of start-up. |
+
+### Checked and not filed
+
+| Finding | Why no issue |
+| --- | --- |
+| `BuildDirectoryProvider` recognises its candidates again for its declaration | 1-15 ms wall once per pass on a real source tree. |
+| The Chromium AppData walk in a Clean preview | About 8,500 listings, 138-186 ms wall and 36 MB per pass, shared by both rows. The depth-6 search is the design (#43, #61, #647), and #661 asks whether to narrow it. |
+| The first row to ask for declarations pays for every row's | The `RowDeclarations` design, paid once per pass and shared. |
+| Claude Code sidecar dating, Cargo and node_modules measurement | 69-159 ms, bounded and parallel, or the walk primitive at about 14 µs per entry. |
+| Crash dump signature reads, emulator obstacle probes | Microseconds, or 13 ms per pass. |
+| Git LFS per-object measure | No LFS store on the machine, and the claim that it is serial was not confirmed. |
+| Resolve walks each render folder twice | About 10 ms even for a 100 GB cache, and it needs the scanner seam #465 and #529 ask for. |
+| Restore points' three readings in turn, `TempFolderListings` building paths eagerly | Under 60 ms, elevated only, or 9.4 ms and 5 MB once per pass. |
+| Steam artwork measured as 1,965 requests | 130 ms against 115 ms for one walk of the parent. |
+| VS Code discovery in three rows, pre-commit listing twice, packaged-app probes | Under 1-40 ms each, the third audit's "repeated listings" row. |
+| The temporary files row's 2.4 s of processor time | One walk of a 497,000-entry `%TEMP%` at the same per-folder rate as Cargo, NuGet and Gradle. |
+| 74 absent rows | 88 ms of processor time and 2.2 MB in total. |
+| One conhost per tool start, Bun's two queries in series | 29 starts per pass at about 5 ms each, and avoiding them risks visible windows. Bun's pair is about 40 ms per pass. |
+| Git's `cmd\git.exe` launcher, DISM started unelevated, Python tools starting two interpreters | 10-16 ms per start, one deliberate start that answers 740, or how those tools are installed. |
+| Auto reads the file table alone for a volume root | Warm, a walk is faster on some volumes. Cold, the table wins on most, and the walk costs about eight times the processor time. |
+| Cold file-table reads, folders of 95,000-149,000 entries, 260-character paths, OneDrive placeholders | 0.46-2.7 GB/s on a loaded disk, and no errors or outliers. |
+| The duplicate search's storage cleans | 3.5 s warm, overlapped with finding. |
+| Clean page row arrivals | 115 ms over a 65 s preview, p50 3.9 ms per arrival. The second audit's verdict stands, now measured. |
+| The item list's search over 1,965 items | 140 ms for a search and its clear, in line with the third audit's figure. |
+| The pointer light, GPU and UI-thread sides | GPU busy 3.7-8.5% of hover time, and under 2 ms of UI thread per move. |
+| `ExploreLift`'s shadow and mask textures per hover | 15-30 small textures a second, inside the compositor's hover load. A lift sized to stable buckets would remove them. |
+| `CushionRenderer` uploads, a canvas-sized surface per drawing | Uploads only when the quads change. The surfaces are WinUI's own. |
+| ReadyToRun coverage, `ExtendsContentIntoTitleBar`, the scan-choice list in the Storage page's constructor | Every image that matters is ReadyToRun, 27 App and Core methods are jitted (about 5 ms), and the rest is native WinUI work or 15-30 ms. |
+| Two NVIDIA driver threads waking about 79 times a second | The driver's behaviour, not Deguffer's. |
+| #524 | Measured: a tool window left open is now built after the first frame, as the fix intended (162-234 ms). |
+| A collapsed indeterminate progress bar on Explore, camera expressions reading the property set they write | Compositor wake-ups unchanged without either. #739 names the cause. |
+| The names, `Follow`, overview, strokes, shadow and `BarMotion` expressions | Each follows #739's tick and still ticked with its own switch off. |
+| Idle Duplicates, Startup, Installed apps and Storage before any map | 31-109 ms of processor time per 45 s. |
+| The paused star field after leaving About, Storage at 16-24% after About | 0.06-0.11 s a minute, and the second does not reproduce in a fresh process: it was #739's tick. |
+| The Memory page's own reading | About 1 s a minute of managed work. Most of its idle cost is #739's tick on its own map. |
+| A UI Automation client holding the map's automation peers, x:Bind `StopTracking` alone, GC `ConserveMemory` or `RetainVM` | Disproved by heap dumps and probe builds for #737 and #738. |
+
+Not covered: spinning, removable and network storage (none on the machine), ARM64, a true 3840x2160
+window (the largest was 4758x1408), frame times during a scan snapshot (UI-thread stalls were
+measured instead), Composer, Vagrant, Docker, LM Studio and Scoop (not installed), tool starts that
+only a clean makes (no clean was run), approved source folders (none configured), Capture One and
+Git LFS stores (absent: estimates only), a duplicate search of a 2 TB volume, the questions of #510
+and #484 (no run varied the reader count or timed an index build inside a preview), a WPR stack of
+the Settings page's heaviest idle bursts and a standby-cleared cold launch (both need a quiet
+machine), and whether the first map of an `--explore` launch reaches the screen within 8 s (#523's
+traces ended first).
