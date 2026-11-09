@@ -1,5 +1,6 @@
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Hidden;
+using Deguffer.Core.Health;
 using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Execution;
@@ -33,6 +34,13 @@ public static class ElevationOffer
     /// <see cref="Deguffer.App.Views.AboutPage"/>'s scan-mode note for what was measured.</para>
     /// </summary>
     public static bool ShouldOffer(bool isElevated) => !isElevated;
+
+    /// <summary>
+    /// What the Health page has read so far. Only a drive that was refused for want of administrator
+    /// rights would show more, so on a machine with no such drive there is nothing to ask for (§7.6).
+    /// </summary>
+    public static bool ShouldOffer(bool isElevated, IEnumerable<DriveHealth> drives) =>
+        !isElevated && drives.Any(drive => drive.MoreWhenElevated);
 
     /// <summary>
     /// What a finished Storage preview found. Two unrelated things are improved by elevating, and

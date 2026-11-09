@@ -19,6 +19,8 @@
             <converters:RunStatementStyleConverter x:Key="RunStatementStyle" />
             <converters:StandingChipStyleConverter x:Key="StandingChipStyle" />
             <converters:StartupChipStyleConverter x:Key="StartupChipStyle" />
+            <converters:DriveVerdictChipStyleConverter x:Key="DriveVerdictChipStyle" />
+            <converters:AttributeStandingChipStyleConverter x:Key="AttributeStandingChipStyle" />
 
             <!--
                 §7's "colour by tier". These are Styles rather than loose brushes so the colours

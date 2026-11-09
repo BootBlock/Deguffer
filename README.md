@@ -56,12 +56,14 @@ Besides Settings and About, Deguffer has six pages:
 - [Startup](#startup) lists what Windows starts when you sign in, along with how much memory each
   running program is using. It can stop an entry from starting in the same way Task Manager does,
   without deleting it.
+- [Health](#health) shows what each drive reports about its own condition, in plain words with the
+  numbers behind them. It only reads, and it changes nothing on a drive.
 
 Deguffer starts without administrator rights. Storage, Explore and Duplicates can restart it as
 administrator so that it can read a drive's file table directly, which makes scanning much faster,
 and so that Storage can run the Windows cleanup steps that need those rights. Installed apps can
 restart it in the same way to remove entries that belong to every account, and Startup can do so to
-change entries that start for every account.
+change entries that start for every account. Health can restart it to read more about a SATA drive.
 
 ## Why it exists
 
@@ -398,6 +400,20 @@ Deguffer only changes a record in a form it has seen Windows write. A packaged a
 can only be changed by the app itself or in Settings, so for those the page offers Settings' own
 Startup page instead. The page never suggests disabling anything because of how much memory a
 program uses.
+
+## Health
+
+The Health page lists every drive with what it reports about its own condition. Each reading is
+stated in plain words, with the numbers the drive holds beside it. A drive's verdict is Good, Watch,
+Failing or Unknown, and it says why. Good means the drive reports no problems. Drives can fail with
+no warning, so keep backups whatever this page says.
+
+The page reads nothing until you open it, and it reads again only when you press Refresh, because a
+read can wake a sleeping disk. Everything it sends a drive is a read: it never starts a self-test or
+changes a setting. NVMe drives report everything without administrator rights. For a SATA drive,
+restarting as administrator adds its failure limits, link speed, self-test history and error log,
+and a banner says so where it applies. Windows does not report the health of drives on USB, RAID or
+Storage Spaces in this way, so those show only their details.
 
 ## Building
 

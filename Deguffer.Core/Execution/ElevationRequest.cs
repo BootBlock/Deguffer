@@ -33,6 +33,9 @@ public abstract record ElevationRequest
     /// <summary>Open on the Startup page and read the entries again. Stateless, as <see cref="Preview"/> is.</summary>
     public static ElevationRequest Startup { get; } = new StartupRequest();
 
+    /// <summary>Open on the Health page and read the drives again. Stateless, as <see cref="Preview"/> is.</summary>
+    public static ElevationRequest Health { get; } = new HealthRequest();
+
     /// <summary>The arguments that ask a replacement instance to do this.</summary>
     public abstract IReadOnlyList<string> ToArguments();
 
@@ -51,6 +54,7 @@ public abstract record ElevationRequest
         List<string> chosen = [];
         var installedApps = false;
         var startup = false;
+        var health = false;
         var duplicates = false;
         List<SearchLocation> locations = [];
         string? drive = null;
@@ -87,6 +91,10 @@ public abstract record ElevationRequest
             {
                 startup = true;
             }
+            else if (argument.Equals(HealthSwitch, StringComparison.OrdinalIgnoreCase))
+            {
+                health = true;
+            }
             else if (argument.StartsWith(SearchPrefix, StringComparison.OrdinalIgnoreCase))
             {
                 AddLocation(ValueOf(argument, SearchPrefix), LocationRole.Search);
@@ -112,6 +120,7 @@ public abstract record ElevationRequest
             : duplicates ? new DuplicatesRequest(locations)
             : installedApps ? InstalledApps
             : startup ? Startup
+            : health ? Health
             : preview ? chosen.Count > 0 ? new PreviewRequest(new ProviderChoice { Ids = chosen }) : Preview
             : null;
 
@@ -140,6 +149,8 @@ public abstract record ElevationRequest
     private protected const string DuplicatesSwitch = "--duplicates";
 
     private protected const string StartupSwitch = "--startup";
+
+    private protected const string HealthSwitch = "--health";
 
     private protected const string SearchPrefix = "--duplicates-search=";
 
@@ -174,6 +185,12 @@ public sealed record InstalledAppsRequest : ElevationRequest
 public sealed record StartupRequest : ElevationRequest
 {
     public override IReadOnlyList<string> ToArguments() => [StartupSwitch];
+}
+
+/// <summary>Open on the Health page. See <see cref="ElevationRequest.Health"/>.</summary>
+public sealed record HealthRequest : ElevationRequest
+{
+    public override IReadOnlyList<string> ToArguments() => [HealthSwitch];
 }
 
 /// <summary>

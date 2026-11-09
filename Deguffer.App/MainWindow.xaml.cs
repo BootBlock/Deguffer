@@ -161,6 +161,7 @@ public sealed partial class MainWindow : Window
             ExploreRequest => (typeof(ExplorePage), ExploreItem),
             DuplicatesRequest => (typeof(DuplicatesPage), DuplicatesItem),
             InstalledAppsRequest => (typeof(InstalledAppsPage), InstalledAppsItem),
+            HealthRequest => (typeof(HealthPage), HealthItem),
             StartupRequest => (typeof(StartupPage), StartupItem),
             _ => (typeof(CleanPage), StorageItem),
         };
@@ -266,6 +267,7 @@ public sealed partial class MainWindow : Window
             "Memory" => typeof(MemoryPage),
             "InstalledApps" => typeof(InstalledAppsPage),
             "Startup" => typeof(StartupPage),
+            "Health" => typeof(HealthPage),
             _ => typeof(CleanPage),
         };
 

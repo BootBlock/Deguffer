@@ -108,6 +108,15 @@
                         <FontIcon Glyph="&#xE71D;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+
+                <!-- Health answers "what state are the drives in" (§7.6). It reads and explains, and
+                     sends a drive nothing that could change it. Built on the first visit, so nothing
+                     asks a drive anything until then. -->
+                <NavigationViewItem x:Name="HealthItem" Content="Health" Tag="Health">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE95E;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
             </NavigationView.MenuItems>
 
             <!-- Settings and About sit at the foot of the rail: they are where you go once, not
