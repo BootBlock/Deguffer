@@ -1,8 +1,6 @@
 # Health page: plan overview
 
-> **Status:** 🟢 ACTIVE — shipped 2026-11-09, with one check outstanding: a driven run as administrator
-> on a SATA drive (stage 08), which needs a UAC prompt accepted. Moves to
-> `docs/todo/done/`. Spec section: [_spec.md](../_spec.md) §7.6, added by stage 07.
+> **Status:** ✅ COMPLETE — shipped 2026-11-09. Spec section: [_spec.md](../../_spec.md) §7.6.
 
 A new rail destination, **Health**, lists every physical drive with what Windows can report about
 its condition: an interpreted SMART reading in plain words, the raw values behind it, and the
@@ -101,7 +99,7 @@ ATA command set.
 | 05 | [05-elevation.md](05-elevation.md) | `ElevationRequest.Health`, the offer rule | complete |
 | 06 | [06-view-model.md](06-view-model.md) | Rows and `HealthViewModel` | complete |
 | 07 | [07-page-and-docs.md](07-page-and-docs.md) | Page, rail, spec §7.6, README | complete |
-| 08 | [08-verification.md](08-verification.md) | Full build, tests, driven runs, filing this plan | open: the elevated run |
+| 08 | [08-verification.md](08-verification.md) | Full build, tests, driven runs, filing this plan | complete |
 
 The stages run in order. `MainWindow.xaml(.cs)` and `ElevationRequest.cs` are also edited by any
 other new destination.

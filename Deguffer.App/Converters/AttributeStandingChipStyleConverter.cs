@@ -4,7 +4,11 @@ using Microsoft.UI.Xaml.Data;
 
 namespace Deguffer.App.Converters;
 
-/// <summary>A drive reading's standing, as a <see cref="Style"/> for <see cref="TierChipStyleConverter"/>'s reason.</summary>
+/// <summary>
+/// A drive reading's standing, as a <see cref="Style"/> for <see cref="TierChipStyleConverter"/>'s
+/// reason, in the colours a drive's verdict uses. The chip's word states the standing, so the colour
+/// only reinforces it (§6.5).
+/// </summary>
 public sealed partial class AttributeStandingChipStyleConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, string language) =>
@@ -12,7 +16,7 @@ public sealed partial class AttributeStandingChipStyleConverter : IValueConverte
         {
             AttributeStanding.Watch => "TierChipRegenerableWithCost",
             AttributeStanding.Failing => "TierChipUserData",
-            _ => "StandingChip",
+            _ => "TierChipRegenerableCache",
         }];
 
     public object ConvertBack(object value, Type targetType, object parameter, string language) =>

@@ -1484,7 +1484,7 @@ Every other page asks what is on a drive. **Health answers "what state is the dr
 each drive reports about itself, in plain words, with the numbers behind them.** It reads and
 explains. It changes nothing on any drive, and it deletes nothing.
 
-[health-page/00-overview.md](health-page/00-overview.md) records what was measured.
+[done/health-page/00-overview.md](done/health-page/00-overview.md) records what was measured.
 
 **What is read**
 
