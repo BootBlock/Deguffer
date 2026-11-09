@@ -361,7 +361,7 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
                     : [];
         }
 
-        var offered = new TargetedEntries(survey.Conversations.OfferedEntries);
+        var offered = new ClaudeCodeOfferedEntries(survey.Conversations.Offers, _transcripts);
 
         return
         [

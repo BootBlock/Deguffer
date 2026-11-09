@@ -29,9 +29,10 @@ public sealed record ClaudeCodePlacement(string Project, DateTimeOffset? Started
 ///
 /// <para><b>Two questions, because only one of them is asked often.</b> Which conversations are
 /// offered depends on each one's project, which is on its first lines: <see cref="Place"/> reads those
-/// and stops, a few KB of a file that can run to hundreds of MB. A title is shown only by the Storage
-/// page's preview, so only a plan asks for one (<see cref="Describe"/>), and only of what it offers.
-/// Explore's policy is built before every scan and every duplicate search, and asks only the first.</para>
+/// and stops. Over 3,212 transcripts the first line holding both fields ended a median 10 KB in. A title
+/// is shown only by the Storage page's preview, so a plan asks for one (<see cref="Describe"/>) only of
+/// what it offers, and Explore only of a conversation it is asked to remove. Explore's policy is built
+/// before every scan and every duplicate search, and asks only the first.</para>
 ///
 /// <para><b>The format is internal to Claude Code and changes between versions</b>, so nothing here is
 /// depended on beyond four fields, and every read fails closed: a transcript this cannot place in a
@@ -61,7 +62,7 @@ public sealed class ClaudeCodeTranscriptReader(Func<string, Stream>? open = null
     /// <summary>Where Claude Code writes a session's latest title, in nearly every one measured.</summary>
     private const int TailBytes = 64 * 1024;
 
-    /// <summary>Enough for the first lines of most transcripts, so that most head reads are one read.</summary>
+    /// <summary>Where the head's reads start. Each read doubles, up to <see cref="ChunkBytes"/>.</summary>
     private const int FirstHeadRead = 4 * 1024;
 
     private const int ChunkBytes = 64 * 1024;
@@ -203,8 +204,9 @@ public sealed class ClaudeCodeTranscriptReader(Func<string, Stream>? open = null
 
     /// <summary>
     /// Each line of the first <see cref="HeadBytes"/> of <paramref name="stream"/>, until
-    /// <paramref name="take"/> says it has what it came for. The reads start small and grow, because
-    /// nearly every transcript's first lines are short and the budget is for the few that are not.
+    /// <paramref name="take"/> says it has what it came for. The reads start small and grow, so that a
+    /// transcript whose first lines are short is not read a full chunk at a time, and the budget stays
+    /// for the few whose first lines are long.
     /// </summary>
     private static void ReadHead(Stream stream, HeadLine take, CancellationToken ct)
     {

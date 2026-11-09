@@ -72,6 +72,18 @@ public sealed class ClaudeCodeTranscriptReaderTests : IDisposable
         Assert.Equal(new FileInfo(path).Length, reads.Furthest);
     }
 
+    /// <summary>A transcript can go between the two reads. It is then not described, and so not offered.</summary>
+    [Fact]
+    public void AConversationGoneBetweenBeingPlacedAndDescribedIsNotDescribed()
+    {
+        var path = _claude.Conversation(SessionA);
+        var placement = ClaudeCodeTranscriptReader.Default.Place(path, CancellationToken.None)!;
+
+        File.Delete(path);
+
+        Assert.Null(ClaudeCodeTranscriptReader.Default.Describe(path, placement, CancellationToken.None));
+    }
+
     /// <summary>§6.3: a truncated path here would read as a conversation that cannot be placed.</summary>
     [Fact]
     public void EveryTranscriptIsOpenedByItsExtendedPath()

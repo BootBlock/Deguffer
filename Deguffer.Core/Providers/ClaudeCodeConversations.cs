@@ -41,14 +41,7 @@ internal sealed record ClaudeCodeSortedConversations(
     ClaudeCodeClassification Sorted,
     IReadOnlyList<ClaudeCodeConversationOffer> Offers,
     ClaudeCodeSessionStarts Starts,
-    int Unplaced)
-{
-    /// <summary>Each entry an offer would remove, as the kind it is: what the §5.2 declaration recognises.</summary>
-    public IEnumerable<(string Path, ChildKind Kind)> OfferedEntries =>
-        Offers.SelectMany(offer => offer.Folders
-            .Select(folder => (folder.Folder.Path, ChildKind.Folder))
-            .Prepend((offer.Transcript.Path, ChildKind.File)));
-}
+    int Unplaced);
 
 /// <summary>
 /// Decides which of Claude Code's conversations may be offered, one session at a time.
@@ -70,8 +63,9 @@ internal sealed record ClaudeCodeSortedConversations(
 /// described well enough to choose.</para>
 ///
 /// <para><b>Decided from each conversation's first lines.</b> Nothing here reads a title, so Explore's
-/// declaration costs a few KB per conversation. A plan reads the titles of what is left, in
-/// <see cref="ClaudeCodeConversationOffers"/>.</para>
+/// declaration reads only the start of each conversation. A plan reads the titles of what is left, in
+/// <see cref="ClaudeCodeConversationOffers"/>, and Explore reads one when it is asked about that
+/// conversation (<see cref="ClaudeCodeOfferedEntries"/>).</para>
 /// </summary>
 internal static class ClaudeCodeConversations
 {

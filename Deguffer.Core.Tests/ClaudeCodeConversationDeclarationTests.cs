@@ -18,6 +18,7 @@ public sealed class ClaudeCodeConversationDeclarationTests : IDisposable
     private const int SessionProcess = 4242;
     private const int FirstRead = 4 * 1024;
     private const int Padded = 200 * 1024;
+    private const string AnotherSession = "44444444-4444-4444-8444-444444444444";
 
     private readonly TempDirectory _temp = new();
     private readonly FakeUserEnvironment _environment;
@@ -46,6 +47,9 @@ public sealed class ClaudeCodeConversationDeclarationTests : IDisposable
 
     private (string Conversation, string Folder) OldSession(string session, string folder = ProjectFolder, string project = ProjectPath) =>
         (_claude.Conversation(session, folder, project, age: Old, padding: Padded), _claude.SessionFolder(session, folder, Old));
+
+    private int TimesOpened(string conversation) =>
+        _reads.Opened.Count(opened => opened.EndsWith(Path.GetFileName(conversation), StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// The declaration reads no further than each conversation's first lines, and refuses and offers what
@@ -94,23 +98,47 @@ public sealed class ClaudeCodeConversationDeclarationTests : IDisposable
         Assert.True(policy.MayRemove(ended.Conversation).IsAllowed);
     }
 
-    /// <summary>A plan reads a title only for what it offers, and shows the title it read.</summary>
+    /// <summary>
+    /// A plan reads a title only for what it offers, and shows the title it read. The occupied
+    /// conversation is the one that bites: it can be placed, and is refused only after that.
+    /// </summary>
     [Fact]
     public async Task APlanReadsATitleOnlyForWhatItOffers()
     {
         var offered = OldSession(SessionA);
-        var unplaced = _claude.Conversation(SessionB, OtherProjectFolder, project: null, age: Old);
+        var occupied = OldSession(SessionB, OtherProjectFolder, OtherProjectPath).Conversation;
+        var unplaced = _claude.Conversation(AnotherSession, ProjectFolder, project: null, age: Old);
+        _claude.Registered(SessionProcess, SessionC, project: OtherProjectPath);
+        var inspector = FakeProcessInspector.NothingRunning.WithProcess(SessionProcess, ProcessLiveness.Running(null));
 
-        var plan = await Provider().PlanAsync();
+        var plan = await Provider(inspector: inspector).PlanAsync();
 
-        Assert.Equal(2, _reads.Opened.Count(opened => opened.EndsWith(Path.GetFileName(offered.Conversation), StringComparison.OrdinalIgnoreCase)));
-        Assert.Single(_reads.Opened, opened => opened.EndsWith(Path.GetFileName(unplaced), StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(2, TimesOpened(offered.Conversation));
+        Assert.Equal(1, TimesOpened(occupied));
+        Assert.Equal(1, TimesOpened(unplaced));
         Assert.All(plan.Steps, step => Assert.Equal("Tidy the build scripts", Assert.Single(step.Facets, facet => facet.Label == "Title").Value));
+    }
+
+    /// <summary>Explore reads a title once, and only of the conversation it is asked about.</summary>
+    [Fact]
+    public void ExploreReadsATitleOnlyOfTheConversationItIsAskedAbout()
+    {
+        var asked = OldSession(SessionA);
+        var other = OldSession(SessionB, OtherProjectFolder, OtherProjectPath);
+        var policy = Policy(Provider().ToolRoots);
+
+        Assert.True(policy.MayRemove(asked.Conversation).IsAllowed);
+        Assert.True(policy.MayRemove(asked.Folder).IsAllowed);
+        Assert.True(policy.MayRemove(asked.Conversation).IsAllowed);
+
+        Assert.Equal(2, TimesOpened(asked.Conversation));
+        Assert.Equal(1, TimesOpened(other.Conversation));
     }
 
     /// <summary>
     /// A title that cannot be read leaves the conversation out of the plan, as it always did, with its
-    /// folder, asserted to survive, and counted with those that cannot be placed.
+    /// folder, asserted to survive, and counted with those that cannot be placed. Explore refuses what
+    /// the plan holds back (§7.1), though its declaration was made from the first lines alone.
     /// </summary>
     [Fact]
     public async Task AConversationWhoseTitleCannotBeReadIsNotOffered()
@@ -124,6 +152,12 @@ public sealed class ClaudeCodeConversationDeclarationTests : IDisposable
         var folder = _claude.SessionFolder(SessionB, OtherProjectFolder, Old);
 
         var provider = Provider();
+        var policy = Policy(provider.ToolRoots);
+
+        Assert.False(policy.MayRemove(conversation).IsAllowed, "Explore would remove what the plan holds back");
+        Assert.False(policy.MayRemove(folder).IsAllowed, "Explore would remove the folder of what the plan holds back");
+        Assert.True(policy.MayRemove(offered.Conversation).IsAllowed);
+
         var plan = await provider.PlanAsync();
 
         Assert.Equal(
