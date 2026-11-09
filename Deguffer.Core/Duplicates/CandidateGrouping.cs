@@ -30,33 +30,72 @@ internal static class CandidateGrouping
     /// </summary>
     /// <param name="minuteOf">The minute a file is placed by, or null to leave it out.</param>
     public static IReadOnlyList<IReadOnlyList<FoundFile>> ByTheTree(
-        IEnumerable<FoundFile> found,
+        IReadOnlyList<FoundFile> found,
         MatchCriteria criteria,
         Func<FoundFile, int?> minuteOf)
     {
         var bySize = criteria.GroupsBySize();
         var byName = criteria.GroupsByName();
         var byTime = criteria.GroupsByTime();
-        var groups = new Dictionary<GroupKey, List<FoundFile>>(KeyComparer.Instance);
 
-        foreach (var file in found)
+        var placed = new Placement[found.Count];
+        var count = 0;
+
+        for (var index = 0; index < found.Count; index++)
         {
-            long time = 0;
+            var file = found[index];
+            var minute = 0;
 
             if (byTime)
             {
-                if (minuteOf(file) is not { } minute)
+                if (minuteOf(file) is not { } known)
                 {
                     continue;
                 }
 
-                time = minute;
+                minute = known;
             }
 
-            Add(groups, new GroupKey(bySize ? file.Tree.LengthOf(file.Node) : 0, byName ? file : null, time), file);
+            placed[count++] = new Placement(
+                bySize ? file.Tree.LengthOf(file.Node) : 0,
+                minute,
+                byName ? string.GetHashCode(file.Tree.NameSpanOf(file.Node), StringComparison.OrdinalIgnoreCase) : 0,
+                index);
         }
 
-        return [.. groups.Values.Where(group => group.Count > 1)];
+        var order = new PlacementOrder(found, byName);
+        var sorted = placed.AsSpan(0, count);
+        sorted.Sort(order);
+
+        List<(int First, FoundFile[] Files)> groups = [];
+
+        for (int start = 0, end; start < count; start = end)
+        {
+            end = start + 1;
+
+            while (end < count && order.CompareGroups(sorted[start], sorted[end]) == 0)
+            {
+                end++;
+            }
+
+            if (end - start > 1)
+            {
+                var files = new FoundFile[end - start];
+
+                for (var member = start; member < end; member++)
+                {
+                    files[member - start] = found[sorted[member].Index];
+                }
+
+                groups.Add((sorted[start].Index, files));
+            }
+        }
+
+        // In the order they were found, so the order files are identified in does not follow how
+        // their lengths happen to sort.
+        groups.Sort((x, y) => x.First.CompareTo(y.First));
+
+        return [.. groups.Select(group => group.Files)];
     }
 
     /// <summary>The minute the tree holds for a file, or null where it holds none.</summary>
@@ -151,7 +190,7 @@ internal static class CandidateGrouping
         return now is FileStorage.CloudOnly || scanned is FileStorage.CloudOnly ? now : scanned;
     }
 
-    private static void Add<T>(Dictionary<GroupKey, List<T>> groups, GroupKey key, T member)
+    private static void Add(Dictionary<GroupKey, List<IdentifiedFile>> groups, GroupKey key, IdentifiedFile member)
     {
         if (!groups.TryGetValue(key, out var members))
         {
@@ -159,6 +198,54 @@ internal static class CandidateGrouping
         }
 
         members.Add(member);
+    }
+
+    /// <summary>
+    /// A found file by what the tree says places it, flat so a drive's worth sorts with no object for
+    /// each. Its name is held as a hash, so only files that may share a name compare names.
+    /// </summary>
+    /// <param name="Index">Where the file is in the list found, which breaks a tie to keep that order.</param>
+    private readonly record struct Placement(long Length, int Minute, int NameHash, int Index);
+
+    /// <summary>
+    /// Puts files of one group next to each other, in the order they were found. Names are compared
+    /// only where their hashes are equal, ignoring case as the search does (§7.4), so two names that
+    /// share a hash stay apart.
+    /// </summary>
+    private sealed class PlacementOrder(IReadOnlyList<FoundFile> found, bool byName) : IComparer<Placement>
+    {
+        public int Compare(Placement x, Placement y)
+        {
+            var group = CompareGroups(x, y);
+
+            return group != 0 ? group : x.Index.CompareTo(y.Index);
+        }
+
+        public int CompareGroups(Placement x, Placement y)
+        {
+            var order = x.Length.CompareTo(y.Length);
+
+            if (order == 0)
+            {
+                order = x.Minute.CompareTo(y.Minute);
+            }
+
+            if (order == 0)
+            {
+                order = x.NameHash.CompareTo(y.NameHash);
+            }
+
+            return order != 0 || !byName
+                ? order
+                : NameOf(x).CompareTo(NameOf(y), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private ReadOnlySpan<char> NameOf(Placement placement)
+        {
+            var file = found[placement.Index];
+
+            return file.Tree.NameSpanOf(file.Node);
+        }
     }
 
     /// <summary>

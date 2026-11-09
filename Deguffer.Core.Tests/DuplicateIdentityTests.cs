@@ -386,7 +386,7 @@ public sealed class DuplicateIdentityTests : IDisposable
         var data = MftExploreRooting.Locate(tree, ["Data"]).Node!.Value;
 
         IdentifiedFile Identified(string name, FileAttributes attributes, int number) => new(
-            new FoundFile(tree, tree.ChildrenOf(data).ToArray().Single(child => tree.NameOf(child) == name), LocationRole.Search, IdentityRoute.FileId, DriveX),
+            new FoundFile(new FoundRoot(tree, IdentityRoute.FileId, DriveX), tree.ChildrenOf(data).ToArray().Single(child => tree.NameOf(child) == name), LocationRole.Search),
             new FileDescription(
                 new FileState(new FileIdentity(1, (UInt128)number), 100, 4096, 1, DateTime.UnixEpoch, DateTime.UnixEpoch, attributes, ReparseTag: 0),
                 Path.Combine(@"X:\Data", name)));
