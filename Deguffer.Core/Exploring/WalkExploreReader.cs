@@ -117,12 +117,15 @@ internal static class WalkExploreReader
         long items = 0;
         long bytes = 0;
 
+        // Kept from one snapshot to the next, so each copies out only the nodes added since the last.
+        var shared = new SnapshotColumns();
+
         var snapshots = progress is not null && snapshotAssembly is not null
             ? new ScanSnapshots(
                 order =>
                 {
                     var captured = builder.Capture();
-                    return stopped => captured.Snapshot(order, stopped);
+                    return stopped => captured.Snapshot(order, shared, stopped);
                 },
                 clock,
                 snapshotAssembly)

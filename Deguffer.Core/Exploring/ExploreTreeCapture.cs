@@ -47,8 +47,8 @@ internal sealed class ExploreTreeCapture
     }
 
     /// <summary>
-    /// The tree, ordering each node's children by <paramref name="childOrder"/>. Each call makes
-    /// arrays of its own, because <see cref="ExploreTree.Create"/> totals each subtree into them.
+    /// The tree, ordering each node's children by <paramref name="childOrder"/>, in arrays of its own
+    /// sized to the tree, because it is the tree a finished walk keeps.
     ///
     /// <para>Every slot was filled by the builder, so every one is marked
     /// <see cref="ExploreNodeFlags.Present"/> — the distinction <see cref="ExploreTree.Create"/>
@@ -59,30 +59,31 @@ internal sealed class ExploreTreeCapture
     /// been cancelled stops part way rather than holding the walk until it is finished.
     /// </param>
     public ExploreTree Build(ExploreChildOrder childOrder, CancellationToken ct = default) =>
-        Build(childOrder, snapshot: false, ct);
+        Build(childOrder, new SnapshotColumns(), snapshot: false, ct);
 
     /// <summary>
     /// The tree as a snapshot of a walk in progress draws it: <see cref="Build(ExploreChildOrder, CancellationToken)"/>,
     /// marked as a snapshot (<see cref="ExploreTree.IsSnapshot"/>), in the order
     /// <see cref="ScanSnapshots"/> was asked for when it was captured.
     /// </summary>
-    public ExploreTree Snapshot(ExploreChildOrder childOrder, CancellationToken ct) =>
-        Build(childOrder, snapshot: true, ct);
+    /// <param name="shared">
+    /// The columns every snapshot of this walk reads, which this fills for the nodes added since the
+    /// last. See <see cref="SnapshotColumns"/>.
+    /// </param>
+    public ExploreTree Snapshot(ExploreChildOrder childOrder, SnapshotColumns shared, CancellationToken ct) =>
+        Build(childOrder, shared, snapshot: true, ct);
 
-    private ExploreTree Build(ExploreChildOrder childOrder, bool snapshot, CancellationToken ct)
+    private ExploreTree Build(ExploreChildOrder childOrder, SnapshotColumns shared, bool snapshot, CancellationToken ct)
     {
         var count = _nodes.Count;
 
-        var nameNumbers = new int[count];
-        var parents = new int[count];
-        var nameRanks = new int[count];
+        shared.Fill(_nodes, CancellationMask, ct);
+
         var sizes = new long[count];
         var lengths = new long[count];
         var storage = new FileStorage[count];
         var flags = new ExploreNodeFlags[count];
-        var created = new ExploreTimestamp[count];
         var modified = new ExploreTimestamp[count];
-        var visibility = new FileVisibility[count];
 
         for (var i = 0; i < count; i++)
         {
@@ -95,9 +96,6 @@ internal sealed class ExploreTreeCapture
             // writing, is never read.
             ref readonly var node = ref _nodes[i];
 
-            nameNumbers[i] = node.Name;
-            parents[i] = node.Parent;
-            nameRanks[i] = node.NameRank;
             sizes[i] = node.Size;
             lengths[i] = node.Length;
             storage[i] = node.Storage;
@@ -105,9 +103,7 @@ internal sealed class ExploreTreeCapture
                 | (node.IsDirectory ? ExploreNodeFlags.Directory : ExploreNodeFlags.None)
                 | (node.IsLink ? ExploreNodeFlags.Link : ExploreNodeFlags.None)
                 | (node.SizeUnknown ? ExploreNodeFlags.SizeUnknown : ExploreNodeFlags.None);
-            created[i] = node.Created;
             modified[i] = node.Modified;
-            visibility[i] = node.Visibility;
         }
 
         foreach (var node in _sizeUnknown)
@@ -117,26 +113,27 @@ internal sealed class ExploreTreeCapture
 
         if (_listedTwice.Length > 0)
         {
-            RankAcrossCalls(_listedTwice, parents, nameNumbers, _names, nameRanks);
+            RankAcrossCalls(_listedTwice, count, shared.Parents, shared.NameNumbers, _names, shared.NameRanks);
         }
 
         return ExploreTree.Create(
             _rootPath,
             ExploreTreeBuilder.RootNode,
-            nameNumbers,
+            shared.NameNumbers,
             _names,
-            parents,
+            shared.Parents,
             sizes,
             lengths,
             storage,
             flags,
-            created,
+            shared.Created,
             modified,
-            visibility,
+            shared.Visibility,
             childOrder,
             _listingRefused,
-            nameRanks,
+            shared.NameRanks,
             snapshot: snapshot,
+            orderBuffer: shared.Order,
             ct: ct);
     }
 
@@ -145,13 +142,14 @@ internal sealed class ExploreTreeCapture
     /// siblings, not only those recorded in the same call. Two calls' ranks for one parent both
     /// start at zero, and placed as they are, one child would take another's place in the tree.
     /// </summary>
+    /// <param name="count">How many nodes the tree holds, which the columns can outnumber.</param>
     private static void RankAcrossCalls(
-        int[] listedTwice, int[] parents, int[] nameNumbers, NamePool.Frozen names, int[] nameRanks)
+        int[] listedTwice, int count, int[] parents, int[] nameNumbers, NamePool.Frozen names, int[] nameRanks)
     {
         var siblings = listedTwice.ToDictionary(parent => parent, _ => new List<int>());
 
         // From one, because the root is its own parent and nobody's child.
-        for (var node = 1; node < parents.Length; node++)
+        for (var node = 1; node < count; node++)
         {
             if (siblings.TryGetValue(parents[node], out var children))
             {
