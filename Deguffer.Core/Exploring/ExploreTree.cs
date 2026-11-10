@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Collections.Frozen;
 using Deguffer.Core.Scanning;
 
@@ -736,6 +735,13 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
     /// ordered apart from every other folder's, so the folders are shared among
     /// <see cref="SortWorkers"/> threads. Names are put in order by <see cref="NameSortKeys"/>, which
     /// says why they are not compared as they are.</para>
+    ///
+    /// <para>Each worker is one iteration, which takes shares of <see cref="NodesPerShare"/> nodes in
+    /// turn until none are left, with buffers made for it here, before any worker starts. A
+    /// <see cref="Parallel"/> loop over the shares would make a set of buffers, each sized to the
+    /// largest folder, for every task it starts and on whichever thread runs that task, and how many it
+    /// starts and where depends on how busy the thread pool is, so a sort's allocations would change
+    /// from one run to the next.</para>
     /// </summary>
     private static void SortChildren(
         int[] childStart,
@@ -753,7 +759,7 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
         // thousands of directories (G5).
         Func<int, long> sizeOf = node => sizes[node];
 
-        // One pair of key buffers for each thread, sized to the largest folder, rather than one per
+        // One pair of key buffers for each worker, sized to the largest folder, rather than one per
         // folder.
         var most = 0;
         var nodeCount = childStart.Length - 1;
@@ -763,42 +769,61 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
             most = Math.Max(most, childStart[node + 1] - childStart[node]);
         }
 
-        Parallel.ForEach(
-            Partitioner.Create(0, nodeCount, NodesPerShare),
+        var shares = (nodeCount + NodesPerShare - 1) / NodesPerShare;
+        var buffers = new SortBuffers[Math.Min(SortWorkers, shares)];
+
+        for (var worker = 0; worker < buffers.Length; worker++)
+        {
+            buffers[worker] = new SortBuffers(most, nameKeys);
+        }
+
+        var taken = -1;
+
+        Parallel.For(
+            0,
+            buffers.Length,
             new ParallelOptions { MaxDegreeOfParallelism = SortWorkers, CancellationToken = ct },
-            () => new SortBuffers(most, nameKeys),
-            (share, _, buffers) =>
+            worker =>
             {
-                for (var node = share.Item1; node < share.Item2; node++)
+                var own = buffers[worker];
+
+                // The token is asked between shares, as the loop over the shares asked it, because a
+                // worker here is one iteration that the loop never comes back to.
+                for (int share; !ct.IsCancellationRequested && (share = Interlocked.Increment(ref taken)) < shares;)
                 {
-                    var from = childStart[node];
-                    var length = childStart[node + 1] - from;
+                    var end = Math.Min((share + 1) * NodesPerShare, nodeCount);
 
-                    if (length <= 1)
+                    for (var node = share * NodesPerShare; node < end; node++)
                     {
-                        continue;
-                    }
+                        var from = childStart[node];
+                        var length = childStart[node + 1] - from;
 
-                    var siblings = children.AsSpan(from, length);
+                        if (length <= 1)
+                        {
+                            continue;
+                        }
 
-                    if (bySize)
-                    {
-                        OrderBySize(siblings, buffers.SizeKeys, sizeOf, buffers.ByName);
-                    }
-                    else
-                    {
-                        buffers.ByName(siblings);
+                        var siblings = children.AsSpan(from, length);
+
+                        if (bySize)
+                        {
+                            OrderBySize(siblings, own.SizeKeys, sizeOf, own.ByName);
+                        }
+                        else
+                        {
+                            own.ByName(siblings);
+                        }
                     }
                 }
+            });
 
-                return buffers;
-            },
-            static _ => { });
+        // A worker that saw the token stopped taking shares and returned, leaving folders unsorted.
+        ct.ThrowIfCancellationRequested();
     }
 
     /// <summary>
-    /// What one sorting thread orders its folders with: a key buffer for sizes, one for names, and the
-    /// name order that writes to the second, made once for the thread rather than once per folder.
+    /// What one sorting worker orders its folders with: a key buffer for sizes, one for names, and the
+    /// name order that writes to the second, made once for the worker rather than once per folder.
     /// </summary>
     private sealed class SortBuffers
     {
