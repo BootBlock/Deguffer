@@ -130,7 +130,18 @@ internal sealed class ExploreFixture : IDisposable
             Running,
             Work,
             History,
-            Motion);
+            Motion,
+            () =>
+            {
+                Releases++;
+                Releasing?.Invoke();
+            });
+
+    /// <summary>How many times a page built here asked to free what its scans' snapshots left behind.</summary>
+    public int Releases { get; private set; }
+
+    /// <summary>Run as a page built here asks to free them, to see what the page is doing at that moment.</summary>
+    public Action? Releasing { get; set; }
 
     /// <summary>The reader's Animation effects setting, as the page's replay follows it.</summary>
     public ScriptedMotion Motion { get; } = new(animationsEnabled: true);

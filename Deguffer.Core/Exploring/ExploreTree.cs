@@ -170,7 +170,11 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
     /// </summary>
     public bool HasUnknownSizes => HasUnknownSizeBelow(RootNode);
 
-    public int NodeCount => _nameNumbers.Length;
+    /// <summary>
+    /// How many nodes the tree holds. Read from a column each tree has to itself, because the columns a
+    /// walk's snapshots share run past it (<see cref="SnapshotColumns"/>).
+    /// </summary>
+    public int NodeCount => _sizes.Length;
 
     /// <summary>How many distinct names the tree keeps, the empty name included. See <see cref="Create"/>.</summary>
     internal int NamesHeld => _names.Count;
@@ -429,6 +433,16 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
     ///
     /// <paramref name="snapshot"/> says the tree is of a scan still running (<see cref="IsSnapshot"/>).
     ///
+    /// <para><b>The node count is the length of <paramref name="sizes"/>.</b> The columns nothing
+    /// totals into (<paramref name="nameNumbers"/>, <paramref name="parents"/>,
+    /// <paramref name="created"/>, <paramref name="visibility"/> and <paramref name="nameRanks"/>) may
+    /// be longer, because a walk's snapshots share them, and only their first slots are read: see
+    /// <see cref="SnapshotColumns"/>. Nothing here or in the tree reads past the count, because a later
+    /// snapshot may be writing there.</para>
+    ///
+    /// <paramref name="orderBuffer"/> is room for the top-down order of every node, reused by a caller
+    /// that assembles one tree after another. The tree does not keep it.
+    ///
     /// <paramref name="ct"/> is asked between the passes and by the sort, so a snapshot of a walk that
     /// has ended, or a table read whose scan was cancelled, stops within one pass rather than holding
     /// the end of the scan until the tree is finished.
@@ -451,6 +465,7 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
         int[]? nameRanks = null,
         MftExploreColumns? links = null,
         bool snapshot = false,
+        int[]? orderBuffer = null,
         CancellationToken ct = default)
     {
         if (links is not null && nameRanks is not null)
@@ -458,19 +473,20 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
             throw new ArgumentException("Names ranked by the reader leave no place for a file's further names.", nameof(links));
         }
 
+        var count = sizes.Length;
         var after = links ?? MftExploreColumns.None;
 
-        var (childStart, children) = InvertParentLinks(parents, flags, after, nameRanks);
+        var (childStart, children) = InvertParentLinks(count, parents, flags, after, nameRanks);
         ct.ThrowIfCancellationRequested();
 
-        var order = TopDownOrder(childStart, children, rootNode);
+        var order = TopDownOrder(childStart, children, rootNode, orderBuffer);
         ct.ThrowIfCancellationRequested();
 
         // Wherever there are links, even with every node reached, because only this joins their
         // slots to the others.
-        if (after.Count > 0 || order.Length < parents.Length)
+        if (after.Count > 0 || order.Length < count)
         {
-            var reached = new ReachedNodes(order, parents.Length, after.Count);
+            var reached = new ReachedNodes(order, count, after.Count);
 
             nameNumbers = reached.Keep(nameNumbers, after.NameNumbers);
             names = NamePool.Keeping(names, nameNumbers);
@@ -515,18 +531,18 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
     /// Without, each parent's own start is the cursor that places its children, and the starts are
     /// moved back afterwards: one pass rather than a cursor array the size of the tree.</para>
     ///
-    /// <para>The nodes of <paramref name="links"/> are numbered after those of
-    /// <paramref name="parents"/>, so each pass runs over the one and then the other, and each child
-    /// list holds them in that order.</para>
+    /// <para>The nodes of <paramref name="links"/> are numbered after the first
+    /// <paramref name="nodes"/> of <paramref name="parents"/>, so each pass runs over the one and then
+    /// the other, and each child list holds them in that order.</para>
     /// </summary>
     private static (int[] Start, int[] Children) InvertParentLinks(
-        int[] parents, ExploreNodeFlags[] flags, MftExploreColumns links, int[]? nameRanks)
+        int nodes, int[] parents, ExploreNodeFlags[] flags, MftExploreColumns links, int[]? nameRanks)
     {
-        var count = parents.Length + links.Count;
+        var count = nodes + links.Count;
         var start = new int[count + 1];
 
-        CountChildren(parents, flags, first: 0, start);
-        CountChildren(links.Parents, links.Flags, first: parents.Length, start);
+        CountChildren(nodes, parents, flags, first: 0, start);
+        CountChildren(links.Count, links.Parents, links.Flags, first: nodes, start);
 
         for (var i = 0; i < count; i++)
         {
@@ -537,7 +553,7 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
 
         if (nameRanks is not null)
         {
-            for (var i = 0; i < parents.Length; i++)
+            for (var i = 0; i < nodes; i++)
             {
                 if (IsLinked(parents, flags, i, i))
                 {
@@ -548,8 +564,8 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
             return (start, children);
         }
 
-        PlaceChildren(parents, flags, first: 0, start, children);
-        PlaceChildren(links.Parents, links.Flags, first: parents.Length, start, children);
+        PlaceChildren(nodes, parents, flags, first: 0, start, children);
+        PlaceChildren(links.Count, links.Parents, links.Flags, first: nodes, start, children);
 
         // Each start has advanced to the end of its range, which is where the next node's range
         // starts, so every start now sits one place early. The last never moved, because no node
@@ -581,12 +597,13 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
         (flags[slot] & ExploreNodeFlags.Present) != 0 && parents[slot] != node;
 
     /// <summary>
-    /// Count each node's children among columns whose first slot is node <paramref name="first"/>,
-    /// each one place along in <paramref name="start"/>, ready for the sum that makes them starts.
+    /// Count each node's children among the first <paramref name="nodes"/> slots of columns whose
+    /// first slot is node <paramref name="first"/>, each one place along in <paramref name="start"/>,
+    /// ready for the sum that makes them starts.
     /// </summary>
-    private static void CountChildren(int[] parents, ExploreNodeFlags[] flags, int first, int[] start)
+    private static void CountChildren(int nodes, int[] parents, ExploreNodeFlags[] flags, int first, int[] start)
     {
-        for (var i = 0; i < parents.Length; i++)
+        for (var i = 0; i < nodes; i++)
         {
             if (IsLinked(parents, flags, i, first + i))
             {
@@ -596,12 +613,13 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
     }
 
     /// <summary>
-    /// Place each node of columns whose first slot is node <paramref name="first"/> after its
-    /// parent's children placed so far, moving that parent's start along.
+    /// Place each of the first <paramref name="nodes"/> nodes of columns whose first slot is node
+    /// <paramref name="first"/> after its parent's children placed so far, moving that parent's start
+    /// along.
     /// </summary>
-    private static void PlaceChildren(int[] parents, ExploreNodeFlags[] flags, int first, int[] start, int[] children)
+    private static void PlaceChildren(int nodes, int[] parents, ExploreNodeFlags[] flags, int first, int[] start, int[] children)
     {
-        for (var i = 0; i < parents.Length; i++)
+        for (var i = 0; i < nodes; i++)
         {
             if (IsLinked(parents, flags, i, first + i))
             {
@@ -625,9 +643,10 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
     /// <see cref="RollUp"/> asks only that a parent comes before its children, and
     /// <see cref="ReachedNodes"/> only which nodes are here.</para>
     /// </summary>
-    private static Span<int> TopDownOrder(int[] childStart, int[] children, int rootNode)
+    /// <param name="buffer">Room for every node, or null for an array of its own.</param>
+    private static Span<int> TopDownOrder(int[] childStart, int[] children, int rootNode, int[]? buffer)
     {
-        var order = new int[childStart.Length - 1];
+        var order = buffer ?? new int[childStart.Length - 1];
         order[0] = rootNode;
         var reached = 1;
 

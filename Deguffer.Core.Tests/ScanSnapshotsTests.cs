@@ -19,6 +19,7 @@ public sealed class ScanSnapshotsTests
 
     private readonly ManualTimeProvider _clock = new();
     private readonly ExploreTreeBuilder _builder = new(Root);
+    private readonly SnapshotColumns _shared = new();
     private readonly Queue<(Action Assemble, TaskCompletionSource Done)> _waiting = new();
 
     private int _started;
@@ -251,7 +252,7 @@ public sealed class ScanSnapshotsTests
     private Func<CancellationToken, ExploreTree?> Capture(ExploreChildOrder order)
     {
         var captured = _builder.Capture();
-        return stopped => captured.Snapshot(order, stopped);
+        return stopped => captured.Snapshot(order, _shared, stopped);
     }
 
     private Task Start(Action assemble)

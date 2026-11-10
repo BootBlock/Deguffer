@@ -67,6 +67,55 @@ public sealed class ExploreWorkTests : IDisposable
     });
 
     [Fact]
+    public void AFinishedScanFreesWhatItsSnapshotsLeftOnceThePageIsIdle() => UiThread.Run(async () =>
+    {
+        _explore.Volumes.With(@"C:\");
+        var page = _explore.Page();
+        var scanning = page.ScanCommand.ExecuteAsync(null);
+        var scan = _explore.Scanner.Current;
+
+        scan.Report(new ExploreProgress(Done: 1, Total: null, BytesSeen: 0, Snapshot: new ExploreTreeBuilder(@"C:\").Snapshot(ExploreChildOrder.ByName)));
+        await Task.Yield();
+
+        Assert.Equal(0, _explore.Releases);
+
+        var idleWhenReleased = false;
+        _explore.Releasing = () => idleWhenReleased = page.IsIdle && _explore.Work.IsIdle && page.Tree is { IsSnapshot: false };
+        scan.Finish(ExploreScan.Fast(new ExploreTreeBuilder(@"C:\").Build(ExploreChildOrder.BySize)));
+        await scanning;
+
+        Assert.Equal(1, _explore.Releases);
+        Assert.True(idleWhenReleased);
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AScanThatEndsWithoutATreeStillFreesWhatItsSnapshotsLeft(bool cancelled) => UiThread.Run(async () =>
+    {
+        _explore.Volumes.With(@"C:\");
+        var page = _explore.Page();
+        var scanning = page.ScanCommand.ExecuteAsync(null);
+
+        _explore.Scanner.Current.Fail(cancelled ? new OperationCanceledException() : new IOException("The device is not ready."));
+        await scanning;
+
+        Assert.Equal(1, _explore.Releases);
+    });
+
+    [Fact]
+    public void EachScanFreesWhatItsOwnSnapshotsLeft() => UiThread.Run(async () =>
+    {
+        _explore.Volumes.With(@"C:\");
+        var page = _explore.Page();
+
+        await _explore.ScanAsync(page, ExploreScan.Fast(new ExploreTreeBuilder(@"C:\").Build(ExploreChildOrder.BySize)));
+        await _explore.ScanAsync(page, ExploreScan.Fast(new ExploreTreeBuilder(@"C:\").Build(ExploreChildOrder.BySize)));
+
+        Assert.Equal(2, _explore.Releases);
+    });
+
+    [Fact]
     public void ARemovalIsUnderWayUntilItHasReported() => UiThread.Run(async () =>
     {
         _explore.Volumes.With(Path.GetPathRoot(_explore.Temp.Path)!);

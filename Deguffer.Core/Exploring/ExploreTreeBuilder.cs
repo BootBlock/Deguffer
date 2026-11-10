@@ -219,7 +219,8 @@ public sealed class ExploreTreeBuilder
     /// (<see cref="ExploreTree.IsSnapshot"/>), ordering each node's children by
     /// <paramref name="childOrder"/>.
     /// </summary>
-    public ExploreTree Snapshot(ExploreChildOrder childOrder) => Capture().Snapshot(childOrder, CancellationToken.None);
+    public ExploreTree Snapshot(ExploreChildOrder childOrder) =>
+        Capture().Snapshot(childOrder, new SnapshotColumns(), CancellationToken.None);
 
     /// <summary>
     /// What has been recorded so far, to be assembled into a tree once the lock is released.
