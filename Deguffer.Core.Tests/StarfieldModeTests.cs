@@ -13,42 +13,39 @@ public sealed class StarfieldModeTests
 
     [Fact]
     public void ItFliesWhenEverythingAllowsIt() =>
-        Assert.Equal(StarfieldMode.Flying, StarfieldModes.For(On, highContrast: false, effectsFast: true, shown: true, covered: false));
+        Assert.Equal(StarfieldMode.Flying, StarfieldModes.For(On, highContrast: false, effectsFast: true, Sight.Seen));
 
     /// <summary>A high contrast theme has no starfield, whatever else holds.</summary>
     [Theory]
-    [InlineData(true, true, true, false)]
-    [InlineData(false, true, true, false)]
-    [InlineData(true, false, false, false)]
-    [InlineData(true, true, true, true)]
-    public void HighContrastHasNoStarfield(bool animationsEnabled, bool effectsFast, bool shown, bool covered) =>
+    [InlineData(true, true, Sight.Seen)]
+    [InlineData(false, true, Sight.Seen)]
+    [InlineData(true, false, Sight.Unseen)]
+    [InlineData(true, true, Sight.Covered)]
+    public void HighContrastHasNoStarfield(bool animationsEnabled, bool effectsFast, Sight sight) =>
         Assert.Equal(
             StarfieldMode.Absent,
-            StarfieldModes.For(MotionToken.Starfield.For(animationsEnabled), highContrast: true, effectsFast, shown, covered));
+            StarfieldModes.For(MotionToken.Starfield.For(animationsEnabled), highContrast: true, effectsFast, sight));
 
     /// <summary>With animation effects off the stars are a still field, seen or not.</summary>
     [Theory]
-    [InlineData(true, false)]
-    [InlineData(false, false)]
-    [InlineData(true, true)]
-    public void WithMotionOffTheFieldIsStill(bool shown, bool covered) =>
-        Assert.Equal(StarfieldMode.Still, StarfieldModes.For(Off, highContrast: false, effectsFast: true, shown, covered));
+    [InlineData(Sight.Seen)]
+    [InlineData(Sight.Unseen)]
+    [InlineData(Sight.Covered)]
+    public void WithMotionOffTheFieldIsStill(Sight sight) =>
+        Assert.Equal(StarfieldMode.Still, StarfieldModes.For(Off, highContrast: false, effectsFast: true, sight));
 
     /// <summary>Over Remote Desktop, where effects are not fast, the field stands still rather than streaming frames.</summary>
     [Fact]
     public void WhereEffectsAreSlowTheFieldIsStill() =>
-        Assert.Equal(StarfieldMode.Still, StarfieldModes.For(On, highContrast: false, effectsFast: false, shown: true, covered: false));
-
-    /// <summary>A page that has gone, or a minimised or hidden window, stops the flight where it is.</summary>
-    [Fact]
-    public void NotShownTheFlightPauses() =>
-        Assert.Equal(StarfieldMode.Paused, StarfieldModes.For(On, highContrast: false, effectsFast: true, shown: false, covered: false));
+        Assert.Equal(StarfieldMode.Still, StarfieldModes.For(On, highContrast: false, effectsFast: false, Sight.Seen));
 
     /// <summary>
-    /// A window covered by others is shown as far as the XAML host knows, and the flight pauses all the
-    /// same, because nobody can see it.
+    /// A page that has gone, a minimised or hidden window, or one covered by others, which is shown as
+    /// far as the XAML host knows, stops the flight where it is, because nobody can see it.
     /// </summary>
-    [Fact]
-    public void CoveredTheFlightPauses() =>
-        Assert.Equal(StarfieldMode.Paused, StarfieldModes.For(On, highContrast: false, effectsFast: true, shown: true, covered: true));
+    [Theory]
+    [InlineData(Sight.Unseen)]
+    [InlineData(Sight.Covered)]
+    public void UnseenTheFlightPauses(Sight sight) =>
+        Assert.Equal(StarfieldMode.Paused, StarfieldModes.For(On, highContrast: false, effectsFast: true, sight));
 }

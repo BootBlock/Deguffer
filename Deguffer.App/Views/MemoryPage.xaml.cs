@@ -26,12 +26,14 @@ namespace Deguffer.App.Views;
 /// is.</para>
 ///
 /// <para>It reads the machine while someone can see it, and stops otherwise, because a page nobody is
-/// looking at has no reason to ask Windows anything.</para>
+/// looking at has no reason to ask Windows anything. See <see cref="WatchWhileAnyoneCanSeeThis"/>.</para>
 /// </summary>
 public sealed partial class MemoryPage : Page
 {
     private CancellationTokenSource? _watching;
-    private bool _onScreen;
+
+    /// <summary>Whether anyone can see the page, which decides whether it reads the machine.</summary>
+    private readonly ElementSight _sight;
 
     /// <summary>The look the map was last drawn in. See <see cref="FollowLook"/>.</summary>
     private MapLook _look = App.MapAppearance.Look;
@@ -59,6 +61,8 @@ public sealed partial class MemoryPage : Page
                 MemoryActions.ForThisMachine(
                     () => new ContentDialogMemoryConfirmation(XamlRoot, ActualTheme)),
                 App.Faults));
+
+        _sight = new ElementSight(this, WatchWhileAnyoneCanSeeThis);
 
         _guard = new ListSelectionGuard(() => ViewModel.IsShowingRows, restore => DispatcherQueue.TryEnqueueGuarded(restore));
 
@@ -128,16 +132,10 @@ public sealed partial class MemoryPage : Page
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        _onScreen = true;
-
         FollowLook();
         App.MapAppearance.Changed += OnLookChanged;
 
-        if (XamlRoot is { } root)
-        {
-            root.Changed += OnRootChanged;
-        }
-
+        _sight.Follow();
         WatchWhileAnyoneCanSeeThis();
 
         _ = KnowStartupAsync();
@@ -178,15 +176,9 @@ public sealed partial class MemoryPage : Page
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        _onScreen = false;
-
         App.MapAppearance.Changed -= OnLookChanged;
 
-        if (XamlRoot is { } root)
-        {
-            root.Changed -= OnRootChanged;
-        }
-
+        _sight.Stop();
         StopWatching();
 
         // One of §7.2.1's three ends of a watch. The close itself is not called off — the messages
@@ -197,26 +189,24 @@ public sealed partial class MemoryPage : Page
     }
 
     /// <summary>
-    /// The window was minimised, restored, resized or moved between displays. Only the first two
-    /// matter here, and the property answers all four.
-    /// </summary>
-    private void OnRootChanged(XamlRoot sender, XamlRootChangedEventArgs args) =>
-        WatchWhileAnyoneCanSeeThis();
-
-    /// <summary>
-    /// Read while this page is on screen and the window is not hidden, and not otherwise.
+    /// Read while anyone can see this page, and not otherwise (<see cref="MemoryWatch"/>).
     ///
-    /// <para>Minimised, the window keeps its content sized and its elements visible, so nothing else
-    /// here would stop it: a Deguffer left minimised on this page would go on reading the machine,
-    /// building a tree and shading every pixel of the picture every couple of seconds, for nobody.</para>
+    /// <para>Minimised, or behind other windows, the window keeps its content sized and its elements
+    /// visible, so nothing else here would stop it: a Deguffer left on this page under other windows
+    /// would go on reading the machine, building a tree and shading every pixel of the picture every
+    /// couple of seconds, for nobody.</para>
     ///
-    /// <para>Started and stopped only on a change of answer. A resize raises this event too, and
-    /// restarting the loop each time would put the cadence back to nothing every time a window edge
-    /// moved.</para>
+    /// <para>A page uncovered or restored starts a reading at once rather than at the next beat of the
+    /// cadence, so the reader never sees the list from before it was hidden presented as the
+    /// present.</para>
+    ///
+    /// <para>Started and stopped only on a change of answer. A resize or a window moving elsewhere on the
+    /// desktop asks again too, and restarting the loop each time would put the cadence back to nothing
+    /// every time a window edge moved.</para>
     /// </summary>
     private void WatchWhileAnyoneCanSeeThis()
     {
-        var wanted = _onScreen && XamlRoot is not { IsHostVisible: false };
+        var wanted = MemoryWatch.Wanted(_sight.Now);
 
         if (wanted == (_watching is not null))
         {
