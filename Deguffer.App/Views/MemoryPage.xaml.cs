@@ -189,7 +189,7 @@ public sealed partial class MemoryPage : Page
     }
 
     /// <summary>
-    /// Read while anyone can see this page, and not otherwise (<see cref="Sights"/>).
+    /// Read while anyone can see this page, and not otherwise (<see cref="MemoryWatch"/>).
     ///
     /// <para>Minimised, or behind other windows, the window keeps its content sized and its elements
     /// visible, so nothing else here would stop it: a Deguffer left on this page under other windows
@@ -206,7 +206,7 @@ public sealed partial class MemoryPage : Page
     /// </summary>
     private void WatchWhileAnyoneCanSeeThis()
     {
-        var wanted = _sight.Now == Sight.Seen;
+        var wanted = MemoryWatch.Wanted(_sight.Now);
 
         if (wanted == (_watching is not null))
         {

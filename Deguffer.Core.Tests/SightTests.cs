@@ -22,8 +22,7 @@ public sealed class SightTests
         Assert.Equal(Sight.Seen, Sights.Of(loaded: true, hostVisible: true, Cover(new FakeWindowStack().Add(Ourselves))));
 
     /// <summary>
-    /// A window covered by others is shown as far as the XAML host knows, and is not seen all the same,
-    /// so the Memory page stops reading the machine behind it.
+    /// A window covered by others is shown as far as the XAML host knows, and is not seen all the same.
     /// </summary>
     [Fact]
     public void APartBehindASolidWindowIsCovered() =>
