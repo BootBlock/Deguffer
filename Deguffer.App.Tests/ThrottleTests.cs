@@ -46,16 +46,19 @@ public sealed class ThrottleTests
 
     /// <summary>
     /// A window dragged over the field moves for as long as the drag lasts, and the field asks again
-    /// during the drag, not only once it ends, so it pauses as soon as it is covered.
+    /// during the drag, not only once it ends, so it pauses as soon as it is covered. Ten seconds of
+    /// pokes every few milliseconds give a throttle on a loaded machine room to run twice.
     /// </summary>
     [Fact]
     public async Task AStreamOfPokesRunsWhileItLasts()
     {
         var runs = 0;
         var throttle = Make(() => Interlocked.Increment(ref runs));
-        var end = DateTime.UtcNow + TimeSpan.FromMilliseconds(600);
+        var end = DateTime.UtcNow + TimeSpan.FromSeconds(10);
 
-        while (DateTime.UtcNow < end)
+        // Poked far more often than the interval for as long as it takes, so a throttle that waited
+        // for the pokes to stop would never run, however slow the machine.
+        while (Volatile.Read(ref runs) < 2 && DateTime.UtcNow < end)
         {
             Poke(throttle, times: 1);
             await Task.Delay(5);
