@@ -85,6 +85,12 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     /// </summary>
     private readonly ItemGuide _guide;
 
+    /// <summary>
+    /// Frees what a scan's snapshots left behind once the page is idle again. See
+    /// <see cref="SpentSnapshots"/>.
+    /// </summary>
+    private readonly Action _releaseSpent;
+
     /// <param name="time">
     /// The one clock the page reads: what the folder list and the line under the map date an age
     /// against, what a kept scan is stamped with, and what decides when the drive picker's last
@@ -95,6 +101,10 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     /// <param name="running">What is changing the machine on every page, which the elevated relaunch waits for.</param>
     /// <param name="history">See <see cref="_history"/>.</param>
     /// <param name="motion">How the reader wants things to move, which a play of the replay follows.</param>
+    /// <param name="releaseSpent">
+    /// Called once as each scan ends, however it ends, after the page has gone idle. The window
+    /// queues <see cref="SpentSnapshots.Release"/> behind the frame that shows the result.
+    /// </param>
     internal ExploreViewModel(
         IExploreScanner scanner,
         IVolumeInventory volumes,
@@ -107,7 +117,8 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         RunningActions running,
         BusyWork work,
         ScanHistory history,
-        IMotionPolicy motion)
+        IMotionPolicy motion,
+        Action releaseSpent)
     {
         _scanner = scanner;
         _volumes = volumes;
@@ -117,6 +128,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         _guide = guide;
         _isElevated = isElevated;
         _work = work;
+        _releaseSpent = releaseSpent;
 
         Selection = new ExploreSelection(actions, work);
         Growth = new ExploreGrowth(history);
@@ -506,6 +518,9 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
             IsBusy = false;
             Progress = null;
             work.Dispose();
+
+            // A cancelled or failed scan took snapshots too, and nothing else will free them.
+            _releaseSpent();
         }
     }
 

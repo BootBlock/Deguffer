@@ -10,6 +10,7 @@ using Deguffer.Core.Exploring.Knowledge;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Viewing;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -90,7 +91,11 @@ public sealed partial class ExplorePage : Page
             App.Running,
             App.Work,
             App.ScanHistory,
-            SystemMotion.Current);
+            SystemMotion.Current,
+
+            // Low, so the frame that shows the result is drawn before the collection pauses the
+            // window.
+            () => DispatcherQueue.TryEnqueueGuarded(DispatcherQueuePriority.Low, SpentSnapshots.Release));
 
         _guard = new ListSelectionGuard(() => ViewModel.IsShowingRows, restore => DispatcherQueue.TryEnqueueGuarded(restore));
 
