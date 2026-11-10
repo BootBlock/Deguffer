@@ -45,6 +45,9 @@ internal sealed class ExploreFixture : IDisposable
 
     public FakeHiddenSpaceSource Hidden { get; } = new();
 
+    /// <summary>What a location typed into the page finds: nothing, unless a test describes it.</summary>
+    public FakePathProbe Probe { get; } = new();
+
     public ManualTimeProvider Time { get; } = new();
 
     public FakeExploreConfirmation Prompt { get; set; } = new(answer: true);
@@ -111,6 +114,7 @@ internal sealed class ExploreFixture : IDisposable
             Scanner,
             Volumes,
             Hidden,
+            Probe,
             Time,
             new ExploreActions(Building, () => Prompt, Faults, Running, Bin),
             Guide,

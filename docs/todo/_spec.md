@@ -643,7 +643,18 @@ not the shell asked.
   draw the same file alike. The walk learns lengths alone, so it asks the file system only about a
   file whose attributes mark it, and it counts a CompactOS file, whose mark the filter hides, at its
   length. A finished scan puts no sentence of its own under the map: the readout and the rows state
-  each figure, and a lower bound is marked on the figure it qualifies.
+  each figure, and a lower bound is marked on the figure it qualifies. The one exception is a scan
+  that could not list the place it was pointed at, which says that nothing was measured, because an
+  empty map reads as an empty drive.
+- **Explore draws a network share by walking it.** The drive box offers each drive letter mapped to a
+  share, named as a network drive rather than by its space, which is not read, and never opened on
+  by default while a local drive will scan. A path typed into the page reaches a share the folder
+  picker has not found, and the page points there only once Windows says it is a folder. A share has
+  no file table, so the walk reads it, bounded and cancellable as on a disk, and the page states how
+  much it has read as it goes. No file's content is read. The elevated scan is not offered for a
+  share: an elevated process does not see the letters this one mapped. Nothing on a share is removed
+  (above), and a share's scans are not kept to compare growth, because Windows names no volume that
+  tells one share from another.
 
 ### 7.2 Memory — where the memory goes
 
@@ -1143,7 +1154,7 @@ on: what the established duplicate finders do, and the ways their users have los
 
 - **The locations the user chose**: whole drives, folders, or both, on more than one drive in one
   search. A location is on a local disk of this machine, fixed or removable, whose content is stored
-  on it. Network drives and shares are not searched, as Explore does not draw them, because a file
+  on it. Network drives and shares are not searched, though Explore draws them, because a file
   reached over the network can be a file on this machine under a second name that its identity does
   not reveal. Nor is a drive that a cloud client presents as local while it keeps the content
   elsewhere: its files carry no sign that reading them downloads them, and removing one removes it

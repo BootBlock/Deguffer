@@ -34,9 +34,20 @@ namespace Deguffer.Core.Exploring;
 /// flag at the page, so the one sentence a reader is given is asserted here with the rest of the
 /// wording.
 /// </param>
+/// <param name="IsNetwork">
+/// Whether the letter is one Windows maps to a network share. Such a drive's label and space are not
+/// read (<see cref="VolumeReadiness.NotAsked"/>), so the entry says what it is instead.
+/// </param>
 public sealed record DriveChoice(
-    string RootPath, string? Label, long? TotalBytes, long? FreeBytes, string? Refusal = null)
+    string RootPath, string? Label, long? TotalBytes, long? FreeBytes, string? Refusal = null, bool IsNetwork = false)
 {
+    /// <summary>
+    /// What a mapped network drive states where a local one states its space. Each figure would be a
+    /// round trip to the server, made every time the picker is read, and "size unknown" would read
+    /// as a drive that failed to answer.
+    /// </summary>
+    public const string NetworkDriveText = "network drive";
+
     /// <summary>
     /// What a volume whose contents are not on this machine is told. See
     /// <see cref="LocalVolume.StoresContentRemotely"/> for how one is recognised.
@@ -73,7 +84,8 @@ public sealed record DriveChoice(
                 { Readiness: VolumeReadiness.Refused } => UnreadableRefusal,
                 { StoresContentRemotely: true } => RemoteStorageRefusal,
                 _ => null,
-            });
+            },
+            volume.Kind == DriveType.Network);
 
     /// <summary>
     /// Whether a scan may be pointed at this volume.
@@ -99,7 +111,8 @@ public sealed record DriveChoice(
     /// A dash would read as zero.
     /// </summary>
     public string Sizes =>
-        UsedBytes is { } used && FreeBytes is { } free && TotalBytes is { } total
+        IsNetwork ? NetworkDriveText
+        : UsedBytes is { } used && FreeBytes is { } free && TotalBytes is { } total
             ? $"{FreeSpace.Format(used)} used, {FreeSpace.Format(free)} free of {FreeSpace.Format(total)}"
             : "size unknown";
 

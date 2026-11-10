@@ -47,15 +47,21 @@ public sealed partial class ExploreTargeting : ObservableObject
     private bool _retargeting;
 
     /// <param name="time">What decides when the drive picker's last reading has gone stale.</param>
+    /// <param name="probe">What asks whether a typed location is a folder. See <see cref="Typed"/>.</param>
     /// <param name="status">See <see cref="_status"/>.</param>
     internal ExploreTargeting(
         IVolumeInventory volumes,
         TimeProvider time,
+        IPathProbe probe,
         StatusLineViewModel status)
     {
         _volumes = volumes;
-        _drives = new DriveList(volumes, time);
+
+        // Mapped letters are offered, because Explore pictures a share by walking it. Removing
+        // anything on one stays refused, by FinalPlaces.
+        _drives = new DriveList(volumes, time, NetworkDrives.Offered);
         _status = status;
+        Typed = new ExploreTypedFolder(probe, ScopeToFolder) { CanRetarget = CanRun() };
 
         // The drives are not read here: a constructor cannot wait for a reading taken off the UI
         // thread, and the page reads them as it is first shown (RefreshDrivesAsync).
@@ -71,15 +77,18 @@ public sealed partial class ExploreTargeting : ObservableObject
     /// <summary>The volumes offered in the picker, each with what it is called and how full it is.</summary>
     public ObservableCollection<DriveEntry> Drives => _drives.Entries;
 
+    /// <summary>The box a location is typed into, a share most often, which points the page once it is checked.</summary>
+    public ExploreTypedFolder Typed { get; }
+
     [ObservableProperty]
     public partial DriveEntry? SelectedDrive { get; set; }
 
     /// <summary>
     /// The folder a scan is scoped to, or null for a whole drive.
     ///
-    /// <para>Set from the system picker rather than from a typed string, so the path is one the
-    /// shell confirmed exists — the same reason <see cref="SettingsViewModel"/>'s source folders go
-    /// through one.</para>
+    /// <para>Set from the system picker, so the path is one the shell confirmed exists, the same
+    /// reason <see cref="SettingsViewModel"/>'s source folders go through one; or typed, where
+    /// <see cref="Typed"/> confirms it before the page points at it.</para>
     ///
     /// <para>Written only through <see cref="Retarget"/>, which is what keeps the drive box, the
     /// elevation offer and the status line answering for it.</para>
@@ -110,6 +119,7 @@ public sealed partial class ExploreTargeting : ObservableObject
         {
             field = value;
             ScanWholeDriveCommand.NotifyCanExecuteChanged();
+            Typed.CanRetarget = CanRun();
         }
     }
 
@@ -133,8 +143,15 @@ public sealed partial class ExploreTargeting : ObservableObject
             return;
         }
 
-        Retarget(Target, Target.ScopedTo(onDisk, _drives.Holding(onDisk)?.RootPath));
+        ScopeToFolder(onDisk);
     }
+
+    /// <summary>
+    /// Point the next scan at <paramref name="folder"/>, which is known to be a folder, with the
+    /// drive box moved to the volume holding it where the box offers one.
+    /// </summary>
+    private void ScopeToFolder(string folder) =>
+        Retarget(Target, Target.ScopedTo(folder, _drives.Holding(folder)?.RootPath));
 
     /// <summary>
     /// The page being shown: read the drives (<see cref="RefreshDrivesAsync"/>), then point it at

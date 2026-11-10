@@ -17,7 +17,8 @@ namespace Deguffer.Core.Exploring;
 /// drive that is plugged in or taken away between two readings costs one insertion or one removal,
 /// and a drive whose figures moved costs nothing the list itself is told about.</para>
 /// </summary>
-public sealed class DriveList(IVolumeInventory volumes, TimeProvider time)
+/// <param name="networkDrives">Whether drive letters mapped to network shares are offered. See <see cref="NetworkDrives"/>.</param>
+public sealed class DriveList(IVolumeInventory volumes, TimeProvider time, NetworkDrives networkDrives)
 {
     /// <summary>
     /// How long one reading stands. Long enough that opening the picker twice in a row reads the
@@ -85,7 +86,10 @@ public sealed class DriveList(IVolumeInventory volumes, TimeProvider time)
         // card are both mounted and both answer no, and offering them is offering a scan that cannot
         // start. A volume Windows would not describe is listed and refused, because the user can see
         // it in File Explorer and leaving it out would not say why. See DriveChoice.UnreadableRefusal.
-        foreach (var volume in read.Where(v => v.Readiness is not VolumeReadiness.NoMedia && v.Kind != DriveType.Network))
+        // A mapped letter is never probed (VolumeReadiness.NotAsked), so it is never taken for empty.
+        foreach (var volume in read.Where(v =>
+            v.Readiness is not VolumeReadiness.NoMedia
+            && (v.Kind != DriveType.Network || networkDrives is NetworkDrives.Offered)))
         {
             _arriving.Add(DriveChoice.From(volume));
         }
@@ -123,9 +127,14 @@ public sealed class DriveList(IVolumeInventory volumes, TimeProvider time)
     /// because opening the page on a drive whose Scan button is dead reads as an app that failed to
     /// start. Where every volume is refused there is nothing better to point at, so the first is
     /// named and the page says why it will not scan it.</para>
+    ///
+    /// <para>A mapped network drive is not defaulted onto while a local one will scan. It is offered
+    /// to a person who chooses it, and a page that opened on it would picture another machine, at the
+    /// speed of the link, for a reader who came to see what fills this one.</para>
     /// </summary>
     public DriveEntry? Choose(string? chosen) =>
         Find(chosen)
+        ?? Entries.FirstOrDefault(static listed => listed.Choice is { IsRefused: false, IsNetwork: false })
         ?? Entries.FirstOrDefault(static listed => !listed.Choice.IsRefused)
         ?? Entries.FirstOrDefault();
 

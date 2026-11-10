@@ -143,8 +143,9 @@ public sealed class VolumeInventory : IVolumeInventory
         catch (IOException)
         {
             // The volumes above are still whole, and are the part every safety rule reads. Only
-            // network mappings would have been added here, and no rule that decides a deletion
-            // acts on one.
+            // network mappings would have been added here. The one rule that reads them, Explore's
+            // refusal of what is on a share, also refuses a letter missing from the list, by the
+            // share Windows follows it to (FinalPlaces.Item).
             return volumes;
         }
 
@@ -182,7 +183,8 @@ public sealed class VolumeInventory : IVolumeInventory
     /// not probed (<see cref="VolumeReadiness.NotAsked"/>). The probe, the label and the two space
     /// figures each cost a round trip to the server, and a mapped share that is not there answers
     /// the probe only once the redirector gives up on it. No caller wants any of it for a share: the
-    /// picker refuses network volumes outright and <c>RecycleBinProvider</c> takes fixed ones only.
+    /// Explore picker names a mapped letter as a network drive rather than by its space, the
+    /// duplicate search leaves one out, and <c>RecycleBinProvider</c> takes fixed volumes only.
     /// This declines a cost, and filters nothing — which kinds a caller may act on stays that
     /// caller's decision.</para>
     /// </summary>
