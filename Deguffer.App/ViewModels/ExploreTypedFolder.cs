@@ -76,7 +76,18 @@ public sealed partial class ExploreTypedFolder : ObservableObject
             return;
         }
 
-        var presence = await Task.Run(() => _probe.ProbeDirectory(LongPath.Extended(folder), out _), ct).WaitAsync(ct);
+        PathPresence presence;
+
+        try
+        {
+            presence = await Task.Run(() => _probe.ProbeDirectory(LongPath.Extended(folder), out _), ct).WaitAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            // Stopped, or the box closed. Caught here because the command is run from the page's
+            // handlers, where an exception escaping the command would end the process.
+            return;
+        }
 
         if (TypedFolder.Refusal(folder, presence) is { } refusal)
         {

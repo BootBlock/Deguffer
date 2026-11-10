@@ -1,4 +1,5 @@
 using Deguffer.Core.Exploring;
+using Deguffer.Core.Safety;
 using Deguffer.Testing;
 
 namespace Deguffer.App.Tests;
@@ -72,6 +73,28 @@ public sealed class ExploreTypedFolderTests : IDisposable
 
         Assert.Equal(@"C:\", page.Targeting.Target.Root);
         Assert.Equal(TypedFolder.Refusal(Share, Core.Safety.PathPresence.Refused), page.Targeting.Typed.Refusal);
+    }
+
+    /// <summary>
+    /// A check stopped before it finished points nothing, says nothing, and ends quietly: the command
+    /// runs from the page's handlers, where an exception escaping it would end the process.
+    /// </summary>
+    [Fact]
+    public async Task AStoppedCheckPointsNothingAndEndsQuietly()
+    {
+        using var release = new ManualResetEventSlim();
+        _explore.Volumes.With(@"C:\");
+        _explore.HeldProbe = new HeldProbe(release);
+        var page = _explore.Page();
+        page.Targeting.Typed.Text = Share;
+
+        var running = page.Targeting.Typed.GoCommand.ExecuteAsync(null);
+        page.Targeting.Typed.GoCancelCommand.Execute(null);
+        await running;
+        release.Set();
+
+        Assert.Equal(@"C:\", page.Targeting.Target.Root);
+        Assert.Null(page.Targeting.Typed.Refusal);
     }
 
     /// <summary>Text that is not a full path is refused without asking the machine anything.</summary>
@@ -160,5 +183,21 @@ public sealed class ExploreTypedFolderTests : IDisposable
 
         Assert.Equal(@"Z:\", page.Targeting.SelectedDrive?.RootPath);
         Assert.Equal(@"Z:\Photos", page.Targeting.Target.Root);
+    }
+
+    /// <summary>A server that has not answered yet: every folder is there, once the test lets it answer.</summary>
+    private sealed class HeldProbe(ManualResetEventSlim release) : IPathProbe
+    {
+        public PathPresence ProbeFile(string path) => PathPresence.Absent;
+
+        public PathPresence ProbeEntry(string path) => PathPresence.Absent;
+
+        public PathPresence ProbeDirectory(string path, out bool? isLink)
+        {
+            release.Wait();
+            isLink = false;
+
+            return PathPresence.Present;
+        }
     }
 }

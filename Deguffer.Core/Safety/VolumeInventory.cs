@@ -143,9 +143,11 @@ public sealed class VolumeInventory : IVolumeInventory
         catch (IOException)
         {
             // The volumes above are still whole, and are the part every safety rule reads. Only
-            // network mappings would have been added here. The one rule that reads them, Explore's
-            // refusal of what is on a share, also refuses a letter missing from the list, by the
-            // share Windows follows it to (FinalPlaces.Item).
+            // network mappings would have been added here. Explore's refusal of what is on a share
+            // also refuses a letter missing from the list, by the share Windows follows it to
+            // (FinalPlaces.Item). Other readers of the mappings, such as the scan's choice of route
+            // and the elevation offer, take such a letter for a local drive until the list is read
+            // again.
             return volumes;
         }
 
