@@ -11,9 +11,9 @@ namespace Deguffer.Core.Exploring;
 /// one before, and every snapshot can read one set of arrays: each tree reads the slots below its own
 /// node count, and a later fill writes only above the count of the fill before it. When the nodes
 /// outgrow the arrays, new ones twice the size take over and the trees already made keep the old,
-/// which nothing writes again. A snapshot of a system drive was about 51 bytes a node, a full set of
-/// columns every time; these leave about 30 bytes a node for the columns that are totalled again in
-/// each snapshot, and those are the only ones it allocates (#738).</para>
+/// which nothing writes again. A full set of columns is about 51 bytes a node. Sharing these leaves a
+/// snapshot about 30 bytes a node, for the columns totalled again in each one, and a snapshot whose
+/// nodes outgrow the shared arrays allocates the new ones as well (#738).</para>
 ///
 /// <para>The rolled-up columns (sizes, lengths, storage, flags and newest writes) and the child lists
 /// change with every node added below them, so each tree has its own. Sharing those would mean taking
