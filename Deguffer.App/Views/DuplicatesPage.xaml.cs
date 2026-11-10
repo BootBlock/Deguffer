@@ -48,7 +48,7 @@ public sealed partial class DuplicatesPage : Page
             DuplicateActions.ForThisMachine(() => new ContentDialogDuplicateConfirmation(XamlRoot, ActualTheme), App.Running),
             ChooseCsvAsync,
             App.Preferences,
-            new DriveList(VolumeInventory.Current, TimeProvider.System),
+            new DriveList(VolumeInventory.Current, TimeProvider.System, NetworkDrives.LeftOut),
             ElevatedRelaunch.IsElevated,
             ElevatedRelaunch.TryRelaunch,
             App.Running,

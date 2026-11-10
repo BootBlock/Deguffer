@@ -167,4 +167,19 @@ public sealed class DriveChoiceTests
 
         Assert.Equal(DriveChoice.RemoteStorageRefusal, choice.Refusal);
     }
+
+    /// <summary>
+    /// A mapped drive's space is never read, so it says what it is rather than "size unknown", which
+    /// would read as a drive that failed to answer. It is not refused: Explore walks a share.
+    /// </summary>
+    [Fact]
+    public void AMappedNetworkDriveSaysWhatItIsAndIsNotRefused()
+    {
+        var choice = DriveChoice.From(new LocalVolume(@"Z:\", DriveType.Network, VolumeReadiness.NotAsked));
+
+        Assert.True(choice.IsNetwork);
+        Assert.False(choice.IsRefused);
+        Assert.Equal(DriveChoice.NetworkDriveText, choice.Sizes);
+        Assert.Equal(@"Z:\, network drive", choice.Description);
+    }
 }

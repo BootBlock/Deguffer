@@ -186,15 +186,68 @@
                       DropDownOpened="OnDriveListOpened"
                       AutomationProperties.Name="Drive to scan" />
 
-            <!-- Scoping to a folder, through the system picker for the reason the source folders
-                 use one: the path is then one the shell confirmed exists rather than a typed
-                 string. -->
-            <Button Grid.Column="1"
-                    VerticalAlignment="Bottom"
-                    Content="Folder…"
-                    IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
-                    Click="OnChooseFolder"
-                    AutomationProperties.Name="Choose a folder to scan" />
+            <StackPanel Grid.Column="1"
+                        Orientation="Horizontal"
+                        Spacing="8"
+                        VerticalAlignment="Bottom">
+                <!-- Scoping to a folder, through the system picker for the reason the source
+                     folders use one: the path is then one the shell confirmed exists. -->
+                <Button Content="Folder…"
+                        IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
+                        Click="OnChooseFolder"
+                        AutomationProperties.Name="Choose a folder to scan" />
+
+                <!-- Or typed, for a share the picker has not found on the network. Nothing
+                     confirmed a typed path, so the page asks whether it is a folder before it
+                     points there, and says why where it is not. -->
+                <Button Content="Path…"
+                        IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
+                        ToolTipService.ToolTip="Type a folder or a network share to scan"
+                        AutomationProperties.Name="Type a folder or a network share to scan">
+                    <Button.Flyout>
+                        <Flyout x:Name="TypedFlyout"
+                                Placement="BottomEdgeAlignedLeft"
+                                Opened="OnTypedOpened"
+                                Closed="OnTypedClosed">
+                            <StackPanel Width="400" Spacing="10">
+                                <TextBox x:Name="TypedBox"
+                                         Header="Folder or network share"
+                                         PlaceholderText="\\server\share"
+                                         Text="{x:Bind ViewModel.Targeting.Typed.Text, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         KeyDown="OnTypedKeyDown"
+                                         IsSpellCheckEnabled="False"
+                                         AutomationProperties.Name="Folder or network share to scan" />
+
+                                <!-- Live, so a screen reader hears why the path was not used
+                                     without leaving the box. -->
+                                <TextBlock Text="{x:Bind ViewModel.Targeting.Typed.Refusal, Mode=OneWay}"
+                                           Visibility="{x:Bind ViewModel.Targeting.Typed.HasRefusal, Mode=OneWay}"
+                                           TextWrapping="Wrap"
+                                           Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                           AutomationProperties.LiveSetting="Assertive" />
+
+                                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                                    <ProgressRing Width="16"
+                                                  Height="16"
+                                                  IsActive="{x:Bind ViewModel.Targeting.Typed.GoCommand.IsRunning, Mode=OneWay}"
+                                                  AutomationProperties.Name="Asking whether the folder is there" />
+
+                                    <Button Content="Stop"
+                                            Visibility="{x:Bind ViewModel.Targeting.Typed.GoCommand.IsRunning, Mode=OneWay}"
+                                            Command="{x:Bind ViewModel.Targeting.Typed.GoCancelCommand}"
+                                            AutomationProperties.Name="Stop asking whether the folder is there" />
+
+                                    <!-- Points the page; the scan starts from Scan, as it does
+                                         for a folder picked. -->
+                                    <Button Style="{StaticResource AccentButtonStyle}"
+                                            Content="Use this path"
+                                            Command="{x:Bind ViewModel.Targeting.Typed.GoCommand}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+            </StackPanel>
 
             <Button Grid.Column="2"
                     VerticalAlignment="Bottom"

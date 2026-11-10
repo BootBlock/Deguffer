@@ -107,6 +107,23 @@ public sealed class ExploreTargetTests
         Assert.Null(target.Refusal(new FakeVolumeInventory().With(@"C:\")));
     }
 
+    /// <summary>
+    /// A share's own top, and a drive letter mapped to one, are places Explore scans: neither is
+    /// refused, whether chosen as the drive or reached as the folder.
+    /// </summary>
+    [Fact]
+    public void AShareOrAMappedDriveIsAPlaceToScan()
+    {
+        var volumes = new FakeVolumeInventory()
+            .With(@"C:\")
+            .With(@"Z:\", DriveType.Network, readiness: VolumeReadiness.NotAsked);
+
+        Assert.True(new ExploreTarget(@"C:\", @"\\server.test\share").IsScannable(volumes));
+        Assert.True(new ExploreTarget(@"Z:\", null).IsScannable(volumes));
+        Assert.True(new ExploreTarget(@"Z:\", @"Z:\Photos").IsScannable(volumes));
+        Assert.Equal(@"\\server.test\share", new ExploreTarget(@"C:\", @"\\server.test\share").Root);
+    }
+
     [Fact]
     public void NothingToScanIsNotScannable()
     {

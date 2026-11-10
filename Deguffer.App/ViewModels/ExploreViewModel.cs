@@ -90,6 +90,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     /// against, what a kept scan is stamped with, and what decides when the drive picker's last
     /// reading has gone stale.
     /// </param>
+    /// <param name="probe">What asks whether a location typed into the page is a folder.</param>
     /// <param name="isElevated">Whether this process holds administrator rights.</param>
     /// <param name="relaunch">See <see cref="ExploreElevation"/>.</param>
     /// <param name="running">What is changing the machine on every page, which the elevated relaunch waits for.</param>
@@ -99,6 +100,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         IExploreScanner scanner,
         IVolumeInventory volumes,
         IHiddenSpaceSource hidden,
+        IPathProbe probe,
         TimeProvider time,
         ExploreActions actions,
         ItemGuide guide,
@@ -123,7 +125,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         Replay = new ExploreReplay(motion);
         Files = new ExploreFiles(actions, time);
         Types = new ExploreTypes();
-        Targeting = new ExploreTargeting(volumes, time, Status);
+        Targeting = new ExploreTargeting(volumes, time, probe, Status);
         Elevation = new ExploreElevation(Targeting, volumes, isElevated, relaunch, running, Status);
         Notes = new ExploreNoteCard(Selection);
         Listing = new ExploreRows(guide, time);
@@ -564,11 +566,12 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         Notes.RouteNote = scan.RouteNote;
         Elevation.Offer(scan.Fallback, space.Hidden);
 
-        // The progress sentence goes, and nothing replaces it: the map, its readout and its rows
-        // state the figures, and each one that is a lower bound is marked "≥". Before the scan is
-        // kept, which waits for the list of volumes read beside it, so the sentence does not go on
-        // describing a scan whose map is already drawn.
-        Status.Say(StatusLine.Empty);
+        // The progress sentence goes, and nothing replaces it unless the scan could not list where
+        // it was pointed (ExploreStatusText.Finished): the map, its readout and its rows state the
+        // figures, and each one that is a lower bound is marked "≥". Before the scan is kept, which
+        // waits for the list of volumes read beside it, so the sentence does not go on describing a
+        // scan whose map is already drawn.
+        Status.Say(ExploreStatusText.Finished(scan.Tree));
 
         await RecordAsync(scan, volume, scoped);
     }
@@ -611,7 +614,8 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         var volume = await scanned.NameAsync();
         var taken = _time.GetUtcNow().UtcDateTime;
 
-        var record = await Task.Run(() => _history.Record(scan, volume, space, scoped, taken));
+        var record = await Task.Run(() =>
+            _history.Record(scan, volume, space, ScanHistory.CoverageOf(scan.Tree.PathOf(scan.Tree.RootNode), scoped, _volumes), taken));
 
         // A comparison describes one scan, and the page can have moved to another while this ran.
         // Shown only for the scan it was taken from, or what a removal left of it.

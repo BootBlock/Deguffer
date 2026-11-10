@@ -18,6 +18,7 @@ public static class GrowthText
         NotKept.None => null,
         NotKept.NotWholeDrive => NotWholeDrive,
         NotKept.NoVolumeName => NoVolumeName,
+        NotKept.OnAShare => OnAShare,
         _ => throw new ArgumentOutOfRangeException(nameof(notKept)),
     };
 
@@ -33,6 +34,11 @@ public static class GrowthText
     public const string NoVolumeName =
         "Windows did not identify this drive or state its size, so its scans cannot be told from "
         + "another drive's and are not kept.";
+
+    /// <summary>What the page says when a scan covered a share or a mapped network drive.</summary>
+    public const string OnAShare =
+        "Growth is compared between scans of this computer's own drives. A network share has no name "
+        + "Windows gives that tells it from another share, so its scans are not kept.";
 
     /// <summary>What the page says when this scan's summary could not be stored.</summary>
     public const string NotSaved =

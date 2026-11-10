@@ -72,6 +72,7 @@ public sealed partial class ExplorePage : Page
             new ExploreScanner(UserEnvironment.Current.VolumeTables, tuning: App.ScanTuning),
             VolumeInventory.Current,
             WindowsHiddenSpace.Default,
+            LongPathProbe.Default,
             TimeProvider.System,
 
             // The dialog is built per ask, as the Storage page's is: a XamlRoot captured in this
@@ -110,6 +111,7 @@ public sealed partial class ExplorePage : Page
             ColourAs);
 
         ViewModel.Elevation.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
+        ViewModel.Targeting.Typed.Accepted += OnTypedAccepted;
         FollowRows();
 
         InitializeComponent();
@@ -596,6 +598,38 @@ public sealed partial class ExplorePage : Page
             ViewModel.Targeting.ScopeTo(folder);
         }
     }
+
+    private void OnTypedOpened(object? sender, object e)
+    {
+        TypedBox.Focus(FocusState.Programmatic);
+        TypedBox.SelectAll();
+    }
+
+    /// <summary>
+    /// A check still asking a server when the box closes is stopped, so a server that answers late
+    /// cannot point the page at a path the reader has walked away from.
+    /// </summary>
+    private void OnTypedClosed(object? sender, object e)
+    {
+        if (ViewModel.Targeting.Typed.GoCommand.IsRunning)
+        {
+            ViewModel.Targeting.Typed.GoCancelCommand.Execute(null);
+        }
+    }
+
+    /// <summary>Enter uses the path, as the button does, which is what a box with one action is expected to do.</summary>
+    private void OnTypedKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        var go = ViewModel.Targeting.Typed.GoCommand;
+
+        if (e.Key is Windows.System.VirtualKey.Enter && go.CanExecute(null))
+        {
+            e.Handled = true;
+            go.Execute(null);
+        }
+    }
+
+    private void OnTypedAccepted(object? sender, EventArgs e) => TypedFlyout.Hide();
 
     private void OnCrumbClicked(object sender, RoutedEventArgs e)
     {

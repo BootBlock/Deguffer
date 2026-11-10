@@ -57,28 +57,54 @@ internal sealed class FinalPlaces(IFileSystem fileSystem, IVolumeInventory volum
     }
 
     /// <summary>
+    /// Why <paramref name="target"/> is not opened (<see cref="HostVolume.Unopened"/>), asked once per
+    /// question and handed to <see cref="OnAShare(string)"/> and <see cref="Item"/>.
+    ///
+    /// <para>Asked before anything else is asked of the path, the top of its volume included, because
+    /// every other question asks Windows about the path, and on a share that is a conversation with
+    /// the server: a removal policy asked about each of the thousand largest files on a share, or
+    /// about a row on the UI thread, would otherwise wait on the link for each answer. The answer
+    /// reads the remembered volume list and the path's text, and opens nothing.</para>
+    /// </summary>
+    /// <param name="target">The item, in display form, as the policy has already resolved it.</param>
+    public UnopenedPlace? Unopened(string target) => HostVolume.Unopened(volumes, target);
+
+    /// <summary>
+    /// The refusal of <paramref name="target"/>, which <see cref="Unopened"/> found on a share or a
+    /// network drive. Named by the folder that holds the item, where there is one, because that folder
+    /// is what is on the share; and by the item where it is the share's own top, which holds nothing.
+    /// </summary>
+    /// <param name="target">The item, in display form, as the policy has already resolved it.</param>
+    public static ExploreVerdict OnAShare(string target)
+    {
+        var holder = Path.GetDirectoryName(target) ?? target;
+
+        return OnAShare(Path.GetFileName(target) is { Length: > 0 } name ? name : target, $"'{holder}' is on a network share or a network drive");
+    }
+
+    /// <summary>
     /// Where removing <paramref name="target"/> acts once the links above it are followed, or why
     /// Deguffer cannot tell.
     ///
-    /// <para><b>Fails closed.</b> A folder above the item that is on a share or a network drive, that
-    /// is there and that Windows will not open, that Windows names only by a device path, or that
-    /// leads to a share, hides where the removal would act, so it refuses. A folder above the item
-    /// that is not there hides nothing: the item is not there either, and the removal reports it as
-    /// gone.</para>
+    /// <para><b>Fails closed.</b> A folder above the item that is there and that Windows will not
+    /// open, that Windows names only by a device path, or that leads to a share, hides where the
+    /// removal would act, so it refuses. A folder above the item that is not there hides nothing: the
+    /// item is not there either, and the removal reports it as gone. An item on a share or a network
+    /// drive never reaches this: <see cref="OnAShare(string)"/> refused it first.</para>
     /// </summary>
-    /// <param name="target">The item, in display form, as the policy has already resolved it. Never the top of a volume.</param>
-    public FarSide Item(string target)
+    /// <param name="target">The item, in display form, as the policy has already resolved it. Never the top of a volume, and never on a share.</param>
+    /// <param name="unopened">
+    /// What <see cref="Unopened"/> answered for <paramref name="target"/>. The folder holding it is on
+    /// the same volume, because the top of a volume never reaches this.
+    /// </param>
+    public FarSide Item(string target, UnopenedPlace? unopened)
     {
         var parent = Path.GetDirectoryName(target)!;
         var extended = LongPath.Extended(parent);
 
-        switch (HostVolume.Unopened(volumes, parent))
+        if (unopened is UnopenedPlace.Cloud)
         {
-            case UnopenedPlace.Share:
-                return new FarSide(null, OnAShare(Path.GetFileName(target), $"'{parent}' is on a network share or a network drive"));
-
-            case UnopenedPlace.Cloud:
-                return new FarSide(null, null);
+            return new FarSide(null, null);
         }
 
         if (fileSystem.FinalPath(extended) is not { } final)
@@ -112,9 +138,9 @@ internal sealed class FinalPlaces(IFileSystem fileSystem, IVolumeInventory volum
 
     /// <summary>
     /// The refusal of <paramref name="name"/>, which is reached through a share, for the reason
-    /// <paramref name="reached"/> states. Its own sentence for both ways there, a share named as one
-    /// and a local name Windows follows to one, because a removal through either acts where no rule
-    /// can be asked.
+    /// <paramref name="reached"/> states. One sentence for both ways there, a share named as one and
+    /// a local name Windows follows to one, because a removal through either acts where no rule can
+    /// be asked.
     /// </summary>
     private static ExploreVerdict OnAShare(string name, string reached) =>
         ExploreVerdict.Refuse(

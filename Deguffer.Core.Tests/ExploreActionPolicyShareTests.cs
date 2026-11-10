@@ -173,6 +173,43 @@ public sealed class ExploreActionPolicyShareTests : IDisposable
         Assert.Equal(handed, recording.Paths.Count);
     }
 
+    /// <summary>
+    /// Explore scans a share, and a mapped drive, and refuses to remove anything on either, the top
+    /// of the share included. Nothing is asked of Windows to decide it, not even where the path's
+    /// volume is mounted: that question is a conversation with the server, and the policy is asked
+    /// about every one of the largest files on a share and about a row on the UI thread.
+    ///
+    /// <para>The §5.6 negative beside it: an ordinary folder on a local drive in the same inventory
+    /// is still allowed, so the refusal is the share's and not a refusal of everything.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(@"\\fileserver.test\photos", @"'\\fileserver.test\photos' is on a network share")]
+    [InlineData(@"\\fileserver.test\photos\", @"'\\fileserver.test\photos' is on a network share")]
+    [InlineData(@"\\fileserver.test\photos\2019", @"'\\fileserver.test\photos' is on a network share")]
+    [InlineData(@"Z:\", @"'Z:\' is on a network share")]
+    [InlineData(@"Z:\Photos", @"'Z:\' is on a network share")]
+    public void AShareOrAMappedDriveIsRefusedWithoutAskingWhereItIsMounted(string item, string reason)
+    {
+        var ordinary = _temp.CreateDirectory("profile", "Downloads", "old");
+        var recording = new RecordingFileSystem(WindowsFileSystem.Default);
+        var volumes = new FakeVolumeInventory()
+            .With(Path.GetPathRoot(_temp.Path)!)
+            .With(@"Z:\", kind: DriveType.Network, readiness: VolumeReadiness.NotAsked);
+        var policy = Policy(volumes, recording);
+        var asked = recording.Resolved.Count;
+        volumes.MountPointQueries.Clear();
+
+        var verdict = policy.MayRemove(item);
+
+        Assert.False(verdict.IsAllowed);
+        Assert.Contains(reason, verdict.Reason, StringComparison.Ordinal);
+        Assert.Contains("this computer's own disk", verdict.Reason, StringComparison.Ordinal);
+        Assert.Equal(asked, recording.Resolved.Count);
+        Assert.Empty(volumes.MountPointQueries);
+
+        Assert.True(policy.MayRemove(ordinary).IsAllowed, policy.MayRemove(ordinary).Reason);
+    }
+
     private ExploreActionPolicy Policy(IVolumeInventory volumes, IFileSystem fileSystem) =>
         new(ProtectedRegions.For(_system, _environment), [], volumes, fileSystem);
 }

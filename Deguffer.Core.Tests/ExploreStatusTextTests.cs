@@ -50,4 +50,31 @@ public sealed class ExploreStatusTextTests
 
         Assert.Same(told, ExploreStatusText.Retargeted(told, refusal: null));
     }
+
+    /// <summary>
+    /// A scan that could not list where it was pointed says that nothing was measured. Without it, a
+    /// share whose computer did not answer finishes as an empty map and a cleared line, which reads
+    /// as a drive that holds nothing.
+    /// </summary>
+    [Fact]
+    public void AScanThatCouldNotListItsFolderSaysNothingWasMeasured()
+    {
+        var builder = new ExploreTreeBuilder(@"\\server.test\share");
+        builder.MarkListingRefused(ExploreTreeBuilder.RootNode);
+
+        var line = ExploreStatusText.Finished(builder.Build(ExploreChildOrder.BySize));
+
+        Assert.StartsWith(@"Windows would not list '\\server.test\share', so nothing in it was measured.", line.Sentence, StringComparison.Ordinal);
+        Assert.Equal(StatusOrigin.Told, line.Origin);
+    }
+
+    /// <summary>A scan that listed its folder leaves the line empty: the map states the figures.</summary>
+    [Fact]
+    public void AScanThatListedItsFolderSaysNothing()
+    {
+        var builder = new ExploreTreeBuilder(@"\\server.test\share");
+        builder.AddChildren(ExploreTreeBuilder.RootNode, [new ExploreChild("a.bin", IsDirectory: false, IsLink: false, 4096)]);
+
+        Assert.Same(StatusLine.Empty, ExploreStatusText.Finished(builder.Build(ExploreChildOrder.BySize)));
+    }
 }

@@ -295,10 +295,15 @@ public sealed class ExploreScanner(
     /// The volume <paramref name="root"/> is on, with its table opened, or the reason the walk answers
     /// alone: the path is on no volume this process can address, Settings asks for the walk, or the
     /// table would not open.
+    ///
+    /// <para>A drive letter mapped to a share parses as a volume and is not one. Opening it raw is a
+    /// request to the redirector, which can answer access denied, and the page would then offer to
+    /// read a file table as administrator that no share has. So it is asked about before the
+    /// letter, and answers as the share it is.</para>
     /// </summary>
     private Opened Open(string root)
     {
-        if (!VolumePath.TryParse(root, out var volume))
+        if (!VolumePath.TryParse(root, out var volume) || _tuning.IsOnAShare(root))
         {
             return new Opened(volume, null, FallbackReason.VolumeNotAddressable);
         }
