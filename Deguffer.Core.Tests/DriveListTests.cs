@@ -28,7 +28,7 @@ public sealed class DriveListTests
             .With(@"D:\")
             .With(@"C:\Mount\");
 
-        var drives = new DriveList(volumes, new ManualTimeProvider());
+        var drives = new DriveList(volumes, new ManualTimeProvider(), NetworkDrives.Offered);
 
         await Refresh(drives);
 
@@ -43,11 +43,72 @@ public sealed class DriveListTests
             .With(@"D:\", DriveType.CDRom, readiness: VolumeReadiness.NoMedia)
             .With(@"N:\", DriveType.Network);
 
-        var drives = new DriveList(volumes, new ManualTimeProvider());
+        var drives = new DriveList(volumes, new ManualTimeProvider(), NetworkDrives.LeftOut);
 
         await Refresh(drives);
 
         Assert.Equal([@"C:\"], drives.Entries.Select(entry => entry.RootPath));
+    }
+
+    /// <summary>
+    /// Explore pictures a share by walking it, so a mapped letter is offered beside the local drives,
+    /// in letter order, and not refused. It is never probed, so it is never taken for an empty drive.
+    /// </summary>
+    [Fact]
+    public async Task OffersAMappedNetworkDriveWhereAskedTo()
+    {
+        var volumes = new FakeVolumeInventory()
+            .With(@"Z:\", DriveType.Network, readiness: VolumeReadiness.NotAsked)
+            .With(@"C:\")
+            .With(@"D:\", DriveType.CDRom, readiness: VolumeReadiness.NoMedia);
+
+        var drives = new DriveList(volumes, new ManualTimeProvider(), NetworkDrives.Offered);
+
+        await Refresh(drives);
+
+        Assert.Equal([@"C:\", @"Z:\"], drives.Entries.Select(entry => entry.RootPath));
+
+        var mapped = drives.Entries[1].Choice;
+        Assert.True(mapped.IsNetwork);
+        Assert.False(mapped.IsRefused);
+        Assert.False(drives.Entries[0].Choice.IsNetwork);
+    }
+
+    /// <summary>
+    /// A mapped drive is offered to a person who chooses it, and not opened on by default while a
+    /// local drive will scan: the page would picture another machine at the speed of the link.
+    /// </summary>
+    [Fact]
+    public async Task TheDefaultIsALocalDriveBeforeAMappedOne()
+    {
+        var drives = new DriveList(
+            new FakeVolumeInventory()
+                .With(@"A:\", DriveType.Network, readiness: VolumeReadiness.NotAsked)
+                .With(@"B:\", features: VolumeFeatures.RemoteStorage)
+                .With(@"C:\"),
+            new ManualTimeProvider(),
+            NetworkDrives.Offered);
+
+        await Refresh(drives);
+
+        Assert.Equal(@"C:\", drives.Choose(null)?.RootPath);
+        Assert.Equal(@"A:\", drives.Choose(@"a:\")?.RootPath);
+    }
+
+    /// <summary>Where only a mapped drive will scan, it is the default rather than a refused local one.</summary>
+    [Fact]
+    public async Task WhereOnlyAMappedDriveWillScanItIsTheDefault()
+    {
+        var drives = new DriveList(
+            new FakeVolumeInventory()
+                .With(@"B:\", features: VolumeFeatures.RemoteStorage)
+                .With(@"Z:\", DriveType.Network, readiness: VolumeReadiness.NotAsked),
+            new ManualTimeProvider(),
+            NetworkDrives.Offered);
+
+        await Refresh(drives);
+
+        Assert.Equal(@"Z:\", drives.Choose(null)?.RootPath);
     }
 
     /// <summary>
@@ -61,7 +122,7 @@ public sealed class DriveListTests
             .With(@"C:\")
             .With(@"R:\", readiness: VolumeReadiness.Refused);
 
-        var drives = new DriveList(volumes, new ManualTimeProvider());
+        var drives = new DriveList(volumes, new ManualTimeProvider(), NetworkDrives.Offered);
 
         await Refresh(drives);
 
@@ -79,7 +140,7 @@ public sealed class DriveListTests
     {
         var volumes = new FakeVolumeInventory().With(@"C:\");
         var time = new ManualTimeProvider();
-        var drives = new DriveList(volumes, time);
+        var drives = new DriveList(volumes, time, NetworkDrives.Offered);
 
         Assert.True(await Refresh(drives));
         Assert.Equal(1, volumes.RefreshCount);
@@ -104,7 +165,7 @@ public sealed class DriveListTests
     public async Task NeverDropsTheListToReadItWhereItStands()
     {
         var volumes = new FakeVolumeInventory().With(@"C:\");
-        var drives = new DriveList(volumes, new ManualTimeProvider());
+        var drives = new DriveList(volumes, new ManualTimeProvider(), NetworkDrives.Offered);
 
         Assert.True(await Refresh(drives));
 
@@ -120,7 +181,7 @@ public sealed class DriveListTests
     public async Task AReadingAskedForWhileOneRunsIsTheSameReading()
     {
         var volumes = new FakeVolumeInventory().With(@"C:\");
-        var drives = new DriveList(volumes, new ManualTimeProvider());
+        var drives = new DriveList(volumes, new ManualTimeProvider(), NetworkDrives.Offered);
         var release = volumes.HoldRefreshes();
 
         var first = drives.ReadAsync(CancellationToken.None);
@@ -143,7 +204,7 @@ public sealed class DriveListTests
     public async Task AStoppedReadingLeavesTheNextOneToRead()
     {
         var volumes = new FakeVolumeInventory().With(@"C:\");
-        var drives = new DriveList(volumes, new ManualTimeProvider());
+        var drives = new DriveList(volumes, new ManualTimeProvider(), NetworkDrives.Offered);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => drives.ReadAsync(new CancellationToken(canceled: true)));
 
@@ -163,7 +224,7 @@ public sealed class DriveListTests
             .With(@"D:\", totalBytes: 100 * Gigabyte, freeBytes: 70 * Gigabyte);
 
         var time = new ManualTimeProvider();
-        var drives = new DriveList(volumes, time);
+        var drives = new DriveList(volumes, time, NetworkDrives.Offered);
 
         await Refresh(drives);
 
@@ -187,7 +248,7 @@ public sealed class DriveListTests
     {
         var volumes = new FakeVolumeInventory().With(@"C:\", totalBytes: 100 * Gigabyte, freeBytes: 40 * Gigabyte);
         var time = new ManualTimeProvider();
-        var drives = new DriveList(volumes, time);
+        var drives = new DriveList(volumes, time, NetworkDrives.Offered);
 
         await Refresh(drives);
 
@@ -210,7 +271,7 @@ public sealed class DriveListTests
     {
         var volumes = new FakeVolumeInventory().With(@"C:\").With(@"F:\");
         var time = new ManualTimeProvider();
-        var drives = new DriveList(volumes, time);
+        var drives = new DriveList(volumes, time, NetworkDrives.Offered);
 
         await Refresh(drives);
 
@@ -237,7 +298,7 @@ public sealed class DriveListTests
     [Fact]
     public async Task FindsARowByItsMountPointWhateverTheCase()
     {
-        var drives = new DriveList(new FakeVolumeInventory().With(@"D:\"), new ManualTimeProvider());
+        var drives = new DriveList(new FakeVolumeInventory().With(@"D:\"), new ManualTimeProvider(), NetworkDrives.Offered);
 
         await Refresh(drives);
 
@@ -250,7 +311,7 @@ public sealed class DriveListTests
     [Fact]
     public async Task AChosenDriveThatIsStillOfferedStaysChosen()
     {
-        var drives = new DriveList(new FakeVolumeInventory().With(@"C:\").With(@"D:\"), new ManualTimeProvider());
+        var drives = new DriveList(new FakeVolumeInventory().With(@"C:\").With(@"D:\"), new ManualTimeProvider(), NetworkDrives.Offered);
 
         await Refresh(drives);
 
@@ -269,7 +330,7 @@ public sealed class DriveListTests
             new FakeVolumeInventory()
                 .With(@"A:\", features: VolumeFeatures.RemoteStorage)
                 .With(@"C:\"),
-            new ManualTimeProvider());
+            new ManualTimeProvider(), NetworkDrives.Offered);
 
         await Refresh(drives);
 
@@ -285,12 +346,12 @@ public sealed class DriveListTests
             new FakeVolumeInventory()
                 .With(@"A:\", features: VolumeFeatures.RemoteStorage)
                 .With(@"B:\", features: VolumeFeatures.RemoteStorage),
-            new ManualTimeProvider());
+            new ManualTimeProvider(), NetworkDrives.Offered);
 
         await Refresh(drives);
 
         Assert.Equal(@"A:\", drives.Choose(null)?.RootPath);
-        Assert.Null(new DriveList(new FakeVolumeInventory(), new ManualTimeProvider()).Choose(null));
+        Assert.Null(new DriveList(new FakeVolumeInventory(), new ManualTimeProvider(), NetworkDrives.Offered).Choose(null));
     }
 
     /// <summary>
@@ -302,7 +363,7 @@ public sealed class DriveListTests
     {
         var drives = new DriveList(
             new FakeVolumeInventory().With(@"C:\").With(@"C:\Mount\").With(@"D:\"),
-            new ManualTimeProvider());
+            new ManualTimeProvider(), NetworkDrives.Offered);
 
         await Refresh(drives);
 
@@ -320,7 +381,7 @@ public sealed class DriveListTests
     {
         var drives = new DriveList(
             new FakeVolumeInventory().With(@"C:\").With(@"C:\Mount\").Substituting(@"S:\", @"C:\Mount\Photos"),
-            new ManualTimeProvider());
+            new ManualTimeProvider(), NetworkDrives.Offered);
 
         await Refresh(drives);
 

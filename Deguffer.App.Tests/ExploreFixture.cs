@@ -45,6 +45,12 @@ internal sealed class ExploreFixture : IDisposable
 
     public FakeHiddenSpaceSource Hidden { get; } = new();
 
+    /// <summary>What a location typed into the page finds: nothing, unless a test describes it.</summary>
+    public FakePathProbe Probe { get; } = new();
+
+    /// <summary>What a page built after this is set asks instead of <see cref="Probe"/>, for a test that holds the answer back.</summary>
+    public IPathProbe? HeldProbe { get; set; }
+
     public ManualTimeProvider Time { get; } = new();
 
     public FakeExploreConfirmation Prompt { get; set; } = new(answer: true);
@@ -111,6 +117,7 @@ internal sealed class ExploreFixture : IDisposable
             Scanner,
             Volumes,
             Hidden,
+            HeldProbe ?? Probe,
             Time,
             new ExploreActions(Building, () => Prompt, Faults, Running, Bin),
             Guide,

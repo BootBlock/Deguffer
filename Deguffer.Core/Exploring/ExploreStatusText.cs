@@ -25,6 +25,27 @@ public static class ExploreStatusText
         standing is null ? PickedFolder.NotOnDisk : $"{PickedFolder.NotOnDisk} {standing}";
 
     /// <summary>
+    /// What the line says once a scan of <paramref name="tree"/> has finished: nothing, because the
+    /// map, its readout and its rows state the figures; or, where the scan could not list the folder
+    /// it was pointed at, that nothing was measured.
+    ///
+    /// <para>Without the second, a share whose computer did not answer, or a mapped drive whose
+    /// connection is gone, finishes as an empty map and a cleared line, which reads as a drive that
+    /// holds nothing. The walk cannot tell which of the causes it met, so all of them are named.</para>
+    /// </summary>
+    public static StatusLine Finished(ExploreTree tree)
+    {
+        ArgumentNullException.ThrowIfNull(tree);
+
+        return tree.ListingWasRefused(tree.RootNode)
+            ? StatusLine.Said(
+                $"Windows would not list '{tree.PathOf(tree.RootNode)}', so nothing in it was measured. It may "
+                + "no longer be there, the computer sharing it may not have answered, or this account may "
+                + "not open it.")
+            : StatusLine.Empty;
+    }
+
+    /// <summary>
     /// What the line says once the page is pointed somewhere new: why the page will not scan it, or
     /// the prompt where the line still holds a refusal the page stated and nothing refuses now, or
     /// whatever it said before.

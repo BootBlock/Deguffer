@@ -62,6 +62,14 @@ public sealed class ScanTuner
     public StorageMedia MediaOf(string path) => StorageOf(path)?.Class ?? StorageMedia.Unknown;
 
     /// <summary>
+    /// Whether <paramref name="path"/> is on a share or on a drive letter Windows maps to one
+    /// (<see cref="HostVolume.Unopened"/>), read from the path and the remembered volume list without
+    /// asking anything. A tuner built without the machine's volumes knows a share only by its name.
+    /// </summary>
+    public bool IsOnAShare(string path) =>
+        _volumes is null ? LongPath.IsShare(path) : HostVolume.Unopened(_volumes, path) is UnopenedPlace.Share;
+
+    /// <summary>
     /// What <paramref name="path"/> is on, its disks included, or null where nothing was asked: a
     /// tuner built without the machine's devices, or a path on no volume the inventory lists. A share
     /// is <see cref="StorageMedia.Network"/> on no disk of this machine, without asking anything. Asks

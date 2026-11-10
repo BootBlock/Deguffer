@@ -253,6 +253,29 @@ public class ExploreScannerTests
     }
 
     /// <summary>
+    /// A letter mapped to a share parses as a drive and is not one. Opening it raw asks the
+    /// redirector, which may answer access denied, and the page would then offer to read as
+    /// administrator a file table no share has. So the table is never opened, and the walk answers
+    /// for the reason a share gets.
+    /// </summary>
+    [Fact]
+    public async Task WalksAMappedNetworkDriveWithoutOpeningItsLetter()
+    {
+        var sources = FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated);
+        var walks = new WalkRecorder();
+        var volumes = new FakeVolumeInventory()
+            .With(@"C:\")
+            .With(@"Z:\", DriveType.Network, readiness: Core.Safety.VolumeReadiness.NotAsked);
+        var tuning = new ScanTuner(DefaultPreferences.Instance, new Core.Scanning.Media.VolumeMediaCache(new FakeStorageQueries()), volumes);
+
+        var scan = await OnTheFakes(sources, walks, tuning).ScanAsync(@"Z:\");
+
+        Assert.Equal(FallbackReason.VolumeNotAddressable, scan.Fallback);
+        Assert.Equal(0, sources.OpenCount);
+        Assert.Equal([@"Z:\"], walks.Walked);
+    }
+
+    /// <summary>
     /// §5.5: never block on a complete scan. The walk cannot say how many directories it has yet to
     /// open, so its reports are indeterminate by design — but they have to arrive, and the counts
     /// have to rise, or the window shows a scan that is running and never getting anywhere.

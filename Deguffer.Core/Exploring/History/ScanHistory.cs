@@ -1,3 +1,5 @@
+using Deguffer.Core.Safety;
+
 namespace Deguffer.Core.Exploring.History;
 
 /// <summary>Why a finished scan is neither kept nor compared, or that it is.</summary>
@@ -18,6 +20,12 @@ public enum NotKept
     /// be told from another volume's that later wears the same letter.
     /// </summary>
     NoVolumeName,
+
+    /// <summary>
+    /// It covered a share, or a drive letter mapped to one (<see cref="ScanCoverage.Share"/>), which
+    /// has no volume name to tell its scans from another share's.
+    /// </summary>
+    OnAShare,
 }
 
 /// <summary>What recording one scan produced.</summary>
@@ -59,6 +67,16 @@ public sealed class ScanHistory(ScanHistoryStore store)
     public event EventHandler? Changed;
 
     /// <summary>
+    /// What a scan of <paramref name="root"/> covered. Reads the remembered volume list, which can
+    /// mean reading the machine where the list was dropped, so never call it on the UI thread.
+    /// </summary>
+    /// <param name="scopedToFolder">Whether the scan was pointed at a folder rather than a drive.</param>
+    public static ScanCoverage CoverageOf(string root, bool scopedToFolder, IVolumeInventory volumes) =>
+        HostVolume.Unopened(volumes, root) is UnopenedPlace.Share ? ScanCoverage.Share
+        : scopedToFolder ? ScanCoverage.Folder
+        : ScanCoverage.WholeDrive;
+
+    /// <summary>
     /// Compare <paramref name="scan"/> with the newest earlier summary of its volume, then store this
     /// one, where it covered the whole of a volume that can be told from every other. See
     /// <see cref="History.NotKept"/> for the scans that are not.
@@ -75,17 +93,23 @@ public sealed class ScanHistory(ScanHistoryStore store)
     /// The volume's size and free space where the scan covered the whole of it, and
     /// <see cref="VolumeSpace.None"/> otherwise (<see cref="VolumeSpace.Of"/>).
     /// </param>
-    /// <param name="scopedToFolder">Whether the scan was pointed at a folder rather than a drive.</param>
+    /// <param name="coverage">What the scan covered. See <see cref="CoverageOf"/>.</param>
     public ScanRecord Record(
-        ExploreScan scan, string? volume, VolumeSpace space, bool scopedToFolder, DateTime takenUtc)
+        ExploreScan scan, string? volume, VolumeSpace space, ScanCoverage coverage, DateTime takenUtc)
     {
         ArgumentNullException.ThrowIfNull(scan);
+
+        // Before the space, because a share has none, and "scan the whole drive" is no advice for one.
+        if (coverage is ScanCoverage.Share)
+        {
+            return ScanRecord.Refused(NotKept.OnAShare);
+        }
 
         // A folder that is the root of a volume mounted there covers that volume whole, and has its
         // space, so the scope alone does not decide it.
         if (space == VolumeSpace.None)
         {
-            return ScanRecord.Refused(scopedToFolder ? NotKept.NotWholeDrive : NotKept.NoVolumeName);
+            return ScanRecord.Refused(coverage is ScanCoverage.Folder ? NotKept.NotWholeDrive : NotKept.NoVolumeName);
         }
 
         if (volume is null)

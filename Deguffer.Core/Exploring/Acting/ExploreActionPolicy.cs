@@ -248,6 +248,15 @@ public sealed class ExploreActionPolicy
                 "Deguffer could not make sense of that path, so it will not act on it.");
         }
 
+        // Before any question that asks Windows about the path, which on a share is a question for
+        // the server. FinalPlaces says why nothing on a share is removed.
+        var unopened = _finalPlaces.Unopened(target);
+
+        if (unopened is UnopenedPlace.Share)
+        {
+            return FinalPlaces.OnAShare(target);
+        }
+
         // A whole volume, whether a drive or a folder one is mounted at, or something with no
         // containing directory at all. None of them is a thing to remove, and asking where the volume
         // is mounted now rather than a list of drives means a volume mounted after this policy was
@@ -289,7 +298,7 @@ public sealed class ExploreActionPolicy
         }
 
         // Then where the removal really acts, asked of the disk and only of a path its text allows.
-        var (refused, reached) = ThroughLinks(target, folder, children);
+        var (refused, reached) = ThroughLinks(target, unopened, folder, children);
 
         // Last, and only of a path everything above allows at every place, because it reads every
         // location the path holds. The tool roots read one entry each, and only of a path inside one.
@@ -302,9 +311,9 @@ public sealed class ExploreActionPolicy
     /// <paramref name="folder"/> with that place joined, so <see cref="HeldLocations"/> asks there too.
     /// </summary>
     private (ExploreVerdict? Refusal, ReachedFolder Folder) ThroughLinks(
-        string target, ReachedFolder folder, ToolRootChildren children)
+        string target, UnopenedPlace? unopened, ReachedFolder folder, ToolRootChildren children)
     {
-        var (farSide, unfollowed) = _finalPlaces.Item(target);
+        var (farSide, unfollowed) = _finalPlaces.Item(target, unopened);
 
         // Where no link leads elsewhere the far side is one of the paths the item is already
         // reachable at, a substituted letter and another mount of its volume included.

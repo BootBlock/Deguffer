@@ -1,6 +1,7 @@
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Hidden;
 using Deguffer.Core.Health;
+using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Execution;
@@ -34,6 +35,19 @@ public static class ElevationOffer
     /// <see cref="Deguffer.App.Views.AboutPage"/>'s scan-mode note for what was measured.</para>
     /// </summary>
     public static bool ShouldOffer(bool isElevated) => !isElevated;
+
+    /// <summary>
+    /// Nothing has been scanned yet, and the Explore page is pointed at <paramref name="root"/>. A
+    /// share, or a drive letter Windows maps to one, takes the walk whoever asks, for want of a file
+    /// table to read, so the offer stands everywhere else and not there.
+    ///
+    /// <para>Elevating would also lose the target. The elevated process runs in a logon session of
+    /// its own, which does not see the letters this one mapped, and may not hold the credentials a
+    /// share was opened with: the replacement would open on a drive it cannot find.</para>
+    /// </summary>
+    /// <param name="root">What the next scan covers, or null where the page is pointed at nothing.</param>
+    public static bool ShouldOffer(bool isElevated, string? root, IVolumeInventory volumes) =>
+        ShouldOffer(isElevated) && (root is null || HostVolume.Unopened(volumes, root) is not UnopenedPlace.Share);
 
     /// <summary>
     /// What the Health page has read so far. Only a drive that was refused for want of administrator

@@ -116,7 +116,7 @@ public sealed class ScanHistoryStoreTests : IDisposable
         }
 
         var history = new ScanHistory(_store);
-        var record = history.Record(ExploreScan.Fast(Tree()), Volume, new VolumeSpace(1000 * Megabyte, 400 * Megabyte), scopedToFolder: false, Then.AddDays(1));
+        var record = history.Record(ExploreScan.Fast(Tree()), Volume, new VolumeSpace(1000 * Megabyte, 400 * Megabyte), ScanCoverage.WholeDrive, Then.AddDays(1));
 
         Assert.Null(record.Growth);
         Assert.True(record.Saved);
@@ -133,7 +133,7 @@ public sealed class ScanHistoryStoreTests : IDisposable
         WriteJson(newest, Json(newest).Replace("\"Folders\":[[", "\"Folders\":[[\"x\",", StringComparison.Ordinal));
 
         var record = new ScanHistory(_store).Record(
-            ExploreScan.Fast(Tree()), Volume, new VolumeSpace(1000 * Megabyte, 400 * Megabyte), scopedToFolder: false, Then.AddDays(14));
+            ExploreScan.Fast(Tree()), Volume, new VolumeSpace(1000 * Megabyte, 400 * Megabyte), ScanCoverage.WholeDrive, Then.AddDays(14));
 
         Assert.NotNull(record.Growth);
         Assert.Equal(Then, record.Growth.SinceUtc);
@@ -225,16 +225,49 @@ public sealed class ScanHistoryStoreTests : IDisposable
         var history = new ScanHistory(_store);
         var space = new VolumeSpace(1000 * Megabyte, 400 * Megabyte);
 
-        Assert.Equal(NotKept.NotWholeDrive, history.Record(ExploreScan.Fast(Tree()), Volume, VolumeSpace.None, scopedToFolder: true, Then).NotKept);
-        Assert.Equal(NotKept.NoVolumeName, history.Record(ExploreScan.Fast(Tree()), Volume, VolumeSpace.None, scopedToFolder: false, Then).NotKept);
-        Assert.Equal(NotKept.NoVolumeName, history.Record(ExploreScan.Fast(Tree()), volume: null, space, scopedToFolder: false, Then).NotKept);
+        Assert.Equal(NotKept.NotWholeDrive, history.Record(ExploreScan.Fast(Tree()), Volume, VolumeSpace.None, ScanCoverage.Folder, Then).NotKept);
+        Assert.Equal(NotKept.NoVolumeName, history.Record(ExploreScan.Fast(Tree()), Volume, VolumeSpace.None, ScanCoverage.WholeDrive, Then).NotKept);
+        Assert.Equal(NotKept.NoVolumeName, history.Record(ExploreScan.Fast(Tree()), volume: null, space, ScanCoverage.WholeDrive, Then).NotKept);
         Assert.Empty(history.All());
 
         // A folder that is the root of a volume mounted there has that volume's space, and is kept.
-        var kept = history.Record(ExploreScan.Fast(Tree()), Volume, space, scopedToFolder: true, Then);
+        var kept = history.Record(ExploreScan.Fast(Tree()), Volume, space, ScanCoverage.Folder, Then);
         Assert.Equal(NotKept.None, kept.NotKept);
         Assert.Equal(Volume, kept.Volume);
         Assert.Single(history.All());
+    }
+
+    /// <summary>
+    /// A share is not kept, even given a name and a size, and says why in its own words: "scan the
+    /// whole drive" is no advice for a share.
+    /// </summary>
+    [Fact]
+    public void AScanOfAShareIsNotKept()
+    {
+        var history = new ScanHistory(_store);
+
+        var record = history.Record(ExploreScan.Fast(Tree()), Volume, new VolumeSpace(1000 * Megabyte, 400 * Megabyte), ScanCoverage.Share, Then);
+
+        Assert.Equal(NotKept.OnAShare, record.NotKept);
+        Assert.Equal(GrowthText.OnAShare, GrowthText.Why(record.NotKept));
+        Assert.Empty(history.All());
+    }
+
+    /// <summary>A share, a mapped drive and a folder on either cover a share; a local drive and its folders do not.</summary>
+    [Theory]
+    [InlineData(@"\\server.test\share", false, ScanCoverage.Share)]
+    [InlineData(@"\\server.test\share\Photos", true, ScanCoverage.Share)]
+    [InlineData(@"Z:\", false, ScanCoverage.Share)]
+    [InlineData(@"Z:\Photos", true, ScanCoverage.Share)]
+    [InlineData(@"C:\", false, ScanCoverage.WholeDrive)]
+    [InlineData(@"C:\Users\testuser", true, ScanCoverage.Folder)]
+    public void WhatAScanCoveredIsReadFromWhereItWasPointed(string root, bool scopedToFolder, ScanCoverage coverage)
+    {
+        var volumes = new FakeVolumeInventory()
+            .With(@"C:\")
+            .With(@"Z:\", DriveType.Network, readiness: Core.Safety.VolumeReadiness.NotAsked);
+
+        Assert.Equal(coverage, ScanHistory.CoverageOf(root, scopedToFolder, volumes));
     }
 
     /// <summary>A comparison is still kept until the summary it compares against is removed.</summary>
@@ -244,8 +277,8 @@ public sealed class ScanHistoryStoreTests : IDisposable
         var history = new ScanHistory(_store);
         var space = new VolumeSpace(1000 * Megabyte, 400 * Megabyte);
 
-        history.Record(ExploreScan.Fast(Tree()), Volume, space, scopedToFolder: false, Then);
-        var growth = history.Record(ExploreScan.Fast(Tree()), Volume, space, scopedToFolder: false, Then.AddDays(1)).Growth!;
+        history.Record(ExploreScan.Fast(Tree()), Volume, space, ScanCoverage.WholeDrive, Then);
+        var growth = history.Record(ExploreScan.Fast(Tree()), Volume, space, ScanCoverage.WholeDrive, Then.AddDays(1)).Growth!;
 
         Assert.True(history.StillKept(growth));
 

@@ -42,6 +42,30 @@ public sealed class ElevationOfferTests
         Assert.False(ElevationOffer.ShouldOffer(isElevated: true));
     }
 
+    /// <summary>
+    /// Explore pointed at a share, or at a letter mapped to one, before anything is scanned. No share
+    /// has a file table, and the elevated process does not see the letters this one mapped, so the
+    /// replacement would open on a drive it cannot find. A local drive in the same inventory is still
+    /// offered, and so is a page pointed at nothing yet.
+    /// </summary>
+    [Theory]
+    [InlineData(@"\\server.test\share", false)]
+    [InlineData(@"\\server.test\share\Photos", false)]
+    [InlineData(@"Z:\", false)]
+    [InlineData(@"Z:\Photos", false)]
+    [InlineData(@"C:\", true)]
+    [InlineData(@"C:\Users\testuser", true)]
+    [InlineData(null, true)]
+    public void ExploreOffersNothingBeforeAScanOfAShare(string? root, bool offered)
+    {
+        var volumes = new Testing.FakeVolumeInventory()
+            .With(@"C:\")
+            .With(@"Z:\", DriveType.Network, readiness: VolumeReadiness.NotAsked);
+
+        Assert.Equal(offered, ElevationOffer.ShouldOffer(isElevated: false, root, volumes));
+        Assert.False(ElevationOffer.ShouldOffer(isElevated: true, root, volumes));
+    }
+
     /// <summary>Explore's own scan, which has one route and so one reason rather than a plan each.</summary>
     [Fact]
     public void OffersWhenAnExploreScanWalkedForWantOfRights()

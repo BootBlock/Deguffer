@@ -121,7 +121,7 @@ public sealed partial class ExploreElevation : ObservableObject
 
         CanElevate = found is { } fallback
             ? ElevationOffer.ShouldOffer(_isElevated, fallback, hidden)
-            : ElevationOffer.ShouldOffer(_isElevated);
+            : ElevationOffer.ShouldOffer(_isElevated, _targeting.Target.Root, _volumes);
 
         OnPropertyChanged(nameof(ElevateLabel));
     }
