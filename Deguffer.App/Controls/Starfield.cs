@@ -27,8 +27,9 @@ namespace Deguffer.App.Controls;
 ///
 /// <para>It is decoration: it takes no input and assistive technology skips it. What it does is
 /// <see cref="StarfieldModes"/>' decision, asked again whenever an answer that feeds it changes: the
-/// page coming or going, the window minimised, restored, hidden or shown, high contrast, the
-/// compositor's word on effects, and the reader's animation setting.</para>
+/// page coming or going, the window minimised, restored, hidden or shown, any window on the desktop
+/// moving over it or away (<see cref="WindowCover"/>), high contrast, the compositor's word on effects,
+/// and the reader's animation setting.</para>
 /// </summary>
 public sealed partial class Starfield : Grid
 {
@@ -75,6 +76,14 @@ public sealed partial class Starfield : Grid
     /// <summary>The steps the loop is played in: a quarter of a second each, too short to see a corner in.</summary>
     private const int Steps = 160;
 
+    /// <summary>
+    /// How long after a window moves the field asks again whether it is covered. A window dragged
+    /// across it raises a move for every frame of the drag, and asking at most ten times a second keeps
+    /// the asking far cheaper than the flight it saves, while a field uncovered resumes before the
+    /// reader can look for it.
+    /// </summary>
+    private static readonly TimeSpan Resurvey = TimeSpan.FromMilliseconds(100);
+
     private static readonly StarFlight Flight = new(MotionToken.Starfield.Full.Duration, Depth, Speed);
 
     private readonly Compositor _compositor;
@@ -83,6 +92,7 @@ public sealed partial class Starfield : Grid
     private readonly CompositionColorGradientStop _core;
     private readonly CompositionColorGradientStop _rim;
     private readonly AnimationController _flight;
+    private readonly Throttle _resurvey;
 
     /// <summary>What the field follows while it is loaded, undone when it is unloaded.</summary>
     private Subscriptions? _watching;
@@ -104,6 +114,7 @@ public sealed partial class Starfield : Grid
         Pose(Flight.Rest);
 
         _flight = _compositor.CreateAnimationController();
+        _resurvey = new Throttle(DispatcherQueue, Resurvey, Decide);
 
         // One soft round dot for every star, so a theme change recolours the whole field in two writes.
         var dot = _compositor.CreateRadialGradientBrush();
@@ -117,7 +128,11 @@ public sealed partial class Starfield : Grid
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
-        SizeChanged += (_, _) => Frame();
+        SizeChanged += (_, _) =>
+        {
+            Frame();
+            _resurvey.Poke();
+        };
         ActualThemeChanged += (_, _) => Tint();
     }
 
@@ -216,6 +231,7 @@ public sealed partial class Starfield : Grid
         _watching?.Dispose();
         _watching = new Subscriptions()
             .Add(() => root.Changed += OnRootChanged, () => root.Changed -= OnRootChanged)
+            .Add(() => WindowStackEvents.Current.Changed += OnStackChanged, () => WindowStackEvents.Current.Changed -= OnStackChanged)
             .Add(() => SystemLook.Current.Changed += OnLookChanged, () => SystemLook.Current.Changed -= OnLookChanged)
             .Add(() => SystemMotion.Current.Changed += OnMotionChanged, () => SystemMotion.Current.Changed -= OnMotionChanged);
 
@@ -232,6 +248,7 @@ public sealed partial class Starfield : Grid
         {
             _watching?.Dispose();
             _watching = null;
+            _resurvey.Stop();
         }
 
         Decide();
@@ -239,6 +256,9 @@ public sealed partial class Starfield : Grid
 
     /// <summary>The window was minimised, restored, hidden or shown, or moved between displays.</summary>
     private void OnRootChanged(XamlRoot sender, XamlRootChangedEventArgs args) => Decide();
+
+    /// <summary>A window on the desktop moved, came to the front, or was shown, hidden, minimised or cloaked.</summary>
+    private void OnStackChanged(object? sender, EventArgs e) => _resurvey.Poke();
 
     /// <summary>High contrast turned on or off, or the compositor's word on whether effects are fast changed.</summary>
     private void OnLookChanged(object? sender, SystemLookChange change) => Decide();
@@ -249,14 +269,21 @@ public sealed partial class Starfield : Grid
     /// <summary>Put the field in the mode it should be in now.</summary>
     private void Decide()
     {
-        var seen = IsLoaded && XamlRoot is { IsHostVisible: true };
+        var shown = IsLoaded && XamlRoot is { IsHostVisible: true };
 
         Play(StarfieldModes.For(
             SystemMotion.Current.For(MotionToken.Starfield),
             SystemLook.Current.State.Contrast is not null,
             SystemLook.Current.State.EffectsFast,
-            seen));
+            shown,
+            covered: shown && IsCovered()));
     }
+
+    /// <summary>
+    /// Whether other windows, the screens' edges or a virtual desktop hide every pixel of the field.
+    /// Not where Windows will not say where it is, so a doubt leaves it flying.
+    /// </summary>
+    private bool IsCovered() => ScreenPlace.Of(this) is { } place && WindowCover.Hides(place.Window, place.Rect);
 
     private void Play(StarfieldMode mode)
     {

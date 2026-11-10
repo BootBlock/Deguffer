@@ -32,8 +32,13 @@ public static class StarfieldModes
     /// Whether the compositor can draw effects without cost, which it cannot over Remote Desktop, where
     /// every frame of a moving field would go down the wire.
     /// </param>
-    /// <param name="seen">Whether the page is on screen in a window that is not minimised or hidden.</param>
-    public static StarfieldMode For(Motion played, bool highContrast, bool effectsFast, bool seen)
+    /// <param name="shown">Whether the page is on screen in a window that is not minimised or hidden.</param>
+    /// <param name="covered">
+    /// Whether every pixel of the field is hidden all the same: behind other windows, off every screen,
+    /// or on another virtual desktop (<see cref="WindowCover"/>). Windows tells the page nothing of
+    /// this, and a covered field would otherwise fly at a core for nobody.
+    /// </param>
+    public static StarfieldMode For(Motion played, bool highContrast, bool effectsFast, bool shown, bool covered)
     {
         if (highContrast)
         {
@@ -47,6 +52,6 @@ public static class StarfieldModes
             return StarfieldMode.Still;
         }
 
-        return seen ? StarfieldMode.Flying : StarfieldMode.Paused;
+        return shown && !covered ? StarfieldMode.Flying : StarfieldMode.Paused;
     }
 }
