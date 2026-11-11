@@ -392,6 +392,9 @@ public sealed class CleanupPlanner
             new ClaudeCodeFileHistoryProvider(environment, sessions: claudeSessions, scanner: scanner),
             new ClaudeCodeConversationProvider(environment, projects: claudeProjects, sessions: claudeSessions, scanner: scanner, scope: scope),
             new VirtualDiskProvider(SystemDirectories.Current, environment, scanner: scanner),
+            new HyperVDiskProvider(SystemDirectories.Current, environment, scanner: scanner),
+            new VmwareDiskProvider(environment, scanner: scanner),
+            new VirtualBoxDiskProvider(environment, scanner: scanner),
             new ModManagerDownloadProvider(SystemDirectories.Current, environment, scanner: scanner),
         ];
     }

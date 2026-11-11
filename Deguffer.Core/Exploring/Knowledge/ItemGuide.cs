@@ -116,9 +116,10 @@ public sealed class ItemGuide
     /// The catalogue against the directories and volumes these seams name, which is what lets every
     /// entry be asserted against a synthetic profile rather than the developer's own.
     ///
-    /// <para>With it, the virtual disks WSL and Docker Desktop record for this account, read once here
-    /// rather than on hover: each is a file the size picture draws as one of the largest on the drive,
-    /// and only those tools' records say whose it is. And the download folders of Vortex and of each Mod
+    /// <para>With it, the virtual disks WSL, Docker Desktop, VMware Workstation and VirtualBox record for
+    /// this account, read once here rather than on hover: each is a file the size picture draws as one of
+    /// the largest on the drive, and only those tools' records say whose it is. Hyper-V's are not, because
+    /// only a run of Windows PowerShell can ask Hyper-V, and this is built without one. And the download folders of Vortex and of each Mod
     /// Organizer 2 instance, which only the manager's defaults and records say are its.</para>
     /// </summary>
     public static ItemGuide For(ISystemDirectories system, IUserEnvironment environment, IVolumeInventory volumes)
@@ -130,6 +131,8 @@ public sealed class ItemGuide
             [
                 .. KnownItems.All,
                 .. VirtualDiskItems.For(VirtualDiskInventory.Read(environment, system)),
+                .. VirtualDiskItems.For(VmwareMachines.Read(environment)),
+                .. VirtualDiskItems.For(VirtualBoxMachines.Read(environment)),
                 .. ModManagerItems.For(ModManagerInventory.Read(environment, system, volumes)),
             ],
             Anchors(system, environment),

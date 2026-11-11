@@ -1,4 +1,3 @@
-using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.VirtualDisks;
@@ -7,36 +6,22 @@ namespace Deguffer.Core.Providers;
 
 /// <summary>
 /// The virtual disks WSL and Docker Desktop keep their Linux file systems in, reported and never acted
-/// on (§5.4, and <c>docs/todo/unreached-locations.md</c> §11).
+/// on. What every disk report shares is in <see cref="VirtualDiskReportProvider"/>.
 ///
 /// <para><b>Found from the tools' own records.</b> WSL's registration names each distribution's disk,
-/// and Docker Desktop's settings name its data disk. A search for <c>.vhdx</c> files would find disks no
-/// tool owns, and could not say which route applies to the ones it found.</para>
+/// and Docker Desktop's settings name its data disk.</para>
 ///
 /// <para><b>Two figures, kept apart.</b> The host file's size on the drive, from the file system, and
 /// what is reclaimable inside, from Docker's own accounting where Docker Desktop is already running.
 /// Freeing the second does not free the first until the disk is compacted, and the report says so for
-/// every disk, because a user who prunes and sees no change stops trusting the figure.</para>
-///
-/// <para><b>No step.</b> Compacting a disk that is in use or sparse can damage the whole disk, so the
-/// route is named and left to the vendor's commands, in the order they are taken. Nothing here starts
-/// WSL or the Docker engine, and the one command it can run only reads.</para>
-///
-/// <para><b>Every disk registered, so no run deletes one.</b> The row is how the planner learns where
-/// the disks are (<see cref="IRegistersVirtualMachineStorage"/>): a step of any other row that would
-/// reach one is withheld, and every clean proves afterwards that each one is still there.</para>
-///
-/// <para><b>Tier 3</b>, because a disk deleted is a distribution, or every image, container and volume,
-/// gone for good. The tier describes the disk. The row offers nothing to tick either way.</para>
+/// every disk, because a user who prunes and sees no change stops trusting the figure. Nothing here
+/// starts WSL or the Docker engine, and the one command it can run only reads.</para>
 /// </summary>
-public sealed class VirtualDiskProvider : CleanupProviderBase, IRegistersVirtualMachineStorage
+public sealed class VirtualDiskProvider : VirtualDiskReportProvider
 {
     private readonly ISystemDirectories _system;
 
     private readonly DockerInsideFigure _docker;
-
-    /// <summary>What the tools record, read once per planning pass and shared by presence and planning (G4).</summary>
-    private readonly PassMemo<VirtualDiskInventory> _inventory = new();
 
     public VirtualDiskProvider(
         ISystemDirectories? system = null,
@@ -58,14 +43,6 @@ public sealed class VirtualDiskProvider : CleanupProviderBase, IRegistersVirtual
 
     public override string Name => "WSL and Docker virtual disks";
 
-    public override SafetyTier Tier => SafetyTier.UserData;
-
-    public override StepGrain Grain => StepGrain.Parts;
-
-    public override string WhatHappensOnNextUse =>
-        "Nothing changes: Deguffer only reports these disks. Making one smaller is done with the commands the "
-        + "report names, inside the tool that owns the disk.";
-
     public override ProviderBasis Basis => ProviderBasis.Observed;
 
     public override ProviderDescription Description { get; } = new()
@@ -82,57 +59,13 @@ public sealed class VirtualDiskProvider : CleanupProviderBase, IRegistersVirtual
             + "everything in it.",
     };
 
-    public override void InvalidateCaches()
-    {
-        _inventory.Forget();
-        base.InvalidateCaches();
-    }
+    protected override Task<VirtualDiskInventory> ReadInventoryAsync(CancellationToken ct) =>
+        Task.FromResult(VirtualDiskInventory.Read(Environment, _system));
 
-    /// <summary>A disk WSL or Docker Desktop records, or a record that could not be read.</summary>
-    public override Task<bool> IsPresentAsync(CancellationToken ct = default)
-    {
-        var inventory = Inventory();
-
-        return Task.FromResult(inventory.Disks.Count > 0 || inventory.Problems.Count > 0);
-    }
-
-    /// <summary>
-    /// Every disk WSL and Docker Desktop record, from the same reading the plan makes. Explore refuses
-    /// each one, and a run refuses and proves each one, through this alone.
-    /// </summary>
-    public Task<IReadOnlyList<VirtualMachineStorage>> RegisteredStorageAsync(CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<VirtualMachineStorage>>([.. Inventory().Disks.Select(disk => disk.AsStorage())]);
-
-    /// <summary>
-    /// None: the row only reports how large each disk is, and its plan holds no step at all.
-    /// </summary>
-    public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<CleanedPlace>>([]);
-
-    protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
-    {
-        var inventory = Inventory();
-
-        var measured = inventory.Disks.Select(disk => (Disk: disk, Size: VirtualDiskFile.Measure(disk.Path))).ToList();
-
-        var inside = measured.Any(entry => entry.Disk.Owner is DockerDesktopData
-                && entry.Size.Presence == PathPresence.Present)
+    /// <summary>Docker's own figure, asked only where Docker Desktop's data disk is there to ask about.</summary>
+    protected override async Task<DockerInsideReading?> InsideAsync(
+        IReadOnlyList<(VirtualDisk Disk, VirtualDiskSize Size)> measured, CancellationToken ct) =>
+        measured.Any(entry => entry.Disk.Owner is DockerDesktopData && entry.Size.Presence == PathPresence.Present)
             ? await _docker.ReadAsync(ct).ConfigureAwait(false)
             : null;
-
-        return new CleanupPlan
-        {
-            ProviderId = Id,
-            ProviderName = Name,
-            Tier = Tier,
-            WhatHappensOnNextUse = WhatHappensOnNextUse,
-            ReportsOnly = true,
-
-            // No protected paths: every clean proves each disk this row registers, whether or not this row
-            // was scanned or chosen (VirtualMachineStoragePlan.ProofFor).
-            Notes = VirtualDiskReport.Notes(measured, inside, inventory.Problems),
-        };
-    }
-
-    private VirtualDiskInventory Inventory() => _inventory.Get(() => VirtualDiskInventory.Read(Environment, _system));
 }

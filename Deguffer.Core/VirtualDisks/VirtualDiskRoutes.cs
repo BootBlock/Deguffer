@@ -31,6 +31,13 @@ public static class VirtualDiskRoutes
         + "that is in use, or a sparse one, can damage everything in it.";
 
     /// <summary>
+    /// What every Hyper-V cmdlet needs, the compaction of a WSL disk on an older WSL and every Hyper-V
+    /// machine's route alike, as the end of a sentence whose subject is the cmdlets.
+    /// </summary>
+    public const string HyperVModuleNeeds =
+        "need an elevated PowerShell or membership of the Hyper-V Administrators group";
+
+    /// <summary>
     /// What follows the owner's own clean-up for any disk WSL keeps: the compaction that gives the space
     /// back to the drive, which is WSL's whoever registered the distribution. Two sentences or more,
     /// each beginning with its step.
@@ -46,8 +53,8 @@ public static class VirtualDiskRoutes
             ? " Then run 'sudo fstrim -a' inside it: a sparse disk gives the discarded space back to the drive by "
                 + "itself."
             : $" Then compact the disk with 'wsl --manage {name} --compact' (WSL 3.0.1 and later), or on an older WSL "
-                + "run 'wsl --shutdown' and then Optimize-VHD from the Hyper-V module, which needs an elevated "
-                + "PowerShell or membership of the Hyper-V Administrators group. "
+                + "run 'wsl --shutdown' and then Optimize-VHD from the Hyper-V module. Its cmdlets "
+                + HyperVModuleNeeds + ". "
                 + $"'wsl --manage {name} --set-sparse true' instead makes the disk give space back by itself, and WSL "
                 + "2.5.6 to 3.0.1 ask for '--allow-unsafe' with it after reports of damaged disks.";
     }

@@ -54,13 +54,13 @@ public static class VirtualDiskReport
     {
         PathPresence.Absent => new PlanNote(
             PlanNoteSeverity.Warning,
-            $"{Capitalised(disk.Whose)}: its record names {disk.Path}, and there is no file there. The disk is "
-            + "missing, rather than empty."),
+            $"{Capitalised(disk.Whose)}: its record names {size.Unmeasured ?? disk.Path}, and there is no file "
+            + "there. The disk is missing, rather than empty."),
 
         PathPresence.Refused => new PlanNote(
             PlanNoteSeverity.Warning,
-            $"{Capitalised(disk.Whose)}: Windows would not let Deguffer read {disk.Path}, so its size on the drive "
-            + "is not known."),
+            $"{Capitalised(disk.Whose)}: Windows would not let Deguffer read {size.Unmeasured ?? disk.Path}, so "
+            + "the disk's size on the drive is not known."),
 
         _ => new PlanNote(
             PlanNoteSeverity.Information,
