@@ -6,7 +6,7 @@ namespace Deguffer.Core.Execution;
 ///
 /// <para>Behind an interface so the host's conversation with a handler can be tested: which calls it
 /// makes, in which order, and what it reads from each answer. A survey that measured where it should
-/// only have started costs a minute and a half on every elevated preview and shows in no outcome,
+/// only have started costs about two and a half minutes on every elevated preview and shows in no outcome,
 /// and the real handler on whatever machine runs the suite is that machine's own.</para>
 /// </summary>
 internal interface IVolumeCacheLoader
