@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Deguffer.Core.Health;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Viewing;
 
@@ -16,9 +17,12 @@ namespace Deguffer.Core.Exploring;
 /// <para>The rows are kept and written over rather than rebuilt (see <see cref="DriveEntry"/>). A
 /// drive that is plugged in or taken away between two readings costs one insertion or one removal,
 /// and a drive whose figures moved costs nothing the list itself is told about.</para>
+///
+/// <para>Each row also names a drive of concern under its volume, from what Health last read
+/// (<see cref="HealthByVolume"/>), and follows that reading as it changes. Nothing here asks a drive
+/// about its health (§7.6).</para>
 /// </summary>
-/// <param name="networkDrives">Whether drive letters mapped to network shares are offered. See <see cref="NetworkDrives"/>.</param>
-public sealed class DriveList(IVolumeInventory volumes, TimeProvider time, NetworkDrives networkDrives)
+public sealed class DriveList
 {
     /// <summary>
     /// How long one reading stands. Long enough that opening the picker twice in a row reads the
@@ -27,9 +31,27 @@ public sealed class DriveList(IVolumeInventory volumes, TimeProvider time, Netwo
     /// </summary>
     public static readonly TimeSpan FreshFor = TimeSpan.FromMinutes(1);
 
+    private readonly IVolumeInventory _volumes;
+    private readonly TimeProvider _time;
+    private readonly NetworkDrives _networkDrives;
+    private readonly HealthByVolume _health;
     private readonly List<DriveChoice> _arriving = [];
 
     private DateTimeOffset? _readAt;
+
+    /// <param name="networkDrives">Whether drive letters mapped to network shares are offered. See <see cref="NetworkDrives"/>.</param>
+    /// <param name="health">What Health last read of each volume's drives.</param>
+    public DriveList(IVolumeInventory volumes, TimeProvider time, NetworkDrives networkDrives, HealthByVolume health)
+    {
+        _volumes = volumes;
+        _time = time;
+        _networkDrives = networkDrives;
+        _health = health;
+
+        // The list lives as long as the page that shows it, which is kept for the whole session, as
+        // the record it listens to is.
+        _health.Changed += (_, _) => ShowHealth();
+    }
 
     /// <summary>The volumes on offer, one row each, ordered by where they are mounted.</summary>
     public ObservableCollection<DriveEntry> Entries { get; } = [];
@@ -50,7 +72,7 @@ public sealed class DriveList(IVolumeInventory volumes, TimeProvider time, Netwo
     /// <returns>What was read, or null where the last reading, finished or still under way, stands.</returns>
     public async Task<IReadOnlyList<LocalVolume>?> ReadAsync(CancellationToken ct)
     {
-        var now = time.GetUtcNow();
+        var now = _time.GetUtcNow();
 
         if (_readAt is { } readAt && now - readAt < FreshFor)
         {
@@ -63,7 +85,7 @@ public sealed class DriveList(IVolumeInventory volumes, TimeProvider time, Netwo
 
         try
         {
-            return await volumes.RefreshAsync(ct);
+            return await _volumes.RefreshAsync(ct);
         }
         catch (OperationCanceledException)
         {
@@ -89,7 +111,7 @@ public sealed class DriveList(IVolumeInventory volumes, TimeProvider time, Netwo
         // A mapped letter is never probed (VolumeReadiness.NotAsked), so it is never taken for empty.
         foreach (var volume in read.Where(v =>
             v.Readiness is not VolumeReadiness.NoMedia
-            && (v.Kind != DriveType.Network || networkDrives is NetworkDrives.Offered)))
+            && (v.Kind != DriveType.Network || _networkDrives is NetworkDrives.Offered)))
         {
             _arriving.Add(DriveChoice.From(volume));
         }
@@ -105,8 +127,12 @@ public sealed class DriveList(IVolumeInventory volumes, TimeProvider time, Netwo
             _arriving,
             static entry => entry.RootPath,
             static choice => choice.RootPath,
-            static choice => new DriveEntry(choice),
-            static (entry, choice) => entry.Update(choice));
+            choice => new DriveEntry(choice, _health.Of(choice.RootPath)),
+            (entry, choice) =>
+            {
+                entry.Update(choice);
+                entry.Show(_health.Of(choice.RootPath));
+            });
     }
 
     /// <summary>
@@ -146,5 +172,13 @@ public sealed class DriveList(IVolumeInventory volumes, TimeProvider time, Netwo
     /// a drive letter: a folder on a volume mounted at <c>C:\Mount</c> would otherwise name the disk
     /// that folder sits on, and both are in the list.</para>
     /// </summary>
-    public DriveEntry? Holding(string folder) => Find(HostVolume.For(volumes, folder)?.RootPath);
+    public DriveEntry? Holding(string folder) => Find(HostVolume.For(_volumes, folder)?.RootPath);
+
+    private void ShowHealth()
+    {
+        foreach (var entry in Entries)
+        {
+            entry.Show(_health.Of(entry.RootPath));
+        }
+    }
 }

@@ -8,6 +8,7 @@ using Deguffer.Core.Duplicates;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Execution.Sizes;
 using Deguffer.Core.Exploring.History;
+using Deguffer.Core.Health;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Media;
@@ -126,6 +127,13 @@ public partial class App : Application
     /// left.
     /// </summary>
     public static BusyWork Work { get; } = new();
+
+    /// <summary>
+    /// What Health last read of each volume's drives, which the pages that list volumes name a drive
+    /// of concern from. Shared because Health writes it and Explore, Duplicates and Storage read it,
+    /// each kept alive between visits.
+    /// </summary>
+    public static HealthByVolume DriveHealth { get; } = new();
 
     /// <summary>
     /// The shell window, for the Win32 interop a folder picker needs — a <see cref="Microsoft.UI.Xaml.Controls.Page"/> has no

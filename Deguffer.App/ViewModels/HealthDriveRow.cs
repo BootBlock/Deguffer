@@ -61,13 +61,7 @@ public sealed partial class HealthDriveRow : ObservableObject
         Report = report;
         Title = report.Name;
         Verdict = report.Verdict;
-        VerdictText = report.Verdict switch
-        {
-            DriveVerdict.Good => "Good",
-            DriveVerdict.Watch => "Watch",
-            DriveVerdict.Failing => "Failing",
-            _ => "Unknown",
-        };
+        VerdictText = report.Verdict.Word();
         Summary = report.Summary;
         Temperature = report.Temperature ?? string.Empty;
 

@@ -1,6 +1,7 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
 using Deguffer.Core.Exploring;
+using Deguffer.Core.Health;
 using Deguffer.Core.Safety;
 using Deguffer.Testing;
 
@@ -28,7 +29,7 @@ public sealed class DriveListTests
             .With(@"D:\")
             .With(@"C:\Mount\");
 
-        var drives = new DriveList(volumes, new ManualTimeProvider(), NetworkDrives.Offered);
+        var drives = new DriveList(volumes, new ManualTimeProvider(), NetworkDrives.Offered, new HealthByVolume());
 
         await Refresh(drives);
 
@@ -43,7 +44,7 @@ public sealed class DriveListTests
             .With(@"D:\", DriveType.CDRom, readiness: VolumeReadiness.NoMedia)
             .With(@"N:\", DriveType.Network);
 
-        var drives = new DriveList(volumes, new ManualTimeProvider(), NetworkDrives.LeftOut);
+        var drives = new DriveList(volumes, new ManualTimeProvider(), NetworkDrives.LeftOut, new HealthByVolume());
 
         await Refresh(drives);
 
@@ -62,7 +63,7 @@ public sealed class DriveListTests
             .With(@"C:\")
             .With(@"D:\", DriveType.CDRom, readiness: VolumeReadiness.NoMedia);
 
-        var drives = new DriveList(volumes, new ManualTimeProvider(), NetworkDrives.Offered);
+        var drives = new DriveList(volumes, new ManualTimeProvider(), NetworkDrives.Offered, new HealthByVolume());
 
         await Refresh(drives);
 
@@ -87,7 +88,7 @@ public sealed class DriveListTests
                 .With(@"B:\", features: VolumeFeatures.RemoteStorage)
                 .With(@"C:\"),
             new ManualTimeProvider(),
-            NetworkDrives.Offered);
+            NetworkDrives.Offered, new HealthByVolume());
 
         await Refresh(drives);
 
@@ -104,7 +105,7 @@ public sealed class DriveListTests
                 .With(@"B:\", features: VolumeFeatures.RemoteStorage)
                 .With(@"Z:\", DriveType.Network, readiness: VolumeReadiness.NotAsked),
             new ManualTimeProvider(),
-            NetworkDrives.Offered);
+            NetworkDrives.Offered, new HealthByVolume());
 
         await Refresh(drives);
 
@@ -122,7 +123,7 @@ public sealed class DriveListTests
             .With(@"C:\")
             .With(@"R:\", readiness: VolumeReadiness.Refused);
 
-        var drives = new DriveList(volumes, new ManualTimeProvider(), NetworkDrives.Offered);
+        var drives = new DriveList(volumes, new ManualTimeProvider(), NetworkDrives.Offered, new HealthByVolume());
 
         await Refresh(drives);
 
@@ -140,7 +141,7 @@ public sealed class DriveListTests
     {
         var volumes = new FakeVolumeInventory().With(@"C:\");
         var time = new ManualTimeProvider();
-        var drives = new DriveList(volumes, time, NetworkDrives.Offered);
+        var drives = new DriveList(volumes, time, NetworkDrives.Offered, new HealthByVolume());
 
         Assert.True(await Refresh(drives));
         Assert.Equal(1, volumes.RefreshCount);
@@ -165,7 +166,7 @@ public sealed class DriveListTests
     public async Task NeverDropsTheListToReadItWhereItStands()
     {
         var volumes = new FakeVolumeInventory().With(@"C:\");
-        var drives = new DriveList(volumes, new ManualTimeProvider(), NetworkDrives.Offered);
+        var drives = new DriveList(volumes, new ManualTimeProvider(), NetworkDrives.Offered, new HealthByVolume());
 
         Assert.True(await Refresh(drives));
 
@@ -181,7 +182,7 @@ public sealed class DriveListTests
     public async Task AReadingAskedForWhileOneRunsIsTheSameReading()
     {
         var volumes = new FakeVolumeInventory().With(@"C:\");
-        var drives = new DriveList(volumes, new ManualTimeProvider(), NetworkDrives.Offered);
+        var drives = new DriveList(volumes, new ManualTimeProvider(), NetworkDrives.Offered, new HealthByVolume());
         var release = volumes.HoldRefreshes();
 
         var first = drives.ReadAsync(CancellationToken.None);
@@ -204,7 +205,7 @@ public sealed class DriveListTests
     public async Task AStoppedReadingLeavesTheNextOneToRead()
     {
         var volumes = new FakeVolumeInventory().With(@"C:\");
-        var drives = new DriveList(volumes, new ManualTimeProvider(), NetworkDrives.Offered);
+        var drives = new DriveList(volumes, new ManualTimeProvider(), NetworkDrives.Offered, new HealthByVolume());
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => drives.ReadAsync(new CancellationToken(canceled: true)));
 
@@ -224,7 +225,7 @@ public sealed class DriveListTests
             .With(@"D:\", totalBytes: 100 * Gigabyte, freeBytes: 70 * Gigabyte);
 
         var time = new ManualTimeProvider();
-        var drives = new DriveList(volumes, time, NetworkDrives.Offered);
+        var drives = new DriveList(volumes, time, NetworkDrives.Offered, new HealthByVolume());
 
         await Refresh(drives);
 
@@ -240,7 +241,7 @@ public sealed class DriveListTests
         Assert.Empty(listChanges);
         Assert.Same(system, drives.Entries[0]);
         Assert.Equal(39 * Gigabyte, system.Choice.FreeBytes);
-        Assert.Equal([nameof(DriveEntry.Choice)], rowChanges);
+        Assert.Equal([nameof(DriveEntry.Choice), nameof(DriveEntry.Description)], rowChanges);
     }
 
     [Fact]
@@ -248,7 +249,7 @@ public sealed class DriveListTests
     {
         var volumes = new FakeVolumeInventory().With(@"C:\", totalBytes: 100 * Gigabyte, freeBytes: 40 * Gigabyte);
         var time = new ManualTimeProvider();
-        var drives = new DriveList(volumes, time, NetworkDrives.Offered);
+        var drives = new DriveList(volumes, time, NetworkDrives.Offered, new HealthByVolume());
 
         await Refresh(drives);
 
@@ -271,7 +272,7 @@ public sealed class DriveListTests
     {
         var volumes = new FakeVolumeInventory().With(@"C:\").With(@"F:\");
         var time = new ManualTimeProvider();
-        var drives = new DriveList(volumes, time, NetworkDrives.Offered);
+        var drives = new DriveList(volumes, time, NetworkDrives.Offered, new HealthByVolume());
 
         await Refresh(drives);
 
@@ -298,7 +299,7 @@ public sealed class DriveListTests
     [Fact]
     public async Task FindsARowByItsMountPointWhateverTheCase()
     {
-        var drives = new DriveList(new FakeVolumeInventory().With(@"D:\"), new ManualTimeProvider(), NetworkDrives.Offered);
+        var drives = new DriveList(new FakeVolumeInventory().With(@"D:\"), new ManualTimeProvider(), NetworkDrives.Offered, new HealthByVolume());
 
         await Refresh(drives);
 
@@ -311,7 +312,7 @@ public sealed class DriveListTests
     [Fact]
     public async Task AChosenDriveThatIsStillOfferedStaysChosen()
     {
-        var drives = new DriveList(new FakeVolumeInventory().With(@"C:\").With(@"D:\"), new ManualTimeProvider(), NetworkDrives.Offered);
+        var drives = new DriveList(new FakeVolumeInventory().With(@"C:\").With(@"D:\"), new ManualTimeProvider(), NetworkDrives.Offered, new HealthByVolume());
 
         await Refresh(drives);
 
@@ -330,7 +331,7 @@ public sealed class DriveListTests
             new FakeVolumeInventory()
                 .With(@"A:\", features: VolumeFeatures.RemoteStorage)
                 .With(@"C:\"),
-            new ManualTimeProvider(), NetworkDrives.Offered);
+            new ManualTimeProvider(), NetworkDrives.Offered, new HealthByVolume());
 
         await Refresh(drives);
 
@@ -346,12 +347,12 @@ public sealed class DriveListTests
             new FakeVolumeInventory()
                 .With(@"A:\", features: VolumeFeatures.RemoteStorage)
                 .With(@"B:\", features: VolumeFeatures.RemoteStorage),
-            new ManualTimeProvider(), NetworkDrives.Offered);
+            new ManualTimeProvider(), NetworkDrives.Offered, new HealthByVolume());
 
         await Refresh(drives);
 
         Assert.Equal(@"A:\", drives.Choose(null)?.RootPath);
-        Assert.Null(new DriveList(new FakeVolumeInventory(), new ManualTimeProvider(), NetworkDrives.Offered).Choose(null));
+        Assert.Null(new DriveList(new FakeVolumeInventory(), new ManualTimeProvider(), NetworkDrives.Offered, new HealthByVolume()).Choose(null));
     }
 
     /// <summary>
@@ -363,7 +364,7 @@ public sealed class DriveListTests
     {
         var drives = new DriveList(
             new FakeVolumeInventory().With(@"C:\").With(@"C:\Mount\").With(@"D:\"),
-            new ManualTimeProvider(), NetworkDrives.Offered);
+            new ManualTimeProvider(), NetworkDrives.Offered, new HealthByVolume());
 
         await Refresh(drives);
 
@@ -381,11 +382,55 @@ public sealed class DriveListTests
     {
         var drives = new DriveList(
             new FakeVolumeInventory().With(@"C:\").With(@"C:\Mount\").Substituting(@"S:\", @"C:\Mount\Photos"),
-            new ManualTimeProvider(), NetworkDrives.Offered);
+            new ManualTimeProvider(), NetworkDrives.Offered, new HealthByVolume());
 
         await Refresh(drives);
 
         Assert.Equal(@"C:\Mount\", drives.Holding(@"S:\2024")?.RootPath);
+    }
+
+    [Fact]
+    public async Task ARowNamesADriveHealthFoundAConcernWith()
+    {
+        var health = new HealthByVolume();
+        var drive = new DriveDescription(new DriveKey("a"), 0, "System SSD");
+        health.Record(new DriveVolumes(drive.Key, "C:", [@"C:\"]));
+        health.Record(new DriveHealth(drive.Key, drive.Name, DriveVerdict.Failing, "summary", null, [], [], [], false));
+
+        var drives = new DriveList(new FakeVolumeInventory().With(@"C:\").With(@"D:\"), new ManualTimeProvider(), NetworkDrives.Offered, health);
+        await Refresh(drives);
+
+        var system = drives.Entries[0];
+
+        Assert.True(system.HasHealthConcern);
+        Assert.Equal("Failing", system.Health?.Word);
+        Assert.Contains("Drive health: Failing. System SSD reports a serious problem.", system.Description, StringComparison.Ordinal);
+        Assert.False(drives.Entries[1].HasHealthConcern);
+        Assert.Equal(drives.Entries[1].Choice.Description, drives.Entries[1].Description);
+    }
+
+    [Fact]
+    public async Task ARowFollowsHealthsLatestReadingInPlace()
+    {
+        var health = new HealthByVolume();
+        var drive = new DriveDescription(new DriveKey("a"), 0, "System SSD");
+        var drives = new DriveList(new FakeVolumeInventory().With(@"C:\"), new ManualTimeProvider(), NetworkDrives.Offered, health);
+        await Refresh(drives);
+        var row = drives.Entries[0];
+        var changes = WatchRow(row);
+
+        health.Record(new DriveVolumes(drive.Key, "C:", [@"C:\"]));
+        health.Record(new DriveHealth(drive.Key, drive.Name, DriveVerdict.Watch, "summary", null, [], [], [], false));
+
+        Assert.Same(row, drives.Entries[0]);
+        Assert.True(row.HasHealthConcern);
+        Assert.Contains(nameof(DriveEntry.HasHealthConcern), changes);
+        Assert.Contains(nameof(DriveEntry.Description), changes);
+
+        health.Record(new DriveHealth(drive.Key, drive.Name, DriveVerdict.Good, "summary", null, [], [], [], false));
+
+        Assert.False(row.HasHealthConcern);
+        Assert.Null(row.Health);
     }
 
     /// <summary>A reading and its rows, as a page that has nothing to guard between the two takes them.</summary>

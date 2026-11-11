@@ -58,7 +58,8 @@ public sealed partial class CleanPage : Page
             AppVersion.Current,
             new WhenCompleteViewModel(App.Preferences, WindowsSession.Current),
             new ScanChoiceViewModel(planner.Providers, App.Preferences),
-            App.ProviderSizes);
+            App.ProviderSizes,
+            App.DriveHealth);
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
 
         _density = new DrawnSetting<ViewDensity>(
