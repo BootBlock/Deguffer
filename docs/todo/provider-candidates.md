@@ -33,8 +33,9 @@ the negative list.
 
 ## The short answer: VMware and Hyper-V
 
-Deguffer has no VMware, Hyper-V or VirtualBox provider. The only virtualisation provider is
-`VirtualDiskProvider`, which reports WSL 2 and Docker Desktop disks and offers nothing.
+✅ done: `HyperVDiskProvider`, `VmwareDiskProvider` and `VirtualBoxDiskProvider` report each
+hypervisor's disks and offer nothing, beside `VirtualDiskProvider` for WSL 2 and Docker Desktop. All
+four share `VirtualDiskReportProvider`.
 
 All three hypervisors fit that same shape, and none of them fits an offered row. Everything large in
 a virtual machine's folder is the machine: a base disk, a snapshot's delta disk, a suspended
@@ -54,9 +55,9 @@ route in order. The one offered row in this area is old Vagrant box versions, th
 
 | Candidate | Verdict | Tier | Measured |
 | --- | --- | --- | --- |
-| VMware Workstation virtual machines | Report only | 3 | Yes: two VMs, one with a snapshot |
-| Hyper-V virtual machines and checkpoints | Report only, where Hyper-V answers | 3 | Present, but nothing answers unelevated |
-| VirtualBox virtual machines and media | Report only | 3 | Absent |
+| VMware Workstation virtual machines | Report only. ✅ done: `VmwareDiskProvider` | 3 | Yes: two VMs, one with a snapshot |
+| Hyper-V virtual machines and checkpoints | Report only, where Hyper-V answers. ✅ done: `HyperVDiskProvider` | 3 | Present, but nothing answers unelevated |
+| VirtualBox virtual machines and media | Report only. ✅ done: `VirtualBoxDiskProvider` | 3 | Absent |
 | Vagrant superseded box versions | **Build**. ✅ done: `VagrantSupersededBoxProvider` | 2 | Absent |
 | Rancher Desktop snapshots | Report only | 3 | Absent |
 | Podman and Rancher Desktop distributions | Owner records in the WSL report | 3 | Absent |
@@ -64,7 +65,7 @@ route in order. The one offered row in this area is old Vagrant box versions, th
 | Packer, minikube, kind, Multipass, Windows Sandbox, Hyper-V Quick Create downloads | Reject | — | — |
 | Any VM file by path: logs, `.lck`, `.vmem`, `.vmss`, `.vmsn`, delta disks, `.avhdx`, `.vmrs`, `.vmgs` | Reject | 4 | — |
 
-### VMware Workstation — Report only, measured
+### VMware Workstation — Report only, measured ✅ done
 
 **Records.** Workstation keeps no single complete list. `%APPDATA%\VMware\inventory.vmls` names
 each VM in its library (`vmlistN.config` is the `.vmx` path), and `%APPDATA%\VMware\preferences.ini`
@@ -92,10 +93,15 @@ while the disk is shrinking"
 ([KB 315631](https://knowledge.broadcom.com/external/article/315631/defragmenting-and-shrinking-vmware-works.html)).
 Shrinking frees host space. Deleting a snapshot frees it only once the delta has merged.
 
+✅ done: `VmwareDiskProvider`. It reads the union of both lists, each `.vmx` and `.vmsd`, and each
+disk's descriptor. The descriptor names a split disk's extents, so the disk is measured and
+registered across every file, and its `parentFileNameHint` leads a delta down to its base. The
+`.vmx`, the snapshot records and state, and a suspended machine's `.vmss` are registered too.
+
 **Rejected inside it.** Old `vmware-N.log` rotations (about 1 MB measured, Tier 3 diagnostics, and
 Workstation rotates them itself) and `caches\GuestAppsCache` (0.4 MB). Neither is worth a row.
 
-### Hyper-V — Report only, where Hyper-V answers
+### Hyper-V — Report only, where Hyper-V answers ✅ done
 
 **Discovery has to be Hyper-V's API.** `Get-VMHost`'s `VirtualHardDiskPath` is not where the disks
 are: Microsoft says it "is not a functional setting… the Hyper-V API… and `New-VHD` don't use it"
@@ -123,12 +129,20 @@ holds "the running state of virtual machines" and is the size of the VM's memory
 ([KB 4056669](https://support.microsoft.com/en-in/help/4056669/hyper-v-vss-backs-up-a-large-vmrs-file-when-you-back-up-a-vm)).
 No primary source was found for `.vmgs`, `.vsv` or `.bin`; all are live state, Tier 4.
 
+✅ done: `HyperVDiskProvider`. One read-only Windows PowerShell query, run only where the Hyper-V
+module is installed, asks first whether the account is elevated or in Hyper-V Administrators,
+because a third-party write-up ([Altaro](https://www.altaro.com/hyper-v/?p=21601)) reports `Get-VM`
+listing nothing rather than failing for anyone else. It then reads each machine's
+attached disks, each checkpoint's disks and each disk's `ParentPath`. Any other answer is said to
+leave the machines unknown. Explore does not describe these disks, because only a run of PowerShell
+can ask Hyper-V.
+
 **Rejected beside it.** Windows Sandbox: "closing it deletes all software, files, and state"
 ([Windows Sandbox](https://learn.microsoft.com/en-us/windows/security/application-security/application-isolation/windows-sandbox/)),
 and its base image is about 500 MB managed by the feature itself. Quick Create's downloaded image:
 the only source is a community answer that it stays in `%TEMP%`, where §5.3's rules already apply.
 
-### VirtualBox — Report only, researched
+### VirtualBox — Report only, researched ✅ done
 
 `VirtualBox.xml` in `%USERPROFILE%\.VirtualBox` (or `VBOX_USER_HOME`) "includes global configuration
 options and a list of registered virtual machines", and each VM folder has a `Logs` and a movable
@@ -140,6 +154,12 @@ rotate to `.1`–`.3` on their own
 `VBoxManage modifymedium --compact`
 ([VBoxManage](https://www.virtualbox.org/manual/topics/vboxmanage.html)). The report also names
 registered media whose file is missing. `closemedium --delete` is never a step: it deletes the image.
+
+✅ done: `VirtualBoxDiskProvider`. It reads `VirtualBox.xml` and each `.vbox` as VirtualBox's own
+source lays them out (`src/VBox/Main/xml/Settings.cpp`), because the manual leaves the format
+undocumented. A disk the machine attaches is its current disk. The disks under it, and those a
+snapshot attaches, are a snapshot's. A disk nothing uses is reported as unused, never as an orphan.
+The manual documents `modifymedium --compact` for VDI images only, and the route says so.
 
 ### Vagrant superseded boxes — Build, Tier 2, researched
 

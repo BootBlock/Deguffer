@@ -2,7 +2,7 @@
 
 # Supported providers
 
-Deguffer knows 130 locations. Each one is a *provider*: a single class that names one cache,
+Deguffer knows 133 locations. Each one is a *provider*: a single class that names one cache,
 log or leftover, the tool that writes it, and the children it recognises. Anything a provider
 does not recognise is left alone.
 
@@ -176,6 +176,7 @@ For where each location is, how Deguffer cleans it and what the next use costs, 
 | Debugger symbol cache | The Windows debuggers: WinDbg, the console debuggers and Visual Studio | Microsoft | 1 | Observed |
 | Debugger symbol cache, other servers | The Windows debuggers: WinDbg, the console debuggers and Visual Studio | Microsoft | 2 | Observed |
 | Hugging Face models and datasets | the Hugging Face Hub's Python library, which Transformers, Diffusers and many other machine-learning tools download through | Hugging Face | 3 | Observed |
+| Hyper-V virtual machine disks | Hyper-V | Microsoft | 3 | Researched |
 | Kopia local cache | Kopia and KopiaUI, a backup program | the Kopia project | 1 | Researched |
 | LM Studio superseded runtimes | LM Studio, an app for running language models on your own computer | Element Labs | 2 | Observed |
 | Nx shared task caches | Nx, the JavaScript monorepo build system | Narwhal Technologies | 1 | Researched |
@@ -189,6 +190,8 @@ For where each location is, how Deguffer cleans it and what the next use costs, 
 | Unity GI cache | the Unity Editor | Unity Technologies | 2 | Researched |
 | Unreal Engine derived data cache | the Unreal Editor | Epic Games | 2 | Researched |
 | Vagrant superseded box versions | Vagrant, which builds development virtual machines from boxes | HashiCorp, an IBM company | 2 | Researched |
+| VirtualBox virtual machine disks | Oracle VirtualBox | Oracle | 3 | Researched |
+| VMware Workstation virtual machine disks | VMware Workstation and VMware Player | Broadcom | 3 | Observed |
 | VS Code C/C++ IntelliSense cache | the C/C++ extension for Visual Studio Code | Microsoft | 1 | Observed |
 | VS Code editor caches | Visual Studio Code, and the editors built on the same Code - OSS base — VS Code Insiders, VSCodium, Cursor and the rest | Microsoft publishes Visual Studio Code; each derivative is published by its own vendor | 1 | Observed |
 | VS Code editor logs and crash reports | Visual Studio Code, and the editors built on the same Code - OSS base — VS Code Insiders, VSCodium, Cursor and the rest | Microsoft publishes Visual Studio Code; each derivative is published by its own vendor | 3 | Observed |

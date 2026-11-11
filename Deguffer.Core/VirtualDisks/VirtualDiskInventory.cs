@@ -3,17 +3,31 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.VirtualDisks;
 
 /// <summary>
-/// Every virtual disk WSL and Docker Desktop have recorded for this account, and anything that kept
-/// one from being found.
+/// Every virtual disk a tool has recorded for this account, the other files its machines are made of,
+/// and anything that kept one from being found.
 /// </summary>
-/// <param name="Disks">Each disk once, WSL's registrations first.</param>
+/// <param name="Disks">Each disk once, in the order the tool's records give them.</param>
 /// <param name="Problems">Why a tool's record could not be read, for the user. Usually empty.</param>
 public sealed record VirtualDiskInventory(IReadOnlyList<VirtualDisk> Disks, IReadOnlyList<string> Problems)
 {
+    public static VirtualDiskInventory Empty { get; } = new([], []);
+
     /// <summary>
-    /// Reads both tools' records. Cheap enough to run where it is needed, since it is a few registry
-    /// values and one small file, and not memoised here: the provider keeps it for a planning pass and
-    /// Explore for the life of its page.
+    /// The files a machine is made of that are not its disks, as its hypervisor's records name them:
+    /// its configuration, its snapshots' metadata and saved memory, and its suspended state. Never
+    /// measured or reported, only registered, because deleting any of them breaks the machine as surely
+    /// as deleting a disk.
+    /// </summary>
+    public IReadOnlyList<VirtualMachineStorage> MachineFiles { get; init; } = [];
+
+    /// <summary>Everything the records name, disks and machine files, as storage no clean may remove.</summary>
+    public IReadOnlyList<VirtualMachineStorage> Storage() =>
+        [.. Disks.SelectMany(disk => disk.AsStorage()), .. MachineFiles];
+
+    /// <summary>
+    /// Reads WSL's and Docker Desktop's records. Cheap enough to run where it is needed, since it is a
+    /// few registry values and one small file, and not memoised here: the provider keeps it for a
+    /// planning pass and Explore for the life of its page.
     /// </summary>
     public static VirtualDiskInventory Read(IUserEnvironment environment, ISystemDirectories system)
     {
