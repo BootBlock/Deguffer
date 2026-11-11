@@ -655,6 +655,16 @@ not the shell asked.
   share: an elevated process does not see the letters this one mapped. Nothing on a share is removed
   (above), and a share's scans are not kept to compare growth, because Windows names no volume that
   tells one share from another.
+- **A share is reached without knowing its whole name.** The Path… box suggests as it is typed: while
+  empty, the mapped, connected and remembered shares, the folders Explore scanned recently, and the
+  computers in the shell's Network folder and those added by hand; then computers, a computer's
+  shares asked of it directly so discovery need not find it, and a share's folders one level in.
+  Administrative, hidden and printer shares are left out. A chevron opens a network browser, a tree
+  of the same places listed only as each is opened, where a computer is added by name or address and
+  kept, and a share that refuses offers the Windows credentials prompt, so Deguffer never sees a
+  password. Every lookup runs off the UI thread with a time limit, a few at once, kept for the box's
+  or the browser's session, and reads names alone. A place chosen only fills the box: the box's own
+  check still confirms the folder, and nothing about removal changes.
 
 ### 7.2 Memory — where the memory goes
 

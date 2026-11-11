@@ -6,6 +6,7 @@ using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
+using Deguffer.Core.Exploring.Network;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Exploring.Files;
 using Deguffer.Core.Exploring.Hidden;
@@ -97,6 +98,8 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     /// reading has gone stale.
     /// </param>
     /// <param name="probe">What asks whether a location typed into the page is a folder.</param>
+    /// <param name="network">The network sources the Path… box suggests from.</param>
+    /// <param name="preferences">Where the folders scanned recently are kept, and the box reads them back from.</param>
     /// <param name="isElevated">Whether this process holds administrator rights.</param>
     /// <param name="relaunch">See <see cref="ExploreElevation"/>.</param>
     /// <param name="running">What is changing the machine on every page, which the elevated relaunch waits for.</param>
@@ -111,6 +114,8 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         IVolumeInventory volumes,
         IHiddenSpaceSource hidden,
         IPathProbe probe,
+        NetworkAccess network,
+        PreferenceService preferences,
         TimeProvider time,
         ExploreActions actions,
         ItemGuide guide,
@@ -137,7 +142,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         Replay = new ExploreReplay(motion);
         Files = new ExploreFiles(actions, time);
         Types = new ExploreTypes();
-        Targeting = new ExploreTargeting(volumes, time, probe, Status);
+        Targeting = new ExploreTargeting(volumes, time, probe, network, preferences, Status);
         Elevation = new ExploreElevation(Targeting, volumes, isElevated, relaunch, running, Status);
         Notes = new ExploreNoteCard(Selection);
         Listing = new ExploreRows(guide, time);
@@ -483,6 +488,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         // written afterwards would then describe the next scan rather than this one's result.
         var scoped = Targeting.IsScopedToFolder;
         var (scanned, volume) = Begin(target, ct);
+        Targeting.Scanning();
 
         // Next to the try, so nothing can throw between the two and leave the taskbar busy.
         var work = _work.Begin();

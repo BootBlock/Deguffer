@@ -463,4 +463,11 @@ public sealed record AppPreferences(
     /// chosen. See <see cref="ProviderChoice"/>.
     /// </summary>
     public ProviderChoice ChosenToScan { get; init; } = ProviderChoice.None;
+
+    /// <summary>
+    /// The places Explore's Path… box and network browser remember. A property for the reason
+    /// <see cref="Scanning"/> is one, and a settings file written before it existed reads with none.
+    /// See <see cref="ExploreLocations"/>.
+    /// </summary>
+    public ExploreLocations Locations { get; init; } = ExploreLocations.None;
 }

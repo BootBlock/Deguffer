@@ -1,9 +1,11 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Deguffer.App.Shell;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
+using Deguffer.Core.Exploring.Network;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.App.ViewModels;
@@ -31,6 +33,8 @@ public sealed partial class ExploreTargeting : ObservableObject
     /// <summary>The page's status line, where a refusal is stated and taken back.</summary>
     private readonly StatusLineViewModel _status;
 
+    private readonly PreferenceService _preferences;
+
     /// <summary>
     /// True while this is writing the target itself, so a write that arrives as a change of drive is
     /// not taken for a person choosing one.
@@ -46,13 +50,20 @@ public sealed partial class ExploreTargeting : ObservableObject
     /// </summary>
     private bool _retargeting;
 
-    /// <param name="time">What decides when the drive picker's last reading has gone stale.</param>
+    /// <param name="time">
+    /// What decides when the drive picker's last reading has gone stale, and what a network lookup's
+    /// time limit is measured on.
+    /// </param>
     /// <param name="probe">What asks whether a typed location is a folder. See <see cref="Typed"/>.</param>
+    /// <param name="network">The network sources the Path… box suggests from.</param>
+    /// <param name="preferences">Where the folders scanned recently are kept. See <see cref="Scanning"/>.</param>
     /// <param name="status">See <see cref="_status"/>.</param>
     internal ExploreTargeting(
         IVolumeInventory volumes,
         TimeProvider time,
         IPathProbe probe,
+        NetworkAccess network,
+        PreferenceService preferences,
         StatusLineViewModel status)
     {
         _volumes = volumes;
@@ -61,7 +72,11 @@ public sealed partial class ExploreTargeting : ObservableObject
         // anything on one stays refused, by FinalPlaces.
         _drives = new DriveList(volumes, time, NetworkDrives.Offered);
         _status = status;
-        Typed = new ExploreTypedFolder(probe, ScopeToFolder) { CanRetarget = CanRun() };
+        _preferences = preferences;
+        Typed = new ExploreTypedFolder(probe, new ExplorePathSuggestions(network, time, preferences), ScopeToFolder)
+        {
+            CanRetarget = CanRun(),
+        };
 
         // The drives are not read here: a constructor cannot wait for a reading taken off the UI
         // thread, and the page reads them as it is first shown (RefreshDrivesAsync).
@@ -79,6 +94,14 @@ public sealed partial class ExploreTargeting : ObservableObject
 
     /// <summary>The box a location is typed into, a share most often, which points the page once it is checked.</summary>
     public ExploreTypedFolder Typed { get; }
+
+    /// <summary>
+    /// Keep what a scan starting now covers among the recent folders the Path… box offers, by
+    /// <see cref="ExploreLocations.Scanned"/>. A preference that does not save is not worth a
+    /// sentence over a scan that has started: the folder is simply not offered next time.
+    /// </summary>
+    public void Scanning() =>
+        _preferences.Update(current => current with { Locations = current.Locations.Scanned(Target) });
 
     [ObservableProperty]
     public partial DriveEntry? SelectedDrive { get; set; }

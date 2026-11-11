@@ -67,7 +67,7 @@ internal sealed class BinnedShellItem(string? path) : IShellItem
         return path is null ? unchecked((int)0x8000_4005) : 0;
     }
 
-    public void BindToHandler(IntPtr bindContext, ref Guid handler, ref Guid interfaceId, out IntPtr result) =>
+    public int BindToHandler(IntPtr bindContext, ref Guid handler, ref Guid interfaceId, out IntPtr result) =>
         throw new NotSupportedException();
 
     public void GetParent(out IShellItem parent) => throw new NotSupportedException();
