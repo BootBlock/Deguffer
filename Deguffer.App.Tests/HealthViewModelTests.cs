@@ -19,6 +19,7 @@ public sealed class HealthViewModelTests
 
     private readonly RunningActions _running = new();
     private readonly BusyWork _work = new();
+    private readonly HealthByVolume _byVolume = new();
     private readonly List<ElevationRequest> _relaunches = [];
     private IReadOnlyList<DriveDescription>? _drives = [First, Second];
     private int _reads;
@@ -45,7 +46,8 @@ public sealed class HealthViewModelTests
             return true;
         },
         _running,
-        _work);
+        _work,
+        _byVolume);
 
     private static Func<IReadOnlyList<DriveDescription>, IProgress<DriveHealth>, CancellationToken, Task> ReportAll(bool moreWhenElevated = false) =>
         (drives, progress, _) =>
@@ -185,12 +187,36 @@ public sealed class HealthViewModelTests
     });
 
     [Fact]
+    public void EachReadingReachesThePagesThatListVolumes() => UiThread.Run(async () =>
+    {
+        _reader = (drives, progress, _) =>
+        {
+            progress.Report(Health(drives[1], DriveVerdict.Failing));
+            return Task.CompletedTask;
+        };
+        var page = Page();
+        await page.RefreshAsync();
+
+        _placing!.Report(new DriveVolumes(Second.Key, "D: (Data)", [@"D:\"]));
+        await Eventually.HoldsAsync(() => _byVolume.Of(@"D:\") is not null, "the note for D:");
+
+        Assert.Equal(DriveVerdict.Failing, _byVolume.Of(@"D:\")?.Verdict);
+
+        // A drive a later listing no longer has stops speaking for its volume.
+        _drives = [First];
+        _reader = ReportAll();
+        await page.RefreshAsync();
+
+        Assert.Null(_byVolume.Of(@"D:\"));
+    });
+
+    [Fact]
     public void AVolumeLineReachesItsOwnRow() => UiThread.Run(async () =>
     {
         var page = Page();
         await page.RefreshAsync();
 
-        _placing!.Report(new DriveVolumes(Second.Key, "D: (Data)"));
+        _placing!.Report(new DriveVolumes(Second.Key, "D: (Data)", [@"D:\"]));
         await Eventually.HoldsAsync(() => page.Rows[1].Volumes.Length > 0, "the volume line");
 
         Assert.Equal("D: (Data)", page.Rows[1].Volumes);

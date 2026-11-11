@@ -29,6 +29,15 @@
                       Visibility="{x:Bind Choice.IsRefused, Mode=OneWay}"
                       AutomationProperties.AccessibilityView="Raw" />
 
+            <!-- A drive Health found a concern with, collapsed otherwise for the same reason.
+                 The list below names the drive and says what to do. -->
+            <FontIcon Glyph="&#xE95E;"
+                      FontSize="14"
+                      VerticalAlignment="Center"
+                      Visibility="{x:Bind HasHealthConcern, Mode=OneWay}"
+                      ToolTipService.ToolTip="{x:Bind Health.Text, Mode=OneWay, FallbackValue=''}"
+                      AutomationProperties.AccessibilityView="Raw" />
+
             <TextBlock Text="{x:Bind RootPath}" />
         </StackPanel>
     </DataTemplate>
@@ -41,7 +50,7 @@
         parts in layout order with nothing between them.
     -->
     <DataTemplate x:Key="DriveListed" x:DataType="exploring:DriveEntry">
-        <StackPanel Spacing="2" AutomationProperties.Name="{x:Bind Choice.Description, Mode=OneWay}">
+        <StackPanel Spacing="2" AutomationProperties.Name="{x:Bind Description, Mode=OneWay}">
             <Grid ColumnSpacing="8" ColumnDefinitions="Auto,116,Auto">
                 <TextBlock Grid.Column="0" Text="{x:Bind RootPath}" />
 
@@ -70,6 +79,21 @@
                        MaxWidth="380"
                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                        AutomationProperties.AccessibilityView="Raw" />
+
+            <!-- §7.6: the drive under this volume that Health last found a concern with, and what
+                 to do first. Read from Health's last reading only, so a drive is never asked
+                 anything for the picker. The verdict is a word, not only the icon (§6.5). Raw to
+                 the screen reader because the panel's name already carries it. -->
+            <StackPanel Orientation="Horizontal"
+                        Spacing="6"
+                        MaxWidth="380"
+                        Visibility="{x:Bind HasHealthConcern, Mode=OneWay}"
+                        AutomationProperties.AccessibilityView="Raw">
+                <FontIcon Glyph="&#xE95E;" FontSize="14" VerticalAlignment="Top" Margin="0,2,0,0" />
+                <TextBlock TextWrapping="Wrap" MaxWidth="360">
+                    <Run Text="{x:Bind Health.Word, Mode=OneWay, FallbackValue=''}" FontWeight="SemiBold" /><Run Text=": " /><Run Text="{x:Bind Health.Text, Mode=OneWay, FallbackValue=''}" />
+                </TextBlock>
+            </StackPanel>
         </StackPanel>
     </DataTemplate>
 

@@ -342,6 +342,7 @@ public sealed class DriveHealthReaderTests
 
         Assert.Equal(report.Key, Assert.Single(_placed.Reports).Key);
         Assert.Contains(@"C:\", _placed.Reports.Single().Line, StringComparison.Ordinal);
+        Assert.Equal([@"C:\"], _placed.Reports.Single().RootPaths);
     }
 
     [Fact]

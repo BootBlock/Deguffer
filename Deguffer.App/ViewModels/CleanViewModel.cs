@@ -7,6 +7,7 @@ using Deguffer.Core.Configuration;
 using Deguffer.Core.Diagnostics;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Execution.Sizes;
+using Deguffer.Core.Health;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -107,6 +108,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// so its rows are the planner's own providers.
     /// </param>
     /// <param name="sizes">Each provider's figure at each scan, which every row states its change against.</param>
+    /// <param name="driveHealth">What Health last read of each volume's drives. See <see cref="DriveHealth"/>.</param>
     public CleanViewModel(
         CleanupPlanner planner,
         IUserEnvironment environment,
@@ -121,7 +123,8 @@ public sealed partial class CleanViewModel : ObservableObject
         string appVersion,
         WhenCompleteViewModel whenComplete,
         ScanChoiceViewModel scanChoice,
-        ProviderSizeHistory sizes)
+        ProviderSizeHistory sizes,
+        HealthByVolume driveHealth)
     {
         _planner = planner;
         _environment = environment;
@@ -136,6 +139,7 @@ public sealed partial class CleanViewModel : ObservableObject
         WhenComplete = whenComplete;
         ScanChoice = scanChoice;
         Sizes = new StorageSizeChanges(sizes, Findings, isElevated);
+        DriveHealth = new DriveHealthLine(driveHealth, volumes, environment.UserProfile);
         _coverage = new ScanCoverage(planner.Providers.Count, planner.Providers.Count);
         _origin = new ReportOrigin(
             appVersion,
@@ -261,6 +265,9 @@ public sealed partial class CleanViewModel : ObservableObject
 
     /// <summary>Each row's change since the scan before, and each provider's own history.</summary>
     public StorageSizeChanges Sizes { get; }
+
+    /// <summary>What Health last found wrong with the drive the free space figure is on.</summary>
+    public DriveHealthLine DriveHealth { get; }
 
     /// <summary>
     /// The row whose items are listed in place of the rows, or null while the rows are shown.

@@ -92,4 +92,5 @@ public sealed record DriveHealth(
     bool MoreWhenElevated);
 
 /// <summary>What is stored on one drive, as a line of volumes. Reported apart, because a volume can stall where the drive does not.</summary>
-public sealed record DriveVolumes(DriveKey Key, string Line);
+/// <param name="RootPaths">Where each of those volumes is mounted, so a page that lists volumes can find the drive under one.</param>
+public sealed record DriveVolumes(DriveKey Key, string Line, IReadOnlyList<string> RootPaths);
