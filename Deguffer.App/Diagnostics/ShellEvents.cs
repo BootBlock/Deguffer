@@ -5,7 +5,7 @@ namespace Deguffer.App.Diagnostics;
 
 /// <summary>
 /// The shell's milestones on the UI thread, as start and stop pairs a trace of the running app
-/// times: launch to the first frame, a tool window reopened after it, each tree Explore shows, each new picture's first drawing on
+/// times: the process's creation to the first frame, a tool window reopened after it, each tree Explore shows, each new picture's first drawing on
 /// screen, and each batch of duplicate groups the Duplicates page applies. How to record and read
 /// them is in <c>docs/tracing-the-shell.md</c>.
 ///
@@ -31,9 +31,14 @@ internal sealed class ShellEvents : EventSource
 
     public static ShellEvents Log { get; } = new();
 
-    /// <summary>The application is launched, before its window is built.</summary>
+    /// <summary>
+    /// The process has reached its entry point, before the application object is made or any store
+    /// is read, <paramref name="sinceProcessStart"/> milliseconds after Windows created the process.
+    /// No event can be written while the runtime itself starts, so the launch began that long before
+    /// this event's time. See <see cref="LaunchTiming"/>.
+    /// </summary>
     [Event(1, Level = EventLevel.Informational)]
-    public void LaunchStart() => WriteEvent(1);
+    public void LaunchStart(int sinceProcessStart) => WriteEvent(1, sinceProcessStart);
 
     /// <summary>The window's first frame after it was activated has been handed to the compositor.</summary>
     [Event(2, Level = EventLevel.Informational)]

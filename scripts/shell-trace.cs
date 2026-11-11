@@ -63,8 +63,24 @@ static void Launch(List<Raised> raised)
     }
 
     var launch = spans[0];
-    Console.WriteLine($"Launch to first frame: {Ms(launch.Duration)}");
-    Console.WriteLine($"  main window and first page: {Ms(Pairs(raised, "Window").FirstOrDefault()?.Duration)}");
+    var window = Pairs(raised, "Window").FirstOrDefault();
+
+    // The start carries how long the process had existed when the entry point wrote it. A trace of
+    // a build from before that started the launch in OnLaunched, with no payload.
+    if (launch.Start.Payload is [var sinceProcessStart, ..])
+    {
+        var beforeEntry = Number(sinceProcessStart);
+
+        Console.WriteLine($"Launch to first frame, from the process's creation: {Ms(beforeEntry + launch.Duration)}");
+        Console.WriteLine($"  process creation to the entry point (the runtime's start): {Ms(beforeEntry)}");
+        Console.WriteLine($"  entry point to OnLaunched (the stores read, the XAML parsed): {Ms(window is null ? null : window.Start.Time - launch.Start.Time)}");
+    }
+    else
+    {
+        Console.WriteLine($"OnLaunched to first frame (an older build, which started the launch there): {Ms(launch.Duration)}");
+    }
+
+    Console.WriteLine($"  main window and first page: {Ms(window?.Duration)}");
 
     // Reopened once the first frame is drawn, so after the launch rather than inside it.
     if (Pairs(raised, "ToolWindows").FirstOrDefault() is { } reopened)

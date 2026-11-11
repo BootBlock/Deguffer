@@ -101,8 +101,9 @@ slower with every test still green. For such a change, record a trace before and
    `window --pid <pid> --action list`), which ends the trace, and
    run `dotnet run scripts/shell-trace.cs -- <file>`.
 4. Report **launch to first frame** and **scan end to first map** from both builds, with the longest
-   `Show` where Explore changed. Four launches of one build on a three-folder fixture ranged from
-   792 ms to 866 ms and from 149 ms to 183 ms, so take three runs of each build and give the medians.
+   `Show` where Explore changed. The launch is counted from the process's creation. Four warm
+   launches of one Release build on a three-folder fixture ranged from 1,304 ms to 1,722 ms and from
+   192 ms to 230 ms, so take three runs of each build and give the medians.
 
 ## Before you screenshot anything
 

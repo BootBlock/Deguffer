@@ -26,6 +26,10 @@
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <RootNamespace>Deguffer.App</RootNamespace>
+
+        <!-- Program.cs is the entry point, so the launch a trace times starts before App's statics
+             read the stores: see LaunchTiming. -->
+        <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
         <!--
