@@ -62,13 +62,21 @@ internal static class ShellNative
         [In, Out] byte[] info);
 }
 
-/// <summary>One item in the shell namespace. Declared to <c>Compare</c> and no further; <c>GetDisplayName</c> is called.</summary>
+/// <summary>
+/// One item in the shell namespace. Declared to <c>Compare</c> and no further; <c>GetDisplayName</c>
+/// is called, and <c>BindToHandler</c> by <see cref="Exploring.Network.ShellNetworkFolder"/>.
+/// </summary>
 [ComImport]
 [Guid("43826d1e-e718-42ee-bc55-a1e261c37bfe")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 internal interface IShellItem
 {
-    void BindToHandler(IntPtr bindContext, ref Guid handler, ref Guid interfaceId, out IntPtr result);
+    /// <summary>
+    /// A handler for the item, answering its <c>HRESULT</c> as a value: the Network folder refuses
+    /// when discovery is off, which is an answer to state, not an exception to catch.
+    /// </summary>
+    [PreserveSig]
+    int BindToHandler(IntPtr bindContext, ref Guid handler, ref Guid interfaceId, out IntPtr result);
 
     void GetParent(out IShellItem parent);
 

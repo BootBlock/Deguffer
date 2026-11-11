@@ -20,12 +20,17 @@ public sealed partial class ExploreTypedFolder : ObservableObject
     private readonly Action<string> _scopeTo;
 
     /// <param name="probe">Asks whether the typed folder is there, off the UI thread.</param>
+    /// <param name="suggestions">The list under the box.</param>
     /// <param name="scopeTo">Points the page at a folder the check passed.</param>
-    internal ExploreTypedFolder(IPathProbe probe, Action<string> scopeTo)
+    internal ExploreTypedFolder(IPathProbe probe, ExplorePathSuggestions suggestions, Action<string> scopeTo)
     {
         _probe = probe;
         _scopeTo = scopeTo;
+        Suggestions = suggestions;
     }
+
+    /// <summary>The list under the box, which follows what has been typed.</summary>
+    public ExplorePathSuggestions Suggestions { get; }
 
     /// <summary>Raised once the page points at what was typed, so the box can close.</summary>
     public event EventHandler? Accepted;

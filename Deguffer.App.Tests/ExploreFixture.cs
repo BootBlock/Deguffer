@@ -1,3 +1,4 @@
+using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Diagnostics;
@@ -50,6 +51,14 @@ internal sealed class ExploreFixture : IDisposable
 
     /// <summary>What a page built after this is set asks instead of <see cref="Probe"/>, for a test that holds the answer back.</summary>
     public IPathProbe? HeldProbe { get; set; }
+
+    /// <summary>The network the Path… box suggests from: nothing, unless a test describes it.</summary>
+    public FakeNetwork Network { get; } = new();
+
+    /// <summary>The settings, stored under the fake profile's own local data.</summary>
+    public PreferenceService Preferences => _preferences ??= new PreferenceService(new PreferenceStore(Environment));
+
+    private PreferenceService? _preferences;
 
     public ManualTimeProvider Time { get; } = new();
 
@@ -118,6 +127,8 @@ internal sealed class ExploreFixture : IDisposable
             Volumes,
             Hidden,
             HeldProbe ?? Probe,
+            Network.Access,
+            Preferences,
             Time,
             new ExploreActions(Building, () => Prompt, Faults, Running, Bin),
             Guide,
