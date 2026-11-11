@@ -220,7 +220,7 @@ public abstract class MozillaProfileCacheProvider : CleanupProviderBase
             return _discovery.ProfilesElsewhere.Count > 0
                 ? UnexaminedPlan(StoredElsewhere(_discovery.ProfilesElsewhere)) with
                 {
-                    ProtectedPaths = Protect([.. SurvivorsElsewhere()]),
+                    ProtectedPaths = await ProtectAsync([.. SurvivorsElsewhere()], ct).ConfigureAwait(false),
                 }
                 : EmptyPlan($"{App} has no profile in this user's account.");
         }
@@ -379,8 +379,8 @@ public abstract class MozillaProfileCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect(
-                [.. survivors.Concat(declined)]),
+            ProtectedPaths = await ProtectAsync(
+                [.. survivors.Concat(declined)], ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = unreadable,

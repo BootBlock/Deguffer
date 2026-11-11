@@ -321,7 +321,7 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(declined, live),
+            ProtectedPaths = await BuildProtectedPathsAsync(declined, live, ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = scan.Unreadable,
@@ -370,9 +370,10 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
     /// because the spared and the targeted are siblings in one folder — which is precisely when an
     /// over-broad rule takes one with the other.
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(
         IReadOnlyList<(string Path, string Reason)> declined,
-        LiveTreeVetoResult live) => Protect(
+        LiveTreeVetoResult live,
+        CancellationToken ct) => ProtectAsync(
     [
         (_root, "The tooling's own folder must survive — only downloaded releases inside it are removed."),
         (_releases, "The folder holding the releases must survive; only whole releases inside it go."),
@@ -383,7 +384,7 @@ public sealed partial class AzureFunctionsToolsProvider : CleanupProviderBase
         .. declined,
         .. live.Vetoed.Select(v => (v.Directory, InUseReason)),
         .. live.Unchecked.Select(path => (path, LiveTreeVeto.UncheckedReason)),
-    ]);
+    ], ct);
 
     /// <summary>
     /// The cached feed files beside <c>Releases</c>, named so §5.6 can assert they survived. There

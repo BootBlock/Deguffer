@@ -236,7 +236,7 @@ public sealed class PnpmStoreProvider : CleanupProviderBase
                     MeasuredPaths = [store],
                 },
             ],
-            ProtectedPaths = BuildProtectedPaths(store),
+            ProtectedPaths = await BuildProtectedPathsAsync(store, ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             CountsLinksFromElsewhere = true,
@@ -251,11 +251,14 @@ public sealed class PnpmStoreProvider : CleanupProviderBase
     /// store is pnpm's own layout, and the home carries the launcher the user runs, the packages
     /// installed with <c>pnpm add --global</c>, and the per-user configuration.
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(string store) => Protect(
-        (store, "The store directory itself must survive — only unreferenced packages inside it are removed."),
-        (Path.GetDirectoryName(store)!, "The directory holding the store, which is pnpm's own layout."),
-        (HomeDirectory, "pnpm's home directory, which holds pnpm itself and its configuration."),
-        (Path.Combine(HomeDirectory, "global"), "Globally installed packages — never a cache."));
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(string store, CancellationToken ct) => ProtectAsync(
+        [
+            (store, "The store directory itself must survive — only unreferenced packages inside it are removed."),
+            (Path.GetDirectoryName(store)!, "The directory holding the store, which is pnpm's own layout."),
+            (HomeDirectory, "pnpm's home directory, which holds pnpm itself and its configuration."),
+            (Path.Combine(HomeDirectory, "global"), "Globally installed packages — never a cache."),
+        ],
+        ct);
 
     /// <summary>
     /// Ask pnpm where the active store is. The one line of stdout is a configured value in §5.2's

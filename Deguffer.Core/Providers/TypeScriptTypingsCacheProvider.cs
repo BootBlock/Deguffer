@@ -221,13 +221,14 @@ public sealed partial class TypeScriptTypingsCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect(
-            [
-                (root, "TypeScript's typings cache folder itself must survive — only version folders inside it are removed."),
-                .. spared,
-                .. live.Vetoed.Select(v => (v.Directory, InUseReason)),
-                .. live.Unchecked.Select(path => (path, LiveTreeVeto.UncheckedReason)),
-            ]),
+            ProtectedPaths = await ProtectAsync(
+                [
+                    (root, "TypeScript's typings cache folder itself must survive — only version folders inside it are removed."),
+                    .. spared,
+                    .. live.Vetoed.Select(v => (v.Directory, InUseReason)),
+                    .. live.Unchecked.Select(path => (path, LiveTreeVeto.UncheckedReason)),
+                ],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = scan.Unreadable,

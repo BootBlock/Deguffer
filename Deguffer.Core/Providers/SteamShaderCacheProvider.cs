@@ -219,7 +219,7 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect([.. examination.Survivors, .. examination.Declined]),
+            ProtectedPaths = await ProtectAsync([.. examination.Survivors, .. examination.Declined], ct).ConfigureAwait(false),
             Notes = examination.Notes,
             Fallback = measured.Fallback,
 

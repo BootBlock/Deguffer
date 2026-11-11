@@ -302,7 +302,7 @@ public sealed class AffinityModelCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect([.. found.Protect]),
+            ProtectedPaths = await ProtectAsync([.. found.Protect], ct).ConfigureAwait(false),
             Notes = found.Notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = found.Unreadable,

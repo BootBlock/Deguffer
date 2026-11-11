@@ -305,10 +305,13 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
             // holding more than Maven put there.
             return UnexaminedPlan(reason) with
             {
-                ProtectedPaths = Protect((
-                    repository,
-                    "Your Maven settings name this folder as the local repository, and it is not one Deguffer removes, "
-                    + "so it must survive.")),
+                ProtectedPaths = await ProtectAsync(
+                    [
+                        (repository,
+                            "Your Maven settings name this folder as the local repository, and it is not one Deguffer removes, "
+                            + "so it must survive."),
+                    ],
+                    ct).ConfigureAwait(false),
             };
         }
 
@@ -354,7 +357,7 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect([.. scan.Protected]),
+            ProtectedPaths = await ProtectAsync([.. scan.Protected], ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             WasNotExamined = scan.NothingWasExamined,

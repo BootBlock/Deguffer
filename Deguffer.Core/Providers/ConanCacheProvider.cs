@@ -251,7 +251,7 @@ public sealed class ConanCacheProvider : CleanupProviderBase
 
             return withheld with
             {
-                ProtectedPaths = BuildProtectedPaths(found, contents),
+                ProtectedPaths = await BuildProtectedPathsAsync(found, contents, ct).ConfigureAwait(false),
                 Notes = [.. withheld.Notes, .. contents.Notes],
                 HasUnreadableRoot = contents.Unreadable,
             };
@@ -265,7 +265,7 @@ public sealed class ConanCacheProvider : CleanupProviderBase
             return clear with { Notes = [.. clear.Notes, .. contents.Notes], HasUnreadableRoot = contents.Unreadable };
         }
 
-        var protectedPaths = BuildProtectedPaths(found, contents);
+        var protectedPaths = await BuildProtectedPathsAsync(found, contents, ct).ConfigureAwait(false);
         var measured = await MeasureAllAsync(contents.Measured, ct).ConfigureAwait(false);
 
         List<PlanNote> notes =
@@ -313,8 +313,11 @@ public sealed class ConanCacheProvider : CleanupProviderBase
     /// clean leaves: every recipe and package folder, in each of them every folder but the sources
     /// and the build, and anything the clean would take that Conan did not make.
     /// </summary>
-    private static IReadOnlyList<ProtectedPath> BuildProtectedPaths(ConanLocation.Found found, ConanStoreReading contents) =>
-        Protect([.. ConanDeclarations.Survivors(found.Home, found.Store), .. contents.Kept]);
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(
+        ConanLocation.Found found,
+        ConanStoreReading contents,
+        CancellationToken ct) =>
+        ProtectAsync([.. ConanDeclarations.Survivors(found.Home, found.Store), .. contents.Kept], ct);
 
     private static string Unrecognised(string store, IReadOnlyList<string> entries)
     {

@@ -248,11 +248,12 @@ public sealed class AfterEffectsDiskCacheProvider : CleanupProviderBase, ITempor
             ct).ConfigureAwait(false);
 
         // A held cache is never a survivor otherwise, so the two sets cannot name one path twice.
-        var protectedPaths = Protect(
-        [
-            .. held.Select(cache => (Path: cache.Path, Reason: HeldReason)),
-            .. examination.Survivors,
-        ]);
+        var protectedPaths = await ProtectAsync(
+            [
+                .. held.Select(cache => (Path: cache.Path, Reason: HeldReason)),
+                .. examination.Survivors,
+            ],
+            ct).ConfigureAwait(false);
 
         if (steps.Count == 0
             && held.Count == 0

@@ -252,7 +252,7 @@ public sealed class ComposerCacheProvider : CleanupProviderBase
                     MeasuredPaths = [cache],
                 },
             ],
-            ProtectedPaths = BuildProtectedPaths(settings, cache),
+            ProtectedPaths = await BuildProtectedPathsAsync(settings, cache, ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
         };
@@ -343,7 +343,10 @@ public sealed class ComposerCacheProvider : CleanupProviderBase
     /// §5.6. clear-cache keeps the cache folder, and the home beside it carries what matters most:
     /// <c>auth.json</c> with the credentials Composer signs in with, and <c>config.json</c>.
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(ComposerSettings settings, string cache)
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(
+        ComposerSettings settings,
+        string cache,
+        CancellationToken ct)
     {
         List<(string Path, string Reason)> paths =
         [
@@ -363,7 +366,7 @@ public sealed class ComposerCacheProvider : CleanupProviderBase
             paths.Add((data, "Composer's data folder, which is not cache."));
         }
 
-        return Protect([.. paths]);
+        return ProtectAsync([.. paths], ct);
     }
 
     private Task<ComposerSettings?> ResolveSettingsAsync(string composer, CancellationToken ct) =>

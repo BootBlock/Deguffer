@@ -188,15 +188,16 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
                     ServicingCalls = _servicingCalls,
                 },
             ],
-            ProtectedPaths = Protect(
-            [
-                (_store, "The component store itself. Windows' cleanup removes superseded components inside it, and never the store."),
-                (_packages,
-                    "Windows' record of the updates installed on this machine. The cleanup removes superseded entries from it, and never the record."),
-                (Path.Combine(_windows, "System32"),
-                    "Windows itself, which shares most of the component store's files through hard links."),
-                .. WindowsSystemRoot.ExclusionsUnder(_windows),
-            ]),
+            ProtectedPaths = await ProtectAsync(
+                [
+                    (_store, "The component store itself. Windows' cleanup removes superseded components inside it, and never the store."),
+                    (_packages,
+                        "Windows' record of the updates installed on this machine. The cleanup removes superseded entries from it, and never the record."),
+                    (Path.Combine(_windows, "System32"),
+                        "Windows itself, which shares most of the component store's files through hard links."),
+                    .. WindowsSystemRoot.ExclusionsUnder(_windows),
+                ],
+                ct).ConfigureAwait(false),
             Notes =
             [
                 analysed,

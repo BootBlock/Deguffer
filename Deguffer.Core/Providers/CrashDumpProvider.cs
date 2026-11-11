@@ -184,7 +184,7 @@ public sealed class CrashDumpProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect([.. scan.Protected, .. relocated.Protected]),
+            ProtectedPaths = await ProtectAsync([.. scan.Protected, .. relocated.Protected], ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             WasNotExamined = targets.Count == 0 && (scan.Declined.Count > 0 || relocated.LeftUnexamined),

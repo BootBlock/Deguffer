@@ -342,7 +342,7 @@ public sealed class CargoCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect([.. BuildProtectedPaths(home), .. declined]),
+            ProtectedPaths = await ProtectAsync([.. BuildProtectedPaths(home), .. declined], ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = unreadable,

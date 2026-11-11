@@ -243,7 +243,7 @@ public sealed class VisualStudioSolutionCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(examined, walked, declined, live),
+            ProtectedPaths = await BuildProtectedPathsAsync(examined, walked, declined, live, ct).ConfigureAwait(false),
             Notes = SourceTreePlanNotes.For(
                 discovered,
                 $"'{VisualStudioCacheLayout.FolderName}'",
@@ -293,20 +293,22 @@ public sealed class VisualStudioSolutionCacheProvider : CleanupProviderBase
     /// which are the caches' siblings. Every <c>.vs</c> folder declined or held back is
     /// protected whole, because it is separated from the ones examined only by evidence.
     /// </summary>
-    private static IReadOnlyList<ProtectedPath> BuildProtectedPaths(
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(
         IReadOnlyList<VisualStudioSolutionFolder> examined,
         IReadOnlyList<VisualStudioCacheContents> walked,
         IReadOnlyList<string> declined,
-        LiveTreeVetoResult live) => Protect(
-    [
-        .. examined.SelectMany(folder => new[]
-        {
-            (folder.Folder, $"The solution folder for {folder.Name}. Only caches inside its .vs folder are removed."),
-        }.Concat(folder.SolutionFiles.Select(solution => (solution, "The solution file is yours, not a cache.")))),
-        .. walked.SelectMany(walk => walk.Containers.Select(container =>
-            (container, "Holds caches that are removed. The folder itself, and everything in it that is not a cache, stays."))),
-        .. walked.SelectMany(walk => walk.Kept),
-        .. declined.Select(path => (path, $"Not recognised as {Subject}, so it is left alone.")),
-        .. live.Survivors,
-    ]);
+        LiveTreeVetoResult live,
+        CancellationToken ct) => ProtectAsync(
+        [
+            .. examined.SelectMany(folder => new[]
+            {
+                (folder.Folder, $"The solution folder for {folder.Name}. Only caches inside its .vs folder are removed."),
+            }.Concat(folder.SolutionFiles.Select(solution => (solution, "The solution file is yours, not a cache.")))),
+            .. walked.SelectMany(walk => walk.Containers.Select(container =>
+                (container, "Holds caches that are removed. The folder itself, and everything in it that is not a cache, stays."))),
+            .. walked.SelectMany(walk => walk.Kept),
+            .. declined.Select(path => (path, $"Not recognised as {Subject}, so it is left alone.")),
+            .. live.Survivors,
+        ],
+        ct);
 }

@@ -319,13 +319,14 @@ public sealed partial class TestBrowserProfileProvider : CleanupProviderBase, IT
             // runner deletes it the moment its browser closes, which is usually seconds, so asserting
             // across an indefinite preview that it survived would raise §5.6's alarm on an ordinary
             // run and teach the reader to ignore it. One the clean holds back is asserted by the run.
-            ProtectedPaths = Protect(
-            [
-                .. scans.Select(s => (s.Folder, "The temporary folder itself must survive — only the "
-                    + "test browser profiles inside it are removed.")),
-                .. NearMisses().Select(path => (path, "Named like a test browser profile, but not in "
-                    + "the shape either tool writes, so it is somebody else's.")),
-            ]),
+            ProtectedPaths = await ProtectAsync(
+                [
+                    .. scans.Select(s => (s.Folder, "The temporary folder itself must survive — only the "
+                        + "test browser profiles inside it are removed.")),
+                    .. NearMisses().Select(path => (path, "Named like a test browser profile, but not in "
+                        + "the shape either tool writes, so it is somebody else's.")),
+                ],
+                ct).ConfigureAwait(false),
             Notes = notes,
 
             // §5.3's floor travels on the plan, so the removal applies exactly the cut-off the

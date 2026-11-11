@@ -216,7 +216,7 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = [.. Protected(protect, recentOnly)],
+            ProtectedPaths = [.. await ProtectedAsync(protect, recentOnly, ct).ConfigureAwait(false)],
             Notes = notes,
             WasNotExamined = declined && steps.Count == 0,
             HasUnreadableRoot = unreadable,
@@ -228,12 +228,14 @@ public sealed class CloudLocalCopiesProvider : CleanupProviderBase
     /// step, so the row does not read as clear about a folder full of local copies the guard kept.
     /// See <see cref="CleanupPlan.HasRecentContentHeldBack"/>.
     /// </summary>
-    private static IEnumerable<ProtectedPath> Protected(
+    private async Task<IEnumerable<ProtectedPath>> ProtectedAsync(
         List<(string Path, string Reason)> roots,
-        List<string> recentOnly) =>
-        Protect([.. roots]).Select(path => recentOnly.Contains(path.Path, StringComparer.OrdinalIgnoreCase)
-            ? path with { Withheld = Withholding.TooRecent }
-            : path);
+        List<string> recentOnly,
+        CancellationToken ct) =>
+        (await ProtectAsync([.. roots], ct).ConfigureAwait(false))
+            .Select(path => recentOnly.Contains(path.Path, StringComparer.OrdinalIgnoreCase)
+                ? path with { Withheld = Withholding.TooRecent }
+                : path);
 
     /// <summary>What the rules left alone in one root, said once per reason and only where it happened.</summary>
     private static IEnumerable<PlanNote> NotesFor(ReleaseSelection selection, string app, string name)

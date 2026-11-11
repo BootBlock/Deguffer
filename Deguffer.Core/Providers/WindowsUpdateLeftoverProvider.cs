@@ -195,7 +195,7 @@ public sealed class WindowsUpdateLeftoverProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = [.. Protect([.. scan.Protected]), .. held],
+            ProtectedPaths = [.. await ProtectAsync([.. scan.Protected], ct).ConfigureAwait(false), .. held],
             Notes = notes,
             Fallback = measured.Fallback,
             WasNotExamined = scan.NothingWasExamined,

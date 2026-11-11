@@ -242,12 +242,13 @@ public sealed class PulumiPluginProvider : CleanupProviderBase
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
             // Held first, so a plugin held back is named for why rather than as something not offered.
-            ProtectedPaths = Protect(
-            [
-                .. choice.Held,
-                .. recent.Select(plugin => (plugin.Folder, $"Something in this plugin {keep.DescribeChange()}, and it goes whole or not at all.")),
-                .. BuildProtectedPaths(home, cache, steps),
-            ]),
+            ProtectedPaths = await ProtectAsync(
+                [
+                    .. choice.Held,
+                    .. recent.Select(plugin => (plugin.Folder, $"Something in this plugin {keep.DescribeChange()}, and it goes whole or not at all.")),
+                    .. BuildProtectedPaths(home, cache, steps),
+                ],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             WasNotExamined = steps.Count == 0 && (choice.Held.Count > 0 || recent.Count > 0),

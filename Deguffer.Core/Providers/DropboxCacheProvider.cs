@@ -220,13 +220,14 @@ public sealed class DropboxCacheProvider : CleanupProviderBase
             Steps = steps,
             // Held first, so a held cache is named for why it was held rather than as the folder only the
             // contents of are removed.
-            ProtectedPaths = Protect(
-            [
-                .. held.Select(path => (Path: path, Reason: HeldReason)),
-                .. scan.Protected,
-                .. beside,
-                .. folders.Records.Select(record => (Path: record, Reason: RecordReason)),
-            ]),
+            ProtectedPaths = await ProtectAsync(
+                [
+                    .. held.Select(path => (Path: path, Reason: HeldReason)),
+                    .. scan.Protected,
+                    .. beside,
+                    .. folders.Records.Select(record => (Path: record, Reason: RecordReason)),
+                ],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             // A cache held back while Dropbox runs, or one behind a link, unread or declined, is something

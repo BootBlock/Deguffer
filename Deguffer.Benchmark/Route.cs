@@ -78,6 +78,13 @@ internal enum Route
     Clean,
 
     /// <summary>
+    /// Build many empty folders in a new folder once, and record each as §5.6 records the paths a plan
+    /// protects, as a row protecting one path for each item of the user's data does: whether each is
+    /// there and whether it holds anything, asked several at once.
+    /// </summary>
+    Protect,
+
+    /// <summary>
     /// Walk one folder, through the walk route or the sources route, while the index of a volume is
     /// built, started at the same moment, as Auto races the two in a scan, and each of the two alone,
     /// so the result says how much each slows the other. The build is of the folder's own volume
@@ -98,13 +105,16 @@ internal static class RouteFacts
     /// <summary>Whether the route reads a volume's file table, which needs administrator rights.</summary>
     public static bool ReadsTable(this Route route) =>
         route is not (Route.Walk or Route.Measure or Route.ExploreWalk or Route.Sources or Route.Links or Route.Folders)
-            && !route.Removes();
+            && !route.Builds();
+
+    /// <summary>Whether the route builds what it removes in a folder it creates.</summary>
+    public static bool Removes(this Route route) => route is Route.Remove or Route.Clean;
 
     /// <summary>
-    /// Whether the route builds what it removes in a folder it creates, so its target must not exist
+    /// Whether the route builds what it times in a folder it creates, so its target must not exist
     /// yet, where every other route's must.
     /// </summary>
-    public static bool Removes(this Route route) => route is Route.Remove or Route.Clean;
+    public static bool Builds(this Route route) => route.Removes() || route is Route.Protect;
 
     /// <summary>
     /// Whether the route walks with the values given on the command line. The links route walks with
@@ -145,6 +155,7 @@ internal static class RouteFacts
         Route.Clean => "steps",
         Route.Sources => "candidates",
         Route.Links => "files",
+        Route.Protect => "paths",
         _ => "records",
     };
 }

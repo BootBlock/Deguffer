@@ -266,7 +266,7 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = [.. Protect([.. scan.Protected]), .. held],
+            ProtectedPaths = [.. await ProtectAsync([.. scan.Protected], ct).ConfigureAwait(false), .. held],
             Notes = notes,
             Fallback = scanned.Fallback,
 

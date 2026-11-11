@@ -320,12 +320,13 @@ public sealed class DenoCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect(
-            [
-                (root, "Deno's folder itself must survive — only what Deno downloads or works out again is removed."),
-                .. Survivors(root),
-                .. declined,
-            ]),
+            ProtectedPaths = await ProtectAsync(
+                [
+                    (root, "Deno's folder itself must survive — only what Deno downloads or works out again is removed."),
+                    .. Survivors(root),
+                    .. declined,
+                ],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             WasNotExamined = targets.Count == 0 && declined.Count > 0,

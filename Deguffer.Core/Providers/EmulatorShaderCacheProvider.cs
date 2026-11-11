@@ -270,12 +270,13 @@ public sealed class EmulatorShaderCacheProvider : CleanupProviderBase
             Steps = steps,
             // Held first, so a held root is named for why it was held rather than as the folder only
             // the cache inside is taken from.
-            ProtectedPaths = Protect(
-            [
-                .. held.SelectMany(held => new[] { held.Root.Path }.Concat(held.Root.CacheFolders.Select(folder => folder.Path))
-                        .Select(path => (Path: path, Reason: HeldReason(held.Running))))
-                    .Concat(examination.Survivors),
-            ]),
+            ProtectedPaths = await ProtectAsync(
+                [
+                    .. held.SelectMany(held => new[] { held.Root.Path }.Concat(held.Root.CacheFolders.Select(folder => folder.Path))
+                            .Select(path => (Path: path, Reason: HeldReason(held.Running))))
+                        .Concat(examination.Survivors),
+                ],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             // A cache held back while its emulator runs, or behind a link, is something real left

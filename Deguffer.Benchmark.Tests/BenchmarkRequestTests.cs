@@ -377,6 +377,19 @@ public sealed class BenchmarkRequestTests
         Assert.Equal(BenchmarkRequest.DefaultTrees, BenchmarkRequest.Parse(["clean", @"C:\new"], out _)!.Trees);
     }
 
+    [Fact]
+    public void TheProtectRoutesFoldersCanBeChosen()
+    {
+        var request = BenchmarkRequest.Parse(["protect", @"C:\new", "--folders", "7"], out var error);
+
+        Assert.Null(error);
+        Assert.Equal(Route.Protect, request!.Route);
+        Assert.Equal(7, request.Trees);
+        Assert.True(Route.Protect.Builds());
+        Assert.False(Route.Protect.ReadsTable());
+        Assert.Equal(BenchmarkRequest.DefaultProtectedFolders, BenchmarkRequest.Parse(["protect", @"C:\new"], out _)!.Trees);
+    }
+
     /// <summary>
     /// Each route takes only what it builds with, so a value given to another would be reported unused,
     /// and a tree too large to build is refused before any of it is.
@@ -393,6 +406,10 @@ public sealed class BenchmarkRequestTests
     [InlineData("clean", "--files", "10")]
     [InlineData("clean", "--trees", "0")]
     [InlineData("clean", "--trees", "100000", "--files-per-tree", "101")]
+    [InlineData("protect", "--trees", "4")]
+    [InlineData("protect", "--folders", "0")]
+    [InlineData("protect", "--folders", "100001")]
+    [InlineData("clean", "--folders", "4")]
     [InlineData("walk", "--files", "10")]
     [InlineData("walk", "--read-only")]
     public void ARemovalValueIsTakenOnlyByItsRouteAndOnlyInRange(string route, params string[] rest)

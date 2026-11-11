@@ -205,7 +205,7 @@ public sealed class SteamLibraryArtworkProvider : CleanupProviderBase
                 $"Leaving '{obstacle.Path}' alone: it is a link to somewhere else, and Deguffer does not "
                 + "look through a link.") with
             {
-                ProtectedPaths = Protect((obstacle.Path, LinkReason)),
+                ProtectedPaths = await ProtectAsync([(obstacle.Path, LinkReason)], ct).ConfigureAwait(false),
             };
         }
 
@@ -242,12 +242,13 @@ public sealed class SteamLibraryArtworkProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect(
-            [
-                (install, "This is where Steam itself is installed, with your games beside it."),
-                .. Neighbours.Select(n => (Path.Combine(install, n.RelativePath), n.Reason)),
-                .. examination.Declined,
-            ]),
+            ProtectedPaths = await ProtectAsync(
+                [
+                    (install, "This is where Steam itself is installed, with your games beside it."),
+                    .. Neighbours.Select(n => (Path.Combine(install, n.RelativePath), n.Reason)),
+                    .. examination.Declined,
+                ],
+                ct).ConfigureAwait(false),
             Notes = examination.Notes,
             Fallback = measured.Fallback,
             WasNotExamined = examination.Targets.Count == 0,

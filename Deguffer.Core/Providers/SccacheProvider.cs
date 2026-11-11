@@ -208,10 +208,11 @@ public sealed class SccacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect(
+            ProtectedPaths = await ProtectAsync(
                 walk,
                 walk.Unrecognised,
-                (root, "sccache's cache folder itself must survive — only the cached entries inside it are removed.")),
+                [(root, "sccache's cache folder itself must survive — only the cached entries inside it are removed.")],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = walk.Unreadable,

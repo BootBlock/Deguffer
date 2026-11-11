@@ -336,7 +336,8 @@ public sealed class HuggingFaceHubProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(hub, reported, entries, unused.Select(item => item.Folder), use.Held),
+            ProtectedPaths = await BuildProtectedPathsAsync(hub, reported, entries, unused.Select(item => item.Folder), use.Held, ct)
+                .ConfigureAwait(false),
             Notes = notes,
         };
     }
@@ -391,12 +392,13 @@ public sealed class HuggingFaceHubProvider : CleanupProviderBase
     /// <para>The shared store is asserted standing and nothing more. <c>hf cache rm</c> removes the
     /// files in it that only the removed repository used, and keeps the store.</para>
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(
         string hub,
         HuggingFaceEnvironment reported,
         IReadOnlyList<FileSystemInfo> entries,
         IEnumerable<string> offered,
-        IReadOnlyList<(string Path, string Reason)> held)
+        IReadOnlyList<(string Path, string Reason)> held,
+        CancellationToken ct)
     {
         var excluded = new HashSet<string>(offered, StringComparer.OrdinalIgnoreCase);
         var heldReasons = held.ToDictionary(item => item.Path, item => item.Reason, StringComparer.OrdinalIgnoreCase);
@@ -421,14 +423,15 @@ public sealed class HuggingFaceHubProvider : CleanupProviderBase
                 ?? []
             : [];
 
-        return Protect(
-        [
-            (hub, "The Hugging Face hub cache must survive: only the repositories chosen are removed from it."),
-            .. reported.Credentials.Select(file => (file, "Your Hugging Face access tokens.")),
-            .. reported.Assets is { } assets ? [(assets, "Files libraries downloaded for themselves beside the hub cache.")] : Array.Empty<(string, string)>(),
-            .. inCache,
-            .. besideHub,
-        ]);
+        return ProtectAsync(
+            [
+                (hub, "The Hugging Face hub cache must survive: only the repositories chosen are removed from it."),
+                .. reported.Credentials.Select(file => (file, "Your Hugging Face access tokens.")),
+                .. reported.Assets is { } assets ? [(assets, "Files libraries downloaded for themselves beside the hub cache.")] : Array.Empty<(string, string)>(),
+                .. inCache,
+                .. besideHub,
+            ],
+            ct);
     }
 
     /// <summary>The heading a repository is listed under, by what kind of repository it is.</summary>

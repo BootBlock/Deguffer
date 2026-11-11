@@ -174,7 +174,7 @@ public sealed class UvCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(),
+            ProtectedPaths = await BuildProtectedPathsAsync(ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
         };
@@ -186,10 +186,13 @@ public sealed class UvCacheProvider : CleanupProviderBase
     /// of which look like cache and are not. The cache directory itself is not protected — uv's own
     /// command removes it rather than emptying it, and recreates it on next use.
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths() => Protect(
-        (StateRoot, "uv's state directory must survive — only the cache within it is cleared."),
-        (Path.Combine(StateRoot, "tools"), "CLI tools installed with 'uv tool install'."),
-        (Path.Combine(StateRoot, "python"), "Python interpreters uv downloaded and manages."));
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(CancellationToken ct) => ProtectAsync(
+        [
+            (StateRoot, "uv's state directory must survive — only the cache within it is cleared."),
+            (Path.Combine(StateRoot, "tools"), "CLI tools installed with 'uv tool install'."),
+            (Path.Combine(StateRoot, "python"), "Python interpreters uv downloaded and manages."),
+        ],
+        ct);
 
     private Task<AskedLocation> ResolveCacheDirectoryAsync(string uv, CancellationToken ct) =>
         _resolvedCacheDirectory.Get(() => AskCacheDirectoryAsync(uv, ct));

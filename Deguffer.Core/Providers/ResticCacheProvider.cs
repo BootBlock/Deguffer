@@ -250,7 +250,7 @@ public sealed class ResticCacheProvider : CleanupProviderBase
             Steps = steps,
             // Held first, so a cache held back is named for why rather than as the folder only some of the
             // contents of are removed.
-            ProtectedPaths = Protect([.. held, .. survivors]),
+            ProtectedPaths = await ProtectAsync([.. held, .. survivors], ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = fallback,
             WasNotExamined = steps.Count == 0

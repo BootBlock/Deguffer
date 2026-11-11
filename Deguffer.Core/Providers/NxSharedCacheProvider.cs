@@ -189,14 +189,15 @@ public sealed class NxSharedCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect(
-            [
-                (root, RootReason),
-                .. examination.Caches.Select(cache => (Path.GetDirectoryName(cache)!, WorkspaceReason)),
-                .. examination.Kept,
-                .. examination.Declined,
-                .. live.Survivors,
-            ]),
+            ProtectedPaths = await ProtectAsync(
+                [
+                    (root, RootReason),
+                    .. examination.Caches.Select(cache => (Path.GetDirectoryName(cache)!, WorkspaceReason)),
+                    .. examination.Kept,
+                    .. examination.Declined,
+                    .. live.Survivors,
+                ],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = examination.Unreadable,

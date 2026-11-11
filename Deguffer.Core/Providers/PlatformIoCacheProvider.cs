@@ -274,7 +274,7 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(locations),
+            ProtectedPaths = await BuildProtectedPathsAsync(locations, ct).ConfigureAwait(false),
             Notes = notes,
             // Two measurements now, combined by the rule ScanBatch already applies within one.
             Fallback = FallbackReasonText.Prevailing(cache.Fallback, packages.Fallback),
@@ -491,17 +491,20 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
     /// that pass without establishing anything, on exactly the installs where the guess about where
     /// PlatformIO lives has already been shown to be wrong.</para>
     /// </summary>
-    private static IReadOnlyList<ProtectedPath> BuildProtectedPaths(PlatformIoLocations locations)
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(PlatformIoLocations locations, CancellationToken ct)
     {
         var core = locations.CoreDirectory;
 
-        return Protect(
-            (core, "PlatformIO's core directory must survive — only the cache and the unused packages within it are cleared."),
-            (locations.PackagesDirectory, "Installed toolchains and frameworks; PlatformIO removes individual unused packages, never the folder."),
-            (Path.Combine(core, "platforms"), "Installed development platform definitions."),
-            (Path.Combine(core, "penv"), "The virtual environment PlatformIO Core itself runs in."),
-            (Path.Combine(core, "python3"), "The bundled Python interpreter backing that environment."),
-            (Path.Combine(core, "lib"), "Globally installed user libraries — never a cache."));
+        return ProtectAsync(
+            [
+                (core, "PlatformIO's core directory must survive — only the cache and the unused packages within it are cleared."),
+                (locations.PackagesDirectory, "Installed toolchains and frameworks; PlatformIO removes individual unused packages, never the folder."),
+                (Path.Combine(core, "platforms"), "Installed development platform definitions."),
+                (Path.Combine(core, "penv"), "The virtual environment PlatformIO Core itself runs in."),
+                (Path.Combine(core, "python3"), "The bundled Python interpreter backing that environment."),
+                (Path.Combine(core, "lib"), "Globally installed user libraries — never a cache."),
+            ],
+            ct);
     }
 
     /// <summary>

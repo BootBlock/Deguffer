@@ -249,18 +249,19 @@ public sealed class KopiaCacheProvider : CleanupProviderBase
             // Held first, so a cache held back is named for why rather than as the folder only some of the
             // contents of are removed. The connections next, because losing one is the failure this row
             // exists to rule out.
-            ProtectedPaths = Protect(
-            [
-                .. held,
-                (KopiaCacheLayout.ConfigFolder(Environment), "Kopia's configuration folder, with your connections to your repositories."),
-                .. layout.ConnectionFiles.SelectMany(file => new[]
-                {
-                    (file, "A Kopia connection: where a repository is and how to reach it."),
-                    (KopiaCacheLayout.PasswordFileOf(file), "The password Kopia keeps for this connection where Windows does not keep it."),
-                }),
-                (KopiaCacheLayout.LocalFolder(Environment), "Kopia's folder for its caches and its logs."),
-                .. survivors,
-            ]),
+            ProtectedPaths = await ProtectAsync(
+                [
+                    .. held,
+                    (KopiaCacheLayout.ConfigFolder(Environment), "Kopia's configuration folder, with your connections to your repositories."),
+                    .. layout.ConnectionFiles.SelectMany(file => new[]
+                    {
+                        (file, "A Kopia connection: where a repository is and how to reach it."),
+                        (KopiaCacheLayout.PasswordFileOf(file), "The password Kopia keeps for this connection where Windows does not keep it."),
+                    }),
+                    (KopiaCacheLayout.LocalFolder(Environment), "Kopia's folder for its caches and its logs."),
+                    .. survivors,
+                ],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             WasNotExamined = steps.Count == 0 && (held.Count > 0 || declined || unreadable || layout.Notes.Count > 0),

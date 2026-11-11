@@ -303,7 +303,7 @@ public sealed class FileHistoryProvider : CleanupProviderBase
                     WithheldRecent = aged.WithheldRecent.Any(held => held),
                 },
             ],
-            ProtectedPaths = Protect([.. survivors]),
+            ProtectedPaths = await ProtectAsync([.. survivors], ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = probed.Fallback,
             HasUnreadableRoot = unreadable,

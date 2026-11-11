@@ -266,7 +266,7 @@ public sealed class SpotifyCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect([.. survivors]),
+            ProtectedPaths = await ProtectAsync([.. survivors], ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
 

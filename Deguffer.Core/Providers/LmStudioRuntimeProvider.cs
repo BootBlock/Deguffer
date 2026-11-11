@@ -310,7 +310,8 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(listing, kept, offered.Select(item => item.Runtime.Folder)),
+            ProtectedPaths = await BuildProtectedPathsAsync(listing, kept, offered.Select(item => item.Runtime.Folder), ct)
+                .ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
         };
@@ -374,10 +375,11 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
     /// The runtimes folder as the plan read it, so the folders asserted are the ones the plan checked
     /// it could list.
     /// </param>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(
+    private async Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(
         ChildDirectoryScan listing,
         IReadOnlyDictionary<string, string> kept,
-        IEnumerable<string> offered)
+        IEnumerable<string> offered,
+        CancellationToken ct)
     {
         var excluded = new HashSet<string>(offered, StringComparer.OrdinalIgnoreCase) { Vendor };
 
@@ -390,15 +392,18 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
 
         return
         [
-            .. Protect(
-            [
-                (Root, "LM Studio's own folder must survive: only superseded runtimes inside it are removed."),
-                (Backends, "Where LM Studio keeps its runtimes: runtimes are removed from it, never the folder."),
-                (Path.Combine(Backends, Vendor), "The libraries LM Studio's runtimes share."),
-                (Path.Combine(Root, "models"), "Your downloaded models."),
-                (Path.Combine(Root, ".internal"), "LM Studio's own record of what is installed and selected."),
-            ]),
-            .. Protect([.. siblings.Select(path => (path, kept.GetValueOrDefault(Path.GetFileName(path), "A runtime folder Deguffer does not offer.")))])
+            .. await ProtectAsync(
+                [
+                    (Root, "LM Studio's own folder must survive: only superseded runtimes inside it are removed."),
+                    (Backends, "Where LM Studio keeps its runtimes: runtimes are removed from it, never the folder."),
+                    (Path.Combine(Backends, Vendor), "The libraries LM Studio's runtimes share."),
+                    (Path.Combine(Root, "models"), "Your downloaded models."),
+                    (Path.Combine(Root, ".internal"), "LM Studio's own record of what is installed and selected."),
+                ],
+                ct).ConfigureAwait(false),
+            .. (await ProtectAsync(
+                    [.. siblings.Select(path => (path, kept.GetValueOrDefault(Path.GetFileName(path), "A runtime folder Deguffer does not offer.")))],
+                    ct).ConfigureAwait(false))
                 .Select(path => path with { Marker = Marker }),
         ];
     }

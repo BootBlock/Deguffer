@@ -444,24 +444,18 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// as absent, so a provider protects a folder it could not reach exactly as it protects one it
     /// could. See <see cref="ProtectedPath.PresenceBefore"/>.</para>
     ///
-    /// <para>The content question stops at the first content it finds, so it costs a listing or two
-    /// per protected path rather than a walk of everything the path holds (G4). See
-    /// <see cref="DirectoryContent"/>.</para>
+    /// <para>The paths are probed as many at once as this provider's walks of each volume run, and
+    /// answered in their order (<see cref="ProtectedPathCapture"/>): a row that protects one path for
+    /// each item of the user's data protects thousands.</para>
     ///
     /// <para>Each path is named once, under the first reason given for it. A provider builds this
     /// list from what it names itself and from what it spared, and the two overlap wherever a named
     /// path is also a spared child, so the provider's own names go first.</para>
     /// </summary>
-    protected static IReadOnlyList<ProtectedPath> Protect(params (string Path, string Reason)[] candidates) =>
-    [
-        .. candidates
-            .DistinctBy(c => c.Path, StringComparer.OrdinalIgnoreCase)
-            .Select(c => new ProtectedPath(
-                c.Path,
-                c.Reason,
-                LongPath.ProbeEntry(c.Path),
-                DirectoryContent.IsPresent(c.Path))),
-    ];
+    protected Task<IReadOnlyList<ProtectedPath>> ProtectAsync(
+        IReadOnlyList<(string Path, string Reason)> candidates,
+        CancellationToken ct) =>
+        ProtectedPathCapture.CaptureAsync(candidates, Scanner.Tuning, ct);
 
     /// <summary>
     /// §5.6 for a plan built on <see cref="CacheLevelWalk"/>: the paths the provider names itself,
@@ -472,11 +466,12 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// of a targeted one under the same parent, so a plan that only notes it gives §5.6 nothing to
     /// check when a later rule turns out too broad.</para>
     /// </summary>
-    private protected static IReadOnlyList<ProtectedPath> Protect(
+    private protected Task<IReadOnlyList<ProtectedPath>> ProtectAsync(
         LevelWalk walk,
         IReadOnlyList<(string Path, string Reason)> spared,
-        params (string Path, string Reason)[] named) =>
-        Protect([.. named, .. spared, .. walk.Declined]);
+        IReadOnlyList<(string Path, string Reason)> named,
+        CancellationToken ct) =>
+        ProtectAsync([.. named, .. spared, .. walk.Declined], ct);
 
     /// <summary>§5.3 warning for this provider's processes, or null if none are running.</summary>
     protected PlanNote? BuildRunningProcessNote() =>

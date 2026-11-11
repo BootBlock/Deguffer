@@ -252,7 +252,7 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
                     MeasuredPaths = present,
                 },
             ],
-            ProtectedPaths = BuildProtectedPaths(locals),
+            ProtectedPaths = await BuildProtectedPathsAsync(locals, ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = found.CouldNotBeReached,
@@ -267,12 +267,12 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
     /// that is not one of its caches. Each is a sibling of a cache the command empties, which is
     /// exactly where an over-broad rule takes one with the other.</para>
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(IReadOnlyList<string> locals)
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(IReadOnlyList<string> locals, CancellationToken ct)
     {
         var profile = Path.Combine(Environment.UserProfile, ".nuget");
         var local = Path.Combine(Environment.LocalAppData, "NuGet");
 
-        return Protect(
+        return ProtectAsync(
         [
             (Path.Combine(Environment.RoamingAppData, "NuGet", "NuGet.Config"),
                 "User NuGet configuration, which may hold private feed credentials."),
@@ -286,7 +286,8 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
                 "NuGet's folder in your local profile must survive; only the caches inside it are cleared."),
             .. Spared(profile, ProfileCacheNames, locals),
             .. Spared(local, LocalCacheNames, locals),
-        ]);
+        ],
+        ct);
     }
 
     /// <summary>

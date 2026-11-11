@@ -36,7 +36,7 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>Both of those are read from Poetry's own source rather than observed here</b>, because
 /// Poetry is not installed on this machine and the tests fake the subprocess. The one that is
-/// load-bearing is the scope of the flush: <see cref="BuildProtectedPaths"/> asserts that
+/// load-bearing is the scope of the flush: <see cref="BuildProtectedPathsAsync"/> asserts that
 /// <c>{cache-dir}/cache</c> and <c>repositories</c> under it are still standing after a run, so if
 /// <c>clear</c> ever removed a directory above the one it was given, every real run would report a
 /// verification failure. That fails towards a false alarm rather than towards a loss, which is the
@@ -350,7 +350,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
             // §5.1's route first: where Poetry can evict its own cache, that is what the user is
             // offered, and the path-based step is the one child no Poetry command reaches.
             Steps = [.. commands, .. deletions],
-            ProtectedPaths = BuildProtectedPaths(cacheRoot, environments, walk, spared, withheld),
+            ProtectedPaths = await BuildProtectedPathsAsync(cacheRoot, environments, walk, spared, withheld, ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = fallback,
             HasUnreadableRoot = walk.Unreadable || repositoriesUnreachable,
@@ -410,12 +410,13 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     /// is a sibling of <c>artifacts</c>, which is exactly where an over-broad rule takes one with the
     /// other.</para>
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(
         string cacheRoot,
         string environments,
         LevelWalk walk,
         IReadOnlyList<(string Path, string Reason)> spared,
-        IReadOnlyList<(string Path, string Reason)> withheld) => Protect(
+        IReadOnlyList<(string Path, string Reason)> withheld,
+        CancellationToken ct) => ProtectAsync(
         walk,
         spared,
         [
@@ -429,7 +430,8 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
             (Path.Combine(RoamingRoot, "auth.toml"), "Stored credentials for private package repositories."),
             (Path.Combine(RoamingRoot, "config.toml"), "Your Poetry configuration."),
             .. withheld,
-        ]);
+        ],
+        ct);
 
     /// <summary>
     /// The recognised children of the cache directory that Deguffer removes itself, with everything

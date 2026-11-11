@@ -199,7 +199,7 @@ public abstract class DebuggerSymbolCacheProviderBase : CleanupProviderBase, ITe
             ct).ConfigureAwait(false);
 
         // A held store is named first, so §5.6 records it under the reason it was held for.
-        var protectedPaths = Protect([.. held, .. examination.Survivors]);
+        var protectedPaths = await ProtectAsync([.. held, .. examination.Survivors], ct).ConfigureAwait(false);
 
         if (steps.Count == 0 && held.Count == 0 && examination.Declined.Count == 0 && !examination.Unreadable)
         {

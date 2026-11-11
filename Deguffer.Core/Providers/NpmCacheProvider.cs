@@ -192,7 +192,7 @@ public sealed class NpmCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(cacheDirectory),
+            ProtectedPaths = await BuildProtectedPathsAsync(cacheDirectory, ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
         };
@@ -203,11 +203,14 @@ public sealed class NpmCacheProvider : CleanupProviderBase
     /// installed tools — neither is cache, and both sit close enough to be worth proving. The cache
     /// directory and its <c>_npx</c> sit beside what the command removes, and both must outlive it.
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(string cacheDirectory) => Protect(
-        (Path.Combine(Environment.UserProfile, ".npmrc"), "User npm configuration, which may hold registry auth tokens."),
-        (Path.Combine(Environment.RoamingAppData, "npm"), "Globally installed npm packages and their shims."),
-        (cacheDirectory, "npm's cache directory must survive — only the package cache within it is cleared."),
-        (Path.Combine(cacheDirectory, NpxCacheName), "Packages npx ran, which npm's clean command leaves."));
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(string cacheDirectory, CancellationToken ct) => ProtectAsync(
+        [
+            (Path.Combine(Environment.UserProfile, ".npmrc"), "User npm configuration, which may hold registry auth tokens."),
+            (Path.Combine(Environment.RoamingAppData, "npm"), "Globally installed npm packages and their shims."),
+            (cacheDirectory, "npm's cache directory must survive — only the package cache within it is cleared."),
+            (Path.Combine(cacheDirectory, NpxCacheName), "Packages npx ran, which npm's clean command leaves."),
+        ],
+        ct);
 
     private static string ContentCacheIn(string cacheDirectory) => Path.Combine(cacheDirectory, ContentCacheName);
 

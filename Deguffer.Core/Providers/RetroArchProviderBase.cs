@@ -326,13 +326,14 @@ public abstract class RetroArchProviderBase : CleanupProviderBase
             Steps = steps,
             // Held first, so a folder is named for why it was held rather than as a folder only part of
             // which is taken.
-            ProtectedPaths = Protect(
-            [
-                .. reading.Folders
-                    .Where(_ => held)
-                    .Select(folder => (folder.Path, Reason: HeldReason))
-                    .Concat(reading.Survivors),
-            ]),
+            ProtectedPaths = await ProtectAsync(
+                [
+                    .. reading.Folders
+                        .Where(_ => held)
+                        .Select(folder => (folder.Path, Reason: HeldReason))
+                        .Concat(reading.Survivors),
+                ],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             // Something held back while RetroArch runs, or behind a link, is something real left

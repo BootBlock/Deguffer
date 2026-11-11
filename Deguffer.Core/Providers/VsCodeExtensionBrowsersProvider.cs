@@ -197,7 +197,7 @@ public sealed class VsCodeExtensionBrowsersProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(search, live),
+            ProtectedPaths = await BuildProtectedPathsAsync(search, live, ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = search.Unreadable || search.Caches.Any(cache => cache.Survey.Unreadable),
@@ -221,7 +221,10 @@ public sealed class VsCodeExtensionBrowsersProvider : CleanupProviderBase
     /// too wide would take them with it. Inside the cache, the root and what
     /// <see cref="PuppeteerCacheSurvey.Survivors"/> names.
     /// </summary>
-    private static IReadOnlyList<ProtectedPath> BuildProtectedPaths(ExtensionBrowserSearch search, LiveTreeVetoResult live)
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(
+        ExtensionBrowserSearch search,
+        LiveTreeVetoResult live,
+        CancellationToken ct)
     {
         var survivors = new List<(string Path, string Reason)>(search.Declined);
 
@@ -255,7 +258,7 @@ public sealed class VsCodeExtensionBrowsersProvider : CleanupProviderBase
         survivors.AddRange(live.Vetoed.Select(v => (v.Directory, InUseReason)));
         survivors.AddRange(live.Unchecked.Select(path => (path, LiveTreeVeto.UncheckedReason)));
 
-        return Protect([.. survivors]);
+        return ProtectAsync([.. survivors], ct);
     }
 
     /// <summary>

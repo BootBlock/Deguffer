@@ -195,11 +195,12 @@ public sealed class ResolveRenderCacheProvider : CleanupProviderBase
             Steps = steps,
             // Held first, so a held cache folder is named for why it was held rather than as the
             // folder only the render cache inside is taken from.
-            ProtectedPaths = Protect(
-            [
-                .. held.Select(path => (Path: path, Reason: HeldReason))
-                    .Concat(examination.Survivors),
-            ]),
+            ProtectedPaths = await ProtectAsync(
+                [
+                    .. held.Select(path => (Path: path, Reason: HeldReason))
+                        .Concat(examination.Survivors),
+                ],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             // A cache held back while Resolve runs, or behind a link, is something real left unexamined,

@@ -269,7 +269,7 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect([.. scan.Protected, .. held.Select(store => (store, HeldReason))]),
+            ProtectedPaths = await ProtectAsync([.. scan.Protected, .. held.Select(store => (store, HeldReason))], ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = scan.CouldNotBeReached,

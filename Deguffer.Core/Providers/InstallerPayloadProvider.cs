@@ -253,7 +253,7 @@ public abstract class InstallerPayloadProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect([.. Deduplicate(survivors)]),
+            ProtectedPaths = await ProtectAsync([.. Deduplicate(survivors)], ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = unreadable,

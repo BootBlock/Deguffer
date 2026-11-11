@@ -373,7 +373,7 @@ public sealed class RecycleBinProvider : CleanupProviderBase
             // restore it. So the direct route's steps go whole or not at all, and the plan withholds a bin
             // holding a store on either route. See DeleteDirectoryStep.IsIndivisible and MailStorePlan.
             Steps = [.. planned.Select(step => step is DeleteDirectoryStep direct ? direct with { IsIndivisible = true } : step)],
-            ProtectedPaths = Protect([.. survivors, .. declined]),
+            ProtectedPaths = await ProtectAsync([.. survivors, .. declined], ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = unreadable,

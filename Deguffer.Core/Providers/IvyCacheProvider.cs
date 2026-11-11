@@ -149,14 +149,15 @@ public sealed class IvyCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect(
+            ProtectedPaths = await ProtectAsync(
                 walk,
                 spared,
                 [
                     (home, "The Ivy home itself must survive — only its cache is removed."),
                     (Path.Combine(home, "local"), Children.Classify("local").Reason),
                     (Path.Combine(home, ".credentials"), "A repository login that sbt reads."),
-                ]),
+                ],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = walk.Unreadable,

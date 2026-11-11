@@ -163,7 +163,7 @@ public sealed class ScoopCacheProvider : CleanupProviderBase
                 + "removes everything in that folder without looking at it, so Deguffer will not run it while "
                 + "they are there. Move them out of the folder and scan again.") with
             {
-                ProtectedPaths = BuildProtectedPaths(layout, entries.Unrecognised),
+                ProtectedPaths = await BuildProtectedPathsAsync(layout, entries.Unrecognised, ct).ConfigureAwait(false),
             };
         }
 
@@ -209,7 +209,7 @@ public sealed class ScoopCacheProvider : CleanupProviderBase
                     TargetCheck = new ScoopCacheContents(Environment, cache),
                 },
             ],
-            ProtectedPaths = BuildProtectedPaths(layout, []),
+            ProtectedPaths = await BuildProtectedPathsAsync(layout, [], ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
         };
@@ -221,13 +221,17 @@ public sealed class ScoopCacheProvider : CleanupProviderBase
     /// commands on <c>PATH</c>, which a cache that someone pointed at the root would otherwise sit
     /// beside. The settings files hold credentials.
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(ScoopLayout layout, IReadOnlyList<string> unrecognised) => Protect(
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(
+        ScoopLayout layout,
+        IReadOnlyList<string> unrecognised,
+        CancellationToken ct) => ProtectAsync(
     [
         (layout.Cache, "Scoop's cache folder must survive. Only the downloads inside it are removed."),
         .. ScoopToolRoots.RootFolders.Select(folder => (Path.Combine(layout.Root, folder.Name), folder.Holds)),
         .. layout.ConfigFiles.Select(file => (file, "Scoop's settings, which can hold a GitHub token and a proxy password.")),
         .. unrecognised.Select(entry => (entry, "Not a download Scoop made, so it is left alone.")),
-    ]);
+    ],
+    ct);
 
     /// <summary>The layout of the Scoop on <c>PATH</c>, or null where there is none.</summary>
     private ScoopResolution? Resolve() =>

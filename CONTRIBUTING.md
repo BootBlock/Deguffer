@@ -33,8 +33,8 @@ open a public issue.
 
 `Deguffer.Benchmark` times the routes a scan takes and the removal a clean makes, so a change to how
 Deguffer reads or removes can be judged by a measurement rather than a guess. Every route but
-`remove` and `clean` only reads: nothing on the drive is written, moved or deleted. Those two write
-and delete only inside a folder they create. It is not part of `dotnet test`, because a timing
+`remove`, `clean` and `protect` only reads: nothing on the drive is written, moved or deleted. Those
+three write and delete only inside a folder they create. It is not part of `dotnet test`, because a timing
 changes with whatever else the machine is doing.
 
 Build it in Release, then run one route at a time:
@@ -55,6 +55,7 @@ Deguffer.Benchmark explorewalk C:\Users\<user>\source --snapshots off
 Deguffer.Benchmark folders C:\Users\<user>\Pictures D:\Photos
 Deguffer.Benchmark remove D:\benchmark --files 100000 --depth 15 --fanout 2 --read-only
 Deguffer.Benchmark clean D:\benchmark --trees 500 --files-per-tree 100
+Deguffer.Benchmark protect D:\benchmark --folders 5000
 Deguffer.Benchmark race C:\Users\<user>\source --build D --reads-in-flight 2
 Deguffer.Benchmark scan C:\Users\<user>\source --runs 6
 ```
@@ -96,6 +97,11 @@ Deguffer.Benchmark scan C:\Users\<user>\source --runs 6
   step, the use checks, the looks and the work apart, and the removals' passes summed over the
   plan. The use checks ask fakes rather than this machine's running programs, so the result is
   what a step costs with nothing running.
+- `protect <new folder>` creates the folder, builds `--folders N` empty folders in it once (default
+  5,000), and on every run records each as a plan records the paths it protects (§5.6): whether it
+  is there and whether it holds anything, asked several at once with the walk a scan uses for the
+  drive's kind. It reports how many folders were asked at once. A row that protects one path for
+  each item of the user's data, such as the Claude Code rows, pays this on every preview.
 - `race <folder>` walks a folder while the index of a volume is built, both started at the same
   moment, as Auto races them in a scan, and times each of the two alone as well. Each round walks
   alone, builds alone, then races the two, and every other round runs them in the reverse order,

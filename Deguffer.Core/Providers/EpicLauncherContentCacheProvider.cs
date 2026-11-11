@@ -171,7 +171,7 @@ public sealed class EpicLauncherContentCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect([.. scan.Protected]),
+            ProtectedPaths = await ProtectAsync([.. scan.Protected], ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             WasNotExamined = scan.NothingWasExamined,

@@ -439,8 +439,9 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
             // The user-data folder is its own profile in the single-profile layout, so that one
             // directory is named twice on that path. Verifying it twice would report one survivor
             // as two.
-            ProtectedPaths = Protect(
-                [.. survivors.Concat(declined)]),
+            ProtectedPaths = await ProtectAsync(
+                [.. survivors.Concat(declined)],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = unreadable,

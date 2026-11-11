@@ -250,11 +250,14 @@ public sealed class CcacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect(
-                (cache, "ccache's clear empties its cache and keeps the folder."),
-                (Path.Combine(cache, ConfigurationFile),
-                    "ccache's configuration for this cache: its size limit, compiler settings and hashing rules. "
-                    + "ccache's clear keeps it.")),
+            ProtectedPaths = await ProtectAsync(
+                [
+                    (cache, "ccache's clear empties its cache and keeps the folder."),
+                    (Path.Combine(cache, ConfigurationFile),
+                        "ccache's configuration for this cache: its size limit, compiler settings and hashing rules. "
+                        + "ccache's clear keeps it."),
+                ],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
         };

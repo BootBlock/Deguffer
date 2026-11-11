@@ -135,7 +135,9 @@ public sealed class CapCutCacheProvider : CleanupProviderBase
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
             // Held first, so a held folder is named for why it was held rather than as a declared location.
-            ProtectedPaths = Protect([.. held.Select(path => (Path: path, Reason: reason!)), .. scan.Protected]),
+            ProtectedPaths = await ProtectAsync(
+                [.. held.Select(path => (Path: path, Reason: reason!)), .. scan.Protected],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             WasNotExamined = steps.Count == 0 && (held.Count > 0 || scan.Declined.Count > 0),

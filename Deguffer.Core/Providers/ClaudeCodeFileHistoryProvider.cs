@@ -239,10 +239,12 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
             Steps = steps,
             ProtectedPaths =
             [
-                .. Protect([
-                    .. snapshots.Survivors
-                        .Prepend((Path: survey.Home, Reason: HomeReason)),
-                ]),
+                .. await ProtectAsync(
+                    [
+                        .. snapshots.Survivors
+                            .Prepend((Path: survey.Home, Reason: HomeReason)),
+                    ],
+                    ct).ConfigureAwait(false),
 
                 // Measured during planning, so each was there when the plan was made: the claim
                 // CleanupPlan.NarrowedTo makes for a step the user declined.

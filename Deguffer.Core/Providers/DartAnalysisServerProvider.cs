@@ -166,7 +166,7 @@ public sealed class DartAnalysisServerProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(walk, spared),
+            ProtectedPaths = await BuildProtectedPathsAsync(walk, spared, ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = walk.Unreadable,
@@ -180,13 +180,17 @@ public sealed class DartAnalysisServerProvider : CleanupProviderBase
     /// indistinguishable in shape from them, and so exactly what an over-broad rule takes along.
     /// Every other child the walk spared or declined is named for the same reason.
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(
         LevelWalk walk,
-        IReadOnlyList<(string Path, string Reason)> spared) => Protect(
+        IReadOnlyList<(string Path, string Reason)> spared,
+        CancellationToken ct) => ProtectAsync(
         walk,
         spared,
-        (_root, "The .dartServer root itself must survive — only its known-disposable children are removed."),
-        (Path.Combine(_root, ".prompts"), "The user's answers to the analysis server's prompts — a preference, not a cache."),
-        (Path.Combine(_root, ".plugin_manager"), "State for the analyzer plugins the server loads."),
-        (Path.Combine(_root, ".instrumentation"), "The server's instrumentation log and the identifier it is keyed to."));
+        [
+            (_root, "The .dartServer root itself must survive — only its known-disposable children are removed."),
+            (Path.Combine(_root, ".prompts"), "The user's answers to the analysis server's prompts — a preference, not a cache."),
+            (Path.Combine(_root, ".plugin_manager"), "State for the analyzer plugins the server loads."),
+            (Path.Combine(_root, ".instrumentation"), "The server's instrumentation log and the identifier it is keyed to."),
+        ],
+        ct);
 }

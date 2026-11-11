@@ -169,7 +169,7 @@ public sealed class UnityGiCacheProvider : CleanupProviderBase
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
             // Held first, so the held cache is named for why it was held rather than as a declared location.
-            ProtectedPaths = Protect([.. held.Select(path => (Path: path, Reason: HeldReason)), .. scan.Protected]),
+            ProtectedPaths = await ProtectAsync([.. held.Select(path => (Path: path, Reason: HeldReason)), .. scan.Protected], ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             // A cache held back while an Editor runs, behind a link, or moved where Deguffer does not reach

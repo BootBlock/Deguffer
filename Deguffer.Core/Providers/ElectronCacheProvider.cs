@@ -229,11 +229,12 @@ public sealed partial class ElectronCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect(
-            [
-                (root, "Electron's cache folder itself must survive — only recognised downloads inside it are removed."),
-                .. spared,
-            ]),
+            ProtectedPaths = await ProtectAsync(
+                [
+                    (root, "Electron's cache folder itself must survive — only recognised downloads inside it are removed."),
+                    .. spared,
+                ],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = scan.Unreadable,
