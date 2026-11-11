@@ -6,6 +6,7 @@ using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Network;
+using Deguffer.Core.Health;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.App.ViewModels;
@@ -58,19 +59,21 @@ public sealed partial class ExploreTargeting : ObservableObject
     /// <param name="network">The network sources the Path… box suggests from.</param>
     /// <param name="preferences">Where the folders scanned recently are kept. See <see cref="Scanning"/>.</param>
     /// <param name="status">See <see cref="_status"/>.</param>
+    /// <param name="driveHealth">What Health last read of each volume's drives. See <see cref="DriveList"/>.</param>
     internal ExploreTargeting(
         IVolumeInventory volumes,
         TimeProvider time,
         IPathProbe probe,
         NetworkAccess network,
         PreferenceService preferences,
-        StatusLineViewModel status)
+        StatusLineViewModel status,
+        HealthByVolume driveHealth)
     {
         _volumes = volumes;
 
         // Mapped letters are offered, because Explore pictures a share by walking it. Removing
         // anything on one stays refused, by FinalPlaces.
-        _drives = new DriveList(volumes, time, NetworkDrives.Offered);
+        _drives = new DriveList(volumes, time, NetworkDrives.Offered, driveHealth);
         _status = status;
         _preferences = preferences;
         Typed = new ExploreTypedFolder(probe, new ExplorePathSuggestions(network, time, preferences), ScopeToFolder)

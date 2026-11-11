@@ -14,6 +14,7 @@ using Deguffer.Core.Exploring.History;
 using Deguffer.Core.Exploring.Knowledge;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
+using Deguffer.Core.Health;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Viewing;
@@ -104,6 +105,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     /// <param name="relaunch">See <see cref="ExploreElevation"/>.</param>
     /// <param name="running">What is changing the machine on every page, which the elevated relaunch waits for.</param>
     /// <param name="history">See <see cref="_history"/>.</param>
+    /// <param name="driveHealth">What Health last read of each volume's drives, which the drive picker names a drive of concern from.</param>
     /// <param name="motion">How the reader wants things to move, which a play of the replay follows.</param>
     /// <param name="releaseSpent">
     /// Called once as each scan ends, however it ends, after the page has gone idle. The window
@@ -124,6 +126,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         RunningActions running,
         BusyWork work,
         ScanHistory history,
+        HealthByVolume driveHealth,
         IMotionPolicy motion,
         Action releaseSpent)
     {
@@ -142,7 +145,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         Replay = new ExploreReplay(motion);
         Files = new ExploreFiles(actions, time);
         Types = new ExploreTypes();
-        Targeting = new ExploreTargeting(volumes, time, probe, network, preferences, Status);
+        Targeting = new ExploreTargeting(volumes, time, probe, network, preferences, Status, driveHealth);
         Elevation = new ExploreElevation(Targeting, volumes, isElevated, relaunch, running, Status);
         Notes = new ExploreNoteCard(Selection);
         Listing = new ExploreRows(guide, time);

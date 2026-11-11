@@ -67,7 +67,8 @@ public sealed partial class CleanPage : Page
                 ElevatedRelaunch.TryRelaunch,
                 App.Running),
             new ScanChoiceViewModel(planner.Providers, App.Preferences),
-            App.ProviderSizes);
+            App.ProviderSizes,
+            App.DriveHealth);
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
         ViewModel.Retrim.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
 

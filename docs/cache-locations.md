@@ -9481,6 +9481,61 @@ container and volume, gone for good.
 
 ---
 
+## Hyper-V, VMware and VirtualBox virtual machine disks
+
+**Tier 3 — reported only.** Three rows, one per hypervisor, each shown with a *Report only* status
+and never offered.
+
+| | |
+| --- | --- |
+| **Location** | Wherever the hypervisor's own records put each machine's disks. Hyper-V: its answer to `Get-VM`, `Get-VMHardDiskDrive` and `Get-VHD`. VMware Workstation: the machines `%APPDATA%\VMware\inventory.vmls` and the recent list in `preferences.ini` name, each `.vmx` and `.vmsd`, and each disk's descriptor. VirtualBox: `VirtualBox.xml` in `VBOX_USER_HOME` or `%USERPROFILE%\.VirtualBox`, and each machine's `.vbox` |
+| **Method** | None. Deguffer reports each disk's size on the drive, says which disks a snapshot or checkpoint keeps, and names the vendor's commands in order. It runs none of them |
+| **Typical size** | Not measured. Each snapshot or checkpoint adds a delta disk that grows with every write after it |
+
+### What it is
+
+A virtual machine keeps its drives in disk files that grow as it writes and never shrink by
+themselves. A snapshot or checkpoint freezes the disk and starts a new delta disk the machine then
+writes to. Everything large in a machine's folder is the machine: deleting a delta (`.avhdx`,
+`-000001.vmdk`, a differencing `.vdi`) by path leaves a machine that does not start and loses every
+write since the snapshot. Microsoft says "You should not delete the .avhdx files directly"
+([checkpoints](https://learn.microsoft.com/en-us/windows-server/virtualization/hyper-v/checkpoints)).
+
+### What Deguffer does
+
+It finds every disk from the hypervisor's own records, never by searching for `.vhdx`, `.vmdk` or
+`.vdi` files. Every disk is registered, with every extent of a split disk, and so is every other
+file the records name for a VMware or VirtualBox machine: its configuration, its snapshots' state
+and its saved memory. A step of any other row that would reach one is withheld, and every clean
+proves afterwards that each is still there (§5.6). Explore refuses each one. Hyper-V's own
+configuration and state files are not registered, because Hyper-V's answer names only the disks.
+
+- **Hyper-V** answers only an elevated account or a member of Hyper-V Administrators, and a
+  third-party write-up ([Altaro](https://www.altaro.com/hyper-v/?p=21601)) reports `Get-VM` listing
+  nothing, rather than failing, for anyone else. So Deguffer asks first, and
+  for any other account the row says that whether there are machines is not known. It asks only
+  where the Hyper-V module is installed. The route: delete checkpoints with `Remove-VMCheckpoint`,
+  which merges them, then compact with `Optimize-VHD` while the machine is off
+  ([Optimize-VHD](https://learn.microsoft.com/en-us/powershell/module/hyper-v/optimize-vhd)).
+- **VMware Workstation** keeps no single complete list, so the machines are its library and its
+  recent list together, and a `.vmx` the records name that is not there is reported as missing. A
+  disk split into several files is measured across all of them, from its descriptor, and a delta's
+  `parentFileNameHint` is followed to its base. The route: delete snapshots in the Snapshot Manager
+  or with `vmrun deleteSnapshot`, then *VM > Manage > Clean up Disks* or `vmware-vdiskmanager -k` with
+  the machine off. A pre-allocated disk cannot shrink
+  ([KB 315631](https://knowledge.broadcom.com/external/article/315631/defragmenting-and-shrinking-vmware-works.html)).
+- **VirtualBox**: a disk the machine attaches is its current disk, the disks under it and those a
+  snapshot attaches are a snapshot's, and a disk nothing uses is reported as unused. The route:
+  `VBoxManage snapshot <machine> delete`, zero the free space inside the guest, then
+  `VBoxManage modifymedium disk <file> --compact`, which the manual documents for VDI images only
+  ([VBoxManage](https://www.virtualbox.org/manual/topics/vboxmanage.html)). `closemedium --delete`
+  deletes the image and is never named.
+
+A suspended or saved machine is said to keep its memory on the drive until it is resumed and shut
+down. A record that cannot be read is reported as unknown, never as no machines.
+
+---
+
 ## Vortex and Mod Organizer 2 downloads
 
 **Tier 3 — reported only.** Shown with a *Report only* status, and never offered: there is nothing

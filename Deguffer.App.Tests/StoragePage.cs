@@ -3,6 +3,7 @@ using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Execution.Sizes;
+using Deguffer.Core.Health;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Working;
 using Deguffer.Testing;
@@ -87,7 +88,8 @@ internal sealed class StoragePage : IDisposable
                 },
                 Running),
             new ScanChoiceViewModel(planner.Providers, Preferences),
-            Sizes);
+            Sizes,
+            DriveHealth);
     }
 
     public CleanViewModel ViewModel { get; }
@@ -104,6 +106,9 @@ internal sealed class StoragePage : IDisposable
 
     /// <summary>Each provider's figure at each scan, in this test's own profile.</summary>
     public ProviderSizeHistory Sizes { get; }
+
+    /// <summary>What Health last read of each volume's drives, which a test writes as Health would.</summary>
+    public HealthByVolume DriveHealth { get; } = new();
 
     /// <summary>The stored settings, in this test's own profile.</summary>
     public PreferenceService Preferences { get; }

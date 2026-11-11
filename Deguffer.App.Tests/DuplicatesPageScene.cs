@@ -4,6 +4,7 @@ using Deguffer.Core.Configuration;
 using Deguffer.Core.Duplicates;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Exploring;
+using Deguffer.Core.Health;
 using Deguffer.Core.Working;
 using Deguffer.Testing;
 
@@ -100,7 +101,7 @@ public abstract class DuplicatesPageScene : IDisposable
             new DuplicateActions((_, ct) => _scene.ProtectionsAsync(ct), _ => null, () => Prompt, _scene.Remover(RecycleBin), _running),
             () => ChooseCsv?.Invoke() ?? Task.FromResult(CsvChosen),
             _preferences,
-            new DriveList(_volumes, new ManualTimeProvider(), NetworkDrives.LeftOut),
+            new DriveList(_volumes, new ManualTimeProvider(), NetworkDrives.LeftOut, new HealthByVolume()),
             isElevated: false,
             request =>
             {

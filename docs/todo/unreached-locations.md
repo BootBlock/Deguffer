@@ -1693,7 +1693,8 @@ its disks are. A step of any row that would reach one is withheld, and the disk 
 standing, whether or not the report's row was scanned, and Explore's refusal is read from the same
 registration. Container
 tools on WSL are named by their own distributions: Docker Desktop, Podman and Rancher Desktop, each
-with its own route.
+with its own route. Hyper-V, VMware Workstation and VirtualBox are reported and registered the same
+way, each by a row of its own ([provider-candidates.md](provider-candidates.md) §1).
 
 ---
 
