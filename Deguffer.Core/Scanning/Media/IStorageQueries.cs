@@ -13,7 +13,7 @@ public readonly record struct StorageAnswer(byte[]? Bytes, int Win32Error)
 }
 
 /// <summary>
-/// The three questions Windows answers about the storage behind a volume, as raw bytes, so that
+/// The four questions Windows answers about the storage behind a volume, as raw bytes, so that
 /// <see cref="VolumeMediaCache"/> classifies synthesised descriptors in a test and the real ones on
 /// a machine by the same code.
 ///
@@ -40,4 +40,11 @@ public interface IStorageQueries
     /// <c>\\.\PhysicalDrive<paramref name="disk"/></c>.
     /// </summary>
     StorageAnswer SeekPenalty(int disk);
+
+    /// <summary>
+    /// <c>IOCTL_STORAGE_QUERY_PROPERTY</c> for <c>StorageDeviceLBProvisioningProperty</c> on
+    /// <c>\\.\PhysicalDrive<paramref name="disk"/></c>: whether the disk is thinly provisioned, so
+    /// clusters the volume frees go back to whatever stands behind it only once they are trimmed.
+    /// </summary>
+    StorageAnswer Provisioning(int disk);
 }

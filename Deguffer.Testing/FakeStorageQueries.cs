@@ -15,12 +15,15 @@ public sealed class FakeStorageQueries : IStorageQueries
     private readonly Dictionary<string, StorageAnswer> _extents = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<int, StorageAnswer> _adapters = [];
     private readonly Dictionary<int, StorageAnswer> _seekPenalties = [];
+    private readonly Dictionary<int, StorageAnswer> _provisioning = [];
 
     public int ExtentsAsked { get; private set; }
 
     public int AdaptersAsked { get; private set; }
 
     public int SeekPenaltiesAsked { get; private set; }
+
+    public int ProvisioningAsked { get; private set; }
 
     /// <summary>The volume at <paramref name="mountPoint"/> has one extent on each of <paramref name="disks"/>, in that order.</summary>
     public FakeStorageQueries Volume(string mountPoint, params int[] disks) =>
@@ -52,6 +55,21 @@ public sealed class FakeStorageQueries : IStorageQueries
         return this;
     }
 
+    /// <summary>
+    /// <paramref name="disk"/> says it is thinly provisioned or not, or fails the question where
+    /// <paramref name="thin"/> is null. A disk nothing was said about fails it, as a missing device does.
+    /// </summary>
+    public FakeStorageQueries Thin(int disk, bool? thin) =>
+        ProvisioningAnswer(
+            disk,
+            thin is { } enabled ? StorageAnswer.Answered(ProvisioningBytes(enabled)) : StorageAnswer.Failed(ErrorFileNotFound));
+
+    public FakeStorageQueries ProvisioningAnswer(int disk, StorageAnswer provisioning)
+    {
+        _provisioning[disk] = provisioning;
+        return this;
+    }
+
     public StorageAnswer DiskExtents(string mountPoint)
     {
         ExtentsAsked++;
@@ -68,6 +86,26 @@ public sealed class FakeStorageQueries : IStorageQueries
     {
         SeekPenaltiesAsked++;
         return _seekPenalties.GetValueOrDefault(disk, StorageAnswer.Failed(ErrorFileNotFound));
+    }
+
+    public StorageAnswer Provisioning(int disk)
+    {
+        ProvisioningAsked++;
+        return _provisioning.GetValueOrDefault(disk, StorageAnswer.Failed(ErrorFileNotFound));
+    }
+
+    /// <summary>
+    /// A <c>DEVICE_LB_PROVISIONING_DESCRIPTOR</c>, version and size 40, with every bit field beside
+    /// <c>ThinProvisioningEnabled</c> set, so a read of the wrong bit answers the other way.
+    /// </summary>
+    public static byte[] ProvisioningBytes(bool thin)
+    {
+        var bytes = new byte[40];
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes, 40);
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(4), 40);
+        bytes[8] = (byte)(thin ? 0xFF : 0xFE);
+        BinaryPrimitives.WriteUInt64LittleEndian(bytes.AsSpan(16), 1UL << 20);
+        return bytes;
     }
 
     /// <summary>A <c>VOLUME_DISK_EXTENTS</c> with one 1 GiB extent per disk named.</summary>

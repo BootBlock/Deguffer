@@ -53,6 +53,31 @@ public sealed class ElevationRequestTests
         Assert.IsType<HealthRequest>(ElevationRequest.From(ElevationRequest.Health.ToArguments()));
     }
 
+    /// <summary>
+    /// Every mount point travels as its own argument and comes back in its order, a folder mount with a
+    /// space in it included.
+    /// </summary>
+    [Fact]
+    public void ARetrimRequestComesBackWithEveryVolumeInOrder()
+    {
+        var request = new RetrimRequest([Drive, @"C:\", @"C:\Mounts\Second disk\"]);
+
+        Assert.Equal([@"--retrim=D:\", @"--retrim=C:\", @"--retrim=C:\Mounts\Second disk\"], request.ToArguments());
+        Assert.Equal(request, ElevationRequest.From(request.ToArguments()));
+    }
+
+    [Fact]
+    public void ARetrimRequestNamingNoVolumeIsNoRequest()
+    {
+        Assert.Null(ElevationRequest.From(["--retrim=", "--retrim=  "]));
+    }
+
+    [Fact]
+    public void ARetrimWinsOverAPreview()
+    {
+        Assert.IsType<RetrimRequest>(ElevationRequest.From(["--rescan", @"--retrim=D:\"]));
+    }
+
     [Fact]
     public void HealthWinsOverAPreviewAndLosesToStartup()
     {

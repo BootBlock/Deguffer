@@ -37,6 +37,8 @@ public sealed class DriveHealthReaderTests
         public StorageAnswer Adapter(int disk) => StorageAnswer.Failed(FakeStorageQueries.ErrorFileNotFound);
 
         public StorageAnswer SeekPenalty(int disk) => StorageAnswer.Failed(FakeStorageQueries.ErrorFileNotFound);
+
+        public StorageAnswer Provisioning(int disk) => StorageAnswer.Failed(FakeStorageQueries.ErrorFileNotFound);
     }
 
     private readonly Collected<DriveVolumes> _placed = new();

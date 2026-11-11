@@ -4,7 +4,9 @@ using Deguffer.App.Shell;
 using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Retrim;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning.Media;
 using Deguffer.Core.Viewing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -57,9 +59,17 @@ public sealed partial class CleanPage : Page
             () => new ContentDialogConfirmationPrompt(XamlRoot, ActualTheme),
             AppVersion.Current,
             new WhenCompleteViewModel(App.Preferences, WindowsSession.Current),
+            new RetrimViewModel(
+                VolumeInventory.Current,
+                StorageQueries.Machine,
+                WindowsVolumeRetrim.Machine,
+                ElevatedRelaunch.IsElevated,
+                ElevatedRelaunch.TryRelaunch,
+                App.Running),
             new ScanChoiceViewModel(planner.Providers, App.Preferences),
             App.ProviderSizes);
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
+        ViewModel.Retrim.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
 
         _density = new DrawnSetting<ViewDensity>(
             App.Preferences, current => current.View, (current, density) => current with { View = density }, ShowFindingsAt);
@@ -122,6 +132,11 @@ public sealed partial class CleanPage : Page
             // Deferred to Loaded rather than run here: planning posts rows back through the
             // dispatcher, and starting it before the page is live would report into nothing.
             Loaded += StartRequestedRescan;
+        }
+        else if (ElevatedRelaunch.Requested is RetrimRequest)
+        {
+            // Deferred to Loaded for the same reason: each result is put on the card as it lands.
+            Loaded += StartRequestedRetrim;
         }
     }
 
@@ -458,6 +473,21 @@ public sealed partial class CleanPage : Page
 
     /// <summary>The scan has started from the drop-down, and the page under it is where it reports.</summary>
     private void OnScanChosenClicked(object sender, RoutedEventArgs e) => ScanChoiceFlyout.Hide();
+
+    /// <summary>
+    /// The retrim the replaced window was asked for. The user accepted the offer there, so it is not
+    /// offered again. Nothing on this page cancels it: Windows' call cannot be stopped once made, and
+    /// the window waits for it before it closes.
+    /// </summary>
+    private async void StartRequestedRetrim(object sender, RoutedEventArgs e)
+    {
+        Loaded -= StartRequestedRetrim;
+
+        if (ElevatedRelaunch.Requested is RetrimRequest request)
+        {
+            await ViewModel.Retrim.RunRequestedAsync(request, CancellationToken.None);
+        }
+    }
 
     private void StartRequestedRescan(object sender, RoutedEventArgs e)
     {

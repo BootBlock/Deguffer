@@ -291,6 +291,12 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | Claude Code conversations | One item per session, by its title and project, for when you want one gone before Claude Code deletes it after 30 days; never one that is running, one in a project Claude Code is running in, or one used this week |
 </details>
 
+A clean that frees more than 1 GiB on a solid-state, thinly provisioned or virtual drive offers
+Windows' own retrim, the step Optimize Drives takes. Until Windows retrims the drive, the storage
+behind it, such as a virtual machine's host, can go on counting the freed space as used. Deguffer
+runs the retrim only when you ask, restarts as administrator first where it needs to, and shows
+what Windows answered. It never defragments.
+
 ## Explore
 
 Explore reads the drive's file table when Deguffer is running as administrator, and walks the

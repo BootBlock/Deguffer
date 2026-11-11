@@ -59,6 +59,7 @@ public abstract record ElevationRequest
         List<SearchLocation> locations = [];
         string? drive = null;
         string? folder = null;
+        List<string> retrim = [];
 
         foreach (var argument in arguments)
         {
@@ -111,16 +112,23 @@ public abstract record ElevationRequest
             {
                 folder = ValueOf(argument, FolderPrefix);
             }
+            else if (argument.StartsWith(RetrimPrefix, StringComparison.OrdinalIgnoreCase)
+                     && ValueOf(argument, RetrimPrefix) is { } root)
+            {
+                retrim.Add(root);
+            }
         }
 
         // Explore wins where both are somehow present: it is the more specific request, and nothing
         // writes the two together. The alternative silently starts a whole-machine preview the user
-        // did not ask for. Duplicates, Installed apps and Startup come before a preview for the same reason.
+        // did not ask for. Duplicates, Installed apps, Startup, Health and a retrim come before a preview
+        // for the same reason.
         return explore ? new ExploreRequest(drive, folder)
             : duplicates ? new DuplicatesRequest(locations)
             : installedApps ? InstalledApps
             : startup ? Startup
             : health ? Health
+            : retrim.Count > 0 ? new RetrimRequest(retrim)
             : preview ? chosen.Count > 0 ? new PreviewRequest(new ProviderChoice { Ids = chosen }) : Preview
             : null;
 
@@ -159,6 +167,8 @@ public abstract record ElevationRequest
     private protected const string DrivePrefix = "--explore-drive=";
 
     private protected const string FolderPrefix = "--explore-folder=";
+
+    private protected const string RetrimPrefix = "--retrim=";
 
     /// <summary>
     /// What follows the prefix, or null where nothing does. A value that is empty, or nothing but
@@ -223,6 +233,34 @@ public sealed record DuplicatesRequest : ElevationRequest
     public bool Equals(DuplicatesRequest? other) => other is not null && Locations.SequenceEqual(other.Locations);
 
     public override int GetHashCode() => Locations.Count;
+}
+
+/// <summary>
+/// Open on the Storage page and ask Windows to retrim the volumes mounted at <see cref="Volumes"/>,
+/// which the user asked for from a clean's offer in the instance this one replaces.
+///
+/// <para>Each mount point is its own argument, so a folder mount with a space in it travels whole.
+/// What travels is a name, not the decision: the run judges each volume again before Windows is asked
+/// (<see cref="Retrim.RetrimRun"/>), so a command line naming any volume retrims only one a clean could
+/// have offered.</para>
+/// </summary>
+public sealed record RetrimRequest : ElevationRequest
+{
+    public RetrimRequest(IReadOnlyList<string> volumes)
+    {
+        ArgumentNullException.ThrowIfNull(volumes);
+
+        Volumes = [.. volumes];
+    }
+
+    /// <summary>The mount points of the volumes to retrim, in the order the offer listed them.</summary>
+    public IReadOnlyList<string> Volumes { get; }
+
+    public override IReadOnlyList<string> ToArguments() => [.. Volumes.Select(root => RetrimPrefix + root)];
+
+    public bool Equals(RetrimRequest? other) => other is not null && Volumes.SequenceEqual(other.Volumes);
+
+    public override int GetHashCode() => Volumes.Count;
 }
 
 /// <summary>
