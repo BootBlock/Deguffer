@@ -151,6 +151,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
 
         Files = new ExploreFiles(actions, time, Inspect);
         ShortcutFolders = new ExploreShortcutFolders(actions, Inspect, shortcutFolders, work);
+        Selection.LastWord = Files.LastWord;
         Types = new ExploreTypes();
         Targeting = new ExploreTargeting(volumes, time, probe, network, preferences, Status);
         Elevation = new ExploreElevation(Targeting, volumes, isElevated, relaunch, running, Status);

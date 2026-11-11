@@ -12,6 +12,9 @@ namespace Deguffer.Core.Exploring.Links;
 /// </summary>
 public sealed class LinkInspection(ILinkTargetReader reader, LinkTargets targets)
 {
+    /// <summary>What a link the last look withdraws says, in the report of its removal.</summary>
+    public const string Withdrawn = "What it points at is back, or it points somewhere else now, so it was left where it is.";
+
     private readonly ConcurrentDictionary<string, LinkTarget?> _recorded = new(StringComparer.Ordinal);
 
     /// <summary>
@@ -44,16 +47,25 @@ public sealed class LinkInspection(ILinkTargetReader reader, LinkTargets targets
     /// since the list was made has put its target back. A link that now points somewhere else, or no
     /// longer records a target, is not the link that was offered.
     /// </summary>
-    public bool IsStillGone(BrokenLink link)
+    public bool IsStillGone(BrokenLink link) => WhyNoLongerOffered(link) is null;
+
+    /// <summary>
+    /// Why <paramref name="link"/> may no longer be removed, which is <see cref="Withdrawn"/> where it no
+    /// longer leads nowhere (see <see cref="IsStillGone"/>), or null where it still does. The last word a
+    /// removal of a broken link asks after the user agrees (<c>ExploreActions.RemoveAsync</c>).
+    /// </summary>
+    public string? WhyNoLongerOffered(BrokenLink link)
     {
         ArgumentNullException.ThrowIfNull(link);
 
         var now = reader.Read(link.Path, link.Kind is not LinkKind.Shortcut);
         _recorded[link.Path] = now;
 
-        return now is not null
+        var stillGone = now is not null
             && now.Kind == link.Kind
             && string.Equals(now.Target, link.Target, StringComparison.OrdinalIgnoreCase)
             && targets.StateNow(now.Target) is LinkTargetState.Gone;
+
+        return stillGone ? null : Withdrawn;
     }
 }

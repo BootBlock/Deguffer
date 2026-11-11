@@ -55,12 +55,12 @@ public sealed class MftExploreLinkPlacementTests
             FirstPath + @"\v.bin",
         ];
 
-        var nodes = numbered.Select(path => ExploreTreePaths.NodeAt(tree, path)).ToArray();
+        var nodes = numbered.Select(path => TreeNodes.At(tree, path)).ToArray();
 
         Assert.Equal(nodes.Order(), nodes);
         Assert.Equal(nodes.Length, nodes.Distinct().Count());
-        Assert.Equal(512 + 4096 + 4096 + 2048 + 2048, tree.SizeOf(ExploreTreePaths.NodeAt(tree, FirstPath)));
-        Assert.Equal(4096 + 2048 + 1024, tree.SizeOf(ExploreTreePaths.NodeAt(tree, SecondPath)));
+        Assert.Equal(512 + 4096 + 4096 + 2048 + 2048, tree.SizeOf(TreeNodes.At(tree, FirstPath)));
+        Assert.Equal(4096 + 2048 + 1024, tree.SizeOf(TreeNodes.At(tree, SecondPath)));
         Assert.DoesNotContain(
             Enumerable.Range(0, tree.NodeCount),
             node => tree.NameOf(node) is "lost.dll" or "orphan");
@@ -150,8 +150,8 @@ public sealed class MftExploreLinkPlacementTests
             ExploreChildOrder.BySize, links: links);
 
         Assert.Equal(4, tree.NodeCount);
-        Assert.Equal(4096, tree.SizeOf(ExploreTreePaths.NodeAt(tree, Root + "shared.dll")));
-        Assert.Equal(4096, tree.SizeOf(ExploreTreePaths.NodeAt(tree, FirstPath + @"\shared.dll")));
+        Assert.Equal(4096, tree.SizeOf(TreeNodes.At(tree, Root + "shared.dll")));
+        Assert.Equal(4096, tree.SizeOf(TreeNodes.At(tree, FirstPath + @"\shared.dll")));
         Assert.Equal(2 * 4096, tree.TotalBytes);
 
         static void Describe(MftExploreColumns columns, int slot, int parent, int name, ExploreNodeFlags kind, long size)

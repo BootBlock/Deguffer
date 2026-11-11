@@ -48,7 +48,26 @@ public sealed class WindowsLinkTargetReaderTests : IDisposable
 
         Assert.NotNull(read);
         Assert.Equal(LinkKind.SymbolicLink, read.Kind);
-        Assert.Equal(LongPath.Display(Path.Combine(_temp.Path, "tools", "tool.exe")), read.Target);
+        Assert.Equal(Path.Combine(Final(_temp.Path), "tools", "tool.exe"), read.Target);
+    }
+
+    /// <summary>
+    /// Windows follows the links above a relative link before it resolves it, so a link reached through
+    /// a junction resolves from where its folder really is. Resolved from the path as written, a link
+    /// in a profile moved by a junction would name a path that is not there, and read as broken.
+    /// </summary>
+    [Fact]
+    public void ARelativeSymbolicLinkBehindAJunctionIsResolvedFromWhereItsFolderReallyIs()
+    {
+        _temp.CreateFile(10, "real", "tools", "tool.exe");
+        var bin = _temp.CreateDirectory("real", "bin");
+        SymbolicLink.ToFile(Path.Combine(bin, "tool.exe"), @"..\tools\tool.exe");
+        var moved = Path.Combine(_temp.Path, "moved");
+        Junction.ToDirectory(moved, Path.Combine(_temp.Path, "real"));
+
+        var read = new WindowsLinkTargetReader(new FakeShortcutReader()).Read(Path.Combine(moved, "bin", "tool.exe"), isLink: true);
+
+        Assert.Equal(Path.Combine(Final(_temp.Path), "real", "tools", "tool.exe"), read?.Target);
     }
 
     /// <summary>
@@ -98,4 +117,7 @@ public sealed class WindowsLinkTargetReaderTests : IDisposable
     [Fact]
     public void AFolderThatIsNoLinkReadsAsNothing() =>
         Assert.Null(new WindowsLinkTargetReader(new FakeShortcutReader()).Read(_temp.CreateDirectory("plain"), isLink: true));
+
+    /// <summary>Where <paramref name="folder"/> really is, as the reader resolves a relative link from it.</summary>
+    private static string Final(string folder) => LongPath.Display(FileInformation.Default.FinalPath(folder)!);
 }

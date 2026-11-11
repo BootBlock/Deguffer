@@ -39,15 +39,16 @@ public sealed record ExploreFileRow(
     public bool IsRefused => Refusal is not null;
 
     /// <summary>
-    /// Where the row's link points, for a row of the broken links, or null for a row of the largest
-    /// files. Its target is gone: that list holds no other kind.
+    /// The row's link, for a row of the broken links, or null for a row of the largest files. Its
+    /// target is gone: that list holds no other kind. Kept whole so a removal of the row can ask about
+    /// it again after the user agrees.
     /// </summary>
-    public string? Target { get; init; }
+    public BrokenLink? Link { get; init; }
 
-    public bool IsLink => Target is not null;
+    public bool IsLink => Link is not null;
 
     /// <summary>What the row's link points at, stated under its folder, or null for a file.</summary>
-    public string? TargetLine => Target is null ? null : $"Points at {Target}, which is not there.";
+    public string? TargetLine => Link is null ? null : $"Points at {Link.Target}, which is not there.";
 
     /// <summary>
     /// A file's glyph, the one the folder list gives a file, or a link's. See <see cref="ExploreRow.Icon"/>.
@@ -123,7 +124,7 @@ public sealed record ExploreFileRow(
             ExploreRowText.Dates(tree, node),
             answer.IsAllowed ? null : answer.Reason)
         {
-            Target = link?.Target,
+            Link = link,
         };
     }
 }

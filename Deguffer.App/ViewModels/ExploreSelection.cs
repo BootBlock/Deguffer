@@ -64,6 +64,14 @@ public sealed partial class ExploreSelection : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(PropertiesCommand))]
     public partial bool CanAct { get; set; } = true;
 
+    /// <summary>
+    /// The last word on each removal, taken as the removal starts and asked of each item after the user
+    /// agrees (see <see cref="ExploreActions.RemoveAsync"/>), or null where nothing listed has one. The
+    /// Files layout's broken links are the case: a link listed because its target was gone is withdrawn
+    /// if the target is back (<see cref="ExploreFiles.LastWord"/>).
+    /// </summary>
+    public Func<Func<ExploreItem, string?>?> LastWord { get; set; } = static () => null;
+
     /// <summary>Raised while a removal is under way, so the owner can stand its own commands down.</summary>
     public event EventHandler<bool>? Working;
 
@@ -297,7 +305,7 @@ public sealed partial class ExploreSelection : ObservableObject
         // Taken together and before the await, because nothing stops the list, the map or the trail
         // while the removal runs: navigating empties the selection, and a pick replaces it. What is
         // recorded has to be what was acted on, or a removed folder stays listed and pickable.
-        var (tree, picked, items) = (_tree, _nodes, Items());
+        var (tree, picked, items, lastWord) = (_tree, _nodes, Items(), LastWord());
 
         if (tree is null || items.Count == 0)
         {
@@ -315,7 +323,7 @@ public sealed partial class ExploreSelection : ObservableObject
             void Acting(IReadOnlyList<ExploreItem> allowed) =>
                 MarkRemoving(tree, [.. picked.Where((_, i) => allowed.Contains(items[i]))]);
 
-            if (await _actions.RemoveAsync(items, mode, Acting, ct: ct) is not { } report)
+            if (await _actions.RemoveAsync(items, mode, Acting, lastWord, ct) is not { } report)
             {
                 // Declined. Saying so beats leaving the previous sentence standing, which somebody
                 // who has just dismissed a dialog reads as the outcome of it.

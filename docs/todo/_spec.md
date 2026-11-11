@@ -650,14 +650,17 @@ not the shell asked.
   list, below the folder on screen, the shortcuts, symbolic links and junctions whose target is not
   there, by path, and a panel beside it reads the Start menu, desktop and Startup folders, this
   account's and every account's, without a scan. A target is gone only where it is on a fixed local
-  disk that is mounted and ready and Windows answers that nothing is at the path. A target on a drive
-  that is not there, on a removable drive, on a share or a network drive, on a volume named only by
-  its GUID that is not attached, or one Windows would not describe, is unreachable: it is counted,
-  never listed and never offered, because a refusal is never absence and the drive may come back.
-  A shortcut is read through the shell's own reader and never resolved, and a link from its reparse
-  data and never followed. Either is removed as the link itself, by Explore's own removal, and the
-  panel's removal goes to the Recycle Bin. Its target is asked about again after the user agrees, and
-  a link whose target has come back is left where it is with the reason.
+  disk that is mounted and ready, Windows answers that nothing is at the path, and no link or
+  undescribed folder stands between the disk's mount point and the path. A target on a drive that is
+  not there, on a removable drive, on a share or a network drive, on a volume named only by its GUID
+  that is not attached, behind a link, or one Windows would not describe, is unreachable: it is
+  counted, never listed and never offered, because a refusal is never absence, Windows reads a share
+  that does not answer as empty, and the drive may come back. A shortcut is read through the shell's
+  own reader and never resolved, and a link from its reparse data and never followed; a relative link
+  is resolved from where its folder really is. Either is removed as the link itself, by Explore's own
+  removal, and the panel's removal goes to the Recycle Bin. From either list, its target is asked
+  about again after the user agrees, and a link whose target has come back is left where it is with
+  the reason.
 - **Explore draws a network share by walking it.** The drive box offers each drive letter mapped to a
   share, named as a network drive rather than by its space, which is not read, and never opened on
   by default while a local drive will scan. A path typed into the page reaches a share the folder

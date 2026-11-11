@@ -31,8 +31,8 @@ public sealed class WindowsLinkTargetReader(IShortcutReader shortcuts) : ILinkTa
                 : null;
         }
 
-        return KindOf(path) is { } kind && TargetOf(path) is { } recorded
-            ? new LinkTarget(kind, Resolved(path, recorded))
+        return KindOf(path) is { } kind && TargetOf(path) is { } recorded && Resolved(path, recorded) is { } resolved
+            ? new LinkTarget(kind, resolved)
             : null;
     }
 
@@ -80,19 +80,27 @@ public sealed class WindowsLinkTargetReader(IShortcutReader shortcuts) : ILinkTa
     }
 
     /// <summary>
-    /// <paramref name="recorded"/> as a full path in display form. A relative symbolic link is relative
-    /// to the folder it is in, which is where Windows resolves it from. A junction records the object
-    /// manager's <c>\??\</c> form, which <see cref="LongPath.Display"/> reads as the device form it is.
+    /// <paramref name="recorded"/> as a full path in display form, or null where it cannot be placed. A
+    /// junction records the object manager's <c>\??\</c> form, which <see cref="LongPath.Display"/>
+    /// reads as the device form it is.
+    ///
+    /// <para><b>A relative symbolic link is resolved from where its folder really is.</b> Windows
+    /// follows every link above it first, so on a profile moved to <c>D:\</c> by a junction, a link
+    /// recording <c>..\..\Tools\app.exe</c> opens <c>D:\...\Tools\app.exe</c>. Resolved from the path as
+    /// written, it would name a path on <c>C:\</c> that is not there, and a working link would read as
+    /// broken. A folder Windows will not open gives no place to resolve from, and the link claims
+    /// nothing.</para>
     /// </summary>
-    private static string Resolved(string path, string recorded)
+    private static string? Resolved(string path, string recorded)
     {
         if (Path.IsPathFullyQualified(recorded) || recorded.StartsWith(@"\??\", StringComparison.Ordinal))
         {
             return LongPath.Display(recorded);
         }
 
-        var folder = Path.GetDirectoryName(LongPath.Display(path)) ?? string.Empty;
-
-        return LongPath.Display(Path.GetFullPath(recorded, folder));
+        return Path.GetDirectoryName(LongPath.Display(path)) is { Length: > 0 } folder
+               && FileInformation.Default.FinalPath(folder) is { } final
+            ? LongPath.Display(Path.GetFullPath(recorded, LongPath.Display(final)))
+            : null;
     }
 }

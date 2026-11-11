@@ -1,10 +1,10 @@
 using System.Collections.Concurrent;
-using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Exploring.Files;
 using Deguffer.Core.Exploring.Links;
+using Deguffer.Core.Safety;
 using Deguffer.Core.Viewing;
 
 namespace Deguffer.App.ViewModels;
@@ -111,7 +111,7 @@ public sealed partial class ExploreFiles : ObservableObject
     /// The files, largest first. Updated in place rather than rebuilt, so the list keeps its scroll
     /// position and its selection while a filter is typed (G4).
     /// </summary>
-    public ObservableCollection<ExploreFileRow> Rows { get; } = [];
+    public BoundList<ExploreFileRow> Rows { get; } = [];
 
     /// <summary>The types the type box offers, "any type" first.</summary>
     public IReadOnlyList<string> TypeLabels => Types;
@@ -169,6 +169,29 @@ public sealed partial class ExploreFiles : ObservableObject
     /// <see cref="ExploreViewModel.IsShowingRows"/> gives.
     /// </summary>
     public bool IsShowingRows { get; private set; }
+
+    /// <summary>
+    /// The last word on a removal of what is picked, taken as the removal starts: for each broken link
+    /// listed now, whether it still leads nowhere (<see cref="LinkInspection.WhyNoLongerOffered"/>),
+    /// and nothing to say about anything else. Null while the layout lists no broken links.
+    ///
+    /// <para>A row here is picked into Explore's one selection like any other, so its removal is the
+    /// selection's, and the selection asks this as it starts. Taken then rather than read when the
+    /// answer is wanted, after the user has agreed, because the list can change while they decide.</para>
+    /// </summary>
+    public Func<ExploreItem, string?>? LastWord()
+    {
+        if (!IsActive || Listing is not FileListing.BrokenLinks)
+        {
+            return null;
+        }
+
+        var (links, inspection) = (
+            Rows.Select(row => row.Link).OfType<BrokenLink>().ToDictionary(link => link.Path, StringComparer.OrdinalIgnoreCase),
+            _inspection);
+
+        return item => links.TryGetValue(LongPath.Display(item.Path), out var link) ? inspection.WhyNoLongerOffered(link) : null;
+    }
 
     /// <summary>
     /// The filter the four boxes describe, with an index no box offers read as that box's first
@@ -366,14 +389,25 @@ public sealed partial class ExploreFiles : ObservableObject
         }
     }
 
-    /// <summary>Bring <see cref="Rows"/> to <paramref name="arriving"/>.</summary>
+    /// <summary>
+    /// Bring <see cref="Rows"/> to <paramref name="arriving"/>: in place where rows stay, and in one
+    /// reset where the list starts or ends empty, as it does across a change of listing. Nothing on
+    /// screen is lost to a reset then, and a row at a time would be a thousand changes for one.
+    /// </summary>
     private void ShowRows(IReadOnlyList<ExploreFileRow> arriving)
     {
         IsShowingRows = true;
 
         try
         {
-            LiveList.Show(Rows, arriving, row => row.Key);
+            if (Rows.Count == 0 || arriving.Count == 0)
+            {
+                Rows.Replace(arriving);
+            }
+            else
+            {
+                LiveList.Show(Rows, arriving, row => row.Key);
+            }
         }
         finally
         {

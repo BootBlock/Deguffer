@@ -246,7 +246,7 @@ public sealed class MftExploreSnapshotTests
         return reports[2].Snapshot ?? throw new Xunit.Sdk.XunitException("The read handed over no snapshot while it ran.");
     }
 
-    private static int At(ExploreTree tree, string path) => ExploreTreePaths.NodeAt(tree, path);
+    private static int At(ExploreTree tree, string path) => TreeNodes.At(tree, path);
 
     private static IEnumerable<string> Names(ExploreTree tree) =>
         Enumerable.Range(0, tree.NodeCount).Select(tree.NameOf);

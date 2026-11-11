@@ -127,7 +127,51 @@ public sealed class ExploreBrokenLinksTests : IDisposable
 
         Assert.Empty(_explore.Bin.Paths);
         Assert.True(File.Exists(gone));
-        Assert.Equal(ExploreShortcutFolders.Withdrawn, page.Status.Sentence);
+        Assert.Equal(LinkInspection.Withdrawn, page.Status.Sentence);
+    });
+
+    /// <summary>
+    /// A row of the Files layout's broken links is removed through Explore's one selection, and its
+    /// target is asked about again after the user agrees there too: a link whose target came back
+    /// meanwhile is left where it is with the reason.
+    /// </summary>
+    [Fact]
+    public void ALinkPickedFromTheFilesLayoutWhoseTargetCameBackIsLeftWhereItIs() => UiThread.Run(async () =>
+    {
+        var (page, root) = await ScannedAsync();
+        var shortcut = Path.Combine(root, "Desktop", "Old Game.lnk");
+        page.SelectedView = ExploreView.Files;
+        page.Files.ListingIndex = 1;
+        await Eventually.HoldsAsync(() => page.Files.Rows.Count == 1 && page.Files.Rows[0].IsLink, "the broken link listed");
+        page.Selection.Select([page.Files.Rows[0].Node]);
+        var answer = new TaskCompletionSource<bool>();
+        _explore.Prompt = new FakeExploreConfirmation(answer.Task);
+
+        var removing = page.Selection.DeleteCommand.ExecuteAsync(null);
+        await _explore.Prompt.FirstAsked;
+        _explore.Probe.File($@"{Drive}Games\Old\game.exe");
+        answer.SetResult(true);
+        await removing;
+
+        Assert.Empty(_explore.Bin.Paths);
+        Assert.True(File.Exists(shortcut));
+        Assert.Equal(LinkInspection.Withdrawn, page.Status.Sentence);
+    });
+
+    /// <summary>A file picked from the largest files has no last word: nothing listed it for a fact the machine can take back.</summary>
+    [Fact]
+    public void AFilePickedFromTheLargestFilesIsRemovedWithNoLastWord() => UiThread.Run(async () =>
+    {
+        var (page, root) = await ScannedAsync();
+        page.SelectedView = ExploreView.Files;
+        await Eventually.HoldsAsync(() => page.Files.Rows.Count == 3, "every file listed");
+
+        Assert.Null(page.Files.LastWord());
+
+        page.Selection.Select([page.Files.Rows.Single(row => row.Name == "big.bin").Node]);
+        await page.Selection.DeleteCommand.ExecuteAsync(null);
+
+        Assert.Equal([Path.Combine(root, "big.bin")], _explore.Bin.Paths);
     });
 
     /// <summary>

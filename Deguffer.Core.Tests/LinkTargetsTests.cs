@@ -69,6 +69,27 @@ public sealed class LinkTargetsTests
         Assert.Empty(_probe.EntryQueries);
     }
 
+    /// <summary>
+    /// Windows reads a share that does not answer, or a drive that is not ready, as "nothing is there"
+    /// for every path through it. So a target behind a folder link on a fixed disk that is ready reads
+    /// absent while the NAS the link leads to is switched off, and is not gone. A folder on the way that
+    /// Windows will not describe hides the same question.
+    /// </summary>
+    [Fact]
+    public void AnAbsentTargetBehindALinkOrARefusedFolderIsUnreachable()
+    {
+        _probe.Directory(@"C:\Users", isLink: false)
+            .Directory(@"C:\Users\testuser", isLink: false)
+            .Directory(@"C:\Users\testuser\Music", isLink: true)
+            .Refused(@"C:\Users\testuser\Locked");
+
+        var targets = Targets();
+
+        Assert.Equal(LinkTargetState.Unreachable, targets.StateOf(@"C:\Users\testuser\Music\Player\player.exe"));
+        Assert.Equal(LinkTargetState.Unreachable, targets.StateOf(@"C:\Users\testuser\Locked\Tool\tool.exe"));
+        Assert.Equal(LinkTargetState.Gone, targets.StateOf(@"C:\Users\testuser\Removed\app.exe"));
+    }
+
     /// <summary>A share can be another computer's disk under the same name tomorrow, and it is never asked.</summary>
     [Theory]
     [InlineData(@"\\server\share\tools\tool.exe")]

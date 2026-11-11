@@ -1267,12 +1267,14 @@ public sealed class ExploreViewModelTests : IDisposable
     /// <summary>Each panel round the picture is what <see cref="ExploreDisplay"/> says of the page's facts.</summary>
     private static void Follows(ExploreViewModel page)
     {
-        var display = new ExploreDisplay(page.Tree, page.SelectedView, page.SelectedColouring, page.Look, page.MapInContrast);
+        var display = new ExploreDisplay(page.Tree, page.SelectedView, page.SelectedColouring, page.Look, page.MapInContrast, page.Files.Listing);
 
         Assert.Equal(display.ShowsLegend, page.ShowsLegend);
         Assert.Equal(display.ShowsFileFilters, page.ShowsFileFilters);
         Assert.Equal(display.ShowsGrowth, page.ShowsGrowth);
         Assert.Equal(display.ShowsTypes, page.ShowsTypes);
+        Assert.Equal(display.ShowsShortcutFolders, page.ShowsShortcutFolders);
+        Assert.Equal(display.ShowsShortcutFolders, page.ShortcutFolders.IsActive);
         Assert.Equal(display.Zooms, page.ShowsMapControls);
         Assert.Equal(display.Note, page.ViewNote);
         Assert.Equal(display.Scheme, page.SelectedScheme);

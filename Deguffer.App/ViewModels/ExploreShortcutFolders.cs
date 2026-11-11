@@ -23,9 +23,6 @@ namespace Deguffer.App.ViewModels;
 /// </summary>
 public sealed partial class ExploreShortcutFolders : ObservableObject
 {
-    /// <summary>What a row withdrawn by the last look says, in the report of its removal.</summary>
-    internal const string Withdrawn = "What it points at is back, or it points somewhere else now, so it was left where it is.";
-
     private readonly ExploreActions _actions;
     private readonly Func<LinkInspection> _inspect;
     private readonly IReadOnlyList<string> _folders;
@@ -108,7 +105,7 @@ public sealed partial class ExploreShortcutFolders : ObservableObject
     /// is cheapest for.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanRemove))]
-    private async Task RemoveAsync(ShortcutFolderRow? row)
+    private async Task RemoveAsync(ShortcutFolderRow? row, CancellationToken ct)
     {
         if (row is null || _inspection is not { } inspection)
         {
@@ -124,7 +121,8 @@ public sealed partial class ExploreShortcutFolders : ObservableObject
             var report = await _actions.RemoveAsync(
                 [new ExploreItem(link.Path, link.IsDirectory, link.Bytes, LowerBound: false)],
                 ExploreRemovalMode.RecycleBin,
-                lastWord: _ => inspection.IsStillGone(link) ? null : Withdrawn);
+                lastWord: _ => inspection.WhyNoLongerOffered(link),
+                ct: ct);
 
             if (report is null)
             {

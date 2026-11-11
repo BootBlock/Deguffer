@@ -1,4 +1,5 @@
 using Deguffer.Core.Exploring;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
@@ -13,8 +14,8 @@ public sealed class ExploreTreePathsTests
     {
         var tree = Tree(@"C:\Users\a");
 
-        Assert.Equal("Old.lnk", tree.NameOf(ExploreTreePaths.NodeAt(tree, @"C:\Users\a\Desktop\Old.lnk")));
-        Assert.Equal(tree.RootNode, ExploreTreePaths.NodeAt(tree, @"C:\Users\a"));
+        Assert.Equal("Old.lnk", tree.NameOf(TreeNodes.At(tree, @"C:\Users\a\Desktop\Old.lnk")));
+        Assert.Equal(tree.RootNode, TreeNodes.At(tree, @"C:\Users\a"));
         Assert.Null(ExploreTreePaths.TryNodeAt(tree, @"C:\Users\a\Desktop\New.lnk"));
     }
 

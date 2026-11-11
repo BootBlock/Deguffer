@@ -22,6 +22,7 @@ public sealed class BrokenLinksTests
         .With($@"{Root}\Desktop\Away.lnk", LinkKind.Shortcut, @"E:\Games\game.exe")
         .With($@"{Root}\Deep\Deeper\Tool.lnk", LinkKind.Shortcut, @"C:\Tools\tool.exe")
         .With($@"{Root}\cache", LinkKind.Junction, @"C:\Moved\cache")
+        .With($@"{Root}\cache\Inside.lnk", LinkKind.Shortcut, @"C:\Behind\app.exe")
         .With($@"{Root}\media", LinkKind.SymbolicLink, @"C:\Media");
 
     private readonly FakePathProbe _probe = new FakePathProbe().File(@"C:\Games\Kept\game.exe").Directory(@"C:\Media");
@@ -59,13 +60,14 @@ public sealed class BrokenLinksTests
         Assert.Equal(6, _links.Reads.Count);
         Assert.False(_links.Reads.ContainsKey($@"{Root}\Desktop\notes.txt"));
         Assert.False(_links.Reads.ContainsKey($@"{Root}\Desktop"));
+        Assert.False(_links.Reads.ContainsKey($@"{Root}\cache\Inside.lnk"));
     }
 
     [Fact]
     public void TheListFollowsTheFolderAndTheFilter()
     {
         var tree = Tree();
-        var desktop = ExploreTreePaths.NodeAt(tree, $@"{Root}\Desktop");
+        var desktop = TreeNodes.At(tree, $@"{Root}\Desktop");
 
         var inDesktop = BrokenLinks.Find(tree, desktop, new FileFilter(), Now, Inspection());
         var named = BrokenLinks.Find(tree, tree.RootNode, new FileFilter(Name: "game"), Now, Inspection());
@@ -112,6 +114,9 @@ public sealed class BrokenLinksTests
 
         var deeper = builder.AddChildren(top + 1, [new ExploreChild("Deeper", IsDirectory: true, IsLink: false, Size: 0)]);
         builder.AddChildren(deeper, [new ExploreChild("Tool.lnk", IsDirectory: false, IsLink: false, Size: 900)]);
+
+        // What a link leads to is in no tree as its child; here it is, so a pass that descended would read it.
+        builder.AddChildren(top + 2, [new ExploreChild("Inside.lnk", IsDirectory: false, IsLink: false, Size: 800)]);
 
         return builder.Build(ExploreChildOrder.BySize);
     }

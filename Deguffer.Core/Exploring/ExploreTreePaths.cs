@@ -15,10 +15,6 @@ namespace Deguffer.Core.Exploring;
 /// </summary>
 public static class ExploreTreePaths
 {
-    /// <summary>The node <paramref name="path"/> names. Throws where the tree holds nothing there.</summary>
-    public static int NodeAt(ExploreTree tree, string path) =>
-        TryNodeAt(tree, path) ?? throw new InvalidOperationException($"The tree holds nothing at {path}.");
-
     /// <summary>The node <paramref name="path"/> names, or null where the tree holds nothing there.</summary>
     public static int? TryNodeAt(ExploreTree tree, string path)
     {
