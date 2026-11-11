@@ -404,7 +404,7 @@ public sealed class PreviousWindowsInstallationProviderTests : IDisposable
 
         Assert.Empty(plan.Steps);
         Assert.True(plan.WasNotExamined);
-        Assert.Equal(["Windows ESD installation files"], handlers.Surveyed);
+        Assert.Equal([("Windows ESD installation files", DiskCleanupQuestion.Starts)], handlers.Surveyed);
         Assert.Contains(plan.Notes, n => n.Message.Contains("finds nothing of its own", StringComparison.Ordinal));
 
         await provider.ExecuteAsync(plan);
@@ -430,8 +430,8 @@ public sealed class PreviousWindowsInstallationProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The handler is asked last, because asking it can take as long as measuring an entire Windows
-    /// installation, and a folder another rule already holds back is never asked about.
+    /// The handler is asked last, so a folder another rule already holds back is never handed to
+    /// Windows' cleanup at all.
     /// </summary>
     [Fact]
     public async Task NeverAsksTheHandlerAboutAFolderAnotherRuleHoldsBack()

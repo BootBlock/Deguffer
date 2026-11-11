@@ -32,6 +32,37 @@ public enum DiskCleanupAnswer
     HasSomething,
 }
 
+/// <summary>
+/// What a survey asks a handler before a plan offers it. Chosen by the provider that clears through the
+/// handler, because handlers differ in when they know, and nothing documents which does which.
+/// </summary>
+public enum DiskCleanupQuestion
+{
+    /// <summary>
+    /// Whether the handler starts for the volume: <c>Initialize</c> alone, where <c>S_FALSE</c> is
+    /// "nothing to delete" and success is "something", and the handler is never asked to measure.
+    ///
+    /// <para>For a handler that decides when it starts, as <c>setupcln.dll</c> does. Elevated on
+    /// Windows 11 24H2, its <em>Windows ESD installation files</em>, <em>Temporary Setup Files</em> and
+    /// <em>Upgrade Discarded Files</em> roles answered <c>S_FALSE</c> with nothing of theirs on the
+    /// drive, the first over a <c>$Windows.~WS</c> holding 148 KB it does not count as its own.
+    /// <em>Previous Installations</em> answered <c>S_OK</c> in under a millisecond and then took 146 s,
+    /// 93 s of it processor time, to measure an 82 GB <c>Windows.old</c>, and
+    /// <em>Windows Reset Log Files</em> answered <c>S_OK</c> and measured 448 MB.</para>
+    /// </summary>
+    Starts,
+
+    /// <summary>
+    /// Whether it starts and then measures more than nothing: <c>Initialize</c>, then
+    /// <c>GetSpaceUsed</c>, where a measured zero is "nothing to delete".
+    ///
+    /// <para>For a handler whose start promises nothing. Elevated on Windows 11 24H2,
+    /// <c>pnpclean.dll</c>'s <em>Device Driver Packages</em> answered <c>S_OK</c> and then measured
+    /// 0 bytes, in 2.6 s.</para>
+    /// </summary>
+    Measures,
+}
+
 /// <param name="Answer">What the handler said.</param>
 /// <param name="Message">Why, where it is a refusal, written for the user.</param>
 public sealed record DiskCleanupSurvey(DiskCleanupAnswer Answer, string? Message = null)
@@ -81,8 +112,12 @@ public interface IDiskCleanupHandlers
     /// files</em> handler was observed to answer "nothing to delete" over a <c>$Windows.~WS</c>
     /// holding 367 KB of setup sources. A plan that offered it would promise a reclaim Windows then
     /// declines, and the run would fail over a folder exactly as full as before.</para>
+    ///
+    /// <para><b>Asked only as much as the handler needs.</b> The plan's size comes from Deguffer's own
+    /// measurement, so a handler's measurement is asked for only where its start says nothing: see
+    /// <see cref="DiskCleanupQuestion"/>.</para>
     /// </summary>
-    DiskCleanupSurvey Survey(string handler, string volume, CancellationToken ct);
+    DiskCleanupSurvey Survey(string handler, string volume, DiskCleanupQuestion question, CancellationToken ct);
 
     /// <param name="handler">
     /// The handler's name, as registered under

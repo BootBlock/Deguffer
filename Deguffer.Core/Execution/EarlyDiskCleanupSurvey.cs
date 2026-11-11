@@ -28,13 +28,14 @@ internal sealed class EarlyDiskCleanupSurvey
 
     /// <summary>Starts asking <paramref name="handler"/> about <paramref name="volume"/>.</summary>
     /// <param name="ct">The pass's token: cancelling the pass stops the handler too.</param>
-    public EarlyDiskCleanupSurvey(IDiskCleanupHandlers handlers, string handler, string volume, CancellationToken ct)
+    public EarlyDiskCleanupSurvey(
+        IDiskCleanupHandlers handlers, string handler, string volume, DiskCleanupQuestion question, CancellationToken ct)
     {
         _stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var stop = _stop.Token;
 
         // On its own thread, because the handler measures synchronously and can take seconds.
-        _answer = Task.Run(() => handlers.Survey(handler, volume, stop), stop);
+        _answer = Task.Run(() => handlers.Survey(handler, volume, question, stop), stop);
     }
 
     /// <summary>The handler's answer, once it has given one.</summary>

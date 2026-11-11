@@ -207,7 +207,9 @@ public sealed class WindowsServicingLogProvider : CleanupProviderBase
         var volume = LongPath.Display(_system.SystemDrive);
         var survey = resetLogs.Count == 0
             ? null
-            : await Task.Run(() => _handlers.Survey(ResetLogsHandler, volume, ct), ct).ConfigureAwait(false);
+            // Asked only whether it starts, because setupcln.dll decides when it starts.
+            : await Task.Run(
+                () => _handlers.Survey(ResetLogsHandler, volume, DiskCleanupQuestion.Starts, ct), ct).ConfigureAwait(false);
 
         if (survey is { MayOffer: true })
         {

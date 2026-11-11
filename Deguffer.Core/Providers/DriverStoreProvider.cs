@@ -38,6 +38,12 @@ public sealed class DriverStoreProvider : CleanupProviderBase
     public const string Handler = "Device Driver Packages";
 
     /// <summary>
+    /// What the handler is asked before the plan offers it: how much, because <c>pnpclean.dll</c>'s start
+    /// promises nothing. See <see cref="DiskCleanupQuestion.Measures"/>.
+    /// </summary>
+    private const DiskCleanupQuestion Question = DiskCleanupQuestion.Measures;
+
+    /// <summary>
     /// Asked whether Windows' own cleanup has anything to clear, and given to the executor that runs it,
     /// so the plan and the clean ask the same instance. See <see cref="CleanupProviderBase"/>'s
     /// <c>handlers</c>.
@@ -235,7 +241,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         }
 
         // Read last: every gate above decides over the answer's use, never over whether it was asked.
-        var survey = await (early ?? new EarlyDiskCleanupSurvey(_handlers, Handler, _volume, ct)).TakeAsync().ConfigureAwait(false);
+        var survey = await (early ?? new EarlyDiskCleanupSurvey(_handlers, Handler, _volume, Question, ct)).TakeAsync().ConfigureAwait(false);
 
         return survey.Answer switch
         {
@@ -453,7 +459,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
     private Task<DriverStoreListing> ListingAsync(CancellationToken ct) => _listing.Get(() =>
     {
         var survey = UnfinishedUpdate.HoldsEverything(Servicing, Inspector) is null
-            ? new EarlyDiskCleanupSurvey(_handlers, Handler, _volume, ct)
+            ? new EarlyDiskCleanupSurvey(_handlers, Handler, _volume, Question, ct)
             : null;
 
         // A listing that failed is asked again, and the survey started with it is replaced.

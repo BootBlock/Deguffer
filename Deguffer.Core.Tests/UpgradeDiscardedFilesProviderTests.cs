@@ -131,7 +131,7 @@ public sealed class UpgradeDiscardedFilesProviderTests : IDisposable
         Assert.Equal([inplace, ls], step.AlsoClears);
         Assert.True(step.EstimatedBytes >= 4096 + 8192 + 2048);
         Assert.True(plan.RequiresElevation);
-        Assert.Equal(["Upgrade Discarded Files"], handlers.Surveyed);
+        Assert.Equal([("Upgrade Discarded Files", DiskCleanupQuestion.Starts)], handlers.Surveyed);
 
         var result = await provider.ExecuteAsync(plan);
 

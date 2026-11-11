@@ -25,6 +25,9 @@ internal static class DiskCleanupNative
 
     public const int E_ABORT = unchecked((int)0x80004004);
 
+    /// <summary>The class, or the registration naming it, is not registered.</summary>
+    public const int REGDB_E_CLASSNOTREG = unchecked((int)0x80040154);
+
     /// <summary>
     /// <c>EVCF_USERCONSENTOBTAINED</c>: the person has already agreed to the cleanup. Deguffer has
     /// shown what goes and asked the confirmation §7 requires before any handler runs.
