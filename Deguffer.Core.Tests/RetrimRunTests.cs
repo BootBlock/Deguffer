@@ -30,7 +30,7 @@ public sealed class RetrimRunTests
     }
 
     private static async Task<(FakeVolumeRetrim Retrim, List<RetrimResult> Results)> Run(
-        IReadOnlyList<string> roots,
+        IReadOnlyList<RetrimTarget> targets,
         Func<LocalVolume, VolumeMedia> media,
         RetrimAnswer? answer = null,
         CancellationToken ct = default)
@@ -38,7 +38,7 @@ public sealed class RetrimRunTests
         var retrim = new FakeVolumeRetrim { Answer = answer ?? new RetrimAnswer(RetrimOutcome.Retrimmed) };
         var collected = new Collected();
 
-        await RetrimRun.ExecuteAsync(roots, Mounted, media, retrim, collected, ct);
+        await RetrimRun.ExecuteAsync(targets, Mounted, media, retrim, collected, ct);
 
         return (retrim, collected.Results);
     }
@@ -47,7 +47,7 @@ public sealed class RetrimRunTests
     [Fact]
     public async Task EachVolumeIsRetrimmedByItsNameInOrder()
     {
-        var (retrim, results) = await Run([D, C], _ => new VolumeMedia(StorageMedia.Nvme, [0]));
+        var (retrim, results) = await Run([new(D, NameOfD), new(C, NameOfC)], _ => new VolumeMedia(StorageMedia.Nvme, [0]));
 
         Assert.Equal([NameOfD, NameOfC], retrim.Asked);
         Assert.Equal([D, C], results.Select(r => r.Root));
@@ -62,7 +62,7 @@ public sealed class RetrimRunTests
     public async Task AVolumeThatNoLongerQualifiesIsNotRetrimmed()
     {
         var (retrim, results) = await Run(
-            [C, D],
+            [new(C, NameOfC), new(D, NameOfD)],
             volume => volume.RootPath == C
                 ? new VolumeMedia(StorageMedia.Rotational, [0], ThinlyProvisioned: false)
                 : new VolumeMedia(StorageMedia.SolidState, [1]));
@@ -75,16 +75,44 @@ public sealed class RetrimRunTests
     [Fact]
     public async Task AVolumeThatIsNotMountedIsNotRetrimmed()
     {
-        var (retrim, results) = await Run([@"Z:\"], _ => new VolumeMedia(StorageMedia.Nvme, [0]));
+        var (retrim, results) = await Run(
+            [new(@"Z:\", @"\\?\Volume{99999999-9999-9999-9999-999999999999}\")],
+            _ => new VolumeMedia(StorageMedia.Nvme, [0]));
 
         Assert.Empty(retrim.Asked);
         Assert.Equal(RetrimOutcome.NotOffered, Assert.Single(results).Answer.Outcome);
     }
 
+    /// <summary>
+    /// The letter the user accepted now stands for another volume, here after a restart as administrator.
+    /// The volume at that letter is never retrimmed in its place: the one accepted is found by its name,
+    /// wherever it is mounted now, and the result still names the letter the offer showed.
+    /// </summary>
+    [Fact]
+    public async Task AMovedLetterNeverRetrimsTheVolumeNowAtIt()
+    {
+        const string Accepted = @"\\?\Volume{44444444-4444-4444-4444-444444444444}\";
+
+        var (retrim, results) = await Run([new(D, Accepted)], _ => new VolumeMedia(StorageMedia.Nvme, [0]));
+
+        Assert.DoesNotContain(NameOfD, retrim.Asked);
+        Assert.Empty(retrim.Asked);
+        Assert.Equal(new RetrimResult(D, new RetrimAnswer(RetrimOutcome.NotOffered)), Assert.Single(results));
+    }
+
+    [Fact]
+    public async Task TheAcceptedVolumeIsRetrimmedWhereverItIsMountedNow()
+    {
+        var (retrim, results) = await Run([new(@"F:\", NameOfD)], _ => new VolumeMedia(StorageMedia.Nvme, [0]));
+
+        Assert.Equal([NameOfD], retrim.Asked);
+        Assert.Equal(@"F:\", Assert.Single(results).Root);
+    }
+
     [Fact]
     public async Task WindowsOwnAnswerIsReported()
     {
-        var (_, results) = await Run([C], _ => new VolumeMedia(StorageMedia.Nvme, [0]), new RetrimAnswer(RetrimOutcome.Failed, 3));
+        var (_, results) = await Run([new(C, NameOfC)], _ => new VolumeMedia(StorageMedia.Nvme, [0]), new RetrimAnswer(RetrimOutcome.Failed, 3));
 
         Assert.Equal(new RetrimAnswer(RetrimOutcome.Failed, 3), Assert.Single(results).Answer);
     }
@@ -98,7 +126,7 @@ public sealed class RetrimRunTests
         var retrim = new FakeVolumeRetrim();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => RetrimRun.ExecuteAsync([C], Mounted, _ => new VolumeMedia(StorageMedia.Nvme, [0]), retrim, new Collected(), cancelled.Token));
+            () => RetrimRun.ExecuteAsync([new(C, NameOfC)], Mounted, _ => new VolumeMedia(StorageMedia.Nvme, [0]), retrim, new Collected(), cancelled.Token));
 
         Assert.Empty(retrim.Asked);
     }

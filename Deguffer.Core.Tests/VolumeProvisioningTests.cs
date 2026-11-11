@@ -125,6 +125,18 @@ public sealed class VolumeProvisioningTests
         Assert.Equal(thin, read);
     }
 
+    /// <summary>A descriptor cut short before the flag is a refusal to say, not an answer of "not thin".</summary>
+    [Fact]
+    public void ADiskWhoseAnswerStopsBeforeTheFlagIsNotKnown()
+    {
+        var queries = new FakeStorageQueries()
+            .Volume(Root, 0)
+            .Disk(0, Sata, seekPenalty: false)
+            .ProvisioningAnswer(0, StorageAnswer.Answered(FakeStorageQueries.ProvisioningBytes(thin: true)[..8]));
+
+        Assert.Null(Classify(queries).ThinlyProvisioned);
+    }
+
     [Fact]
     public void AnAnswerTooShortToHoldTheFlagSaysNothing()
     {

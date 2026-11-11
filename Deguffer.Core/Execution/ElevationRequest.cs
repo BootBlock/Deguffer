@@ -1,5 +1,6 @@
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Duplicates;
+using Deguffer.Core.Retrim;
 
 namespace Deguffer.Core.Execution;
 
@@ -59,7 +60,7 @@ public abstract record ElevationRequest
         List<SearchLocation> locations = [];
         string? drive = null;
         string? folder = null;
-        List<string> retrim = [];
+        List<RetrimTarget> retrim = [];
 
         foreach (var argument in arguments)
         {
@@ -113,9 +114,9 @@ public abstract record ElevationRequest
                 folder = ValueOf(argument, FolderPrefix);
             }
             else if (argument.StartsWith(RetrimPrefix, StringComparison.OrdinalIgnoreCase)
-                     && ValueOf(argument, RetrimPrefix) is { } root)
+                     && RetrimRequest.TargetOf(argument[RetrimPrefix.Length..]) is { } target)
             {
-                retrim.Add(root);
+                retrim.Add(target);
             }
         }
 
@@ -236,31 +237,44 @@ public sealed record DuplicatesRequest : ElevationRequest
 }
 
 /// <summary>
-/// Open on the Storage page and ask Windows to retrim the volumes mounted at <see cref="Volumes"/>,
-/// which the user asked for from a clean's offer in the instance this one replaces.
+/// Open on the Storage page and ask Windows to retrim the volumes <see cref="Targets"/> names, which
+/// the user asked for from a clean's offer in the instance this one replaces.
 ///
-/// <para>Each mount point is its own argument, so a folder mount with a space in it travels whole.
-/// What travels is a name, not the decision: the run judges each volume again before Windows is asked
-/// (<see cref="Retrim.RetrimRun"/>), so a command line naming any volume retrims only one a clean could
-/// have offered.</para>
+/// <para>Each volume is its own argument, its name and its mount point joined by a <c>|</c>, which
+/// neither a volume name nor a path can hold, so a folder mount with a space in it travels whole. What
+/// travels is a name, not the decision: the run judges each volume again before Windows is asked
+/// (<see cref="RetrimRun"/>), so a command line naming any volume retrims only one a clean could have
+/// offered.</para>
 /// </summary>
 public sealed record RetrimRequest : ElevationRequest
 {
-    public RetrimRequest(IReadOnlyList<string> volumes)
-    {
-        ArgumentNullException.ThrowIfNull(volumes);
+    private const char Separator = '|';
 
-        Volumes = [.. volumes];
+    public RetrimRequest(IReadOnlyList<RetrimTarget> targets)
+    {
+        ArgumentNullException.ThrowIfNull(targets);
+
+        Targets = [.. targets];
     }
 
-    /// <summary>The mount points of the volumes to retrim, in the order the offer listed them.</summary>
-    public IReadOnlyList<string> Volumes { get; }
+    /// <summary>The volumes to retrim, in the order the offer listed them.</summary>
+    public IReadOnlyList<RetrimTarget> Targets { get; }
 
-    public override IReadOnlyList<string> ToArguments() => [.. Volumes.Select(root => RetrimPrefix + root)];
+    public override IReadOnlyList<string> ToArguments() =>
+        [.. Targets.Select(target => RetrimPrefix + target.VolumeName + Separator + target.Root)];
 
-    public bool Equals(RetrimRequest? other) => other is not null && Volumes.SequenceEqual(other.Volumes);
+    public bool Equals(RetrimRequest? other) => other is not null && Targets.SequenceEqual(other.Targets);
 
-    public override int GetHashCode() => Volumes.Count;
+    public override int GetHashCode() => Targets.Count;
+
+    /// <summary>
+    /// The volume one argument's value names, or null where it does not name both halves: a volume name
+    /// alone cannot be shown, and a mount point alone is the identity a moved letter makes wrong.
+    /// </summary>
+    internal static RetrimTarget? TargetOf(string value) =>
+        value.Split(Separator) is [var name, var root] && !string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(root)
+            ? new RetrimTarget(root, name)
+            : null;
 }
 
 /// <summary>

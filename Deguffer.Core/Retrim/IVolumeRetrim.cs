@@ -9,8 +9,8 @@ public interface IVolumeRetrim
 {
     /// <summary>
     /// Ask Windows to retrim the volume Windows names <paramref name="volumeName"/>, in its
-    /// <c>\?\Volume{GUID}\</c> form, and wait for its answer. Blocks for as long as Windows takes, which
-    /// is seconds on most volumes and longer on a large thin one, so never call it on the UI thread.
+    /// <c>\?\Volume{GUID}\</c> form, and wait for its answer. Blocks for as long as Windows takes, so
+    /// never call it on the UI thread.
     /// </summary>
     RetrimAnswer Retrim(string volumeName);
 }

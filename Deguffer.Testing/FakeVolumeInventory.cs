@@ -24,6 +24,7 @@ public sealed class FakeVolumeInventory : IVolumeInventory
     private readonly Lock _gate = new();
 
     private readonly Dictionary<string, string> _substitutes = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> _freeNow = new(StringComparer.OrdinalIgnoreCase);
 
     private string? _answer;
 
@@ -217,9 +218,20 @@ public sealed class FakeVolumeInventory : IVolumeInventory
     public (long Total, long Free)? SpaceOf(string path) =>
         MountPointOf(path) is { } mountPoint
         && _volumes.FirstOrDefault(volume => volume.MountPoints.Contains(mountPoint, StringComparer.OrdinalIgnoreCase))
-            is { TotalBytes: { } total, FreeBytes: { } free }
-            ? (total, free)
+            is { TotalBytes: { } total, FreeBytes: { } free } volume
+            ? (total, _freeNow.TryGetValue(volume.RootPath, out var now) ? now : free)
             : null;
+
+    /// <summary>
+    /// The volume at <paramref name="rootPath"/> has <paramref name="freeBytes"/> free when asked now,
+    /// while <see cref="Volumes"/> goes on stating the figure it was read with, as the real list does
+    /// until it is read again.
+    /// </summary>
+    public FakeVolumeInventory FreeNow(string rootPath, long freeBytes)
+    {
+        _freeNow[rootPath] = freeBytes;
+        return this;
+    }
 
     public void Invalidate() => InvalidateCount++;
 

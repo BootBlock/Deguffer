@@ -109,7 +109,7 @@ public sealed partial class RetrimViewModel : ObservableObject
     /// Retrim the volumes a restart as administrator was asked to, with no offer first: the user
     /// accepted it in the instance this one replaced.
     /// </summary>
-    public Task RunRequestedAsync(RetrimRequest request, CancellationToken ct) => RunAsync(request.Volumes, ct);
+    public Task RunRequestedAsync(RetrimRequest request, CancellationToken ct) => RunAsync(request.Targets, ct);
 
     /// <summary>
     /// Take the offer and its results down, as a new clean begins and they describe one that has gone.
@@ -131,15 +131,17 @@ public sealed partial class RetrimViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanRetrim))]
     private async Task RetrimAsync(CancellationToken ct)
     {
-        IReadOnlyList<string> roots = [.. _offered.Select(candidate => candidate.Volume.RootPath)];
+        // BasisOf offers only a volume Windows names, so every candidate has its name.
+        IReadOnlyList<RetrimTarget> targets =
+            [.. _offered.Select(candidate => new RetrimTarget(candidate.Volume.RootPath, candidate.Volume.VolumeName!))];
 
         if (_isElevated)
         {
-            await RunAsync(roots, ct);
+            await RunAsync(targets, ct);
             return;
         }
 
-        if (_relaunch(new RetrimRequest(roots)))
+        if (_relaunch(new RetrimRequest(targets)))
         {
             ReplacedByElevatedInstance?.Invoke(this, EventArgs.Empty);
             return;
@@ -151,7 +153,7 @@ public sealed partial class RetrimViewModel : ObservableObject
 
     private bool CanRetrim() => !IsRetrimming && (_isElevated || _running.MayEndProcess);
 
-    private async Task RunAsync(IReadOnlyList<string> roots, CancellationToken ct)
+    private async Task RunAsync(IReadOnlyList<RetrimTarget> targets, CancellationToken ct)
     {
         IsOffered = false;
         Results.Clear();
@@ -165,7 +167,7 @@ public sealed partial class RetrimViewModel : ObservableObject
         {
             var volumes = await _volumes.RefreshAsync(ct);
             var media = new VolumeMediaCache(_storage);
-            var remaining = new Queue<string>(roots);
+            var remaining = new Queue<string>(targets.Select(target => target.Root));
             Underway = remaining.Count > 0 ? RetrimReport.Underway(remaining.Peek()) : string.Empty;
 
             var landed = new Landed(result =>
@@ -175,7 +177,7 @@ public sealed partial class RetrimViewModel : ObservableObject
                 Show(result.Sentence);
             });
 
-            await RetrimRun.ExecuteAsync(roots, volumes, media.Of, _retrim, landed, ct);
+            await RetrimRun.ExecuteAsync(targets, volumes, media.Of, _retrim, landed, ct);
         }
         catch (OperationCanceledException)
         {

@@ -152,12 +152,13 @@ public sealed class RetrimOfferTests
         var inventory = new FakeVolumeInventory()
             .With(C, totalBytes: 100 * GiB, freeBytes: 7 * GiB, volumeName: NameOfC)
             .With(D, totalBytes: 100 * GiB, freeBytes: 1 * GiB)
-            .With(@"E:\", kind: DriveType.Removable, totalBytes: 100 * GiB, freeBytes: 1 * GiB, volumeName: NameOfD);
+            .With(@"E:\", kind: DriveType.Removable, totalBytes: 100 * GiB, freeBytes: 1 * GiB, volumeName: NameOfD)
+            .FreeNow(C, 12 * GiB);
 
         var reading = FreeSpaceReading.Take(inventory);
 
         var only = Assert.Single(reading);
         Assert.Equal(C, only.RootPath);
-        Assert.Equal(7 * GiB, only.FreeBytes);
+        Assert.Equal(12 * GiB, only.FreeBytes);
     }
 }

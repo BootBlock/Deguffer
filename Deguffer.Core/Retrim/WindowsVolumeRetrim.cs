@@ -5,8 +5,8 @@ namespace Deguffer.Core.Retrim;
 
 /// <summary>
 /// <c>MSFT_Volume.Optimize</c> in Windows' storage management namespace,
-/// <c>ROOT\Microsoft\Windows\Storage</c>, which is what <c>Optimize-Volume -ReTrim</c> and Optimize
-/// Drives call. Windows' own route, so Windows decides what a retrim means for each kind of storage
+/// <c>ROOT\Microsoft\Windows\Storage</c>, the class the storage module's <c>Optimize-Volume -ReTrim</c>
+/// is a cmdlet over. Windows' own route, so Windows decides what a retrim means for each kind of storage
 /// (§5.1), and answers "Not Supported" where it means nothing.
 ///
 /// <para>The volume is found by its <c>Path</c>, the <c>\\?\Volume{GUID}\</c> name, rather than by its

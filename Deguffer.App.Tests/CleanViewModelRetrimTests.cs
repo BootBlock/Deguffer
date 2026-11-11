@@ -28,9 +28,7 @@ public class CleanViewModelRetrimTests
         var page = new StoragePage([cache], isElevated, freeBytes: 10 * GiB, volumeName: VolumeName);
         page.Storage.Volume(page.VolumeRoot, 0).Disk(0, bus, seekPenalty).Thin(0, false);
         cache.Steps = [page.Cache("taken", 1024)];
-        cache.AfterCleaning = () => page.Volumes
-            .Without(page.VolumeRoot)
-            .With(page.VolumeRoot, totalBytes: 100 * GiB, freeBytes: (10 * GiB) + freed, volumeName: VolumeName);
+        cache.AfterCleaning = () => page.Volumes.FreeNow(page.VolumeRoot, (10 * GiB) + freed);
         page.Scan();
         page.Clean();
         return page;
@@ -91,7 +89,7 @@ public class CleanViewModelRetrimTests
         Accept(page);
 
         var request = Assert.IsType<RetrimRequest>(Assert.Single(page.Relaunches));
-        Assert.Equal([page.VolumeRoot], request.Volumes);
+        Assert.Equal([new RetrimTarget(page.VolumeRoot, VolumeName)], request.Targets);
         Assert.True(replaced);
         Assert.Empty(page.Retrim.Asked);
     }
@@ -127,19 +125,25 @@ public class CleanViewModelRetrimTests
         Assert.False(page.ViewModel.Retrim.IsOffered);
     }
 
-    /// <summary>A new clean takes down the offer and the results of the one before it.</summary>
+    /// <summary>
+    /// A new clean takes down the offer and the results of the one before it. A declined restart leaves
+    /// both on screen, and the second clean frees nothing more, so nothing it finds puts them back.
+    /// </summary>
     [Fact]
     public void ANewCleanTakesDownTheLastOnesOfferAndResults()
     {
-        using var page = Cleaned(isElevated: true);
+        using var page = Cleaned(isElevated: false);
+        page.RelaunchAccepted = false;
         Accept(page);
+        Assert.True(page.ViewModel.Retrim.IsOffered);
         Assert.NotEmpty(page.ViewModel.Retrim.Results);
 
-        page.Volumes.Without(page.VolumeRoot).With(page.VolumeRoot, totalBytes: 100 * GiB, freeBytes: 14 * GiB, volumeName: VolumeName);
         page.Scan();
         page.Clean();
 
+        Assert.False(page.ViewModel.Retrim.IsOffered);
         Assert.Empty(page.ViewModel.Retrim.Results);
+        Assert.False(page.ViewModel.Retrim.IsShown);
     }
 
     /// <summary>
@@ -152,7 +156,9 @@ public class CleanViewModelRetrimTests
         using var page = new StoragePage([new FakeCleanupProvider("cache")], isElevated: true, freeBytes: 10 * GiB, volumeName: VolumeName);
         page.Storage.Volume(page.VolumeRoot, 0).Disk(0, Nvme, seekPenalty: false);
 
-        UiThread.Run(() => page.ViewModel.Retrim.RunRequestedAsync(new RetrimRequest([page.VolumeRoot, @"Z:\"]), CancellationToken.None));
+        RetrimRequest request = new([new(page.VolumeRoot, VolumeName), new(@"Z:\", @"\\?\Volume{99999999-9999-9999-9999-999999999999}\")]);
+
+        UiThread.Run(() => page.ViewModel.Retrim.RunRequestedAsync(request, CancellationToken.None));
 
         Assert.Equal([VolumeName], page.Retrim.Asked);
         Assert.Equal(

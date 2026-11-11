@@ -60,22 +60,36 @@ public sealed class ElevationRequestTests
     [Fact]
     public void ARetrimRequestComesBackWithEveryVolumeInOrder()
     {
-        var request = new RetrimRequest([Drive, @"C:\", @"C:\Mounts\Second disk\"]);
+        const string First = @"\\?\Volume{11111111-1111-1111-1111-111111111111}\";
+        const string Second = @"\\?\Volume{22222222-2222-2222-2222-222222222222}\";
+        var request = new RetrimRequest([new(Drive, First), new(@"C:\Mounts\Second disk\", Second)]);
 
-        Assert.Equal([@"--retrim=D:\", @"--retrim=C:\", @"--retrim=C:\Mounts\Second disk\"], request.ToArguments());
+        Assert.Equal(
+            [$"--retrim={First}|D:\\", $"--retrim={Second}|C:\\Mounts\\Second disk\\"],
+            request.ToArguments());
         Assert.Equal(request, ElevationRequest.From(request.ToArguments()));
     }
 
-    [Fact]
-    public void ARetrimRequestNamingNoVolumeIsNoRequest()
+    /// <summary>
+    /// Each argument names both halves or none: a mount point alone is the identity a moved letter
+    /// makes wrong, and a volume name alone cannot be shown.
+    /// </summary>
+    [Theory]
+    [InlineData("--retrim=")]
+    [InlineData("--retrim=  ")]
+    [InlineData(@"--retrim=D:\")]
+    [InlineData(@"--retrim=\\?\Volume{11111111-1111-1111-1111-111111111111}\|")]
+    [InlineData(@"--retrim=|D:\")]
+    [InlineData(@"--retrim=a|b|c")]
+    public void ARetrimArgumentNamingLessThanBothHalvesIsNoRequest(string argument)
     {
-        Assert.Null(ElevationRequest.From(["--retrim=", "--retrim=  "]));
+        Assert.Null(ElevationRequest.From([argument]));
     }
 
     [Fact]
     public void ARetrimWinsOverAPreview()
     {
-        Assert.IsType<RetrimRequest>(ElevationRequest.From(["--rescan", @"--retrim=D:\"]));
+        Assert.IsType<RetrimRequest>(ElevationRequest.From(["--rescan", @"--retrim=\\?\Volume{11111111-1111-1111-1111-111111111111}\|D:\"]));
     }
 
     [Fact]
