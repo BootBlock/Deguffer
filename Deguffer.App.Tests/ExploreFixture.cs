@@ -7,6 +7,7 @@ using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Exploring.History;
 using Deguffer.Core.Exploring.Knowledge;
+using Deguffer.Core.Health;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Working;
 using Deguffer.Testing;
@@ -141,6 +142,7 @@ internal sealed class ExploreFixture : IDisposable
             Running,
             Work,
             History,
+            DriveHealth,
             Motion,
             () =>
             {
@@ -159,6 +161,9 @@ internal sealed class ExploreFixture : IDisposable
 
     /// <summary>The kept scan summaries, stored under the fake profile's own local data.</summary>
     public ScanHistory History => _history ??= new ScanHistory(new ScanHistoryStore(Environment));
+
+    /// <summary>What Health last read of each volume's drives, which a test writes as Health would.</summary>
+    public HealthByVolume DriveHealth { get; } = new();
 
     private ScanHistory? _history;
 

@@ -425,6 +425,19 @@
                              During a clean it drains as the disk gives the space back. -->
                         <controls:FillBar Value="{x:Bind ViewModel.UsedPercent, Mode=OneWay}"
                                           Height="6" />
+
+                        <!-- §7.6: a drive that is filling wants a clean, and one that is failing
+                             wants a backup first, so a drive of concern is named beside its free
+                             space. Only from what Health last read: nothing here asks a drive
+                             anything, so the bar stays closed until Health has been opened. The
+                             title states the verdict in words, so the severity colour is not
+                             needed to read it (§6.5). -->
+                        <InfoBar IsOpen="{x:Bind ViewModel.DriveHealth.HasConcern, Mode=OneWay}"
+                                 IsClosable="False"
+                                 Severity="{x:Bind ViewModel.DriveHealth.Severity, Mode=OneWay}"
+                                 Title="{x:Bind ViewModel.DriveHealth.Title, Mode=OneWay}"
+                                 Message="{x:Bind ViewModel.DriveHealth.Text, Mode=OneWay}"
+                                 AutomationProperties.Name="Drive health" />
                     </StackPanel>
 
                     <!-- §5.4: the two numbers are reported separately and labelled distinctly. They

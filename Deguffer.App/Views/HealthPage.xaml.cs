@@ -28,7 +28,8 @@ public sealed partial class HealthPage : Page
             ElevatedRelaunch.IsElevated,
             ElevatedRelaunch.TryRelaunch,
             App.Running,
-            App.Work);
+            App.Work,
+            App.DriveHealth);
 
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
 

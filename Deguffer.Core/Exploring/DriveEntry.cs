@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Deguffer.Core.Health;
 
 namespace Deguffer.Core.Exploring;
 
@@ -15,8 +16,15 @@ namespace Deguffer.Core.Exploring;
 public sealed class DriveEntry : INotifyPropertyChanged
 {
     private static readonly PropertyChangedEventArgs ChoiceChanged = new(nameof(Choice));
+    private static readonly PropertyChangedEventArgs HealthChanged = new(nameof(Health));
+    private static readonly PropertyChangedEventArgs ConcernChanged = new(nameof(HasHealthConcern));
+    private static readonly PropertyChangedEventArgs DescriptionChanged = new(nameof(Description));
 
-    internal DriveEntry(DriveChoice choice) => Choice = choice;
+    internal DriveEntry(DriveChoice choice, VolumeHealthNote? health)
+    {
+        Choice = choice;
+        Health = health;
+    }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -25,6 +33,22 @@ public sealed class DriveEntry : INotifyPropertyChanged
 
     /// <summary>The latest reading of the volume, worded for the picker.</summary>
     public DriveChoice Choice { get; private set; }
+
+    /// <summary>
+    /// What Health last found wrong with the drives under the volume, or null where it found nothing
+    /// or has not read them. Apart from <see cref="Choice"/>, because it comes from Health's reading
+    /// and not from the volume's, and the two arrive at different times.
+    /// </summary>
+    public VolumeHealthNote? Health { get; private set; }
+
+    public bool HasHealthConcern => Health is not null;
+
+    /// <summary>
+    /// Everything the row shows, in one sentence, for the screen reader: the volume's own
+    /// <see cref="DriveChoice.Description"/>, and a drive of concern after it.
+    /// </summary>
+    public string Description =>
+        Health is { } health ? $"{Choice.Description}. Drive health: {health.Word}. {health.Text}" : Choice.Description;
 
     /// <summary>
     /// Take a newer reading of the same volume. Nothing is raised for one equal to the last, which is
@@ -39,5 +63,20 @@ public sealed class DriveEntry : INotifyPropertyChanged
 
         Choice = choice;
         PropertyChanged?.Invoke(this, ChoiceChanged);
+        PropertyChanged?.Invoke(this, DescriptionChanged);
+    }
+
+    /// <summary>Take what Health now says about the drives under the volume. Nothing is raised for the same note.</summary>
+    internal void Show(VolumeHealthNote? health)
+    {
+        if (health == Health)
+        {
+            return;
+        }
+
+        Health = health;
+        PropertyChanged?.Invoke(this, HealthChanged);
+        PropertyChanged?.Invoke(this, ConcernChanged);
+        PropertyChanged?.Invoke(this, DescriptionChanged);
     }
 }

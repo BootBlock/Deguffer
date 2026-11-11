@@ -415,6 +415,11 @@ restarting as administrator adds its failure limits, link speed, latest self-tes
 and a banner says so where it applies. Windows does not report the health of drives on USB, RAID or
 Storage Spaces in this way, so those show only their details.
 
+Once Health has read your drives, a drive it marks Watch or Failing is also named where its free
+space is shown: on the Storage page, and in the drive lists of Explore and Duplicates. A drive that
+is filling needs a clean, but a drive that is failing needs a backup first. Those pages never ask a
+drive anything themselves, so they show nothing until you have opened Health.
+
 ## Building
 
 To build Deguffer you need Windows and the .NET 10 SDK. The Windows App SDK and Win2D come from

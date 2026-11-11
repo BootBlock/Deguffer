@@ -18,7 +18,7 @@ public static class DriveOverview
         }
 
         var total = Count(drives, "drive");
-        var concerns = read.Count(report => report.Verdict is DriveVerdict.Watch or DriveVerdict.Failing);
+        var concerns = read.Count(report => report.Verdict.IsConcern());
         var withoutReport = read.Count(report => report.Verdict is DriveVerdict.Unknown);
 
         if (concerns > 0)

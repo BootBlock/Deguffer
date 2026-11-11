@@ -27,7 +27,7 @@ public sealed class DriveHealthReader(IDriveProbe probe, IVolumeInventory invent
     private static readonly IDriveHealthSource[] Sources = [new NvmeHealthSource(), new AtaHealthSource()];
 
     private readonly SingleRun<IReadOnlyList<DriveDescription>?> _listing = new();
-    private readonly SingleRun<IReadOnlyDictionary<int, string>> _volumes = new();
+    private readonly SingleRun<IReadOnlyDictionary<int, IReadOnlyList<LocalVolume>>> _volumes = new();
     private readonly ConcurrentDictionary<int, SingleRun<DriveHealth>> _drives = new();
 
     /// <summary>Every drive present, ordered by disk number, or null where Windows would not list them in time.</summary>
@@ -113,11 +113,11 @@ public sealed class DriveHealthReader(IDriveProbe probe, IVolumeInventory invent
 
     private async Task ReportVolumesAsync(IReadOnlyList<DriveDescription> drives, IProgress<DriveVolumes> progress, CancellationToken ct)
     {
-        IReadOnlyDictionary<int, string> lines;
+        IReadOnlyDictionary<int, IReadOnlyList<LocalVolume>> byDisk;
 
         try
         {
-            lines = await _volumes.Join(VolumesByDiskAsync).WaitAsync(answerLimit, ct);
+            byDisk = await _volumes.Join(VolumesByDiskAsync).WaitAsync(answerLimit, ct);
         }
         catch (TimeoutException)
         {
@@ -128,7 +128,9 @@ public sealed class DriveHealthReader(IDriveProbe probe, IVolumeInventory invent
 
         foreach (var drive in drives)
         {
-            progress.Report(new DriveVolumes(drive.Key, lines.GetValueOrDefault(drive.Disk, string.Empty)));
+            var volumes = byDisk.GetValueOrDefault(drive.Disk, []);
+
+            progress.Report(new DriveVolumes(drive.Key, string.Join("; ", volumes.Select(VolumeText)), [.. volumes.SelectMany(volume => (IEnumerable<string>)[volume.RootPath, .. volume.AlsoMountedAt ?? []])]));
         }
     }
 
@@ -172,10 +174,10 @@ public sealed class DriveHealthReader(IDriveProbe probe, IVolumeInventory invent
     }
 
     /// <summary>
-    /// A line of each disk's volumes. The token is left out because a run outlives the read that
+    /// Each disk's volumes. The token is left out because a run outlives the read that
     /// started it, and the media cache is made for this run so a swapped disk is seen by the next.
     /// </summary>
-    private async Task<IReadOnlyDictionary<int, string>> VolumesByDiskAsync()
+    private async Task<IReadOnlyDictionary<int, IReadOnlyList<LocalVolume>>> VolumesByDiskAsync()
     {
         var mounted = await inventory.RefreshAsync(CancellationToken.None);
         var media = new VolumeMediaCache(storage);
@@ -184,6 +186,6 @@ public sealed class DriveHealthReader(IDriveProbe probe, IVolumeInventory invent
             .Where(volume => volume.IsReady)
             .SelectMany(volume => media.Of(volume).PhysicalDisks.Select(disk => (Disk: disk, Volume: volume)))
             .GroupBy(entry => entry.Disk, entry => entry.Volume)
-            .ToDictionary(group => group.Key, group => string.Join("; ", group.Select(VolumeText)));
+            .ToDictionary(group => group.Key, IReadOnlyList<LocalVolume> (group) => [.. group]);
     }
 }
