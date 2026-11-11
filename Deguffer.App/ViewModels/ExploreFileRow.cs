@@ -95,7 +95,7 @@ public sealed record ExploreFileRow(
     public string Description =>
         $"{Name}, {SizeLabel} on disk{(StorageLabel.Length > 0 ? $", {StorageLabel}" : string.Empty)}, "
         + $"in {Folder}, last written {AgeLabel}"
-        + (TargetLine is null ? string.Empty : $". {TargetLine}")
+        + (Link is null ? string.Empty : $". Points at {Link.Target}, which is not there")
         + (Refusal is null ? string.Empty : $". Explore will not remove this: {Refusal}");
 
     /// <summary>

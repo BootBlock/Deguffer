@@ -44,6 +44,10 @@ public sealed class ExploreBrokenLinksTests : IDisposable
         var row = page.Files.Rows[0];
         Assert.Equal(Path.Combine(root, "Desktop", "Old Game.lnk"), row.Path);
         Assert.Equal($@"Points at {Drive}Games\Old\game.exe, which is not there.", row.TargetLine);
+
+        // A screen reader is told the target in the row's name, in one sentence among the others.
+        // Its last sentence here, so a refusal following it would start a sentence of its own.
+        Assert.EndsWith($@". Points at {Drive}Games\Old\game.exe, which is not there", row.Description);
         Assert.Equal(
             "1 shortcut or link here leads nowhere. 1 more leads to a drive or share that is not connected or could not be checked, so it is not listed.",
             page.Files.Summary);
