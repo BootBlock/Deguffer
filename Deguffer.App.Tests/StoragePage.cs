@@ -27,16 +27,21 @@ internal sealed class StoragePage : IDisposable
     /// <param name="selectionStore">
     /// Where the remembered ticks are kept, given the page's own profile, or null for the store the app uses.
     /// </param>
+    /// <param name="volumeName">
+    /// The <c>\\?\Volume{GUID}\</c> name of the page's one volume, or null for none. A retrim is offered
+    /// only on a volume Windows names.
+    /// </param>
     public StoragePage(
         IReadOnlyList<FakeCleanupProvider> providers,
         bool isElevated = false,
         long freeBytes = 400_000,
         string? storedKeepList = null,
-        Func<FakeUserEnvironment, ISelectionStore>? selectionStore = null)
+        Func<FakeUserEnvironment, ISelectionStore>? selectionStore = null,
+        string? volumeName = null)
     {
         Environment = new FakeUserEnvironment(_temp.Path);
         VolumeRoot = Path.TrimEndingDirectorySeparator(_temp.Path) + Path.DirectorySeparatorChar;
-        Volumes = new FakeVolumeInventory().With(VolumeRoot, totalBytes: Capacity, freeBytes: freeBytes);
+        Volumes = new FakeVolumeInventory().With(VolumeRoot, totalBytes: Capacity, freeBytes: freeBytes, volumeName: volumeName);
         ToolRoot = _temp.CreateDirectory("profile", "AppData", "Local", "Fake");
 
         if (storedKeepList is not null)
@@ -71,6 +76,17 @@ internal sealed class StoragePage : IDisposable
             },
             appVersion: "0.0.0-test",
             new WhenCompleteViewModel(Preferences, Session),
+            new RetrimViewModel(
+                Volumes,
+                Storage,
+                Retrim,
+                isElevated,
+                request =>
+                {
+                    Relaunches.Add(request);
+                    return RelaunchAccepted;
+                },
+                Running),
             new ScanChoiceViewModel(planner.Providers, Preferences),
             Sizes,
             DriveHealth);
@@ -96,6 +112,15 @@ internal sealed class StoragePage : IDisposable
 
     /// <summary>The stored settings, in this test's own profile.</summary>
     public PreferenceService Preferences { get; }
+
+    /// <summary>The storage behind the page's volume, which decides whether a retrim is offered on it.</summary>
+    public FakeStorageQueries Storage { get; } = new();
+
+    /// <summary>Windows' retrim, which records what it is asked and retrims nothing.</summary>
+    public FakeVolumeRetrim Retrim { get; } = new();
+
+    /// <summary>Whether the user accepts Windows' prompt when the retrim offer restarts Deguffer as administrator.</summary>
+    public bool RelaunchAccepted { get; set; } = true;
 
     /// <summary>The Windows session a finished clean may lock, log off, sleep or shut down.</summary>
     public FakeWindowsSession Session { get; } = new();

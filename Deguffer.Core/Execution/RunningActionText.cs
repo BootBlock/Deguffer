@@ -27,6 +27,7 @@ public static class RunningActionText
         RunningAction.Uninstall => "an uninstall",
         RunningAction.DuplicateRemoval => "a removal on the Duplicates page",
         RunningAction.StartupChange => "a change on the Startup page",
+        RunningAction.Retrim => "a retrim on the Storage page",
         _ => throw new ArgumentOutOfRangeException(nameof(action), action, null),
     };
 }

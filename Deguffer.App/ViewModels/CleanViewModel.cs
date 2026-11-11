@@ -9,6 +9,7 @@ using Deguffer.Core.Execution;
 using Deguffer.Core.Execution.Sizes;
 using Deguffer.Core.Health;
 using Deguffer.Core.Providers;
+using Deguffer.Core.Retrim;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Viewing;
@@ -103,6 +104,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// </param>
     /// <param name="appVersion">Deguffer's own version, which a run's diagnostic report names.</param>
     /// <param name="whenComplete">What follows a finished clean, chosen beside the Clean button.</param>
+    /// <param name="retrim">The offer of Windows' retrim on the volumes a finished clean freed space on.</param>
     /// <param name="scanChoice">
     /// The locations the Scan button's drop-down scans on their own. Built over this page's planner,
     /// so its rows are the planner's own providers.
@@ -122,6 +124,7 @@ public sealed partial class CleanViewModel : ObservableObject
         Func<IConfirmationPrompt> prompt,
         string appVersion,
         WhenCompleteViewModel whenComplete,
+        RetrimViewModel retrim,
         ScanChoiceViewModel scanChoice,
         ProviderSizeHistory sizes,
         HealthByVolume driveHealth)
@@ -137,6 +140,7 @@ public sealed partial class CleanViewModel : ObservableObject
         _work = work;
         _prompt = prompt;
         WhenComplete = whenComplete;
+        Retrim = retrim;
         ScanChoice = scanChoice;
         Sizes = new StorageSizeChanges(sizes, Findings, isElevated);
 
@@ -263,6 +267,9 @@ public sealed partial class CleanViewModel : ObservableObject
     public ObservableCollection<FindingViewModel> Listed { get; } = [];
 
     public WhenCompleteViewModel WhenComplete { get; }
+
+    /// <summary>The offer of Windows' retrim after a clean, and what the retrims it started answered.</summary>
+    public RetrimViewModel Retrim { get; }
 
     public ScanChoiceViewModel ScanChoice { get; }
 
@@ -688,6 +695,10 @@ public sealed partial class CleanViewModel : ObservableObject
 
             var freeBefore = FreeSpaceOfProfile();
 
+            // Every fixed volume, not only the profile's: a clean frees space wherever its rows were,
+            // and a retrim is offered on each volume that freed enough.
+            var volumesBefore = FreeSpaceReading.Take(_volumes);
+
             // §7's confirmation is collected here, on the UI thread and before any work starts:
             // a dialog cannot be raised from the worker below, and asking mid-deletion would be
             // asking after the point the answer could still change anything.
@@ -786,6 +797,7 @@ public sealed partial class CleanViewModel : ObservableObject
             // the rescan below: it is the durable record, and leaving it showing the previous run
             // for the length of a scan would describe a machine that no longer exists.
             var outcome = RecordRunResult(results, freeBefore);
+            await Retrim.OfferAsync(volumesBefore, ct);
 
             if (outcome.VerificationFailed)
             {
@@ -1269,6 +1281,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
     private void ClearRunResult()
     {
+        Retrim.Clear();
         RemovedLabel = string.Empty;
         FreeSpaceChangeLabel = string.Empty;
         RequestedLabel = string.Empty;

@@ -389,7 +389,7 @@
 
             <!-- §7: free space, prominently. It is the only number the user came for. -->
             <Border Style="{StaticResource CardStyle}">
-                <Grid ColumnSpacing="28" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                <Grid ColumnSpacing="28" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
 
                     <StackPanel Grid.Row="0" Grid.Column="0" Spacing="10">
                         <StackPanel Orientation="Horizontal" Spacing="10">
@@ -531,6 +531,52 @@
                                        Style="{StaticResource SecondaryText}"
                                        AutomationProperties.LiveSetting="Polite" />
                         </StackPanel>
+                    </StackPanel>
+
+                    <!-- Windows' own retrim, offered where a clean freed a lot on a thin, virtual or
+                         solid-state drive, whose storage learns the space is free only when Windows
+                         trims it. Its own row rather than part of the verdict above, because a restart
+                         as administrator opens on this row with no clean behind it. Offered, never
+                         run unasked, and each result is Windows' own answer. -->
+                    <StackPanel x:Name="RetrimPanel"
+                                Grid.Row="2"
+                                Grid.Column="0"
+                                Grid.ColumnSpan="2"
+                                Margin="0,14,0,0"
+                                Spacing="10"
+                                Visibility="{x:Bind ViewModel.Retrim.IsShown, Mode=OneWay}">
+
+                        <TextBlock Text="{x:Bind ViewModel.Retrim.OfferText, Mode=OneWay}"
+                                   Style="{StaticResource CardStatement}"
+                                   Visibility="{x:Bind ViewModel.Retrim.IsOffered, Mode=OneWay}" />
+
+                        <Button x:Name="RetrimButton"
+                                Content="{x:Bind ViewModel.Retrim.ActionLabel, Mode=OneWay}"
+                                Command="{x:Bind ViewModel.Retrim.RetrimCommand}"
+                                Visibility="{x:Bind ViewModel.Retrim.IsOffered, Mode=OneWay}" />
+
+                        <StackPanel Orientation="Horizontal"
+                                    Spacing="10"
+                                    Visibility="{x:Bind ViewModel.Retrim.IsRetrimming, Mode=OneWay}">
+                            <ProgressRing IsActive="{x:Bind ViewModel.Retrim.IsRetrimming, Mode=OneWay}"
+                                          Width="16"
+                                          Height="16"
+                                          AutomationProperties.AccessibilityView="Raw" />
+                            <TextBlock Text="{x:Bind ViewModel.Retrim.Underway, Mode=OneWay}"
+                                       Style="{StaticResource SecondaryText}"
+                                       VerticalAlignment="Center"
+                                       AutomationProperties.LiveSetting="Polite" />
+                        </StackPanel>
+
+                        <ItemsControl x:Name="RetrimResults"
+                                      ItemsSource="{x:Bind ViewModel.Retrim.Results}"
+                                      AutomationProperties.LiveSetting="Polite">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="x:String">
+                                    <TextBlock Text="{x:Bind}" Style="{StaticResource CardStatement}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </StackPanel>
                 </Grid>
             </Border>

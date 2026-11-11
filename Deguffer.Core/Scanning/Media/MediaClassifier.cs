@@ -3,9 +3,18 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Scanning.Media;
 
 /// <summary>
-/// One physical disk's class, or why it has none.
+/// One physical disk's class, or why it has none, and whether it says it is thinly provisioned.
 /// </summary>
-internal readonly record struct DiskMedia(StorageMedia Class, MediaUnknownReason Reason = MediaUnknownReason.None, int Win32Error = 0)
+/// <param name="Thin">
+/// Whether the disk is thinly provisioned, or null where it did not say. Asked apart from the class,
+/// so a disk whose class is unknown can still say it is thin, and a disk that will not say whether it
+/// is thin keeps its class.
+/// </param>
+internal readonly record struct DiskMedia(
+    StorageMedia Class,
+    MediaUnknownReason Reason = MediaUnknownReason.None,
+    int Win32Error = 0,
+    bool? Thin = null)
 {
     public static DiskMedia Unknown(MediaUnknownReason reason, int win32Error) =>
         new(StorageMedia.Unknown, reason, win32Error);
@@ -83,7 +92,32 @@ internal static class MediaClassifier
             slowest = Slower(slowest, diskMedia(disk));
         }
 
-        return new VolumeMedia(slowest.Class, disks, slowest.Reason, slowest.Win32Error);
+        return new VolumeMedia(slowest.Class, disks, slowest.Reason, slowest.Win32Error, Thin(disks, diskMedia));
+    }
+
+    /// <summary>
+    /// Whether the volume is thinly provisioned: true where any disk behind it says so, since the
+    /// clusters freed on that disk go back only once trimmed, false where every disk says it is not,
+    /// and null where no disk says so and one would not answer. A refusal is never read as "not thin".
+    /// </summary>
+    private static bool? Thin(IReadOnlyList<int> disks, Func<int, DiskMedia> diskMedia)
+    {
+        var allAnswered = true;
+
+        foreach (var disk in disks)
+        {
+            switch (diskMedia(disk).Thin)
+            {
+                case true:
+                    return true;
+
+                case null:
+                    allAnswered = false;
+                    break;
+            }
+        }
+
+        return allAnswered ? false : null;
     }
 
     /// <summary>
@@ -95,7 +129,16 @@ internal static class MediaClassifier
     /// it does not say. An NVMe drive behind a RAID adapter reports the RAID bus, so it is classed by
     /// its seek penalty and is never NVMe, which is the conservative side of the truth.</para>
     /// </summary>
-    internal static DiskMedia ClassifyDisk(int disk, IStorageQueries queries)
+    internal static DiskMedia ClassifyDisk(int disk, IStorageQueries queries) =>
+        ClassOfDisk(disk, queries) with { Thin = ThinDisk(disk, queries) };
+
+    /// <summary>Whether <c>\\.\PhysicalDrive<paramref name="disk"/></c> says it is thinly provisioned, or null where it did not say.</summary>
+    private static bool? ThinDisk(int disk, IStorageQueries queries) =>
+        queries.Provisioning(disk).Bytes is { } bytes && StorageDescriptors.TryReadThinProvisioning(bytes, out var thin)
+            ? thin
+            : null;
+
+    private static DiskMedia ClassOfDisk(int disk, IStorageQueries queries)
     {
         var adapter = queries.Adapter(disk);
 
