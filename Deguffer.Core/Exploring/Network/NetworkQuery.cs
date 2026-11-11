@@ -46,7 +46,7 @@ public sealed record NetworkQuery(NetworkQueryStage Stage, string Parent, string
             return new NetworkQuery(NetworkQueryStage.Everything, string.Empty, string.Empty);
         }
 
-        if (!text.StartsWith(@"\\", StringComparison.Ordinal) || text.Length > 2 && text[2] is '?' or '.')
+        if (!text.StartsWith(@"\\", StringComparison.Ordinal) || Safety.LongPath.IsDeviceSpelling(text))
         {
             return Nothing;
         }
@@ -63,7 +63,7 @@ public sealed record NetworkQuery(NetworkQueryStage Stage, string Parent, string
         {
             1 => new NetworkQuery(NetworkQueryStage.Computers, string.Empty, names[0]),
             2 => new NetworkQuery(NetworkQueryStage.Shares, names[0], names[1]),
-            _ => new NetworkQuery(NetworkQueryStage.Folders, @"\\" + string.Join('\\', names[..^1]), names[^1]),
+            _ => new NetworkQuery(NetworkQueryStage.Folders, NetworkNames.Computer(string.Join('\\', names[..^1])), names[^1]),
         };
     }
 }

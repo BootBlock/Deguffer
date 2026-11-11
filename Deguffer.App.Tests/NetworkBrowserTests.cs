@@ -239,11 +239,32 @@ public sealed class NetworkBrowserTests : IDisposable
         using var browser = Browser();
         browser.Selected = await OpenMappedShareAsync(browser);
 
-        page.Targeting.Typed.Text = browser.Choice!;
-        await page.Targeting.Typed.GoCommand.ExecuteAsync(null);
+        await page.Targeting.Typed.UseAsync(browser.Choice!);
 
+        Assert.Equal(@"\\nas.test\media", page.Targeting.Typed.Text);
         Assert.Equal(TypedFolder.Refusal(@"\\nas.test\media", PathPresence.Absent), page.Targeting.Typed.Refusal);
         Assert.Equal(@"C:\", page.Targeting.Target.Root);
+
+        explore.Probe.Directory(@"\\?\UNC\nas.test\media");
+        await page.Targeting.Typed.UseAsync(browser.Choice!);
+
+        Assert.Equal(@"\\nas.test\media", page.Targeting.Target.Root);
+    });
+
+    /// <summary>A case-sensitive share listing two folders that differ only in case keeps both through a refresh.</summary>
+    [Fact]
+    public void FoldersDifferingOnlyInCaseSurviveARefresh() => UiThread.Run(async () =>
+    {
+        _network.Folder(@"\\nas.test\media", "Photos", "photos");
+        using var browser = Browser();
+        var media = await OpenMappedShareAsync(browser);
+
+        browser.RefreshCommand.Execute(media);
+        await media.Listing;
+
+        Assert.Equal(2, media.Children.Count);
+        Assert.False(media.HasFailure);
+        Assert.Equal(2, _network.Asked(@"\\nas.test\media"));
     });
 
     /// <summary>The filter narrows the nodes listed by name and keeps the way to a match open; emptied, it shows them all again.</summary>

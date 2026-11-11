@@ -41,7 +41,7 @@ public sealed class NetworkTreeTests
         var sources = Sources with { Computers = NetworkListing<string>.Failed(NetworkFailure.Refused) };
 
         Assert.Equal(NetworkFailure.Refused, NetworkTree.Listed(NetworkRoot.Network, sources).Failure);
-        Assert.True(NetworkTree.Listed(NetworkRoot.MappedDrives, sources).Succeeded);
+        Assert.Null(NetworkTree.Listed(NetworkRoot.MappedDrives, sources).Failure);
     }
 
     /// <summary>The connection roots fail only where both connection sources failed and nothing was listed.</summary>
@@ -51,7 +51,7 @@ public sealed class NetworkTreeTests
         var oneFailed = Sources with { Remembered = NetworkListing<NetworkConnection>.Failed(NetworkFailure.Refused) };
         var bothFailed = oneFailed with { Connected = NetworkListing<NetworkConnection>.Failed(NetworkFailure.Refused) };
 
-        Assert.True(NetworkTree.Listed(NetworkRoot.ConnectedShares, oneFailed).Succeeded);
+        Assert.Null(NetworkTree.Listed(NetworkRoot.ConnectedShares, oneFailed).Failure);
         Assert.Equal(NetworkFailure.Refused, NetworkTree.Listed(NetworkRoot.ConnectedShares, bothFailed).Failure);
     }
 
@@ -94,6 +94,30 @@ public sealed class NetworkTreeTests
     [Fact]
     public void OnlyTheNetworkRootWaitsToBeOpened() =>
         Assert.Equal([NetworkRoot.Network], NetworkTree.Roots.Where(root => !NetworkTree.OpensAtFirst(root)));
+
+    /// <summary>Only a computer added by name can be taken out of the tree: everything else comes back from Windows.</summary>
+    [Fact]
+    public void OnlyAnAddedComputerCanBeRemoved()
+    {
+        var computer = NetworkSources.Computer("nas.test");
+        var share = new NetworkPlace(@"\\nas.test\media", "media", NetworkPlaceKind.Share);
+
+        Assert.True(NetworkTree.CanRemove(NetworkRoot.Added, computer));
+        Assert.False(NetworkTree.CanRemove(NetworkRoot.Network, computer));
+        Assert.False(NetworkTree.CanRemove(NetworkRoot.Added, share));
+    }
+
+    /// <summary>A place that refused this account offers the credentials prompt. A root, or another failure, does not.</summary>
+    [Fact]
+    public void OnlyAPlaceThatRefusedThisAccountOffersASignIn()
+    {
+        var computer = NetworkSources.Computer("nas.test");
+
+        Assert.True(NetworkTree.OffersSignIn(computer, NetworkFailure.NeedsSignIn));
+        Assert.False(NetworkTree.OffersSignIn(null, NetworkFailure.NeedsSignIn));
+        Assert.False(NetworkTree.OffersSignIn(computer, NetworkFailure.NoAnswer));
+        Assert.False(NetworkTree.OffersSignIn(computer, null));
+    }
 
     [Fact]
     public void AComputerIsNoFolderToScan()

@@ -210,6 +210,13 @@
                                 Placement="BottomEdgeAlignedLeft"
                                 Opened="OnTypedOpened"
                                 Closed="OnTypedClosed">
+                            <!-- The presenter's default MaxWidth leaves room for a 424-pixel
+                                 body, which would clip the chevron beside the box. -->
+                            <Flyout.FlyoutPresenterStyle>
+                                <Style TargetType="FlyoutPresenter" BasedOn="{StaticResource DefaultFlyoutPresenterStyle}">
+                                    <Setter Property="MaxWidth" Value="560" />
+                                </Style>
+                            </Flyout.FlyoutPresenterStyle>
                             <StackPanel Width="460" Spacing="10">
                                 <!-- The list under the box follows what has been typed: what this
                                      account uses while it is empty, then computers, a computer's

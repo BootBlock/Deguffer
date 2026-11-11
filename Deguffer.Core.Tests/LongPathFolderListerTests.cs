@@ -25,7 +25,7 @@ public sealed class LongPathFolderListerTests : IDisposable
 
         var listed = new LongPathFolderLister(WindowsFileSystem.Default).Folders(Path.Combine(_temp.Path, "share"), CancellationToken.None);
 
-        Assert.True(listed.Succeeded);
+        Assert.Null(listed.Failure);
         Assert.Equal(["Films", "Photos"], listed.Entries.Order(StringComparer.Ordinal));
     }
 

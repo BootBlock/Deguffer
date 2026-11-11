@@ -80,7 +80,7 @@ public sealed class NetworkReadingsTests : IDisposable
 
         var later = await AnswerAsync(() => _readings.SharesAsync("slow.test", CancellationToken.None));
 
-        Assert.True(later.Succeeded);
+        Assert.Null(later.Failure);
         Assert.Single(later.Entries);
         Assert.Equal(1, _network.Asked("slow.test"));
     }
@@ -123,6 +123,14 @@ public sealed class NetworkReadingsTests : IDisposable
         var asked = servers.Select(server => _readings.SharesAsync(server, CancellationToken.None)).ToList();
 
         await WaitUntilAsync(() => servers.Count(server => _network.Asked(server) > 0) == 4);
+
+        // Every wait runs out of time while the four calls still hang: the callers are told there
+        // was no answer, and the calls keep their slots.
+        _time.Advance(NetworkReadings.Limit);
+        var answers = await Task.WhenAll(asked).WaitAsync(Patience);
+
+        Assert.All(answers, answer => Assert.Equal(NetworkFailure.NoAnswer, answer.Failure));
+
         await Task.Delay(100);
 
         Assert.Equal(4, servers.Count(server => _network.Asked(server) > 0));
@@ -135,8 +143,29 @@ public sealed class NetworkReadingsTests : IDisposable
         {
             _network.Release(server);
         }
+    }
 
-        await Task.WhenAll(asked).WaitAsync(Patience);
+    /// <summary>
+    /// A refresh while a question is still being asked leaves it to finish rather than asking a
+    /// second time beside it, so a slow computer's answer arrives for the refresh that asked for it.
+    /// </summary>
+    [Fact]
+    public async Task ARefreshLeavesAQuestionStillBeingAskedToFinish()
+    {
+        _network.Computer("slow.test", new ListedShare("media", ShareKind.Disk, false));
+        _network.Hold("slow.test");
+
+        var first = _readings.SharesAsync("slow.test", CancellationToken.None);
+        await WaitUntilAsync(() => _network.Asked("slow.test") == 1);
+
+        _readings.Forget(@"\\slow.test");
+        _readings.ForgetAll();
+        var second = _readings.SharesAsync("slow.test", CancellationToken.None);
+        _network.Release("slow.test");
+
+        Assert.Single((await first.WaitAsync(Patience)).Entries);
+        Assert.Single((await second.WaitAsync(Patience)).Entries);
+        Assert.Equal(1, _network.Asked("slow.test"));
     }
 
     /// <summary>Signing in to a share drops what was kept about its computer, which was an answer to an account that could not list it.</summary>
@@ -152,7 +181,7 @@ public sealed class NetworkReadingsTests : IDisposable
 
         Assert.Equal(SignInOutcome.Connected, signIn.Outcome);
         Assert.Equal([(@"\\nas.test\IPC$", (nint)42)], _network.SignIns);
-        Assert.True((await _readings.SharesAsync("nas.test", CancellationToken.None)).Succeeded);
+        Assert.Null((await _readings.SharesAsync("nas.test", CancellationToken.None)).Failure);
     }
 
     /// <summary>A sign-in the reader cancelled leaves what was kept as it was.</summary>

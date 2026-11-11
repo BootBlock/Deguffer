@@ -34,6 +34,4 @@ public sealed record NetworkListing<T>(IReadOnlyList<T> Entries, NetworkFailure?
     public static NetworkListing<T> Listed(IReadOnlyList<T> entries) => new(entries, null);
 
     public static NetworkListing<T> Failed(NetworkFailure failure) => new([], failure);
-
-    public bool Succeeded => Failure is null;
 }

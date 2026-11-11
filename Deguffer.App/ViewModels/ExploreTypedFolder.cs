@@ -105,5 +105,21 @@ public sealed partial class ExploreTypedFolder : ObservableObject
         Accepted?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>
+    /// Fill the box with <paramref name="chosen"/>, a place picked from a list rather than typed, and
+    /// check it as typed text is checked. A place picked from the network browser or the suggestions
+    /// names a folder only as far as another computer said so, so it points the page only once the
+    /// check finds a folder there.
+    /// </summary>
+    public async Task UseAsync(string chosen)
+    {
+        Text = chosen;
+
+        if (GoCommand.CanExecute(null))
+        {
+            await GoCommand.ExecuteAsync(null);
+        }
+    }
+
     private bool CanGo() => CanRetarget && !string.IsNullOrWhiteSpace(Text);
 }

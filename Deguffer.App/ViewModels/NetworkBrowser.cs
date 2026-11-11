@@ -28,6 +28,12 @@ public sealed partial class NetworkBrowser : ObservableObject, IDisposable
     /// <summary>The window the credentials prompt is owned by.</summary>
     private readonly nint _owner;
 
+    /// <summary>
+    /// Cancelled as the browser closes, so a sign-in still waiting on the prompt or the connection
+    /// changes no node of a tree nobody is looking at.
+    /// </summary>
+    private readonly CancellationTokenSource _life = new();
+
     /// <param name="network">The sources the tree is listed from.</param>
     /// <param name="time">What each listing's time limit is measured on.</param>
     /// <param name="preferences">Where the added computers and the place the browser was left at are kept.</param>
@@ -221,7 +227,19 @@ public sealed partial class NetworkBrowser : ObservableObject, IDisposable
             return;
         }
 
-        var signIn = await _lookup.SignInAsync(place, _owner, CancellationToken.None);
+        NetworkSignIn signIn;
+
+        try
+        {
+            signIn = await _lookup.SignInAsync(place, _owner, _life.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // The browser closed while the prompt or the connection was still under way. Caught
+            // here because the command runs from a node's button, where an exception escaping would
+            // end the process.
+            return;
+        }
 
         switch (signIn.Outcome)
         {
@@ -235,7 +253,11 @@ public sealed partial class NetworkBrowser : ObservableObject, IDisposable
         }
     }
 
-    public void Dispose() => _lookup.Dispose();
+    public void Dispose()
+    {
+        _life.Cancel();
+        _lookup.Dispose();
+    }
 
     partial void OnFilterChanged(string value)
     {

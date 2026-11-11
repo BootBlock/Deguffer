@@ -69,7 +69,7 @@ public sealed partial class NetworkNodeRow : ObservableObject
     public string Spoken => Root is { } root ? NetworkText.Root(root) : NetworkText.Spoken(Place!);
 
     /// <summary>Whether this is a computer added by name, which can be taken out of the tree.</summary>
-    public bool IsRemovable => Root is null && Under is NetworkRoot.Added && Place!.IsComputer;
+    public bool IsRemovable => Place is { } place && NetworkTree.CanRemove(Under, place);
 
     /// <summary>What the filter keeps of what is listed inside, brought up to date in place.</summary>
     public ObservableCollection<NetworkNodeRow> Children { get; } = [];
@@ -108,8 +108,8 @@ public sealed partial class NetworkNodeRow : ObservableObject
 
     public bool HasFailure => Failure is not null;
 
-    /// <summary>Whether the node refused this account and a place it stands for can be signed in to.</summary>
-    public bool CanSignIn => Failure is NetworkFailure.NeedsSignIn && Place is not null;
+    /// <summary>Whether the node offers the credentials prompt, by <see cref="NetworkTree.OffersSignIn"/>.</summary>
+    public bool CanSignIn => NetworkTree.OffersSignIn(Place, Failure);
 
     /// <summary>
     /// Open the node and list what is inside, where it has not been listed. The tree opens a node by
@@ -208,7 +208,8 @@ public sealed partial class NetworkNodeRow : ObservableObject
     /// <summary>Put what a listing found on screen, keeping each child that is still there as the same row.</summary>
     private void Show(NetworkListing<NetworkPlace> listed)
     {
-        var standing = _listed.ToDictionary(child => child.Place!.Path, StringComparer.OrdinalIgnoreCase);
+        // Exact case, because a case-sensitive share can list Photos and photos side by side.
+        var standing = _listed.ToDictionary(child => child.Place!.Path, StringComparer.Ordinal);
 
         _listed = [.. listed.Entries.Select(place => standing.GetValueOrDefault(place.Path) ?? new NetworkNodeRow(Under, null, place, _list, _filter))];
         _isListed = true;

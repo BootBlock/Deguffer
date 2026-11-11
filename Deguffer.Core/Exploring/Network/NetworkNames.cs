@@ -1,11 +1,13 @@
 using System.Buffers;
+using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Exploring.Network;
 
 /// <summary>
 /// How a network place's path is built from its parts and read back into them. Paths here are in
 /// display form, <c>\\server\share\folder</c>: what the box shows and what the page's check is
-/// handed, which asks in the extended form itself (§6.3).
+/// handed, which asks in the extended form itself (§6.3). Whether a path is a share at all is
+/// <see cref="LongPath.IsShare"/>'s to say.
 /// </summary>
 public static class NetworkNames
 {
@@ -23,6 +25,9 @@ public static class NetworkNames
     /// </summary>
     private static readonly SearchValues<char> NotInAName = SearchValues.Create("\\/:*?\"<>| \t");
 
+    /// <summary>Either separator, which Windows reads alike in a share path.</summary>
+    private static readonly SearchValues<char> EitherSeparator = SearchValues.Create("\\/");
+
     /// <summary><c>\\name</c>, the path a computer is reached at.</summary>
     public static string Computer(string name) => Separators + name;
 
@@ -39,53 +44,11 @@ public static class NetworkNames
     }
 
     /// <summary>The computer <paramref name="path"/> is on, or null where it is not a share path.</summary>
-    public static string? ServerOf(string path)
-    {
-        if (!IsUnc(path))
-        {
-            return null;
-        }
-
-        var rest = path.AsSpan(2);
-        var end = rest.IndexOf(Separator);
-
-        return (end < 0 ? rest : rest[..end]).ToString();
-    }
+    public static string? ServerOf(string path) => Names(path) is { } names ? names.Server : null;
 
     /// <summary>The share <paramref name="path"/> is in, as <c>\\server\share</c>, or null where it names no share.</summary>
-    public static string? ShareOf(string path)
-    {
-        if (ServerOf(path) is not { } server)
-        {
-            return null;
-        }
-
-        var rest = path.AsSpan(2 + server.Length);
-
-        if (rest.Length < 2 || rest[0] != Separator)
-        {
-            return null;
-        }
-
-        var share = rest[1..];
-        var end = share.IndexOf(Separator);
-
-        return Inside(Computer(server), (end < 0 ? share : share[..end]).ToString());
-    }
-
-    /// <summary>
-    /// Whether <paramref name="target"/> is <paramref name="place"/> or somewhere inside it, case
-    /// aside, which is how the tree finds its way back to the place it last showed.
-    /// </summary>
-    public static bool Leads(string place, string target)
-    {
-        var trimmed = place.TrimEnd(Separator);
-
-        return target.Equals(trimmed, StringComparison.OrdinalIgnoreCase)
-            || (target.Length > trimmed.Length
-                && target.StartsWith(trimmed, StringComparison.OrdinalIgnoreCase)
-                && target[trimmed.Length] == Separator);
-    }
+    public static string? ShareOf(string path) =>
+        Names(path) is { Share: { } share } names ? Inside(Computer(names.Server), share) : null;
 
     /// <summary>
     /// The computer <paramref name="typed"/> names, as it is added to the tree, or null where it
@@ -102,10 +65,34 @@ public static class NetworkNames
         return name.Length is 0 or > LongestName || name.AsSpan().ContainsAny(NotInAName) || name.StartsWith('.') ? null : name;
     }
 
-    /// <summary>
-    /// Whether <paramref name="path"/> starts with a computer: two separators and a name. A device
-    /// path (<c>\\?\</c>, <c>\\.\</c>) starts with two separators and names no computer.
-    /// </summary>
-    private static bool IsUnc(string path) =>
-        path.Length > 2 && path[0] == Separator && path[1] == Separator && path[2] is not ('?' or '.' or Separator);
+    /// <summary>The computer and the share <paramref name="path"/> names, in either spelling, or null where it is no share path.</summary>
+    private static (string Server, string? Share)? Names(string path)
+    {
+        var shown = LongPath.Display(path);
+
+        if (!LongPath.IsShare(shown))
+        {
+            return null;
+        }
+
+        var rest = shown.AsSpan(2);
+        var serverEnd = rest.IndexOfAny(EitherSeparator);
+
+        if (serverEnd < 0)
+        {
+            return (rest.ToString(), null);
+        }
+
+        // A third separator names no computer at all.
+        if (serverEnd == 0)
+        {
+            return null;
+        }
+
+        var share = rest[(serverEnd + 1)..];
+        var shareEnd = share.IndexOfAny(EitherSeparator);
+        share = shareEnd < 0 ? share : share[..shareEnd];
+
+        return (rest[..serverEnd].ToString(), share.IsEmpty ? null : share.ToString());
+    }
 }

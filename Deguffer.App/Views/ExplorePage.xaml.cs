@@ -685,21 +685,17 @@ public sealed partial class ExplorePage : Page
     {
         var typed = ViewModel.Targeting.Typed;
 
-        if (args.ChosenSuggestion is PathSuggestionRow chosen)
+        if (args.ChosenSuggestion is not PathSuggestionRow chosen)
         {
-            if (!chosen.Suggestion.Place.IsFolder)
-            {
-                await CompleteAsync(chosen);
-
-                return;
-            }
-
-            typed.Text = chosen.Path;
+            await typed.UseAsync(typed.Text);
         }
-
-        if (typed.GoCommand.CanExecute(null))
+        else if (chosen.Suggestion.Place.IsFolder)
         {
-            typed.GoCommand.Execute(null);
+            await typed.UseAsync(chosen.Path);
+        }
+        else
+        {
+            await CompleteAsync(chosen);
         }
     }
 
@@ -737,14 +733,8 @@ public sealed partial class ExplorePage : Page
             return;
         }
 
-        var typed = ViewModel.Targeting.Typed;
-        typed.Text = chosen;
         TypedFlyout.ShowAt(TypedButton);
-
-        if (typed.GoCommand.CanExecute(null))
-        {
-            typed.GoCommand.Execute(null);
-        }
+        await ViewModel.Targeting.Typed.UseAsync(chosen);
     }
 
     private void OnTypedAccepted(object? sender, EventArgs e) => TypedFlyout.Hide();

@@ -1,3 +1,5 @@
+using Deguffer.Core.Safety;
+
 namespace Deguffer.Core.Exploring.Network;
 
 /// <summary>The top level of the network browser's tree, in the order it is shown.</summary>
@@ -59,6 +61,25 @@ public static class NetworkTree
     /// </summary>
     public static bool OpensAtFirst(NetworkRoot root) => root is not NetworkRoot.Network;
 
+    /// <summary>
+    /// Whether <paramref name="place"/>, listed under <paramref name="under"/>, can be taken out of
+    /// the tree: a computer added by name. Everything else is listed from what Windows says, and
+    /// comes back the next time it is asked.
+    /// </summary>
+    public static bool CanRemove(NetworkRoot under, NetworkPlace place)
+    {
+        ArgumentNullException.ThrowIfNull(place);
+
+        return under is NetworkRoot.Added && place.IsComputer;
+    }
+
+    /// <summary>
+    /// Whether a node offers the Windows credentials prompt: a place that refused this account. A
+    /// root that failed is no place to sign in to.
+    /// </summary>
+    public static bool OffersSignIn(NetworkPlace? place, NetworkFailure? failure) =>
+        place is not null && failure is NetworkFailure.NeedsSignIn;
+
     /// <summary>What opening <paramref name="place"/> lists.</summary>
     public static NetworkChildren ChildrenOf(NetworkPlace place) =>
         place.IsComputer ? NetworkChildren.Shares : NetworkChildren.Folders;
@@ -106,7 +127,7 @@ public static class NetworkTree
     /// </summary>
     public static NetworkPlace? Toward(IEnumerable<NetworkPlace> children, string target) =>
         children
-            .Where(child => NetworkNames.Leads(child.Path, target))
+            .Where(child => LongPath.Contains(child.Path, target))
             .MaxBy(child => child.Path.Length);
 
     private static NetworkListing<NetworkPlace> Uses(IReadOnlyList<NetworkUse> uses, NetworkSources sources) =>

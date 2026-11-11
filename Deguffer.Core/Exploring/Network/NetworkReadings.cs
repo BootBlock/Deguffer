@@ -1,3 +1,5 @@
+using Deguffer.Core.Safety;
+
 namespace Deguffer.Core.Exploring.Network;
 
 /// <summary>
@@ -40,7 +42,12 @@ public sealed class NetworkReadings : IDisposable
     private readonly Lock _gate = new();
 
     private readonly Dictionary<string, Task<NetworkListing<ListedShare>>> _sharesOf = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, Task<NetworkListing<string>>> _foldersOf = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>
+    /// Keyed in the case each folder was named in, because a share can be case-sensitive and hold
+    /// both <c>Photos</c> and <c>photos</c>. A folder typed in two cases is asked twice, which costs
+    /// a listing and never shows one folder's contents under the other's name.
+    /// </summary>
+    private readonly Dictionary<string, Task<NetworkListing<string>>> _foldersOf = new(StringComparer.Ordinal);
     private Task<NetworkListing<NetworkConnection>>? _connected;
     private Task<NetworkListing<NetworkConnection>>? _remembered;
     private Task<NetworkListing<string>>? _computers;
@@ -81,29 +88,30 @@ public sealed class NetworkReadings : IDisposable
         if (signIn.Outcome is SignInOutcome.Connected && NetworkNames.ServerOf(remote) is { } server)
         {
             Forget(NetworkNames.Computer(server));
-
-            lock (_gate)
-            {
-                _connected = null;
-            }
+            ForgetConnections();
         }
 
         return signIn;
     }
 
-    /// <summary>Drop what was kept about <paramref name="path"/> and everything inside it, so it is asked again.</summary>
+    /// <summary>
+    /// Drop what was kept about <paramref name="path"/> and everything inside it, so it is asked
+    /// again. Every forgetting here drops only answers that have arrived: a question still being
+    /// asked is left to finish, because asking it a second time beside the first would only wait
+    /// longer, and its answer is the fresh one the reader asked for.
+    /// </summary>
     public void Forget(string path)
     {
         lock (_gate)
         {
-            if (NetworkNames.ServerOf(path) is { } server && path.TrimEnd('\\').Length == NetworkNames.Computer(server).Length)
+            if (NetworkNames.ServerOf(path) is { } server && NetworkNames.ShareOf(path) is null)
             {
-                _sharesOf.Remove(server);
+                Drop(_sharesOf, server);
             }
 
-            foreach (var folder in _foldersOf.Keys.Where(folder => NetworkNames.Leads(path, folder)).ToList())
+            foreach (var folder in _foldersOf.Keys.Where(folder => LongPath.Contains(path.TrimEnd('\\'), folder)).ToList())
             {
-                _foldersOf.Remove(folder);
+                Drop(_foldersOf, folder);
             }
         }
     }
@@ -113,8 +121,8 @@ public sealed class NetworkReadings : IDisposable
     {
         lock (_gate)
         {
-            _connected = null;
-            _remembered = null;
+            Drop(ref _connected);
+            Drop(ref _remembered);
         }
     }
 
@@ -123,7 +131,7 @@ public sealed class NetworkReadings : IDisposable
     {
         lock (_gate)
         {
-            _computers = null;
+            Drop(ref _computers);
         }
     }
 
@@ -132,11 +140,19 @@ public sealed class NetworkReadings : IDisposable
     {
         lock (_gate)
         {
-            _sharesOf.Clear();
-            _foldersOf.Clear();
-            _connected = null;
-            _remembered = null;
-            _computers = null;
+            foreach (var server in _sharesOf.Keys.ToList())
+            {
+                Drop(_sharesOf, server);
+            }
+
+            foreach (var folder in _foldersOf.Keys.ToList())
+            {
+                Drop(_foldersOf, folder);
+            }
+
+            Drop(ref _connected);
+            Drop(ref _remembered);
+            Drop(ref _computers);
         }
     }
 
@@ -145,6 +161,24 @@ public sealed class NetworkReadings : IDisposable
     /// this, from a handler the closing raced, is answered as cancelled rather than thrown at.
     /// </summary>
     public void Dispose() => _life.Cancel();
+
+    /// <summary>Drop <paramref name="kept"/> where its answer has arrived. Called under <see cref="_gate"/>.</summary>
+    private static void Drop<T>(ref Task<NetworkListing<T>>? kept)
+    {
+        if (kept is { IsCompleted: true })
+        {
+            kept = null;
+        }
+    }
+
+    /// <summary>Drop the answer kept under <paramref name="key"/> where it has arrived. Called under <see cref="_gate"/>.</summary>
+    private static void Drop<T>(Dictionary<string, Task<NetworkListing<T>>> kept, string key)
+    {
+        if (kept.TryGetValue(key, out var reading) && reading.IsCompleted)
+        {
+            kept.Remove(key);
+        }
+    }
 
     private Task<NetworkListing<T>> Kept<T>(ref Task<NetworkListing<T>>? kept, Func<CancellationToken, NetworkListing<T>> read)
     {

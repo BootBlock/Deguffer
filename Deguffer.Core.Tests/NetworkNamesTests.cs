@@ -35,22 +35,18 @@ public sealed class NetworkNamesTests
     [InlineData(@"\\nas.test", "nas.test", null)]
     [InlineData(@"\\nas.test\media", "nas.test", @"\\nas.test\media")]
     [InlineData(@"\\nas.test\media\Photos\2026", "nas.test", @"\\nas.test\media")]
+    [InlineData(@"\\nas.test\", "nas.test", null)]
+    [InlineData(@"\\?\UNC\nas.test\media\Photos", "nas.test", @"\\nas.test\media")]
+    [InlineData(@"//nas.test/media/Photos", "nas.test", @"\\nas.test\media")]
     [InlineData(@"D:\Folder", null, null)]
-    [InlineData(@"\\?\UNC\nas.test\media", null, null)]
+    [InlineData(@"\\?\D:\Folder", null, null)]
+    [InlineData(@"\\.\PhysicalDrive0", null, null)]
+    [InlineData(@"\\\media", null, null)]
     public void ASharePathIsReadBackIntoItsComputerAndShare(string path, string? server, string? share)
     {
         Assert.Equal(server, NetworkNames.ServerOf(path));
         Assert.Equal(share, NetworkNames.ShareOf(path));
     }
-
-    [Theory]
-    [InlineData(@"\\nas.test\media", @"\\nas.test\media", true)]
-    [InlineData(@"\\nas.test\media", @"\\NAS.test\Media\Photos", true)]
-    [InlineData(@"\\nas.test\media\", @"\\nas.test\media\Photos", true)]
-    [InlineData(@"\\nas.test\media", @"\\nas.test\mediaroom", false)]
-    [InlineData(@"\\nas.test\media\Photos", @"\\nas.test\media", false)]
-    public void APlaceLeadsToItselfAndWhatIsInsideIt(string place, string target, bool leads) =>
-        Assert.Equal(leads, NetworkNames.Leads(place, target));
 
     [Theory]
     [InlineData(@"\\nas.test\media\Photos", "Photos")]

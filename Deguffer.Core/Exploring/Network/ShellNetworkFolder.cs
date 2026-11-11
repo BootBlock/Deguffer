@@ -53,7 +53,7 @@ public sealed class ShellNetworkFolder : INetworkNeighbourhood
 
             try
             {
-                return NetworkListing<string>.Listed(Names(items, ct));
+                return Names(items, ct);
             }
             finally
             {
@@ -66,40 +66,54 @@ public sealed class ShellNetworkFolder : INetworkNeighbourhood
         }
     }
 
-    private static List<string> Names(IEnumShellItems items, CancellationToken ct)
+    /// <summary>
+    /// The computers among the folder's items. <c>Next</c> answers <c>S_OK</c> for an item and
+    /// <c>S_FALSE</c> at the end, and a failure part-way is a refusal rather than the end of the
+    /// list: half the computers are not offered as all of them (§5.3).
+    /// </summary>
+    internal static NetworkListing<string> Names(IEnumShellItems items, CancellationToken ct)
     {
         var names = new List<string>();
 
-        while (!ct.IsCancellationRequested && items.Next(1, out var item, out var fetched) == 0 && fetched == 1)
+        while (true)
         {
-            try
-            {
-                if (item.GetDisplayName(ParsingName, out var name) == 0)
-                {
-                    var parsed = Marshal.PtrToStringUni(name);
-                    Marshal.FreeCoTaskMem(name);
+            ct.ThrowIfCancellationRequested();
 
-                    if (ComputerOf(parsed) is { } computer)
-                    {
-                        names.Add(computer);
-                    }
+            var answer = items.Next(1, out var item, out var fetched);
+
+            if (answer < 0)
+            {
+                return NetworkListing<string>.Failed(NetworkFailure.Refused);
+            }
+
+            if (answer != 0 || fetched != 1)
+            {
+                return NetworkListing<string>.Listed(names);
+            }
+
+            // Each item is left to its wrapper's finaliser rather than released here: the folder
+            // holds a few dozen at most, and the enumerator, which holds the folder, is released
+            // as soon as this returns.
+            if (item.GetDisplayName(ParsingName, out var name) == 0)
+            {
+                var parsed = Marshal.PtrToStringUni(name);
+                Marshal.FreeCoTaskMem(name);
+
+                if (ComputerOf(parsed) is { } computer)
+                {
+                    names.Add(computer);
                 }
             }
-            finally
-            {
-                Marshal.ReleaseComObject(item);
-            }
         }
-
-        ct.ThrowIfCancellationRequested();
-
-        return names;
     }
 
-    /// <summary>The computer <paramref name="parsed"/> names as <c>\\name</c>, or null for anything else the folder holds.</summary>
+    /// <summary>
+    /// The computer <paramref name="parsed"/> names as <c>\\name</c>, or null for anything else the
+    /// folder holds: a media server or a device is a <c>::{GUID}</c> path, and names no share path.
+    /// </summary>
     private static string? ComputerOf(string? parsed) =>
-        parsed is { Length: > 2 } && parsed.StartsWith(@"\\", StringComparison.Ordinal) && parsed.IndexOf('\\', 2) < 0
-            ? parsed[2..]
+        parsed is not null && NetworkNames.ServerOf(parsed) is { } server && NetworkNames.Computer(server) == parsed.TrimEnd('\\')
+            ? server
             : null;
 
     // DllImport rather than LibraryImport: the generator does not marshal a ComImport interface.

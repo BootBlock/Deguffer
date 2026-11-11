@@ -77,6 +77,21 @@ public sealed class NetworkLookupTests : IDisposable
             Paths(all));
     }
 
+    /// <summary>A connection Windows remembers and has not reconnected is offered as remembered, beside the connected ones.</summary>
+    [Fact]
+    public async Task ARememberedConnectionIsOfferedAsRemembered()
+    {
+        _network.RememberedAnswer = NetworkListing<NetworkConnection>.Listed([
+            new NetworkConnection(@"\\nas.test\media", "Z:"),
+            new NetworkConnection(@"\\old.test\archive", "Y:"),
+        ]);
+
+        var last = await LastAsync(_lookup.SuggestAsync(string.Empty, Remembered, CancellationToken.None));
+
+        Assert.Equal(NetworkGroup.MappedDrive, last.Single(s => s.Place.Path == @"\\nas.test\media").Group);
+        Assert.Equal(NetworkGroup.Remembered, last.Single(s => s.Place.Path == @"\\old.test\archive").Group);
+    }
+
     /// <summary>A failing source is left out, and empties none of the others.</summary>
     [Fact]
     public async Task AFailingSourceEmptiesNoneOfTheOthers()

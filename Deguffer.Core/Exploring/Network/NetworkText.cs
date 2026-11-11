@@ -84,7 +84,7 @@ public static class NetworkText
         {
             NetworkFailure.NeedsSignIn => "This needs a user name and password.",
             NetworkFailure.NotFound => "Not found. Check the name, and that the computer is switched on and connected.",
-            NetworkFailure.NoAnswer => "The computer did not answer in time.",
+            NetworkFailure.NoAnswer => "No answer came in time. Refresh (F5) to ask again.",
             NetworkFailure.Refused => "Windows would not list this.",
             _ => throw new ArgumentOutOfRangeException(nameof(failure), failure, null),
         };
