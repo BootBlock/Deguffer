@@ -11,7 +11,8 @@ namespace Deguffer.App.ViewModels;
 /// <summary>
 /// The Health page (§7.6): the drives, the one the reader is looking at, and the offer to reopen
 /// elevated. A read here changes nothing, so it is never a <see cref="RunningActions"/> action and
-/// never holds the window open. Each reading's meaning is Core's.
+/// never holds the window open. Each reading's meaning is Core's. Each reading also goes to
+/// <see cref="HealthByVolume"/>, so the pages that list volumes can name a drive of concern.
 /// </summary>
 public sealed partial class HealthViewModel : ObservableObject
 {
@@ -23,6 +24,7 @@ public sealed partial class HealthViewModel : ObservableObject
     private readonly Func<ElevationRequest, bool> _relaunch;
     private readonly RunningActions _running;
     private readonly BusyWork _work;
+    private readonly HealthByVolume _byVolume;
     private CancellationTokenSource? _reads;
     private bool _hasRead;
 
@@ -30,13 +32,15 @@ public sealed partial class HealthViewModel : ObservableObject
     /// <param name="read">Reads each drive and what is stored on it, reporting each as it finishes.</param>
     /// <param name="relaunch">Starts an elevated replacement, returning false where the user declined.</param>
     /// <param name="running">What is changing the machine on every page, which the relaunch waits for.</param>
+    /// <param name="byVolume">Where each reading is kept for the pages that list volumes.</param>
     public HealthViewModel(
         Func<CancellationToken, Task<IReadOnlyList<DriveDescription>?>> list,
         Func<IReadOnlyList<DriveDescription>, IProgress<DriveHealth>, IProgress<DriveVolumes>, CancellationToken, Task> read,
         bool isElevated,
         Func<ElevationRequest, bool> relaunch,
         RunningActions running,
-        BusyWork work)
+        BusyWork work,
+        HealthByVolume byVolume)
     {
         _list = list;
         _read = read;
@@ -44,6 +48,7 @@ public sealed partial class HealthViewModel : ObservableObject
         _relaunch = relaunch;
         _running = running;
         _work = work;
+        _byVolume = byVolume;
 
         _running.Changed += (_, _) => ElevateCommand.NotifyCanExecuteChanged();
     }
@@ -123,6 +128,7 @@ public sealed partial class HealthViewModel : ObservableObject
                 if (!reads.IsCancellationRequested)
                 {
                     RowOf(line.Key)?.Show(line);
+                    _byVolume.Record(line);
                 }
             });
 
@@ -170,6 +176,7 @@ public sealed partial class HealthViewModel : ObservableObject
             (row, drive) => row.Show(drive));
 
         SelectedDrive = DriveSelection.After(Rows, SelectedDrive, place);
+        _byVolume.Listed(drives);
         Summarise();
     }
 
@@ -178,6 +185,7 @@ public sealed partial class HealthViewModel : ObservableObject
         if (RowOf(report.Key) is { } row)
         {
             row.Show(report);
+            _byVolume.Record(report);
             Summarise();
         }
     }

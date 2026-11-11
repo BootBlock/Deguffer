@@ -3,7 +3,7 @@ using System.Buffers.Binary;
 namespace Deguffer.Core.Scanning.Media;
 
 /// <summary>
-/// Reads the three structures the storage queries return, from their bytes.
+/// Reads the four structures the storage queries return, from their bytes.
 ///
 /// <para>Each reader checks the length it was given against the fields it reads, and answers false
 /// rather than read past it: a driver that returns fewer bytes than the structure has said nothing
@@ -30,6 +30,10 @@ internal static class StorageDescriptors
     /// one-byte flags.
     /// </summary>
     private const int BusTypeOffset = 24;
+
+    private const int ProvisioningFlagsOffset = 8;
+
+    private const byte ThinProvisioningEnabled = 0x01;
 
     /// <summary>
     /// The count of extents a <c>VOLUME_DISK_EXTENTS</c> says it has, read from the header alone.
@@ -98,6 +102,23 @@ internal static class StorageDescriptors
         }
 
         incursSeekPenalty = bytes[SeekPenaltyOffset] != 0;
+        return true;
+    }
+
+    /// <summary>
+    /// <c>DEVICE_LB_PROVISIONING_DESCRIPTOR</c>: version, size, then a byte of bit fields whose lowest
+    /// is <c>ThinProvisioningEnabled</c>.
+    /// </summary>
+    internal static bool TryReadThinProvisioning(ReadOnlySpan<byte> bytes, out bool thin)
+    {
+        thin = false;
+
+        if (bytes.Length <= ProvisioningFlagsOffset)
+        {
+            return false;
+        }
+
+        thin = (bytes[ProvisioningFlagsOffset] & ThinProvisioningEnabled) != 0;
         return true;
     }
 

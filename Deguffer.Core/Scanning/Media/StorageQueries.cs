@@ -17,6 +17,7 @@ public sealed class StorageQueries : IStorageQueries
 
     private const int StorageAdapterProperty = 1;
     private const int StorageDeviceSeekPenaltyProperty = 7;
+    private const int StorageDeviceLBProvisioningProperty = 11;
 
     /// <summary>
     /// Room for four extents, which every simple volume and most spanned ones fit. A volume with
@@ -25,8 +26,8 @@ public sealed class StorageQueries : IStorageQueries
     private const int FirstExtentsBytes = StorageDescriptors.ExtentsHeaderBytes + (4 * StorageDescriptors.ExtentBytes);
 
     /// <summary>
-    /// Larger than either descriptor asked for: the seek-penalty one is 12 bytes and the adapter one
-    /// 32. A driver writes no more than the structure, and reports how much it wrote.
+    /// Larger than any descriptor asked for: the seek-penalty one is 12 bytes, the adapter one 32 and
+    /// the provisioning one 40. A driver writes no more than the structure, and reports how much it wrote.
     /// </summary>
     private const int DescriptorBytes = 64;
 
@@ -67,6 +68,8 @@ public sealed class StorageQueries : IStorageQueries
     public StorageAnswer Adapter(int disk) => Property(disk, StorageAdapterProperty);
 
     public StorageAnswer SeekPenalty(int disk) => Property(disk, StorageDeviceSeekPenaltyProperty);
+
+    public StorageAnswer Provisioning(int disk) => Property(disk, StorageDeviceLBProvisioningProperty);
 
     private static StorageAnswer Property(int disk, int property)
     {

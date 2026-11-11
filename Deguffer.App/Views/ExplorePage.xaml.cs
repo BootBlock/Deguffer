@@ -96,6 +96,7 @@ public sealed partial class ExplorePage : Page
             App.Running,
             App.Work,
             App.ScanHistory,
+            App.DriveHealth,
             SystemMotion.Current,
 
             // Low, so the frame that shows the result is drawn before the collection pauses the

@@ -1,5 +1,6 @@
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Duplicates;
+using Deguffer.Core.Retrim;
 
 namespace Deguffer.Core.Execution;
 
@@ -59,6 +60,7 @@ public abstract record ElevationRequest
         List<SearchLocation> locations = [];
         string? drive = null;
         string? folder = null;
+        List<RetrimTarget> retrim = [];
 
         foreach (var argument in arguments)
         {
@@ -111,16 +113,23 @@ public abstract record ElevationRequest
             {
                 folder = ValueOf(argument, FolderPrefix);
             }
+            else if (argument.StartsWith(RetrimPrefix, StringComparison.OrdinalIgnoreCase)
+                     && RetrimRequest.TargetOf(argument[RetrimPrefix.Length..]) is { } target)
+            {
+                retrim.Add(target);
+            }
         }
 
         // Explore wins where both are somehow present: it is the more specific request, and nothing
         // writes the two together. The alternative silently starts a whole-machine preview the user
-        // did not ask for. Duplicates, Installed apps and Startup come before a preview for the same reason.
+        // did not ask for. Duplicates, Installed apps, Startup, Health and a retrim come before a preview
+        // for the same reason.
         return explore ? new ExploreRequest(drive, folder)
             : duplicates ? new DuplicatesRequest(locations)
             : installedApps ? InstalledApps
             : startup ? Startup
             : health ? Health
+            : retrim.Count > 0 ? new RetrimRequest(retrim)
             : preview ? chosen.Count > 0 ? new PreviewRequest(new ProviderChoice { Ids = chosen }) : Preview
             : null;
 
@@ -159,6 +168,8 @@ public abstract record ElevationRequest
     private protected const string DrivePrefix = "--explore-drive=";
 
     private protected const string FolderPrefix = "--explore-folder=";
+
+    private protected const string RetrimPrefix = "--retrim=";
 
     /// <summary>
     /// What follows the prefix, or null where nothing does. A value that is empty, or nothing but
@@ -223,6 +234,47 @@ public sealed record DuplicatesRequest : ElevationRequest
     public bool Equals(DuplicatesRequest? other) => other is not null && Locations.SequenceEqual(other.Locations);
 
     public override int GetHashCode() => Locations.Count;
+}
+
+/// <summary>
+/// Open on the Storage page and ask Windows to retrim the volumes <see cref="Targets"/> names, which
+/// the user asked for from a clean's offer in the instance this one replaces.
+///
+/// <para>Each volume is its own argument, its name and its mount point joined by a <c>|</c>, which
+/// neither a volume name nor a path can hold, so a folder mount with a space in it travels whole. What
+/// travels is a name, not the decision: the run judges each volume again before Windows is asked
+/// (<see cref="RetrimRun"/>), so a command line naming any volume retrims only one a clean could have
+/// offered.</para>
+/// </summary>
+public sealed record RetrimRequest : ElevationRequest
+{
+    private const char Separator = '|';
+
+    public RetrimRequest(IReadOnlyList<RetrimTarget> targets)
+    {
+        ArgumentNullException.ThrowIfNull(targets);
+
+        Targets = [.. targets];
+    }
+
+    /// <summary>The volumes to retrim, in the order the offer listed them.</summary>
+    public IReadOnlyList<RetrimTarget> Targets { get; }
+
+    public override IReadOnlyList<string> ToArguments() =>
+        [.. Targets.Select(target => RetrimPrefix + target.VolumeName + Separator + target.Root)];
+
+    public bool Equals(RetrimRequest? other) => other is not null && Targets.SequenceEqual(other.Targets);
+
+    public override int GetHashCode() => Targets.Count;
+
+    /// <summary>
+    /// The volume one argument's value names, or null where it does not name both halves: a volume name
+    /// alone cannot be shown, and a mount point alone is the identity a moved letter makes wrong.
+    /// </summary>
+    internal static RetrimTarget? TargetOf(string value) =>
+        value.Split(Separator) is [var name, var root] && !string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(root)
+            ? new RetrimTarget(root, name)
+            : null;
 }
 
 /// <summary>

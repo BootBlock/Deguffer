@@ -86,7 +86,9 @@ in a few minutes, without touching a single piece of user data.
 **Non-goals**
 
 - Not a disk repair or maintenance tool. Health (§7.6) reads what a drive reports. It never starts a
-  self-test, changes a SMART setting, or sends a drive anything that could change it.
+  self-test, changes a SMART setting, or sends a drive anything that could change it. The one
+  maintenance step Deguffer takes is Windows' own retrim, offered after a clean and never run unasked
+  (§7), because it finishes handing back the space the clean freed and moves no data.
 
 - Not an uninstaller. Installed apps (§7.3) removes entries Windows lists for programs that are
   gone, and for a program that is still there it runs that program's own uninstaller. Deguffer
@@ -534,6 +536,17 @@ Deliberate points, and the traps that come with them:
   says how many locations it measured. A location the last scan found not installed is marked in the
   list and can still be ticked. Elevating repeats whichever of the two scans was last run.
 - **Show free space before and after**, prominently. It is the only number the user came for.
+- **A large clean offers Windows' own retrim, and never runs it unasked.** On a thinly provisioned
+  volume, in a virtual disk or on solid state, the storage behind the drive learns that the clusters
+  a clean freed are free only when Windows trims the volume, and Windows trims on a schedule, so a
+  virtual machine's host or a thin pool can go on counting the space as used for days. A clean that
+  freed more than 1 GiB on such a fixed volume offers a retrim on the card. Thin is the disk's own
+  provisioning answer, and a disk that will not say is not taken to be thin. The route is
+  `MSFT_Volume.Optimize` with `ReTrim` alone, the step Optimize Drives takes, so Windows decides what
+  a retrim means for each kind of storage (§5.1). Every other switch is passed as off, and Deguffer
+  never defragments, on any medium. Windows retrims only for an administrator, so an unelevated
+  offer restarts as one, and the new instance judges each volume again before it asks. Each result
+  is Windows' own answer. Settled in [#725](https://github.com/BootBlock/Deguffer/issues/725).
 - **What follows a clean is the user's choice, and it can always be stopped.** Beside Clean, a
   "When complete" box offers to exit Deguffer, lock the PC, log off, sleep, hibernate, restart or
   shut down once a clean has finished. Sleep and hibernate are offered only where Windows says the
@@ -1549,6 +1562,10 @@ explains. It changes nothing on any drive, and it deletes nothing.
   not answering. The listing and the volumes have the same limit. A device call cannot be interrupted,
   so a drive still being asked is not asked again.
 - A read never holds the window open.
+- Windows' storage reliability counters (`MSFT_StorageReliabilityCounter`, behind
+  `Get-StorageReliabilityCounter`) are not read. Measured unelevated on 2026-11-11, they refused
+  every drive that the requests above answer without elevation. What they give elevated was not
+  measured. Their `Reset` method is never called.
 
 **What it says**
 
@@ -1560,6 +1577,21 @@ explains. It changes nothing on any drive, and it deletes nothing.
 - An attribute whose meaning differs by manufacturer is shown as reported and judged by nothing
   beyond the drive's own threshold, unless the manufacturer is named in `AtaVendorOverlay`.
 - A serial number appears on the page and nowhere else: no record prints it, and a drive's key is a hash.
+
+**Beside the volumes**
+
+A drive that is filling wants a clean, and a drive that is failing wants a backup first, so a drive
+of concern is named where its free space is: the Storage page's free space card, and each row of
+the drive pickers in Explore and Duplicates
+([#715](https://github.com/BootBlock/Deguffer/issues/715)).
+
+- Only from what Health last read (`HealthByVolume`). Those pages never ask a drive anything, so
+  until Health has been opened they say nothing about health at all.
+- Only Watch and Failing are named, with Health's own verdict, and never a verdict of their own made
+  from raw figures. A drive with no problems reported, or with no report, adds nothing there.
+- A volume on several drives is answered for by the worst of them. A drive a later listing no
+  longer has stops speaking for its volumes.
+- The verdict is a word, beside the icon and the colour (§6.5).
 
 **Elevation**
 

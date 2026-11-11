@@ -23,6 +23,9 @@ public enum RunningAction
 
     /// <summary>A startup entry being disabled or enabled on the Startup page.</summary>
     StartupChange,
+
+    /// <summary>Windows retrimming the volumes a clean on the Storage page freed space on.</summary>
+    Retrim,
 }
 
 /// <summary>

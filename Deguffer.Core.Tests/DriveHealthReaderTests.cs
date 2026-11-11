@@ -37,6 +37,8 @@ public sealed class DriveHealthReaderTests
         public StorageAnswer Adapter(int disk) => StorageAnswer.Failed(FakeStorageQueries.ErrorFileNotFound);
 
         public StorageAnswer SeekPenalty(int disk) => StorageAnswer.Failed(FakeStorageQueries.ErrorFileNotFound);
+
+        public StorageAnswer Provisioning(int disk) => StorageAnswer.Failed(FakeStorageQueries.ErrorFileNotFound);
     }
 
     private readonly Collected<DriveVolumes> _placed = new();
@@ -342,6 +344,19 @@ public sealed class DriveHealthReaderTests
 
         Assert.Equal(report.Key, Assert.Single(_placed.Reports).Key);
         Assert.Contains(@"C:\", _placed.Reports.Single().Line, StringComparison.Ordinal);
+        Assert.Equal([@"C:\"], _placed.Reports.Single().RootPaths);
+    }
+
+    [Fact]
+    public async Task AVolumeIsPlacedByEveryPlaceItIsMounted()
+    {
+        Nvme(4);
+        _volumes.With(@"D:\", alsoMountedAt: [@"C:\Data\"]);
+        _storage.Volume(@"D:\", 4).Disk(4, DriveBytes.Nvme, seekPenalty: false);
+
+        await ReadAll();
+
+        Assert.Equal([@"D:\", @"C:\Data\"], Assert.Single(_placed.Reports).RootPaths);
     }
 
     [Fact]

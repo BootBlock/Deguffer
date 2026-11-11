@@ -50,6 +50,7 @@ public sealed class ClosePromptTests
     [InlineData(RunningAction.Uninstall, "an uninstall")]
     [InlineData(RunningAction.DuplicateRemoval, "a removal on the Duplicates page")]
     [InlineData(RunningAction.StartupChange, "a change on the Startup page")]
+    [InlineData(RunningAction.Retrim, "a retrim on the Storage page")]
     public void EveryActionHasAName(RunningAction action, string name)
     {
         Assert.Contains(name, ClosePrompt.For([action]).Title);

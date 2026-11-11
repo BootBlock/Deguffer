@@ -155,8 +155,8 @@ public sealed partial class CloseMessageTests
     /// <see cref="NoCallThatEndsOrCommandsAnotherProgramIsDeclared"/> cannot see: <c>Process.Kill</c>
     /// is <c>TerminateProcess</c>, <c>CloseMainWindow</c> is a posted close Deguffer did not choose the
     /// window for, <c>SendKeys</c> is <c>SendInput</c>, WMI's <c>Win32_Process.Terminate</c> arrives
-    /// through <c>System.Management</c>, and <c>NativeLibrary</c> reaches any export by name without a
-    /// declaration at all. <c>GetProcessById</c> hands over another program's <c>Process</c>, which is
+    /// through <c>System.Management</c> or through WMI's own <c>ExecMethod</c>, and <c>NativeLibrary</c>
+    /// reaches any export by name without a declaration at all. <c>GetProcessById</c> hands over another program's <c>Process</c>, which is
     /// where a <c>Kill</c> or a <c>CloseMainWindow</c> would start.
     ///
     /// <para>Matched on code, not comments, because the comments explain why these are not used.</para>
@@ -168,7 +168,7 @@ public sealed partial class CloseMessageTests
             .SelectMany(file => ProductSources.Code(File.ReadAllText(file))
                 .SelectMany(line => ManagedRoute().Matches(line))
                 .Select(match => (Route: match.Groups["route"].Value, File: Path.GetRelativePath(MarkdownGuide.RepositoryRoot, file))))
-            .Where(use => !NativeLibraryAllowance(use.Route, use.File))
+            .Where(use => !NativeLibraryAllowance(use.Route, use.File) && !WmiMethodAllowance(use.Route, use.File))
             .Select(use => $"{use.Route} in {use.File}")
             .ToList();
 
@@ -192,6 +192,32 @@ public sealed partial class CloseMessageTests
         Assert.Equal(["\"SRRemoveRestorePoint\""], ExportLoaded().Matches(code).Select(match => match.Groups["export"].Value.Trim()));
     }
 
+    /// <summary>
+    /// The one WMI method called: <c>MSFT_Volume.Optimize</c>, Windows' retrim, which reaches a volume
+    /// rather than any program. <c>ExecMethod</c> calls any method of any class by name, so the
+    /// allowance is held to that file, that class and that method, and a second call there is a second
+    /// route and fails.
+    /// </summary>
+    [Fact]
+    public void TheOnlyWmiMethodCalledIsTheRetrim()
+    {
+        var code = string.Join('\n', ProductSources.Code(File.ReadAllText(Path.Combine(MarkdownGuide.RepositoryRoot, VolumeRetrim))));
+
+        Assert.Single(MethodCall().Matches(code));
+        Assert.Contains("services.ExecMethod(path, Method,", code, StringComparison.Ordinal);
+        Assert.Contains("private const string Method = \"Optimize\";", code, StringComparison.Ordinal);
+        Assert.Contains("private const string VolumeClass = \"MSFT_Volume\";", code, StringComparison.Ordinal);
+    }
+
+    /// <summary>The one file that calls a WMI method, for the reason <see cref="TheOnlyWmiMethodCalledIsTheRetrim"/> gives.</summary>
+    private static readonly string VolumeRetrim = Path.Combine("Deguffer.Core", "Retrim", "WindowsVolumeRetrim.cs");
+
+    /// <summary>Where <c>ExecMethod</c> is declared, which is the slot and not a call.</summary>
+    private static readonly string WmiInterfaces = Path.Combine("Deguffer.Core", "Wmi", "WbemInterfaces.cs");
+
+    private static bool WmiMethodAllowance(string route, string file) =>
+        route == "ExecMethod" && (file == VolumeRetrim || file == WmiInterfaces);
+
     /// <summary>The one file allowed <c>NativeLibrary</c>, for the reason <see cref="TheOnlyLibraryLoadedByNameRemovesARestorePoint"/> gives.</summary>
     private static readonly string RestorePointCalls = Path.Combine("Deguffer.Core", "SystemProtection", "RestorePointCalls.cs");
 
@@ -201,8 +227,11 @@ public sealed partial class CloseMessageTests
     private static string Core =>
         Path.Combine(MarkdownGuide.RepositoryRoot, "Deguffer.Core");
 
-    [GeneratedRegex(@"(?<route>\bKill\b|\bCloseMainWindow\b|\bGetProcessById\b|\bNativeLibrary\b|\bSystem\.Management\b|\bSendKeys\b)")]
+    [GeneratedRegex(@"(?<route>\bKill\b|\bCloseMainWindow\b|\bGetProcessById\b|\bNativeLibrary\b|\bSystem\.Management\b|\bSendKeys\b|\bExecMethod\b)")]
     private static partial Regex ManagedRoute();
+
+    [GeneratedRegex(@"\bExecMethod\s*\(")]
+    private static partial Regex MethodCall();
 
     /// <summary>Every export taken, by the text of its name argument, so one named by a variable is seen too.</summary>
     [GeneratedRegex(@"\bNativeLibrary\.(?:Try)?GetExport\s*\(\s*\w+\s*,\s*(?<export>[^,)]+)")]
