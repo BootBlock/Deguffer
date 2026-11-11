@@ -6,10 +6,9 @@ namespace Deguffer.App.Diagnostics;
 /// Where the <c>Launch</c> pair a trace times begins: at the process's entry point, before the
 /// application starts, and measured back from there to the moment Windows created the process.
 ///
-/// <para>It began in <see cref="App.OnLaunched"/> once, which missed everything before it: the
-/// runtime's start, and <see cref="App"/>'s type initialiser, which reads the stores
-/// (<see cref="Core.Configuration.PreferenceStore"/> among them) the first time the application
-/// object touches a static. That part was 380 to 823 ms of a warm launch of about a second.</para>
+/// <para>Not in <see cref="App.OnLaunched"/>: by then <see cref="App"/>'s type initialiser has read
+/// the stores (<see cref="Core.Configuration.PreferenceStore"/> among them), which it does the first
+/// time the application object touches a static, and that is a large part of a launch.</para>
 /// </summary>
 internal static class LaunchTiming
 {
