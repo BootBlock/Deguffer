@@ -18,7 +18,7 @@ public sealed class HealthByVolume
 
     /// <summary>
     /// Forget every drive a finished listing no longer has. A drive taken away no longer speaks for
-    /// the volumes it held, and a volume moved to another drive is answered for by that one.
+    /// the volumes it held.
     /// </summary>
     public void Listed(IReadOnlyList<DriveDescription> drives)
     {
@@ -50,7 +50,10 @@ public sealed class HealthByVolume
         }
     }
 
-    /// <summary>Take where a drive's volumes are mounted.</summary>
+    /// <summary>
+    /// Take where a drive's volumes are mounted, in place of where they were, so a volume moved to
+    /// another drive is answered for by that drive alone.
+    /// </summary>
     public void Record(DriveVolumes volumes)
     {
         if (_volumes.TryGetValue(volumes.Key, out var last) && last.SequenceEqual(volumes.RootPaths, StringComparer.OrdinalIgnoreCase))
@@ -63,13 +66,8 @@ public sealed class HealthByVolume
     }
 
     /// <summary>
-    /// Whether any drive read so far is a concern, so a caller that must first work out which volume
-    /// it means can skip that until there is something to say about one.
-    /// </summary>
-    public bool HasConcern => _reports.Values.Any(report => report.Verdict is DriveVerdict.Watch or DriveVerdict.Failing);
-
-    /// <summary>
-    /// What to say about the drives under the volume mounted at <paramref name="rootPath"/>, or null
+    /// What to say about the drives under the volume mounted at <paramref name="rootPath"/>, any of
+    /// the places it is mounted, or null
     /// where none read so far is a concern. A volume that spans several drives is answered for by
     /// the worst of them.
     /// </summary>

@@ -20,11 +20,7 @@ public sealed class HealthByVolumeTests
     private static DriveVolumes On(DriveDescription drive, params string[] roots) => new(drive.Key, string.Join("; ", roots), roots);
 
     [Fact]
-    public void NothingIsSaidBeforeHealthHasRead()
-    {
-        Assert.Null(_health.Of(@"C:\"));
-        Assert.False(_health.HasConcern);
-    }
+    public void NothingIsSaidBeforeHealthHasRead() => Assert.Null(_health.Of(@"C:\"));
 
     [Theory]
     [InlineData(DriveVerdict.Good)]
@@ -36,7 +32,6 @@ public sealed class HealthByVolumeTests
         _health.Record(Report(System, verdict));
 
         Assert.Null(_health.Of(@"C:\"));
-        Assert.False(_health.HasConcern);
     }
 
     [Fact]
@@ -115,10 +110,16 @@ public sealed class HealthByVolumeTests
     {
         _health.Record(On(System, @"C:\", @"E:\"));
         _health.Record(Report(System, DriveVerdict.Failing));
+        _health.Record(Report(Data, DriveVerdict.Watch));
 
         _health.Record(On(System, @"C:\"));
+        _health.Record(On(Data, @"E:\"));
 
-        Assert.Null(_health.Of(@"E:\"));
+        var moved = _health.Of(@"E:\");
+
+        Assert.NotNull(moved);
+        Assert.Equal(DriveVerdict.Watch, moved.Verdict);
+        Assert.StartsWith("Data SSD", moved.Text, StringComparison.Ordinal);
     }
 
     [Fact]

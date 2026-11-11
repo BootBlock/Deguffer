@@ -17,7 +17,7 @@ public sealed record VolumeHealthNote(DriveVerdict Verdict, string Word, string 
     /// </summary>
     public static VolumeHealthNote? For(IEnumerable<DriveHealth> drives)
     {
-        var concerns = drives.Where(drive => drive.Verdict is DriveVerdict.Watch or DriveVerdict.Failing).ToList();
+        var concerns = drives.Where(drive => drive.Verdict.IsConcern()).ToList();
 
         if (concerns.Count == 0)
         {
@@ -31,11 +31,11 @@ public sealed record VolumeHealthNote(DriveVerdict Verdict, string Word, string 
         return worst is DriveVerdict.Failing
             ? new VolumeHealthNote(
                 worst,
-                "Failing",
+                worst.Word(),
                 $"{Names(named)} {(one ? "reports" : "report")} a serious problem. Back up what is on this drive before cleaning it or anything else.")
             : new VolumeHealthNote(
                 worst,
-                "Watch",
+                worst.Word(),
                 $"{Names(named)} {(one ? "has a reading that needs" : "have readings that need")} attention. Back up important files, and see Health for the details.");
     }
 

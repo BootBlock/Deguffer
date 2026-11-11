@@ -139,7 +139,10 @@ public sealed partial class CleanViewModel : ObservableObject
         WhenComplete = whenComplete;
         ScanChoice = scanChoice;
         Sizes = new StorageSizeChanges(sizes, Findings, isElevated);
-        DriveHealth = new DriveHealthLine(driveHealth, volumes, environment.UserProfile);
+
+        // Asked of the machine for this one path, as the free space above is, rather than read from
+        // the volume list, which may not have been read yet.
+        DriveHealth = new DriveHealthLine(driveHealth, volumes.MountPointOf(environment.UserProfile));
         _coverage = new ScanCoverage(planner.Providers.Count, planner.Providers.Count);
         _origin = new ReportOrigin(
             appVersion,

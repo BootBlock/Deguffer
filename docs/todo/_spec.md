@@ -1536,8 +1536,8 @@ explains. It changes nothing on any drive, and it deletes nothing.
 - A read never holds the window open.
 - Windows' storage reliability counters (`MSFT_StorageReliabilityCounter`, behind
   `Get-StorageReliabilityCounter`) are not read. Measured unelevated on 2026-11-11, they refused
-  every drive that the requests above answer, so they add nothing Health lacks and would ask for
-  elevation to say less. Their `Reset` method is never called.
+  every drive that the requests above answer without elevation. What they give elevated was not
+  measured. Their `Reset` method is never called.
 
 **What it says**
 

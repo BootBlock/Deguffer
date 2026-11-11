@@ -389,7 +389,6 @@ public sealed class DriveListTests
         Assert.Equal(@"C:\Mount\", drives.Holding(@"S:\2024")?.RootPath);
     }
 
-    /// <summary>A reading and its rows, as a page that has nothing to guard between the two takes them.</summary>
     [Fact]
     public async Task ARowNamesADriveHealthFoundAConcernWith()
     {
@@ -434,6 +433,7 @@ public sealed class DriveListTests
         Assert.Null(row.Health);
     }
 
+    /// <summary>A reading and its rows, as a page that has nothing to guard between the two takes them.</summary>
     private static async Task<bool> Refresh(DriveList drives)
     {
         if (await drives.ReadAsync(CancellationToken.None) is not { } read)

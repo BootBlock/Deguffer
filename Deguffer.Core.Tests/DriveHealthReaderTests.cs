@@ -346,6 +346,18 @@ public sealed class DriveHealthReaderTests
     }
 
     [Fact]
+    public async Task AVolumeIsPlacedByEveryPlaceItIsMounted()
+    {
+        Nvme(4);
+        _volumes.With(@"D:\", alsoMountedAt: [@"C:\Data\"]);
+        _storage.Volume(@"D:\", 4).Disk(4, DriveBytes.Nvme, seekPenalty: false);
+
+        await ReadAll();
+
+        Assert.Equal([@"D:\", @"C:\Data\"], Assert.Single(_placed.Reports).RootPaths);
+    }
+
+    [Fact]
     public async Task ADriveThatDoesNotAnswerIsReportedAndNotAskedAgain()
     {
         using var release = new ManualResetEventSlim();

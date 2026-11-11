@@ -130,7 +130,7 @@ public sealed class DriveHealthReader(IDriveProbe probe, IVolumeInventory invent
         {
             var volumes = byDisk.GetValueOrDefault(drive.Disk, []);
 
-            progress.Report(new DriveVolumes(drive.Key, string.Join("; ", volumes.Select(VolumeText)), [.. volumes.Select(volume => volume.RootPath)]));
+            progress.Report(new DriveVolumes(drive.Key, string.Join("; ", volumes.Select(VolumeText)), [.. volumes.SelectMany(volume => (IEnumerable<string>)[volume.RootPath, .. volume.AlsoMountedAt ?? []])]));
         }
     }
 
