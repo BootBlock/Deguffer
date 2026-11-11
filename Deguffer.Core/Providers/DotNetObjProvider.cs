@@ -159,7 +159,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
     /// Every <c>obj</c> below an approved source folder, which is the whole of where the search looks.
     /// Named by name rather than by recognition, because one declined today, by the signature or by
     /// git, is a target once its files agree or git stops tracking it. <c>bin</c> is never one: it is
-    /// a survivor (<see cref="BuildProtectedPaths"/>).
+    /// a survivor (<see cref="BuildProtectedPathsAsync"/>).
     /// </summary>
     public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<CleanedPlace>>(
@@ -265,7 +265,7 @@ public sealed class DotNetObjProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(targets, declined, live),
+            ProtectedPaths = await BuildProtectedPathsAsync(targets, declined, live, ct).ConfigureAwait(false),
             Notes = SourceTreePlanNotes.For(
                 discovered,
                 $"'{DirectoryName}'",
@@ -327,10 +327,11 @@ public sealed class DotNetObjProvider : CleanupProviderBase
     /// separated from the targets only by evidence — which is exactly the situation where an
     /// over-broad rule takes one with the other.
     /// </summary>
-    private static IReadOnlyList<ProtectedPath> BuildProtectedPaths(
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(
         IReadOnlyList<RecognisedObj> targets,
         IReadOnlyList<string> declined,
-        LiveTreeVetoResult live) => Protect(
+        LiveTreeVetoResult live,
+        CancellationToken ct) => ProtectAsync(
     [
         .. targets.Select(t => t.Project).SelectMany(project =>
         {
@@ -346,5 +347,6 @@ public sealed class DotNetObjProvider : CleanupProviderBase
         }),
         .. declined.Select(path => (path, "Not recognised as .NET intermediate build output, so it is left alone.")),
         .. live.Survivors,
-    ]);
+    ],
+    ct);
 }

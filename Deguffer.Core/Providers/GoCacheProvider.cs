@@ -291,7 +291,7 @@ public sealed class GoCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(located.GoPaths),
+            ProtectedPaths = await BuildProtectedPathsAsync(located.GoPaths, ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = found.CouldNotBeReached,
@@ -305,15 +305,16 @@ public sealed class GoCacheProvider : CleanupProviderBase
     /// and they are what the run has to prove it left standing, in every workspace <c>GOPATH</c>
     /// lists.
     /// </summary>
-    private static IReadOnlyList<ProtectedPath> BuildProtectedPaths(IReadOnlyList<string> workspaces) => Protect(
-    [
-        .. workspaces.SelectMany(workspace => new[]
-        {
-            (workspace, "The Go workspace itself must survive — only the caches inside it are cleared."),
-            (Path.Combine(workspace, "bin"), "Binaries installed with 'go install', which are normally on PATH."),
-            (Path.Combine(workspace, "src"), "Source Go keeps in the workspace, which is the user's own code."),
-        }),
-    ]);
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(IReadOnlyList<string> workspaces, CancellationToken ct) => ProtectAsync(
+        [
+            .. workspaces.SelectMany(workspace => new[]
+            {
+                (workspace, "The Go workspace itself must survive — only the caches inside it are cleared."),
+                (Path.Combine(workspace, "bin"), "Binaries installed with 'go install', which are normally on PATH."),
+                (Path.Combine(workspace, "src"), "Source Go keeps in the workspace, which is the user's own code."),
+            }),
+        ],
+        ct);
 
     /// <summary>
     /// What the plan says about the two caches. A report and a guess are two different claims, and

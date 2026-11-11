@@ -178,7 +178,7 @@ public sealed class PipCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(),
+            ProtectedPaths = await BuildProtectedPathsAsync(ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
         };
@@ -190,17 +190,20 @@ public sealed class PipCacheProvider : CleanupProviderBase
     /// the parent of the cache directory pip reports. Naming the parent as well is what stops a
     /// future change from reclaiming the cache by removing the directory that contains it.
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths()
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(CancellationToken ct)
     {
         var localRoot = Path.Combine(Environment.LocalAppData, "pip");
 
         // pip reads pip.ini from both the local and roaming profile directories, and either may be
         // the one that exists. Naming both keeps §5.6's list an honest statement of what survived
         // rather than a guess at which copy this machine happens to use.
-        return Protect(
-            (localRoot, "pip's directory must survive — only the cache within it is cleared."),
-            (Path.Combine(localRoot, "pip.ini"), "pip configuration, which may hold private index URLs and credentials."),
-            (Path.Combine(Environment.RoamingAppData, "pip", "pip.ini"), "Roaming pip configuration, which may hold private index URLs and credentials."));
+        return ProtectAsync(
+            [
+                (localRoot, "pip's directory must survive — only the cache within it is cleared."),
+                (Path.Combine(localRoot, "pip.ini"), "pip configuration, which may hold private index URLs and credentials."),
+                (Path.Combine(Environment.RoamingAppData, "pip", "pip.ini"), "Roaming pip configuration, which may hold private index URLs and credentials."),
+            ],
+            ct);
     }
 
     private string? FindPip() => PipCommand.Find(Environment);

@@ -234,7 +234,7 @@ public sealed class RoslynCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(declined),
+            ProtectedPaths = await BuildProtectedPathsAsync(declined, ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = scan.Unreadable,
@@ -253,8 +253,9 @@ public sealed class RoslynCacheProvider : CleanupProviderBase
     /// <c>Cache</c> that was declined is protected by name as well, because the spared and the removed are
     /// siblings of one shape — precisely when an over-broad rule takes one with the other.
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(
-        IReadOnlyList<(string Path, string Reason)> declined) => Protect(
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(
+        IReadOnlyList<(string Path, string Reason)> declined,
+        CancellationToken ct) => ProtectAsync(
     [
         (_visualStudio, "Visual Studio's own folder must survive: it holds each installation's settings and "
             + "extensions, and the recovery copies of documents that were never saved."),
@@ -263,5 +264,6 @@ public sealed class RoslynCacheProvider : CleanupProviderBase
         (_roslyn, "Roslyn's folder must survive — only indexes inside its Cache folder are removed."),
         (_cache, "The folder holding the indexes must survive; only whole sets inside it go."),
         .. declined,
-    ]);
+    ],
+    ct);
 }

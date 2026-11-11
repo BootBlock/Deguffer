@@ -288,11 +288,12 @@ public sealed class ZigCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect(
-            [
-                (root, "Zig's cache folder itself must survive — only what Zig compiled inside it is removed."),
-                .. declined,
-            ]),
+            ProtectedPaths = await ProtectAsync(
+                [
+                    (root, "Zig's cache folder itself must survive — only what Zig compiled inside it is removed."),
+                    .. declined,
+                ],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = scan.Unreadable,

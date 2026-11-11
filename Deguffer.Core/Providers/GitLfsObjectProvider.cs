@@ -232,7 +232,7 @@ public sealed class GitLfsObjectProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(checkouts, declined, found.Survivors, live),
+            ProtectedPaths = await BuildProtectedPathsAsync(checkouts, declined, found.Survivors, live, ct).ConfigureAwait(false),
             Notes = SourceTreePlanNotes.For(
                 discovered, $"'{GitDirectoryName}'", "a git directory", declined.Count, live, measured?.Note, found.Notes),
             Fallback = measured?.Fallback ?? FallbackReason.None,
@@ -468,17 +468,19 @@ public sealed class GitLfsObjectProvider : CleanupProviderBase
     /// all, must outlive a prune, which removes files from the object store and nothing else. So must
     /// the store's folder itself, and everything the plan declined or held back.
     /// </summary>
-    private static IReadOnlyList<ProtectedPath> BuildProtectedPaths(
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(
         IReadOnlyList<GitLfsCheckout> checkouts,
         IReadOnlyList<string> declined,
         IReadOnlyList<(string Path, string Reason)> survivors,
-        LiveTreeVetoResult live) => Protect(
+        LiveTreeVetoResult live,
+        CancellationToken ct) => ProtectAsync(
     [
         .. checkouts.SelectMany(GitLfsPlanNotes.Survivors),
         .. declined.Select(path => (path, "Not recognised as a git directory, so it is left alone.")),
         .. survivors,
         .. live.Survivors,
-    ]);
+    ],
+    ct);
 
     /// <summary>Where Git LFS keeps the object <paramref name="oid"/>: <c>objects\aa\bb\&lt;oid&gt;</c> (<c>fs/fs.go</c>).</summary>
     private static string ObjectFile(GitLfsStore store, string oid) =>

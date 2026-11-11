@@ -143,8 +143,9 @@ public abstract class MediaServerTranscodeProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect(
-                [.. scan.Protected.Concat(layout.Survivors)]),
+            ProtectedPaths = await ProtectAsync(
+                [.. scan.Protected.Concat(layout.Survivors)],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             WasNotExamined = scan.Targets.Count == 0 && (scan.Declined.Count > 0 || layout.LeftSomethingUnexamined),

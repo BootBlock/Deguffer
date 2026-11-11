@@ -302,7 +302,7 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = [.. commands, .. builds],
-            ProtectedPaths = Protect([.. survivors]),
+            ProtectedPaths = await ProtectAsync([.. survivors], ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = FallbackReasonText.Prevailing(staged.Fallback, built.Fallback),
             HasUnreadableRoot = unreachable.Count > 0,

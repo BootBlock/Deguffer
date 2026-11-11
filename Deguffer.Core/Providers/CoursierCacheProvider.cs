@@ -274,14 +274,15 @@ public sealed class CoursierCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect(
+            ProtectedPaths = await ProtectAsync(
                 walk,
                 spared,
                 [
                     (cache, "Coursier's artefact cache itself must survive — only the downloads inside it are removed."),
                     (DefaultCacheHome, "The folder holding Coursier's caches must survive — only downloads inside it are removed."),
                     .. kept.Protected,
-                ]),
+                ],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = walk.Unreadable,

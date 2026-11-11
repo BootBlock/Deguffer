@@ -44,7 +44,7 @@ if (request.Route.ReadsTable())
         return 2;
     }
 }
-else if (request.Route.Removes())
+else if (request.Route.Builds())
 {
     site = RemovalSite.Create(request.Path, out var refused);
     if (site is null)
@@ -94,6 +94,7 @@ static int Benchmark(BenchmarkRequest request, ScanTuner tuner, RemovalSite? sit
         Route.Remove => new RemoveRoute(site!, request.Tree).Timed,
         Route.Clean => new CleanRoute(
             site!, request.Trees, request.Tree, UserEnvironment.Current, SystemDirectories.Current, VolumeInventory.Current).Timed,
+        Route.Protect => new ProtectRoute(site!, request.Trees, tuner).Timed,
         Route.Race => RaceRoute.On(
             VolumeMftSourceFactory.Default,
             request.Path,
@@ -157,7 +158,8 @@ static int Benchmark(BenchmarkRequest request, ScanTuner tuner, RemovalSite? sit
     }
     catch (InvalidOperationException ex) when (site is not null)
     {
-        // A removal route found something gone beside what it removed. Its message names no path.
+        // A removal route found something gone beside what it removed, or the protect route a record
+        // that does not match the folder it built. Its message names no path.
         Console.Error.WriteLine(ex.Message);
         return 4;
     }

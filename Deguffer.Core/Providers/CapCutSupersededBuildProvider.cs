@@ -217,7 +217,7 @@ public sealed class CapCutSupersededBuildProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect([.. survivors]),
+            ProtectedPaths = await ProtectAsync([.. survivors], ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = installations.Any(i => i.Doubt is CapCutBuildDoubt.AppsUnreadable),

@@ -276,14 +276,15 @@ public sealed partial class PreCommitStoreProvider : CleanupProviderBase
                     MeasuredPaths = repositories,
                 },
             ],
-            ProtectedPaths = Protect(
-            [
-                (store, "pre-commit's store itself must survive — 'pre-commit gc' removes only hook repositories inside it."),
-                .. StoreFiles.Select(name => (Path.Combine(store, name), "pre-commit's own record of its store, which 'pre-commit gc' keeps.")),
-                .. entries
-                    .Where(entry => !IsRepository(entry))
-                    .Select(entry => (LongPath.Display(entry.FullName), WhySurvives(entry))),
-            ]),
+            ProtectedPaths = await ProtectAsync(
+                [
+                    (store, "pre-commit's store itself must survive — 'pre-commit gc' removes only hook repositories inside it."),
+                    .. StoreFiles.Select(name => (Path.Combine(store, name), "pre-commit's own record of its store, which 'pre-commit gc' keeps.")),
+                    .. entries
+                        .Where(entry => !IsRepository(entry))
+                        .Select(entry => (LongPath.Display(entry.FullName), WhySurvives(entry))),
+                ],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
         };

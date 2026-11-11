@@ -456,7 +456,7 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect([.. survivors, .. declined]),
+            ProtectedPaths = await ProtectAsync([.. survivors, .. declined], ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = unreadable,

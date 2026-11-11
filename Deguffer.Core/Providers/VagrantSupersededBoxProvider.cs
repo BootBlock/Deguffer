@@ -286,7 +286,7 @@ public sealed class VagrantSupersededBoxProvider : CleanupProviderBase
                     TargetCheck = new VagrantPruneTarget(home, installed, [.. located.Select(found => found.Box)]),
                 },
             ],
-            ProtectedPaths = BuildProtectedPaths(home, boxes, preview, located),
+            ProtectedPaths = await BuildProtectedPathsAsync(home, boxes, preview, located, ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
         };
@@ -299,11 +299,12 @@ public sealed class VagrantSupersededBoxProvider : CleanupProviderBase
     /// they sit beside what is removed and an over-broad removal would take them first, and so is
     /// whatever shares a removed version's folder without being removed with it.
     /// </summary>
-    private static IReadOnlyList<ProtectedPath> BuildProtectedPaths(
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(
         string home,
         string boxes,
         VagrantPrunePreview preview,
-        IReadOnlyList<(VagrantBoxVersion Box, IReadOnlyList<string> Folders)> located)
+        IReadOnlyList<(VagrantBoxVersion Box, IReadOnlyList<string> Folders)> located,
+        CancellationToken ct)
     {
         var removedByName = preview.Removed
             .GroupBy(box => box.Name, StringComparer.Ordinal)
@@ -312,20 +313,21 @@ public sealed class VagrantSupersededBoxProvider : CleanupProviderBase
         IReadOnlyList<string> removing = [.. located.SelectMany(found => found.Folders)];
         var listing = ChildDirectories.Under(boxes);
 
-        return Protect(
-        [
-            (home, "Vagrant's own folder must survive. Only superseded box versions inside it are removed."),
-            (boxes, "Every installed box, the newest version of each included."),
-            .. HomeEntries.Select(entry => (Path.Combine(home, entry.Name), entry.Reason)),
-            .. listing.Directories.Concat(listing.Links).Select(box => (LongPath.Display(box.FullName),
-                "A box keeps its newest version, so its folder survives a prune.")),
-            .. preview.Kept.SelectMany(box => VagrantBoxLayout.ProviderDirectories(boxes, box, MayBeThere))
-                .Select(folder => (folder, "The newest version of a box, which prune keeps.")),
-            .. removedByName.SelectMany(pair => VagrantBoxLayout.OtherVersionDirectories(boxes, pair.Key, pair.Value))
-                .Select(folder => (folder, "A version folder prune does not remove.")),
-            .. located.SelectMany(found => VagrantBoxLayout.Beside(boxes, found.Box, removing))
-                .Select(folder => (folder, "Beside a version prune removes, and not part of it.")),
-        ]);
+        return ProtectAsync(
+            [
+                (home, "Vagrant's own folder must survive. Only superseded box versions inside it are removed."),
+                (boxes, "Every installed box, the newest version of each included."),
+                .. HomeEntries.Select(entry => (Path.Combine(home, entry.Name), entry.Reason)),
+                .. listing.Directories.Concat(listing.Links).Select(box => (LongPath.Display(box.FullName),
+                    "A box keeps its newest version, so its folder survives a prune.")),
+                .. preview.Kept.SelectMany(box => VagrantBoxLayout.ProviderDirectories(boxes, box, MayBeThere))
+                    .Select(folder => (folder, "The newest version of a box, which prune keeps.")),
+                .. removedByName.SelectMany(pair => VagrantBoxLayout.OtherVersionDirectories(boxes, pair.Key, pair.Value))
+                    .Select(folder => (folder, "A version folder prune does not remove.")),
+                .. located.SelectMany(found => VagrantBoxLayout.Beside(boxes, found.Box, removing))
+                    .Select(folder => (folder, "Beside a version prune removes, and not part of it.")),
+            ],
+            ct);
     }
 
     private static bool IsThere(PathPresence presence) => presence is PathPresence.Present;

@@ -196,13 +196,14 @@ public sealed class RedshiftCacheProvider : CleanupProviderBase
             Steps = steps,
             // Held first, so a held textures folder is named for why it was held rather than as the folder
             // only some of the contents of are removed.
-            ProtectedPaths = Protect(
-            [
-                .. held.Select(path => (Path: path, Reason: HeldReason)),
-                .. examined.Scan.Protected,
-                .. examined.Walks.SelectMany(walked => walked.Walk.Declined),
-                .. unrecognised,
-            ]),
+            ProtectedPaths = await ProtectAsync(
+                [
+                    .. held.Select(path => (Path: path, Reason: HeldReason)),
+                    .. examined.Scan.Protected,
+                    .. examined.Walks.SelectMany(walked => walked.Walk.Declined),
+                    .. unrecognised,
+                ],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             // A cache held back while a host runs, behind a link, or withheld from another computer's disk

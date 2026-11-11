@@ -258,11 +258,14 @@ public sealed class PipenvCacheProvider : CleanupProviderBase
 
             // §5.1's route first, then what no command reaches.
             Steps = [.. commands, .. deletions],
-            ProtectedPaths = Protect(
+            ProtectedPaths = await ProtectAsync(
                 walk,
                 spared,
-                (root, "pipenv's cache folder itself must survive — only the caches inside it are cleared."),
-                (LocalRoot, "pipenv's folder in your profile, which contains its default cache.")),
+                [
+                    (root, "pipenv's cache folder itself must survive — only the caches inside it are cleared."),
+                    (LocalRoot, "pipenv's folder in your profile, which contains its default cache."),
+                ],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = fallback,
             HasUnreadableRoot = walk.Unreadable,

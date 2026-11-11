@@ -296,7 +296,7 @@ public sealed class CondaCacheProvider : CleanupProviderBase
                     MeasuredBefore = probed.TotalOf(..packageCaches.Count),
                 },
             ],
-            ProtectedPaths = BuildProtectedPaths(installation, packageCaches),
+            ProtectedPaths = await BuildProtectedPathsAsync(installation, packageCaches, ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = probed.Fallback,
             HasUnreadableRoot = unreached.Count > 0,
@@ -318,9 +318,10 @@ public sealed class CondaCacheProvider : CleanupProviderBase
     /// excuse it, because that exemption covers the folders above a path the tool is sent to and never
     /// the folders inside one, and it would take the check off the base environment too.</para>
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(
         CondaInstallation installation,
-        IReadOnlyList<string> packageCaches)
+        IReadOnlyList<string> packageCaches,
+        CancellationToken ct)
     {
         var candidates = new List<(string Path, string Reason)>();
 
@@ -339,7 +340,7 @@ public sealed class CondaCacheProvider : CleanupProviderBase
         candidates.AddRange(packageCaches
             .Select(directory => (directory, "The package cache directory itself must survive — only unused contents are removed.")));
 
-        return Protect([.. candidates]);
+        return ProtectAsync([.. candidates], ct);
     }
 
     /// <summary>

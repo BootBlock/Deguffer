@@ -204,11 +204,12 @@ public sealed class AdobeMediaCacheProvider : CleanupProviderBase
             Steps = steps,
             // Held first, so a held cache folder is named for why it was held rather than as the
             // folder only the contents of are removed.
-            ProtectedPaths = Protect(
-            [
-                .. held.Select(path => (Path: path, Reason: HeldReason))
-                    .Concat(scan.Protected),
-            ]),
+            ProtectedPaths = await ProtectAsync(
+                [
+                    .. held.Select(path => (Path: path, Reason: HeldReason))
+                        .Concat(scan.Protected),
+                ],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             // A cache held back while Adobe runs, behind a link, or where the settings could not be

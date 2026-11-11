@@ -224,7 +224,7 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(live, declined, siblingFiles, parts),
+            ProtectedPaths = await BuildProtectedPathsAsync(live, declined, siblingFiles, parts, ct).ConfigureAwait(false),
             Notes = SourceTreePlanNotes.For(
                 discovered,
                 Kind.DisplayNames,
@@ -338,11 +338,12 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
     /// <para>For a kind that offers parts, a fourth: the directory itself, which only loses its parts,
     /// and everything inside it the parts leave alone.</para>
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(
         LiveTreeVetoResult live,
         IReadOnlyList<string> declined,
         IReadOnlyDictionary<string, IReadOnlyList<string>> siblingFiles,
-        IReadOnlyList<BuildDirectoryParts>? parts) => Protect(
+        IReadOnlyList<BuildDirectoryParts>? parts,
+        CancellationToken ct) => ProtectAsync(
     [
         .. parts is null ? [] : live.Cleared.Select(directory =>
             (directory.Path, $"Only what the toolchain is recognised to have written inside {Path.GetFileName(directory.Path)} is removed, and the folder itself stays.")),
@@ -357,7 +358,7 @@ public abstract class BuildDirectoryProvider : CleanupProviderBase
              $"{marker} is part of the project, not its build output.")))),
         .. declined.Select(path => (path, $"Not recognised as {Subject}, so it is left alone.")),
         .. live.Survivors,
-    ]);
+    ], ct);
 
     /// <summary>
     /// Everything beside the directory that has to survive it: every sibling the recognition looked

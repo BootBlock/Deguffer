@@ -235,12 +235,13 @@ public sealed class CaptureOneCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect(
-            [
-                .. examination.Survivors,
-                .. examination.Declined,
-                .. live.Survivors,
-            ]),
+            ProtectedPaths = await ProtectAsync(
+                [
+                    .. examination.Survivors,
+                    .. examination.Declined,
+                    .. live.Survivors,
+                ],
+                ct).ConfigureAwait(false),
             Notes = examination.Notes,
             Fallback = measured.Fallback,
             // A catalog on a drive that is not connected was listed and never looked in, which is

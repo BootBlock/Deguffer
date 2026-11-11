@@ -350,14 +350,15 @@ public sealed class VcpkgCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect(
-            [
-                .. scan.Protected,
+            ProtectedPaths = await ProtectAsync(
+                [
+                    .. scan.Protected,
 
-                // A folder a variable named and Deguffer declined is somebody's, and §5.6 says so after
-                // a run that reached into the clone beside it.
-                .. located.Declined.Select(declined => (declined.Path, DeclinedReason)),
-            ]),
+                    // A folder a variable named and Deguffer declined is somebody's, and §5.6 says so after
+                    // a run that reached into the clone beside it.
+                    .. located.Declined.Select(declined => (declined.Path, DeclinedReason)),
+                ],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             WasNotExamined = scan.NothingWasExamined,

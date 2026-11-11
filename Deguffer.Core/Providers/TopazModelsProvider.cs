@@ -224,7 +224,7 @@ public sealed class TopazModelsProvider : CleanupProviderBase
             case TopazRootReach.Link:
                 return UnexaminedPlan(LinkNote(survey.Root).Message) with
                 {
-                    ProtectedPaths = Protect((survey.Root, CacheLevelWalk.LinkReason)),
+                    ProtectedPaths = await ProtectAsync([(survey.Root, CacheLevelWalk.LinkReason)], ct).ConfigureAwait(false),
                 };
 
             // Found by name, and a listing right is separate from a traverse right, so the sentence is
@@ -234,7 +234,7 @@ public sealed class TopazModelsProvider : CleanupProviderBase
                 {
                     Notes = [UnreadableRoot.Note(survey.Root)],
                     HasUnreadableRoot = true,
-                    ProtectedPaths = Protect((survey.Root, UnlistedReason)),
+                    ProtectedPaths = await ProtectAsync([(survey.Root, UnlistedReason)], ct).ConfigureAwait(false),
                 };
         }
 
@@ -335,7 +335,7 @@ public sealed class TopazModelsProvider : CleanupProviderBase
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
             // One entry per path, keeping the first reason given for it.
-            ProtectedPaths = Protect([.. protect.DistinctBy(p => p.Path, StringComparer.OrdinalIgnoreCase)]),
+            ProtectedPaths = await ProtectAsync([.. protect.DistinctBy(p => p.Path, StringComparer.OrdinalIgnoreCase)], ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = unreadable,

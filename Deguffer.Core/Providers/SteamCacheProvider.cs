@@ -205,7 +205,7 @@ public sealed class SteamCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect([.. scan.Protected]),
+            ProtectedPaths = await ProtectAsync([.. scan.Protected], ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             // An install directory nobody could reach counts here for the same reason a declined

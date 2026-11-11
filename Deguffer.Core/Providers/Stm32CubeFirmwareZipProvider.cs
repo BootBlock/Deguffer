@@ -188,13 +188,14 @@ public sealed class Stm32CubeFirmwareZipProvider : CleanupProviderBase
             Steps = steps,
             // Held first, so a repository is named for why it was held rather than as the folder only
             // some of the contents of are removed.
-            ProtectedPaths = Protect(
-            [
-                .. examined.Read.Select(repository => (repository, held ? HeldReason : RepositoryReason)),
-                .. examined.Survivors,
-                .. examined.Declined,
-                .. repositories.Declined,
-            ]),
+            ProtectedPaths = await ProtectAsync(
+                [
+                    .. examined.Read.Select(repository => (repository, held ? HeldReason : RepositoryReason)),
+                    .. examined.Survivors,
+                    .. examined.Declined,
+                    .. repositories.Declined,
+                ],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             // Zips held back while ST's tools run, or a repository behind a link or withheld, is something

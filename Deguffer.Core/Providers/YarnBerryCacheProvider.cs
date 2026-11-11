@@ -199,10 +199,11 @@ public sealed class YarnBerryCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect(
-            [
-                .. found.Where(folder => folder.State is not YarnBerryCacheState.Absent).SelectMany(Survivors),
-            ]),
+            ProtectedPaths = await ProtectAsync(
+                [
+                    .. found.Where(folder => folder.State is not YarnBerryCacheState.Absent).SelectMany(Survivors),
+                ],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = found.Any(folder => folder.State is YarnBerryCacheState.Refused),

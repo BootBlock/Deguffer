@@ -43,7 +43,7 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
     /// for the same reason <see cref="DisposableChildSet"/> is: a name this does not know is Tier 4,
     /// never a guess.
     ///
-    /// <c>.links</c> is deliberately absent — see <see cref="BuildProtectedPaths"/>.
+    /// <c>.links</c> is deliberately absent — see <see cref="BuildProtectedPathsAsync"/>.
     /// </summary>
     [GeneratedRegex(
         @"\A(?:chromium|chromium_headless_shell|chromium_tip_of_tree|chromium_tip_of_tree_headless_shell|chromium_with_symbols|firefox|firefox_asan|firefox_beta|webkit|ffmpeg|winldd|android)-[0-9]+\z",
@@ -326,7 +326,7 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(root, spared, live),
+            ProtectedPaths = await BuildProtectedPathsAsync(root, spared, live, ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = scan.Unreadable,
@@ -345,15 +345,17 @@ public sealed partial class PlaywrightBrowsersProvider : CleanupProviderBase
     /// back because a program may be using it. Each is a sibling of a targeted build, which is exactly
     /// where an over-broad rule takes one with the other.</para>
     /// </summary>
-    private static IReadOnlyList<ProtectedPath> BuildProtectedPaths(
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(
         string root,
         IReadOnlyList<(string Path, string Reason)> spared,
-        LiveTreeVetoResult live) => Protect(
+        LiveTreeVetoResult live,
+        CancellationToken ct) => ProtectAsync(
     [
         (root, "The browser cache root itself must survive — only recognised browser builds are removed."),
         (Path.Combine(root, ".links"), "Playwright's record of which installations use which browsers."),
         .. spared,
         .. live.Vetoed.Select(v => (v.Directory, InUseReason)),
         .. live.Unchecked.Select(path => (path, LiveTreeVeto.UncheckedReason)),
-    ]);
+    ],
+    ct);
 }

@@ -241,20 +241,21 @@ public sealed class NxWorkspaceCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect(
-            [
-                .. examined.SelectMany(folder => new[]
-                {
-                    (folder.Workspace, $"The Nx workspace {folder.Name}. Only the task cache in its .nx folder is removed."),
-                    (Path.Combine(folder.Workspace, NxWorkspaceFolder.Manifest), "The workspace's Nx configuration, not a cache."),
-                    (folder.Path, "Holds the task cache that is removed. The folder itself, and everything in it that is not the cache, stays."),
-                    (folder.IndexIn(Environment), "The workspace's Nx index, which holds its task history as well. The Nx that reads it treats a removed entry as a miss."),
-                }),
-                .. siblings.SelectMany(sibling => sibling.Kept),
-                .. refused,
-                .. declined.Select(path => (path, $"Not recognised as {Subject} with a cache Deguffer can remove, so it is left alone.")),
-                .. live.Survivors,
-            ]),
+            ProtectedPaths = await ProtectAsync(
+                [
+                    .. examined.SelectMany(folder => new[]
+                    {
+                        (folder.Workspace, $"The Nx workspace {folder.Name}. Only the task cache in its .nx folder is removed."),
+                        (Path.Combine(folder.Workspace, NxWorkspaceFolder.Manifest), "The workspace's Nx configuration, not a cache."),
+                        (folder.Path, "Holds the task cache that is removed. The folder itself, and everything in it that is not the cache, stays."),
+                        (folder.IndexIn(Environment), "The workspace's Nx index, which holds its task history as well. The Nx that reads it treats a removed entry as a miss."),
+                    }),
+                    .. siblings.SelectMany(sibling => sibling.Kept),
+                    .. refused,
+                    .. declined.Select(path => (path, $"Not recognised as {Subject} with a cache Deguffer can remove, so it is left alone.")),
+                    .. live.Survivors,
+                ],
+                ct).ConfigureAwait(false),
             Notes = SourceTreePlanNotes.For(
                 discovered,
                 $"'{NxWorkspaceFolder.FolderName}'",

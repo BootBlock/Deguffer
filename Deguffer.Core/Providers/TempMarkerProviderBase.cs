@@ -169,7 +169,7 @@ public abstract class TempMarkerProviderBase : CleanupProviderBase, ITemporaryFo
             var empty = EmptyPlan(NothingLeftBehind);
             return empty with
             {
-                ProtectedPaths = Protect([.. findings.Survivors]),
+                ProtectedPaths = await ProtectAsync([.. findings.Survivors], ct).ConfigureAwait(false),
                 Notes = [.. empty.Notes, .. settings, .. findings.Notes],
             };
         }
@@ -189,7 +189,7 @@ public abstract class TempMarkerProviderBase : CleanupProviderBase, ITemporaryFo
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect([.. findings.Survivors]),
+            ProtectedPaths = await ProtectAsync([.. findings.Survivors], ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = findings.Unreadable,

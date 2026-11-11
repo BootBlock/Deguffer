@@ -209,7 +209,7 @@ public abstract class SetupCleanupProviderBase : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = [.. Protect([.. scan.Protected]), .. held],
+            ProtectedPaths = [.. await ProtectAsync([.. scan.Protected], ct).ConfigureAwait(false), .. held],
             Notes = notes,
             Fallback = measured.Fallback,
             // A folder Windows' own cleanup will not clear is one Deguffer declined to act on, and a row

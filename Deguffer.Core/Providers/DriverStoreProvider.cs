@@ -214,12 +214,13 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         // folder the listing does not account for, so an unlisted folder is Windows' own only where
         // every listed package was matched to its folder.
         var matched = listing.Unread == 0 && listing.Packages.All(p => p.Folder is not null);
-        var kept = Protect(
-        [
-            .. KeptPaths(drivers.Newest, listing),
-            .. matched ? unlisted.Select(folder => (folder, "A driver that is part of Windows, which pnputil does not list as third-party.")) : [],
-            .. WindowsSystemRoot.ExclusionsUnder(_system.WindowsDirectory),
-        ]);
+        var kept = await ProtectAsync(
+            [
+                .. KeptPaths(drivers.Newest, listing),
+                .. matched ? unlisted.Select(folder => (folder, "A driver that is part of Windows, which pnputil does not list as third-party.")) : [],
+                .. WindowsSystemRoot.ExclusionsUnder(_system.WindowsDirectory),
+            ],
+            ct).ConfigureAwait(false);
 
         if (drivers.Superseded.Count == 0)
         {
@@ -240,7 +241,17 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         return survey.Answer switch
         {
             DiskCleanupAnswer.Unavailable => await ByPackageAsync(
-                drivers, listing, survey, notes, [.. kept, .. matched ? [] : Protect([.. unlisted.Select(folder => (folder, DriverPackageNotes.NotAsked))])], ct).ConfigureAwait(false),
+                drivers,
+                listing,
+                survey,
+                notes,
+                [
+                    .. kept,
+                    .. matched
+                        ? []
+                        : await ProtectAsync([.. unlisted.Select(folder => (folder, DriverPackageNotes.NotAsked))], ct).ConfigureAwait(false),
+                ],
+                ct).ConfigureAwait(false),
             _ when survey.MayOffer => await ByHandlerAsync(folders, _volume, keep, matched, notes, kept, ct).ConfigureAwait(false),
             _ => Plan(
                 [],
@@ -365,7 +376,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
             .Where(folder => accounted.Add(folder) && SupersededDrivers.IsChildOf(folder, _repository))
             .Select(folder => (folder, DriverPackageNotes.NotAsked));
 
-        return Plan(steps, notes, [.. kept, .. Protect([.. others])]) with { Fallback = measured.Fallback };
+        return Plan(steps, notes, [.. kept, .. await ProtectAsync([.. others], ct).ConfigureAwait(false)]) with { Fallback = measured.Fallback };
     }
 
     private CleanupPlan Plan(IReadOnlyList<CleanupStep> steps, IReadOnlyList<PlanNote> notes, IReadOnlyList<ProtectedPath> protectedPaths) => new()

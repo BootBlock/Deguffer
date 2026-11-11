@@ -190,7 +190,7 @@ public sealed class JetBrainsSupersededSystemProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(survey),
+            ProtectedPaths = await BuildProtectedPathsAsync(survey, ct).ConfigureAwait(false),
             Notes = JetBrainsPlanNotes.For(survey.Versions.Select(v => v.Verdict), survey.UnreadableFolders, measured.Note),
             Fallback = measured.Fallback,
             HasUnreadableRoot = survey.UnreadableFolders.Count > 0,
@@ -212,7 +212,7 @@ public sealed class JetBrainsSupersededSystemProvider : CleanupProviderBase
     /// reaching from <c>%LOCALAPPDATA%</c> into <c>%APPDATA%</c> would take the one folder here holding
     /// a credential store.
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(Survey survey) => Protect(
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(Survey survey, CancellationToken ct) => ProtectAsync(
     [
         .. _vendors.Select(vendor => (vendor.Folder, "The vendor's own folder. Only replaced versions' system folders inside it are removed.")),
         .. survey.Versions.Where(v => v.Verdict is VersionVerdict.Offered).SelectMany(version => new[]
@@ -225,7 +225,8 @@ public sealed class JetBrainsSupersededSystemProvider : CleanupProviderBase
             "This version's local history of your files, or its logs. Lost for good if removed, so never offered here.")))),
         .. survey.Versions.Where(v => v.Verdict is not VersionVerdict.Offered).Select(version => (version.Directory.Path, KeptBecause(version.Verdict))),
         .. survey.Others.Select(other => (other, "Not an IDE version's system folder, so it is left alone.")),
-    ]);
+    ],
+    ct);
 
     private static string WhyNotInstalled(JetBrainsInstallStanding standing) => standing switch
     {

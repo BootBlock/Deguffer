@@ -176,7 +176,7 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
 
             // Into declined as well as noted. A link here is a spared sibling of the targeted
             // workspace directories, indistinguishable from them by name, which is exactly the
-            // case BuildProtectedPaths exists to cover.
+            // case BuildProtectedPathsAsync exists to cover.
             declined.Add((
                 LongPath.Display(link.FullName),
                 "A link rather than a directory, so what it points at was never classified."));
@@ -222,7 +222,7 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(declined),
+            ProtectedPaths = await BuildProtectedPathsAsync(declined, ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = scan.Unreadable,
@@ -239,12 +239,14 @@ public sealed partial class VsCodeCppToolsCacheProvider : CleanupProviderBase
     /// one with the other, so the negative is verified against the specific directories this plan
     /// decided to spare rather than against the root alone.
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(
-        IReadOnlyList<(string Path, string Reason)> declined) => Protect(
-    [
-        (_root, "The cpptools root itself must survive — only its known-disposable children are removed."),
-        .. declined,
-    ]);
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(
+        IReadOnlyList<(string Path, string Reason)> declined,
+        CancellationToken ct) => ProtectAsync(
+        [
+            (_root, "The cpptools root itself must survive — only its known-disposable children are removed."),
+            .. declined,
+        ],
+        ct);
 
     /// <summary>
     /// §5.2 by name first, then by content. The content signature only ever runs on a child the

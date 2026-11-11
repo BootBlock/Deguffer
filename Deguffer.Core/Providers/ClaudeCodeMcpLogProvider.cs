@@ -197,8 +197,9 @@ public sealed class ClaudeCodeMcpLogProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect(
-                [.. survey.Survivors.Concat(survey.Declined)]),
+            ProtectedPaths = await ProtectAsync(
+                [.. survey.Survivors.Concat(survey.Declined)],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = survey.Unreadable,

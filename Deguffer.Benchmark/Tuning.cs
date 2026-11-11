@@ -15,7 +15,7 @@ namespace Deguffer.Benchmark;
 internal static class Tuning
 {
     /// <param name="tree">The tree a removal route builds, or each of the clean route's. No other route reads it.</param>
-    /// <param name="trees">How many trees the clean route builds. No other route reads it.</param>
+    /// <param name="trees">How many trees the clean route builds, or folders the protect route records. No other route reads it.</param>
     public static string Describe(
         Route route, WalkTuning walk, TableTuning table, bool snapshots, LinkRead readBy, TreeShape tree, int trees)
     {
@@ -34,6 +34,13 @@ internal static class Tuning
                 CultureInfo.InvariantCulture,
                 $"{trees:N0} build folders of {tree.Files:N0} empty files in {tree.Folders + 1:N0} folders, " +
                 $"removed as one plan with nothing running");
+        }
+
+        if (route is Route.Protect)
+        {
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"{trees:N0} empty folders, each recorded as a plan records a protected path, with the walk a scan uses for the drive's kind");
         }
 
         if (route is Route.Scan)

@@ -13,39 +13,15 @@ namespace Deguffer.Benchmark;
 /// </summary>
 internal sealed class ListingsInFlight(ListDirectory inner)
 {
-    private int _inFlight;
-    private int _peak;
+    private readonly InFlightPeak _listings = new();
 
     /// <summary>The most listings that were in flight at once.</summary>
-    public int Peak => Volatile.Read(ref _peak);
+    public int Peak => _listings.Peak;
 
     public ListingEnd List(string directory, ListingRequest request, List<WalkEntry> into)
     {
-        var now = Interlocked.Increment(ref _inFlight);
-        RaisePeak(now);
+        using var listing = _listings.Enter();
 
-        try
-        {
-            return inner(directory, request, into);
-        }
-        finally
-        {
-            Interlocked.Decrement(ref _inFlight);
-        }
-    }
-
-    private void RaisePeak(int now)
-    {
-        var peak = Volatile.Read(ref _peak);
-        while (now > peak)
-        {
-            var was = Interlocked.CompareExchange(ref _peak, now, peak);
-            if (was == peak)
-            {
-                return;
-            }
-
-            peak = was;
-        }
+        return inner(directory, request, into);
     }
 }

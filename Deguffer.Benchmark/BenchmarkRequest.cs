@@ -32,7 +32,10 @@ namespace Deguffer.Benchmark;
 /// of the <paramref name="Trees"/> build folders it builds and removes as one plan. No other route
 /// builds any.
 /// </param>
-/// <param name="Trees">How many trees the clean route builds. One for every other route.</param>
+/// <param name="Trees">
+/// How many trees the clean route builds, or how many empty folders the protect route builds and
+/// records. One for every other route.
+/// </param>
 /// <param name="Drive">
 /// For a route that reads the table, the volume it reads: the letter of <paramref name="Path"/>, or
 /// for <see cref="Route.Race"/> the volume whose index is built beside the walk. Meaningless for
@@ -80,6 +83,12 @@ internal sealed record BenchmarkRequest(
     /// </summary>
     public const int DefaultTrees = 500;
 
+    /// <summary>
+    /// The protect route's folders when told nothing about them: about as many as each Claude Code row
+    /// was measured protecting on a machine with that data, 3,800 to 5,200 paths.
+    /// </summary>
+    public const int DefaultProtectedFolders = 5000;
+
     public const int DefaultFilesPerTree = 100;
 
     public const int MaximumFilesPerTree = 100_000;
@@ -91,7 +100,7 @@ internal sealed record BenchmarkRequest(
         """
         Usage: Deguffer.Benchmark <route> <target> [--runs N] [options]
                Deguffer.Benchmark folders <folder> [<folder>...] [--runs N]
-               Deguffer.Benchmark remove|clean <new folder> [--runs N] [options]
+               Deguffer.Benchmark remove|clean|protect <new folder> [--runs N] [options]
                Deguffer.Benchmark race <folder> [--build <drive>] [--runs N] [options]
 
         Routes:
@@ -124,6 +133,10 @@ internal sealed record BenchmarkRequest(
                             Create the folder, build many small build folders in it before
                             each run, and remove them as one plan, as a clean of the obj
                             row does: what each step costs around its removal.
+          protect <new folder>
+                            Create the folder, build many empty folders in it once, and
+                            record each as a plan records the paths it protects: whether
+                            each is there and holds anything, several asked at once.
           race <folder>     Walk the folder while the index of its volume is built, both
                             started at the same moment, as Auto races them in a scan, and
                             each of the two alone, alternating the order every round. The
@@ -157,6 +170,8 @@ internal sealed record BenchmarkRequest(
         --files-per-tree N     Clean only. How many empty files each build folder holds, in
                                seven folders, 0 to 100000, for at most 10000000 files in all.
                                The default is 100.
+        --folders N            Protect only. How many empty folders are built and recorded, 1
+                               to 100000. The default is 5000.
         --read-size KiB        Table routes only. How many KiB of records each read asks for, 4
                                to 16384.
         --reads-in-flight N    Table routes only. How many reads are outstanding at once, 1 to 32.
@@ -183,9 +198,9 @@ internal sealed record BenchmarkRequest(
         shipped settings, as the race it reproduces does. The Explore routes also report what
         the finished tree keeps on the managed heap.
 
-        Every route but remove and clean only reads: nothing on the drive is written, moved or
-        deleted. Those two refuse a folder that already exists, create it, write and delete only
-        inside it, and remove it when they finish.
+        Every route but remove, clean and protect only reads: nothing on the drive is written,
+        moved or deleted. Those three refuse a folder that already exists, create it, write and
+        delete only inside it, and remove it when they finish.
         """;
 
     /// <summary>
@@ -221,7 +236,7 @@ internal sealed record BenchmarkRequest(
 
         if (named is not { } route)
         {
-            error = "The route must be table, index, explore, explorefolder, walk, measure, explorewalk, sources, links, folders, remove, clean, race or scan.";
+            error = "The route must be table, index, explore, explorefolder, walk, measure, explorewalk, sources, links, folders, remove, clean, protect, race or scan.";
             return null;
         }
 
@@ -238,7 +253,12 @@ internal sealed record BenchmarkRequest(
         var depth = DefaultTree.Depth;
         var fanout = DefaultTree.Fanout;
         var readOnly = false;
-        var trees = route is Route.Clean ? DefaultTrees : 1;
+        var trees = route switch
+        {
+            Route.Clean => DefaultTrees,
+            Route.Protect => DefaultProtectedFolders,
+            _ => 1,
+        };
         var filesPerTree = DefaultFilesPerTree;
         char? build = null;
         var racer = Route.Sources;
@@ -290,6 +310,7 @@ internal sealed record BenchmarkRequest(
                 "--fanout" when route is Route.Remove => TryNumber(value, 1, TreeShape.MaximumFanout, out fanout),
                 "--trees" when route is Route.Clean => TryNumber(value, 1, MaximumTrees, out trees),
                 "--files-per-tree" when route is Route.Clean => TryNumber(value, 0, MaximumFilesPerTree, out filesPerTree),
+                "--folders" when route is Route.Protect => TryNumber(value, 1, MaximumTrees, out trees),
                 "--build" when route is Route.Race => TryDrive(value, out build),
                 "--racer" when route is Route.Race => TryRacer(value, out racer),
                 "--before-part" when route is Route.Race => TryCommand(value, out beforePart),
@@ -313,6 +334,7 @@ internal sealed record BenchmarkRequest(
                     $"For remove, --files takes a number from 0 to {TreeShape.MaximumFiles}, --depth from 0 to " +
                     $"{TreeShape.MaximumDepth} and --fanout from 1 to {TreeShape.MaximumFanout}, and --read-only takes nothing. " +
                     $"For clean, --trees takes a number from 1 to {MaximumTrees} and --files-per-tree from 0 to {MaximumFilesPerTree}. " +
+                    $"For protect, --folders takes a number from 1 to {MaximumTrees}. " +
                     "For race, --build takes a drive letter, --racer takes sources or walk, --before-part a command, " +
                     "and --build-priority yield or normal. " +
                     "Nothing else is accepted after the target.";

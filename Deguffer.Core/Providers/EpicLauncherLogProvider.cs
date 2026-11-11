@@ -258,8 +258,9 @@ public sealed class EpicLauncherLogProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect(
-                [.. survivors.Concat(declined)]),
+            ProtectedPaths = await ProtectAsync(
+                [.. survivors.Concat(declined)],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = folder.Unreadable,

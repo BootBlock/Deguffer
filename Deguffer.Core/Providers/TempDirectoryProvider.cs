@@ -433,16 +433,17 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = Protect(
-            [
-                // First, because the first reason for a path is the one kept, and a folder withheld
-                // whole is also one the scan protects.
-                .. withheld.Select(target => (target.Path, LiveTreeVeto.UncheckedReason)),
-                .. unlisted.Select(target => (target.Path, TemporaryUserWork.UnlistedReason)),
-                .. work.Values.SelectMany(w => w.Entries).Select(entry => (entry.Path, TemporaryUserWork.Reason(entry))),
-                .. scan.Protected,
-                .. spared,
-            ]),
+            ProtectedPaths = await ProtectAsync(
+                [
+                    // First, because the first reason for a path is the one kept, and a folder withheld
+                    // whole is also one the scan protects.
+                    .. withheld.Select(target => (target.Path, LiveTreeVeto.UncheckedReason)),
+                    .. unlisted.Select(target => (target.Path, TemporaryUserWork.UnlistedReason)),
+                    .. work.Values.SelectMany(w => w.Entries).Select(entry => (entry.Path, TemporaryUserWork.Reason(entry))),
+                    .. scan.Protected,
+                    .. spared,
+                ],
+                ct).ConfigureAwait(false),
             Notes = notes,
 
             // §5.3's floor travels on the plan, so the removal applies exactly the cut-off the

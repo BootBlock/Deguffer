@@ -227,7 +227,7 @@ public sealed class GradleCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(home, walk, spared),
+            ProtectedPaths = await BuildProtectedPathsAsync(home, walk, spared, ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = walk.Unreadable,
@@ -241,16 +241,18 @@ public sealed class GradleCacheProvider : CleanupProviderBase
     /// the walk spared or declined is named as well: <c>jdks</c>, <c>native</c> and <c>daemon</c> are
     /// siblings of the two targets, which is exactly where an over-broad rule takes one with the other.
     /// </summary>
-    private static IReadOnlyList<ProtectedPath> BuildProtectedPaths(
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(
         string home,
         LevelWalk walk,
-        IReadOnlyList<(string Path, string Reason)> spared) => Protect(
+        IReadOnlyList<(string Path, string Reason)> spared,
+        CancellationToken ct) => ProtectAsync(
         walk,
         spared,
         [
             (home, "The Gradle user home itself must survive — only its known-disposable children are removed."),
             .. Configuration.Select(file => (Path.Combine(home, file.Name), file.Reason)),
-        ]);
+        ],
+        ct);
 
     private ConfiguredFolder.Setting Resolve() =>
         ConfiguredFolder.FromVariable(HomeVariable, DefaultHome, Environment, _system, Volumes);

@@ -201,12 +201,13 @@ public sealed class EspIdfArchiveProvider : CleanupProviderBase
             Steps = steps,
             // Held first, so a held dist is named for why it was held rather than as the folder only the
             // contents of are removed.
-            ProtectedPaths = Protect(
-            [
-                .. held.Select(path => (Path: path, Reason: HeldReason)),
-                .. examined.Scan.Protected,
-                .. examined.Kept,
-            ]),
+            ProtectedPaths = await ProtectAsync(
+                [
+                    .. held.Select(path => (Path: path, Reason: HeldReason)),
+                    .. examined.Scan.Protected,
+                    .. examined.Kept,
+                ],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             // Archives held back while the Installation Manager runs, or anything behind a link, unread or

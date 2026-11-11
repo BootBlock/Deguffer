@@ -236,17 +236,18 @@ public sealed class BunInstallCacheProvider : CleanupProviderBase
                     MeasuredPaths = packages,
                 },
             ],
-            ProtectedPaths = Protect(
-            [
-                (cache, "Bun's prune removes package folders inside its cache and keeps the folder."),
-                (Path.Combine(cache, BunCacheEntries.LinksName),
-                    "Bun's global store, which projects' node_modules can link into. Prune keeps it."),
-                (HomeDirectory, "Bun's home, which holds Bun itself."),
-                (Path.Combine(HomeDirectory, "install", "global"), "The packages you installed globally with Bun."),
-                .. contents.Kept
-                    .Where(kept => !kept.Equals(Path.Combine(cache, BunCacheEntries.LinksName), StringComparison.OrdinalIgnoreCase))
-                    .Select(kept => (kept, "Bun's prune keeps this: a git clone, a package listing, its transpiler cache or something it does not recognise.")),
-            ]),
+            ProtectedPaths = await ProtectAsync(
+                [
+                    (cache, "Bun's prune removes package folders inside its cache and keeps the folder."),
+                    (Path.Combine(cache, BunCacheEntries.LinksName),
+                        "Bun's global store, which projects' node_modules can link into. Prune keeps it."),
+                    (HomeDirectory, "Bun's home, which holds Bun itself."),
+                    (Path.Combine(HomeDirectory, "install", "global"), "The packages you installed globally with Bun."),
+                    .. contents.Kept
+                        .Where(kept => !kept.Equals(Path.Combine(cache, BunCacheEntries.LinksName), StringComparison.OrdinalIgnoreCase))
+                        .Select(kept => (kept, "Bun's prune keeps this: a git clone, a package listing, its transpiler cache or something it does not recognise.")),
+                ],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             CountsLinksFromElsewhere = true,

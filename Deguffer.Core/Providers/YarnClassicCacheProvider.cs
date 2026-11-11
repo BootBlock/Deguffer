@@ -228,12 +228,13 @@ public sealed class YarnClassicCacheProvider : CleanupProviderBase
                     MeasuredPaths = [root],
                 },
             ],
-            ProtectedPaths = Protect(
-            [
-                (DataFolder, "Yarn's data folder: the packages you installed globally and the packages you linked."),
-                (BerryFolder, "The global cache of Yarn 2 and later, which Plug'n'Play projects run from."),
-                .. ConfigurationFiles.Select(file => (file, "Yarn's configuration, which may hold registry authentication tokens.")),
-            ]),
+            ProtectedPaths = await ProtectAsync(
+                [
+                    (DataFolder, "Yarn's data folder: the packages you installed globally and the packages you linked."),
+                    (BerryFolder, "The global cache of Yarn 2 and later, which Plug'n'Play projects run from."),
+                    .. ConfigurationFiles.Select(file => (file, "Yarn's configuration, which may hold registry authentication tokens.")),
+                ],
+                ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
         };

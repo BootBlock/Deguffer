@@ -239,7 +239,7 @@ public sealed class PuppeteerBrowsersProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = BuildProtectedPaths(root, survey, live),
+            ProtectedPaths = await BuildProtectedPathsAsync(root, survey, live, ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
             HasUnreadableRoot = survey.Unreadable,
@@ -255,10 +255,11 @@ public sealed class PuppeteerBrowsersProvider : CleanupProviderBase
     /// default place however the setting names it, because one naming it through a letter <c>subst</c>
     /// made for the profile still has those models beside it.
     /// </summary>
-    private IReadOnlyList<ProtectedPath> BuildProtectedPaths(
+    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(
         string root,
         PuppeteerCacheSurvey survey,
-        LiveTreeVetoResult live)
+        LiveTreeVetoResult live,
+        CancellationToken ct)
     {
         var survivors = new List<(string Path, string Reason)>
         {
@@ -275,6 +276,6 @@ public sealed class PuppeteerBrowsersProvider : CleanupProviderBase
         survivors.AddRange(live.Vetoed.Select(v => (v.Directory, InUseReason)));
         survivors.AddRange(live.Unchecked.Select(path => (path, LiveTreeVeto.UncheckedReason)));
 
-        return Protect([.. survivors]);
+        return ProtectAsync([.. survivors], ct);
     }
 }
