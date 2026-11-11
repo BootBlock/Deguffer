@@ -125,7 +125,8 @@ public sealed class WindowsServicingTests
     [Fact]
     public void TheRealHostRefusesToSurveyTheHandlerThatEmptiesDownloads()
     {
-        var survey = DiskCleanupHandlers.Default.Survey("DownloadsFolder", @"C:\", CancellationToken.None);
+        var survey = DiskCleanupHandlers.Default.Survey(
+            "DownloadsFolder", @"C:\", DiskCleanupQuestion.Measures, CancellationToken.None);
 
         Assert.Equal(DiskCleanupAnswer.Unavailable, survey.Answer);
         Assert.False(survey.MayOffer);
@@ -139,7 +140,8 @@ public sealed class WindowsServicingTests
     [Fact]
     public void TheRealHostCallsAHandlerWindowsDoesNotRegisterUnavailable()
     {
-        var survey = DiskCleanupHandlers.Default.Survey(NeverRegistered, @"C:\", CancellationToken.None);
+        var survey = DiskCleanupHandlers.Default.Survey(
+            NeverRegistered, @"C:\", DiskCleanupQuestion.Starts, CancellationToken.None);
 
         Assert.Equal(DiskCleanupAnswer.Unavailable, survey.Answer);
         Assert.False(survey.MayOffer);

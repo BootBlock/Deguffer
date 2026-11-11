@@ -24,11 +24,12 @@ public sealed class EarlyDiskCleanupSurveyTests : IDisposable
     public async Task TakesTheHandlersAnswer()
     {
         var handlers = FakeDiskCleanupHandlers.FindingNothing();
-        var survey = new EarlyDiskCleanupSurvey(handlers, Handler, Volume, CancellationToken.None);
+        var survey = new EarlyDiskCleanupSurvey(handlers, Handler, Volume, DiskCleanupQuestion.Measures, CancellationToken.None);
 
         var answer = await survey.TakeAsync().WaitAsync(Hung);
 
         Assert.Equal(DiskCleanupAnswer.NothingToClear, answer.Answer);
+        Assert.Equal([(Handler, DiskCleanupQuestion.Measures)], handlers.Surveyed);
         Assert.Equal([(Handler, false)], handlers.Returned);
     }
 
@@ -36,7 +37,7 @@ public sealed class EarlyDiskCleanupSurveyTests : IDisposable
     public async Task DiscardingStopsTheHandlerAndWaitsForItToReturn()
     {
         var handlers = FakeDiskCleanupHandlers.Measuring(_endless.Task);
-        var survey = new EarlyDiskCleanupSurvey(handlers, Handler, Volume, CancellationToken.None);
+        var survey = new EarlyDiskCleanupSurvey(handlers, Handler, Volume, DiskCleanupQuestion.Measures, CancellationToken.None);
         await handlers.SurveyStarted.WaitAsync(Hung);
 
         await survey.DiscardAsync().WaitAsync(Hung);
@@ -53,7 +54,7 @@ public sealed class EarlyDiskCleanupSurveyTests : IDisposable
     {
         using var pass = new CancellationTokenSource();
         var handlers = FakeDiskCleanupHandlers.Measuring(_endless.Task, DiskCleanupAnswer.NothingToClear);
-        var survey = new EarlyDiskCleanupSurvey(handlers, Handler, Volume, pass.Token);
+        var survey = new EarlyDiskCleanupSurvey(handlers, Handler, Volume, DiskCleanupQuestion.Measures, pass.Token);
         await handlers.SurveyStarted.WaitAsync(Hung);
 
         await pass.CancelAsync();
@@ -66,7 +67,7 @@ public sealed class EarlyDiskCleanupSurveyTests : IDisposable
     public async Task DiscardingDoesNotThrowWhatTheHandlerThrew()
     {
         var handlers = FakeDiskCleanupHandlers.FailingOnceStopped(new InvalidCastException("Not an IEmptyVolumeCache."));
-        var survey = new EarlyDiskCleanupSurvey(handlers, Handler, Volume, CancellationToken.None);
+        var survey = new EarlyDiskCleanupSurvey(handlers, Handler, Volume, DiskCleanupQuestion.Measures, CancellationToken.None);
         await handlers.SurveyStarted.WaitAsync(Hung);
 
         await survey.DiscardAsync().WaitAsync(Hung);
@@ -77,7 +78,7 @@ public sealed class EarlyDiskCleanupSurveyTests : IDisposable
     {
         var handlers = FakeDiskCleanupHandlers.FailingOnceStopped(new InvalidCastException("Not an IEmptyVolumeCache."));
         using var pass = new CancellationTokenSource();
-        var survey = new EarlyDiskCleanupSurvey(handlers, Handler, Volume, pass.Token);
+        var survey = new EarlyDiskCleanupSurvey(handlers, Handler, Volume, DiskCleanupQuestion.Measures, pass.Token);
         await handlers.SurveyStarted.WaitAsync(Hung);
 
         await pass.CancelAsync();
@@ -89,7 +90,7 @@ public sealed class EarlyDiskCleanupSurveyTests : IDisposable
     public async Task DiscardingAnAnswerAlreadyTakenDoesNothing()
     {
         var handlers = FakeDiskCleanupHandlers.FindingNothing();
-        var survey = new EarlyDiskCleanupSurvey(handlers, Handler, Volume, CancellationToken.None);
+        var survey = new EarlyDiskCleanupSurvey(handlers, Handler, Volume, DiskCleanupQuestion.Measures, CancellationToken.None);
         await survey.TakeAsync().WaitAsync(Hung);
 
         await survey.DiscardAsync().WaitAsync(Hung);
@@ -101,7 +102,7 @@ public sealed class EarlyDiskCleanupSurveyTests : IDisposable
     public async Task ADiscardedSurveyCannotBeTaken()
     {
         var handlers = FakeDiskCleanupHandlers.Measuring(_endless.Task);
-        var survey = new EarlyDiskCleanupSurvey(handlers, Handler, Volume, CancellationToken.None);
+        var survey = new EarlyDiskCleanupSurvey(handlers, Handler, Volume, DiskCleanupQuestion.Measures, CancellationToken.None);
 
         await survey.DiscardAsync().WaitAsync(Hung);
 
@@ -112,7 +113,7 @@ public sealed class EarlyDiskCleanupSurveyTests : IDisposable
     public async Task AbandoningStopsTheHandler()
     {
         var handlers = FakeDiskCleanupHandlers.Measuring(_endless.Task);
-        var survey = new EarlyDiskCleanupSurvey(handlers, Handler, Volume, CancellationToken.None);
+        var survey = new EarlyDiskCleanupSurvey(handlers, Handler, Volume, DiskCleanupQuestion.Measures, CancellationToken.None);
         await handlers.SurveyStarted.WaitAsync(Hung);
 
         survey.Abandon();

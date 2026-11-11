@@ -694,7 +694,7 @@ public sealed class DriverStoreProviderTests : IDisposable
         await provider.IsPresentAsync();
         await provider.PlanAsync();
         Assert.Equal(1, store.Listings);
-        Assert.Single(handlers.Surveyed);
+        Assert.Equal([(DriverStoreProvider.Handler, DiskCleanupQuestion.Measures)], handlers.Surveyed);
 
         provider.InvalidateCaches();
         await provider.PlanAsync();

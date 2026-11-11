@@ -1288,7 +1288,7 @@ check before writing the provider.
 
 **Outcome:** shipped as two providers, `PreviousWindowsInstallationProvider` and
 `WindowsUpdateLeftoverProvider`, with a new step kind, `DiskCleanupStep`, that hands one of Windows'
-own Disk Cleanup handlers the volume. Seven things the work settled that this entry did not anticipate:
+own Disk Cleanup handlers the volume. Eight things the work settled that this entry did not anticipate:
 
 - **Half of the family has a vendor route after all, so §5.1 decides the route.** Disk Cleanup's
   registrations under `VolumeCaches` name `Windows.old` (*Previous Installations*), `$Windows.~BT`
@@ -1324,6 +1324,14 @@ own Disk Cleanup handlers the volume. Seven things the work settled that this en
   A real `Purge` that removes something has not been observed: nothing on the audited machine was
   claimed by the three setup handlers, so whether *Previous Installations* shows its own
   confirmation when driven outside Disk Cleanup is still open.
+- **Since #699, a survey asks each handler only what it needs.** Asked to measure, *Previous
+  Installations* walked an 82 GB `Windows.old` in 146 s, 93 s of it processor time, on every elevated
+  preview, and the plan used only whether the answer was zero. `setupcln.dll` decides when it starts:
+  elevated, its roles with nothing of theirs answered `S_FALSE` from `Initialize`, the ESD role over
+  a `$Windows.~WS` holding 148 KB, and the roles with something answered `S_OK`. So every
+  `setupcln.dll` role is asked with `Initialize` alone, about 0.1 s. *Device Driver Packages*
+  (`pnpclean.dll`) answered `S_OK` and then measured 0 bytes, so it is still asked to measure. A run
+  still measures before it purges.
 - **Whether a handler leaves its containers standing is not documented.** `$SysReset` and `ESD` are
   asserted to survive, as every container is. If Windows turns out to remove an emptied one, §5.6
   will say so as a failure on the first run that meets it, and the assertion is what to revisit.

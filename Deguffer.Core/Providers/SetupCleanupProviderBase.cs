@@ -28,7 +28,8 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>Offered only where the handler says it has something to clear.</b> A folder can hold
 /// files the handler does not count as its own, and then Windows' cleanup declines it: see
-/// <see cref="IDiskCleanupHandlers.Survey"/>. Unelevated, the handler cannot be asked, so the row is
+/// <see cref="IDiskCleanupHandlers.Survey"/>. The handler is asked only whether it starts
+/// (<see cref="DiskCleanupQuestion.Starts"/>). Unelevated, the handler cannot be asked, so the row is
 /// offered as needing administrator rights and the plan made after elevating asks.</para>
 /// </summary>
 public abstract class SetupCleanupProviderBase : CleanupProviderBase
@@ -168,10 +169,12 @@ public abstract class SetupCleanupProviderBase : CleanupProviderBase
                 continue;
             }
 
-            // Asked last, because it is the one question that can take a while: the handler measures
-            // what it would clear, and Windows.old is an entire installation.
+            // Asked last, so no folder another rule holds back is handed to Windows' handler. Asked
+            // only whether it starts: setupcln.dll decides when it starts, and asked to measure,
+            // Previous Installations walks the whole of Windows.old, which the plan measures anyway.
             var volume = LongPath.Display(_system.SystemDrive);
-            var survey = await Task.Run(() => _handlers.Survey(cleanup.Handler, volume, ct), ct).ConfigureAwait(false);
+            var survey = await Task.Run(
+                () => _handlers.Survey(cleanup.Handler, volume, DiskCleanupQuestion.Starts, ct), ct).ConfigureAwait(false);
 
             if (survey.WhyLeftAlone(cleanup.Handler, LongPath.Display(paths[0])) is { } why)
             {

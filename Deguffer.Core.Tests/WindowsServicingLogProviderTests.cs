@@ -581,6 +581,7 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
         Assert.Equal(logs, step.Path);
         Assert.Equal([oldLogs, pbr], step.AlsoClears);
         Assert.Equal([logs, oldLogs, pbr], plan.TargetedPaths);
+        Assert.Equal([(WindowsServicingLogProvider.ResetLogsHandler, DiskCleanupQuestion.Starts)], handlers.Surveyed);
 
         var result = await provider.ExecuteAsync(plan);
 

@@ -142,8 +142,8 @@ public sealed class FakeDiskCleanupHandlers : IDiskCleanupHandlers
     private readonly TaskCompletionSource _surveyStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _surveyReturned = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    /// <summary>Every handler asked about before a plan offered it.</summary>
-    public List<string> Surveyed { get; } = [];
+    /// <summary>Every handler asked about before a plan offered it, and what it was asked.</summary>
+    public List<(string Handler, DiskCleanupQuestion Question)> Surveyed { get; } = [];
 
     /// <summary>
     /// Every survey that has returned, and whether it had been told to stop by then. A plan runs its
@@ -157,11 +157,11 @@ public sealed class FakeDiskCleanupHandlers : IDiskCleanupHandlers
     /// <summary>Completes when the first survey returns, for a caller that does not wait for it.</summary>
     public Task SurveyReturned => _surveyReturned.Task;
 
-    public DiskCleanupSurvey Survey(string handler, string volume, CancellationToken ct)
+    public DiskCleanupSurvey Survey(string handler, string volume, DiskCleanupQuestion question, CancellationToken ct)
     {
         lock (_surveys)
         {
-            Surveyed.Add(handler);
+            Surveyed.Add((handler, question));
         }
 
         _surveyStarted.TrySetResult();

@@ -2,7 +2,6 @@ using System.Collections.Frozen;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using Deguffer.Core.Safety;
-using Microsoft.Win32;
 
 namespace Deguffer.Core.Execution;
 
@@ -21,18 +20,17 @@ namespace Deguffer.Core.Execution;
 ///
 /// <para><b>What was observed of <c>setupcln.dll</c>, on Windows 11 24H2.</b> It answers "nothing to
 /// delete" for every role to a process that is not elevated. Elevated, it answers for a volume given
-/// as <c>C:\</c> and not for <c>C:</c>, which is why the volume crosses with its separator. Nothing on
-/// the handler's side is documented beyond the interface, which is why the plan measures every
-/// directory the registration names before and after, and why a run holding one of these is
+/// as <c>C:\</c> and not for <c>C:</c>, which is why the volume crosses with its separator, and it
+/// decides whether it has anything when it starts (see <see cref="DiskCleanupQuestion.Starts"/>).
+/// Nothing on the handler's side is documented beyond the interface, which is why the plan measures
+/// every directory the registration names before and after, and why a run holding one of these is
 /// unbounded for §5.6.</para>
 ///
 /// <para>Stateless, so one instance serves the process (G5).</para>
 /// </summary>
 public sealed class DiskCleanupHandlers : IDiskCleanupHandlers
 {
-    public static DiskCleanupHandlers Default { get; } = new();
-
-    private const string VolumeCaches = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches";
+    public static DiskCleanupHandlers Default { get; } = new(WindowsVolumeCacheLoader.Default);
 
     /// <summary>
     /// Registrations this host refuses to load, whatever asks for them. Windows registers each one as
@@ -48,48 +46,45 @@ public sealed class DiskCleanupHandlers : IDiskCleanupHandlers
     internal static readonly FrozenSet<string> NeverHosted =
         FrozenSet.ToFrozenSet(["DownloadsFolder"], StringComparer.OrdinalIgnoreCase);
 
-    private DiskCleanupHandlers()
-    {
-    }
+    private readonly IVolumeCacheLoader _loader;
 
-    public DiskCleanupSurvey Survey(string handler, string volume, CancellationToken ct)
+    internal DiskCleanupHandlers(IVolumeCacheLoader loader) => _loader = loader;
+
+    public DiskCleanupSurvey Survey(string handler, string volume, DiskCleanupQuestion question, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(handler);
         ArgumentException.ThrowIfNullOrWhiteSpace(volume);
+
+        if (!Enum.IsDefined(question))
+        {
+            throw new ArgumentOutOfRangeException(nameof(question), question, "Not a question a handler can be asked.");
+        }
 
         if (NotHosted(handler, volume) is { } refused)
         {
             return new DiskCleanupSurvey(DiskCleanupAnswer.Unavailable, refused);
         }
 
-        if (ClassOf(handler) is not { } classId)
+        if (!_loader.IsRegistered(handler))
         {
             return new DiskCleanupSurvey(DiskCleanupAnswer.Unavailable, Unregistered(handler));
         }
 
         // Asked after the registration, so a handler that is not there is reported as missing
         // rather than as something elevating would reveal.
-        if (!Environment.IsPrivilegedProcess)
+        if (!_loader.IsElevated)
         {
             return new DiskCleanupSurvey(DiskCleanupAnswer.NeedsElevation);
         }
 
         return OnItsOwnThread(() => Hosted(
             handler,
-            classId,
             volume,
             new CancellingCallback(ct),
             why => new DiskCleanupSurvey(DiskCleanupAnswer.Unavailable, why),
-            (cache, callback) =>
-            {
-                var measured = cache.GetSpaceUsed(out var used, callback);
-
-                // Any failure to work out the size, S_FALSE included, is not an empty cache, and the
-                // handler has already said it has something by starting, so it is offered.
-                return measured == DiskCleanupNative.S_OK && used == 0
-                    ? new DiskCleanupSurvey(DiskCleanupAnswer.NothingToClear)
-                    : new DiskCleanupSurvey(DiskCleanupAnswer.HasSomething);
-            },
+            (cache, callback) => question == DiskCleanupQuestion.Starts
+                ? new DiskCleanupSurvey(DiskCleanupAnswer.HasSomething)
+                : Measured(cache, callback),
             () => new DiskCleanupSurvey(DiskCleanupAnswer.NothingToClear)));
     }
 
@@ -103,14 +98,13 @@ public sealed class DiskCleanupHandlers : IDiskCleanupHandlers
             return new DiskCleanupOutcome(Ran: false, refused);
         }
 
-        if (ClassOf(handler) is not { } classId)
+        if (!_loader.IsRegistered(handler))
         {
             return new DiskCleanupOutcome(Ran: false, Unregistered(handler));
         }
 
         return OnItsOwnThread(() => Hosted(
             handler,
-            classId,
             volume,
             new CancellingCallback(ct),
             why => new DiskCleanupOutcome(Ran: false, why),
@@ -160,6 +154,18 @@ public sealed class DiskCleanupHandlers : IDiskCleanupHandlers
             : $"'{volume}' is not the top of a drive, so Windows was not asked to clear anything on it.";
     }
 
+    /// <summary>The answer of a handler asked how much it would clear, for <see cref="DiskCleanupQuestion.Measures"/>.</summary>
+    private static DiskCleanupSurvey Measured(IEmptyVolumeCache cache, CancellingCallback callback)
+    {
+        var measured = cache.GetSpaceUsed(out var used, callback);
+
+        // Any failure to work out the size, S_FALSE included, is not an empty cache, and the handler
+        // has already said it has something by starting, so it is offered.
+        return measured == DiskCleanupNative.S_OK && used == 0
+            ? new DiskCleanupSurvey(DiskCleanupAnswer.NothingToClear)
+            : new DiskCleanupSurvey(DiskCleanupAnswer.HasSomething);
+    }
+
     private static string Unregistered(string handler) =>
         $"Windows no longer registers its '{handler}' cleanup, so nothing was cleared.";
 
@@ -169,26 +175,6 @@ public sealed class DiskCleanupHandlers : IDiskCleanupHandlers
     /// </summary>
     private static string Refused(string handler, string what, int hresult) =>
         $"Windows' '{handler}' cleanup {what} (0x{hresult:X8}).";
-
-    /// <summary>
-    /// The class a registration names, from the registration key's default value, in this process's
-    /// view of the registry. Null where the key is missing or names nothing that parses as a class. The
-    /// view is the point: a 32-bit Deguffer on 64-bit Windows sees the 32-bit registrations, and a
-    /// class with no 32-bit server cannot be loaded into it.
-    /// </summary>
-    private static Guid? ClassOf(string handler)
-    {
-        using var key = Registry.LocalMachine.OpenSubKey($@"{VolumeCaches}\{handler}");
-
-        if (key?.GetValue(null) is not string text || !Guid.TryParse(text, out var classId))
-        {
-            return null;
-        }
-
-        using var server = Registry.ClassesRoot.OpenSubKey($@"CLSID\{classId:B}\InprocServer32");
-
-        return server?.GetValue(null) is string { Length: > 0 } ? classId : null;
-    }
 
     /// <summary>
     /// The handler's apartment requirement, met on a thread of our own rather than by initialising
@@ -225,55 +211,37 @@ public sealed class DiskCleanupHandlers : IDiskCleanupHandlers
     }
 
     /// <summary>
-    /// One handler created, initialised with its own registration's key, handed to
+    /// One handler loaded, initialised with its own registration's key, handed to
     /// <paramref name="started"/>, and deactivated and released whatever happens.
     /// </summary>
     /// <param name="failed">What to answer where it would not load or start, given why, for the user.</param>
     /// <param name="started">What to do with a handler that started and has something to clear.</param>
     /// <param name="nothing">What to answer where it started and found nothing of its own.</param>
-    private static T Hosted<T>(
+    private T Hosted<T>(
         string handler,
-        Guid classId,
         string volume,
         CancellingCallback callback,
         Func<string, T> failed,
         Func<IEmptyVolumeCache, CancellingCallback, T> started,
         Func<T> nothing)
     {
-        using var key = Registry.LocalMachine.OpenSubKey($@"{VolumeCaches}\{handler}");
-
-        if (key is null)
+        if (_loader.Load(handler, out var failure) is not { } loaded)
         {
-            return failed(Unregistered(handler));
+            return failed(failure == DiskCleanupNative.REGDB_E_CLASSNOTREG
+                ? Unregistered(handler)
+                : Refused(handler, "would not load", failure));
         }
 
-        var cacheId = DiskCleanupNative.VolumeCache2Id;
-        var created = DiskCleanupNative.CoCreateInstance(
-            ref classId, IntPtr.Zero, DiskCleanupNative.InProcessServer, ref cacheId, out var instance);
-
-        if (created < 0)
-        {
-            cacheId = DiskCleanupNative.VolumeCacheId;
-            created = DiskCleanupNative.CoCreateInstance(
-                ref classId, IntPtr.Zero, DiskCleanupNative.InProcessServer, ref cacheId, out instance);
-        }
-
-        if (created < 0)
-        {
-            return failed(Refused(handler, "would not load", created));
-        }
-
-        try
+        using (loaded)
         {
             var flags = DiskCleanupNative.UserConsentObtained;
-            var handle = key.Handle.DangerousGetHandle();
-            var cache = (IEmptyVolumeCache)instance;
+            var cache = (IEmptyVolumeCache)loaded.Instance;
 
             IntPtr display, description, button = IntPtr.Zero;
 
-            var initialised = instance is IEmptyVolumeCache2 second
-                ? second.InitializeEx(handle, volume, handler, out display, out description, out button, ref flags)
-                : cache.Initialize(handle, volume, out display, out description, ref flags);
+            var initialised = loaded.Instance is IEmptyVolumeCache2 second
+                ? second.InitializeEx(loaded.Key, volume, handler, out display, out description, out button, ref flags)
+                : cache.Initialize(loaded.Key, volume, out display, out description, ref flags);
 
             // Allocated by the handler for a host that shows them, which this one does not.
             Marshal.FreeCoTaskMem(display);
@@ -300,10 +268,6 @@ public sealed class DiskCleanupHandlers : IDiskCleanupHandlers
                 // from a list this host does not keep.
                 cache.Deactivate(out _);
             }
-        }
-        finally
-        {
-            Marshal.FinalReleaseComObject(instance);
         }
     }
 }
