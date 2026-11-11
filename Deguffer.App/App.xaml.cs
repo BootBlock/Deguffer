@@ -184,9 +184,9 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        // The launch started in Program.Main, before this type's initialiser read the stores.
         var events = ShellEvents.Log;
 
-        events.LaunchStart();
         events.WindowStart();
         _shell = new MainWindow();
         events.WindowStop();
