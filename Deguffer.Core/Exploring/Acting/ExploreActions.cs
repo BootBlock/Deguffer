@@ -282,10 +282,18 @@ public sealed class ExploreActions
     /// refused (§7.1). Not told at all where the policy could not be built, because then nothing is
     /// acted on.
     /// </param>
+    /// <param name="lastWord">
+    /// Asked of each item the user agreed to, after they agreed and immediately before anything is
+    /// removed, off the page's thread: why the item no longer is what they were shown, or null where
+    /// it still is. For a list whose every row stands on a fact the machine can take back, as a
+    /// broken link's gone target is by a drive plugged in. An item it withdraws is reported with its
+    /// reason, and §5.6 asserts it survived.
+    /// </param>
     public async Task<ExploreRemovalReport?> RemoveAsync(
         IReadOnlyList<ExploreItem> items,
         ExploreRemovalMode mode,
         Action<IReadOnlyList<ExploreItem>>? acting = null,
+        Func<ExploreItem, string?>? lastWord = null,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(items);
@@ -338,6 +346,20 @@ public sealed class ExploreActions
         // After the question rather than before it: until it is answered nothing has changed, and a
         // window closed over the dialog loses nothing.
         using var running = _running.Begin(RunningAction.ExploreRemoval);
+
+        if (lastWord is not null && going.Count > 0)
+        {
+            ExploreItemOutcome[] withdrawn = await Task.Run(
+                    () => going
+                        .Select(item => lastWord(item) is { } why ? new ExploreItemOutcome(item.Path, Removed: false, Bytes: 0, why) : null)
+                        .OfType<ExploreItemOutcome>()
+                        .ToArray(),
+                    ct)
+                .ConfigureAwait(true);
+
+            binRefused = [.. binRefused, .. withdrawn];
+            notGoing.UnionWith(withdrawn.Select(refusal => refusal.Path));
+        }
 
         // Everything else goes back in, the policy's refusals included: the remover partitions again
         // and reports what it would not take, so the user is told about each one rather than seeing

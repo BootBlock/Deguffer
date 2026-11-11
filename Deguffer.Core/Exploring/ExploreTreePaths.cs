@@ -1,6 +1,6 @@
-using Deguffer.Core.Exploring;
+using Deguffer.Core.Safety;
 
-namespace Deguffer.Testing;
+namespace Deguffer.Core.Exploring;
 
 /// <summary>
 /// The node of an <see cref="ExploreTree"/> that a path names, found by descending from the tree's
@@ -9,20 +9,20 @@ namespace Deguffer.Testing;
 /// <para>By path because a tree's node numbers are its own. The file table's route keeps only what
 /// its root reaches and numbers that again, so a record number says nothing about which node holds
 /// the record.</para>
+///
+/// <para>The page asks it where something it removed without a node, such as a shortcut from the
+/// report of the Start menu, may be in the tree on screen, which then has to be drawn without it.</para>
 /// </summary>
 public static class ExploreTreePaths
 {
-    /// <summary>The node <paramref name="path"/> names. Throws where the tree holds nothing there.</summary>
-    public static int NodeAt(ExploreTree tree, string path) =>
-        TryNodeAt(tree, path) ?? throw new InvalidOperationException($"The tree holds nothing at {path}.");
-
     /// <summary>The node <paramref name="path"/> names, or null where the tree holds nothing there.</summary>
     public static int? TryNodeAt(ExploreTree tree, string path)
     {
         ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(path);
 
-        if (!path.StartsWith(tree.RootPath, StringComparison.OrdinalIgnoreCase))
+        // Contains rather than a prefix of the text: a tree of C:\Users\a holds nothing of C:\Users\ab.
+        if (!LongPath.Contains(tree.RootPath, path))
         {
             return null;
         }

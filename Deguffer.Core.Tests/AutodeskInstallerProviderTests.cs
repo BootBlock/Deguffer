@@ -443,6 +443,10 @@ public sealed class AutodeskInstallerProviderTests : IDisposable
         public string SystemDrive => string.Empty;
 
         public string? CommonStartupFolder => located.CommonStartupFolder;
+
+        public string? CommonStartMenuFolder => located.CommonStartMenuFolder;
+
+        public string? CommonDesktopFolder => located.CommonDesktopFolder;
     }
 
     /// <summary>§7.1: Explore refuses what a plan protects, because it is told the same rule.</summary>

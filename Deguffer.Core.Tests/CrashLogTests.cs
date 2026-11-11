@@ -187,6 +187,10 @@ public class CrashLogTests
 
         public string? StartupFolder => null;
 
+        public string? StartMenuFolder => null;
+
+        public string? DesktopFolder => null;
+
         public string TempPath => string.Empty;
 
         public string? UserSecurityIdentifier => null;

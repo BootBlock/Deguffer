@@ -133,6 +133,13 @@
                                TextTrimming="CharacterEllipsis"
                                Style="{StaticResource SecondaryText}" />
 
+                    <!-- Where a broken link points, wrapped, because the target is the fact the row is listed for. -->
+                    <TextBlock Text="{x:Bind TargetLine}"
+                               FontSize="12"
+                               TextWrapping="Wrap"
+                               Style="{StaticResource SecondaryText}"
+                               Visibility="{x:Bind IsLink}" />
+
                     <Grid ColumnSpacing="4" ColumnDefinitions="Auto,*" Visibility="{x:Bind IsRefused}">
                         <FontIcon Grid.Column="0"
                                   Glyph="&#xE7BA;"
@@ -491,30 +498,42 @@
             The age is by the last write, and says so. The tree holds no other date for a file, and
             Windows stops keeping last-access times by default.
         -->
-        <Grid Grid.Row="3" ColumnSpacing="8" ColumnDefinitions="Auto,Auto,Auto,Auto,*"
+        <Grid Grid.Row="3" ColumnSpacing="8" ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,*"
               Visibility="{x:Bind ViewModel.ShowsFileFilters, Mode=OneWay}">
-            <TextBox Grid.Column="0"
+            <!--
+                What the list is of: the largest files, or the shortcuts and links whose target is
+                gone. The other filters narrow either. A link whose target cannot be reached is never
+                listed, and the sentence beside the filters counts it instead.
+            -->
+            <ComboBox Grid.Column="0"
+                      MinWidth="150"
+                      Header="List"
+                      ItemsSource="{x:Bind ViewModel.Files.ListingLabels}"
+                      SelectedIndex="{x:Bind ViewModel.Files.ListingIndex, Mode=TwoWay}"
+                      AutomationProperties.Name="What to list" />
+
+            <TextBox Grid.Column="1"
                      Width="220"
                      Header="Name"
                      PlaceholderText="Text, or a wildcard such as *.iso"
                      Text="{x:Bind ViewModel.Files.NameFilter, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                      AutomationProperties.Name="Name contains this text, or matches this wildcard" />
 
-            <ComboBox Grid.Column="1"
+            <ComboBox Grid.Column="2"
                       MinWidth="150"
                       Header="Type"
                       ItemsSource="{x:Bind ViewModel.Files.TypeLabels}"
                       SelectedIndex="{x:Bind ViewModel.Files.TypeIndex, Mode=TwoWay}"
                       AutomationProperties.Name="Type of file" />
 
-            <ComboBox Grid.Column="2"
+            <ComboBox Grid.Column="3"
                       MinWidth="130"
                       Header="Size"
                       ItemsSource="{x:Bind ViewModel.Files.MinimumLabels}"
                       SelectedIndex="{x:Bind ViewModel.Files.MinimumIndex, Mode=TwoWay}"
                       AutomationProperties.Name="Smallest size to list" />
 
-            <ComboBox Grid.Column="3"
+            <ComboBox Grid.Column="4"
                       MinWidth="130"
                       Header="Not written for"
                       ItemsSource="{x:Bind ViewModel.Files.AgeLabels}"
@@ -523,7 +542,7 @@
                       AutomationProperties.Name="Not written for at least"
                       AutomationProperties.HelpText="By the last write. Windows does not keep last-access times by default, so Deguffer does not use them." />
 
-            <TextBlock Grid.Column="4"
+            <TextBlock Grid.Column="5"
                        VerticalAlignment="Bottom"
                        Margin="4,0,0,6"
                        Text="{x:Bind ViewModel.Files.Summary, Mode=OneWay}"
@@ -1200,6 +1219,97 @@
                                                Style="{StaticResource SecondaryText}"
                                                FontSize="12"
                                                TextWrapping="Wrap" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </Grid>
+            </Border>
+
+            <!--
+                The broken shortcuts and links in the Start menu, on the desktop and in the Startup
+                folders (#727), beside the Files layout's own list of the broken links below the folder
+                on screen. Read from those folders rather than from the scan, because they are rarely
+                the place on screen, and read again each time the panel opens.
+
+                §7.1: nothing here is selected. Each row has its own button, which removes that link
+                and nothing else, to the Recycle Bin, through Explore's own removal: the policy, the
+                question, the bin and the §5.6 check. The link goes, never what it pointed at. Only a
+                link whose target is gone is listed; one leading to a drive or share that is not there
+                is counted in the sentence instead, and never offered.
+            -->
+            <Border Grid.Column="1"
+                    Width="340"
+                    Background="{ThemeResource LayerFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Visibility="{x:Bind ViewModel.ShowsShortcutFolders, Mode=OneWay}">
+                <Grid Padding="12" RowSpacing="8" RowDefinitions="Auto,Auto,*">
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                        <TextBlock Text="Start menu and desktop"
+                                   Style="{StaticResource SubtitleTextBlockStyle}"
+                                   FontSize="16"
+                                   VerticalAlignment="Center" />
+
+                        <Button Grid.Column="1"
+                                Command="{x:Bind ViewModel.ShortcutFolders.RefreshCommand}"
+                                Style="{StaticResource SubtleButtonStyle}"
+                                AutomationProperties.Name="Read the Start menu, the desktop and the Startup folders again"
+                                ToolTipService.ToolTip="Read the Start menu, the desktop and the Startup folders again">
+                            <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                        </Button>
+                    </Grid>
+
+                    <TextBlock Grid.Row="1"
+                               Text="{x:Bind ViewModel.ShortcutFolders.Summary, Mode=OneWay}"
+                               Style="{StaticResource SecondaryText}"
+                               TextWrapping="Wrap"
+                               AutomationProperties.LiveSetting="Polite" />
+
+                    <ListView Grid.Row="2"
+                              ItemsSource="{x:Bind ViewModel.ShortcutFolders.Rows}"
+                              SelectionMode="None"
+                              AutomationProperties.Name="Broken shortcuts and links in the Start menu, on the desktop and in the Startup folders">
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ShortcutFolderRow">
+                                <Grid ColumnSpacing="8" Padding="0,6"
+                                      ColumnDefinitions="*,Auto,Auto"
+                                      AutomationProperties.Name="{x:Bind Description}">
+                                    <StackPanel Grid.Column="0" Spacing="1">
+                                        <TextBlock Text="{x:Bind Name}" TextTrimming="CharacterEllipsis" />
+
+                                        <TextBlock Text="{x:Bind Folder}"
+                                                   FontSize="12"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTipService.ToolTip="{x:Bind Folder}"
+                                                   Style="{StaticResource SecondaryText}" />
+
+                                        <TextBlock Text="{x:Bind TargetLine}"
+                                                   FontSize="12"
+                                                   TextWrapping="Wrap"
+                                                   Style="{StaticResource SecondaryText}" />
+                                    </StackPanel>
+
+                                    <Button Grid.Column="1"
+                                            VerticalAlignment="Top"
+                                            Command="{x:Bind Reveal}"
+                                            CommandParameter="{x:Bind}"
+                                            Style="{StaticResource SubtleButtonStyle}"
+                                            AutomationProperties.Name="Open containing folder"
+                                            ToolTipService.ToolTip="Open containing folder">
+                                        <FontIcon Glyph="&#xEC50;" FontSize="14" />
+                                    </Button>
+
+                                    <Button Grid.Column="2"
+                                            VerticalAlignment="Top"
+                                            Command="{x:Bind Remove}"
+                                            CommandParameter="{x:Bind}"
+                                            Style="{StaticResource SubtleButtonStyle}"
+                                            AutomationProperties.Name="{x:Bind RemoveTip}"
+                                            ToolTipService.ToolTip="{x:Bind RemoveTip}">
+                                        <FontIcon Glyph="&#xE74D;" FontSize="14" />
+                                    </Button>
                                 </Grid>
                             </DataTemplate>
                         </ListView.ItemTemplate>

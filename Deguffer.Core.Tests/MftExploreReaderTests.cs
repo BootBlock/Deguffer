@@ -1007,7 +1007,7 @@ public class MftExploreReaderTests
     private static ExploreTree WholeVolume(IMftSource source) =>
         MftExploreReader.Read(source, Root, [], TableTuning.Default, progress: null, default).Tree!;
 
-    private static int At(ExploreTree tree, string path) => ExploreTreePaths.NodeAt(tree, path);
+    private static int At(ExploreTree tree, string path) => TreeNodes.At(tree, path);
 
     private static CallbackProgress<ExploreProgress> Counting(List<long> done) => new(report => done.Add(report.Done));
 

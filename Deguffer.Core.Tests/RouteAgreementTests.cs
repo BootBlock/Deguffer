@@ -123,7 +123,7 @@ public class RouteAgreementTests
         var indexed = MftExploreReader.Read(source, path[..3], [], TableTuning.Default, progress: null, default).Tree!;
 
         var walkedSizes = SizesByPath(walked, walked.RootNode);
-        var indexedSizes = SizesByPath(indexed, ExploreTreePaths.NodeAt(indexed, path));
+        var indexedSizes = SizesByPath(indexed, TreeNodes.At(indexed, path));
 
         Assert.Equal(7, walkedSizes.Count);
         Assert.Equal(walkedSizes, indexedSizes);
@@ -634,7 +634,7 @@ public class RouteAgreementTests
         var indexed = MftExploreReader.Read(source, path[..3], [], TableTuning.Default, progress: null, default).Tree!;
 
         var walkedDates = DatesByPath(walked, walked.RootNode);
-        var indexedDates = DatesByPath(indexed, ExploreTreePaths.NodeAt(indexed, path));
+        var indexedDates = DatesByPath(indexed, TreeNodes.At(indexed, path));
 
         // Both routes found the same tree, or the comparison below is over an empty intersection.
         Assert.Equal(4, walkedDates.Count);

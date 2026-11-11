@@ -736,6 +736,36 @@ public sealed class ExploreRemoverTests : IDisposable
     }
 
     /// <summary>
+    /// A broken link is removed as the link itself, never by following it (#727): outright, the link
+    /// goes and the folder it pointed at keeps everything in it, and §5.6 asserts what stood beside the
+    /// link survived. The far side is here so a removal that followed the link would have something to
+    /// take.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public async Task APermanentRemovalOfALinkTakesTheLinkAndLeavesItsTargetWhole(DirectoryLinkKind kind)
+    {
+        var target = _temp.CreateDirectory("elsewhere", "cache");
+        var kept = _temp.CreateFile(64, "elsewhere", "cache", "kept.bin");
+        var folder = _temp.CreateDirectory("profile", "Links");
+        var beside = _temp.CreateFile(8, "profile", "Links", "beside.txt");
+        var link = Path.Combine(folder, "cache");
+        DirectoryLink.Create(kind, link, target);
+
+        var report = await ExploreRemover.RemoveAsync(
+            [new ExploreItem(link, IsDirectory: true, Bytes: 0, LowerBound: false)],
+            ExploreRemovalMode.Permanent,
+            _policy);
+
+        Assert.Single(report.Removed);
+        Assert.False(Path.Exists(link));
+        Assert.True(LongPath.DirectoryExists(target));
+        Assert.True(LongPath.FileExists(kept));
+        Assert.True(LongPath.FileExists(beside));
+        Assert.True(report.Verification.Passed);
+    }
+
+    /// <summary>
     /// A link is moved to the Recycle Bin as a link and takes nothing behind it, so a store on the far
     /// side does not stop it — and looking for one there would walk a tree nobody picked. The bin here
     /// only records, so the fixture cannot touch the far side whatever the shell would do.

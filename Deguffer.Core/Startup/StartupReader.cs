@@ -1,3 +1,4 @@
+using Deguffer.Core.Exploring.Links;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Startup;
@@ -20,8 +21,6 @@ public sealed class StartupReader(
         ShellShortcutReader.Default,
         WindowsProgramFiles.Default,
         PackagedStartupTasks.Default);
-
-    private const string ShortcutExtension = ".lnk";
 
     public StartupReading Read(CancellationToken ct)
     {
@@ -104,7 +103,7 @@ public sealed class StartupReader(
             string? program;
             PathPresence? presence;
 
-            if (item.Name.EndsWith(ShortcutExtension, StringComparison.OrdinalIgnoreCase))
+            if (WindowsLinkTargetReader.IsShortcutName(item.Name))
             {
                 var target = shortcuts.Read(item.Path);
                 program = target?.Target is { } path && Path.IsPathFullyQualified(path) ? path : null;

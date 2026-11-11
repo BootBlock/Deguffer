@@ -74,6 +74,15 @@ public interface IUserEnvironment
     /// </summary>
     string? StartupFolder { get; }
 
+    /// <summary>
+    /// This account's Start menu folder, wherever it has been moved to, or null when Windows will not
+    /// say. A program's shortcuts are put here, and its uninstaller does not always take them away.
+    /// </summary>
+    string? StartMenuFolder { get; }
+
+    /// <summary>This account's desktop, wherever it has been moved to, or null when Windows will not say.</summary>
+    string? DesktopFolder { get; }
+
     /// <summary>The per-user temp directory — NuGet keeps <c>NuGetScratch</c> here.</summary>
     string TempPath { get; }
 
@@ -402,6 +411,12 @@ public sealed partial class UserEnvironment : IUserEnvironment
 
     public string? StartupFolder { get; } =
         Environment.GetFolderPath(Environment.SpecialFolder.Startup) is { Length: > 0 } startup ? startup : null;
+
+    public string? StartMenuFolder { get; } =
+        Environment.GetFolderPath(Environment.SpecialFolder.StartMenu) is { Length: > 0 } startMenu ? startMenu : null;
+
+    public string? DesktopFolder { get; } =
+        Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory) is { Length: > 0 } desktop ? desktop : null;
 
     /// <summary>
     /// Resolved as Windows resolves it — <c>TMP</c>, then <c>TEMP</c>, then whatever

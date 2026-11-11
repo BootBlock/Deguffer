@@ -53,6 +53,12 @@ public interface ISystemDirectories
     /// when Windows will not say. Windows starts what it holds when any account signs in (§7.5).
     /// </summary>
     string? CommonStartupFolder { get; }
+
+    /// <summary>The Start menu folder every account shares, or null when Windows will not say.</summary>
+    string? CommonStartMenuFolder { get; }
+
+    /// <summary>The desktop every account shares, or null when Windows will not say.</summary>
+    string? CommonDesktopFolder { get; }
 }
 
 /// <inheritdoc />
@@ -80,6 +86,12 @@ public sealed class SystemDirectories : ISystemDirectories
 
     public string? CommonStartupFolder { get; } =
         Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup) is { Length: > 0 } startup ? startup : null;
+
+    public string? CommonStartMenuFolder { get; } =
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu) is { Length: > 0 } startMenu ? startMenu : null;
+
+    public string? CommonDesktopFolder { get; } =
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory) is { Length: > 0 } desktop ? desktop : null;
 
     /// <summary>
     /// The 64-bit program directory, from the environment rather than from

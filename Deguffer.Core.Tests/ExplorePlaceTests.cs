@@ -148,8 +148,8 @@ public class ExplorePlaceTests
 
         var standing = WholeVolume(before);
         var arriving = WholeVolume(after);
-        var cache = ExploreTreePaths.NodeAt(standing, CachePath);
-        var moved = ExploreTreePaths.NodeAt(arriving, CachePath);
+        var cache = TreeNodes.At(standing, CachePath);
+        var moved = TreeNodes.At(arriving, CachePath);
 
         // The case under test: the same folder under another number.
         Assert.NotEqual(cache, moved);
@@ -174,7 +174,7 @@ public class ExplorePlaceTests
         using var source = Table().Build();
         var table = WholeVolume(source);
 
-        Assert.Equal(ExploreTreePaths.NodeAt(table, CachePath), ExplorePlace.Carry(walked, cache, table));
+        Assert.Equal(TreeNodes.At(table, CachePath), ExplorePlace.Carry(walked, cache, table));
     }
 
     /// <summary>

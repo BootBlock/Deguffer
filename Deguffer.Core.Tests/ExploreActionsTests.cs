@@ -636,6 +636,40 @@ public sealed class ExploreActionsTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// The last word is asked after the user agrees and before anything moves. An item it withdraws is
+    /// left where it is with its reason, is never handed to the bin, and is one of the things §5.6
+    /// asserts survived the removal of the item beside it.
+    /// </summary>
+    [Fact]
+    public async Task AnItemTheLastWordWithdrawsAfterTheQuestionIsLeftAndAssertedToSurvive()
+    {
+        var going = Item(_temp.CreateFile(8, "Links", "going.lnk"));
+        var withdrawn = Item(_temp.CreateFile(8, "Links", "back.lnk"));
+        var prompt = new FakeExploreConfirmation(answer: true);
+        var actions = Actions(_ => Task.FromResult(Policy()), prompt);
+        var askedAfter = -1;
+
+        var report = await actions.RemoveAsync(
+            [going, withdrawn],
+            ExploreRemovalMode.RecycleBin,
+            lastWord: item =>
+            {
+                askedAfter = prompt.Asked.Count;
+                return Path.GetFileName(item.Path) == "back.lnk" ? "Its target is back." : null;
+            });
+
+        Assert.NotNull(report);
+        Assert.Equal(1, askedAfter);
+        Assert.Equal([going.Path], _recycleBin.Paths);
+        Assert.Equal(going.Path, Assert.Single(report.Removed).Path);
+        var refused = Assert.Single(report.Refused);
+        Assert.Equal((withdrawn.Path, "Its target is back."), (refused.Path, refused.Message));
+        Assert.True(File.Exists(withdrawn.Path));
+        Assert.True(report.Verification.Passed);
+        Assert.Contains(report.Verification.Checks, check => check.Detail == "All 1 other item(s) are still there.");
+    }
+
     private ExploreActions Actions(
         Func<CancellationToken, Task<ExploreActionPolicy>> build, FakeExploreConfirmation? prompt = null) =>
         new((_, ct) => build(ct), () => prompt ?? new FakeExploreConfirmation(answer: false), _faults, _running, _recycleBin);

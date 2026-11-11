@@ -15,6 +15,10 @@ public sealed record FixedSystemDirectories(
 {
     public string? CommonStartupFolder => Path.Combine(ProgramData, "Microsoft", "Windows", "Start Menu", "Programs", "StartUp");
 
+    public string? CommonStartMenuFolder => Path.Combine(ProgramData, "Microsoft", "Windows", "Start Menu");
+
+    public string? CommonDesktopFolder => Path.Combine(SystemDrive, "Users", "Public", "Desktop");
+
     /// <summary>The layout of a 64-bit Windows installed on <c>C:\</c>.</summary>
     public static FixedSystemDirectories Standard { get; } = new(
         @"C:\Windows", @"C:\ProgramData", @"C:\Program Files", @"C:\Program Files (x86)", @"C:\");

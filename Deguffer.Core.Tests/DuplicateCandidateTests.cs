@@ -424,7 +424,7 @@ public sealed class DuplicateCandidateTests : IDisposable
 
         var tree = MftExploreReader.Read(fixture.Build(), @"X:\", [], TableTuning.Default, progress: null, default).Tree!;
         var data = MftExploreRooting.Locate(tree, ["Data"]).Node!.Value;
-        var file = ExploreTreePaths.NodeAt(tree, @"X:\Data\unsized.bin");
+        var file = TreeNodes.At(tree, @"X:\Data\unsized.bin");
 
         // The fixture gives the file no length, and says so, which is the case under test.
         Assert.Equal(0, tree.LengthOf(file));
