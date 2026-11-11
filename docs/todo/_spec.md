@@ -1534,6 +1534,10 @@ explains. It changes nothing on any drive, and it deletes nothing.
   not answering. The listing and the volumes have the same limit. A device call cannot be interrupted,
   so a drive still being asked is not asked again.
 - A read never holds the window open.
+- Windows' storage reliability counters (`MSFT_StorageReliabilityCounter`, behind
+  `Get-StorageReliabilityCounter`) are not read. Measured unelevated on 2026-11-11, they refused
+  every drive that the requests above answer, so they add nothing Health lacks and would ask for
+  elevation to say less. Their `Reset` method is never called.
 
 **What it says**
 
@@ -1545,6 +1549,21 @@ explains. It changes nothing on any drive, and it deletes nothing.
 - An attribute whose meaning differs by manufacturer is shown as reported and judged by nothing
   beyond the drive's own threshold, unless the manufacturer is named in `AtaVendorOverlay`.
 - A serial number appears on the page and nowhere else: no record prints it, and a drive's key is a hash.
+
+**Beside the volumes**
+
+A drive that is filling wants a clean, and a drive that is failing wants a backup first, so a drive
+of concern is named where its free space is: the Storage page's free space card, and each row of
+the drive pickers in Explore and Duplicates
+([#715](https://github.com/BootBlock/Deguffer/issues/715)).
+
+- Only from what Health last read (`HealthByVolume`). Those pages never ask a drive anything, so
+  until Health has been opened they say nothing about health at all.
+- Only Watch and Failing are named, with Health's own verdict, and never a verdict of their own made
+  from raw figures. A drive with no problems reported, or with no report, adds nothing there.
+- A volume on several drives is answered for by the worst of them. A drive a later listing no
+  longer has stops speaking for its volumes.
+- The verdict is a word, beside the icon and the colour (§6.5).
 
 **Elevation**
 
