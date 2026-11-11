@@ -85,7 +85,7 @@ internal sealed record BenchmarkRequest(
 
     /// <summary>
     /// The protect route's folders when told nothing about them: about as many as each Claude Code row
-    /// protects on a machine with a year of conversations.
+    /// was measured protecting on a machine with that data, 3,800 to 5,200 paths.
     /// </summary>
     public const int DefaultProtectedFolders = 5000;
 

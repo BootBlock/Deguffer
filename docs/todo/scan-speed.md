@@ -325,7 +325,7 @@ group card builds every copy at once. The rest are small allocation wins.
 | Explore's carry work per snapshot, `DominantTypes`, `LargestFiles`, `SizeOf` after a removal | A few ms, off the UI thread, or 2-3 ns per call. |
 | `SetThreadErrorMode` per attribute read, the MFT parse, `MftVolumeIndex.TryResolve`, `MftSubtreeTally` | Inside the noise, or tens of ms per pass at most. The rest of the parse is #482, #483 and #486. |
 | `FileRemover` reading a file's attributes three times | The delete dominates: 370-612 ms against 384-819 ms for 3,000 files. |
-| `Protect()` probes in series, `DriverStore.FolderOf` per package, `StepOverlap.Of`'s final paths | 20-60 ms once per pass, or under 0.3 s for 5,000 steps. #516's counts decide the last. |
+| `Protect()` probes in series, `DriverStore.FolderOf` per package, `StepOverlap.Of`'s final paths | 20-60 ms once per pass, or under 0.3 s for 5,000 steps. #516's counts decide the last. The first estimate assumed a handful of paths per row: measured on real data it was 1.2-3.6 s, filed and fixed as #695. |
 | Repeated listings in the VS Code, Steam, packaged-app, Bun and Yarn 1 rows | About 5-40 ms per pass each. |
 | The Memory page's refresh and tree, `LiveList.Reorder`, marking totals, preference writes | Sub-millisecond per tick or click, or bounded lists. |
 | The item-list search, one change per item | About 4 µs per change: 19-31 ms to hide 4,990 of 5,000, against a rebuild that breaks the in-place rule. |
@@ -370,7 +370,7 @@ scan leaves about 600 MB committed (#738), and Classic names draw through a seco
 | #691 | DISM's analysis creates the restart-pending key that holds the component store, driver store, Windows.old and Windows Update rows in every elevated pass. `type: bug`, `safety`. First, because it changes what an elevated pass offers. |
 | #706 | The removal policy's per-file check is linear in its rules: 72 GB allocated judging one drive's duplicates. `safety`. |
 | #692 | Delivery Optimization starts PowerShell in every preview for one WMI number: 1.1-1.9 s against 16-30 ms in process. |
-| #695, #694 | `Protect` probes in series (1.2-3.6 s for a Claude Code row), and `IsPresent(WinSxS)` walks breadth-first (8.8 MB per call, 5-7 calls per pass). `safety`. |
+| #695, #694 | `Protect` probes in series (1.2-3.6 s for a Claude Code row), and `IsPresent(WinSxS)` walks breadth-first (8.8 MB per call, 5-7 calls per pass). `safety`. #695 done: a plan's protected paths are probed as many at once as the volume's walks run, through `DiskBoundWork`, and answered in their order (`ProtectedPathCapture`), with the `protect` benchmark route to time it. #694 open. |
 | #707 | Explore's policy read every Claude Code transcript's head and tail on the duplicate search's critical path. Done: the declaration reads each transcript's first lines only, a title is read only for a plan and only for what it offers, and a scope that cannot reach the conversations reads none of them. |
 | #696, #697 | Claude Code transcripts: read again every pass, and read 64 KiB at the tail to use about 15 KiB. #696 waits on a decision. |
 | #708 | The duplicate search lists hard-link names in series after identifying: an 18-36 s gap on a source tree. Done: the names are listed in the identifying lanes as the stage's last pass, counted on the page and stoppable, and only for files still in a group. On a scratch tree of 20,000 files with 7 names each, warm, listing took 19.6 s on one thread and 4.8 s on four. The source tree itself was not measured again. |

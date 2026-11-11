@@ -16,7 +16,7 @@ public sealed class ProtectRouteTests : IDisposable
     public void Dispose() => _temp.Dispose();
 
     [Fact]
-    public void EveryFolderIsBuiltOnceAndRecordedOnEveryRun()
+    public void EveryFolderIsRecordedOnEveryRun()
     {
         var site = RemovalSite.Create(Path.Combine(_temp.Path, "site"), out _)!;
         var route = new ProtectRoute(site, Folders, ScanTuner.Shipped).Timed;
@@ -33,6 +33,24 @@ public sealed class ProtectRouteTests : IDisposable
         }
 
         Assert.Equal(Folders, Directory.EnumerateDirectories(site.Root, "f*").Count());
+    }
+
+    /// <summary>
+    /// The folders are built before the first run only: one removed after it is not built again, so
+    /// later runs time the reads alone.
+    /// </summary>
+    [Fact]
+    public void TheFoldersAreBuiltBeforeTheFirstRunOnly()
+    {
+        var site = RemovalSite.Create(Path.Combine(_temp.Path, "site"), out _)!;
+        var route = new ProtectRoute(site, Folders, ScanTuner.Shipped).Timed;
+
+        route.Before!(CancellationToken.None);
+        Directory.Delete(site.Place("f5"));
+        route.Before!(CancellationToken.None);
+
+        Assert.False(Directory.Exists(site.Place("f5")));
+        Assert.Equal(Folders - 1, Directory.EnumerateDirectories(site.Root, "f*").Count());
     }
 
     /// <summary>A folder that holds something after it was built is recorded as holding it, and that stops the benchmark.</summary>

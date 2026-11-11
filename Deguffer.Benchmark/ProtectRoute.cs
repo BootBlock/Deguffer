@@ -54,29 +54,20 @@ internal sealed class ProtectRoute
 
     private RunTally Run(CancellationToken ct)
     {
-        var running = 0;
-        var peak = 0;
+        var probes = new InFlightPeak();
 
         _captured = ProtectedPathCapture.CaptureAsync(
             _folders,
             _tuning,
             folder =>
             {
-                var now = Interlocked.Increment(ref running);
-                InterlockedMax(ref peak, now);
+                using var probe = probes.Enter();
 
-                try
-                {
-                    return ProtectedPathCapture.Probe(folder);
-                }
-                finally
-                {
-                    Interlocked.Decrement(ref running);
-                }
+                return ProtectedPathCapture.Probe(folder);
             },
             ct).GetAwaiter().GetResult();
 
-        return new RunTally(_captured.Count, BytesRead: 0, Complete: _captured.Count == _folders.Count, PeakListings: peak);
+        return new RunTally(_captured.Count, BytesRead: 0, Complete: _captured.Count == _folders.Count, PeakListings: probes.Peak);
     }
 
     /// <summary>
@@ -90,23 +81,6 @@ internal sealed class ProtectRoute
         if (_captured!.Any(path => path.PresenceBefore is not PathPresence.Present || path.HeldContentBefore))
         {
             throw new InvalidOperationException("The capture recorded an empty folder the benchmark built as missing or as holding something (§5.6).");
-        }
-    }
-
-    private static void InterlockedMax(ref int target, int value)
-    {
-        var seen = Volatile.Read(ref target);
-
-        while (value > seen)
-        {
-            var was = Interlocked.CompareExchange(ref target, value, seen);
-
-            if (was == seen)
-            {
-                return;
-            }
-
-            seen = was;
         }
     }
 }
