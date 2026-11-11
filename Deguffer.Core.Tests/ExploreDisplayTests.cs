@@ -1,5 +1,6 @@
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
+using Deguffer.Core.Exploring.Files;
 using Deguffer.Core.Exploring.Rendering;
 
 namespace Deguffer.Core.Tests;
@@ -160,13 +161,36 @@ public sealed class ExploreDisplayTests
         Assert.StartsWith("The largest files found so far", Display(PartialBySize, ExploreView.Files, ExploreColouring.Branch).Note);
     }
 
+    /// <summary>
+    /// The panel of broken shortcuts in the Start menu opens only while the Files layout lists broken
+    /// links over a scan, and takes the side panel's place from what grew and from what kind of file.
+    /// </summary>
+    [Theory]
+    [InlineData(ExploreColouring.Growth)]
+    [InlineData(ExploreColouring.Type)]
+    public void ThePanelOfShortcutFoldersOpensOnlyBesideTheBrokenLinks(ExploreColouring colouring)
+    {
+        var links = Display(Finished, ExploreView.Files, colouring, listing: FileListing.BrokenLinks);
+
+        Assert.True(links.ShowsShortcutFolders);
+        Assert.False(links.ShowsGrowth);
+        Assert.False(links.ShowsTypes);
+
+        Assert.False(Display(Finished, ExploreView.Files, colouring).ShowsShortcutFolders);
+        Assert.False(Display(Finished, ExploreView.List, colouring, listing: FileListing.BrokenLinks).ShowsShortcutFolders);
+        Assert.False(Display(null, ExploreView.Files, colouring, listing: FileListing.BrokenLinks).ShowsShortcutFolders);
+        Assert.True(Display(Finished, ExploreView.List, colouring, listing: FileListing.BrokenLinks).ShowsGrowth
+            || Display(Finished, ExploreView.List, colouring, listing: FileListing.BrokenLinks).ShowsTypes);
+    }
+
     private static ExploreDisplay Display(
         ExploreTree? tree,
         ExploreView view,
         ExploreColouring colouring,
         bool inContrast = false,
-        MapLook? look = null) =>
-        new(tree, view, colouring, look ?? MapLook.Default, inContrast);
+        MapLook? look = null,
+        FileListing listing = FileListing.LargestFiles) =>
+        new(tree, view, colouring, look ?? MapLook.Default, inContrast, listing);
 
     private static ExploreTree Tree(ExploreChildOrder order, bool snapshot = false)
     {

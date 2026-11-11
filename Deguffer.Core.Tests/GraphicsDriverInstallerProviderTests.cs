@@ -316,6 +316,10 @@ public sealed class GraphicsDriverInstallerProviderTests : IDisposable
         public string SystemDrive => string.Empty;
 
         public string? CommonStartupFolder => located.CommonStartupFolder;
+
+        public string? CommonStartMenuFolder => located.CommonStartMenuFolder;
+
+        public string? CommonDesktopFolder => located.CommonDesktopFolder;
     }
 
     /// <summary>

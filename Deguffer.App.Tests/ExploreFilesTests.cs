@@ -3,6 +3,7 @@ using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Exploring.Files;
+using Deguffer.Core.Exploring.Links;
 using Deguffer.Core.Scanning;
 
 namespace Deguffer.App.Tests;
@@ -224,7 +225,8 @@ public sealed class ExploreFilesTests : IDisposable
     {
         var files = new ExploreFiles(
             new ExploreActions(_explore.Building, () => _explore.Prompt, _explore.Faults, _explore.Running),
-            _explore.Time)
+            _explore.Time,
+            () => new LinkInspection(_explore.Links, new LinkTargets(_explore.Probe, _explore.Volumes)))
         {
             IsActive = true,
         };

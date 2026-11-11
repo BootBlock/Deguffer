@@ -13,6 +13,7 @@ using Deguffer.Core.Exploring.Hidden;
 using Deguffer.Core.Exploring.History;
 using Deguffer.Core.Exploring.Knowledge;
 using Deguffer.Core.Exploring.Layout;
+using Deguffer.Core.Exploring.Links;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -109,6 +110,8 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     /// Called once as each scan ends, however it ends, after the page has gone idle. The window
     /// queues <see cref="SpentSnapshots.Release"/> behind the frame that shows the result.
     /// </param>
+    /// <param name="links">Reads where a shortcut or a link points, for the broken links.</param>
+    /// <param name="shortcutFolders">The Start menu, desktop and Startup folders. See <see cref="ShortcutFolders.Of"/>.</param>
     internal ExploreViewModel(
         IExploreScanner scanner,
         IVolumeInventory volumes,
@@ -125,7 +128,9 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         BusyWork work,
         ScanHistory history,
         IMotionPolicy motion,
-        Action releaseSpent)
+        Action releaseSpent,
+        ILinkTargetReader links,
+        IReadOnlyList<string> shortcutFolders)
     {
         _scanner = scanner;
         _volumes = volumes;
@@ -140,7 +145,12 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         Selection = new ExploreSelection(actions, work);
         Growth = new ExploreGrowth(history);
         Replay = new ExploreReplay(motion);
-        Files = new ExploreFiles(actions, time);
+        // A new inspection for each tree and each reading of the folders, so what one remembers about
+        // the machine lasts as long as that operation and no longer (G4).
+        LinkInspection Inspect() => new(links, new LinkTargets(probe, volumes));
+
+        Files = new ExploreFiles(actions, time, Inspect);
+        ShortcutFolders = new ExploreShortcutFolders(actions, Inspect, shortcutFolders, work);
         Types = new ExploreTypes();
         Targeting = new ExploreTargeting(volumes, time, probe, network, preferences, Status);
         Elevation = new ExploreElevation(Targeting, volumes, isElevated, relaunch, running, Status);
@@ -174,7 +184,41 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         Selection.Reported += (_, report) => Status.Say(report);
         Selection.Removed += (_, removed) => ShowLeft(removed);
 
+        // The panel removes by path, so what it took is found in the tree on screen by path, and the
+        // tree is drawn without it as it is after a removal picked from the map.
+        ShortcutFolders.Reported += (_, report) => Status.Say(report);
+        ShortcutFolders.Removed += (_, report) => ShowLeftByPath(report);
+
+        Files.PropertyChanged += (_, changed) =>
+        {
+            if (changed.PropertyName == nameof(ExploreFiles.Listing))
+            {
+                ShowPanels();
+            }
+        };
+
         StandDown();
+    }
+
+    /// <summary>The broken shortcuts in the Start menu, on the desktop and in the Startup folders. See <see cref="ExploreShortcutFolders"/>.</summary>
+    public ExploreShortcutFolders ShortcutFolders { get; }
+
+    /// <summary>Whether to show that panel. See <see cref="ExploreDisplay.ShowsShortcutFolders"/>.</summary>
+    public bool ShowsShortcutFolders => Display.ShowsShortcutFolders;
+
+    /// <summary>
+    /// Say again which side panel is open, and open the panel of shortcut folders only while it is on
+    /// screen: it reads every folder as it opens. One place for the three, because each one's answer
+    /// depends on the others (see <see cref="ExploreDisplay.ShowsShortcutFolders"/>).
+    /// </summary>
+    private void ShowPanels()
+    {
+        OnPropertyChanged(nameof(ShowsGrowth));
+        OnPropertyChanged(nameof(ShowsTypes));
+        OnPropertyChanged(nameof(ShowsShortcutFolders));
+
+        ShortcutFolders.IsActive = Display.ShowsShortcutFolders;
+        FollowReplay();
     }
 
     /// <summary>What the user picked out by hand, and what §7.1 lets them do with it.</summary>
@@ -292,7 +336,18 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     [NotifyCanExecuteChangedFor(nameof(AscendCommand))]
     public partial ExploreTree? Tree { get; private set; }
 
-    partial void OnTreeChanged(ExploreTree? value) => Notes.HasViewNote = HasViewNote;
+    partial void OnTreeChanged(ExploreTree? value)
+    {
+        Notes.HasViewNote = HasViewNote;
+
+        // From nothing to something or back, which is when the panel of shortcut folders opens or
+        // closes. Every snapshot of a scan is a new tree, and the panel reads the folders only as it
+        // opens, so a scan in progress does not read them again.
+        if (ShortcutFolders.IsActive != Display.ShowsShortcutFolders)
+        {
+            ShowPanels();
+        }
+    }
 
     /// <summary>
     /// Which picture the user asked for.
@@ -318,6 +373,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
 
         Files.IsActive = Display.SearchesFiles;
         Listing.IsActive = Display.ListsRows;
+        ShowPanels();
 
         // Each picture keeps its own colours, so a change of view can be a change of scheme.
         ShowLegend();
@@ -372,7 +428,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     /// <summary>
     /// What the page shows round its picture, from what it is showing. See <see cref="ExploreDisplay"/>.
     /// </summary>
-    private ExploreDisplay Display => new(Tree, SelectedView, SelectedColouring, Look, MapInContrast);
+    private ExploreDisplay Display => new(Tree, SelectedView, SelectedColouring, Look, MapInContrast, Files.Listing);
 
     /// <summary>What each colour on the map means. See <see cref="MapLegend"/>.</summary>
     public ObservableCollection<ExploreLegendBand> Legend { get; } = [];
@@ -845,6 +901,26 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         var left = removed.Left;
 
         Show(left, _position.CarriedTo(removed.Tree, left), Volume.Remeasured(_volumes, left.RootPath), ShowCause.Removal);
+    }
+
+    /// <summary>
+    /// <see cref="ShowLeft"/> for a removal made by path rather than from a node: whatever of it the
+    /// tree on screen holds is found there by path, and the tree is drawn without it. A removal from a
+    /// folder the scan never reached leaves the tree as it is.
+    /// </summary>
+    private void ShowLeftByPath(ExploreRemovalReport report)
+    {
+        if (Tree is not { } tree)
+        {
+            return;
+        }
+
+        int[] held = [.. report.Removed.Select(item => ExploreTreePaths.TryNodeAt(tree, item.Path)).OfType<int>()];
+
+        if (held.Length > 0)
+        {
+            ShowLeft(new ExploreSelection.RemovedFrom(tree, ExploreRemovals.Without(tree, held, report)));
+        }
     }
 
     private bool CanScan() => Gate.MayScan(Targeting.Target, _volumes);

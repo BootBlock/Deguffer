@@ -315,7 +315,7 @@ public sealed partial class ExploreSelection : ObservableObject
             void Acting(IReadOnlyList<ExploreItem> allowed) =>
                 MarkRemoving(tree, [.. picked.Where((_, i) => allowed.Contains(items[i]))]);
 
-            if (await _actions.RemoveAsync(items, mode, Acting, ct) is not { } report)
+            if (await _actions.RemoveAsync(items, mode, Acting, ct: ct) is not { } report)
             {
                 // Declined. Saying so beats leaving the previous sentence standing, which somebody
                 // who has just dismissed a dialog reads as the outcome of it.

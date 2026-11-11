@@ -1,4 +1,5 @@
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Exploring.Files;
 using Deguffer.Core.Exploring.Layout;
 
 namespace Deguffer.Core.Exploring.Rendering;
@@ -18,12 +19,14 @@ namespace Deguffer.Core.Exploring.Rendering;
 /// <param name="InContrast">
 /// Whether the map is drawn in a high contrast theme's two colours, in which its colours say nothing.
 /// </param>
+/// <param name="Listing">What the Files layout lists, which decides whether its side panel is open.</param>
 public readonly record struct ExploreDisplay(
     ISizedTree? Tree,
     ExploreView View,
     ExploreColouring Colouring,
     MapLook Look,
-    bool InContrast)
+    bool InContrast,
+    FileListing Listing = FileListing.LargestFiles)
 {
     /// <summary>
     /// The colours the picture is drawn in, and so the legend beside it: each picture keeps its own,
@@ -55,14 +58,22 @@ public readonly record struct ExploreDisplay(
     /// a reader in the list view has asked the same question. The replay of the comparison follows
     /// the same answer.
     /// </summary>
-    public bool ShowsGrowth => Colouring == ExploreColouring.Growth && Tree is not null;
+    public bool ShowsGrowth => Colouring == ExploreColouring.Growth && Tree is not null && !ShowsShortcutFolders;
 
     /// <summary>
     /// Whether to show the panel of what kind of file fills the folder on screen: whenever the colours
     /// are types and something has been scanned, in the lists as well as the pictures, as
     /// <see cref="ShowsGrowth"/> is.
     /// </summary>
-    public bool ShowsTypes => MeasuresTypes && Tree is not null;
+    public bool ShowsTypes => MeasuresTypes && Tree is not null && !ShowsShortcutFolders;
+
+    /// <summary>
+    /// Whether to show the panel of broken shortcuts in the Start menu, on the desktop and in the
+    /// Startup folders: while the Files layout lists broken links and something has been scanned. It
+    /// takes the place of the panel of what grew or of what kind of file, which answer a question the
+    /// reader has stopped asking by asking this one.
+    /// </summary>
+    public bool ShowsShortcutFolders => SearchesFiles && Listing == FileListing.BrokenLinks && Tree is not null;
 
     /// <summary>
     /// Whether the largest files below the folder on screen are searched for: only while the Files

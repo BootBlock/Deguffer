@@ -300,6 +300,13 @@ sunburst or a list, and colour it by folder, age, growth, file type or depth. Th
 the largest files at any depth, and you can filter it by name or wildcard, type, size, and how long
 ago each file was last written.
 
+The Files view can also list the shortcuts, symbolic links and junctions whose target is gone, such
+as the Start menu shortcuts a removed program left behind. Beside that list, a panel reads the Start
+menu, the desktop and the Startup folders without a scan and lists their broken shortcuts, each with
+a button that moves it to the Recycle Bin. A link is removed as the link itself, and nothing it
+pointed at is touched. A link whose target is on a drive or share that is not connected is never
+offered, because the drive may come back: Deguffer counts it and says so.
+
 The gear button next to the map opens *Map appearance*, and the map updates as you change the
 settings there. Each view has its own colours. Shapes can be shaded as a cushion, a bevel, a sheen
 lit from above, or flat colour. You can draw an outline of your chosen strength and width around

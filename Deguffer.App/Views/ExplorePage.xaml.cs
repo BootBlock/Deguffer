@@ -7,6 +7,7 @@ using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Exploring.Hidden;
 using Deguffer.Core.Exploring.Knowledge;
+using Deguffer.Core.Exploring.Links;
 using Deguffer.Core.Exploring.Network;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Safety;
@@ -99,7 +100,9 @@ public sealed partial class ExplorePage : Page
 
             // Low, so the frame that shows the result is drawn before the collection pauses the
             // window.
-            () => DispatcherQueue.TryEnqueueGuarded(DispatcherQueuePriority.Low, SpentSnapshots.Release));
+            () => DispatcherQueue.TryEnqueueGuarded(DispatcherQueuePriority.Low, SpentSnapshots.Release),
+            WindowsLinkTargetReader.Default,
+            ShortcutFolders.Of(UserEnvironment.Current, SystemDirectories.Current));
 
         _guard = new ListSelectionGuard(() => ViewModel.IsShowingRows, restore => DispatcherQueue.TryEnqueueGuarded(restore));
 

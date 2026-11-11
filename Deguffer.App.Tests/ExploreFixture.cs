@@ -49,6 +49,12 @@ internal sealed class ExploreFixture : IDisposable
     /// <summary>What a location typed into the page finds: nothing, unless a test describes it.</summary>
     public FakePathProbe Probe { get; } = new();
 
+    /// <summary>Where each shortcut and link a test describes points.</summary>
+    public FakeLinkTargets Links { get; } = new();
+
+    /// <summary>The folders the panel of broken shortcuts reads, none unless a test names some.</summary>
+    public List<string> ShortcutFolders { get; } = [];
+
     /// <summary>What a page built after this is set asks instead of <see cref="Probe"/>, for a test that holds the answer back.</summary>
     public IPathProbe? HeldProbe { get; set; }
 
@@ -146,7 +152,9 @@ internal sealed class ExploreFixture : IDisposable
             {
                 Releases++;
                 Releasing?.Invoke();
-            });
+            },
+            Links,
+            ShortcutFolders);
 
     /// <summary>How many times a page built here asked to free what its scans' snapshots left behind.</summary>
     public int Releases { get; private set; }

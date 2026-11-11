@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Exploring.Files;
+using Deguffer.Core.Exploring.Links;
 using Deguffer.Core.Viewing;
 
 namespace Deguffer.App.ViewModels;
@@ -34,8 +35,20 @@ public sealed partial class ExploreFiles : ObservableObject
 
     private static readonly IReadOnlyList<string> Ages = [.. FileAges.All.Select(FileAges.Label)];
 
+    /// <summary>The listings the List box offers, in the order of <see cref="FileListing"/>.</summary>
+    private static readonly IReadOnlyList<string> Listings = ["Largest files", "Broken shortcuts and links"];
+
     private readonly ExploreActions _actions;
     private readonly TimeProvider _time;
+    private readonly Func<LinkInspection> _inspect;
+
+    /// <summary>
+    /// What every link below <see cref="_tree"/> was read as, and every target asked about, for the
+    /// tree's life (G4): a name typed into the filter a letter at a time asks about the same links
+    /// again. Replaced with the tree, and when the policy is rebuilt, which is when a scan starts and
+    /// the machine is read afresh.
+    /// </summary>
+    private LinkInspection _inspection;
 
     private ExploreTree? _tree;
     private int _root;
@@ -59,8 +72,11 @@ public sealed partial class ExploreFiles : ObservableObject
     /// <para>Replaced rather than cleared when the tree or the policy changes, so a search still
     /// running for the old one fills a dictionary nothing reads. Concurrent because the search that
     /// fills it runs off the window's thread, and one being cancelled can overlap the next.</para>
+    ///
+    /// <para>Keyed by whether the row is of the broken links too, because a shortcut can be in both
+    /// listings, and only the row of the broken links states its target.</para>
     /// </summary>
-    private ConcurrentDictionary<int, ExploreFileRow> _built = new();
+    private ConcurrentDictionary<(int Node, bool Link), ExploreFileRow> _built = new();
 
     /// <summary>The search in flight, cancelled when another replaces it.</summary>
     private CancellationTokenSource? _finding;
@@ -72,10 +88,13 @@ public sealed partial class ExploreFiles : ObservableObject
     private int _generation;
 
     /// <param name="time">Where the instant ages are measured from is read.</param>
-    public ExploreFiles(ExploreActions actions, TimeProvider time)
+    /// <param name="inspect">A new inspection of links, with nothing remembered, for each tree.</param>
+    public ExploreFiles(ExploreActions actions, TimeProvider time, Func<LinkInspection> inspect)
     {
         _actions = actions;
         _time = time;
+        _inspect = inspect;
+        _inspection = inspect();
 
         // A refusal on a row is the one thing here whose answer can arrive late: until the policy is
         // built every path is refused with a sentence saying why. Asked again once it is, so the rows
@@ -83,6 +102,7 @@ public sealed partial class ExploreFiles : ObservableObject
         _actions.Ready += (_, _) =>
         {
             _built = new();
+            _inspection = _inspect();
             Find();
         };
     }
@@ -101,6 +121,20 @@ public sealed partial class ExploreFiles : ObservableObject
 
     /// <summary>The ages the age box offers.</summary>
     public IReadOnlyList<string> AgeLabels => Ages;
+
+    /// <summary>What the List box offers: the largest files, or the broken links.</summary>
+    public IReadOnlyList<string> ListingLabels => Listings;
+
+    /// <summary>Which of <see cref="ListingLabels"/> is chosen.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Listing))]
+    public partial int ListingIndex { get; set; }
+
+    /// <summary>
+    /// What the layout lists, with an index the box does not offer read as its first entry, as
+    /// <see cref="Filter"/> reads the other boxes.
+    /// </summary>
+    public FileListing Listing => ListingIndex == 1 ? FileListing.BrokenLinks : FileListing.LargestFiles;
 
     /// <summary>Text a file's name contains, or a wildcard it matches. See <see cref="FileFilter.Name"/>.</summary>
     [ObservableProperty]
@@ -162,6 +196,7 @@ public sealed partial class ExploreFiles : ObservableObject
             // An answer holds its tree, and a tree is a volume's worth of arrays.
             _ranking = null;
             _built = new();
+            _inspection = _inspect();
 
             Carry(tree);
         }
@@ -238,6 +273,15 @@ public sealed partial class ExploreFiles : ObservableObject
 
     partial void OnAgeIndexChanged(int value) => Find();
 
+    partial void OnListingIndexChanged(int value)
+    {
+        // A row of one listing is not a row of the other: a link is no file of any size, and a row
+        // kept across would be matched by path to a list it is not in.
+        ShowRows([]);
+        Summary = string.Empty;
+        Find();
+    }
+
     partial void OnIsActiveChanged(bool value) => Find();
 
     /// <summary>
@@ -272,6 +316,22 @@ public sealed partial class ExploreFiles : ObservableObject
 
         try
         {
+            if (Listing is FileListing.BrokenLinks)
+            {
+                var inspection = _inspection;
+                var (links, summary) = await Task.Run(
+                    () => ExploreBrokenLinkRows.Find(tree, root, filter, now, inspection, built, _actions.Verdict, finding.Token),
+                    finding.Token);
+
+                if (generation == _generation)
+                {
+                    ShowRows(links);
+                    Summary = summary;
+                }
+
+                return;
+            }
+
             var (ranking, rows) = await Task.Run(
                 () =>
                 {
@@ -283,7 +343,7 @@ public sealed partial class ExploreFiles : ObservableObject
                         finding.Token.ThrowIfCancellationRequested();
 
                         listed[at] = built.GetOrAdd(
-                            found.Files[at], node => ExploreFileRow.For(tree, node, now, _actions.Verdict));
+                            (found.Files[at], false), key => ExploreFileRow.For(tree, key.Node, now, _actions.Verdict));
                     }
 
                     return (found, listed);

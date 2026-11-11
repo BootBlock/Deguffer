@@ -1,5 +1,6 @@
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Acting;
+using Deguffer.Core.Exploring.Links;
 
 namespace Deguffer.App.ViewModels;
 
@@ -37,8 +38,24 @@ public sealed record ExploreFileRow(
 
     public bool IsRefused => Refusal is not null;
 
-    /// <summary>A file's glyph, the one the folder list gives a file. See <see cref="ExploreRow.Icon"/>.</summary>
-    public string Icon => ExploreRow.FileGlyph;
+    /// <summary>
+    /// Where the row's link points, for a row of the broken links, or null for a row of the largest
+    /// files. Its target is gone: that list holds no other kind.
+    /// </summary>
+    public string? Target { get; init; }
+
+    public bool IsLink => Target is not null;
+
+    /// <summary>What the row's link points at, stated under its folder, or null for a file.</summary>
+    public string? TargetLine => Target is null ? null : $"Points at {Target}, which is not there.";
+
+    /// <summary>
+    /// A file's glyph, the one the folder list gives a file, or a link's. See <see cref="ExploreRow.Icon"/>.
+    /// </summary>
+    public string Icon => IsLink ? LinkGlyph : ExploreRow.FileGlyph;
+
+    /// <summary>Segoe Fluent Icons' link.</summary>
+    private const string LinkGlyph = "";
 
     /// <summary>
     /// What the row identifies, for matching it against the rows already on screen: its path, because
@@ -60,6 +77,11 @@ public sealed record ExploreFileRow(
         {
             var details = ExploreRowText.Details(SizeLabel, StorageLabel, DatesLabel);
 
+            if (TargetLine is { } target)
+            {
+                details = $"{target}{Environment.NewLine}{details}";
+            }
+
             return Refusal is null ? details : $"{details}{Environment.NewLine}{Environment.NewLine}{Refusal}";
         }
     }
@@ -72,6 +94,7 @@ public sealed record ExploreFileRow(
     public string Description =>
         $"{Name}, {SizeLabel} on disk{(StorageLabel.Length > 0 ? $", {StorageLabel}" : string.Empty)}, "
         + $"in {Folder}, last written {AgeLabel}"
+        + (TargetLine is null ? string.Empty : $". {TargetLine}")
         + (Refusal is null ? string.Empty : $". Explore will not remove this: {Refusal}");
 
     /// <summary>
@@ -82,7 +105,9 @@ public sealed record ExploreFileRow(
     /// </summary>
     /// <param name="now">The instant every age in one list is measured from.</param>
     /// <param name="verdict">What Explore would say about removing a path. See <see cref="ExploreActions.Verdict"/>.</param>
-    public static ExploreFileRow For(ExploreTree tree, int node, DateTime now, Func<string, ExploreVerdict> verdict)
+    /// <param name="link">What the node points at, for a row of the broken links, or null for a file.</param>
+    public static ExploreFileRow For(
+        ExploreTree tree, int node, DateTime now, Func<string, ExploreVerdict> verdict, BrokenLink? link = null)
     {
         var path = tree.PathOf(node);
         var answer = verdict(path);
@@ -96,6 +121,9 @@ public sealed record ExploreFileRow(
             ExploreNodeText.Storage(tree, node),
             ExploreNodeText.Age(tree, node, now),
             ExploreRowText.Dates(tree, node),
-            answer.IsAllowed ? null : answer.Reason);
+            answer.IsAllowed ? null : answer.Reason)
+        {
+            Target = link?.Target,
+        };
     }
 }

@@ -39,4 +39,10 @@ public sealed class FakeSystemDirectories : ISystemDirectories
 
     /// <summary>Where Windows puts it under <see cref="ProgramData"/>. Named but not created.</summary>
     public string? CommonStartupFolder => Path.Combine(ProgramData, "Microsoft", "Windows", "Start Menu", "Programs", "StartUp");
+
+    /// <summary>Where Windows puts it under <see cref="ProgramData"/>. Named but not created.</summary>
+    public string? CommonStartMenuFolder => Path.Combine(ProgramData, "Microsoft", "Windows", "Start Menu");
+
+    /// <summary>Where Windows puts it, beside the profiles. Named but not created.</summary>
+    public string? CommonDesktopFolder => Path.Combine(SystemDrive, "Users", "Public", "Desktop");
 }
