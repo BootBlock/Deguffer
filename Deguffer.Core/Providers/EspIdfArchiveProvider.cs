@@ -26,14 +26,24 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>Nothing while the Installation Manager runs (§5.3).</b> It downloads each archive and then
 /// unpacks it, one tool after another, and it writes with the sharing Rust's standard library gives, which
-/// lets Windows delete a file it is still writing. So while <c>eim</c> runs the archives are left alone, and the clean asks
+/// lets Windows delete a file it is still writing. So while it runs the archives are left alone, and the clean asks
 /// again before it removes each one. <c>idf_tools.py</c> downloads and unpacks through Python's own
 /// file objects, which Windows will not let another program delete while they are open, so an archive
 /// it is writing or unpacking is refused to the removal by Windows itself.</para>
+///
+/// <para><b>The Installation Manager runs under the name it was downloaded or installed as.</b> The MSI
+/// installs <c>eim.exe</c> and Scoop installs the GUI as <c>eim-gui.exe</c>, but the release assets are
+/// <c>eim-cli-windows-x64.exe</c> and <c>eim-gui-windows-x64.exe</c>, and versioned copies such as
+/// <c>eim-gui-windows-x64-v0.20.1.exe</c> (<c>_v0.17.4</c> up to 0.17.4). Espressif's documentation runs
+/// the CLI by that name, the GUI download is the Installation Manager itself rather than an installer, and
+/// WinGet's portable install keeps the asset's name behind its <c>eim</c> link. So the names are matched
+/// by their beginnings. Not <c>eim</c> alone, which other programs' names start with, and not
+/// <c>offline_installer_builder</c>, which never writes into <c>dist</c>.</para>
 /// </summary>
 public sealed class EspIdfArchiveProvider : CleanupProviderBase
 {
-    private static readonly IReadOnlyList<string> InstallerProcessNames = ["eim"];
+    private static readonly ProcessNameRule InstallationManager =
+        ProcessNameRule.Named("eim", "eim-gui").OrStartingWith("eim-cli-windows-", "eim-gui-windows-");
 
     private const string HeldReason =
         "The ESP-IDF Installation Manager is running, and it may be downloading or unpacking an archive here, "
@@ -70,7 +80,7 @@ public sealed class EspIdfArchiveProvider : CleanupProviderBase
             volumes: volumes)
     {
         _system = system ?? SystemDirectories.Current;
-        _stillClosed = new RunningProcessCheck(Inspector, InstallerProcessNames);
+        _stillClosed = new RunningProcessCheck(Inspector, InstallationManager);
     }
 
     public override string Id => "esp-idf-archives";
@@ -98,8 +108,6 @@ public sealed class EspIdfArchiveProvider : CleanupProviderBase
         Recommendation = "Deguffer removes only the archives in each dist folder. ESP-IDF's own command for "
             + "this also uninstalls the tools other ESP-IDF versions use, so Deguffer does not run it.",
     };
-
-    protected override IReadOnlyList<string> ConflictingProcessNames => InstallerProcessNames;
 
     private EspIdfLayout Layout => _layout.Get(() => EspIdfLayout.Find(Environment, _system, Volumes));
 
@@ -217,5 +225,5 @@ public sealed class EspIdfArchiveProvider : CleanupProviderBase
         };
     }
 
-    private bool InstallerIsRunning() => Inspector.FindRunning(InstallerProcessNames).Count > 0;
+    private bool InstallerIsRunning() => Inspector.FindRunning(InstallationManager).Count > 0;
 }

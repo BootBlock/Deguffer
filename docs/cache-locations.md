@@ -1780,9 +1780,12 @@ installed tool version the active ESP-IDF does not use, and `tools` is shared by
 version on the machine, so it breaks the others. The Installation Manager's `--cleanup` runs only
 during an install, and its `remove` and `purge` uninstall.
 
-While the Installation Manager (`eim`) is running, nothing is offered: it downloads and unpacks one
-archive after another, and Windows lets another program delete a file it is still writing. The clean
-asks again before it removes each archive. An archive `idf_tools.py` is writing or unpacking is open
+While the Installation Manager is running, nothing is offered: it downloads and unpacks one archive
+after another, and Windows lets another program delete a file it is still writing. The clean asks
+again before it removes each archive. The Installation Manager runs under the name it was installed
+or downloaded as, so Deguffer recognises `eim`, `eim-gui`, and every name that starts with
+`eim-cli-windows-` or `eim-gui-windows-`, such as `eim-gui-windows-x64-v0.20.1`. Other names that
+start with `eim` do not hold the archives back. An archive `idf_tools.py` is writing or unpacking is open
 in Python, and Windows refuses its removal until Python closes it.
 
 ### What is protected
