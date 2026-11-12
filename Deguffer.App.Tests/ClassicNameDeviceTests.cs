@@ -23,7 +23,7 @@ public sealed class ClassicNameDeviceTests
         {
             using var compositor = new Compositor();
             var device = CompositionDevice.For(compositor);
-            var name = new ClassicName<CanvasRenderTarget>(device, BitmapCanvas.Instance);
+            var name = new ClassicName<CanvasRenderTarget>(device, new ClassicFormats(), BitmapCanvas.Instance);
 
             Draw(name);
 
@@ -45,7 +45,7 @@ public sealed class ClassicNameDeviceTests
         {
             using var compositor = new Compositor();
             var device = CompositionDevice.For(compositor);
-            var name = new ClassicName<CanvasRenderTarget>(device, BitmapCanvas.Instance);
+            var name = new ClassicName<CanvasRenderTarget>(device, new ClassicFormats(), BitmapCanvas.Instance);
 
             Draw(name);
             var before = name.Image!;
@@ -72,7 +72,7 @@ public sealed class ClassicNameDeviceTests
         var kept = CompositionThread.Run(() =>
         {
             using var compositor = new Compositor();
-            var name = new ClassicName<CanvasRenderTarget>(CompositionDevice.For(compositor), BitmapCanvas.Instance);
+            var name = new ClassicName<CanvasRenderTarget>(CompositionDevice.For(compositor), new ClassicFormats(), BitmapCanvas.Instance);
 
             Draw(name);
             var before = name.Image;
@@ -84,8 +84,89 @@ public sealed class ClassicNameDeviceTests
         Assert.True(kept);
     }
 
+    /// <summary>A name's measurement is kept while its text is unchanged, and only while it is.</summary>
+    [Fact]
+    public void ANameWhoseTextChangesIsMeasuredAgain()
+    {
+        var (longer, shorter) = CompositionThread.Run(() =>
+        {
+            using var compositor = new Compositor();
+            var name = new ClassicName<CanvasRenderTarget>(CompositionDevice.For(compositor), new ClassicFormats(), BitmapCanvas.Instance);
+
+            var longer = name.Draw("Downloads", room: 200, centred: true, Ink, spacing: 13, scale: 1);
+            var shorter = name.Draw("D", room: 200, centred: true, Ink, spacing: 13, scale: 1);
+
+            return (longer.Width, shorter.Width);
+        });
+
+        Assert.True(shorter < longer, $"\"D\" was {shorter} wide and \"Downloads\" {longer}.");
+    }
+
+    /// <summary>
+    /// Each line of a centred name is centred in the image, and each line of one that is not starts at
+    /// its left. The format is shared by every name, so the alignment is the name's own.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AShortLineIsCentredOnlyInACentredName(bool centred)
+    {
+        var start = CompositionThread.Run(() =>
+        {
+            using var compositor = new Compositor();
+            var name = new ClassicName<CanvasRenderTarget>(CompositionDevice.For(compositor), new ClassicFormats(), BitmapCanvas.Instance);
+
+            name.Draw("Downloads\nD", room: 200, centred, Ink, spacing: 13, scale: 1);
+
+            return (FirstInkedColumn(name.Image!, fromRow: 13, toRow: 26), (int)name.Image!.SizeInPixels.Width);
+        });
+
+        Assert.True(start.Item1 < start.Item2, "The second line has no ink.");
+
+        if (centred)
+        {
+            Assert.True(start.Item1 > start.Item2 / 4, $"The second line started at {start.Item1} of {start.Item2}.");
+        }
+        else
+        {
+            Assert.True(start.Item1 < 3, $"The second line started at {start.Item1} of {start.Item2}.");
+        }
+    }
+
+    [Fact]
+    public void NamesOfOneSpacingShareOneFormat()
+    {
+        var formats = new ClassicFormats();
+
+        Assert.Same(formats.For(13), formats.For(13));
+        Assert.NotSame(formats.For(13), formats.For(20));
+        Assert.Equal(20, formats.For(20).LineSpacing);
+    }
+
     private static void Draw(ClassicName<CanvasRenderTarget> name) =>
         name.Draw("Downloads", room: 200, centred: true, Ink, spacing: 13, scale: 1);
+
+    /// <summary>The leftmost column with any ink in rows <paramref name="fromRow"/> up to <paramref name="toRow"/>, or the image's width where there is none.</summary>
+    private static int FirstInkedColumn(CanvasRenderTarget image, int fromRow, int toRow)
+    {
+        var pixels = image.GetPixelBytes();
+        var width = (int)image.SizeInPixels.Width;
+        var height = Math.Min(toRow, (int)image.SizeInPixels.Height);
+        var first = width;
+
+        for (var row = fromRow; row < height; row++)
+        {
+            for (var column = 0; column < first; column++)
+            {
+                if (pixels[(((row * width) + column) * 4) + 3] != 0)
+                {
+                    first = column;
+                }
+            }
+        }
+
+        return first;
+    }
 
     private static bool IsInked(CanvasRenderTarget image)
     {

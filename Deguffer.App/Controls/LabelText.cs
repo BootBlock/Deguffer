@@ -26,10 +26,18 @@ internal sealed class LabelText
 
     private readonly ClassicName<CanvasImageSource> _classic;
 
-    /// <summary>A name whose SpaceMonger lettering is drawn through <paramref name="device"/>, the map's own.</summary>
-    public LabelText(CompositionDevice device)
+    /// <summary>The text and the room last written to the text block.</summary>
+    private string _text = string.Empty;
+
+    private double _room = double.PositiveInfinity;
+
+    /// <summary>
+    /// A name whose SpaceMonger lettering is drawn through <paramref name="device"/>, the map's own, in
+    /// the map's <paramref name="formats"/>.
+    /// </summary>
+    public LabelText(CompositionDevice device, ClassicFormats formats)
     {
-        _classic = new ClassicName<CanvasImageSource>(device, ImageSourceCanvas.Instance);
+        _classic = new ClassicName<CanvasImageSource>(device, formats, ImageSourceCanvas.Instance);
 
         _block = new TextBlock
         {
@@ -91,13 +99,25 @@ internal sealed class LabelText
 
     private Size Set(string text, double room, Color colour)
     {
-        _block.Text = text;
-        _block.MaxWidth = room;
+        // Written only where they changed, as they have not for a name its node kept. Compared with
+        // what was written rather than read back, because each read crosses into the framework and
+        // the text comes back as a new string.
+        if (!string.Equals(_text, text, StringComparison.Ordinal))
+        {
+            _block.Text = _text = text;
+        }
+
+        if (_room != room)
+        {
+            _block.MaxWidth = _room = room;
+        }
+
         ((SolidColorBrush)_block.Foreground).Color = colour;
 
         // Measured here rather than left to the layout pass, because where the text goes and when it
         // fades both depend on how much of the box it fills. The pass that follows asks the same
-        // question and is answered from this.
+        // question and is answered from this. Text whose measurement nothing has spoilt is answered
+        // by the framework from its last one, and a change of the reader's text size spoils it.
         _block.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
 
         return _block.DesiredSize;
