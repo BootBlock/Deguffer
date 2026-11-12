@@ -18,8 +18,13 @@ namespace Deguffer.Core.Providers;
 /// <para><b>What is recognised, and by what.</b></para>
 /// <list type="bullet">
 /// <item>A <b>profile directory</b> (<c>debug</c>, <c>release</c>, or a custom profile's own name), by
-/// what Cargo writes into every one: its <c>.cargo-lock</c> file and its <c>.fingerprint</c> directory.
-/// Read by content rather than by name, because a custom profile can be called anything.</item>
+/// the <c>.cargo-lock</c> file Cargo writes into every one, beside the fingerprints of either build
+/// layout: the <c>.fingerprint</c> directory of the layout Cargo wrote before 1.100, or the
+/// <c>build\&lt;package&gt;\&lt;hash&gt;\fingerprint</c> each build unit keeps in the layout Cargo
+/// writes from 1.100 (<see href="https://github.com/rust-lang/cargo/blob/master/src/compiler/layout.rs">layout.rs</see>).
+/// A profile both wrote holds both, and is one profile. Read by content rather than by name, because
+/// a custom profile can be called anything. Cargo calls that layout internal and subject to change, so
+/// a profile it no longer matches is left alone and named, which costs disk space rather than data.</item>
 /// <item>A <b>nested target directory</b>: a target triple's (<c>target\x86_64-pc-windows-msvc</c>), or
 /// a whole target directory another tool pointed Cargo at, such as rust-analyzer's. Recognised by the
 /// cache directory tag carrying Cargo's own line, because Cargo writes one into every target directory
@@ -92,6 +97,11 @@ public sealed class CargoTargetLayout
         "Not something Cargo is recognised to have written, so it is left alone. A project's build "
         + "scripts often keep their own output in the target folder.";
 
+    private const string LockOnlyReason =
+        "Holds the lock Cargo takes on a build but no build records that could be read, as the folder of "
+        + "finished programs does when Cargo's build folder is moved elsewhere. The lock alone does not "
+        + "show that the rest is Cargo's, so it is left alone.";
+
     private const string TooDeepReason =
         "A target folder nested deeper than Deguffer looks, so nothing inside it was examined.";
 
@@ -110,6 +120,19 @@ public sealed class CargoTargetLayout
 
     private CargoTargetLayout()
     {
+    }
+
+    /// <summary>What a folder inside a target directory shows of being a profile.</summary>
+    private enum ProfileEvidence
+    {
+        /// <summary>No <c>.cargo-lock</c>.</summary>
+        None,
+
+        /// <summary>A <c>.cargo-lock</c> beside no fingerprints of either layout that could be read.</summary>
+        LockOnly,
+
+        /// <summary>A <c>.cargo-lock</c> beside the fingerprints of either layout.</summary>
+        Profile,
     }
 
     /// <summary>One profile directory, and its incremental cache where it holds one.</summary>
@@ -176,8 +199,9 @@ public sealed class CargoTargetLayout
             var name = child.Name;
             var path = LongPath.Display(child.FullName);
             var label = labelPrefix is null ? name : $"{labelPrefix} {name}";
+            var evidence = ProfileEvidenceIn(path);
 
-            if (IsProfile(path))
+            if (evidence is ProfileEvidence.Profile)
             {
                 AddProfile(path, label);
             }
@@ -202,15 +226,47 @@ public sealed class CargoTargetLayout
             }
             else
             {
-                _leftAlone.Add((path, UnrecognisedReason));
+                _leftAlone.Add((path, evidence is ProfileEvidence.LockOnly ? LockOnlyReason : UnrecognisedReason));
             }
         }
     }
 
     // Probes that decide what a folder is, so a refusal is not evidence for the classification and
     // reads as "not this": the folder is then left alone and named, which costs disk space.
-    private static bool IsProfile(string path) =>
-        IsFile(Path.Combine(path, ".cargo-lock")) && IsDirectory(Path.Combine(path, ".fingerprint"));
+    private static ProfileEvidence ProfileEvidenceIn(string path)
+    {
+        if (!IsFile(Path.Combine(path, ".cargo-lock")))
+        {
+            return ProfileEvidence.None;
+        }
+
+        return IsDirectory(Path.Combine(path, ".fingerprint")) || HoldsBuildUnit(Path.Combine(path, "build"))
+            ? ProfileEvidence.Profile
+            : ProfileEvidence.LockOnly;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="build"/> is the build units' folder of Cargo's 1.100 layout, read from
+    /// its first package's first unit. One unit is the evidence, because Cargo gives every unit its
+    /// fingerprints, and a profile's <c>build</c> can hold thousands.
+    /// </summary>
+    private static bool HoldsBuildUnit(string build) =>
+        IsDirectory(build)
+        && FirstChildDirectory(build) is { } package
+        && FirstChildDirectory(package) is { } unit
+        && IsDirectory(Path.Combine(unit, "fingerprint"));
+
+    /// <summary>The first directory inside <paramref name="directory"/> that is not a link, or null where there is none or the listing failed.</summary>
+    private static string? FirstChildDirectory(string directory)
+    {
+        using var children = new DirectoryListing<string>(
+            directory,
+            static (ref System.IO.Enumeration.FileSystemEntry entry) => entry.FileName.ToString(),
+            static (ref System.IO.Enumeration.FileSystemEntry entry) =>
+                entry.IsDirectory && (entry.Attributes & FileAttributes.ReparsePoint) == 0);
+
+        return children.MoveNext() ? Path.Combine(directory, children.Current) : null;
+    }
 
     private static bool IsDocumentation(string path) =>
         IsFile(Path.Combine(path, ".lock")) && IsFile(Path.Combine(path, "crates.js"));

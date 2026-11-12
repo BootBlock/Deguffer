@@ -109,6 +109,38 @@ public static class BuildDirectoryFixture
     }
 
     /// <summary>
+    /// One Cargo profile directory inside <paramref name="targetDirectory"/> laid out as Cargo 1.100
+    /// writes one, returning it: the lock file, no <c>.fingerprint</c>, and a build unit of each package
+    /// under <c>build\&lt;package&gt;\&lt;hash&gt;</c> holding its fingerprints and output, beside the built
+    /// program Cargo copies up into the profile. <paramref name="writeIncremental"/> adds the incremental
+    /// cache of one crate, which stays at the profile's <c>incremental</c>. Called on a profile
+    /// <see cref="CreateCargoProfile"/> made, it adds the new layout beside the old, as a newer Cargo
+    /// building into an older Cargo's target does.
+    /// </summary>
+    public static string CreateCargoBuildUnitProfile(string targetDirectory, string name, int payloadBytes = 4096, bool writeIncremental = false)
+    {
+        var profile = Directory(targetDirectory, name);
+        WriteText(Path.Combine(profile, ".cargo-lock"), string.Empty);
+
+        var dependency = Directory(profile, "build", "dependency", "89abcdef01234567");
+        Directory(dependency, "fingerprint");
+        WriteBytes(Path.Combine(dependency, "out", "libdependency.rlib"), payloadBytes);
+
+        var example = Directory(profile, "build", "example", "0123abcd4567ef89");
+        Directory(example, "fingerprint");
+        WriteBytes(Path.Combine(example, "out", "example.exe"), payloadBytes);
+        WriteBytes(Path.Combine(profile, "example.exe"), payloadBytes);
+
+        if (writeIncremental)
+        {
+            var session = Directory(Directory(profile, "incremental"), "example-1abc");
+            WriteBytes(Path.Combine(session, "query-cache.bin"), payloadBytes);
+        }
+
+        return profile;
+    }
+
+    /// <summary>
     /// A Node.js project, returning its <c>node_modules</c>. <paramref name="lockFile"/> null is the
     /// project with no lock file, whose dependencies are not reproducible and so not disposable.
     /// </summary>

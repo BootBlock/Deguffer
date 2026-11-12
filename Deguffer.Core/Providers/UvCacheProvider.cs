@@ -8,14 +8,13 @@ namespace Deguffer.Core.Providers;
 /// The uv (Python) package cache (~3.5 GB on the audited machine).
 ///
 /// §5.1: uv has an official eviction command, so the plan calls it rather than deleting the cache
-/// directory. That matters more here than it does for npm, because <c>%LOCALAPPDATA%\uv</c> is not
-/// a cache directory — it is uv's whole state directory, and the tools and managed Python
-/// interpreters uv installs live beside <c>cache</c> under it. Deleting the root to reclaim the
-/// cache would uninstall them.
+/// directory. The tools and managed interpreters uv installs are in another profile entirely, under
+/// <c>%APPDATA%\uv</c> beside uv's credential store and configuration, and <c>cache-dir</c> can point
+/// the cache anywhere, so uv is asked where each of them is. <see cref="UvStorage"/> holds the layout.
 /// </summary>
 public sealed class UvCacheProvider : CleanupProviderBase
 {
-    private readonly PassMemo<Task<AskedLocation>> _resolvedCacheDirectory = new();
+    private readonly PassMemo<Task<UvStorage>> _storage = new();
 
     public UvCacheProvider(
         IUserEnvironment? environment = null,
@@ -39,8 +38,8 @@ public sealed class UvCacheProvider : CleanupProviderBase
     public override StepGrain Grain => StepGrain.Parts;
 
     public override string WhatHappensOnNextUse =>
-        "The next uv install re-downloads and re-unpacks packages. Existing virtual environments " +
-        "and uv-installed tools are untouched.";
+        "The next uv install re-downloads and re-unpacks packages. Existing virtual environments, " +
+        "the tools installed with 'uv tool install' and the Python interpreters uv manages are untouched.";
 
     public override ProviderBasis Basis => ProviderBasis.Observed;
 
@@ -52,9 +51,9 @@ public sealed class UvCacheProvider : CleanupProviderBase
         Purpose = "uv caches the archives it downloads and the unpacked wheels it builds "
             + "environments from, so creating another environment with the same dependencies costs "
             + "almost nothing.",
-        Recommendation = "Deguffer runs uv's own cache clean rather than deleting a path, because "
-            + "the folder holding the cache is uv's whole state directory — the tools and Python "
-            + "interpreters uv installed sit beside it and must not go with it.",
+        Recommendation = "Deguffer runs uv's own cache clean rather than deleting a path, so only the "
+            + "cache goes. The tools and Python interpreters uv installed, and the passwords it saved, "
+            + "are kept elsewhere and must not go with it.",
     };
 
     protected override IReadOnlyList<string> ConflictingProcessNames => ["uv", "uvx"];
@@ -66,26 +65,60 @@ public sealed class UvCacheProvider : CleanupProviderBase
     /// </summary>
     public string DefaultCacheDirectory => Path.Combine(Environment.LocalAppData, "uv", "cache");
 
-    /// <summary>uv's state directory. Exposed so tests can assert it is never targeted (§5.2).</summary>
-    public string StateRoot => Path.Combine(Environment.LocalAppData, "uv");
+    /// <summary>uv's folder in the local profile, which holds the cache (§5.2).</summary>
+    public string LocalRoot => Path.Combine(Environment.LocalAppData, "uv");
 
     /// <summary>
-    /// §5.2 as §7.1 needs it read from outside. <c>%LOCALAPPDATA%\uv</c> is not a cache directory
-    /// but uv's whole state directory, so the tools the user installed and the interpreters uv
-    /// manages sit beside the one child that is a cache.
+    /// uv's folder in the roaming profile, which holds its configuration, and by default its tools,
+    /// interpreters and credentials. Nothing in it is a cache.
+    /// </summary>
+    public string RoamingRoot => Path.Combine(Environment.RoamingAppData, "uv");
+
+    /// <summary>
+    /// §5.2 as §7.1 needs it read from outside: the cache is the one child of the local folder that
+    /// may go, and nothing in the roaming folder may.
     ///
-    /// <para>The directory <c>uv cache dir</c> reports is deliberately not declared: it arrives from
-    /// a subprocess, and this is the documented default of the folder holding it.</para>
+    /// <para>The folders uv reports are declared in <see cref="DiscoverToolRootsAsync"/>, because only
+    /// a subprocess can say where they are.</para>
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
     [
         ToolRoot.Folders(
-            StateRoot,
-            "This is uv's own folder. Deguffer clears the cache inside it and nothing else, because "
-            + "the tools you installed with 'uv tool install' and the Python interpreters uv manages "
-            + "sit beside it.",
+            LocalRoot,
+            "This is uv's own folder. Deguffer clears the cache inside it and nothing else.",
             static name => name.Equals("cache", StringComparison.OrdinalIgnoreCase)),
+        new ToolRoot(
+            RoamingRoot,
+            "This is uv's own folder. It holds the tools you installed with 'uv tool install', the Python "
+            + "interpreters uv manages, the passwords and tokens uv saved, and its settings. Removing it "
+            + "would uninstall them and break every environment built on one of those interpreters.",
+            static _ => false),
     ];
+
+    /// <summary>
+    /// The tool and interpreter folders uv reports, where <c>UV_TOOL_DIR</c> or
+    /// <c>UV_PYTHON_INSTALL_DIR</c> can have moved them out of <see cref="RoamingRoot"/>.
+    /// </summary>
+    public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default)
+    {
+        if (Environment.FindExecutable("uv") is not { } uv)
+        {
+            return [];
+        }
+
+        var storage = await ResolveStorageAsync(uv, ct).ConfigureAwait(false);
+
+        return
+        [
+            .. new[]
+                {
+                    (storage.Tools, "uv reports this as where it keeps the tools you installed with 'uv tool install'."),
+                    (storage.Python, "uv reports this as where it keeps the Python interpreters it manages."),
+                }
+                .Where(reported => reported.Item1.Answered)
+                .Select(reported => new ToolRoot(reported.Item1.Path, reported.Item2, static _ => false)),
+        ];
+    }
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(Environment.FindExecutable("uv") is not null);
@@ -93,7 +126,8 @@ public sealed class UvCacheProvider : CleanupProviderBase
     /// <summary>
     /// The cache <c>uv cache clean</c> is sent to: the one uv reports, and the documented default as
     /// well, because <c>UV_CACHE_DIR</c> can move the cache back to it after a duplicate search has
-    /// asked. Only the cache, never the state directory around it.
+    /// asked. Never a reported cache the plan declines because it overlaps uv's own folders, where the
+    /// clean is never run.
     /// </summary>
     public override async Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default)
     {
@@ -104,19 +138,21 @@ public sealed class UvCacheProvider : CleanupProviderBase
             return [CleanedPlace.Whole(DefaultCacheDirectory)];
         }
 
-        var reported = await ResolveCacheDirectoryAsync(uv, ct).ConfigureAwait(false);
+        var storage = await ResolveStorageAsync(uv, ct).ConfigureAwait(false);
 
-        return [CleanedPlace.Whole(DefaultCacheDirectory), CleanedPlace.Whole(reported.Path)];
+        return storage.CacheConflict() is null
+            ? [CleanedPlace.Whole(DefaultCacheDirectory), CleanedPlace.Whole(storage.Cache.Path)]
+            : [CleanedPlace.Whole(DefaultCacheDirectory)];
     }
 
     /// <summary>
-    /// The resolved cache directory is a cache like any other, and UV_CACHE_DIR can move it
-    /// between one scan and the next. Keeping it across an invalidation would measure a location
-    /// uv has stopped using.
+    /// Every folder uv reports is configuration, which <c>UV_CACHE_DIR</c>, <c>UV_TOOL_DIR</c> and
+    /// <c>UV_PYTHON_INSTALL_DIR</c> can move between one scan and the next. Keeping them across an
+    /// invalidation would measure and protect locations uv has stopped using.
     /// </summary>
     public override void InvalidateCaches()
     {
-        _resolvedCacheDirectory.Forget();
+        _storage.Forget();
         base.InvalidateCaches();
     }
 
@@ -128,8 +164,14 @@ public sealed class UvCacheProvider : CleanupProviderBase
             return EmptyPlan("uv is not installed on this machine.");
         }
 
-        var located = await ResolveCacheDirectoryAsync(uv, ct).ConfigureAwait(false);
+        var storage = await ResolveStorageAsync(uv, ct).ConfigureAwait(false);
+        var located = storage.Cache;
         var cacheDirectory = located.Path;
+
+        if (storage.CacheConflict() is { } conflict)
+        {
+            return EmptyPlan(UvStorage.DescribeConflict(cacheDirectory, conflict));
+        }
 
         if (NothingToPlanFor(cacheDirectory, located.DescribeAbsent("uv", "cache directory")) is { } nothing)
         {
@@ -174,35 +216,41 @@ public sealed class UvCacheProvider : CleanupProviderBase
             Tier = Tier,
             WhatHappensOnNextUse = WhatHappensOnNextUse,
             Steps = steps,
-            ProtectedPaths = await BuildProtectedPathsAsync(ct).ConfigureAwait(false),
+            ProtectedPaths = await ProtectAsync(storage.Survivors, ct).ConfigureAwait(false),
             Notes = notes,
             Fallback = measured.Fallback,
         };
     }
 
+    private Task<UvStorage> ResolveStorageAsync(string uv, CancellationToken ct) =>
+        _storage.Get(() => AskStorageAsync(uv, ct));
+
     /// <summary>
-    /// §5.6. The siblings of <c>cache</c> are the point: <c>tools</c> holds CLI tools the user
-    /// installed with <c>uv tool install</c> and <c>python</c> holds downloaded interpreters, both
-    /// of which look like cache and are not. The cache directory itself is not protected — uv's own
-    /// command removes it rather than emptying it, and recreates it on next use.
+    /// The three folders uv can report, asked at once, and the documented layout behind each. The
+    /// legacy state folder is probed only to choose the default, so a refusal keeps both candidates.
     /// </summary>
-    private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(CancellationToken ct) => ProtectAsync(
-        [
-            (StateRoot, "uv's state directory must survive — only the cache within it is cleared."),
-            (Path.Combine(StateRoot, "tools"), "CLI tools installed with 'uv tool install'."),
-            (Path.Combine(StateRoot, "python"), "Python interpreters uv downloaded and manages."),
-        ],
-        ct);
-
-    private Task<AskedLocation> ResolveCacheDirectoryAsync(string uv, CancellationToken ct) =>
-        _resolvedCacheDirectory.Get(() => AskCacheDirectoryAsync(uv, ct));
-
-    private async Task<AskedLocation> AskCacheDirectoryAsync(string uv, CancellationToken ct)
+    private async Task<UvStorage> AskStorageAsync(string uv, CancellationToken ct)
     {
-        // --color never because uv colourises this path when it thinks it is writing to a terminal,
-        // and the escape sequences would land inside the parsed path.
-        var outcome = await Runner.RunAsync(uv, "cache dir --color never", ToolRun.Query, ct).ConfigureAwait(false);
+        var stateRoots = UvStorage.StateRootsFor(
+            RoamingRoot, LongPath.ProbeDirectory(UvStorage.LegacyStateRoot(RoamingRoot)));
+        var cache = AskAsync(uv, "cache dir", DefaultCacheDirectory, ct);
+        var tools = AskAsync(uv, "tool dir", Path.Combine(stateRoots[0], "tools"), ct);
+        var python = AskAsync(uv, "python dir", Path.Combine(stateRoots[0], "python"), ct);
 
-        return AskedLocation.FromLastRootedLine(outcome, DefaultCacheDirectory);
+        await Task.WhenAll(cache, tools, python).ConfigureAwait(false);
+
+        return new UvStorage(await cache, await tools, await python, stateRoots, LocalRoot, RoamingRoot);
+    }
+
+    private async Task<AskedLocation> AskAsync(string uv, string query, string fallback, CancellationToken ct)
+    {
+        // --color never because uv colourises a path when it thinks it is writing to a terminal, and
+        // the escape sequences would land inside the parsed path.
+        var outcome = await Runner.RunAsync(uv, $"{query} --color never", ToolRun.Query, ct).ConfigureAwait(false);
+        var printed = AskedLocation.FromLastRootedLine(outcome, fallback);
+
+        // Resolved as configuration, because uv can print a cache-dir as it was typed: forward slashes
+        // or a '..' would compare equal to none of uv's folders and walk past the overlap check.
+        return AskedLocation.Of(printed.Answered ? LongPath.Configured(printed.Path) : null, fallback);
     }
 }
