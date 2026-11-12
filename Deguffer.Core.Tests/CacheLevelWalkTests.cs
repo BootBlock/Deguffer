@@ -97,4 +97,25 @@ public sealed class CacheLevelWalkTests
         Assert.Equal([UnreadableRoot.UnreachedNote(level)], walk.Notes);
         Assert.True(walk.Unreadable);
     }
+
+    /// <summary>
+    /// The walk keeps what its listings returned, so a plan's record of a child it spared or a link it
+    /// declined is taken from there. A level that is itself a link was never listed, so it is not
+    /// among them and is asked of the disk.
+    /// </summary>
+    [Fact]
+    public void TheWalkKeepsWhatItsListingsReturned()
+    {
+        using var temp = new TempDirectory();
+        var level = temp.CreateDirectory("root", "cache");
+        var recognised = temp.CreateDirectory("root", "cache", Recognised);
+        var stranger = temp.CreateDirectory("root", "cache", Stranger);
+        var link = Path.Combine(level, "link");
+        Junction.ToDirectory(link, stranger);
+
+        var walk = CacheLevelWalk.Under(Levels, Path.Combine(temp.Path, "root"));
+
+        Assert.All([recognised, stranger, link], path => Assert.True(walk.Listed!.TryGet(path, out _), path));
+        Assert.False(walk.Listed!.TryGet(level, out _));
+    }
 }

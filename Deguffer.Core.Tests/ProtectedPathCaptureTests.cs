@@ -60,7 +60,7 @@ public sealed class ProtectedPathCaptureTests : IDisposable
 
         using var denied = DeniedDirectory.WithUnreadableAttributes(refused);
 
-        var captured = await ProtectedPathCapture.CaptureAsync(candidates, ScanTuner.Shipped, default);
+        var captured = await ProtectedPathCapture.CaptureAsync(candidates, listed: null, ScanTuner.Shipped, default);
 
         Assert.Equal(
             [.. candidates.Select(c => new ProtectedPath(c.Path, c.Reason, LongPath.ProbeEntry(c.Path), DirectoryContent.IsPresent(c.Path)))],
@@ -91,6 +91,7 @@ public sealed class ProtectedPathCaptureTests : IDisposable
 
         var captured = await ProtectedPathCapture.CaptureAsync(
             [(@"\\volume.test\cache\Tool", "The tool's root."), (@"\\volume.test\cache\tool", "A spared child.")],
+            listed: null,
             ScanTuner.Shipped,
             path =>
             {
@@ -101,6 +102,7 @@ public sealed class ProtectedPathCaptureTests : IDisposable
 
                 return new ProtectedPathCapture.Before(PathPresence.Present, HeldContent: true);
             },
+            NeverAsked,
             default);
 
         var only = Assert.Single(captured);
@@ -120,8 +122,10 @@ public sealed class ProtectedPathCaptureTests : IDisposable
 
         var captured = await ProtectedPathCapture.CaptureAsync(
             Candidates(2),
+            listed: null,
             TunedTo(2),
             _ => new ProtectedPathCapture.Before(both.SignalAndWait(Patience) ? PathPresence.Present : PathPresence.Absent, HeldContent: false),
+            NeverAsked,
             default);
 
         Assert.All(captured, path => Assert.Equal(PathPresence.Present, path.PresenceBefore));
@@ -144,6 +148,7 @@ public sealed class ProtectedPathCaptureTests : IDisposable
         {
             var captured = await ProtectedPathCapture.CaptureAsync(
                 candidates,
+                listed: null,
                 TunedTo(Count),
                 path =>
                 {
@@ -157,6 +162,7 @@ public sealed class ProtectedPathCaptureTests : IDisposable
                         ? new ProtectedPathCapture.Before(index % 2 == 0 ? PathPresence.Present : PathPresence.Absent, HeldContent: index % 2 == 0)
                         : new ProtectedPathCapture.Before(PathPresence.Refused, HeldContent: false);
                 },
+                NeverAsked,
                 default);
 
             Assert.Equal(candidates.Select(c => c.Path), captured.Select(path => path.Path));
@@ -185,16 +191,120 @@ public sealed class ProtectedPathCaptureTests : IDisposable
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ProtectedPathCapture.CaptureAsync(
             Candidates(4),
+            listed: null,
             ScanTuner.Shipped,
             _ =>
             {
                 Interlocked.Increment(ref probed);
                 return new ProtectedPathCapture.Before(PathPresence.Present, HeldContent: false);
             },
+            NeverAsked,
             cancelled.Token));
 
         Assert.Equal(0, probed);
     }
+
+    /// <summary>
+    /// A path the row's own listing saw is recorded as there, whatever the disk says by the time the
+    /// plan protects it, and the disk is asked only what the listing left open. A path no listing saw
+    /// is probed as before, and a refusal stays a refusal, never absent.
+    /// </summary>
+    [Fact]
+    public async Task APathTheListingSawIsRecordedFromTheListingAndAnyOtherPathIsProbed()
+    {
+        var folder = _temp.CreateDirectory("listed");
+        var file = _temp.CreateFile(8, "listed", "kept.bin");
+        var empty = _temp.CreateDirectory("listed", "empty");
+        var skeleton = _temp.CreateDirectory("listed", "skeleton");
+        _temp.CreateDirectory("listed", "skeleton", "inner");
+
+        var listed = new ListedEntries();
+        listed.AddFolder(folder, FolderEntries.Of(folder)!);
+
+        var unlisted = Path.Join(_temp.Path, "unlisted");
+        var probed = new List<string>();
+        var asked = new List<string>();
+
+        var captured = await ProtectedPathCapture.CaptureAsync(
+            [(folder, "folder"), (file, "file"), (empty, "empty"), (skeleton, "skeleton"), (unlisted, "unlisted")],
+            listed,
+            ScanTuner.Shipped,
+            path =>
+            {
+                lock (probed)
+                {
+                    probed.Add(path);
+                }
+
+                // Asked of the disk, every path answers that Windows would not describe it.
+                return new ProtectedPathCapture.Before(PathPresence.Refused, HeldContent: false);
+            },
+            path =>
+            {
+                lock (asked)
+                {
+                    asked.Add(path);
+                }
+
+                return true;
+            },
+            default);
+
+        Assert.Equal(
+            [
+                // Listed whole and holding a file: settled by the listing.
+                (folder, PathPresence.Present, true),
+
+                // A file holds nothing: settled by the listing.
+                (file, PathPresence.Present, false),
+
+                // Folders the listing returned without listing them: there, and asked only what they hold.
+                (empty, PathPresence.Present, true),
+                (skeleton, PathPresence.Present, true),
+
+                // Seen by no listing: the disk's answer, a refusal recorded as one.
+                (unlisted, PathPresence.Refused, false),
+            ],
+            captured.Select(path => (path.Path, path.PresenceBefore, path.HeldContentBefore)));
+
+        Assert.Equal([unlisted], probed);
+        Assert.Equal([empty, skeleton], asked.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// The record a listing gives is the record asking the disk gives, path for path, wherever the two
+    /// look at the same disk: the listing changes how an answer is found, never what it is.
+    /// </summary>
+    [Fact]
+    public async Task AListedPathIsRecordedAsAskingItAloneRecordsIt()
+    {
+        var root = _temp.CreateDirectory("root");
+        var holding = _temp.CreateDirectory("root", "holding");
+        _temp.CreateFile(8, "root", "holding", "deep", "one.bin");
+        var skeleton = _temp.CreateDirectory("root", "skeleton");
+        _temp.CreateDirectory("root", "skeleton", "a", "b");
+        var empty = _temp.CreateDirectory("root", "empty");
+        var file = _temp.CreateFile(8, "root", "one.bin");
+        var link = Path.Join(root, "link");
+        Junction.ToDirectory(link, holding);
+
+        var listed = new ListedEntries();
+        listed.AddFolder(root, FolderEntries.Of(root)!);
+        listed.AddFolder(empty, FolderEntries.Of(empty)!);
+
+        IReadOnlyList<(string Path, string Reason)> candidates =
+            [(root, "root"), (holding, "holding"), (skeleton, "skeleton"), (empty, "empty"), (file, "file"), (link, "link")];
+
+        var captured = await ProtectedPathCapture.CaptureAsync(candidates, listed, ScanTuner.Shipped, default);
+
+        Assert.Equal(
+            [.. candidates.Select(c => new ProtectedPath(c.Path, c.Reason, LongPath.ProbeEntry(c.Path), DirectoryContent.IsPresent(c.Path)))],
+            captured);
+    }
+
+    /// <summary>The content question of a listed path, for a test that lists nothing and so must never ask it.</summary>
+    private static bool NeverAsked(string path) =>
+        throw new InvalidOperationException($"A path no listing saw was asked only what it holds: {path}");
 
     private static List<(string Path, string Reason)> Candidates(int count) =>
         [.. Enumerable.Range(0, count).Select(index => ($@"\\volume.test\claude\projects\session{index}", $"Conversation {index}."))];

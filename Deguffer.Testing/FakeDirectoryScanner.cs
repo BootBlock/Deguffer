@@ -48,8 +48,33 @@ public sealed class FakeDirectoryScanner(IReadOnlyList<string>? indexed = null) 
     /// </summary>
     public Task WhenMeasured(string path) => MeasuredSignal(path).Task;
 
+    /// <summary>Run before each path is recorded, by any route. See <see cref="RemovingOnFirstMeasure"/>.</summary>
+    private Action? _measuring;
+
+    /// <summary>
+    /// A scanner that removes <paramref name="directory"/> as the first path is measured, by any route:
+    /// the disk then disagrees with what a plan listed before it measured, which is how a test shows
+    /// which of the two a plan's record of that directory came from.
+    /// </summary>
+    public static FakeDirectoryScanner RemovingOnFirstMeasure(string directory)
+    {
+        var removed = 0;
+
+        return new FakeDirectoryScanner
+        {
+            _measuring = () =>
+            {
+                if (Interlocked.Exchange(ref removed, 1) == 0)
+                {
+                    Directory.Delete(LongPath.Extended(directory), recursive: true);
+                }
+            },
+        };
+    }
+
     private void Record(string path)
     {
+        _measuring?.Invoke();
         _measured.Enqueue(path);
         MeasuredSignal(path).TrySetResult();
     }

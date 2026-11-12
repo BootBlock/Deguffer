@@ -244,6 +244,7 @@ public sealed class ClaudeCodeFileHistoryProvider : CleanupProviderBase
                         .. snapshots.Survivors
                             .Prepend((Path: survey.Home, Reason: HomeReason)),
                     ],
+                    snapshots.Listed,
                     ct).ConfigureAwait(false),
 
                 // Measured during planning, so each was there when the plan was made: the claim

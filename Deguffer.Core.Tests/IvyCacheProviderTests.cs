@@ -185,6 +185,37 @@ public sealed class IvyCacheProviderTests : IDisposable
         Assert.Equal(allowed, policy.MayRemove(path).IsAllowed);
     }
 
+    /// <summary>
+    /// §5.6's record of a child the walk spared comes from the walk's own listing, not from asking it
+    /// again (G5): every row that protects through the walk's own overload takes it from there.
+    /// Removed after the walk and before the plan protected it, the child is recorded as there, and the
+    /// check after the clean reports it gone rather than passing over it as never there.
+    /// </summary>
+    [Fact]
+    public async Task ASparedChildIsRecordedAsTheWalkSawItAndItsLossIsStillReported()
+    {
+        CreateAt(Home, "cache", 4096);
+        var notes = CreateAt(Home, "notes", 64);
+        var provider = new IvyCacheProvider(
+            _environment,
+            new FakeProcessRunner(),
+            FakeProcessInspector.NothingRunning,
+            FakeDirectoryScanner.RemovingOnFirstMeasure(notes));
+
+        var plan = await provider.PlanAsync();
+
+        Assert.False(Directory.Exists(notes));
+        Assert.Equal(
+            PathPresence.Present,
+            Assert.Single(plan.ProtectedPaths, p => p.Path.Equals(notes, StringComparison.OrdinalIgnoreCase)).PresenceBefore);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.Equal(
+            VerificationOutcome.RemovedFromOutside,
+            Assert.Single(result.Verification!.Checks, c => c.Subject.Equals(notes, StringComparison.OrdinalIgnoreCase)).Outcome);
+    }
+
     /// <summary>Create <paramref name="child"/> under the root holding one file of the given size.</summary>
     private static string CreateAt(string root, string child, int bytes)
     {

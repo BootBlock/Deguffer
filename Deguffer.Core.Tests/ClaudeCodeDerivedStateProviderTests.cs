@@ -748,4 +748,38 @@ public sealed class ClaudeCodeDerivedStateProviderTests : IDisposable
 
         Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
     }
+
+    /// <summary>
+    /// §5.6's record of a hook environment this row keeps comes from the row's own listing of the
+    /// environments folder, not from asking each folder again (G5). Removed after the listing and
+    /// before the plan protected it, the folder is recorded as there, which is what the listing saw
+    /// when the plan was made, and the check after the clean reports it gone rather than passing over
+    /// it as never there.
+    /// </summary>
+    [Fact]
+    public async Task AKeptFolderIsRecordedAsTheListingSawItAndItsLossIsStillReported()
+    {
+        CreateOneOfEachLeftover();
+        _claude.Transcript(SessionB);
+        var resumable = _claude.HookEnvironment(SessionB, age: Old);
+
+        var provider = new ClaudeCodeDerivedStateProvider(
+            _environment,
+            runner: new FakeProcessRunner(),
+            inspector: FakeProcessInspector.NothingRunning,
+            scanner: FakeDirectoryScanner.RemovingOnFirstMeasure(resumable));
+
+        var plan = await provider.PlanAsync();
+
+        Assert.False(Directory.Exists(resumable));
+        Assert.Equal(
+            PathPresence.Present,
+            Assert.Single(plan.ProtectedPaths, p => p.Path.Equals(resumable, StringComparison.OrdinalIgnoreCase)).PresenceBefore);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.Equal(
+            VerificationOutcome.RemovedFromOutside,
+            Assert.Single(result.Verification!.Checks, c => c.Subject.Equals(resumable, StringComparison.OrdinalIgnoreCase)).Outcome);
+    }
 }

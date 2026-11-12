@@ -5,7 +5,8 @@ namespace Deguffer.Benchmark.Tests;
 
 /// <summary>
 /// The protect route builds its empty folders once, records every one of them on every run, and stops
-/// on a record that does not match the folder it built.
+/// on a record that does not match the folder it built, whether each folder is asked of the disk or
+/// recorded from a listing of the folder holding them.
 /// </summary>
 public sealed class ProtectRouteTests : IDisposable
 {
@@ -15,11 +16,13 @@ public sealed class ProtectRouteTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    [Fact]
-    public void EveryFolderIsRecordedOnEveryRun()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EveryFolderIsRecordedOnEveryRun(bool listed)
     {
         var site = RemovalSite.Create(Path.Combine(_temp.Path, "site"), out _)!;
-        var route = new ProtectRoute(site, Folders, ScanTuner.Shipped).Timed;
+        var route = new ProtectRoute(site, Folders, listed, ScanTuner.Shipped).Timed;
 
         for (var run = 0; run < 2; run++)
         {
@@ -43,7 +46,7 @@ public sealed class ProtectRouteTests : IDisposable
     public void TheFoldersAreBuiltBeforeTheFirstRunOnly()
     {
         var site = RemovalSite.Create(Path.Combine(_temp.Path, "site"), out _)!;
-        var route = new ProtectRoute(site, Folders, ScanTuner.Shipped).Timed;
+        var route = new ProtectRoute(site, Folders, listed: false, ScanTuner.Shipped).Timed;
 
         route.Before!(CancellationToken.None);
         Directory.Delete(site.Place("f5"));
@@ -53,12 +56,18 @@ public sealed class ProtectRouteTests : IDisposable
         Assert.Equal(Folders - 1, Directory.EnumerateDirectories(site.Root, "f*").Count());
     }
 
-    /// <summary>A folder that holds something after it was built is recorded as holding it, and that stops the benchmark.</summary>
-    [Fact]
-    public void ARecordThatDoesNotMatchTheFolderBuiltStopsTheBenchmark()
+    /// <summary>
+    /// A folder that holds something after it was built is recorded as holding it, and that stops the
+    /// benchmark. From a listing too: the listing proves each folder is there, and what it holds is
+    /// still asked.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ARecordThatDoesNotMatchTheFolderBuiltStopsTheBenchmark(bool listed)
     {
         var site = RemovalSite.Create(Path.Combine(_temp.Path, "site"), out _)!;
-        var route = new ProtectRoute(site, Folders, ScanTuner.Shipped).Timed;
+        var route = new ProtectRoute(site, Folders, listed, ScanTuner.Shipped).Timed;
 
         route.Before!(CancellationToken.None);
         File.WriteAllBytes(Path.Combine(site.Place("f3"), "stray.bin"), [1]);

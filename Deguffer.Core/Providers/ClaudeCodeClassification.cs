@@ -44,6 +44,10 @@ internal sealed record ClaudeCodeEvidence(
 /// its process is running, or nothing could establish whether it is. Such a row's zero is not the
 /// whole story. See <see cref="CleanupPlan.WasNotExamined"/>.
 /// </param>
+/// <param name="Listed">
+/// Every folder this kind listed, and what each listing returned, so §5.6's record of a survivor is
+/// taken from the listing rather than asked again. See <see cref="ListedEntries"/>.
+/// </param>
 internal sealed record ClaudeCodeClassification(
     IReadOnlyList<string> Folders,
     IReadOnlyList<DeletionTarget> Targets,
@@ -51,7 +55,8 @@ internal sealed record ClaudeCodeClassification(
     IReadOnlyList<(string Path, string Reason)> Recent,
     IReadOnlyList<PlanNote> Notes,
     bool Unreadable,
-    bool Refused);
+    bool Refused,
+    ListedEntries Listed);
 
 /// <summary>
 /// Gathers one <see cref="ClaudeCodeClassification"/>.
@@ -72,6 +77,7 @@ internal sealed class ClaudeCodeClassificationBuilder
     private readonly List<(string Path, string Reason)> _survivors = [];
     private readonly List<(string Path, string Reason)> _recent = [];
     private readonly List<PlanNote> _notes = [];
+    private readonly ListedEntries _listed = new();
 
     private bool _unreadable;
     private bool _refused;
@@ -127,6 +133,7 @@ internal sealed class ClaudeCodeClassificationBuilder
             return null;
         }
 
+        _listed.AddFolder(folder, entries);
         Keep(folder, reason);
         return entries;
     }
@@ -237,7 +244,7 @@ internal sealed class ClaudeCodeClassificationBuilder
     public ClaudeCodeClassification Build() =>
         _undated.Count > 0
             ? throw new InvalidOperationException($"{_undated.Count} folders were offered and never dated. Call {nameof(DateOffers)} first.")
-            : new(_folders, _targets, _survivors, _recent, _notes, _unreadable, _refused);
+            : new(_folders, _targets, _survivors, _recent, _notes, _unreadable, _refused, _listed);
 
     /// <summary>"1 file" or "3 files", for a sentence that has to read correctly on a machine with one.</summary>
     public static string Count(int count, string singular, string plural) =>

@@ -102,6 +102,9 @@ Deguffer.Benchmark scan C:\Users\<user>\source --runs 6
   is there and whether it holds anything, asked several at once with the walk a scan uses for the
   drive's kind. It reports how many folders were asked at once. A row that protects one path for
   each item of the user's data, such as the Claude Code rows, pays this on every preview.
+  `--listed on` records the folders from one untimed listing of the folder holding them, as a row
+  that listed them while it planned does, so each is asked only whether it holds anything. Timed
+  both ways, the difference is what reusing the listing saves.
 - `race <folder>` walks a folder while the index of a volume is built, both started at the same
   moment, as Auto races them in a scan, and times each of the two alone as well. Each round walks
   alone, builds alone, then races the two, and every other round runs them in the reverse order,
