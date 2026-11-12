@@ -16,9 +16,10 @@ namespace Deguffer.Core.Scanning.Mft;
 /// largest asks for.</para>
 ///
 /// <para>The lists kept outside the table add <c>ListReadsInFlight</c> buffers, each as large as the
-/// largest list read into it, after the first pass and beside its buffers. A buffer holds whole
-/// clusters, and a list is never more than <see cref="MftAttributeList.MaximumLength"/>, so each is at
-/// most the larger of that and a cluster: 8 MiB at the largest depth on a volume of 4 KiB clusters,
+/// largest read made into it, after the first pass and beside its buffers. A buffer holds whole
+/// clusters, and a read, of one list or of several close together, is never more than
+/// <see cref="MftAttributeList.MaximumLength"/> rounded up to whole clusters, so each is at most the
+/// larger of that and a cluster: 8 MiB at the largest depth on a volume of 4 KiB clusters,
 /// and 64 MiB on one of 2 MiB clusters.</para>
 /// </summary>
 public sealed record TableTuning
