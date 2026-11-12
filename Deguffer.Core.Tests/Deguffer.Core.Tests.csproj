@@ -25,4 +25,15 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <!--
+    The build step Directory.Build.targets compiles as an inline task, compiled here as well so its
+    rules are tested (LargeAddressAwareImageTests). Microsoft.Build.Framework declares the interface
+    the task implements, at the version of the MSBuild in the .NET 10 SDK: 18.10 and later target
+    only net11.
+  -->
+  <ItemGroup>
+    <Compile Include="..\build\MarkLargeAddressAware.cs" Link="Build\MarkLargeAddressAware.cs" />
+    <PackageReference Include="Microsoft.Build.Framework" Version="18.9.6" />
+  </ItemGroup>
+
 </Project>

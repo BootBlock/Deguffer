@@ -264,6 +264,43 @@ public sealed class DuplicatesViewModelTests : DuplicatesPageScene
     });
 
     /// <summary>
+    /// A search that runs out of memory, as an x86 build can on a large tree (#709), ends with the page
+    /// saying so rather than with the process. The groups it confirmed stay, the headline says other
+    /// files may still have copies, and a new search can start.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RunningOutOfMemoryEndsTheSearchAndSaysSo(bool afterAGroup) => UiThread.Run(async () =>
+    {
+        var kept = _scene.Pair("kept.jpg", 4096);
+
+        RunDuplicateSearch run = async (search, marksMade, finding, found, progress, ct) =>
+        {
+            if (afterAGroup)
+            {
+                var candidates = DuplicateScene.Finding(kept);
+                var marks = await HandOverAsync(candidates, marksMade, ct);
+                finding.Report(candidates);
+                found.Report(marks.Judge(kept));
+            }
+
+            await Task.Yield();
+            throw new OutOfMemoryException();
+        };
+
+        var page = PageWithPhotos(run);
+        await page.SearchCommand.ExecuteAsync(null);
+
+        string[] confirmed = afterAGroup ? ["kept.jpg"] : [];
+        Assert.Equal(confirmed, page.Groups.Select(row => row[0].Copy.Name));
+        Assert.StartsWith("The search ran out of memory", page.Headline, StringComparison.Ordinal);
+        Assert.Equal(afterAGroup, page.Headline.Contains("may still have copies", StringComparison.Ordinal));
+        Assert.False(page.IsSearching);
+        Assert.True(page.SearchCommand.CanExecute(null));
+    });
+
+    /// <summary>
     /// The Remove button takes its location out of the search, and removing the only one leaves
     /// nothing to search, so the search cannot start and says why.
     /// </summary>

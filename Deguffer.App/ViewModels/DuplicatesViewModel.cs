@@ -270,6 +270,20 @@ public sealed partial class DuplicatesViewModel : ObservableObject
                 Headline = "Stopped before the files to compare were all found, so nothing was confirmed.";
             }
         }
+
+        // A 32-bit build has at most 4 GB of address space, and a search of a large enough tree needs
+        // more (#709). Everything the search held is garbage once it has thrown, so the process can
+        // carry on, and each group confirmed before then is a whole group, so it stays.
+        catch (OutOfMemoryException)
+        {
+            if (ReferenceEquals(_search, search))
+            {
+                Headline = Groups.Count == 0
+                    ? "The search ran out of memory before it confirmed any duplicates. Search fewer locations at once."
+                    : "The search ran out of memory and did not finish, so files not in a group may still have copies. "
+                        + "Search fewer locations at once to find them.";
+            }
+        }
         finally
         {
             if (ReferenceEquals(_search, search))

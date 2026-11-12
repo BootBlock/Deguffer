@@ -163,6 +163,24 @@ jobs:
           -p:Platform=${{ matrix.platform }}
           -p:PublishDir=${{ runner.temp }}\${{ env.PACKAGE }}\
 
+      # A 32-bit process is given 2 GB of address space unless its executable is marked
+      # large-address-aware, and a duplicate search of a large tree needs more. Directory.Build.targets
+      # marks every x86 executable, and this proves the one a user receives carries the flag.
+      - name: Check the x86 executable is large-address-aware
+        if: matrix.platform == 'x86'
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:RUNNER_TEMP "$env:PACKAGE\Deguffer.App.exe"
+          $bytes = [IO.File]::ReadAllBytes($exe)
+          $pe = [BitConverter]::ToInt32($bytes, 0x3C)
+          $machine = [BitConverter]::ToUInt16($bytes, $pe + 4)
+          $characteristics = [BitConverter]::ToUInt16($bytes, $pe + 22)
+          if ($machine -ne 0x014C -or ($characteristics -band 0x0020) -eq 0) {
+              Write-Output ("::error title=x86 executable limited to 2 GB::{0} is for machine 0x{1:X4} with characteristics 0x{2:X4}. It must be x86 (0x014C) and large-address-aware (0x0020)." -f $exe, $machine, $characteristics)
+              exit 1
+          }
+          Write-Output ("{0} is large-address-aware (characteristics 0x{1:X4})." -f $exe, $characteristics)
+
       # A packaging fault in a WinUI app does not fail the build. It shows only when the exe starts,
       # as an exit with 0xC000027B before any window appears. Start the exe and require it to still
       # be running a while later. Starting it changes nothing on the runner beyond the app's own

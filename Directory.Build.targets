@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Project>
+    <!--
+        A 32-bit process is given 2 GB of address space, even on 64-bit Windows, unless its executable
+        is marked large-address-aware, and then 4 GB. The SDK's x86 apphost is not marked and the SDK
+        has no property that marks it, so an x86 build of the App ran out of memory searching a
+        1.2-million-file tree for duplicates, where the marked build completed (#709).
+
+        Here rather than in the App's project, so every executable this repository builds for x86 is
+        marked, the Benchmark too when it is built with -r win-x86. The apphost is marked where the SDK
+        writes it, in obj, and the build output and every publish copy it from there, so neither can
+        miss it. _CreateAppHost is incremental: when it is skipped the apphost is marked already, and
+        the task writes nothing.
+
+        The release workflow reads the flag from the published x86 executable, and fails a release
+        that lacks it.
+    -->
+    <UsingTask TaskName="MarkLargeAddressAware"
+               TaskFactory="RoslynCodeTaskFactory"
+               AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+        <ParameterGroup>
+            <Executable ParameterType="System.String" Required="true" />
+        </ParameterGroup>
+        <Task>
+            <Code Type="Class" Language="cs" Source="$(MSBuildThisFileDirectory)build\MarkLargeAddressAware.cs" />
+        </Task>
+    </UsingTask>
+
+    <Target Name="MarkAppHostLargeAddressAware"
+            AfterTargets="_CreateAppHost"
+            Condition="'$(RuntimeIdentifier)' == 'win-x86' And '$(AppHostIntermediatePath)' != '' And Exists('$(AppHostIntermediatePath)')">
+        <MarkLargeAddressAware Executable="$(AppHostIntermediatePath)" />
+    </Target>
+</Project>
