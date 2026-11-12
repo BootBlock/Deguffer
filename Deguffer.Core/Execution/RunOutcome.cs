@@ -221,7 +221,7 @@ public sealed record RunOutcome(string Statement, RunVerdict Verdict, bool Cance
             // program working in, and only the second names a folder the user chose to keep.
             + (spared > 0 ? $" {spared} folder(s) a running program is working in were kept." : string.Empty)
             + (userWork > 0
-                ? $" {userWork} folder(s) holding work that was never saved anywhere else were kept."
+                ? $" {userWork} item(s) holding work that was never saved anywhere else were kept."
                 : string.Empty)
 
             // Last, and with its reason, because it is the one cause that asks nothing of the reader:
