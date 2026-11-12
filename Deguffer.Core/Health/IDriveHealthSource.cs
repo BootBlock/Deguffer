@@ -1,3 +1,4 @@
+using Deguffer.Core.Health.Parsing;
 using Deguffer.Core.Scanning.Media;
 
 namespace Deguffer.Core.Health;
@@ -21,5 +22,6 @@ internal interface IDriveHealthSource
     /// <summary>Whether this source can read a drive on <paramref name="bus"/>.</summary>
     bool Reads(StorageBusType bus);
 
-    DriveReadout Read(IDriveDevice device, string model);
+    /// <summary>Reads <paramref name="drive"/>, whose model and firmware decide what some readings mean.</summary>
+    DriveReadout Read(IDriveDevice device, DeviceDescriptor drive);
 }

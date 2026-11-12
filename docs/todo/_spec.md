@@ -1575,7 +1575,8 @@ explains. It changes nothing on any drive, and it deletes nothing.
   Without that signal, the verdict is Unknown. Good reads "No problems reported" and never "healthy".
 - The page always says that drives can fail with no warning, and that backups are still needed.
 - An attribute whose meaning differs by manufacturer is shown as reported and judged by nothing
-  beyond the drive's own threshold, unless the manufacturer is named in `AtaVendorOverlay`.
+  beyond the drive's own threshold, unless a manufacturer's own document states its meaning for that
+  model family. `AtaVendorOverlay` keys each meaning on the families its document names, and cites it.
 - A serial number appears on the page and nowhere else: no record prints it, and a drive's key is a hash.
 
 **Beside the volumes**

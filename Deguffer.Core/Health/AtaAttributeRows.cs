@@ -32,8 +32,8 @@ internal static class AtaAttributeRows
         predictsFailure ? AttributeStanding.Failing : AttributeStanding.Normal,
         predictsFailure ? "predicted" : "not predicted");
 
-    internal static IEnumerable<HealthAttribute> Of(IReadOnlyList<AtaAttribute> attributes, string model) =>
-        attributes.Select(attribute => Row(attribute, model));
+    internal static IEnumerable<HealthAttribute> Of(IReadOnlyList<AtaAttribute> attributes, DeviceDescriptor drive) =>
+        attributes.Select(attribute => Row(attribute, drive));
 
     internal static HealthAttribute SelfTest(SelfTestOutcome outcome) => outcome.Result switch
     {
@@ -56,9 +56,9 @@ internal static class AtaAttributeRows
     private static HealthAttribute SelfTestRow(string reading, string meaning, SelfTestOutcome outcome, AttributeStanding standing) =>
         new(SelfTestKey, "Last self-test", reading, meaning, standing, $"at {outcome.PowerOnHours} hours of use");
 
-    private static HealthAttribute Row(AtaAttribute attribute, string model)
+    private static HealthAttribute Row(AtaAttribute attribute, DeviceDescriptor drive)
     {
-        var known = AtaVendorOverlay.Of(attribute.Id, model) ?? AtaAttributeCatalogue.Of(attribute.Id);
+        var known = AtaVendorOverlay.Of(attribute.Id, drive) ?? AtaAttributeCatalogue.Of(attribute.Id);
         var raw = RawText(attribute);
 
         if (known is null)
