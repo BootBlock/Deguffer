@@ -15,7 +15,8 @@ namespace Deguffer.Core.Tests;
 /// </summary>
 public sealed class DriverStoreProviderTests : IDisposable
 {
-    private const string NetClass = "{4d36e972-e325-11ce-bfc1-08002be10318}";
+    /// <summary>The network adapter class, which a staged package of a test is filed under.</summary>
+    internal const string NetClass = "{4d36e972-e325-11ce-bfc1-08002be10318}";
 
     private readonly TempDirectory _temp = new();
     private readonly FakeUserEnvironment _environment;
@@ -404,40 +405,47 @@ public sealed class DriverStoreProviderTests : IDisposable
     }
 
     /// <summary>
-    /// An update that starts after the survey did still holds every package back, and the survey's
-    /// answer is not read: the gate decides over the answer's use, not over whether it was asked.
+    /// #691: a pass is planned against one reading of what Windows servicing was doing, taken before
+    /// anything in the pass could change it. An update that starts while the store is listed is not
+    /// seen by the preview, which offers what the survey found, and every package step is held by the
+    /// clean, which asks the machine itself.
     /// </summary>
     [Fact]
-    public async Task AnUpdateThatStartsWhileTheStoreIsListedStopsTheSurveyUnread()
+    public async Task AnUpdateThatStartsWhileTheStoreIsListedIsHeldByTheClean()
     {
         var older = Staged("oem1.inf", "2022-01-01");
         DriverPackage[] packages = [older, Staged("oem2.inf", "2024-01-01")];
         var servicing = new FakeWindowsServicing();
-        var handlers = StillMeasuring();
-        var store = new FakeDriverStore(async ct =>
+        var handlers = Removing(older.Folder!);
+        var store = new FakeDriverStore(_ =>
         {
-            await handlers.SurveyStarted.WaitAsync(Hung, ct);
             servicing.IsRestartPending = true;
-            return new DriverStoreListing(packages);
+            return Task.FromResult(new DriverStoreListing(packages));
         });
         var provider = CreateProvider(store, handlers, servicing: servicing);
 
         var plan = await provider.PlanAsync().WaitAsync(Hung);
+        Assert.NotEmpty(plan.Steps);
+        Assert.All(plan.Steps, step => Assert.True(step.HeldWhileUpdating));
 
-        Assert.Empty(plan.Steps);
-        Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(older.Folder, StringComparison.OrdinalIgnoreCase) && p.Withheld == Withholding.UpdateInProgress);
-        Assert.Equal([(DriverStoreProvider.Handler, true)], handlers.Returned);
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.Empty(handlers.Calls);
+        Assert.True(Directory.Exists(older.Folder));
+        Assert.All(result.Steps, step => Assert.Contains("waiting for a restart", step.Message, StringComparison.Ordinal));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
 
     /// <summary>
-    /// An update that finishes between the listing and the plan's use of the answer: no survey was
-    /// started while it ran, so the plan asks Windows' cleanup itself before it offers anything.
+    /// An update unfinished as the pass began holds the whole pass, even where it finishes while the
+    /// store is listed, and Windows' cleanup is not asked. The next pass reads the machine afresh, and
+    /// asks it.
     /// </summary>
     [Fact]
-    public async Task AsksWindowsCleanupWhenItIsNeededWhereAnUpdateHeldTheEarlySurveyBack()
+    public async Task AnUpdateUnfinishedAsThePassBeganHoldsThePassAndTheNextPassAsks()
     {
-        DriverPackage[] packages = [Staged("oem1.inf", "2022-01-01"), Staged("oem2.inf", "2024-01-01")];
+        var older = Staged("oem1.inf", "2022-01-01");
+        DriverPackage[] packages = [older, Staged("oem2.inf", "2024-01-01")];
         var servicing = new FakeWindowsServicing { IsRestartPending = true };
         var handlers = FakeDiskCleanupHandlers.FindingNothing();
         var store = new FakeDriverStore(_ =>
@@ -447,10 +455,19 @@ public sealed class DriverStoreProviderTests : IDisposable
         });
         var provider = CreateProvider(store, handlers, servicing: servicing);
 
-        var plan = await provider.PlanAsync().WaitAsync(Hung);
+        var held = await provider.PlanAsync().WaitAsync(Hung);
 
-        Assert.Empty(plan.Steps);
-        Assert.Contains(plan.Notes, n => n.Message.Contains("finds nothing of its own to clear", StringComparison.Ordinal));
+        Assert.Empty(held.Steps);
+        Assert.True(held.WaitsForAnUpdate);
+        Assert.Contains(held.ProtectedPaths, p =>
+            p.Path.Equals(older.Folder, StringComparison.OrdinalIgnoreCase) && p.Withheld == Withholding.UpdateInProgress);
+        Assert.Empty(handlers.Returned);
+
+        provider.InvalidateCaches();
+        var next = await provider.PlanAsync().WaitAsync(Hung);
+
+        Assert.False(next.WaitsForAnUpdate);
+        Assert.Contains(next.Notes, n => n.Message.Contains("finds nothing of its own to clear", StringComparison.Ordinal));
         Assert.Equal([(DriverStoreProvider.Handler, false)], handlers.Returned);
     }
 

@@ -15,10 +15,16 @@ namespace Deguffer.Core.Safety;
 public interface IWindowsServicing
 {
     /// <summary>
-    /// Whether the servicing stack or Windows Update is waiting for a restart to finish what it
-    /// started. An unreadable answer counts as waiting, because the other reading deletes.
+    /// Which of the keys that say the servicing stack or Windows Update is waiting for a restart to
+    /// finish what it started are present now, each with when it was last written. A key that cannot
+    /// be read counts as present, because the other reading deletes.
+    ///
+    /// <para>Each key rather than a yes or no, because the servicing stack also creates
+    /// <see cref="RestartKey.ServicingRebootPending"/> for the length of Deguffer's own DISM calls, and
+    /// only when it was written can tell that from an update's (see
+    /// <see cref="OwnServicingCalls.Wrote"/>).</para>
     /// </summary>
-    bool IsRestartPending { get; }
+    RestartOwed ReadRestart();
 
     /// <summary>
     /// Whether a restart will rename or delete something inside <paramref name="directory"/>, or the
@@ -60,12 +66,12 @@ public sealed class WindowsServicing : IWindowsServicing
     /// states for a restart under way and for packages still to be installed by one, which are known
     /// by convention rather than documented, and asking them can only hold more back.
     /// </summary>
-    private static readonly string[] RestartKeys =
+    private static readonly (RestartKey Key, string Path)[] RestartKeys =
     [
-        @"SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending",
-        @"SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired",
-        @"SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootInProgress",
-        @"SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\PackagesPending",
+        (RestartKey.ServicingRebootPending, @"SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending"),
+        (RestartKey.WindowsUpdateRebootRequired, @"SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired"),
+        (RestartKey.ServicingRebootInProgress, @"SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootInProgress"),
+        (RestartKey.ServicingPackagesPending, @"SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\PackagesPending"),
     ];
 
     private const string SessionManager = @"SYSTEM\CurrentControlSet\Control\Session Manager";
@@ -76,16 +82,16 @@ public sealed class WindowsServicing : IWindowsServicing
 
     /// <summary>
     /// Read each time it is asked, because a restart clears it and an update sets it while Deguffer is
-    /// open, and a remembered answer would be wrong in the direction that deletes.
+    /// open, and a remembered answer would be wrong in the direction that deletes. A planning pass
+    /// remembers one reading of its own, in <see cref="Execution.PlanningServicing"/>.
     /// </summary>
-    public bool IsRestartPending
+    public RestartOwed ReadRestart()
     {
-        get
-        {
-            using var machine = Machine();
+        using var machine = Machine();
 
-            return RestartKeys.Any(path => Exists(machine, path));
-        }
+        IReadOnlyList<RestartMark> marks = [.. RestartKeys.Select(key => Mark(machine, key.Key, key.Path)).OfType<RestartMark>()];
+
+        return marks.Count == 0 ? RestartOwed.None : new RestartOwed(marks);
     }
 
     public bool HasPendingOperationsIn(string directory)
@@ -145,18 +151,19 @@ public sealed class WindowsServicing : IWindowsServicing
     /// </summary>
     private static RegistryKey Machine() => RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
 
-    private static bool Exists(RegistryKey machine, string path)
+    private static RestartMark? Mark(RegistryKey machine, RestartKey which, string path)
     {
         try
         {
             using var key = machine.OpenSubKey(path);
 
-            return key is not null;
+            return key is null ? null : new RestartMark(which, RegistryKeyWriteTime.Of(key) is { } written ? new DateTimeOffset(written) : null);
         }
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException)
         {
-            // A key that exists and refuses to be read is still a key that exists.
-            return true;
+            // A key that exists and refuses to be read is still a key that exists, and one whose
+            // writer cannot be told.
+            return new RestartMark(which, null);
         }
     }
 

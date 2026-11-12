@@ -42,7 +42,7 @@ public sealed class ComponentStoreEarlyStartTests : IDisposable
     private ICleanupProvider[] Rows(IProcessRunner runner, FakeUserEnvironment? environment = null)
     {
         environment ??= _environment;
-        var analysis = new ComponentStoreAnalysis(_system, runner, new OwnServicingCalls());
+        var analysis = new ComponentStoreAnalysis(_system, runner, new OwnServicingCalls(_servicing));
 
         return
         [

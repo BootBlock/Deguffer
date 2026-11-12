@@ -329,14 +329,15 @@ public sealed class PlanExecutor(
 
     /// <summary>
     /// Why <paramref name="step"/> must not run because Windows is now in the middle of an update, or
-    /// null where nothing says it is. The process table is read again where the snapshot is past
+    /// null where nothing says it is. The restart keys are read afresh, never from the preview's
+    /// <see cref="PlanningServicing"/>, and the process table again where the snapshot is past
     /// <see cref="IUseCheck.ReadingLimit"/>, for the reason the step is asked about at all.
     /// </summary>
     private string? StillUpdating(CleanupStep step)
     {
         _inspector.DiscardOlderThan(IUseCheck.ReadingLimit);
 
-        if (UnfinishedUpdate.HoldsEverything(_servicing, _inspector, (step as RunCommandStep)?.ServicingCalls) is { } everything)
+        if (UnfinishedUpdate.HoldsEverything(ServicingState.Read(_servicing, _inspector), (step as RunCommandStep)?.ServicingCalls) is { } everything)
         {
             return $"Nothing was removed: {everything}";
         }

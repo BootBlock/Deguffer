@@ -235,7 +235,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
 
         var folders = drivers.Superseded.Select(s => s.Package.Folder!).ToList();
 
-        if (UnfinishedUpdate.HoldsEverything(Servicing, Inspector) is { } updating)
+        if (UnfinishedUpdate.HoldsEverything(ServicingThisPass) is { } updating)
         {
             notes.Add(new PlanNote(PlanNoteSeverity.Information, updating));
             return Plan([], notes, [.. kept, .. folders.Select(UnfinishedUpdate.Held)]);
@@ -463,13 +463,14 @@ public sealed class DriverStoreProvider : CleanupProviderBase
     /// handler obeyed within 110 ms. Unelevated, <see cref="DiskCleanupHandlers.Survey"/> answers
     /// before it loads the handler, so the early start costs a registry read.</para>
     ///
-    /// <para><b>Not asked while an update is unfinished</b>, which holds every package back in any
-    /// case: Windows Update installs drivers, and nothing documents what the handler's measurement
-    /// does beside it. The plan asks again before it reads the answer.</para>
+    /// <para><b>Not asked while the pass's reading shows an update unfinished</b>, which holds every
+    /// package back in any case: Windows Update installs drivers, and nothing documents what the
+    /// handler's measurement does beside it. The plan asks the same reading before it reads the
+    /// answer, and the clean asks the machine itself before it runs.</para>
     /// </summary>
     private Task<DriverStoreListing> ListingAsync(CancellationToken ct) => _listing.Get(() =>
     {
-        var survey = UnfinishedUpdate.HoldsEverything(Servicing, Inspector) is null
+        var survey = UnfinishedUpdate.HoldsEverything(ServicingThisPass) is null
             ? new EarlyDiskCleanupSurvey(_handlers, Handler, _volume, Question, ct)
             : null;
 

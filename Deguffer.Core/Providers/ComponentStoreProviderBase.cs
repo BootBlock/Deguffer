@@ -56,7 +56,7 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
             servicing: servicing)
     {
         system ??= SystemDirectories.Current;
-        _servicingCalls = servicingCalls ?? OwnServicingCalls.Current;
+        _servicingCalls = servicingCalls ?? OwnServicingCalls.For(Servicing);
         _analysis = analysis ?? new ComponentStoreAnalysis(system, Runner, _servicingCalls);
         _settlement = settlement ?? new ComponentStoreSettlement(Environment);
         _windows = system.WindowsDirectory;
@@ -97,15 +97,16 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
     /// which DISM refuses at once, so the row's own turn costs nothing there.</para>
     ///
     /// <para><b>The hold is asked before DISM starts, and that also serves the rows that remove an
-    /// update's leftovers by path.</b> Their hold takes any servicing stack for an update, Deguffer's own
-    /// included, and Windows wakes the stack for the analysis. Asking reads the process table the
-    /// providers share for the pass, so it is read before the stack wakes, and those rows read the
-    /// machine as it was before the analysis began.</para>
+    /// update's leftovers by path.</b> Their hold takes any servicing stack or restart key for an update,
+    /// Deguffer's own included, and for as long as the analysis runs Windows runs the stack and keeps
+    /// <see cref="RestartKey.ServicingRebootPending"/> present. Asking reads the pass's one reading of
+    /// both, <see cref="PlanningServicing"/>, so it is read before DISM starts, and every row the hold
+    /// governs is planned against the machine as it was before the analysis began.</para>
     /// </summary>
     public override Task BeginPass(CancellationToken ct) =>
         !Environment.IsAdministrator
         || !LongPath.DirectoryMayExist(_store)
-        || UnfinishedUpdate.HoldsEverything(Servicing, Inspector, _servicingCalls) is not null
+        || UnfinishedUpdate.HoldsEverything(ServicingThisPass, _servicingCalls) is not null
             ? Task.CompletedTask
             : _analysis.ReadingAsync(ct);
 
@@ -130,7 +131,7 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
         }
 
         // Asked before DISM is, because the analysis waits on the servicing stack while it works.
-        if (UnfinishedUpdate.HoldsEverything(Servicing, Inspector, _servicingCalls) is { } updating)
+        if (UnfinishedUpdate.HoldsEverything(ServicingThisPass, _servicingCalls) is { } updating)
         {
             return EmptyPlan(updating) with { ProtectedPaths = [UnfinishedUpdate.Held(_store)] };
         }
