@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Testing;
@@ -6,6 +7,10 @@ namespace Deguffer.Testing;
 /// Files, folders, links, refusals and unplugged drives a test describes. Every drive root answers
 /// unless a test disconnects it, and every other path is absent, as on a machine that has nothing
 /// there.
+///
+/// <para>Safe to ask from several threads at once, as a caller that probes in parallel does
+/// (<c>BrokenLinks.Find</c> through <c>LinkTargets</c>). What a test describes is set before it asks,
+/// so only the counts change while it runs.</para>
 /// </summary>
 public sealed class FakePathProbe : IPathProbe
 {
@@ -15,13 +20,13 @@ public sealed class FakePathProbe : IPathProbe
     private readonly HashSet<string> _disconnected = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>How many times each path was asked about as a file, for a test that counts.</summary>
-    public Dictionary<string, int> FileQueries { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public ConcurrentDictionary<string, int> FileQueries { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>How many times each path was asked about as either kind.</summary>
-    public Dictionary<string, int> EntryQueries { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public ConcurrentDictionary<string, int> EntryQueries { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>How many times each path was asked about as a directory.</summary>
-    public Dictionary<string, int> DirectoryQueries { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public ConcurrentDictionary<string, int> DirectoryQueries { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     public FakePathProbe File(string path)
     {
@@ -83,9 +88,9 @@ public sealed class FakePathProbe : IPathProbe
     }
 
     /// <summary>Count the question, and answer whether Windows refuses it.</summary>
-    private bool Ask(Dictionary<string, int> queries, string path)
+    private bool Ask(ConcurrentDictionary<string, int> queries, string path)
     {
-        queries[path] = queries.GetValueOrDefault(path) + 1;
+        queries.AddOrUpdate(path, 1, static (_, count) => count + 1);
         return _refused.Contains(path);
     }
 
