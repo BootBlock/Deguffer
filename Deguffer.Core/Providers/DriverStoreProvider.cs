@@ -56,7 +56,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
 
     /// <summary>
     /// The listing presence and planning both read, taken once per planning pass (G4): it is a
-    /// subprocess and a SetupAPI call per package.
+    /// subprocess, a read of every device and a SetupAPI call per package.
     /// </summary>
     private readonly PassMemo<Task<DriverStoreListing>> _listing = new();
 
@@ -88,7 +88,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
     {
         _handlers = handlers;
         _system = system ?? SystemDirectories.Current;
-        _store = store ?? new DriverStore(Runner, _system);
+        _store = store ?? new DriverStore(Runner, _system, DeviceDriverReader.Default);
         _repository = Path.Combine(_system.WindowsDirectory, "System32", "DriverStore", "FileRepository");
         _volume = LongPath.Display(_system.SystemDrive);
     }

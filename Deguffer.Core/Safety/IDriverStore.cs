@@ -13,7 +13,9 @@ namespace Deguffer.Core.Safety;
 /// </param>
 /// <param name="Date">The date its <c>DriverVer</c> states.</param>
 /// <param name="Version">The version its <c>DriverVer</c> states.</param>
-/// <param name="InUse">Whether any device is installed with it.</param>
+/// <param name="InUse">
+/// Whether any device, present or not, is installed with it or has it applied as an extension.
+/// </param>
 /// <param name="Folder">
 /// Its folder in the driver store, or null where Windows would not say. Windows names the folder with a
 /// hash, so it is asked rather than derived.
@@ -41,8 +43,9 @@ public sealed record DriverStoreListing(IReadOnlyList<DriverPackage> Packages, i
 /// <summary>
 /// Windows' driver store, read through its own tools.
 ///
-/// <para>Behind an interface because both halves reach the machine: <c>pnputil</c> lists the packages,
-/// and SetupAPI names each one's folder. A test that reached either would plan against the driver
+/// <para>Behind an interface because every part reaches the machine: <c>pnputil</c> lists the packages,
+/// the devices' properties say which are in use, and SetupAPI names each one's folder. A test that
+/// reached any of them would plan against the driver
 /// store of whoever ran the suite, and a plan's §5.2 and §5.6 claims have to be proven against a store
 /// the test built.</para>
 /// </summary>

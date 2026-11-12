@@ -390,7 +390,7 @@ scan leaves about 600 MB committed (#738), and Classic names draw through a seco
 | #710 | MFT attribute lists are read one cluster at a time. Merging touching clusters halves the reads. |
 | #698 | The Topaz row reads 383 uninstall keys before it probes its folder: 28-42 ms. |
 | #700 | The Capture One row examines its sessions twice per pass (code-read estimate). |
-| #693 | pnputil `/devices` costs about 1 s of kernel processor time per pass. Waits on a decision. |
+| #693 | pnputil `/devices` costs about 1 s of kernel processor time per pass. Done: pnputil lists the packages without `/devices`, and which are in use comes from every device's `DEVPKEY_Device_DriverInfPath` and `DEVPKEY_Device_ExtendedConfigurationIds`, phantoms included, read in process (`DeviceDrivers`). Where a device does not read, or the store holds an extension package and no device reports its extensions, pnputil is asked again with `/devices`. On one machine, unelevated, the reading took 12-23 ms for 252 devices and named the same 31 packages in use as pnputil, 3 of them extensions, and the listing fell from 1,585 ms to 290 ms. |
 | #699 | Windows.old is measured in full (96-172 s elevated) to ask whether it is empty. Waits on a decision. |
 | #702 | The Classic names hold 79-83% of a core while a maximized map pans. Waits on a decision. |
 
@@ -398,7 +398,7 @@ scan leaves about 600 MB committed (#738), and Classic names draw through a seco
 
 | Issue | The decision |
 | --- | --- |
-| #693 | Keep pnputil's `/devices` answer, or read device properties in process and accept that extension INFs need their own source. `safety`. |
+| #693 | Keep pnputil's `/devices` answer, or read device properties in process and accept that extension INFs need their own source. `safety`. Decided: read in process, with `DEVPKEY_Device_ExtendedConfigurationIds` as the extension INFs' source, and pnputil's `/devices` answer wherever that reading cannot vouch for every package. |
 | #696 | Keep transcript readings across passes, keyed by length and write time, against the recorded "read afresh" (#531). |
 | #699 | Ask Disk Cleanup's handler for emptiness without its full measure, or take Windows.old's size from the scanner. `safety`. |
 | #702 | The Classic names' look against their cost: two expressions and an image source per name. |
