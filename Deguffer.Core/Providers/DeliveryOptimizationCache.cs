@@ -1,24 +1,23 @@
-using System.Globalization;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Providers;
 
 /// <summary>
-/// What Windows says its Delivery Optimization cache holds, and the command that clears it, both
-/// through Windows' own <c>DeliveryOptimization</c> PowerShell module.
+/// What Windows says its Delivery Optimization cache holds, and the command that clears it.
 ///
-/// <para><b>The module is the only route that answers unelevated.</b> The cache is in the Network
-/// Service profile, which refuses the signed-in account a listing, and a policy can move it to
-/// another drive. <c>Get-DeliveryOptimizationPerfSnap</c> reports <c>CacheSizeBytes</c> without
-/// elevation and without walking anything, so the figure is Windows' own and exact.</para>
+/// <para><b>The figure is the service's own.</b> The cache is in the Network Service profile, which
+/// refuses the signed-in account a listing, and a policy can move it to another drive, so nothing
+/// Deguffer could walk gives its size. <see cref="IDeliveryOptimizationStatus"/> asks the service, which
+/// answers without elevation and without walking anything, so the figure is exact.</para>
 ///
-/// <para><b>Windows PowerShell, from the Windows directory.</b> The module ships with Windows
-/// PowerShell under <c>System32</c>, so that host is named by where Windows put it rather than found
-/// on <c>PATH</c>, and through <see cref="NativeSystemTool"/>, so a 32-bit Deguffer runs the host and
-/// reads the module built for the running Windows rather than their 32-bit copies. The in-box module
-/// loads under every execution policy, including <c>Restricted</c>, which was observed on Windows 11
-/// 24H2, so no policy is overridden.</para>
+/// <para><b>The clear is Windows PowerShell's, from the Windows directory</b> (§5.1). The
+/// <c>DeliveryOptimization</c> module ships with Windows PowerShell under <c>System32</c>, so that host
+/// is named by where Windows put it rather than found on <c>PATH</c>, and through
+/// <see cref="NativeSystemTool"/>, so a 32-bit Deguffer runs the host and reads the module built for the
+/// running Windows rather than their 32-bit copies. The in-box module loads under every execution
+/// policy, including <c>Restricted</c>, which was observed on Windows 11 24H2, so no policy is
+/// overridden.</para>
 /// </summary>
 internal sealed class DeliveryOptimizationCache : IToolMeasurement
 {
@@ -31,27 +30,18 @@ internal sealed class DeliveryOptimizationCache : IToolMeasurement
     public const string ClearArguments =
         "-NoProfile -NonInteractive -Command \"Delete-DeliveryOptimizationCache -Force\"";
 
-    /// <summary>
-    /// The figure, as a string so it reaches the output in the invariant form Windows PowerShell
-    /// converts numbers with, whatever the console's culture. The warning the cmdlet writes when no
-    /// transfer is running is silenced, because it is not a failure.
-    /// </summary>
-    public const string MeasureArguments =
-        "-NoProfile -NonInteractive -Command "
-        + "\"[string](Get-DeliveryOptimizationPerfSnap -WarningAction SilentlyContinue).CacheSizeBytes\"";
+    private readonly IDeliveryOptimizationStatus _status;
 
-    private readonly IProcessRunner _runner;
-
-    public DeliveryOptimizationCache(ISystemDirectories system, IProcessRunner runner)
+    public DeliveryOptimizationCache(ISystemDirectories system, IDeliveryOptimizationStatus status)
     {
-        _runner = runner;
+        _status = status;
 
         var host = NativeSystemTool.In(system, Path.Combine("WindowsPowerShell", "v1.0"));
         PowerShell = Path.Combine(host, "powershell.exe");
         ModuleManifest = Path.Combine(host, "Modules", "DeliveryOptimization", "DeliveryOptimization.psd1");
     }
 
-    /// <summary>Windows PowerShell, which runs both commands.</summary>
+    /// <summary>Windows PowerShell, which runs the clear.</summary>
     public string PowerShell { get; }
 
     /// <summary>
@@ -60,36 +50,8 @@ internal sealed class DeliveryOptimizationCache : IToolMeasurement
     /// </summary>
     public string ModuleManifest { get; }
 
-    /// <summary>Asks Windows what the cache holds, and says why where it would not answer.</summary>
-    public async Task<DeliveryOptimizationReading> ReadAsync(CancellationToken ct)
-    {
-        var outcome = await _runner.RunAsync(PowerShell, MeasureArguments, ToolRun.Query, ct).ConfigureAwait(false);
-
-        if (!outcome.Succeeded)
-        {
-            return DeliveryOptimizationReading.Unanswered(outcome.Message);
-        }
-
-        // Anything but one non-negative whole number is not an answer. An empty property, which is
-        // what the snapshot holds when the service reports no status, arrives as an empty line.
-        return long.TryParse(
-                outcome.StandardOutput.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var bytes)
-            ? DeliveryOptimizationReading.Of(bytes)
-            : DeliveryOptimizationReading.Unanswered(
-                string.IsNullOrWhiteSpace(outcome.StandardOutput)
-                    ? "Windows gave no figure."
-                    : $"Windows answered '{outcome.StandardOutput.Trim()}', which is not a size.");
-    }
+    /// <summary>Asks Windows what the cache holds, off the caller's thread, and says why where it would not answer.</summary>
+    public Task<DeliveryOptimizationReading> ReadAsync(CancellationToken ct) => Task.Run(() => _status.Read(ct), ct);
 
     public async Task<long?> MeasureAsync(MeasuredWhen when, CancellationToken ct) => (await ReadAsync(ct).ConfigureAwait(false)).Bytes;
-}
-
-/// <summary>What Windows said its Delivery Optimization cache holds.</summary>
-/// <param name="Bytes">The cache's size, or null where Windows did not answer.</param>
-/// <param name="Failure">Why Windows did not answer, written for the user, or null where it did.</param>
-internal sealed record DeliveryOptimizationReading(long? Bytes, string? Failure)
-{
-    public static DeliveryOptimizationReading Of(long bytes) => new(bytes, null);
-
-    public static DeliveryOptimizationReading Unanswered(string why) => new(null, why);
 }

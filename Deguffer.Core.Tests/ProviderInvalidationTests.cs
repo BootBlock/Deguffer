@@ -332,6 +332,9 @@ public sealed class ProviderInvalidationTests : IDisposable
         : parameter == typeof(IDiskCleanupHandlers) ? FakeDiskCleanupHandlers.Windows()
         : parameter == typeof(ISystemProtection) ? new FakeSystemProtection()
 
+        // Never the real one: it would read the Delivery Optimization cache of whoever ran the suite.
+        : parameter == typeof(IDeliveryOptimizationStatus) ? FakeDeliveryOptimizationStatus.Reporting(0)
+
         // Never the real one: it would remove the profiles of the machine that ran the suite.
         : parameter == typeof(IUserProfiles) ? new FakeUserProfiles(Path.Combine(_temp.Path, "Users"))
 

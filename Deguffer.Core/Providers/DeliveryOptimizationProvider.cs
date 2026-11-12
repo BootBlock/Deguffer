@@ -46,7 +46,8 @@ public sealed class DeliveryOptimizationProvider : CleanupProviderBase
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
-        ISystemDirectories? system = null)
+        ISystemDirectories? system = null,
+        IDeliveryOptimizationStatus? status = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
@@ -54,7 +55,7 @@ public sealed class DeliveryOptimizationProvider : CleanupProviderBase
             scanner)
     {
         _system = system ?? SystemDirectories.Current;
-        _cache = new DeliveryOptimizationCache(_system, Runner);
+        _cache = new DeliveryOptimizationCache(_system, status ?? WindowsDeliveryOptimizationStatus.Machine);
         _serviceFolder = Path.Combine(
             _system.WindowsDirectory, "ServiceProfiles", "NetworkService", "AppData", "Local", "Microsoft",
             "Windows", "DeliveryOptimization");
