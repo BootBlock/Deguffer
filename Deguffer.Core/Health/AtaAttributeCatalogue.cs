@@ -40,10 +40,23 @@ internal enum SmartRawFormat
 
     /// <summary>Manufacturers use these bytes differently, so they are shown as they are and judged by nothing.</summary>
     Opaque,
+
+    /// <summary>The raw value is one of the codes a manufacturer's document lists, each with its own meaning.</summary>
+    Status,
 }
 
 /// <summary>What the page knows about one attribute.</summary>
-internal sealed record AtaAttributeDefinition(string Name, string Explanation, SmartRawFormat Format, AttributeRole Role);
+internal record AtaAttributeDefinition(string Name, string Explanation, SmartRawFormat Format, AttributeRole Role);
+
+/// <summary>What one documented status code means, and whether it is a concern.</summary>
+internal sealed record AtaStatusCode(string Reading, string Meaning, AttributeStanding Standing);
+
+/// <summary>
+/// An attribute whose raw value is a status code. A code the document does not list is shown as
+/// reported and judged by nothing, because guessing a meaning would mislead.
+/// </summary>
+internal sealed record AtaStatusDefinition(string Name, string Explanation, FrozenDictionary<ulong, AtaStatusCode> Codes)
+    : AtaAttributeDefinition(Name, Explanation, SmartRawFormat.Status, AttributeRole.Information);
 
 /// <summary>
 /// The common ATA SMART attributes, written from manufacturers' public documentation. An ID absent
