@@ -1,8 +1,6 @@
-using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
-using Deguffer.Core.Scanning;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
@@ -12,25 +10,14 @@ namespace Deguffer.Core.Tests;
 ///
 /// <para>The layouts are the ones Cargo 1.98 was measured writing: a profile holds <c>.cargo-lock</c>
 /// and <c>.fingerprint</c>, a target triple's folder holds Cargo's own tag and its profiles, and a
-/// project's build scripts keep their own output beside them. No Rust toolchain runs for any of it.</para>
+/// project's build scripts keep their own output beside them. No Rust toolchain runs for any of it.
+/// The profile layout Cargo writes from 1.100 is in <see cref="CargoBuildUnitLayoutTests"/>.</para>
 /// </summary>
 public sealed class CargoTargetLayoutTests : IDisposable
 {
-    private const string CargoTag =
-        "Signature: 8a477f597d28d172789f06886806bc55\n# This file is a cache directory tag created by cargo.\n"
-        + "# For information about cache directory tags see https://bford.info/cachedir/\n";
+    private readonly CargoTargetFixture _cargo = new();
 
-    private readonly TempDirectory _temp = new();
-    private readonly FakeUserEnvironment _environment;
-    private readonly SourceRootStore _roots;
-
-    public CargoTargetLayoutTests()
-    {
-        _environment = new FakeUserEnvironment(_temp.Path);
-        _roots = new SourceRootStore(_environment);
-    }
-
-    public void Dispose() => _temp.Dispose();
+    public void Dispose() => _cargo.Dispose();
 
     // ---- §5.2: recognised children only --------------------------------------------------------
 
@@ -42,7 +29,7 @@ public sealed class CargoTargetLayoutTests : IDisposable
     [Fact]
     public async Task WhatABuildScriptKeepsInTargetSurvivesTheClean()
     {
-        var target = CargoProject("app");
+        var target = _cargo.CargoProject("app");
         var archives = Directory.CreateDirectory(Path.Combine(target, "dist-check")).FullName;
         File.WriteAllText(Path.Combine(archives, "app-1.0.0-x64.zip"), "release");
         var shots = Directory.CreateDirectory(Path.Combine(target, "shots")).FullName;
@@ -51,7 +38,7 @@ public sealed class CargoTargetLayoutTests : IDisposable
         File.WriteAllText(Path.Combine(toolchain, "zig.exe"), "zig");
         BuildDirectoryFixture.CreateCargoProfile(target, "release");
 
-        var provider = BuildOutput();
+        var provider = _cargo.BuildOutput();
         var plan = await provider.PlanAsync();
 
         Assert.Equal(
@@ -83,14 +70,14 @@ public sealed class CargoTargetLayoutTests : IDisposable
     [Fact]
     public async Task AProfileIsRecognisedByWhatCargoWritesIntoItNotByItsName()
     {
-        var target = CargoProject("app");
+        var target = _cargo.CargoProject("app");
         BuildDirectoryFixture.CreateCargoProfile(target, "profiling");
         var lookalike = Directory.CreateDirectory(Path.Combine(target, "release")).FullName;
         File.WriteAllText(Path.Combine(lookalike, ".cargo-lock"), string.Empty);
         var noLock = Directory.CreateDirectory(Path.Combine(target, "bench")).FullName;
         Directory.CreateDirectory(Path.Combine(noLock, ".fingerprint"));
 
-        var plan = await BuildOutput().PlanAsync();
+        var plan = await _cargo.BuildOutput().PlanAsync();
 
         Assert.Equal(
             [Path.Combine(target, "debug"), Path.Combine(target, "profiling")],
@@ -107,14 +94,14 @@ public sealed class CargoTargetLayoutTests : IDisposable
     [Fact]
     public async Task ATargetTriplesFolderIsClassifiedLikeTheTargetItIsIn()
     {
-        var target = CargoProject("app");
+        var target = _cargo.CargoProject("app");
         var triple = Directory.CreateDirectory(Path.Combine(target, "x86_64-pc-windows-msvc")).FullName;
-        File.WriteAllText(Path.Combine(triple, "CACHEDIR.TAG"), CargoTag);
+        File.WriteAllText(Path.Combine(triple, "CACHEDIR.TAG"), CargoTargetFixture.CargoTag);
         var profile = BuildDirectoryFixture.CreateCargoProfile(triple, "release");
         var scratch = Directory.CreateDirectory(Path.Combine(triple, "tmp")).FullName;
         var stray = Directory.CreateDirectory(Path.Combine(triple, "installer")).FullName;
 
-        var plan = await BuildOutput().PlanAsync();
+        var plan = await _cargo.BuildOutput().PlanAsync();
 
         Assert.Equal(
             [Path.Combine(target, "debug"), profile, scratch],
@@ -132,13 +119,13 @@ public sealed class CargoTargetLayoutTests : IDisposable
     [Fact]
     public async Task AFolderTaggedByAnotherToolIsNotLookedInside()
     {
-        var target = CargoProject("app");
+        var target = _cargo.CargoProject("app");
         var cache = Directory.CreateDirectory(Path.Combine(target, "zig-cache")).FullName;
         File.WriteAllText(Path.Combine(cache, "CACHEDIR.TAG"), "Signature: 8a477f597d28d172789f06886806bc55\n");
         Directory.CreateDirectory(Path.Combine(cache, "tmp"));
         BuildDirectoryFixture.CreateCargoProfile(cache, "debug");
 
-        var plan = await BuildOutput().PlanAsync();
+        var plan = await _cargo.BuildOutput().PlanAsync();
 
         Assert.Equal([Path.Combine(target, "debug")], plan.TargetedPaths);
         Assert.Contains(plan.ProtectedPaths, p => p.Path == cache);
@@ -151,14 +138,14 @@ public sealed class CargoTargetLayoutTests : IDisposable
     [Fact]
     public async Task DocumentationIsOfferedByItsEvidenceAndAPackagedCrateIsNot()
     {
-        var target = CargoProject("app");
+        var target = _cargo.CargoProject("app");
         var doc = Directory.CreateDirectory(Path.Combine(target, "doc")).FullName;
         File.WriteAllText(Path.Combine(doc, ".lock"), string.Empty);
         File.WriteAllText(Path.Combine(doc, "crates.js"), "window.ALL_CRATES = [\"app\"];");
         var package = Directory.CreateDirectory(Path.Combine(target, "package")).FullName;
         File.WriteAllText(Path.Combine(package, "app-0.1.0.crate"), "crate");
 
-        var plan = await BuildOutput().PlanAsync();
+        var plan = await _cargo.BuildOutput().PlanAsync();
 
         Assert.Equal(
             [Path.Combine(target, "debug"), doc],
@@ -169,11 +156,11 @@ public sealed class CargoTargetLayoutTests : IDisposable
     [Fact]
     public async Task AFolderNamedDocWithoutRustdocsIndexIsLeftAlone()
     {
-        var target = CargoProject("app");
+        var target = _cargo.CargoProject("app");
         var doc = Directory.CreateDirectory(Path.Combine(target, "doc")).FullName;
         File.WriteAllText(Path.Combine(doc, ".lock"), string.Empty);
 
-        var plan = await BuildOutput().PlanAsync();
+        var plan = await _cargo.BuildOutput().PlanAsync();
 
         Assert.Equal([Path.Combine(target, "debug")], plan.TargetedPaths);
         Assert.Contains(plan.ProtectedPaths, p => p.Path == doc);
@@ -186,12 +173,12 @@ public sealed class CargoTargetLayoutTests : IDisposable
     [Fact]
     public async Task ALinkInsideTargetIsNamedAndNotFollowed()
     {
-        var target = CargoProject("app");
-        var elsewhere = BuildDirectoryFixture.CreateCargoProfile(_temp.CreateDirectory("elsewhere"), "release");
+        var target = _cargo.CargoProject("app");
+        var elsewhere = BuildDirectoryFixture.CreateCargoProfile(_cargo.Temp.CreateDirectory("elsewhere"), "release");
         var link = Path.Combine(target, "release");
         Junction.ToDirectory(link, elsewhere);
 
-        var provider = BuildOutput();
+        var provider = _cargo.BuildOutput();
         var plan = await provider.PlanAsync();
 
         Assert.Equal([Path.Combine(target, "debug")], plan.TargetedPaths);
@@ -208,7 +195,7 @@ public sealed class CargoTargetLayoutTests : IDisposable
     [Fact]
     public async Task ANestedTargetDirectoryPastTheLimitIsLeftAlone()
     {
-        var target = CargoProject("app");
+        var target = _cargo.CargoProject("app");
         var directory = target;
         var names = new List<string>();
 
@@ -216,11 +203,11 @@ public sealed class CargoTargetLayoutTests : IDisposable
         {
             names.Add($"nested{level}");
             directory = Directory.CreateDirectory(Path.Combine(directory, $"nested{level}")).FullName;
-            File.WriteAllText(Path.Combine(directory, "CACHEDIR.TAG"), CargoTag);
+            File.WriteAllText(Path.Combine(directory, "CACHEDIR.TAG"), CargoTargetFixture.CargoTag);
             BuildDirectoryFixture.CreateCargoProfile(directory, "debug");
         }
 
-        var plan = await BuildOutput().PlanAsync();
+        var plan = await _cargo.BuildOutput().PlanAsync();
 
         Assert.Equal(CargoTargetLayout.MaximumNesting + 1, plan.TargetedPaths.Count);
         Assert.DoesNotContain(Path.Combine(directory, "debug"), plan.TargetedPaths);
@@ -234,14 +221,14 @@ public sealed class CargoTargetLayoutTests : IDisposable
     [Fact]
     public async Task ANestedTargetDirectoryThatCannotBeListedIsSaidSo()
     {
-        var target = CargoProject("app");
+        var target = _cargo.CargoProject("app");
         var triple = Directory.CreateDirectory(Path.Combine(target, "aarch64-pc-windows-msvc")).FullName;
-        File.WriteAllText(Path.Combine(triple, "CACHEDIR.TAG"), CargoTag);
+        File.WriteAllText(Path.Combine(triple, "CACHEDIR.TAG"), CargoTargetFixture.CargoTag);
         BuildDirectoryFixture.CreateCargoProfile(triple, "release");
 
         using var denied = new DeniedDirectory(triple);
 
-        var plan = await BuildOutput().PlanAsync();
+        var plan = await _cargo.BuildOutput().PlanAsync();
 
         Assert.Equal([Path.Combine(target, "debug")], plan.TargetedPaths);
         Assert.True(plan.HasUnreadableRoot);
@@ -255,11 +242,11 @@ public sealed class CargoTargetLayoutTests : IDisposable
     [Fact]
     public async Task TheFilesBesideCargosBuildsAreNamedAsSurvivors()
     {
-        var target = CargoProject("app");
+        var target = _cargo.CargoProject("app");
         var info = Path.Combine(target, ".rustc_info.json");
         File.WriteAllText(info, "{}");
 
-        var provider = BuildOutput();
+        var provider = _cargo.BuildOutput();
         var plan = await provider.PlanAsync();
 
         Assert.Contains(plan.ProtectedPaths, p => p.Path == Path.Combine(target, "CACHEDIR.TAG") && p.PresenceBefore is PathPresence.Present);
@@ -280,14 +267,14 @@ public sealed class CargoTargetLayoutTests : IDisposable
     [Fact]
     public async Task AProfileWhoseIncrementalCacheCannotBeDescribedIsOfferedByNeitherRow()
     {
-        var target = CargoProject("app", writeIncremental: true);
+        var target = _cargo.CargoProject("app", writeIncremental: true);
         var debug = Path.Combine(target, "debug");
         BuildDirectoryFixture.CreateCargoProfile(target, "release");
 
         using var denied = DeniedDirectory.WithUnreadableAttributes(Path.Combine(debug, "incremental"));
 
-        var outputPlan = await BuildOutput().PlanAsync();
-        var incrementalPlan = await Incremental().PlanAsync();
+        var outputPlan = await _cargo.BuildOutput().PlanAsync();
+        var incrementalPlan = await _cargo.Incremental().PlanAsync();
 
         Assert.Equal([Path.Combine(target, "release")], outputPlan.TargetedPaths);
         Assert.Empty(incrementalPlan.TargetedPaths);
@@ -303,10 +290,10 @@ public sealed class CargoTargetLayoutTests : IDisposable
     [Fact]
     public async Task BothRowsDivideOneReadingOfEachDirectoryAPass()
     {
-        var target = CargoProject("app", writeIncremental: true);
+        var target = _cargo.CargoProject("app", writeIncremental: true);
         var survey = new CargoTargetSurvey();
-        var output = BuildOutput(survey);
-        var incremental = Incremental(survey);
+        var output = _cargo.BuildOutput(survey);
+        var incremental = _cargo.Incremental(survey);
 
         output.InvalidateCaches();
         incremental.InvalidateCaches();
@@ -331,12 +318,12 @@ public sealed class CargoTargetLayoutTests : IDisposable
     [Fact]
     public async Task EachProfilesIncrementalCacheIsOfferedOnItsOwnRowAndOnlyThere()
     {
-        var target = CargoProject("app", writeIncremental: true);
+        var target = _cargo.CargoProject("app", writeIncremental: true);
         var debug = Path.Combine(target, "debug");
         var incremental = Path.Combine(debug, "incremental");
 
-        var outputPlan = await BuildOutput().PlanAsync();
-        var incrementalPlan = await Incremental().PlanAsync();
+        var outputPlan = await _cargo.BuildOutput().PlanAsync();
+        var incrementalPlan = await _cargo.Incremental().PlanAsync();
 
         var profileStep = Assert.IsType<ClearDirectoryStep>(Assert.Single(outputPlan.Steps));
         Assert.Equal(debug, profileStep.Path);
@@ -356,10 +343,10 @@ public sealed class CargoTargetLayoutTests : IDisposable
     [Fact]
     public async Task TheBuildOutputRowAloneLeavesTheIncrementalCache()
     {
-        var target = CargoProject("app", writeIncremental: true);
+        var target = _cargo.CargoProject("app", writeIncremental: true);
         var debug = Path.Combine(target, "debug");
 
-        var provider = BuildOutput();
+        var provider = _cargo.BuildOutput();
         var result = await provider.ExecuteAsync(await provider.PlanAsync());
 
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
@@ -372,10 +359,10 @@ public sealed class CargoTargetLayoutTests : IDisposable
     [Fact]
     public async Task TheIncrementalRowAloneLeavesTheBuild()
     {
-        var target = CargoProject("app", writeIncremental: true);
+        var target = _cargo.CargoProject("app", writeIncremental: true);
         var debug = Path.Combine(target, "debug");
 
-        var provider = Incremental();
+        var provider = _cargo.Incremental();
         var result = await provider.ExecuteAsync(await provider.PlanAsync());
 
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
@@ -393,11 +380,11 @@ public sealed class CargoTargetLayoutTests : IDisposable
     [InlineData(false)]
     public async Task BothRowsInOneRunEachVerify(bool incrementalFirst)
     {
-        var target = CargoProject("app", writeIncremental: true);
+        var target = _cargo.CargoProject("app", writeIncremental: true);
         var archives = Directory.CreateDirectory(Path.Combine(target, "dist-check")).FullName;
 
-        var output = BuildOutput();
-        var incremental = Incremental();
+        var output = _cargo.BuildOutput();
+        var incremental = _cargo.Incremental();
         var outputPlan = await output.PlanAsync();
         var incrementalPlan = await incremental.PlanAsync();
 
@@ -427,15 +414,15 @@ public sealed class CargoTargetLayoutTests : IDisposable
     [Fact]
     public async Task AnIncrementalCacheThatIsALinkIsNotOffered()
     {
-        var target = CargoProject("app");
+        var target = _cargo.CargoProject("app");
         var debug = Path.Combine(target, "debug");
-        var elsewhere = _temp.CreateDirectory("moved-incremental");
+        var elsewhere = _cargo.Temp.CreateDirectory("moved-incremental");
         File.WriteAllText(Path.Combine(elsewhere, "query-cache.bin"), "state");
         Junction.ToDirectory(Path.Combine(debug, "incremental"), elsewhere);
 
-        Assert.Empty((await Incremental().PlanAsync()).Steps);
+        Assert.Empty((await _cargo.Incremental().PlanAsync()).Steps);
 
-        var provider = BuildOutput();
+        var provider = _cargo.BuildOutput();
         var plan = await provider.PlanAsync();
 
         Assert.IsType<DeleteDirectoryStep>(Assert.Single(plan.Steps));
@@ -448,39 +435,9 @@ public sealed class CargoTargetLayoutTests : IDisposable
     [Fact]
     public async Task CleanedPlacesCoverEveryPathTheIncrementalRowCleans()
     {
-        CargoProject("app", writeIncremental: true);
+        _cargo.CargoProject("app", writeIncremental: true);
 
-        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(Incremental()));
-        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(BuildOutput()));
-    }
-
-    // ---- helpers -------------------------------------------------------------------------------
-
-    private string CargoProject(string name, bool writeIncremental = false)
-    {
-        var root = _temp.CreateDirectory("src");
-        _roots.Save([new SourceRoot(root)]);
-
-        var target = BuildDirectoryFixture.CreateCargoProject(Path.Combine(root, name), writeIncremental: writeIncremental);
-        File.WriteAllText(Path.Combine(target, "CACHEDIR.TAG"), CargoTag);
-        return target;
-    }
-
-    private CargoTargetProvider BuildOutput(CargoTargetSurvey? survey = null)
-    {
-        var scanner = new FakeDirectoryScanner();
-
-        return new CargoTargetProvider(
-            _roots, new SourceDirectoryDiscovery(scanner, new FakeVolumeInventory()), FakeLiveTreeInspector.NothingLive,
-            _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, scanner, targets: survey);
-    }
-
-    private CargoIncrementalProvider Incremental(CargoTargetSurvey? survey = null)
-    {
-        var scanner = new FakeDirectoryScanner();
-
-        return new CargoIncrementalProvider(
-            _roots, new SourceDirectoryDiscovery(scanner, new FakeVolumeInventory()), FakeLiveTreeInspector.NothingLive,
-            _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, scanner, targets: survey);
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(_cargo.Incremental()));
+        Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(_cargo.BuildOutput()));
     }
 }

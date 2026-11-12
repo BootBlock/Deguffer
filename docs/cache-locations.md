@@ -7524,7 +7524,7 @@ only the children Cargo is recognised to have written, each by what Cargo puts i
 
 | Inside `target` | Recognised by |
 | --- | --- |
-| A profile (`debug`, `release`, or a custom profile's own name) | The `.cargo-lock` file and `.fingerprint` folder Cargo writes into every profile |
+| A profile (`debug`, `release`, or a custom profile's own name) | The `.cargo-lock` file Cargo writes into every profile, beside the fingerprints of either build layout: the `.fingerprint` folder Cargo wrote before 1.100, or the `fingerprint` folder each build unit keeps in `build\<package>\<hash>` from 1.100 on. A profile both layouts wrote is one profile |
 | A target platform's folder, such as `x86_64-pc-windows-msvc`, or a whole target folder another tool pointed Cargo at | A `CACHEDIR.TAG` carrying Cargo's own line, "created by cargo". Its children are recognised the same way, two levels deep |
 | `doc` | The `.lock` Cargo takes on it and the `crates.js` index rustdoc writes |
 | `tmp` | Its name: it is the scratch folder Cargo creates for integration tests as `CARGO_TARGET_TMPDIR` |
@@ -7533,6 +7533,12 @@ Everything else in `target` stays and is named as left alone, and so does `targe
 includes `package`, which holds the `.crate` archive `cargo publish` uploads, the small files at the
 top of `target`, and any link. Each profile's `incremental` folder is a row of its own, Rust
 incremental compilation caches, so the build output row empties each profile around it.
+
+Cargo calls its build layout internal and subject to change, so a profile a later Cargo lays out
+differently again is left alone and named until Deguffer learns it. A folder holding `.cargo-lock`
+and no fingerprints is left alone with its own reason. That is what Cargo leaves in `target` when
+`build.build-dir` moves its build folder elsewhere: the finished programs, beside a lock that alone
+does not show the rest is Cargo's. A build folder moved that way is not found by either Rust row.
 
 A profile is Cargo's own output folder and is not looked inside further, so anything another tool
 writes into one goes with it. Tauri's bundler is the known case: it writes the installers it builds
