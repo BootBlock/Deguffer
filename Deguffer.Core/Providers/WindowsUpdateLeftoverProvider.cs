@@ -130,7 +130,7 @@ public sealed class WindowsUpdateLeftoverProvider : CleanupProviderBase
 
         var candidates = new List<DeletionTarget>(scan.Targets.Count);
 
-        if (UnfinishedUpdate.HoldsEverything(Servicing, Inspector) is { } everything)
+        if (UnfinishedUpdate.HoldsEverything(ServicingThisPass) is { } everything)
         {
             notes.Add(new PlanNote(PlanNoteSeverity.Information, everything));
             held.AddRange(scan.Targets.Select(t => UnfinishedUpdate.Held(t.Path)));

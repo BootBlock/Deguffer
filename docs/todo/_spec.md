@@ -1674,8 +1674,15 @@ Tier 3 row of its own rather than a switch on the first. Both are sized by DISM'
 what a clean freed is DISM's figure immediately before and after the command. Neither is planned or
 run while an update is unfinished. Windows starts its servicing stack for Deguffer's own analysis too
 and keeps it running for minutes, so a servicing process created while one of Deguffer's DISM calls
-ran is not taken for an update, and one of unknown creation time is. Deleting from the store by
-path, and everything else in this section, stays excluded.
+ran is not taken for an update, and one of unknown creation time is. For as long as DISM runs,
+Windows also keeps the servicing stack's `RebootPending` key, one of the keys that say a restart is
+owed. A key carries no owner, so it is Deguffer's own only where it was last written while one of
+Deguffer's DISM calls ran and no restart was owed as that call began. Every other restart key, and
+this one written at any other time or at an unknown time, holds. A planning pass reads the restart
+keys and the servicing processes once, before it starts DISM's analysis, and plans every row the
+update hold governs against that one reading, so its own analysis holds none of them. The clean
+reads both again before every step the hold governs. Deleting from the store by path, and
+everything else in this section, stays excluded.
 
 **Restore points are offered on the component store's terms: only through Windows' own route, and
 never by path.** They are kept as shadow copies in `System Volume Information`, which no folder shows

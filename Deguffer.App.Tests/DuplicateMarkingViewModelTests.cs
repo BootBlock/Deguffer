@@ -25,12 +25,12 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
     private static DuplicateGroup Group(params DuplicateCandidate[] copies) => DuplicateScene.Group(MatchCriteria.Content, copies);
 
     private static DuplicateCopyRow Row(DuplicatesViewModel page, DuplicateCandidate copy) =>
-        page.Groups.SelectMany(group => group.Copies).Single(row => row.Copy.Identity == copy.Identity);
+        page.Groups.SelectMany(group => group).Single(row => row.Copy.Identity == copy.Identity);
 
     private static void Toggle(DuplicatesViewModel page, DuplicateCandidate copy) => Row(page, copy).ToggleCommand.Execute(null);
 
     private static HashSet<FileIdentity> MarkedOn(DuplicatesViewModel page) =>
-        [.. page.Groups.SelectMany(group => group.Copies).Where(row => row.IsMarked).Select(row => row.Copy.Identity)];
+        [.. page.Groups.SelectMany(group => group).Where(row => row.IsMarked).Select(row => row.Copy.Identity)];
 
     /// <summary>Whether each rule, removal and mark the page offers is open.</summary>
     private static bool[] Open(DuplicatesViewModel page) =>
@@ -38,7 +38,7 @@ public sealed class DuplicateMarkingViewModelTests : DuplicatesPageScene
         page.Marking.RunRuleCommand.CanExecute(null),
         page.Marking.MoveToRecycleBinCommand.CanExecute(null),
         page.Marking.DeletePermanentlyCommand.CanExecute(null),
-        page.Groups[0].Copies[0].ToggleCommand.CanExecute(null),
+        page.Groups[0][0].ToggleCommand.CanExecute(null),
     ];
 
     /// <summary>

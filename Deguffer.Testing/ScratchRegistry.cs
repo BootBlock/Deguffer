@@ -1,7 +1,6 @@
-using System.Runtime.InteropServices;
 using System.Security;
+using Deguffer.Core.Safety;
 using Microsoft.Win32;
-using Microsoft.Win32.SafeHandles;
 
 namespace Deguffer.Testing;
 
@@ -30,8 +29,6 @@ internal static class ScratchRegistry
 
     /// <summary>What every scratch key's name starts with, before this run's own identifier.</summary>
     internal const string NamePrefix = "Deguffer.Tests.";
-
-    private const int ErrorSuccess = 0;
 
     private static readonly Lazy<bool> Swept = new(() =>
     {
@@ -109,39 +106,12 @@ internal static class ScratchRegistry
         {
             using var key = parent.OpenSubKey(name);
 
-            return key is null ? null : LastWriteTimeUtc(key);
+            return key is null ? null : RegistryKeyWriteTime.Of(key);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SecurityException)
         {
             return null;
         }
-    }
-
-    /// <summary>
-    /// When <paramref name="key"/> was last written, or null if <c>RegQueryInfoKey</c> refused.
-    ///
-    /// <para>A file time at or below zero is not a time. Zero is 1601, which is older than any
-    /// cutoff, so a sweep that took it straight would read "there is nothing here to date" as
-    /// "certainly stale" and delete on it. A negative one is what
-    /// <see cref="DateTime.FromFileTimeUtc"/> throws on.</para>
-    /// </summary>
-    private static DateTime? LastWriteTimeUtc(RegistryKey key)
-    {
-        var status = RegQueryInfoKey(
-            key.Handle,
-            IntPtr.Zero,
-            IntPtr.Zero,
-            IntPtr.Zero,
-            IntPtr.Zero,
-            IntPtr.Zero,
-            IntPtr.Zero,
-            IntPtr.Zero,
-            IntPtr.Zero,
-            IntPtr.Zero,
-            IntPtr.Zero,
-            out var written);
-
-        return status == ErrorSuccess && written > 0 ? DateTime.FromFileTimeUtc(written) : null;
     }
 
     /// <summary>
@@ -187,22 +157,4 @@ internal static class ScratchRegistry
             // The sweep is never the reason a run fails, and there is nobody here to report to.
         }
     }
-
-    // DllImport rather than LibraryImport, matching the App's native calls: the source generator
-    // wants AllowUnsafeBlocks, which this project does not set. Every parameter this caller has no
-    // use for is an optional out pointer, and IntPtr.Zero asks the platform not to fill it in.
-    [DllImport("advapi32.dll", EntryPoint = "RegQueryInfoKeyW")]
-    private static extern int RegQueryInfoKey(
-        SafeRegistryHandle key,
-        IntPtr keyClass,
-        IntPtr keyClassLength,
-        IntPtr reserved,
-        IntPtr subKeyCount,
-        IntPtr subKeyNameLength,
-        IntPtr keyClassNameLength,
-        IntPtr valueCount,
-        IntPtr valueNameLength,
-        IntPtr valueLength,
-        IntPtr securityDescriptorLength,
-        out long lastWriteTime);
 }

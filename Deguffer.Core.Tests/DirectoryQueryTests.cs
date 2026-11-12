@@ -49,8 +49,8 @@ public sealed class DirectoryQueryTests : IDisposable
                 info.Name,
                 info.Attributes,
                 Length: info is FileInfo file ? file.Length : 0,
-                info.CreationTimeUtc,
-                info.LastWriteTimeUtc))
+                CreationFileTime: info.CreationTimeUtc.ToFileTimeUtc(),
+                LastWriteFileTime: info.LastWriteTimeUtc.ToFileTimeUtc()))
             .ToList();
 
         Assert.Equal(ListingEnd.Listed, end);
@@ -58,7 +58,29 @@ public sealed class DirectoryQueryTests : IDisposable
         Assert.Equal(
             expected,
             listed.OrderBy(entry => entry.Name, StringComparer.Ordinal)
-                .Select(entry => (entry.Name, entry.Attributes, entry.Length, entry.CreationTimeUtc, entry.LastWriteTimeUtc)));
+                .Select(entry => (entry.Name, entry.Attributes, entry.Length, entry.CreationFileTime, entry.LastWriteFileTime)));
+    }
+
+    /// <summary>
+    /// A time past the year 9999 is listed as the FILETIME the file carries. NTFS stores whatever a
+    /// program sets, and a <see cref="DateTime"/> made of one throws, which failed the walk's worker and
+    /// the whole walk with it.
+    /// </summary>
+    [Fact]
+    public void ListsATimePastTheYear9999AsTheFileTimeTheFileCarries()
+    {
+        var folder = _temp.CreateDirectory("folder");
+        var dated = _temp.CreateFile(10, "folder", "dated.bin");
+        var created = new DateTime(2019, 1, 2, 3, 4, 5, DateTimeKind.Utc).ToFileTimeUtc();
+
+        EntryTime.SetFileTimes(dated, created, EntryTime.PastTheLastDateTime);
+
+        var listed = Assert.Single(List(folder, followsLink: true, out var end));
+
+        Assert.Equal(ListingEnd.Listed, end);
+        Assert.Equal(created, listed.CreationFileTime);
+        Assert.Equal(EntryTime.PastTheLastDateTime, listed.LastWriteFileTime);
+        Assert.Equal(EntryTime.PastTheLastDateTime, listed.NewestFileTime);
     }
 
     /// <summary>

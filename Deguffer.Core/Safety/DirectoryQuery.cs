@@ -230,8 +230,8 @@ internal static unsafe partial class DirectoryQuery
                     request.NameOf(name, isDirectory),
                     attributes,
                     isDirectory ? 0 : entry->EndOfFile,
-                    DateTime.FromFileTimeUtc(entry->CreationTime),
-                    DateTime.FromFileTimeUtc(entry->LastWriteTime)));
+                    entry->CreationTime,
+                    entry->LastWriteTime));
             }
 
             if (entry->NextEntryOffset == 0)

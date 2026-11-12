@@ -24,7 +24,7 @@ namespace Deguffer.Core.Providers;
 public sealed class ComponentStoreAnalysis(
     ISystemDirectories system,
     IProcessRunner runner,
-    OwnServicingCalls? servicingCalls = null)
+    OwnServicingCalls servicingCalls)
 {
     /// <summary>The read-only analysis, in English so its labels can be read.</summary>
     public const string AnalyzeArguments = "/Online /English /Cleanup-Image /AnalyzeComponentStore";
@@ -40,7 +40,6 @@ public sealed class ComponentStoreAnalysis(
     public const int ElevationRequired = 740;
 
     private readonly PassMemo<Task<ComponentStoreReading>> _reading = new();
-    private readonly OwnServicingCalls _servicingCalls = servicingCalls ?? OwnServicingCalls.Current;
 
     /// <summary>DISM, as Windows ships it for this machine's architecture.</summary>
     public string Dism { get; } = NativeSystemTool.In(system, "Dism.exe");
@@ -62,7 +61,7 @@ public sealed class ComponentStoreAnalysis(
 
     private async Task<ComponentStoreReading> ReadAsync(CancellationToken ct)
     {
-        var outcome = await _servicingCalls.MakeAsync(() => runner.RunAsync(Dism, AnalyzeArguments, AnalysisRun, ct)).ConfigureAwait(false);
+        var outcome = await servicingCalls.MakeAsync(() => runner.RunAsync(Dism, AnalyzeArguments, AnalysisRun, ct)).ConfigureAwait(false);
 
         if (outcome.ExitCode == ElevationRequired)
         {

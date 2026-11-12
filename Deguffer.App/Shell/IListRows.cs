@@ -40,6 +40,14 @@ internal interface IListRows
     IEnumerable<(UIElement Container, object Row)> Realised();
 
     /// <summary>
+    /// Every group heading laid out now, and the group it heads, which is played as a row is so a
+    /// heading moves with the rows under it; none for a list whose items are not grouped. A heading
+    /// holds its group as its own content, so unlike a row's container it is read rightly while a
+    /// change waits to be laid out.
+    /// </summary>
+    IEnumerable<(UIElement Container, object Row)> Headings();
+
+    /// <summary>
     /// How <paramref name="container"/>, standing at <paramref name="at"/> in <paramref name="viewport"/>,
     /// is drawn: the row a ghost of it would show.
     /// </summary>

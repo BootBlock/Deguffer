@@ -230,6 +230,31 @@ public class ParallelEnumerationScannerTests
     }
 
     /// <summary>
+    /// A file last written past the year 9999 is as new as its number says: the guard keeps it out of
+    /// the figure, and a walk with no guard counts it. The listing once made a <see cref="DateTime"/> of
+    /// the time, which threw and failed the whole walk. Created long ago, so only the write protects it.
+    /// </summary>
+    [Fact]
+    public async Task KeepsAFileWrittenPastTheYear9999AsNewerThanAnyWindow()
+    {
+        using var temp = new TempDirectory();
+        TempDirectory.Age(temp.CreateFile(4096, "cache", "stale.bin"), TimeSpan.FromDays(30));
+        EntryTime.SetFileTimes(
+            temp.CreateFile(1000, "cache", "deep", "dated.bin"),
+            (DateTime.UtcNow - TimeSpan.FromDays(30)).ToFileTimeUtc(),
+            EntryTime.PastTheLastDateTime);
+
+        var cache = Path.Combine(temp.Path, "cache");
+
+        var unguarded = await Scanner.MeasureAsync(cache);
+        var guarded = await Scanner.MeasureAsync(cache, MinimumAge.WithinHours(8, DateTime.UtcNow));
+
+        Assert.Equal(5096, unguarded.Size.Reclaimable);
+        Assert.Equal(4096, guarded.Size.Reclaimable);
+        Assert.True(guarded.WithheldRecent);
+    }
+
+    /// <summary>
     /// A single named file is measured on its own path (<see cref="ScanStrategy.DirectRead"/>), so
     /// the guard has to be applied there too. Without it a protected <c>MEMORY.DMP</c> would preview
     /// as gigabytes the run is not going to take.

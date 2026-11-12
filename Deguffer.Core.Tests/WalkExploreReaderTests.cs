@@ -287,6 +287,45 @@ public sealed class WalkExploreReaderTests : IDisposable
     }
 
     /// <summary>
+    /// A time past the year 9999 is shown as unknown, as the volume index's route shows one, rather than
+    /// failing the walk or standing in for a date. The listing once made a <see cref="DateTime"/> of
+    /// it, which threw.
+    /// </summary>
+    [Fact]
+    public void ShowsATimePastTheYear9999AsUnknown()
+    {
+        var made = new DateTime(2021, 4, 5, 9, 15, 0, DateTimeKind.Utc);
+
+        var root = _temp.CreateDirectory("cache");
+        var file = _temp.CreateFile(1024, "cache", "a.tgz");
+        EntryTime.SetFileTimes(file, made.ToFileTimeUtc(), EntryTime.PastTheLastDateTime);
+
+        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, OccupancyProbe.Default, progress: null, TimeProvider.System, default);
+        var node = ByPath(tree)[Path.Combine(root, "a.tgz")];
+
+        Assert.Equal(made, tree.CreatedOf(node).Utc);
+        Assert.False(tree.ModifiedOf(node).IsKnown);
+    }
+
+    /// <summary>
+    /// The root, the one entry nothing listed, is read the same way: a last write past the year 9999 is
+    /// unknown, and its creation is still shown. Empty, so nothing beneath it rolls a date up into it.
+    /// </summary>
+    [Fact]
+    public void ShowsARootWrittenPastTheYear9999AsUnknown()
+    {
+        var made = new DateTime(2021, 4, 5, 9, 15, 0, DateTimeKind.Utc);
+
+        var root = _temp.CreateDirectory("cache");
+        EntryTime.SetFileTimes(root, made.ToFileTimeUtc(), EntryTime.PastTheLastDateTime);
+
+        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, OccupancyProbe.Default, progress: null, TimeProvider.System, default);
+
+        Assert.Equal(made, tree.CreatedOf(tree.RootNode).Utc);
+        Assert.False(tree.ModifiedOf(tree.RootNode).IsKnown);
+    }
+
+    /// <summary>
     /// The scan's own root is dated too, and it is the one entry nothing enumerated — so it is the
     /// one the reader has to look up itself. Without that its creation date is the unknown the
     /// arrays start at, whatever the disk says.
@@ -470,7 +509,7 @@ public sealed class WalkExploreReaderTests : IDisposable
 
     private const FileAttributes RecallOnDataAccess = (FileAttributes)0x0040_0000;
 
-    private static readonly DateTime Written = new(2026, 1, 2, 3, 4, 0, DateTimeKind.Utc);
+    private static readonly long Written = new DateTime(2026, 1, 2, 3, 4, 0, DateTimeKind.Utc).ToFileTimeUtc();
 
     private static WalkEntry Entry(string name, FileAttributes attributes, long length) =>
         new(Listed, name, attributes, length, Written, Written);

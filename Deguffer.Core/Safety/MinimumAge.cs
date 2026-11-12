@@ -216,8 +216,8 @@ public readonly record struct MinimumAge
     }
 
     /// <summary>
-    /// The same number from the two timestamps alone, for the walk, which keeps them from the
-    /// listing rather than building a <see cref="FileSystemInfo"/> per entry to carry them.
+    /// The same number from the two timestamps alone, for an enumeration that reads them from its
+    /// entries rather than building a <see cref="FileSystemInfo"/> per entry to carry them.
     /// </summary>
     public static long NewestFileTimeOf(DateTime createdUtc, DateTime lastWrittenUtc) =>
         NewestFileTimeOf(ToFileTime(createdUtc), ToFileTime(lastWrittenUtc));

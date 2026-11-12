@@ -77,9 +77,33 @@ internal static partial class FileAttributeRead
     /// <returns><c>0</c>, or the Win32 error that the framework would have thrown for.</returns>
     public static int Read(string path, out FileAttributes attributes, out long length, out long newestFileTime)
     {
+        var error = Read(path, out attributes, out length, out var createdFileTime, out var writtenFileTime);
+        newestFileTime = MinimumAge.NewestFileTimeOf(createdFileTime, writtenFileTime);
+        return error;
+    }
+
+    /// <summary>
+    /// Read the attributes, the length and the creation and last-write times of <paramref name="path"/>,
+    /// for a caller that shows the two times apart. The times stay FILETIMEs: NTFS stores whatever a
+    /// program sets, up to the year 30828, and a <see cref="DateTime"/> made of one past 9999 throws.
+    /// </summary>
+    /// <param name="path">A fully qualified path. The caller decides whether it is extended.</param>
+    /// <param name="attributes">What Windows reported, or default where it reported nothing.</param>
+    /// <param name="length">Its length in bytes, which Windows gives a folder as zero; zero where it reported nothing.</param>
+    /// <param name="createdFileTime">Its creation time as a FILETIME; zero where Windows reported nothing.</param>
+    /// <param name="writtenFileTime">Its last-write time as a FILETIME; zero where Windows reported nothing.</param>
+    /// <returns><c>0</c>, or the Win32 error that the framework would have thrown for.</returns>
+    public static int Read(
+        string path,
+        out FileAttributes attributes,
+        out long length,
+        out long createdFileTime,
+        out long writtenFileTime)
+    {
         attributes = default;
         length = 0;
-        newestFileTime = 0;
+        createdFileTime = 0;
+        writtenFileTime = 0;
 
         var trimmed = Path.TrimEndingDirectorySeparator(path);
 
@@ -91,7 +115,8 @@ internal static partial class FileAttributeRead
             {
                 attributes = (FileAttributes)data.Attributes;
                 length = Length(data.SizeHigh, data.SizeLow);
-                newestFileTime = MinimumAge.NewestFileTimeOf(data.Created.Value, data.Written.Value);
+                createdFileTime = data.Created.Value;
+                writtenFileTime = data.Written.Value;
                 return Success;
             }
 
@@ -113,7 +138,8 @@ internal static partial class FileAttributeRead
 
             attributes = (FileAttributes)found.Attributes;
             length = Length(found.SizeHigh, found.SizeLow);
-            newestFileTime = MinimumAge.NewestFileTimeOf(found.Created.Value, found.Written.Value);
+            createdFileTime = found.Created.Value;
+            writtenFileTime = found.Written.Value;
             return Success;
         }
         finally

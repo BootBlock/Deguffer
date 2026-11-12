@@ -45,7 +45,7 @@ each of them for.
 
 | Issue | Why it is first |
 | --- | --- |
-| #472 | A file whose timestamp is past the year 9999 throws out of the walk, the removal walk included. NTFS accepts such a timestamp from any program. |
+| #472 | A file whose timestamp is past the year 9999 throws out of the walk, the removal walk included. NTFS accepts such a timestamp from any program. Done: the walk keeps each entry's and each root's times as the FILETIMEs Windows reported, so the measuring walk, the removal walk, Explore and the JetBrains age read such a file as newer than any window, or Explore as of unknown age, and nothing throws. |
 
 ### 2. Pass scheduling
 
@@ -300,8 +300,8 @@ group card builds every copy at once. The rest are small allocation wins.
 
 | Issue | Note |
 | --- | --- |
-| #676 | Tile workers started as new threads for each frame that wants tiles. The largest gain while the map moves. |
-| #689 | A group of hundreds of copies stops the window for seconds. `status: needs-design`: the card's look. |
+| #676 | Tile workers started as new threads for each frame that wants tiles. The largest gain while the map moves. Done: each worker starts once, parks between asks, and ends when the map's tiles are released. Over a 90-frame zoom of a 1,000,000-node tree outside the App, UI-thread time in `Want` fell from 18-6,059 ms to 2.4-44 ms, and only the first frame, which starts the workers, took over 0.1 ms. |
+| #689 | A group of hundreds of copies stops the window for seconds. Done: each copy is a row of a grouped list, its group's heading the top of the card and its last copy the bottom, so the list realises only the copies on screen. Driven on a 500-copy group, each step timed with the automation tool's own start-up of about 0.7-1.2 s included: the search to the group's heading fell from 9.8 s to 2.4 s, a mark from 3.8-5.2 s to 1.5-1.6 s, and scrolling away and back from 3.7 s and 3.0 s to 1.4 s and 1.5 s. |
 | #681, #682 | An Explore removal compares the selection pair by pair, and asks the policy twice, on the UI thread. `safety`. |
 | #688 | Narrowing a plan to the ticked steps is quadratic, on the UI thread. `safety`. |
 | #678 | Each hover passes over every rectangle of the drawing. |
@@ -367,7 +367,7 @@ scan leaves about 600 MB committed (#738), and Classic names draw through a seco
 
 | Issue | Note |
 | --- | --- |
-| #691 | DISM's analysis creates the restart-pending key that holds the component store, driver store, Windows.old and Windows Update rows in every elevated pass. `type: bug`, `safety`. First, because it changes what an elevated pass offers. |
+| #691 | DISM's analysis creates the restart-pending key that holds the component store, driver store, Windows.old and Windows Update rows in every elevated pass. `type: bug`, `safety`. Done: a pass reads the restart keys and the servicing processes once, before it starts the analysis, and plans every row the update hold governs against that reading. The clean reads both again, and excuses only the `RebootPending` key last written during one of Deguffer's own DISM calls that began with no restart owed. On one machine, an elevated pass of the six system rows held none of them and both component store rows read the analysis. |
 | #706 | The removal policy's per-file check is linear in its rules: 72 GB allocated judging one drive's duplicates. `safety`. |
 | #692 | Delivery Optimization starts PowerShell in every preview for one WMI number: 1.1-1.9 s against 16-30 ms in process. |
 | #695, #694 | `Protect` probes in series (1.2-3.6 s for a Claude Code row), and `IsPresent(WinSxS)` walks breadth-first (8.8 MB per call, 5-7 calls per pass). `safety`. #695 done: a plan's protected paths are probed as many at once as the volume's walks run, through `DiskBoundWork`, and answered in their order (`ProtectedPathCapture`), with the `protect` benchmark route to time it. #755 done: a path the row's own listing returned while it planned is recorded from that listing and asked only what the listing left open (`ListedEntries`), on the driver store, the Claude Code conversations, leftovers and rewind snapshots rows, and the rows that protect through `CacheLevelWalk`'s own overload. The `protect` route's `--listed on` halves the capture of 5,000 empty folders (median 72-75 ms against 145-192 ms). Planned on one machine, the conversations row fell from a median of 778-967 ms to 466-642 ms, the leftovers row moved within its noise, and the driver store row is pnputil's time. The records were identical, path for path, for all 10,918 paths. #694 open. |
@@ -398,7 +398,6 @@ scan leaves about 600 MB committed (#738), and Classic names draw through a seco
 
 | Issue | The decision |
 | --- | --- |
-| #691 | How to tell DISM's own restart-pending key from a real unfinished update: read the key before the analysis starts, run the analysis after the hold checks, or stop starting it at the pass start. |
 | #693 | Keep pnputil's `/devices` answer, or read device properties in process and accept that extension INFs need their own source. `safety`. |
 | #696 | Keep transcript readings across passes, keyed by length and write time, against the recorded "read afresh" (#531). |
 | #699 | Ask Disk Cleanup's handler for emptiness without its full measure, or take Windows.old's size from the scanner. `safety`. |

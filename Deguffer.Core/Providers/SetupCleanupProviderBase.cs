@@ -120,7 +120,7 @@ public abstract class SetupCleanupProviderBase : CleanupProviderBase
         var offered = new List<DiskCleanupTarget>();
         var unclaimed = false;
 
-        var everything = UnfinishedUpdate.HoldsEverything(Servicing, Inspector);
+        var everything = UnfinishedUpdate.HoldsEverything(ServicingThisPass);
 
         if (everything is not null)
         {
