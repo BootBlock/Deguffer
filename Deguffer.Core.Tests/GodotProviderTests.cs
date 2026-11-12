@@ -182,11 +182,16 @@ public sealed class GodotProviderTests : IDisposable
         Directory.Delete(imported, recursive: true);
         DirectoryLink.Create(kind, imported, elsewhere);
 
-        var plan = await Imported().PlanAsync();
+        var provider = Imported();
+        var plan = await provider.PlanAsync();
 
         Assert.Empty(plan.TargetedPaths);
         Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(imported, StringComparison.OrdinalIgnoreCase)
             && p.Reason.StartsWith("A link", StringComparison.Ordinal));
+
+        Assert.True((await provider.ExecuteAsync(plan)).Succeeded);
+        Assert.True((await provider.VerifyAsync(plan)).Passed);
+        Assert.True(Directory.Exists(imported));
         Assert.True(File.Exists(Path.Combine(elsewhere, $"{GodotProjectFixture.ImportedBase}.ctex")));
     }
 

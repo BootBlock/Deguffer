@@ -53,8 +53,8 @@ public sealed class Godot3ImportCacheProvider : BuildDirectoryProvider
     {
         DirectoryNames = [".import", "import"],
         RequiredSiblings = [GodotProjectSettings.ProjectFile],
-        ConfirmsContents = folder => projects.IsDataFolder(folder, godot4: false)
-            && GodotCacheContents.ImportCache(folder, allowIgnoreFile: true) is GodotCacheVerdict.Recognised,
+        ConfirmsContents = (folder, ct) => projects.IsDataFolder(folder)
+            && projects.Godot3ImportCache(folder, ct) is GodotCacheVerdict.Recognised,
         DeclinesTrackedDirectories = true,
     };
 

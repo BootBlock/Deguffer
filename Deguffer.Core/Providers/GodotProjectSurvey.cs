@@ -16,6 +16,7 @@ public sealed class GodotProjectSurvey
 {
     private readonly ConcurrentDictionary<string, GodotProjectSettings?> _settings = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, GodotDataFolder> _dataFolders = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, GodotCacheVerdict> _godot3ImportCaches = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The settings of the project in <paramref name="project"/>, or null where they cannot be known.</summary>
     public GodotProjectSettings? Settings(string project) =>
@@ -26,16 +27,23 @@ public sealed class GodotProjectSurvey
         _dataFolders.GetOrAdd(folder, static (path, token) => GodotDataFolder.Of(path, token), ct);
 
     /// <summary>
-    /// Whether <paramref name="directory"/> is the data folder its project's settings name, for a
-    /// Godot 4 project where <paramref name="godot4"/> is true and a Godot 3 one where it is false.
+    /// What the Godot 3 import folder at <paramref name="folder"/> holds, walked once a pass however
+    /// many times the search, the plan and Explore's declaration recognise it.
     /// </summary>
-    public bool IsDataFolder(string directory, bool godot4)
+    public GodotCacheVerdict Godot3ImportCache(string folder, CancellationToken ct) =>
+        _godot3ImportCaches.GetOrAdd(folder, static (path, token) => GodotCacheContents.ImportCache(path, allowIgnoreFile: true, token), ct);
+
+    /// <summary>
+    /// Whether <paramref name="directory"/> is the data folder its project's settings name. The name
+    /// carries the engine version, <c>godot</c> for Godot 4 and <c>import</c> for Godot 3, so a row
+    /// searching for its own names never accepts the other version's folder.
+    /// </summary>
+    public bool IsDataFolder(string directory)
     {
         var trimmed = directory.TrimEnd(Path.DirectorySeparatorChar);
 
         return Path.GetDirectoryName(trimmed) is { Length: > 0 } project
             && Settings(project) is { } settings
-            && settings.IsGodot4 == godot4
             && Path.GetFileName(trimmed).Equals(settings.DataFolderName, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -44,5 +52,6 @@ public sealed class GodotProjectSurvey
     {
         _settings.Clear();
         _dataFolders.Clear();
+        _godot3ImportCaches.Clear();
     }
 }

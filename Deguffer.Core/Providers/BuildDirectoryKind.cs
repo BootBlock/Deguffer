@@ -83,12 +83,13 @@ public sealed record BuildDirectoryKind
     /// <summary>
     /// A test of what the tool wrote inside the directory, for evidence a name or a line cannot state:
     /// a field inside a structured file. Given the directory; true means confirmed. Null where the
-    /// declared names and markers are the whole of the evidence.
+    /// declared names and markers are the whole of the evidence. Handed the pass's cancellation, for a
+    /// test that walks what the tool wrote rather than reading one file.
     ///
     /// <para>Dart is the case: what proves a <c>.dart_tool</c> is pub's is a value in the JSON pub
     /// writes there, not a name or a line of it.</para>
     /// </summary>
-    public Func<string, bool>? ConfirmsContents { get; init; }
+    public Func<string, CancellationToken, bool>? ConfirmsContents { get; init; }
 
     /// <summary>
     /// Whether a directory holding a file git tracks is declined, and a directory git could not be

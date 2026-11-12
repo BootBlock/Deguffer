@@ -47,7 +47,7 @@ public sealed record GodotProjectSettings(int ConfigVersion, string DataFolderNa
 
     /// <summary>
     /// Far beyond what the editor writes. A project's input map and autoloads make the file longest,
-    /// and the longest measured was under 40 KB. See <see cref="BoundedFile"/> for why a larger file
+    /// and one measured project with many of both wrote 35 KB. See <see cref="BoundedFile"/> for why a larger file
     /// is not read.
     /// </summary>
     private const int MaximumBytes = 1024 * 1024;

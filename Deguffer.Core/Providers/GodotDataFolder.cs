@@ -45,7 +45,7 @@ public sealed class GodotDataFolder
     {
         DirectoryNames = [".godot", "godot"],
         RequiredSiblings = [GodotProjectSettings.ProjectFile],
-        ConfirmsContents = directory => survey.IsDataFolder(directory, godot4: true),
+        ConfirmsContents = (directory, _) => survey.IsDataFolder(directory),
         DeclinesTrackedDirectories = true,
     };
 

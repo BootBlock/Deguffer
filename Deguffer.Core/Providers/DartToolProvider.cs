@@ -51,7 +51,7 @@ public sealed class DartToolProvider : BuildDirectoryProvider
         DirectoryNames = [".dart_tool"],
         RequiredSiblings = ["pubspec.yaml", "pubspec.lock"],
         RequiredContents = ["package_graph.json"],
-        ConfirmsContents = WrittenByPub,
+        ConfirmsContents = (directory, _) => WrittenByPub(directory),
         DeclinesTrackedDirectories = true,
 
         // The package's source, which nothing about the folder identifies but which a rule reaching

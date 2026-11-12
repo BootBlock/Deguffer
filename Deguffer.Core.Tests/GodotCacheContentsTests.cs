@@ -38,6 +38,12 @@ public sealed class GodotCacheContentsTests : IDisposable
         GodotProjectFixture.WriteImportedAsset(cache);
         File.WriteAllBytes(Path.Combine(cache, stranger), [1]);
 
+        // With a record of the same base beside a product, only the name's shape can decline it.
+        if (stranger.EndsWith(".ctex", StringComparison.Ordinal))
+        {
+            File.WriteAllBytes(Path.Combine(cache, Path.ChangeExtension(stranger, ".md5")), [1]);
+        }
+
         Assert.Equal(GodotCacheVerdict.Unrecognised, GodotCacheContents.ImportCache(cache, allowIgnoreFile: false));
     }
 
