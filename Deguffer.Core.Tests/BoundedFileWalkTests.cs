@@ -571,7 +571,7 @@ public sealed class BoundedFileWalkTests : IDisposable
         return new SortedDictionary<string, string>(found, StringComparer.Ordinal);
 
         static string Line(string kind, WalkEntry entry) =>
-            $"{kind} {entry.FullName} {entry.Attributes} {entry.Length} {entry.CreationTimeUtc.Ticks} {entry.LastWriteTimeUtc.Ticks}";
+            $"{kind} {entry.FullName} {entry.Attributes} {entry.Length} {entry.CreationFileTime} {entry.LastWriteFileTime}";
     }
 
     /// <summary>How many progress reports one walk of <paramref name="root"/> makes, on one worker.</summary>

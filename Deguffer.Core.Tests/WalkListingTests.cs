@@ -141,7 +141,7 @@ public sealed class WalkListingTests
     }
 
     private static WalkEntry Entry(string name, FileAttributes attributes) =>
-        new(Folder, name, attributes, 0, DateTime.UnixEpoch, DateTime.UnixEpoch);
+        new(Folder, name, attributes, 0, DateTime.UnixEpoch.ToFileTimeUtc(), DateTime.UnixEpoch.ToFileTimeUtc());
 
     /// <summary>
     /// A server that rejects any buffer above the smallest, after it has already returned one entry,

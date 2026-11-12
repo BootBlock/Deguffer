@@ -161,7 +161,7 @@ public sealed class DirectoryHoldTests : IDisposable
     public void AFileFromAListingWithNoHandleIsReadByItsFullPath()
     {
         var folder = LongPath.Extended(_temp.CreateDirectory("store"));
-        var file = new WalkEntry(folder, "blob.bin", FileAttributes.Normal, 4096, DateTime.UtcNow, DateTime.UtcNow);
+        var file = new WalkEntry(folder, "blob.bin", FileAttributes.Normal, 4096, DateTime.UtcNow.ToFileTimeUtc(), DateTime.UtcNow.ToFileTimeUtc());
         var asked = new List<(nint Directory, string Name)>();
         var files = new FileInformation(
             FileInformation.Open,

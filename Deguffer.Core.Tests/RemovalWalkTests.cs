@@ -160,6 +160,33 @@ public sealed class RemovalWalkTests : IDisposable
     }
 
     /// <summary>
+    /// A file last written past the year 9999 is newer than any window, so the guard keeps it and the
+    /// removal takes the rest around it. The listing once made a <see cref="DateTime"/> of the time,
+    /// which threw out of the removal's walk. §5.6: what the guard keeps, and what stood beside the
+    /// tree, are still on the disk.
+    /// </summary>
+    [Fact]
+    public async Task KeepsAFileWrittenPastTheYear9999AndRemovesTheRest()
+    {
+        var root = _temp.CreateDirectory("cache");
+        var longAgo = DateTime.UtcNow - TimeSpan.FromDays(30);
+        var stale = _temp.CreateFile(64, "cache", "pkg", "stale.bin");
+        var dated = _temp.CreateFile(128, "cache", "pkg", "dated.bin");
+        var beside = _temp.CreateFile(16, "beside.bin");
+        EntryTime.Set(stale, longAgo);
+        EntryTime.SetFileTimes(dated, longAgo.ToFileTimeUtc(), EntryTime.PastTheLastDateTime);
+
+        var outcome = await DirectoryRemover.RemoveAsync(root, MinimumAge.WithinHours(8, DateTime.UtcNow));
+
+        Assert.False(File.Exists(stale));
+        Assert.True(File.Exists(dated));
+        Assert.True(File.Exists(beside));
+        Assert.False(outcome.RootRemoved);
+        Assert.Equal(1, outcome.Kept);
+        Assert.Equal(64, outcome.BytesReclaimed);
+    }
+
+    /// <summary>
     /// A tree deeper than a thread's stack could hold one frame per level of. The walk this replaced
     /// recursed once per folder, and a stack overflow is not an exception anything can catch: it ends
     /// the process.

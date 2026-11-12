@@ -261,8 +261,8 @@ public sealed class LentNamesTests : IDisposable
                     request.NameOf(name, isDirectory),
                     isDirectory ? FileAttributes.Directory : FileAttributes.Archive,
                     length,
-                    DateTime.UnixEpoch,
-                    DateTime.UnixEpoch));
+                    DateTime.UnixEpoch.ToFileTimeUtc(),
+                    DateTime.UnixEpoch.ToFileTimeUtc()));
             }
 
             return ListingEnd.Listed;

@@ -24,11 +24,11 @@ public class ExploreTimestampTests
     [Fact]
     public void BothRoutesReachTheSameValueForTheSameInstant()
     {
-        var fromWalk = ExploreTimestamp.FromUtc(Instant);
+        var fromDate = ExploreTimestamp.FromUtc(Instant);
         var fromTable = ExploreTimestamp.FromFileTime(Instant.ToFileTimeUtc());
 
-        Assert.Equal(fromWalk, fromTable);
-        Assert.Equal(fromWalk.MinutesSinceWindowsEpoch, fromTable.MinutesSinceWindowsEpoch);
+        Assert.Equal(fromDate, fromTable);
+        Assert.Equal(fromDate.MinutesSinceWindowsEpoch, fromTable.MinutesSinceWindowsEpoch);
     }
 
     /// <summary>

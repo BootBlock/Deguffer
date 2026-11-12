@@ -88,7 +88,7 @@ public sealed class WalkFileNamesTests : IDisposable
     [Fact]
     public void RefusesADirectoryWithoutAName() =>
         Assert.Throws<ArgumentException>(() => new WalkEntry(
-            @"\\?\C:\folder", name: null, FileAttributes.Directory, 0, DateTime.UnixEpoch, DateTime.UnixEpoch));
+            @"\\?\C:\folder", name: null, FileAttributes.Directory, 0, creationFileTime: 0, lastWriteFileTime: 0));
 
     /// <summary>
     /// The listing says which directory it describes, as the string its entries share, so a caller
