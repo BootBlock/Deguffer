@@ -5,7 +5,8 @@
 > duplicate search, start-up and file I/O, filed as #494 to #537, and a third audit of the map's
 > drawing, Explore's lists and removal, the duplicate search's memory and the shell's lists, filed as
 > #676 to #690, and a fourth audit of the running App, real tools, real drives and elevated passes,
-> filed as #691 to #710 and #737 to #743. Work each in its own order below:
+> filed as #691 to #710 and #737 to #743, and a fifth audit of every hot path again, filed as #1014
+> to #1046. Work each in its own order below:
 > the measurements in each stage 0 decide the larger items after them. Flip to ✅ COMPLETE and
 > `git mv` into `done/` when every issue below is closed or rejected, or supersede it with a newer
 > plan.
@@ -451,3 +452,73 @@ and #484 (no run varied the reader count or timed an index build inside a previe
 the Settings page's heaviest idle bursts and a standby-cleared cold launch (both need a quiet
 machine), and whether the first map of an `--explore` launch reaches the screen within 8 s (#523's
 traces ended first).
+
+## Fifth audit: every hot path again, and the rules that stop the classes recurring
+
+A fifth audit read the whole product source in nine parallel lanes: the walk and its primitives, the
+file-table route, Explore's model, layout and drawing, the WinUI shell, the providers in two halves,
+planning and the clean with their safety checks, the Core subsystems outside Clean and Explore, and
+a sweep of every file for recurring classes of cost. A second pass checked each finding against the
+code, against every open and closed issue, and against the four tables above, and rejected or merged
+what did not hold. The survivors were filed as #1014 to #1046, and eight findings that extend an open
+issue were added to it as comments. Some figures were timed with throwaway programs outside
+Deguffer, against copies of the code or the Release `Deguffer.Core.dll`, on a shared machine; each
+issue says which. No change was measured inside Deguffer.
+
+### What it found, in one paragraph
+
+**The per-entry walk is lean; the costs left are questions asked again and safety checks run one at
+a time.** Every planning pass waits for the registered-disk readers before any row starts, and the
+Hyper-V reader starts PowerShell even for an account it will refuse (#1014, #1038). After a clean,
+the §5.6 verification follows every surviving protected path to its mount point when nothing was
+left standing (#1016), and the checks before and after a clean probe paths one at a time (#1017,
+#1018). Most rows probe again for §5.6 the paths their own listing returned (#1039). A file-table
+scan copies its whole table at every snapshot (#1015), every walk boxes an enumerator per directory
+(#1021), and the map rebuilds per-drawing facts on the UI thread (#1026). These classes recur, so
+`CLAUDE.md` G4 now states them, the vault note *Deguffer performance rules* holds the detail, and
+the source sweep holds the mechanical ones.
+
+### Order of work
+
+| Issue | Note |
+| --- | --- |
+| #1016 | §5.6 verification follows every survivor to its mount point when nothing was left standing. `safety`. The largest gain for a clean: 1.4-2.0 s estimated for 10,918 paths, from measured per-path costs. |
+| #1014, #1038 | Planning waits on every registered-disk reader in turn, and the Hyper-V reader starts PowerShell to learn the account will be refused (226-298 ms measured for the role check alone). |
+| #1015 | File-table snapshots copy all nine columns: 26-41 ms and 100 MiB per 3 million slots against 4.7-5.4 ms and 14 MiB for flags and parents only, measured on stand-in arrays. |
+| #1017, #1018, #1019 | §5.6 checks and the Clean press's narrowing probe paths one at a time, the last on the UI thread; registered storage follows every step live. `safety`. |
+| #1039 | `ProtectAsync`'s default takes no listing, so most rows probe again what they listed. The seam fix for #755's leftovers. `safety`. |
+| #1021, #1020, #1022, #1032 | Per-directory and per-file costs in the walk, the removal walk, Explore's occupancy probe and file targets. #1020 and #1032 are `safety`. |
+| #1026, #1027, #1028 | Per-drawing facts rebuilt on the UI thread, layouts copying unsized lists, and the overview's second upload. |
+| #1033, #1034, #1035, #1023, #1036 | The duplicate search: judging inside the shared lock, the checksum store's load, stream listings per copy, linear place lists per folder, and unbounded reads of other programs' files. |
+| #1029, #1030, #1031 | UI-thread churn: progress by count, Duplicates page state per group, a bound list cleared and refilled. |
+| #1024, #1025, #1037, #1040, #1041, #1042, #1043, #1044, #1045, #1046 | Smaller allocation and repeated-question costs in the file-table index, providers and Explore's policy build. |
+
+### Added to open issues
+
+| Issue | What was added |
+| --- | --- |
+| #677 | The per-shape Oklch conversion and the lock every tile worker shares, which #677's fix leaves (8-25 ms per 96,000 shapes measured, plus contention). |
+| #480 | Release the link queue once `PlaceLinks` has read it. |
+| #684 | The checksum cache's bound applies only when it writes, so one search's peak is unbounded. |
+| #787 | Three shifting inserts per arriving group. |
+| #448 | A capturing lambda per tool lookup, for the single-flight fix to remove. |
+| #447, #535 | Explore and the duplicate search build providers afresh, so every scan starts the tools' location queries again. |
+| #444 | The tracked-file check builds a string for every output line and candidate pair. |
+
+### Checked and not filed
+
+| Finding | Why no issue |
+| --- | --- |
+| The placeholder walk's mode switch per listing call and basic-info read per placeholder | Deliberate: the switch is a per-thread flag, and the read is the eligibility check at release (#355). |
+| `RootSetWalk`'s per-directory arrays | `everyRoot` carries each directory's folders to its children by design (#473); `opened` is about 48 bytes. |
+| `MapTile.Outlines` scanning its tile's shapes per hover | #678 decided a tile is small enough. |
+| `ExploreRow.KeyOf`'s name string per child per snapshot | #680 weighed a span lookup and chose one key per child. |
+| The About page's star field built per visit | The third audit's verdict stands. |
+| Preference writes on the UI thread | About 1 ms per click, the third audit's verdict, now measured again. |
+| Driver store dates beside its measurement, `DeclaredLocations` probes, repeated listings in Cargo, Godot, LM Studio and installer payloads | 1-30 ms per pass, hidden behind pnputil or a handler survey, or presence-only savings under 10 ms. |
+| The other-accounts row measuring live profiles | #359 requires every profile's size on the report. |
+| Recorded refusals checked place by place | Zero to a few places, each already parallel. |
+| Disk Cleanup handlers surveyed one after another in the setup rows | Whether the handlers tolerate concurrent calls is not known. |
+| Steam rows ignoring the token in their loops | Bounded by the library count. |
+| `DllImport` with runtime marshalling in the Memory, window and WMI calls | Per action or reading, not per entry; the source sweep's `library-import-not-dll-import` rule holds new code. |
+| `SequentialScan` on the duplicate search's first-and-last-blocks read | Disproved: no read-ahead past the 64 KiB block either way. |
