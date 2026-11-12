@@ -21,7 +21,8 @@ namespace Deguffer.App.Shell;
 /// scrolling, and the containers a long list recycles as it scrolls, never animate.</para>
 ///
 /// <para>Only realised rows are read and moved, so a list of thousands animates its window of rows,
-/// and the whole list is read once for a change only when a row has gone from the screen. The row under
+/// and the whole list is read once for a change only when a row has gone from the screen and the
+/// change could have taken one out of the list. The row under
 /// the pointer, or failing that the one with focus, keeps its place on screen unless it is the one
 /// that changed (<see cref="ListMotion.Hold"/>).</para>
 ///
@@ -75,6 +76,12 @@ internal sealed class ListAnimation
     /// row on screen that was not on screen before is then taken to have arrived.
     /// </summary>
     private bool _reset;
+
+    /// <summary>
+    /// Whether any of the frame's changes could take a row out of the list. Without one, a row gone
+    /// from the screen only moved out of sight, and the list's whole contents need not be read.
+    /// </summary>
+    private bool _removed;
 
     private ListAnimation(IListRows rows, IMotionPolicy motion)
     {
@@ -159,7 +166,7 @@ internal sealed class ListAnimation
     private void OnPointerMoved(object sender, PointerRoutedEventArgs e) =>
         _pointer = _viewport is null ? null : e.GetCurrentPoint(_viewport).Position;
 
-    private void OnItemsChanged(IReadOnlyList<object> arrived, bool reset)
+    private void OnItemsChanged(IReadOnlyList<object> arrived, ListChange change)
     {
         // A list that was collapsed when it loaded had no template to look in until it was shown.
         FindViewport();
@@ -176,7 +183,8 @@ internal sealed class ListAnimation
             CompositionTarget.Rendering += OnRendering;
         }
 
-        _reset |= reset;
+        _reset |= change == ListChange.Reset;
+        _removed |= ListMotion.Removes(change);
         _arrived.UnionWith(arrived);
     }
 
@@ -222,6 +230,7 @@ internal sealed class ListAnimation
             _drawn.Clear();
             _arrived.Clear();
             _reset = false;
+            _removed = false;
 
             foreach (var container in _released)
             {
@@ -262,19 +271,8 @@ internal sealed class ListAnimation
             }
         }
 
-        // A row on screen before and not now has either left the list or only moved out of sight.
-        // Telling the two apart takes the list's whole contents, read once, and only when there is
-        // such a row.
-        var departed = new HashSet<object>(Rows);
-        HashSet<object>? held = null;
+        var departed = ListMotion.Departed(before.Keys, after.Select(row => row.Item), _removed, _rows.Held, Rows);
 
-        foreach (var item in before.Keys)
-        {
-            if (!after.Exists(row => ReferenceEquals(row.Item, item)) && !(held ??= _rows.Held()).Contains(item))
-            {
-                departed.Add(item);
-            }
-        }
         var plan = ListMotion.Plan(
             before,
             after.Select(row => (row.Item, row.At.Y)).ToList(),

@@ -1,3 +1,4 @@
+using Deguffer.Core.Viewing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.Foundation;
@@ -22,10 +23,9 @@ internal interface IListRows
 
     /// <summary>
     /// Raised for each change to the list's items, before the list lays itself out again, with the
-    /// rows the change put into the list and whether it was a reset, after which nothing says which
-    /// rows are new.
+    /// rows the change put into the list and what kind of change it was.
     /// </summary>
-    event Action<IReadOnlyList<object>, bool>? Changed;
+    event Action<IReadOnlyList<object>, ListChange>? Changed;
 
     /// <summary>
     /// The scroller the rows are seen through, or null before the list is in the tree, or where no
