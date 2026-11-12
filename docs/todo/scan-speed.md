@@ -455,7 +455,7 @@ traces ended first).
 
 ## Fifth audit: every hot path again, and the rules that stop the classes recurring
 
-A fifth audit read the whole product source in nine parallel lanes: the walk and its primitives, the
+A fifth audit read the whole product source again: the walk and its primitives, the
 file-table route, Explore's model, layout and drawing, the WinUI shell, the providers in two halves,
 planning and the clean with their safety checks, the Core subsystems outside Clean and Explore, and
 a sweep of every file for recurring classes of cost. A second pass checked each finding against the
@@ -475,10 +475,11 @@ left standing (#1016), and the checks before and after a clean probe paths one a
 #1018). Most rows probe again for §5.6 the paths their own listing returned (#1039). A file-table
 scan copies its whole table at every snapshot (#1015), every walk boxes an enumerator per directory
 (#1021), and the map rebuilds per-drawing facts on the UI thread (#1026). These classes recur, so
-`CLAUDE.md` G4 now states them, the vault note *Deguffer performance rules* holds the detail, and
-the source sweep holds the mechanical ones.
+`CLAUDE.md` G4 now states them, and the source sweep holds the mechanical ones.
 
 ### Order of work
+
+#1049 tracks the largest gains across all five audits, in the order to work them.
 
 | Issue | Note |
 | --- | --- |
@@ -489,8 +490,9 @@ the source sweep holds the mechanical ones.
 | #1039 | `ProtectAsync`'s default takes no listing, so most rows probe again what they listed. The seam fix for #755's leftovers. `safety`. |
 | #1021, #1020, #1022, #1032 | Per-directory and per-file costs in the walk, the removal walk, Explore's occupancy probe and file targets. #1020 and #1032 are `safety`. |
 | #1026, #1027, #1028 | Per-drawing facts rebuilt on the UI thread, layouts copying unsized lists, and the overview's second upload. |
-| #1033, #1034, #1035, #1023, #1036 | The duplicate search: judging inside the shared lock, the checksum store's load, stream listings per copy, linear place lists per folder, and unbounded reads of other programs' files. |
+| #1033, #1034, #1035, #1023 | The duplicate search: judging inside the shared lock, the checksum store's load, stream listings per copy, and linear place lists per folder. |
 | #1029, #1030, #1031 | UI-thread churn: progress by count, Duplicates page state per group, a bound list cleared and refilled. |
+| #1036 | Files other programs wrote, read in full with no bound. `safety`. |
 | #1024, #1025, #1037, #1040, #1041, #1042, #1043, #1044, #1045, #1046 | Smaller allocation and repeated-question costs in the file-table index, providers and Explore's policy build. |
 
 ### Added to open issues
