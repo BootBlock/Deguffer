@@ -54,7 +54,8 @@ internal sealed class CountingMftSource(IMftSource inner) : IMftSource
 
     /// <summary>
     /// How many reads of clusters were asked for, including any that failed: the table's bitmap, and
-    /// each run of each attribute list kept outside the table.
+    /// the attribute lists kept outside the table, where one read brings in several lists close
+    /// together and a list read alone takes a read for each of its runs.
     /// </summary>
     public long ClusterReads => Interlocked.Read(ref _clusterReads);
 
