@@ -223,13 +223,14 @@ internal sealed class ExploreTiles
     }
 
     /// <summary>
-    /// Let go of every tile and every surface kept, for a map nobody can see, or for a device that has
-    /// replaced the one the surfaces were made on: they hold nothing, and a write into one would show
-    /// nothing (see <see cref="CompositionDevice.Replaced"/>).
+    /// Let go of every tile and every surface kept, and end the threads that draw them, for a map nobody
+    /// can see, or for a device that has replaced the one the surfaces were made on: they hold nothing,
+    /// and a write into one would show nothing (see <see cref="CompositionDevice.Replaced"/>).
     /// </summary>
     public void Release()
     {
         Forget();
+        _draws.Release();
 
         while (_spare.TryPop(out var sprite))
         {

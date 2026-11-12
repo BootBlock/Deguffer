@@ -300,7 +300,7 @@ group card builds every copy at once. The rest are small allocation wins.
 
 | Issue | Note |
 | --- | --- |
-| #676 | Tile workers started as new threads for each frame that wants tiles. The largest gain while the map moves. |
+| #676 | Tile workers started as new threads for each frame that wants tiles. The largest gain while the map moves. Done: each worker starts once, parks between asks, and ends when the map's tiles are released. Over a 90-frame zoom of a 1,000,000-node tree outside the App, UI-thread time in `Want` fell from 18-6,059 ms to 2.4-44 ms, and only the first frame, which starts the workers, took over 0.1 ms. |
 | #689 | A group of hundreds of copies stops the window for seconds. `status: needs-design`: the card's look. |
 | #681, #682 | An Explore removal compares the selection pair by pair, and asks the policy twice, on the UI thread. `safety`. |
 | #688 | Narrowing a plan to the ticked steps is quadratic, on the UI thread. `safety`. |
