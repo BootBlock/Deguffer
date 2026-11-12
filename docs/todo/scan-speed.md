@@ -307,7 +307,7 @@ group card builds every copy at once. The rest are small allocation wins.
 | #678 | Each hover passes over every rectangle of the drawing. |
 | #677 | The branch colouring divides every child of every folder above a drawn shape. |
 | #680 | The List layout formats every row again at each snapshot of a scan. |
-| #679 | Map names reused by position, and rebuilt after a smaller drawing. Measure with #525 first. |
+| #679 | Map names reused by position, and rebuilt after a smaller drawing. Done: the name controls are kept up to the most a drawing has needed and the rest put away, a name of the same tree keeps the control that named its node, and the SpaceMonger lettering shares one text format per line spacing and measures a name again only when its text or spacing changes. Over 24 zoom steps of a 240-file folder in a maximised window, in the SpaceMonger lettering, sampled UI-thread time in `ExploreLabels.Show` fell from a median of 836 ms to 344 ms over three runs of each Release build, and time making name controls from 254 ms to 93 ms. |
 | #683 | The duplicate search groups by size with a list per distinct size, and a 112-byte `FoundFile`. |
 | #687 | The Hugging Face row lists the whole hub before and after each repository it removes. |
 | #684 | Checksums held as hexadecimal strings for the session. |
