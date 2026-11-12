@@ -22,6 +22,9 @@ internal interface IDriveHealthSource
     /// <summary>Whether this source can read a drive on <paramref name="bus"/>.</summary>
     bool Reads(StorageBusType bus);
 
-    /// <summary>Reads <paramref name="drive"/>, whose model and firmware decide what some readings mean.</summary>
-    DriveReadout Read(IDriveDevice device, DeviceDescriptor drive);
+    /// <summary>
+    /// Reads <paramref name="drive"/>, whose model and firmware decide what some readings mean. A
+    /// reading counted in logical sectors is stated in bytes only where <paramref name="sectors"/> is known.
+    /// </summary>
+    DriveReadout Read(IDriveDevice device, DeviceDescriptor drive, SectorSizes? sectors);
 }

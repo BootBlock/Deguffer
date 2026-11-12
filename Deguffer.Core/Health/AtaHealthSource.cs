@@ -21,7 +21,7 @@ internal sealed class AtaHealthSource : IDriveHealthSource
 
     public bool Reads(StorageBusType bus) => bus is StorageBusType.Sata or StorageBusType.Ata;
 
-    public DriveReadout Read(IDriveDevice device, DeviceDescriptor drive)
+    public DriveReadout Read(IDriveDevice device, DeviceDescriptor drive, SectorSizes? sectors)
     {
         var thresholds = device.Ask(DriveQuestion.AtaThresholds);
         var moreWhenElevated = thresholds.Win32Error == DeviceCalls.AccessDenied;
@@ -40,7 +40,7 @@ internal sealed class AtaHealthSource : IDriveHealthSource
             attributes = AtaAttributeTable.WithThresholds(attributes, limits);
         }
 
-        List<HealthAttribute> rows = [AtaAttributeRows.Prediction(predictsFailure), .. AtaAttributeRows.Of(attributes, drive)];
+        List<HealthAttribute> rows = [AtaAttributeRows.Prediction(predictsFailure), .. AtaAttributeRows.Of(attributes, drive, sectors?.Logical)];
 
         if (Sector(device, DriveQuestion.AtaSelfTestLog) is { } selfTest && SelfTestLogs.TryReadAta(selfTest, out var outcome))
         {

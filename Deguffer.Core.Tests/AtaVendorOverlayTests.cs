@@ -14,7 +14,7 @@ public sealed class AtaVendorOverlayTests
     private const string AsReported = "Scored 50";
 
     private static string Reading(byte id, string model, string firmware = "TEST01", ulong raw = 0) =>
-        Assert.Single(AtaAttributeRows.Of([new AtaAttribute(id, false, 50, 50, raw, null)], AtaDrives.Named(model, firmware))).Reading;
+        Assert.Single(AtaAttributeRows.Of([new AtaAttribute(id, false, 50, 50, raw, null)], AtaDrives.Named(model, firmware), logicalSectorBytes: null)).Reading;
 
     [Theory]
     [InlineData("Micron_M600_MTFDTEST999", "MU01")]

@@ -10,8 +10,11 @@ internal static class AtaAttributeRows
 
     private const string SelfTestKey = "self-test";
     private const string ErrorCountKey = "errors";
+    private const string WriteAmplificationKey = "write-amplification";
 
     private const uint LowDoubleWord = 0xFFFF_FFFF;
+    private const ulong Word = 0xFFFF;
+    private const int BitsPerWord = 16;
     private const int LifeLeftWarningPercent = 10;
 
     /// <summary>The range of values and thresholds that mean something. 0, 254 and 255 are reserved.</summary>
@@ -32,8 +35,13 @@ internal static class AtaAttributeRows
         predictsFailure ? AttributeStanding.Failing : AttributeStanding.Normal,
         predictsFailure ? "predicted" : "not predicted");
 
-    internal static IEnumerable<HealthAttribute> Of(IReadOnlyList<AtaAttribute> attributes, DeviceDescriptor drive) =>
-        attributes.Select(attribute => Row(attribute, drive));
+    /// <param name="logicalSectorBytes">The drive's logical sector size, or null where Windows did not report it.</param>
+    internal static IEnumerable<HealthAttribute> Of(IReadOnlyList<AtaAttribute> attributes, DeviceDescriptor drive, uint? logicalSectorBytes)
+    {
+        var rows = attributes.Select(attribute => Row(attribute, drive, logicalSectorBytes));
+
+        return WriteAmplification(attributes, drive) is { } amplification ? rows.Append(amplification) : rows;
+    }
 
     internal static HealthAttribute SelfTest(SelfTestOutcome outcome) => outcome.Result switch
     {
@@ -56,23 +64,47 @@ internal static class AtaAttributeRows
     private static HealthAttribute SelfTestRow(string reading, string meaning, SelfTestOutcome outcome, AttributeStanding standing) =>
         new(SelfTestKey, "Last self-test", reading, meaning, standing, $"at {outcome.PowerOnHours} hours of use");
 
-    private static HealthAttribute Row(AtaAttribute attribute, DeviceDescriptor drive)
+    /// <summary>
+    /// How many pages the drive writes to flash for each page the computer writes, where a document
+    /// defines both counts. Nothing is stated before the computer has written anything.
+    /// </summary>
+    private static HealthAttribute? WriteAmplification(IReadOnlyList<AtaAttribute> attributes, DeviceDescriptor drive)
+    {
+        if (AtaVendorOverlay.FlashPagesWritten(drive) is not (var hostId, var driveId)
+            || attributes.FirstOrDefault(attribute => attribute.Id == hostId) is not { Id: not 0, Raw: > 0 and var host }
+            || attributes.FirstOrDefault(attribute => attribute.Id == driveId) is not { Id: not 0, Raw: var own })
+        {
+            return null;
+        }
+
+        var factor = ((double)host + own) / host;
+
+        return new HealthAttribute(
+            WriteAmplificationKey,
+            "Write amplification",
+            factor.ToString("0.00", null),
+            "How many pages the drive writes to flash memory for each page the computer writes. The drive's own upkeep adds the extra, and a lower figure wears the drive more slowly.",
+            AttributeStanding.Normal,
+            $"IDs {hostId} and {driveId}: raw {host} and {own}");
+    }
+
+    private static HealthAttribute Row(AtaAttribute attribute, DeviceDescriptor drive, uint? logicalSectorBytes)
     {
         var known = AtaVendorOverlay.Of(attribute.Id, drive) ?? AtaAttributeCatalogue.Of(attribute.Id);
         var raw = RawText(attribute);
 
         if (known is null)
         {
-            return Judged(attribute, $"Vendor-specific attribute {attribute.Id}", Value(attribute), UnusedNumbers, AttributeStanding.Normal, raw);
+            return Judged(attribute, drive, $"Vendor-specific attribute {attribute.Id}", Value(attribute), UnusedNumbers, AttributeStanding.Normal, raw);
         }
 
-        var (reading, meaning, standing) = Reading(attribute, known);
-        return Judged(attribute, known.Name, reading, meaning, standing, raw);
+        var (reading, meaning, standing) = Reading(attribute, known, logicalSectorBytes);
+        return Judged(attribute, drive, known.Name, reading, meaning, standing, raw);
     }
 
     /// <summary>A reading at or below the drive's own threshold is the drive's own verdict, so it stands whatever the raw value's format.</summary>
-    private static HealthAttribute Judged(AtaAttribute attribute, string name, string reading, string meaning, AttributeStanding standing, string raw) =>
-        IsPastThreshold(attribute)
+    private static HealthAttribute Judged(AtaAttribute attribute, DeviceDescriptor drive, string name, string reading, string meaning, AttributeStanding standing, string raw) =>
+        IsPastThreshold(attribute, drive)
             ? new HealthAttribute(
                 Key(attribute),
                 name,
@@ -82,26 +114,31 @@ internal static class AtaAttributeRows
                 raw)
             : new HealthAttribute(Key(attribute), name, reading, meaning, standing, raw);
 
-    private static bool IsPastThreshold(AtaAttribute attribute) =>
+    private static bool IsPastThreshold(AtaAttribute attribute, DeviceDescriptor drive) =>
         attribute is { IsPreFail: true, Threshold: { } threshold, Value: var value }
-        && threshold is >= LowestValid and <= HighestValid
-        && value is >= LowestValid and <= HighestValid
-        && value <= threshold;
+        && (AtaVendorOverlay.AlwaysFails(threshold, drive)
+            || (threshold is >= LowestValid and <= HighestValid
+                && value is >= LowestValid and <= HighestValid
+                && value <= threshold));
 
-    private static (string Reading, string Meaning, AttributeStanding Standing) Reading(AtaAttribute attribute, AtaAttributeDefinition known) =>
+    private static (string Reading, string Meaning, AttributeStanding Standing) Reading(AtaAttribute attribute, AtaAttributeDefinition known, uint? logicalSectorBytes) =>
         known.Format is SmartRawFormat.Opaque
             ? (Value(attribute), $"{known.Explanation} {UnusedNumbers}".TrimStart(), AttributeStanding.Normal)
             : known.Role switch
             {
                 AttributeRole.FailureCount => FailureCount(attribute, known),
                 AttributeRole.RemainingLife => RemainingLife(attribute, known),
-                AttributeRole.Temperature => (Temperature(attribute), known.Explanation, AttributeStanding.Normal),
-                _ => (Decoded(attribute, known.Format), known.Explanation, AttributeStanding.Normal),
+                AttributeRole.Temperature => (Temperature(attribute, known.Format), known.Explanation, AttributeStanding.Normal),
+                _ => (Decoded(attribute, known, logicalSectorBytes), known.Explanation, AttributeStanding.Normal),
             };
+
+    /// <summary>The count or hours in the raw value, as wide as the definition says the figure is.</summary>
+    private static ulong Figure(AtaAttribute attribute, AtaAttributeDefinition known) =>
+        known.Width is RawWidth.AllSixBytes ? attribute.Raw : attribute.Raw & LowDoubleWord;
 
     private static (string, string, AttributeStanding) FailureCount(AtaAttribute attribute, AtaAttributeDefinition known)
     {
-        var count = attribute.Raw & LowDoubleWord;
+        var count = Figure(attribute, known);
 
         return count == 0
             ? ("None", $"{known.Explanation} None so far.", AttributeStanding.Normal)
@@ -113,19 +150,37 @@ internal static class AtaAttributeRows
             ? ($"{attribute.Value}% left", $"{known.Explanation} The drive is near the end of its rated life, so plan to replace it.", AttributeStanding.Watch)
             : ($"{attribute.Value}% left", known.Explanation, AttributeStanding.Normal);
 
-    private static string Temperature(AtaAttribute attribute)
+    private static string Temperature(AtaAttribute attribute, SmartRawFormat format)
     {
-        var celsius = (int)(attribute.Raw & 0xFF);
+        if (format is not SmartRawFormat.CelsiusRange)
+        {
+            var celsius = (int)(attribute.Raw & 0xFF);
 
-        return celsius == 0 ? "Not reported" : HealthText.Temperature(celsius);
+            return celsius == 0 ? "Not reported" : HealthText.Temperature(celsius);
+        }
+
+        var current = (int)(attribute.Raw & Word);
+        var lowest = (int)((attribute.Raw >> BitsPerWord) & Word);
+        var highest = (int)((attribute.Raw >> (2 * BitsPerWord)) & Word);
+
+        // A drive that has recorded no highest has recorded no range either.
+        return (current, highest) switch
+        {
+            (0, _) => "Not reported",
+            (_, 0) => HealthText.Temperature(current),
+            _ => $"{HealthText.Temperature(current)} (lowest {HealthText.Temperature(lowest)}, highest {HealthText.Temperature(highest)})",
+        };
     }
 
-    private static string Decoded(AtaAttribute attribute, SmartRawFormat format) => format switch
+    private static string Decoded(AtaAttribute attribute, AtaAttributeDefinition known, uint? logicalSectorBytes) => known.Format switch
     {
-        SmartRawFormat.Hours => HealthText.Hours(attribute.Raw & LowDoubleWord),
+        SmartRawFormat.Hours => HealthText.Hours(Figure(attribute, known)),
         SmartRawFormat.Bytes512 => HealthText.Size((UInt128)attribute.Raw * DriveRequests.SectorBytes),
+        SmartRawFormat.LogicalSectors => logicalSectorBytes is { } size
+            ? HealthText.Size((UInt128)attribute.Raw * size)
+            : $"{HealthText.Count(attribute.Raw)} sectors",
         SmartRawFormat.Percent => HealthText.Percent(attribute.Value),
-        _ => HealthText.Count(attribute.Raw & LowDoubleWord),
+        _ => HealthText.Count(Figure(attribute, known)),
     };
 
     private static string Value(AtaAttribute attribute) => $"Scored {attribute.Value}";

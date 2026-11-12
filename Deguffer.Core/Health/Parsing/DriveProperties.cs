@@ -53,17 +53,18 @@ internal static class DriveProperties
         return true;
     }
 
-    internal static bool TryReadSectors(ReadOnlySpan<byte> bytes, out uint logical, out uint physical)
+    internal static bool TryReadSectors(ReadOnlySpan<byte> bytes, out SectorSizes sizes)
     {
-        logical = physical = 0;
+        sizes = default;
 
         if (bytes.Length < PhysicalSectorOffset + sizeof(uint))
         {
             return false;
         }
 
-        logical = BinaryPrimitives.ReadUInt32LittleEndian(bytes[LogicalSectorOffset..]);
-        physical = BinaryPrimitives.ReadUInt32LittleEndian(bytes[PhysicalSectorOffset..]);
+        sizes = new SectorSizes(
+            BinaryPrimitives.ReadUInt32LittleEndian(bytes[LogicalSectorOffset..]),
+            BinaryPrimitives.ReadUInt32LittleEndian(bytes[PhysicalSectorOffset..]));
         return true;
     }
 

@@ -17,7 +17,7 @@ public sealed class DriveInterpretationTests
     private const string SamsungCovered = "SAMSUNG MZ7LM999HCTE-00000";
 
     private static HealthAttribute Row(AtaAttribute attribute, string model = "Test Model") =>
-        Assert.Single(AtaAttributeRows.Of([attribute], AtaDrives.Named(model)));
+        Assert.Single(AtaAttributeRows.Of([attribute], AtaDrives.Named(model), logicalSectorBytes: null));
 
     private static IReadOnlyList<HealthAttribute> Nvme(byte[] health, NvmeController? controller = null)
     {
