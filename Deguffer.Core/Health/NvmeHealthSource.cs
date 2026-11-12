@@ -8,7 +8,7 @@ internal sealed class NvmeHealthSource : IDriveHealthSource
 {
     public bool Reads(StorageBusType bus) => bus is StorageBusType.Nvme;
 
-    public DriveReadout Read(IDriveDevice device, DeviceDescriptor drive)
+    public DriveReadout Read(IDriveDevice device, DeviceDescriptor drive, SectorSizes? sectors)
     {
         NvmeController? controller = device.Ask(DriveQuestion.NvmeController).Bytes is { } identify
             && NvmeController.TryRead(identify, out var read) ? read : null;

@@ -1,18 +1,20 @@
+using System.Collections.Frozen;
 using System.Text.RegularExpressions;
 using Deguffer.Core.Health.Parsing;
 
 namespace Deguffer.Core.Health;
 
 /// <summary>
-/// The attributes a manufacturer's own document states more exactly than the catalogue can for every
-/// drive. Each entry is keyed on the model families its document names and no wider, because the same
-/// ID means something else on another family, even from the same maker. A family no document covers
-/// keeps the catalogue's reading (§7.6).
+/// What a manufacturer's own document states more exactly than the catalogue can for every drive: an
+/// attribute's meaning, a threshold code, or a figure worked out from two attributes. Each is keyed on
+/// the model families its document names and no wider, because the same ID means something else on
+/// another family, even from the same maker. A family no document covers keeps the catalogue's
+/// reading and the plain threshold rule (§7.6).
 /// </summary>
 internal static partial class AtaVendorOverlay
 {
-    /// <summary>The first Micron M500 firmware revision TN-FD-22 covers, MU03.</summary>
-    private const int FirstCoveredM500Firmware = 3;
+    /// <summary>The threshold code TN-FD-22 table 7 defines as always failing.</summary>
+    private const byte AlwaysFailingThreshold = 0xFF;
 
     private static readonly AtaAttributeDefinition RemainingLife = new(
         "Remaining life", "How much of the drive's rated write life is left.", SmartRawFormat.Percent, AttributeRole.RemainingLife);
@@ -23,56 +25,124 @@ internal static partial class AtaVendorOverlay
     private static readonly AtaAttributeDefinition TotalWritten = new(
         "Total data written", "How much the computer has written to the drive over its life.", SmartRawFormat.Bytes512, AttributeRole.Usage);
 
+    private static readonly AtaAttributeDefinition SpareBlocksLeft = new(
+        "Spare blocks left", "How much of the drive's reserve of spare blocks, which stand in for failed ones, is left.", SmartRawFormat.Percent, AttributeRole.RemainingLife);
+
+    private static readonly AtaAttributeDefinition ProgramFailureAllowance = new(
+        "Write failure allowance", "How much of the drive's allowance for failed writes to flash memory is left.", SmartRawFormat.Percent, AttributeRole.RemainingLife);
+
+    private static readonly AtaAttributeDefinition EraseFailureAllowance = new(
+        "Erase failure allowance", "How much of the drive's allowance for failed erases of flash memory is left.", SmartRawFormat.Percent, AttributeRole.RemainingLife);
+
+    private static readonly AtaAttributeDefinition BadBlockAllowance = new(
+        "Bad block allowance", "How much of the drive's allowance for blocks that fail in use is left.", SmartRawFormat.Percent, AttributeRole.RemainingLife);
+
+    private static readonly AtaAttributeDefinition AverageErases = new(
+        "Wear levelling count", "How many times, on average, each block of flash memory has been erased.", SmartRawFormat.Count, AttributeRole.Usage);
+
+    private static readonly AtaAttributeDefinition SpareBlocksUnused = new(
+        "Spare blocks left", "How many spare blocks the drive still has to stand in for failed ones.", SmartRawFormat.Count, AttributeRole.Information);
+
+    private static readonly AtaAttributeDefinition ProgramFailures = new(
+        "Write failures", "Writes to flash memory that failed.", SmartRawFormat.Count, AttributeRole.FailureCount);
+
+    private static readonly AtaAttributeDefinition EraseFailures = new(
+        "Erase failures", "Erases of flash memory that failed.", SmartRawFormat.Count, AttributeRole.FailureCount);
+
+    private static readonly AtaAttributeDefinition RuntimeBadBlocks = new(
+        "Failures in use", "Reads, writes and erases of flash memory that failed, all together.", SmartRawFormat.Count, AttributeRole.FailureCount);
+
+    private static readonly AtaAttributeDefinition SuddenPowerLoss = new(
+        "Unexpected power loss", "Times power was lost without warning, so the drive had to recover its data when next switched on.", SmartRawFormat.Count, AttributeRole.Usage);
+
+    private static readonly AtaAttributeDefinition InterfaceDownshifts = new(
+        "Interface speed drops", "Times the connection to the computer settled at a slower speed than it had before.", SmartRawFormat.Count, AttributeRole.Information);
+
+    private static readonly AtaStatusDefinition SsdModeStatus = new(
+        "Drive mode",
+        "The state the drive reports itself to be in.",
+        new Dictionary<ulong, AtaStatusCode>
+        {
+            [0x00] = new("Normal", "The drive reports that it is working normally.", AttributeStanding.Normal),
+            [0x10] = new(
+                "Capacitor failed",
+                "The capacitor that protects data in a power cut has failed, so a power cut can lose data being written. Copy your important files somewhere else, and plan to replace the drive.",
+                AttributeStanding.Failing),
+            [0x20] = new(
+                "Read-only",
+                "The drive has switched itself to read-only, so nothing more can be written to it. Copy your important files somewhere else now.",
+                AttributeStanding.Failing),
+        }.ToFrozenDictionary());
+
     /// <summary>The overlay's definition for <paramref name="id"/> on <paramref name="drive"/>, if a document covers it.</summary>
-    internal static AtaAttributeDefinition? Of(byte id, DeviceDescriptor drive) => id switch
+    internal static AtaAttributeDefinition? Of(byte id, DeviceDescriptor drive) =>
+        MicronClientSata.Covers(drive) ? MicronClientSata.Of(id)
+        : SamsungPm863OrSm863().IsMatch(drive.Model) ? SamsungPm863OrSm863Of(id)
+        : Samsung845Dc().IsMatch(drive.Model) ? Samsung845DcOf(id)
+        : id switch
+        {
+            // Intel DC S3500 product specification 328860-008US, table 18: the normalised value declines
+            // from 100 to 1 with wear. Solidigm KA-00033 names 233 for later drives but states no scale.
+            233 when IntelDcS3500().IsMatch(drive.Model) => MediaWearout,
+
+            _ => null,
+        };
+
+    /// <summary>
+    /// Whether <paramref name="threshold"/> fails its attribute whatever the value. TN-FD-22 table 7 makes
+    /// FFh a valid threshold that always fails. Elsewhere FEh and FFh are left unjudged, as no document says
+    /// otherwise. 00h always passes and FEh is invalid on every drive, which the plain rule already gives.
+    /// </summary>
+    internal static bool AlwaysFails(byte threshold, DeviceDescriptor drive) =>
+        threshold == AlwaysFailingThreshold && MicronClientSata.Covers(drive);
+
+    /// <summary>
+    /// The attributes counting flash pages written for the computer and by the drive itself, from which
+    /// the write amplification is (host + drive) / host, where a document defines them (TN-FD-22, ID 248).
+    /// </summary>
+    internal static (byte Host, byte Drive)? FlashPagesWritten(DeviceDescriptor drive) =>
+        MicronClientSata.Covers(drive) ? (MicronClientSata.HostPagesId, MicronClientSata.DrivePagesId) : null;
+
+    /// <summary>
+    /// Samsung, "Using SMART Attributes to Estimate Drive Lifetime" (WHP-SSD-SSDSMARTATTRIBUTES-APR16J),
+    /// which covers the PM863 and SM863. For 177, 179, 181, 182 and 183 the normalised value is the
+    /// percentage left. The paper advises replacing the drive once 179, 181, 182 or 183 falls below 10,
+    /// which the general warning at 10 or less already gives. The 845 DC note counts used reserve
+    /// blocks in 179's raw value where this paper counts unused ones, so 179 is read by its normalised
+    /// value only. The paper states no unit for 242, so 242 stays as reported. Its timed workload
+    /// attributes, 245 to 247, describe a measurement that Samsung's tool starts with a vendor command,
+    /// which Deguffer never sends (§7.6).
+    /// </summary>
+    private static AtaAttributeDefinition? SamsungPm863OrSm863Of(byte id) => id switch
     {
-        // Samsung, "Using SMART Attributes to Estimate Drive Lifetime" (WHP-SSD-SSDSMARTATTRIBUTES-APR16J):
-        // the normalised value is the percentage of remaining P/E cycles, on the PM863 and SM863.
-        177 when SamsungPm863OrSm863().IsMatch(drive.Model) => RemainingLife,
-
-        // The same white paper, and Samsung's S.M.A.R.T. application note for the 845 DC PRO and EVO:
-        // the raw value counts 512-byte sectors. Neither states a unit for 242, so 242 stays as reported.
-        241 when SamsungPm863OrSm863().IsMatch(drive.Model) || Samsung845Dc().IsMatch(drive.Model) => TotalWritten,
-
-        // Micron TN-FD-22 Rev. E, "Client SATA SSD SMART Attribute Reference": percent lifetime
-        // remaining. Samsung uses 202 for a mode status, which the family names here exclude.
-        202 when IsMicronClientSata(drive) => RemainingLife,
-
-        // Intel DC S3500 product specification 328860-008US, table 18: the normalised value declines
-        // from 100 to 1 with wear. Solidigm KA-00033 names 233 for later drives but states no scale.
-        233 when IntelDcS3500().IsMatch(drive.Model) => MediaWearout,
-
+        177 => RemainingLife,
+        179 => SpareBlocksLeft,
+        181 => ProgramFailureAllowance,
+        182 => EraseFailureAllowance,
+        183 => BadBlockAllowance,
+        241 => TotalWritten,
         _ => null,
     };
 
     /// <summary>
-    /// The families TN-FD-22 lists, under Micron's name, Micron's part number or Crucial's part number.
-    /// The M500 is covered only from firmware MU03, as the note states.
+    /// Samsung's S.M.A.R.T. application note for the 845 DC PRO and 845 DC EVO (2014), which defines
+    /// the raw values and no normalised scale. 179 is left out because the note and the PM863 paper
+    /// disagree on whether it counts used or unused reserve blocks. The note states no unit for 242,
+    /// so 242 stays as reported. Its other IDs are the common ones the catalogue already reads.
     /// </summary>
-    private static bool IsMicronClientSata(DeviceDescriptor drive) =>
-        MicronClientSata().Match(drive.Model) is { Success: true } match
-        && (!IsM500(match) || IsM500FirmwareCovered(drive.Revision));
-
-    private static bool IsM500(Match match) =>
-        match.Groups["family"].ValueSpan.Equals("M500", StringComparison.OrdinalIgnoreCase)
-        || match.Groups["code"].ValueSpan.Equals("MAV", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsM500FirmwareCovered(string revision) =>
-        revision.StartsWith("MU", StringComparison.OrdinalIgnoreCase)
-        && int.TryParse(revision.AsSpan(2), out var release)
-        && release >= FirstCoveredM500Firmware;
-
-    /// <summary>
-    /// "Micron_M600_...", "Crucial_CT250MX200SSD1", or a Micron part number such as "MTFDDAK256MBF".
-    /// The family must stand alone, so a data-centre sibling such as the M500DC, or the MX500 the note
-    /// does not list, is not taken for one it does. In a part number the family is the code after the
-    /// capacity, which Micron's data sheets give as MAV (M500), MAZ (M510), MAY (M550), MBF (M600),
-    /// TBN (1100) and TDL (1300). The data-centre codes, such as MBB (M500DC), differ.
-    /// </summary>
-    [GeneratedRegex(
-        @"^Micron[_ ](?<family>M500|M510|M550|M600|1100|1300)(?:[_ ]|$)|^(?:Crucial_)?CT\d{3,4}(?<family>M500|M550|MX100|MX200|MX300)SSD\d|(?<![A-Z0-9])MTFDD(?:AK|AT|AV|AY)(?:\d{3}|\dT\d)(?<code>MAV|MAZ|MAY|MBF|TBN|TDL)",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex MicronClientSata();
+    private static AtaAttributeDefinition? Samsung845DcOf(byte id) => id switch
+    {
+        177 => AverageErases,
+        180 => SpareBlocksUnused,
+        181 => ProgramFailures,
+        182 => EraseFailures,
+        183 => RuntimeBadBlocks,
+        202 => SsdModeStatus,
+        235 => SuddenPowerLoss,
+        241 => TotalWritten,
+        250 => InterfaceDownshifts,
+        _ => null,
+    };
 
     /// <summary>
     /// The PM863 (MZ7LM...HC) and SM863 (MZ7KM...HA) part numbers in Samsung's data sheets. The PM863a

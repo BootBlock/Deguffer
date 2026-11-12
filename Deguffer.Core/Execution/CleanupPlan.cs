@@ -407,7 +407,14 @@ public sealed record CleanupPlan
         // Named for the user's choice rather than for what is kept, because "keep" already means the
         // guard on recently changed files and the keep list elsewhere in this project, and each of
         // those decides something different about the same plan.
-        var selected = Steps.Where(chosen.Contains).ToList();
+        //
+        // Asked of a set built here, because the shell passes a list and this runs on the UI thread
+        // when Clean is pressed: a list's Contains is a linear search of record equality, which on a
+        // row of thousands of steps is millions of comparisons. Built with the default comparer even
+        // when the caller passes a set, so a set comparing some other way cannot change which steps
+        // are kept and which are declined.
+        var chosenSet = new HashSet<CleanupStep>(chosen);
+        var selected = Steps.Where(chosenSet.Contains).ToList();
 
         if (selected.Count == Steps.Count)
         {

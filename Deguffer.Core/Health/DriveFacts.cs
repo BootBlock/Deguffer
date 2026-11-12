@@ -27,7 +27,11 @@ internal static class DriveFacts
         [StorageBusType.Nvme] = "NVMe",
     }.ToFrozenDictionary();
 
-    internal static IReadOnlyList<DriveFact> Of(DeviceDescriptor descriptor, IDriveDevice device)
+    /// <summary>The drive's sector sizes, asked once because both its details and some attributes need them.</summary>
+    internal static SectorSizes? Sectors(IDriveDevice device) =>
+        device.Ask(DriveQuestion.Alignment).Bytes is { } alignment && DriveProperties.TryReadSectors(alignment, out var sizes) ? sizes : null;
+
+    internal static IReadOnlyList<DriveFact> Of(DeviceDescriptor descriptor, IDriveDevice device, SectorSizes? sectors)
     {
         var facts = new List<DriveFact>();
 
@@ -45,7 +49,7 @@ internal static class DriveFacts
             Add("Capacity", FreeSpace.Format(size));
         }
 
-        if (device.Ask(DriveQuestion.Alignment).Bytes is { } alignment && DriveProperties.TryReadSectors(alignment, out var logical, out var physical))
+        if (sectors is (var logical, var physical))
         {
             Add("Sector size", logical == physical ? $"{logical} bytes" : $"{logical} bytes, {physical} bytes physical");
         }

@@ -9,9 +9,9 @@ namespace Deguffer.Core.Tests;
 /// The Delivery Optimization cache: Tier 1, sized by Windows and cleared by Windows' own command, and
 /// never by deleting a path.
 ///
-/// <para>Everything runs against a synthetic Windows directory and a fake process runner. The real
-/// cache is in the Network Service profile, which the suite could not list, and a test that cleared it
-/// would be clearing the cache of whoever ran the suite.</para>
+/// <para>Everything runs against a synthetic Windows directory, a fake Delivery Optimization service
+/// and a fake process runner. The real cache is in the Network Service profile, which the suite could
+/// not list, and a test that cleared it would be clearing the cache of whoever ran the suite.</para>
 /// </summary>
 public sealed class DeliveryOptimizationProviderTests : IDisposable
 {
@@ -21,6 +21,9 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
     private readonly FakeUserEnvironment _environment;
     private readonly FakeSystemDirectories _system;
     private readonly FakeProcessRunner _runner = new();
+
+    /// <summary>The service, reporting a cache of <see cref="CacheBytes"/> unless a test says otherwise.</summary>
+    private FakeDeliveryOptimizationStatus _status = FakeDeliveryOptimizationStatus.Reporting(CacheBytes);
 
     public DeliveryOptimizationProviderTests()
     {
@@ -42,7 +45,8 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
         _runner,
         FakeProcessInspector.NothingRunning,
         new FakeDirectoryScanner(),
-        _system);
+        _system,
+        _status);
 
     /// <summary>The module's manifest, where Windows ships it.</summary>
     private void InstallModule() =>
@@ -50,9 +54,19 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
             "DeliveryOptimization.psd1");
 
     /// <summary>Windows reporting <paramref name="bytes"/> in the cache, and clearing it successfully.</summary>
-    private void ReportCache(long bytes) => _runner
-        .Responding(PowerShell, "Get-DeliveryOptimizationPerfSnap", bytes.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\r\n")
-        .Responding(PowerShell, "Delete-DeliveryOptimizationCache", "Deleting...\r\nSuccessfully deleted Delivery Optimization cache\r\n");
+    private void ReportCache(long bytes)
+    {
+        _status = FakeDeliveryOptimizationStatus.Reporting(bytes);
+        _runner.Responding(PowerShell, "Delete-DeliveryOptimizationCache", "Deleting...\r\nSuccessfully deleted Delivery Optimization cache\r\n");
+    }
+
+    /// <summary>The clear succeeding, after <paramref name="during"/> has done what the test says it reached.</summary>
+    private void ClearReaching(Action during) =>
+        _runner.Replying(PowerShell, _ =>
+        {
+            during();
+            return new CommandOutcome(0, "Successfully deleted Delivery Optimization cache", string.Empty);
+        });
 
     /// <summary>
     /// Windows' update folder as it is on a real machine: the update history, the updates waiting to
@@ -99,10 +113,10 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
         Assert.False(step.Estimated.IsApproximate);
         Assert.Equal(SafetyTier.RegenerableCache, plan.Tier);
 
-        // The measurement went to the same host, and nothing was cleared while planning.
-        var asked = Assert.Single(_runner.Invocations);
-        Assert.Equal(step.FileName, asked.FileName);
-        Assert.Contains("Get-DeliveryOptimizationPerfSnap", asked.Arguments);
+        // The figure came from the service in-process: planning started no process at all, so nothing
+        // was cleared and no PowerShell was paid for to read one number.
+        Assert.Empty(_runner.Invocations);
+        Assert.Equal(1, _status.Reads);
     }
 
     /// <summary>
@@ -143,23 +157,50 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A failed query is not an empty cache. Reading it as one would call a cache of any size clear.
+    /// A failed query is not an empty cache. Reading it as one would call a cache of any size clear, so
+    /// the plan is unexamined and says what Windows answered.
     /// </summary>
-    [Theory]
-    [InlineData(1, "")]
-    [InlineData(0, "")]
-    [InlineData(0, "-1")]
-    [InlineData(0, "5,368,709,120")]
-    public async Task AQueryWindowsDidNotAnswerOffersNothingAndIsNotClear(int exitCode, string output)
+    [Fact]
+    public async Task AQueryWindowsDidNotAnswerOffersNothingAndIsNotClear()
     {
         InstallModule();
-        _runner.Responding(PowerShell, "Get-DeliveryOptimizationPerfSnap", output, exitCode);
+        _status = new FakeDeliveryOptimizationStatus(
+            () => DeliveryOptimizationReading.Unanswered("Windows refused this account the figure."));
 
         var plan = await CreateProvider().PlanAsync();
 
         Assert.Empty(plan.Steps);
         Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("Windows refused this account the figure.", StringComparison.Ordinal));
     }
+
+    /// <summary>
+    /// WMI hands a <c>uint64</c> over as a string of invariant digits. Only one non-negative whole
+    /// number that fits a size is a figure: an unset property, a negative, a grouped, padded or
+    /// overflowing number, or a value in any other form is unanswered rather than read as zero.
+    /// </summary>
+    [Theory]
+    [InlineData("5368709120", 5368709120L)]
+    [InlineData("0", 0L)]
+    [InlineData("9223372036854775807", long.MaxValue)]
+    [InlineData("", null)]
+    [InlineData("-1", null)]
+    [InlineData("5,368,709,120", null)]
+    [InlineData(" 5368709120", null)]
+    [InlineData("9223372036854775808", null)]
+    [InlineData(null, null)]
+    [InlineData(5368709120L, null)]
+    public void OnlyADecimalStringThatFitsASizeIsAFigure(object? value, long? expected)
+    {
+        var reading = WindowsDeliveryOptimizationStatus.ReadingOf(value);
+
+        Assert.Equal(expected, reading.Bytes);
+        Assert.Equal(expected is null, reading.Failure is not null);
+    }
+
+    [Fact]
+    public void AnUnsetPropertyIsNoFigure() =>
+        Assert.Equal("Windows gave no figure.", WindowsDeliveryOptimizationStatus.ReadingOf(DBNull.Value).Failure);
 
     [Fact]
     public async Task WithoutTheModuleNothingIsAskedOrOffered()
@@ -168,11 +209,13 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
 
         Assert.Empty(plan.Steps);
         Assert.Empty(_runner.Invocations);
+        Assert.Equal(0, _status.Reads);
     }
 
     /// <summary>
     /// What the clean freed is Windows' figure before less Windows' figure after. The folder cannot
-    /// be measured, so without asking again the run would report the whole estimate as freed.
+    /// be measured, so without asking again the run would report the whole estimate as freed. The
+    /// service is asked in-process each time, so the only process the clean starts is the clear.
     /// </summary>
     [Fact]
     public async Task TheReclaimIsWindowsOwnFigureAskedAgainAfterTheCommand()
@@ -182,17 +225,9 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
         const long remaining = 1L * 1024 * 1024 * 1024;
         var cleared = false;
 
-        _runner.Replying(PowerShell, arguments =>
-        {
-            if (arguments.Contains("Delete-DeliveryOptimizationCache", StringComparison.Ordinal))
-            {
-                cleared = true;
-                return new CommandOutcome(0, "Successfully deleted Delivery Optimization cache", string.Empty);
-            }
-
-            var bytes = cleared ? remaining : CacheBytes;
-            return new CommandOutcome(0, bytes.ToString(System.Globalization.CultureInfo.InvariantCulture), string.Empty);
-        });
+        _status = new FakeDeliveryOptimizationStatus(
+            () => DeliveryOptimizationReading.Of(Volatile.Read(ref cleared) ? remaining : CacheBytes));
+        ClearReaching(() => Volatile.Write(ref cleared, true));
 
         var provider = CreateProvider();
         var result = await provider.ExecuteAsync(await provider.PlanAsync());
@@ -200,6 +235,11 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
         var step = Assert.Single(result.Steps);
         Assert.True(step.Succeeded);
         Assert.Equal(CacheBytes - remaining, step.BytesReclaimed);
+
+        var started = Assert.Single(_runner.Invocations);
+        Assert.Equal(PowerShell, started.FileName);
+        Assert.Equal(DeliveryOptimizationCache.ClearArguments, started.Arguments);
+        Assert.Equal(3, _status.Reads);
     }
 
     /// <summary>
@@ -213,12 +253,11 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
 
         var asked = 0;
 
-        _runner.Replying(PowerShell, arguments =>
-            arguments.Contains("Delete-DeliveryOptimizationCache", StringComparison.Ordinal)
-                ? new CommandOutcome(0, "Successfully deleted Delivery Optimization cache", string.Empty)
-                : ++asked == 1
-                    ? new CommandOutcome(0, CacheBytes.ToString(System.Globalization.CultureInfo.InvariantCulture), string.Empty)
-                    : new CommandOutcome(1, string.Empty, "The service did not answer."));
+        _status = new FakeDeliveryOptimizationStatus(() =>
+            Interlocked.Increment(ref asked) == 1
+                ? DeliveryOptimizationReading.Of(CacheBytes)
+                : DeliveryOptimizationReading.Unanswered("Windows did not answer (error 0x80041010)."));
+        ClearReaching(() => { });
 
         var provider = CreateProvider();
         var result = await provider.ExecuteAsync(await provider.PlanAsync());
@@ -236,10 +275,8 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
     public async Task AFailedClearReportsWindowsReasonRatherThanItsProgressLine()
     {
         InstallModule();
-        _runner.Replying(PowerShell, arguments =>
-            arguments.Contains("Delete-DeliveryOptimizationCache", StringComparison.Ordinal)
-                ? new CommandOutcome(1, "Deleting...\r\n", "File is not initialized. Please try again later.\r\n")
-                : new CommandOutcome(0, CacheBytes.ToString(System.Globalization.CultureInfo.InvariantCulture), string.Empty));
+        _runner.Replying(PowerShell, _ =>
+            new CommandOutcome(1, "Deleting...\r\n", "File is not initialized. Please try again later.\r\n"));
 
         var provider = CreateProvider();
         var result = await provider.ExecuteAsync(await provider.PlanAsync());
@@ -306,21 +343,16 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
             "DeliveryOptimization");
         var cached = _temp.CreateFile(4096, Path.GetRelativePath(_temp.Path, folder), "Cache", "payload");
 
-        _runner.Replying(PowerShell, arguments =>
+        ClearReaching(() =>
         {
-            if (arguments.Contains("Delete-DeliveryOptimizationCache", StringComparison.Ordinal))
+            if (removeFolder)
             {
-                if (removeFolder)
-                {
-                    Directory.Delete(folder, recursive: true);
-                }
-                else
-                {
-                    File.Delete(cached);
-                }
+                Directory.Delete(folder, recursive: true);
             }
-
-            return new CommandOutcome(0, CacheBytes.ToString(System.Globalization.CultureInfo.InvariantCulture), string.Empty);
+            else
+            {
+                File.Delete(cached);
+            }
         });
 
         var provider = CreateProvider();
@@ -370,15 +402,7 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
         InstallModule();
         var (_, dataStore, _) = CreateSoftwareDistribution();
 
-        _runner.Replying(PowerShell, arguments =>
-        {
-            if (arguments.Contains("Delete-DeliveryOptimizationCache", StringComparison.Ordinal))
-            {
-                Directory.Delete(dataStore, recursive: true);
-            }
-
-            return new CommandOutcome(0, CacheBytes.ToString(System.Globalization.CultureInfo.InvariantCulture), string.Empty);
-        });
+        ClearReaching(() => Directory.Delete(dataStore, recursive: true));
 
         var provider = CreateProvider();
         var result = await provider.ExecuteAsync(await provider.PlanAsync());
@@ -404,15 +428,7 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
         _temp.CreateFile(4096, "Windows", "Installer", "patch.msp");
         var reached = Path.Combine(_system.WindowsDirectory, folder);
 
-        _runner.Replying(PowerShell, arguments =>
-        {
-            if (arguments.Contains("Delete-DeliveryOptimizationCache", StringComparison.Ordinal))
-            {
-                File.Delete(Path.Combine(reached, file));
-            }
-
-            return new CommandOutcome(0, CacheBytes.ToString(System.Globalization.CultureInfo.InvariantCulture), string.Empty);
-        });
+        ClearReaching(() => File.Delete(Path.Combine(reached, file)));
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
