@@ -12,16 +12,22 @@ namespace Deguffer.Core.Providers;
 /// session of the program, so any one of them holds the step back, as it would have kept the step out
 /// of the plan.</para>
 /// </summary>
-/// <param name="names">Process names without extension, compared as <see cref="IProcessInspector.FindRunning"/> compares them.</param>
-internal sealed class RunningProcessCheck(IProcessInspector inspector, IReadOnlyList<string> names) : IUseCheck
+/// <param name="rule">The processes that are the program's, matched as <see cref="IProcessInspector.FindRunning(ProcessNameRule)"/> matches them.</param>
+internal sealed class RunningProcessCheck(IProcessInspector inspector, ProcessNameRule rule) : IUseCheck
 {
+    /// <param name="names">Process names without extension, compared as <see cref="IProcessInspector.FindRunning(IEnumerable{string})"/> compares them.</param>
+    public RunningProcessCheck(IProcessInspector inspector, IReadOnlyList<string> names)
+        : this(inspector, ProcessNameRule.Named(names))
+    {
+    }
+
     public IReadOnlyList<InUseNow> Ask(DeleteStep step, CancellationToken ct)
     {
         // The inspector keeps one snapshot for a planning pass, and the preview's may be past the
         // limit.
         inspector.DiscardOlderThan(IUseCheck.ReadingLimit);
 
-        return inspector.FindRunning(names) is { Count: > 0 } running
+        return inspector.FindRunning(rule) is { Count: > 0 } running
             ? [new InUseNow(step.Path, $"{string.Join(", ", running)} {(running.Count == 1 ? "is" : "are")} running now")]
             : [];
     }

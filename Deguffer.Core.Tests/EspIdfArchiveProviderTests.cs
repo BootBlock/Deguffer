@@ -499,14 +499,16 @@ public sealed class EspIdfArchiveProviderTests : IDisposable
     /// <summary>
     /// §5.3. The Installation Manager downloads and unpacks one archive after another, and Windows lets a file
     /// it is writing be deleted, so while it runs nothing is offered, each <c>dist</c> is named for why, the
-    /// row does not read as clear, and Explore refuses it.
+    /// row does not read as clear, and Explore refuses it. It runs under the name it was installed or
+    /// downloaded as: the MSI's <c>eim</c>, Scoop's <c>eim-gui</c>, and each release asset, versioned or not.
     /// </summary>
-    [Fact]
-    public async Task NothingIsOfferedWhileTheInstallationManagerRuns()
+    [Theory]
+    [MemberData(nameof(InstallationManagerNames))]
+    public async Task NothingIsOfferedWhileTheInstallationManagerRuns(string processName)
     {
         var (archives, _) = CreateToolsFolder(DefaultTools);
 
-        var provider = CreateProvider(new FakeProcessInspector("eim"));
+        var provider = CreateProvider(new FakeProcessInspector(processName));
         var plan = await provider.PlanAsync();
 
         Assert.True(await provider.IsPresentAsync());
@@ -527,8 +529,9 @@ public sealed class EspIdfArchiveProviderTests : IDisposable
     }
 
     /// <summary>The clean asks again, so an Installation Manager started while the preview was on screen holds the archives back.</summary>
-    [Fact]
-    public async Task AnInstallationManagerStartedAfterThePreviewHoldsTheArchivesBack()
+    [Theory]
+    [MemberData(nameof(InstallationManagerNames))]
+    public async Task AnInstallationManagerStartedAfterThePreviewHoldsTheArchivesBack(string processName)
     {
         var (archives, _) = CreateToolsFolder(DefaultTools);
 
@@ -538,12 +541,53 @@ public sealed class EspIdfArchiveProviderTests : IDisposable
 
         Assert.NotEmpty(plan.Steps);
 
-        inspector.WithRunning("eim").PassTheReadingLimit();
+        inspector.WithRunning(processName).PassTheReadingLimit();
         var result = await provider.ExecuteAsync(plan);
 
         Assert.All(archives, path => Assert.True(File.Exists(path), $"{path} was removed under an Installation Manager started after the preview."));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
     }
+
+    /// <summary>
+    /// A program whose name only starts like the Installation Manager's, or is another program entirely,
+    /// holds nothing back, at the preview or at the clean.
+    /// </summary>
+    [Theory]
+    [InlineData("eimx")]
+    [InlineData("eim-guide")]
+    [InlineData("eim-cli")]
+    [InlineData("teams")]
+    public async Task AProgramThatIsNotTheInstallationManagerHoldsNothingBack(string processName)
+    {
+        var (archives, kept) = CreateToolsFolder(DefaultTools);
+
+        var provider = CreateProvider(new FakeProcessInspector(processName));
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(archives.Order(StringComparer.OrdinalIgnoreCase), plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
+        Assert.False(plan.WasNotExamined);
+        Assert.DoesNotContain(plan.ProtectedPaths, p => p.Reason.Contains("Installation Manager is running", StringComparison.Ordinal));
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.All(archives, path => Assert.False(File.Exists(path), $"{path} was kept although {processName} is not the Installation Manager."));
+        Assert.All(kept, path => Assert.True(File.Exists(path), $"{path} went with the archives."));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    public static TheoryData<string> InstallationManagerNames =>
+    [
+        "eim",
+        "EIM",
+        "eim-gui",
+        "eim-cli-windows-x64",
+        "eim-gui-windows-x64",
+        "eim-cli-windows-x64-v0.20.1",
+        "eim-gui-windows-x64-v0.20.1",
+        "eim-cli-windows-x64_v0.17.4",
+        "eim-gui-windows-x64_v0.17.4",
+        "eim-gui-windows-aarch64",
+    ];
 
     /// <summary>
     /// §7.1. Explore may take from <c>dist</c> only a file with an archive's name. The tools folder
