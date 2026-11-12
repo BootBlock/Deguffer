@@ -54,17 +54,13 @@ public sealed class SunburstSurface : ExploreSurface
         var sunburst = _hits.Sunburst;
         var sectors = sunburst.Sectors;
         var shapes = new List<MapShape>();
-        ExploreSector? holder = null;
 
-        for (var i = 0; i < sectors.Count && holder is null; i++)
-        {
-            holder = sectors[i].Block != MapBlock.Aggregate && sectors[i].Node == inside ? sectors[i] : null;
-        }
-
-        if (holder is not { } outer)
+        if (_byNode.FirstOf(inside) is not { } holder)
         {
             return shapes;
         }
+
+        var outer = sectors[holder];
 
         const float Rounding = 1e-4f;
 
@@ -150,7 +146,21 @@ public sealed class SunburstSurface : ExploreSurface
     {
         ArgumentNullException.ThrowIfNull(nodes);
 
-        return Traced(nodes);
+        var sunburst = _hits.Sunburst;
+        var sectors = sunburst.Sectors;
+        var outlines = new List<ExploreOutline>();
+
+        for (var i = 0; i < sectors.Count; i++)
+        {
+            var sector = sectors[i];
+
+            if (sector.Block != MapBlock.Aggregate && nodes(sector.Node))
+            {
+                Trace(sunburst, sector, outlines);
+            }
+        }
+
+        return outlines;
     }
 
     /// <summary>Each node once: a sunburst draws no node twice, and every sector but a lump is one.</summary>
@@ -178,25 +188,6 @@ public sealed class SunburstSurface : ExploreSurface
         }
 
         return shapes;
-    }
-
-    private List<ExploreOutline> Traced(Func<int, bool> nodes)
-    {
-        var sunburst = _hits.Sunburst;
-        var sectors = sunburst.Sectors;
-        var outlines = new List<ExploreOutline>();
-
-        for (var i = 0; i < sectors.Count; i++)
-        {
-            var sector = sectors[i];
-
-            if (sector.Block != MapBlock.Aggregate && nodes(sector.Node))
-            {
-                Trace(sunburst, sector, outlines);
-            }
-        }
-
-        return outlines;
     }
 
     /// <summary>

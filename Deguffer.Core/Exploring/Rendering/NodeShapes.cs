@@ -67,7 +67,7 @@ internal sealed class NodeShapes<TShape>
     {
         var found = new List<int>();
 
-        // Asked about more nodes than there are shapes, one pass over the shapes reads less.
+        // Asked about more nodes than there are shapes, one pass over the nodes drawn reads less.
         if (nodes.Count >= _shapes.Count)
         {
             foreach (var (node, first) in _first)
