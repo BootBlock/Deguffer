@@ -73,7 +73,7 @@ public static class EnteredSetting
     public static int? TableReadsInFlight(double entered) =>
         WholeOrAuto(entered, TableTuning.MinimumReadsInFlight, TableTuning.MaximumReadsInFlight);
 
-    /// <summary>How many attribute lists kept outside the file table are read at once, or null for Auto.</summary>
+    /// <summary>How many reads of the attribute lists kept outside the file table are outstanding at once, or null for Auto.</summary>
     public static int? TableListReadsInFlight(double entered) =>
         WholeOrAuto(entered, TableTuning.MinimumListReadsInFlight, TableTuning.MaximumListReadsInFlight);
 

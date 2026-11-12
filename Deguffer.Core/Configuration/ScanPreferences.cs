@@ -51,7 +51,7 @@ public enum ScanRoute
 /// <param name="TableReadKiB">How many KiB of records each read of the file table asks for.</param>
 /// <param name="TableReadsInFlight">How many reads of the file table are outstanding at once.</param>
 /// <param name="TableListReadsInFlight">
-/// How many of the attribute lists kept outside the file table are read at once.
+/// How many reads of the attribute lists kept outside the file table are outstanding at once.
 /// </param>
 public sealed record MediaScanPreferences(
     int? WalkThreads = null,

@@ -4,7 +4,8 @@ namespace Deguffer.Core.Scanning.Mft;
 /// The longest run of records nobody wants that one read of the table reads across rather than
 /// ending there and making a second read after it. Both passes end a read at a longer run: the
 /// first at free records (<see cref="MftBatchPlanner"/>), and the second at records it does not
-/// want (<see cref="MftExtensionReader"/>).
+/// want (<see cref="MftExtensionReader"/>). The attribute lists kept outside the table end a read
+/// at a longer run of clusters between two of them (<see cref="MftListReadPlanner"/>).
 ///
 /// <para>Sixty-four kibibytes, sixty-four of the usual 1,024-byte records, is about what a SATA
 /// drive transfers in the time a second read costs it. Reading across a shorter run saves that

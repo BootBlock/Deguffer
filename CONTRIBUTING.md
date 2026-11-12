@@ -142,8 +142,8 @@ Deguffer.Benchmark scan C:\Users\<user>\source --runs 6
   uses, and only `walk`, `measure`, `explorewalk`, `sources` and `race` take them.
 - `--read-size KiB`, `--reads-in-flight N`, `--parse-threads N` and `--list-reads-in-flight N` set
   how many KiB of records each read of the file table asks for (4 to 16384), how many reads are
-  outstanding at once (1 to 32), how many threads parse what arrives (1 to 64), and how many of the
-  attribute lists kept outside the table are read at once (1 to 32). They default to what a scan
+  outstanding at once (1 to 32), how many threads parse what arrives (1 to 64), and how many reads
+  of the attribute lists kept outside the table are outstanding at once (1 to 32). They default to what a scan
   uses on a drive of unknown kind, and only the table routes take them.
 - Every result states the values it ran with, so compare two results only where those match, or
   where they are the one thing you changed. The values a scan uses for each kind of drive are in
