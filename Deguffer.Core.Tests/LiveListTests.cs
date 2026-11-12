@@ -298,6 +298,33 @@ public sealed class LiveListTests
         Assert.Equal(["one", "two"], notes);
     }
 
+    /// <summary>
+    /// A key can be built rather than read, such as a name copied out of a scanned tree, so each
+    /// arriving thing is asked for its key once however many passes the reconcile makes over them.
+    /// </summary>
+    [Fact]
+    public void EachArrivingThingIsAskedForItsKeyOnce()
+    {
+        var rows = Rows("a", "b", "c", "d");
+        var asked = new List<string>();
+
+        LiveList.Show(
+            rows,
+            ["d", "b", "e", "a"],
+            row => row.Name,
+            name =>
+            {
+                asked.Add(name);
+
+                return name;
+            },
+            name => new Row(name),
+            (_, _) => { });
+
+        Assert.Equal(["d", "b", "e", "a"], asked);
+        Assert.Equal(["d", "b", "e", "a"], Names(rows));
+    }
+
     private static ObservableCollection<Row> Rows(params string[] names) =>
         new(names.Select(name => new Row(name)));
 

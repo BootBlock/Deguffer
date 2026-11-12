@@ -28,6 +28,14 @@ public sealed partial class ExploreRow : ObservableObject, IExploreListed
     /// </summary>
     private readonly KnownItem? _known;
 
+    /// <summary>
+    /// What the labels on screen were worded from, and the folder total <see cref="Share"/> was
+    /// measured against, so <see cref="Describe"/> words nothing a later tree left as it was.
+    /// </summary>
+    private ExploreNodeFigures _figures;
+
+    private long _parentTotal;
+
     /// <param name="parentTotal">
     /// Bytes in the containing directory, which <see cref="Share"/> is measured against.
     /// </param>
@@ -52,10 +60,13 @@ public sealed partial class ExploreRow : ObservableObject, IExploreListed
         IsDirectory = tree.IsDirectory(node);
         IsLink = tree.IsLink(node);
 
+        _figures = ExploreNodeFigures.Of(tree, node, now);
+        _parentTotal = parentTotal;
+
         SizeLabel = ExploreNodeText.Size(tree, node);
         StorageLabel = ExploreNodeText.Storage(tree, node);
-        Share = ShareOf(tree, node, parentTotal);
-        IsApproximate = tree.HasUnknownSizeBelow(node);
+        Share = ShareOf(_figures.Size, parentTotal);
+        IsApproximate = _figures.SizeUnknown;
         AgeLabel = ExploreNodeText.Age(tree, node, now);
         DatesLabel = ExploreRowText.Dates(tree, node);
     }
@@ -198,22 +209,41 @@ public sealed partial class ExploreRow : ObservableObject, IExploreListed
     /// Re-read everything a later tree can have changed, from <paramref name="node"/>, which stands
     /// for this row's entry there (<see cref="KeyOf"/>). See the class summary for why this is not a
     /// new row.
+    ///
+    /// <para>Words only what moved. Every snapshot of a scan reaches every row on screen and nearly
+    /// none of them has changed, so the labels are worded again only where
+    /// <see cref="ExploreNodeFigures"/> says they would read differently, and the bar is measured
+    /// again where the folder's total moved under an entry that did not.</para>
     /// </summary>
     public void Describe(ExploreTree tree, int node, long parentTotal, DateTime now)
     {
         ArgumentNullException.ThrowIfNull(tree);
 
         Node = node;
-        SizeLabel = ExploreNodeText.Size(tree, Node);
-        StorageLabel = ExploreNodeText.Storage(tree, Node);
-        Share = ShareOf(tree, Node, parentTotal);
-        IsApproximate = tree.HasUnknownSizeBelow(Node);
-        AgeLabel = ExploreNodeText.Age(tree, Node, now);
-        DatesLabel = ExploreRowText.Dates(tree, Node);
+
+        var figures = ExploreNodeFigures.Of(tree, node, now);
+
+        if (figures.Size != _figures.Size || parentTotal != _parentTotal)
+        {
+            Share = ShareOf(figures.Size, parentTotal);
+            _parentTotal = parentTotal;
+        }
+
+        if (figures == _figures)
+        {
+            return;
+        }
+
+        _figures = figures;
+        SizeLabel = ExploreNodeText.Size(tree, node);
+        StorageLabel = ExploreNodeText.Storage(tree, node);
+        IsApproximate = figures.SizeUnknown;
+        AgeLabel = ExploreNodeText.Age(tree, node, now);
+        DatesLabel = ExploreRowText.Dates(tree, node);
     }
 
-    private static double ShareOf(ExploreTree tree, int node, long parentTotal) =>
-        parentTotal > 0 ? 100.0 * tree.SizeOf(node) / parentTotal : 0;
+    private static double ShareOf(long size, long parentTotal) =>
+        parentTotal > 0 ? 100.0 * size / parentTotal : 0;
 }
 
 /// <summary>

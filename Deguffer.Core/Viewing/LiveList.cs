@@ -130,12 +130,22 @@ public static class LiveList
 
         var keys = EqualityComparer<TKey>.Default;
 
-        Drop(rows, arriving, keyOfRow, keyOfItem, keys);
+        // Once per arriving thing rather than once per pass over them: a key can be built rather
+        // than read, such as a name copied out of a tree of twenty thousand entries, and both
+        // passes below need every one.
+        var wanted = new TKey[arriving.Count];
+
+        for (var at = 0; at < arriving.Count; at++)
+        {
+            wanted[at] = keyOfItem(arriving[at]);
+        }
+
+        Drop(rows, wanted, keyOfRow, keys);
 
         // Where the row for each arriving thing sits now, and -1 for one the list does not hold
         // yet. Every row left after Drop is one of these, so the rows are a permutation of the
         // staying part of this.
-        var from = Places(rows, arriving, keyOfRow, keyOfItem, keys);
+        var from = Places(rows, wanted, keyOfRow, keys);
         var anchored = new bool[arriving.Count];
 
         Anchor(from, anchored);
@@ -163,20 +173,18 @@ public static class LiveList
     /// will not say enough to tell two things apart: three rows for a key that arrived twice leave
     /// two rows rather than none.</para>
     /// </summary>
-    private static void Drop<TRow, TItem, TKey>(
+    /// <param name="arriving">The key of each arriving thing, in the order they arrived.</param>
+    private static void Drop<TRow, TKey>(
         ObservableCollection<TRow> rows,
-        IReadOnlyList<TItem> arriving,
+        TKey[] arriving,
         Func<TRow, TKey> keyOfRow,
-        Func<TItem, TKey> keyOfItem,
         IEqualityComparer<TKey> keys)
         where TKey : notnull
     {
-        var wanted = new Dictionary<TKey, int>(arriving.Count, keys);
+        var wanted = new Dictionary<TKey, int>(arriving.Length, keys);
 
-        for (var at = 0; at < arriving.Count; at++)
+        foreach (var key in arriving)
         {
-            var key = keyOfItem(arriving[at]);
-
             wanted[key] = wanted.TryGetValue(key, out var seen) ? seen + 1 : 1;
         }
 
@@ -197,11 +205,11 @@ public static class LiveList
     }
 
     /// <summary>Where the row for each arriving thing sits, and -1 for one the list does not hold.</summary>
-    private static int[] Places<TRow, TItem, TKey>(
+    /// <param name="arriving">The key of each arriving thing, in the order they arrived.</param>
+    private static int[] Places<TRow, TKey>(
         ObservableCollection<TRow> rows,
-        IReadOnlyList<TItem> arriving,
+        TKey[] arriving,
         Func<TRow, TKey> keyOfRow,
-        Func<TItem, TKey> keyOfItem,
         IEqualityComparer<TKey> keys)
         where TKey : notnull
     {
@@ -214,11 +222,11 @@ public static class LiveList
             cursor.TryAdd(keyOfRow(rows[at]), at);
         }
 
-        var from = new int[arriving.Count];
+        var from = new int[arriving.Length];
 
-        for (var at = 0; at < arriving.Count; at++)
+        for (var at = 0; at < arriving.Length; at++)
         {
-            from[at] = Sits(rows, keyOfRow, keys, keyOfItem(arriving[at]), cursor);
+            from[at] = Sits(rows, keyOfRow, keys, arriving[at], cursor);
         }
 
         return from;
