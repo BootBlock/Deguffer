@@ -28,7 +28,7 @@ public sealed class AtaVendorOverlayTests
         Row(id, model, firmware, raw).Reading;
 
     private static HealthAttribute Row(byte id, string model, string firmware = "TEST01", ulong raw = 0, byte value = 50) =>
-        Assert.Single(AtaAttributeRows.Of([new AtaAttribute(id, false, value, value, raw, null)], AtaDrives.Named(model, firmware)));
+        Assert.Single(AtaAttributeRows.Of([new AtaAttribute(id, false, value, value, raw, null)], AtaDrives.Named(model, firmware), logicalSectorBytes: null));
 
     [Theory]
     [InlineData("Micron_M600_MTFDTEST999", "MU01")]

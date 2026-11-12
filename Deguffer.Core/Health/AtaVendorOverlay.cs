@@ -5,15 +5,16 @@ using Deguffer.Core.Health.Parsing;
 namespace Deguffer.Core.Health;
 
 /// <summary>
-/// The attributes a manufacturer's own document states more exactly than the catalogue can for every
-/// drive. Each entry is keyed on the model families its document names and no wider, because the same
-/// ID means something else on another family, even from the same maker. A family no document covers
-/// keeps the catalogue's reading (§7.6).
+/// What a manufacturer's own document states more exactly than the catalogue can for every drive: an
+/// attribute's meaning, a threshold code, or a figure worked out from two attributes. Each is keyed on
+/// the model families its document names and no wider, because the same ID means something else on
+/// another family, even from the same maker. A family no document covers keeps the catalogue's
+/// reading and the plain threshold rule (§7.6).
 /// </summary>
 internal static partial class AtaVendorOverlay
 {
-    /// <summary>The first Micron M500 firmware revision TN-FD-22 covers, MU03.</summary>
-    private const int FirstCoveredM500Firmware = 3;
+    /// <summary>The threshold code TN-FD-22 table 7 defines as always failing.</summary>
+    private const byte AlwaysFailingThreshold = 0xFF;
 
     private static readonly AtaAttributeDefinition RemainingLife = new(
         "Remaining life", "How much of the drive's rated write life is left.", SmartRawFormat.Percent, AttributeRole.RemainingLife);
@@ -75,20 +76,32 @@ internal static partial class AtaVendorOverlay
 
     /// <summary>The overlay's definition for <paramref name="id"/> on <paramref name="drive"/>, if a document covers it.</summary>
     internal static AtaAttributeDefinition? Of(byte id, DeviceDescriptor drive) =>
-        SamsungPm863OrSm863().IsMatch(drive.Model) ? SamsungPm863OrSm863Of(id)
+        MicronClientSata.Covers(drive) ? MicronClientSata.Of(id)
+        : SamsungPm863OrSm863().IsMatch(drive.Model) ? SamsungPm863OrSm863Of(id)
         : Samsung845Dc().IsMatch(drive.Model) ? Samsung845DcOf(id)
         : id switch
         {
-            // Micron TN-FD-22 Rev. E, "Client SATA SSD SMART Attribute Reference": percent lifetime
-            // remaining. Samsung uses 202 for a mode status, which the family names here exclude.
-            202 when IsMicronClientSata(drive) => RemainingLife,
-
             // Intel DC S3500 product specification 328860-008US, table 18: the normalised value declines
             // from 100 to 1 with wear. Solidigm KA-00033 names 233 for later drives but states no scale.
             233 when IntelDcS3500().IsMatch(drive.Model) => MediaWearout,
 
             _ => null,
         };
+
+    /// <summary>
+    /// Whether <paramref name="threshold"/> fails its attribute whatever the value. TN-FD-22 table 7 makes
+    /// FFh a valid threshold that always fails. Elsewhere FEh and FFh are left unjudged, as no document says
+    /// otherwise. 00h always passes and FEh is invalid on every drive, which the plain rule already gives.
+    /// </summary>
+    internal static bool AlwaysFails(byte threshold, DeviceDescriptor drive) =>
+        threshold == AlwaysFailingThreshold && MicronClientSata.Covers(drive);
+
+    /// <summary>
+    /// The attributes counting flash pages written for the computer and by the drive itself, from which
+    /// the write amplification is (host + drive) / host, where a document defines them (TN-FD-22, ID 248).
+    /// </summary>
+    internal static (byte Host, byte Drive)? FlashPagesWritten(DeviceDescriptor drive) =>
+        MicronClientSata.Covers(drive) ? (MicronClientSata.HostPagesId, MicronClientSata.DrivePagesId) : null;
 
     /// <summary>
     /// Samsung, "Using SMART Attributes to Estimate Drive Lifetime" (WHP-SSD-SSDSMARTATTRIBUTES-APR16J),
@@ -130,35 +143,6 @@ internal static partial class AtaVendorOverlay
         250 => InterfaceDownshifts,
         _ => null,
     };
-
-    /// <summary>
-    /// The families TN-FD-22 lists, under Micron's name, Micron's part number or Crucial's part number.
-    /// The M500 is covered only from firmware MU03, as the note states.
-    /// </summary>
-    private static bool IsMicronClientSata(DeviceDescriptor drive) =>
-        MicronClientSata().Match(drive.Model) is { Success: true } match
-        && (!IsM500(match) || IsM500FirmwareCovered(drive.Revision));
-
-    private static bool IsM500(Match match) =>
-        match.Groups["family"].ValueSpan.Equals("M500", StringComparison.OrdinalIgnoreCase)
-        || match.Groups["code"].ValueSpan.Equals("MAV", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsM500FirmwareCovered(string revision) =>
-        revision.StartsWith("MU", StringComparison.OrdinalIgnoreCase)
-        && int.TryParse(revision.AsSpan(2), out var release)
-        && release >= FirstCoveredM500Firmware;
-
-    /// <summary>
-    /// "Micron_M600_...", "Crucial_CT250MX200SSD1", or a Micron part number such as "MTFDDAK256MBF".
-    /// The family must stand alone, so a data-centre sibling such as the M500DC, or the MX500 the note
-    /// does not list, is not taken for one it does. In a part number the family is the code after the
-    /// capacity, which Micron's data sheets give as MAV (M500), MAZ (M510), MAY (M550), MBF (M600),
-    /// TBN (1100) and TDL (1300). The data-centre codes, such as MBB (M500DC), differ.
-    /// </summary>
-    [GeneratedRegex(
-        @"^Micron[_ ](?<family>M500|M510|M550|M600|1100|1300)(?:[_ ]|$)|^(?:Crucial_)?CT\d{3,4}(?<family>M500|M550|MX100|MX200|MX300)SSD\d|(?<![A-Z0-9])MTFDD(?:AK|AT|AV|AY)(?:\d{3}|\dT\d)(?<code>MAV|MAZ|MAY|MBF|TBN|TDL)",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex MicronClientSata();
 
     /// <summary>
     /// The PM863 (MZ7LM...HC) and SM863 (MZ7KM...HA) part numbers in Samsung's data sheets. The PM863a

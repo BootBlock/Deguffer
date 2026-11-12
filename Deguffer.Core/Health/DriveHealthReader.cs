@@ -151,14 +151,15 @@ public sealed class DriveHealthReader(IDriveProbe probe, IVolumeInventory invent
         }
 
         using var device = probe.Open(drive.Disk);
-        var facts = DriveFacts.Of(descriptor, device);
+        var sectors = DriveFacts.Sectors(device);
+        var facts = DriveFacts.Of(descriptor, device, sectors);
 
         if (Array.Find(Sources, source => source.Reads(descriptor.Bus)) is not { } reader)
         {
             return Empty(drive, DriveVerdict.Unknown, NotReported) with { Facts = facts };
         }
 
-        var readout = reader.Read(device, descriptor);
+        var readout = reader.Read(device, descriptor, sectors);
         var verdict = DriveAssessment.Verdict(readout.Attributes, readout.HasPrimarySignal);
 
         return new DriveHealth(

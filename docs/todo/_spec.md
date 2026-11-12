@@ -1589,6 +1589,9 @@ explains. It changes nothing on any drive, and it deletes nothing.
 - An attribute whose meaning differs by manufacturer is shown as reported and judged by nothing
   beyond the drive's own threshold, unless a manufacturer's own document states its meaning for that
   model family. `AtaVendorOverlay` keys each meaning on the families its document names, and cites it.
+  A document's threshold codes and the figures it derives from two attributes, such as write
+  amplification, apply on the same key. A count in logical sectors is sized by the sector size Windows
+  reports, and stays a count of sectors where Windows does not report one.
 - A serial number appears on the page and nowhere else: no record prints it, and a drive's key is a hash.
 
 **Beside the volumes**
