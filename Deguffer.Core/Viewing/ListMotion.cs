@@ -108,6 +108,56 @@ public static class ListMotion
         return new ListMotionPlan<TKey>(false, rows);
     }
 
+    /// <summary>Whether a change of this kind can take a row out of the list.</summary>
+    public static bool Removes(ListChange change) => change is ListChange.Removed or ListChange.Replaced or ListChange.Reset;
+
+    /// <summary>
+    /// The rows a change took out of the list, of those on screen before it: a row on screen before
+    /// and not after either left the list or only moved out of sight.
+    ///
+    /// <para>Telling the two apart takes every row the list holds, which a long list gives up slowly,
+    /// so <paramref name="held"/> is read at most once, and never for changes that only put rows in
+    /// or moved them, which cannot have taken any out.</para>
+    /// </summary>
+    /// <param name="before">The rows on screen before the change.</param>
+    /// <param name="after">The rows on screen after it.</param>
+    /// <param name="removed">Whether any of the changes could take a row out (<see cref="Removes"/>).</param>
+    /// <param name="held">Every row the list holds after the change.</param>
+    /// <param name="keys">What makes two rows one row.</param>
+    public static IReadOnlySet<TKey> Departed<TKey>(
+        IEnumerable<TKey> before,
+        IEnumerable<TKey> after,
+        bool removed,
+        Func<IReadOnlySet<TKey>> held,
+        IEqualityComparer<TKey> keys)
+        where TKey : notnull
+    {
+        ArgumentNullException.ThrowIfNull(before);
+        ArgumentNullException.ThrowIfNull(after);
+        ArgumentNullException.ThrowIfNull(held);
+        ArgumentNullException.ThrowIfNull(keys);
+
+        var departed = new HashSet<TKey>(keys);
+
+        if (!removed)
+        {
+            return departed;
+        }
+
+        var shown = new HashSet<TKey>(after, keys);
+        IReadOnlySet<TKey>? holding = null;
+
+        foreach (var row in before)
+        {
+            if (!shown.Contains(row) && !(holding ??= held()).Contains(row))
+            {
+                departed.Add(row);
+            }
+        }
+
+        return departed;
+    }
+
     /// <summary>
     /// The scroll that keeps the reader's place: how far down the list's view must move so that
     /// the first of <paramref name="anchors"/> that can be held is drawn where it was before the

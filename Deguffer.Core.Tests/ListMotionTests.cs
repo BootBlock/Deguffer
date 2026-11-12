@@ -157,6 +157,77 @@ public sealed class ListMotionTests
         Assert.Null(shift);
     }
 
+    [Fact]
+    public void AFrameThatOnlyInsertedNeverReadsTheListEvenWhenARowIsPushedOutOfSight()
+    {
+        var reads = 0;
+
+        var departed = ListMotion.Departed(
+            ["a", "b", "c", "d"],
+            ["new", "a", "b", "c"],
+            removed: false,
+            () =>
+            {
+                reads++;
+                return Set("new", "a", "b", "c", "d");
+            },
+            StringComparer.Ordinal);
+
+        Assert.Equal(0, reads);
+        Assert.Empty(departed);
+    }
+
+    [Fact]
+    public void AFrameWithARemovalReadsTheListOnceAndARowOnlyMovedOutOfSightHasNotDeparted()
+    {
+        var reads = 0;
+
+        // "b" left the list and "c" only scrolled out of sight: both are gone from the screen.
+        var departed = ListMotion.Departed(
+            ["a", "b", "c", "d"],
+            ["a", "d", "e"],
+            removed: true,
+            () =>
+            {
+                reads++;
+                return Set("a", "c", "d", "e");
+            },
+            StringComparer.Ordinal);
+
+        Assert.Equal(1, reads);
+        Assert.Equal(Set("b"), departed);
+        Assert.DoesNotContain("c", departed);
+    }
+
+    [Fact]
+    public void AFrameWithARemovalReadsNothingWhenNoRowWentFromTheScreen()
+    {
+        var reads = 0;
+
+        var departed = ListMotion.Departed(
+            ["a", "b"],
+            ["a", "b", "c"],
+            removed: true,
+            () =>
+            {
+                reads++;
+                return Set("a", "b", "c");
+            },
+            StringComparer.Ordinal);
+
+        Assert.Equal(0, reads);
+        Assert.Empty(departed);
+    }
+
+    [Theory]
+    [InlineData(ListChange.Inserted, false)]
+    [InlineData(ListChange.Moved, false)]
+    [InlineData(ListChange.Removed, true)]
+    [InlineData(ListChange.Replaced, true)]
+    [InlineData(ListChange.Reset, true)]
+    public void OnlyAChangeThatCanTakeARowOutCountsAsARemoval(ListChange change, bool removes) =>
+        Assert.Equal(removes, ListMotion.Removes(change));
+
     private static ListMotionPlan<string> Plan(
         Dictionary<string, double> before,
         List<(string, double)> after,
