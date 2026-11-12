@@ -13,8 +13,9 @@ namespace Deguffer.Core.Providers;
 /// of the row's planning time: seconds on a row that ends late in the pass. A spinning disk tuned to
 /// one thread is still probed one path at a time.</para>
 ///
-/// <para><b>What each path proves is unchanged.</b> Every path is asked the same two questions it was
-/// asked one at a time, and the answers come back in the order the paths were given.</para>
+/// <para><b>What each path proves is unchanged.</b> Every path is recorded with the same two answers
+/// it was given when each was asked alone, and the records come back in the order the paths were
+/// given.</para>
 ///
 /// <para><b>Not asked again where the row's own listing answered</b> (G5). A row that listed a
 /// protected path's parent while it planned already knows the path was there, and sometimes whether it

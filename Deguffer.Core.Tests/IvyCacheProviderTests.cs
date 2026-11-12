@@ -185,10 +185,9 @@ public sealed class IvyCacheProviderTests : IDisposable
         Assert.Equal(allowed, policy.MayRemove(path).IsAllowed);
     }
 
-    /// <summary>Create <paramref name="child"/> under the root holding one file of the given size.</summary>
     /// <summary>
     /// §5.6's record of a child the walk spared comes from the walk's own listing, not from asking it
-    /// again (G5): every row whose plan is built on <see cref="CacheLevelWalk"/> takes it from there.
+    /// again (G5): every row that protects through the walk's own overload takes it from there.
     /// Removed after the walk and before the plan protected it, the child is recorded as there, and the
     /// check after the clean reports it gone rather than passing over it as never there.
     /// </summary>
@@ -217,6 +216,7 @@ public sealed class IvyCacheProviderTests : IDisposable
             Assert.Single(result.Verification!.Checks, c => c.Subject.Equals(notes, StringComparison.OrdinalIgnoreCase)).Outcome);
     }
 
+    /// <summary>Create <paramref name="child"/> under the root holding one file of the given size.</summary>
     private static string CreateAt(string root, string child, int bytes)
     {
         var directory = Path.Combine(root, child);

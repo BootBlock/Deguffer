@@ -568,4 +568,38 @@ public sealed class ClaudeCodeFileHistoryProviderTests : IDisposable
 
         Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
     }
+
+    /// <summary>
+    /// §5.6's record of what this row keeps in the snapshots folder comes from the row's own listing of
+    /// that folder, not from asking each entry again (G5). Removed after the listing and before the plan
+    /// protected it, an entry is recorded as there, which is what the listing saw when the plan was
+    /// made, and the check after the clean reports it gone rather than passing over it as never there.
+    /// </summary>
+    [Fact]
+    public async Task AKeptEntryIsRecordedAsTheListingSawItAndItsLossIsStillReported()
+    {
+        OldSession(SessionA);
+        var stranger = Path.Combine(_claude.FileHistory, "not-a-session");
+        Directory.CreateDirectory(stranger);
+        File.WriteAllBytes(Path.Combine(stranger, "notes.bin"), new byte[64]);
+
+        var provider = new ClaudeCodeFileHistoryProvider(
+            _environment,
+            runner: new FakeProcessRunner(),
+            inspector: FakeProcessInspector.NothingRunning,
+            scanner: FakeDirectoryScanner.RemovingOnFirstMeasure(stranger));
+
+        var plan = await provider.PlanAsync();
+
+        Assert.False(Directory.Exists(stranger));
+        Assert.Equal(
+            PathPresence.Present,
+            Assert.Single(plan.ProtectedPaths, p => p.Path.Equals(stranger, StringComparison.OrdinalIgnoreCase)).PresenceBefore);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.Equal(
+            VerificationOutcome.RemovedFromOutside,
+            Assert.Single(result.Verification!.Checks, c => c.Subject.Equals(stranger, StringComparison.OrdinalIgnoreCase)).Outcome);
+    }
 }

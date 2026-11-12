@@ -188,7 +188,7 @@ public readonly record struct LevelWalk(
 {
     /// <summary>
     /// Every child the walk listed, so §5.6's record of a spared or declined child is taken from the
-    /// listing rather than asked again. Null for a walk that listed nothing.
+    /// listing rather than asked again. Null only on a default value, which no walk returns.
     /// </summary>
     internal ListedEntries? Listed { get; init; }
 
