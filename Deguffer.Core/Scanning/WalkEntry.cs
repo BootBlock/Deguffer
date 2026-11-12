@@ -34,9 +34,9 @@ public readonly record struct WalkEntry
         string? name,
         FileAttributes attributes,
         long length,
-        DateTime creationTimeUtc,
-        DateTime lastWriteTimeUtc)
-        : this(directory, name is null ? default : ListedName.Own(name), attributes, length, creationTimeUtc, lastWriteTimeUtc)
+        long creationFileTime,
+        long lastWriteFileTime)
+        : this(directory, name is null ? default : ListedName.Own(name), attributes, length, creationFileTime, lastWriteFileTime)
     {
     }
 
@@ -46,8 +46,8 @@ public readonly record struct WalkEntry
         ListedName name,
         FileAttributes attributes,
         long length,
-        DateTime creationTimeUtc,
-        DateTime lastWriteTimeUtc)
+        long creationFileTime,
+        long lastWriteFileTime)
     {
         // The walk enters a directory by its name, so one without a name is a listing gone wrong.
         if (!name.Exists && (attributes & FileAttributes.Directory) != 0)
@@ -59,8 +59,8 @@ public readonly record struct WalkEntry
         _name = name;
         Attributes = attributes;
         Length = length;
-        CreationTimeUtc = creationTimeUtc;
-        LastWriteTimeUtc = lastWriteTimeUtc;
+        CreationFileTime = creationFileTime;
+        LastWriteFileTime = lastWriteFileTime;
     }
 
     public string Directory { get; }
@@ -85,9 +85,9 @@ public readonly record struct WalkEntry
 
     public long Length { get; }
 
-    public DateTime CreationTimeUtc { get; }
+    public long CreationFileTime { get; }
 
-    public DateTime LastWriteTimeUtc { get; }
+    public long LastWriteFileTime { get; }
 
     public bool IsDirectory => (Attributes & FileAttributes.Directory) != 0;
 
@@ -104,13 +104,13 @@ public readonly record struct WalkEntry
     public string FullName => Path.Join(Directory, NameSpan);
 
     /// <summary>The one number <see cref="MinimumAge"/> judges, from the timestamps the listing read.</summary>
-    public long NewestFileTime => MinimumAge.NewestFileTimeOf(CreationTimeUtc, LastWriteTimeUtc);
+    public long NewestFileTime => MinimumAge.NewestFileTimeOf(CreationFileTime, LastWriteFileTime);
 
     // Written by hand because the generated one reads every property, and Name throws for a nameless file.
     private bool PrintMembers(StringBuilder builder)
     {
         builder.Append($"Directory = {Directory}, Name = {(HasName ? _name.ToString() : "(not kept)")}, Attributes = {Attributes}, ");
-        builder.Append($"Length = {Length}, CreationTimeUtc = {CreationTimeUtc:O}, LastWriteTimeUtc = {LastWriteTimeUtc:O}");
+        builder.Append($"Length = {Length}, CreationFileTime = {CreationFileTime}, LastWriteFileTime = {LastWriteFileTime}");
         return true;
     }
 

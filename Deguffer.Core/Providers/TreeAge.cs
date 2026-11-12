@@ -24,25 +24,33 @@ namespace Deguffer.Core.Providers;
 internal static class TreeAge
 {
     /// <summary>
+    /// The latest FILETIME a <see cref="DateTime"/> can hold. NTFS keeps whatever a program sets, up to
+    /// the year 30828, and a write dated past this is newer than any cutoff, so the answer is held here
+    /// rather than read as unknown or thrown out of the walk.
+    /// </summary>
+    private static readonly long LatestFileTime = DateTime.MaxValue.ToFileTimeUtc();
+
+    /// <summary>
     /// The newest last-write time of <paramref name="directory"/> and of every entry at any depth
     /// below it, or null where the directory is gone or any folder in it could not be listed.
     /// </summary>
     public static DateTime? NewestWrite(string directory, ScanTuner tuning, CancellationToken ct)
     {
-        var info = new DirectoryInfo(LongPath.Extended(directory));
+        var extended = LongPath.Extended(directory);
 
-        if (!info.Exists)
+        // Read as a FILETIME, as the listings below read every entry, so a root dated past the year 9999
+        // cannot throw. A directory that is gone or unreadable has no age to give rather than the
+        // Windows epoch, the oldest age there is. See DirectoryAge.
+        if (FileAttributeRead.Read(extended, out var attributes, out _, out _, out var newest) != 0
+            || (attributes & FileAttributes.Directory) == 0)
         {
-            // LastWriteTimeUtc answers for a missing path with the Windows epoch, the oldest age there
-            // is. See DirectoryAge.
             return null;
         }
 
-        var newest = info.LastWriteTimeUtc.Ticks;
         var refused = 0;
 
         BoundedFileWalk.Visit(
-            LongPath.Extended(directory),
+            extended,
             rootState: 0,
             tuning,
             FileNames.Stores,
@@ -68,14 +76,14 @@ internal static class TreeAge
             TimeProvider.System,
             ct);
 
-        return Volatile.Read(ref refused) == 1 ? null : new DateTime(Interlocked.Read(ref newest), DateTimeKind.Utc);
+        return Volatile.Read(ref refused) == 1 ? null : DateTime.FromFileTimeUtc(Math.Min(Interlocked.Read(ref newest), LatestFileTime));
     }
 
     private static long Newest(IReadOnlyList<WalkEntry> entries, long newest)
     {
         foreach (var entry in entries)
         {
-            newest = Math.Max(newest, entry.LastWriteTimeUtc.Ticks);
+            newest = Math.Max(newest, entry.LastWriteFileTime);
         }
 
         return newest;
