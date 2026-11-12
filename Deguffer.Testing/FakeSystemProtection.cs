@@ -42,6 +42,12 @@ public sealed class FakeSystemProtection : ISystemProtection
     /// <summary>Every other volume Windows is asked about, as it answers. None, unless a test adds one.</summary>
     public List<VolumeShadowStorage> OtherVolumes { get; } = [];
 
+    /// <summary>
+    /// What point-in-time restore records now. A Windows from before the feature, unless a test says
+    /// otherwise.
+    /// </summary>
+    public PointInTimeRestore PointInTimeRestore { get; set; } = PointInTimeRestore.Absent;
+
     /// <summary>Every sequence number System Restore was asked to remove, in order.</summary>
     public List<uint> Removed { get; } = [];
 
@@ -97,6 +103,8 @@ public sealed class FakeSystemProtection : ISystemProtection
         ListingAnswer.NeedsElevation => ShadowCopyListing.Refused,
         _ => ShadowCopyListing.Failed("The Volume Shadow Copy service did not list its shadow copies (error 0x80004005)."),
     };
+
+    public PointInTimeRestore ReadPointInTimeRestore() => PointInTimeRestore;
 
     public IReadOnlyList<VolumeShadowStorage> ReadStorage() => [new VolumeShadowStorage(SystemVolume, Storage), .. OtherVolumes];
 }

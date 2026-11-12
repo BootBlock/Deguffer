@@ -272,7 +272,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | --- | --- |
 | Recycle Bin | |
 | Windows update uninstall data | `DISM /StartComponentCleanup /ResetBase`, as a separate row because afterwards no update installed so far can be uninstalled |
-| Older restore points | Every restore point except the newest, removed one at a time by System Restore itself as administrator; never the newest, a shadow copy that cannot belong to a restore point, or System Protection's limit |
+| Older restore points | Every restore point except the newest, removed one at a time by System Restore itself as administrator; never the newest, a shadow copy that cannot belong to a restore point, or System Protection's limit; nothing where point-in-time restore records snapshots |
 | Other accounts' profiles | Every other account's profile is listed with its size, last use, and whether its account exists and is in use. Only a local account Windows says no longer exists is offered, removed by Windows' own profile removal as administrator, one profile at a time; never a profile in use, the account Deguffer runs as, a domain or work account, or a folder by path |
 | Windows File History | Windows' own command removes saved versions older than an age you set; the backup drive itself is never touched. Researched |
 | Files discarded by a Windows upgrade | What an upgrade set aside instead of moving, which can include your own files. Removed by Windows' own Disk Cleanup handler, and only once the upgrade can no longer be undone |

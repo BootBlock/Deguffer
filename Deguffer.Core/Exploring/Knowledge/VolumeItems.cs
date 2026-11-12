@@ -40,7 +40,8 @@ internal static class VolumeItems
 
             "It belongs to Windows and cannot be deleted. System Protection's own limit on how much of "
             + "the drive restore points may use keeps it smaller, and Deguffer's clean list offers every "
-            + "restore point but the newest, as 'Older restore points'."),
+            + "restore point but the newest, as 'Older restore points', unless point-in-time restore keeps "
+            + "snapshots there too."),
 
         new(
             KnownPlace.VolumeRoot,

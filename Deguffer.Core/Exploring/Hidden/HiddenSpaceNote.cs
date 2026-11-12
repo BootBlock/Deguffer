@@ -15,8 +15,9 @@ public static class HiddenSpaceNote
 {
     private const string ShadowCopiesReduced =
         "\nWindows reduces it through System Protection's limit on how much of the drive restore "
-        + "points may use. Lowering it can delete older restore points. Deguffer's clean list offers every "
-        + "restore point but the newest, as 'Older restore points'.";
+        + "points may use, which is also point-in-time restore's maximum usage in Settings where Windows has it. "
+        + "Lowering it can delete older restore points. Deguffer's clean list offers every restore point but "
+        + "the newest, as 'Older restore points', unless point-in-time restore keeps snapshots there too.";
 
     private const string Reserved =
         "Space Windows keeps back so that updates can still be downloaded and installed when the drive "

@@ -29,6 +29,8 @@ public sealed class WindowsSystemProtection : ISystemProtection
 
     public ShadowCopyListing ListShadowCopies() => ShadowCopyCalls.List();
 
+    public PointInTimeRestore ReadPointInTimeRestore() => PointInTimeRestoreCalls.Read();
+
     /// <summary>
     /// Every ready fixed volume. Shadow copy storage can sit on a different volume from the one it
     /// serves, so asking only the system drive would miss storage System Protection keeps elsewhere.

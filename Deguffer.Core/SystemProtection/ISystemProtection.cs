@@ -35,4 +35,10 @@ public interface ISystemProtection
 
     /// <summary>The shadow copy storage on each local fixed volume that Windows could be asked about.</summary>
     IReadOnlyList<VolumeShadowStorage> ReadStorage();
+
+    /// <summary>
+    /// What point-in-time restore records of its snapshots, which are shadow copies in the same storage,
+    /// under the same limit.
+    /// </summary>
+    PointInTimeRestore ReadPointInTimeRestore();
 }

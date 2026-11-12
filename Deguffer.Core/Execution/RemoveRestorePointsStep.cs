@@ -13,7 +13,8 @@ namespace Deguffer.Core.Execution;
 /// the one the preview kept has gone in the meantime.</para>
 ///
 /// <para><b>Its §5.6 negative is not about paths.</b> What must survive is the newest restore point,
-/// every shadow copy that cannot be a restore point's, and System Protection's limit on each volume.
+/// every shadow copy that cannot be a restore point's, and System Protection's limit on each volume,
+/// which point-in-time restore may also change.
 /// The step carries what each of those was when the plan was made, and
 /// <see cref="RestorePointProof"/> asks Windows again afterwards.</para>
 /// </summary>
