@@ -22,12 +22,13 @@ namespace Deguffer.App.Shell;
 ///
 /// <para>Only realised rows are read and moved, so a list of thousands animates its window of rows,
 /// and the whole list is read once for a change only when a row has gone from the screen and the
-/// change could have taken one out of the list. The row under
-/// the pointer, or failing that the one with focus, keeps its place on screen unless it is the one
-/// that changed (<see cref="ListMotion.Hold"/>).</para>
+/// change could have taken one out of the list. The row under the pointer, or failing that the one
+/// with focus, keeps its place on screen unless it is the one that changed
+/// (<see cref="ListMotion.Hold"/>).</para>
 ///
-/// <para>What a change did to each row is read from where the rows stood and stand, not from what
-/// kind of change the list reported, so a list that reports a sort's move as a reset costs nothing.</para>
+/// <para>Where each row goes is read from where the rows stood and stand, not from what kind of
+/// change the list reported, so a list that reports a sort's move as a reset still glides each row
+/// to its place. The kind only says whether a row gone from the screen may have left the list.</para>
 /// </summary>
 internal sealed class ListAnimation
 {
