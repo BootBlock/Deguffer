@@ -8,8 +8,8 @@ namespace Deguffer.Core.Providers;
 /// The pip (Python) HTTP and wheel cache.
 ///
 /// §5.1: pip has an official eviction command, so the plan calls <c>pip cache purge</c> rather than
-/// deleting paths. Unlike uv, the location pip reports <em>is</em> a cache directory rather than a
-/// state directory with tools inside it — pip keeps no installed packages there, because those go
+/// deleting paths. The location pip reports <em>is</em> a cache directory: pip keeps no installed
+/// packages there, because those go
 /// into the environment's <c>site-packages</c>. That is why this provider protects the environment
 /// rather than a sibling of the cache: the failure to guard against is a user reading "Python cache"
 /// and expecting their virtual environments to be at risk.
