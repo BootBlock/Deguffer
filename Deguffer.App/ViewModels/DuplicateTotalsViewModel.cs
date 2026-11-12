@@ -39,7 +39,7 @@ public sealed partial class DuplicateTotalsViewModel : ObservableObject
     internal void Add(DuplicateGroupRow group)
     {
         _groups++;
-        _files += group.Copies.Count;
+        _files += group.Count;
         FreeableSpace += group.FreeableSpace;
     }
 

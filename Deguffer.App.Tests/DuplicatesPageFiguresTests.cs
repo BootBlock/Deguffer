@@ -19,7 +19,7 @@ public sealed class DuplicatesPageFiguresTests : DuplicatesPageScene
     private static DuplicateGroup Group(params DuplicateCandidate[] copies) => DuplicateScene.Group(MatchCriteria.Content, copies);
 
     private static DuplicateCopyRow Row(DuplicatesViewModel page, DuplicateCandidate copy) =>
-        page.Groups.SelectMany(group => group.Copies).Single(row => row.Copy.Identity == copy.Identity);
+        page.Groups.SelectMany(group => group).Single(row => row.Copy.Identity == copy.Identity);
 
     /// <summary>What Core says every group's standing marks occupy, which the marked total must equal.</summary>
     private static string CoreMarked(DuplicatesViewModel page, int count) =>

@@ -1,4 +1,5 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using Deguffer.Core.Duplicates;
 using Deguffer.Core.Scanning;
 
@@ -8,9 +9,24 @@ namespace Deguffer.App.ViewModels;
 /// One group as the page lists it: which file it is, what matched, what its copies that could go
 /// occupy, how many are marked, the copies, and why a rule left it as it was. Built once, as the
 /// group arrives, and never rebuilt.
+///
+/// <para>A list of its copies rather than an object holding one, because that is the shape a grouped
+/// <c>CollectionViewSource</c> reads without a property path, and the page lists every copy as a row of
+/// its own so the list realises only the copies on screen. A group of a thousand copies built as one
+/// row was built whole each time it was drawn. Being a list, it cannot also derive from
+/// <c>ObservableObject</c>, so its change notification is written out below. Its copies never
+/// change once it is built.</para>
 /// </summary>
-public sealed partial class DuplicateGroupRow : ObservableObject
+public sealed partial class DuplicateGroupRow : ReadOnlyCollection<DuplicateCopyRow>, INotifyPropertyChanged
 {
+    private static readonly PropertyChangedEventArgs NoteChanged = new(nameof(Note));
+    private static readonly PropertyChangedEventArgs HasNoteChanged = new(nameof(HasNote));
+    private static readonly PropertyChangedEventArgs DescriptionChanged = new(nameof(Description));
+    private static readonly PropertyChangedEventArgs MarkedCountChanged = new(nameof(MarkedCount));
+    private static readonly PropertyChangedEventArgs HasMarksChanged = new(nameof(HasMarks));
+
+    private string _note = string.Empty;
+
     /// <param name="judged">
     /// The group as the search judged it by the keeping rule the marks were made under, which says
     /// what it could free and what each copy's row lists, so building the row asks the rule nothing.
@@ -18,13 +34,18 @@ public sealed partial class DuplicateGroupRow : ObservableObject
     /// <param name="toggle">Marks or unmarks a copy, answering Core's refusal, or null where it was done.</param>
     /// <param name="mayMark">Whether the page lets any mark change now.</param>
     public DuplicateGroupRow(GroupMarks marks, GroupJudgement judged, Func<DuplicateCopyRow, string?> toggle, Func<bool> mayMark)
+        : base(new List<DuplicateCopyRow>(marks.Group.Files.Count))
     {
         Marks = marks;
 
         var group = marks.Group;
         var paths = PathDifference.Of([.. group.Files.Select(copy => copy.Path)]);
 
-        Copies = [.. group.Files.Select((copy, i) => new DuplicateCopyRow(copy, paths[i], this, judged.Standings[i], toggle, mayMark))];
+        for (var i = 0; i < group.Files.Count; i++)
+        {
+            Items.Add(new DuplicateCopyRow(group.Files[i], paths[i], this, judged.Standings[i], toggle, mayMark));
+        }
+
         Name = NameOf(group);
         Glyph = FileKindGlyph.Of(group.Files[0].Path);
         Summary = group.Length is { } length
@@ -37,9 +58,9 @@ public sealed partial class DuplicateGroupRow : ObservableObject
         Note = judged.WhyNothingCanBeKept ?? string.Empty;
     }
 
-    public GroupMarks Marks { get; }
+    public event PropertyChangedEventHandler? PropertyChanged;
 
-    public IReadOnlyList<DuplicateCopyRow> Copies { get; }
+    public GroupMarks Marks { get; }
 
     /// <summary>
     /// The file's name, which is how a reader knows the group, or the first copy's name and how many
@@ -73,7 +94,7 @@ public sealed partial class DuplicateGroupRow : ObservableObject
     public bool HasMayDiffer => MayDiffer.Length > 0;
 
     /// <summary>How many of the copies are marked, in words, or an empty string where none is.</summary>
-    public string MarkedCount => Marks.MarkedCount == 0 ? string.Empty : $"{Marks.MarkedCount:N0} of {Copies.Count:N0} marked";
+    public string MarkedCount => Marks.MarkedCount == 0 ? string.Empty : $"{Marks.MarkedCount:N0} of {Count:N0} marked";
 
     public bool HasMarks => Marks.MarkedCount > 0;
 
@@ -87,10 +108,22 @@ public sealed partial class DuplicateGroupRow : ObservableObject
     /// Why no copy here can be kept, or why the last rule left the group as it was, or an empty
     /// string.
     /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasNote))]
-    [NotifyPropertyChangedFor(nameof(Description))]
-    public partial string Note { get; private set; }
+    public string Note
+    {
+        get => _note;
+        private set
+        {
+            if (_note == value)
+            {
+                return;
+            }
+
+            _note = value;
+            PropertyChanged?.Invoke(this, NoteChanged);
+            PropertyChanged?.Invoke(this, HasNoteChanged);
+            PropertyChanged?.Invoke(this, DescriptionChanged);
+        }
+    }
 
     public bool HasNote => Note.Length > 0;
 
@@ -125,11 +158,11 @@ public sealed partial class DuplicateGroupRow : ObservableObject
     internal void Counted(long markedSpace)
     {
         MarkedSpace = markedSpace;
-        OnPropertyChanged(nameof(MarkedCount));
-        OnPropertyChanged(nameof(HasMarks));
-        OnPropertyChanged(nameof(Description));
+        PropertyChanged?.Invoke(this, MarkedCountChanged);
+        PropertyChanged?.Invoke(this, HasMarksChanged);
+        PropertyChanged?.Invoke(this, DescriptionChanged);
 
-        foreach (var copy in Copies)
+        foreach (var copy in this)
         {
             copy.MarksShown();
         }
@@ -141,7 +174,7 @@ public sealed partial class DuplicateGroupRow : ObservableObject
     /// </summary>
     internal void MarksChanged(long markedSpace)
     {
-        foreach (var copy in Copies)
+        foreach (var copy in this)
         {
             copy.ClearNote();
         }

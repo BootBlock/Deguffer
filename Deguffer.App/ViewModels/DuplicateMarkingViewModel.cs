@@ -285,7 +285,7 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
                 // The marks were judged again for the confirmation, so each copy says what it was judged.
                 await ShowJudgedAsync(marks.Keeping);
 
-                var rows = _groups.SelectMany(group => group.Copies).ToDictionary(row => row.Copy.Identity);
+                var rows = _groups.SelectMany(group => group).ToDictionary(row => row.Copy.Identity);
 
                 // Whether or not anything was asked: a copy the bin cannot take stays either way.
                 foreach (var copy in answer.Confirmation.Staying)
@@ -319,7 +319,7 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
     /// </summary>
     private async Task ShowJudgedAsync(CopyKeeping keeping)
     {
-        List<DuplicateCopyRow> copies = [.. _groups.SelectMany(group => group.Copies)];
+        List<DuplicateCopyRow> copies = [.. _groups.SelectMany(group => group)];
         List<DuplicateGroupRow> groups = [.. _groups];
 
         // Not stopped by the page's Stop: it shows a judgement already made, and rows left half
@@ -430,7 +430,7 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
         {
             _mayMark = mayMark;
 
-            foreach (var copy in _groups.SelectMany(group => group.Copies))
+            foreach (var copy in _groups.SelectMany(group => group))
             {
                 copy.GateChanged();
             }
