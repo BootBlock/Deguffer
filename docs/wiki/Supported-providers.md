@@ -2,7 +2,7 @@
 
 # Supported providers
 
-Deguffer knows 133 locations. Each one is a *provider*: a single class that names one cache,
+Deguffer knows 134 locations. Each one is a *provider*: a single class that names one cache,
 log or leftover, the tool that writes it, and the children it recognises. Anything a provider
 does not recognise is left alone.
 
@@ -196,4 +196,5 @@ For where each location is, how Deguffer cleans it and what the next use costs, 
 | VS Code editor caches | Visual Studio Code, and the editors built on the same Code - OSS base — VS Code Insiders, VSCodium, Cursor and the rest | Microsoft publishes Visual Studio Code; each derivative is published by its own vendor | 1 | Observed |
 | VS Code editor logs and crash reports | Visual Studio Code, and the editors built on the same Code - OSS base — VS Code Insiders, VSCodium, Cursor and the rest | Microsoft publishes Visual Studio Code; each derivative is published by its own vendor | 3 | Observed |
 | VS Code extension browsers | VS Code extensions that drive a browser of their own, such as Cline, in VS Code and the editors built on it | Each extension's own publisher | 1 | Observed |
+| VS Code unfinished extension installs | VS Code and the editors built on it, such as VSCodium and Cursor | Microsoft, and each editor's own publisher | 1 | Observed |
 | WSL and Docker virtual disks | Windows Subsystem for Linux (WSL) and Docker Desktop | Microsoft and Docker | 3 | Observed |

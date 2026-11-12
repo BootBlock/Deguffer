@@ -189,6 +189,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | VS Code editor caches | |
 | VS Code C/C++ IntelliSense cache | |
 | VS Code extension browsers | The Chromium build that an extension such as Cline downloaded and will download again by itself; never the extension's conversations, checkpoints or settings, or a build that a running browser is using |
+| VS Code unfinished extension installs | The folders an editor built on VS Code left in its extensions folder from installs and removals it never finished, once nothing in one has changed for 7 days; never an installed extension, the editor's list of them, or a folder found through a link |
 | Chromium application caches | Chrome, Edge, Brave, Vivaldi and Opera, the built-in browsers in the Steam client and the Battle.net launcher, and every application that embeds the same engine, including WebView2 and packaged applications. Never their sign-ins, saved passwords or payment cards |
 | Firefox caches | |
 | Thunderbird caches | The cache, startup cache and Safe Browsing lists in each profile's local half; never your mail, address books, calendars, saved passwords or OpenPGP keys |

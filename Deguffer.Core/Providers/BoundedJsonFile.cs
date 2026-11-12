@@ -12,6 +12,7 @@ internal static class BoundedJsonFile
     /// The record, or null where the file is missing, larger than <paramref name="maximumBytes"/>,
     /// unreadable, not JSON, or not a JSON object. The caller disposes what it is given.
     /// </summary>
+    /// <remarks>An array at the top level is <see cref="ReadArray"/>'s.</remarks>
     /// <param name="options">
     /// What the writer allows beyond JSON itself, such as the comments Visual Studio writes into its
     /// settings file. The default is strict JSON.
@@ -25,13 +26,24 @@ internal static class BoundedJsonFile
     /// A record already read within its bound, or null where it is not JSON or not a JSON object. The
     /// caller disposes what it is given.
     /// </summary>
-    public static JsonDocument? Parse(ReadOnlyMemory<byte> content, JsonDocumentOptions options = default)
+    public static JsonDocument? Parse(ReadOnlyMemory<byte> content, JsonDocumentOptions options = default) =>
+        Parse(content, JsonValueKind.Object, options);
+
+    /// <summary>
+    /// A record whose top level is a JSON array, such as an editor's list of installed extensions, or
+    /// null where the file is missing, larger than <paramref name="maximumBytes"/>, unreadable, not
+    /// JSON, or not an array. The caller disposes what it is given.
+    /// </summary>
+    public static JsonDocument? ReadArray(string path, int maximumBytes) =>
+        BoundedFile.Read(path, maximumBytes) is { } content ? Parse(content, JsonValueKind.Array, default) : null;
+
+    private static JsonDocument? Parse(ReadOnlyMemory<byte> content, JsonValueKind root, JsonDocumentOptions options)
     {
         try
         {
             var document = JsonDocument.Parse(content, options);
 
-            if (document.RootElement.ValueKind == JsonValueKind.Object)
+            if (document.RootElement.ValueKind == root)
             {
                 return document;
             }
