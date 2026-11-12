@@ -202,7 +202,15 @@ public static class ExploreRemover
     /// folders are listed with the allowed items' and they are asserted to have survived, as they
     /// were while the removal itself refused them: a removal beside one could still take it.
     /// </param>
-    public static async Task<ExploreRemovalReport> RemoveAsync(
+    /// <remarks>
+    /// The whole removal runs on the thread pool, from the first question to the policy onwards. The
+    /// caller is a shell resuming on the UI thread after its own dialog, and before anything is
+    /// deleted every item is asked about again and the folder each sits in is listed, which may hold
+    /// two hundred thousand entries. A <see cref="Task.Run(Func{Task}, CancellationToken)"/> rather
+    /// than <c>ConfigureAwait(false)</c> on the first await, because an await of a task that has
+    /// already finished goes on in the caller's thread.
+    /// </remarks>
+    public static Task<ExploreRemovalReport> RemoveAsync(
         IReadOnlyList<ExploreItem> items,
         ExploreRemovalMode mode,
         ExploreActionPolicy policy,
@@ -214,11 +222,29 @@ public static class ExploreRemover
         ArgumentNullException.ThrowIfNull(items);
         ArgumentNullException.ThrowIfNull(policy);
 
-        var bin = recycleBin ?? ShellRecycleBin.Default;
-        var fs = fileSystem ?? WindowsFileSystem.Default;
-        refusedBeforeAsking ??= [];
+        return Task.Run(
+            () => RemoveHereAsync(
+                items,
+                mode,
+                policy,
+                recycleBin ?? ShellRecycleBin.Default,
+                fileSystem ?? WindowsFileSystem.Default,
+                refusedBeforeAsking ?? [],
+                ct),
+            ct);
+    }
 
-        var (allowed, refused) = Partition(items, policy);
+    /// <summary><see cref="RemoveAsync"/>, on whichever thread calls it.</summary>
+    private static async Task<ExploreRemovalReport> RemoveHereAsync(
+        IReadOnlyList<ExploreItem> items,
+        ExploreRemovalMode mode,
+        ExploreActionPolicy policy,
+        IRecycleBin bin,
+        IFileSystem fs,
+        IReadOnlyList<ExploreItemOutcome> refusedBeforeAsking,
+        CancellationToken ct)
+    {
+        var (allowed, refused) = Partition(items, policy, ct);
 
         // The containers of what the policy allows only, among what was refused before asking too.
         // An item the policy refuses may sit in a directory §5.2 says must never be listed at all —
@@ -229,15 +255,11 @@ public static class ExploreRemover
         //
         // Listed before anything is deleted, because a survivor set gathered afterwards can only
         // describe what is left, which would agree with any removal however over-broad.
-        //
-        // Off the calling thread, and that is the purpose of the Task.Run rather than a detail of
-        // it. The caller is a shell resuming on the UI thread after its own dialog, and this listing
-        // is of a folder that may hold two hundred thousand entries. Everything after this stays on
-        // the pool, because every await below is ConfigureAwait(false).
+        var stillAllowed = Verdicts([.. refusedBeforeAsking.Select(refusal => refusal.Path)], policy, ct);
         var listed = allowed.Select(item => item.Path)
-            .Concat(refusedBeforeAsking.Select(refusal => refusal.Path).Where(path => policy.MayRemove(path).IsAllowed))
+            .Concat(refusedBeforeAsking.Where((_, i) => stillAllowed[i].IsAllowed).Select(refusal => refusal.Path))
             .ToList();
-        var before = await Task.Run(() => SiblingCheck.Take(listed, fs), ct).ConfigureAwait(false);
+        var before = SiblingCheck.Take(listed, fs);
 
         var outcomes = new List<ExploreItemOutcome>(items.Count);
         var cancelled = false;
@@ -264,13 +286,18 @@ public static class ExploreRemover
     }
 
     /// <summary>
-    /// Which of <paramref name="items"/> the policy will take, and the refusals for the rest.
+    /// Which of <paramref name="items"/> the policy will take, and the refusals for the rest, each in
+    /// the order the items came in.
     ///
     /// <para>Public because a shell has to know before it asks. A confirmation dialog covering an
     /// item that is then refused teaches the user that saying yes is how you find out what
     /// happens, and §7.1 wants the reason stated instead. It changes nothing about who decides:
     /// <see cref="RemoveAsync"/> partitions again through this same method, so a caller that
     /// skipped it removes exactly as much.</para>
+    ///
+    /// <para>Synchronous and slow: each item is a question to the volume manager, asked of the
+    /// policy afresh rather than read from an earlier answer. The caller runs it off its own
+    /// thread.</para>
     /// </summary>
     /// <para>The allowed items come back with their paths <em>normalised</em>, which is not a
     /// tidy-up. Everything §5.6 asserts is derived from the path by splitting it: the container from
@@ -285,28 +312,47 @@ public static class ExploreRemover
     /// picked.</para>
     public static (IReadOnlyList<ExploreItem> Allowed, IReadOnlyList<ExploreItemOutcome> Refused) Partition(
         IReadOnlyList<ExploreItem> items,
-        ExploreActionPolicy policy)
+        ExploreActionPolicy policy,
+        CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(items);
         ArgumentNullException.ThrowIfNull(policy);
 
+        var verdicts = Verdicts([.. items.Select(item => item.Path)], policy, ct);
         var allowed = new List<ExploreItem>(items.Count);
         var refused = new List<ExploreItemOutcome>();
 
-        foreach (var item in items)
+        for (var i = 0; i < items.Count; i++)
         {
-            if (policy.MayRemove(item.Path) is { IsAllowed: false } verdict)
+            if (verdicts[i] is { IsAllowed: false } verdict)
             {
-                refused.Add(new ExploreItemOutcome(item.Path, Removed: false, Bytes: 0, verdict.Reason));
+                refused.Add(new ExploreItemOutcome(items[i].Path, Removed: false, Bytes: 0, verdict.Reason));
                 continue;
             }
 
             // Non-null by construction: the policy refuses outright anything Entry cannot resolve,
             // so a path that reaches this line has already been through it once.
-            allowed.Add(item with { Path = LongPath.Entry(item.Path)! });
+            allowed.Add(items[i] with { Path = LongPath.Entry(items[i].Path)! });
         }
 
         return (allowed, refused);
+    }
+
+    /// <summary>
+    /// What the policy says about each of <paramref name="paths"/>, by position, asked
+    /// <see cref="ExploreActionPolicy.Asking"/> at a time.
+    /// </summary>
+    private static ExploreVerdict[] Verdicts(IReadOnlyList<string> paths, ExploreActionPolicy policy, CancellationToken ct)
+    {
+        var verdicts = new ExploreVerdict[paths.Count];
+
+        Parallel.For(
+            0,
+            paths.Count,
+            new ParallelOptions { MaxDegreeOfParallelism = ExploreActionPolicy.Asking, CancellationToken = ct },
+            i => verdicts[i] = policy.MayRemove(paths[i]));
+
+        return verdicts;
     }
 
     /// <summary>
