@@ -1,0 +1,21 @@
+# Win32 calls declared in more than one file when the rule came in, with how many files declare
+# each. The number only falls. Never add a line: call the declaration that exists.
+6 CloseHandle
+3 CoCreateInstance
+4 CreateFileW
+2 DefSubclassProc
+2 DwmGetWindowAttribute
+2 EnumWindows
+3 FindClose
+2 FindFirstFileExW
+4 GetCurrentProcess
+3 GetProcessTimes
+2 GetWindowThreadProcessId
+2 IsWindow
+2 IsWindowVisible
+2 NtCreateFile
+4 OpenProcess
+2 OpenProcessToken
+2 SetFileInformationByHandle
+2 SetWindowSubclass
+2 WaitForSingleObject

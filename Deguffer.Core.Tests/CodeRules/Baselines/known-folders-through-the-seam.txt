@@ -1,0 +1,4 @@
+# Uses that predate the rule, by file. Lower a line in the change that removes a use. Never add a
+# line or raise one: that is the maintainer's decision, not a way to pass.
+14 Deguffer.Core/Safety/ISystemDirectories.cs
+16 Deguffer.Core/Safety/IUserEnvironment.cs

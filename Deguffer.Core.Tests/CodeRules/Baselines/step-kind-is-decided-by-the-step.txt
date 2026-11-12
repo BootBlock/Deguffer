@@ -1,0 +1,21 @@
+# Uses that predate the rule, by file. Lower a line in the change that removes a use. Never add a
+# line or raise one: that is the maintainer's decision, not a way to pass.
+2 Deguffer.Core/Execution/AnotherAccountPlan.cs
+2 Deguffer.Core/Execution/CleanupPlan.cs
+1 Deguffer.Core/Execution/ConfirmationRequirement.cs
+8 Deguffer.Core/Execution/MailStorePlan.cs
+12 Deguffer.Core/Execution/PlanExecutor.cs
+2 Deguffer.Core/Execution/PlanVerifier.cs
+3 Deguffer.Core/Execution/RecordedRefusals.cs
+1 Deguffer.Core/Execution/RefusalCheck.cs
+3 Deguffer.Core/Execution/RunReach.cs
+1 Deguffer.Core/Execution/RunResidue.cs
+1 Deguffer.Core/Execution/StepOverlap.cs
+1 Deguffer.Core/Execution/UseRecheck.cs
+4 Deguffer.Core/Execution/VirtualMachineStoragePlan.cs
+1 Deguffer.Core/Providers/ArduinoCacheProvider.cs
+4 Deguffer.Core/Providers/CleanupProviderBase.cs
+2 Deguffer.Core/Providers/LiveChildrenCheck.cs
+3 Deguffer.Core/Providers/PulumiPluginProvider.cs
+1 Deguffer.Core/Providers/RecycleBinProvider.cs
+1 Deguffer.Core/Providers/TemporaryUserWorkCheck.cs

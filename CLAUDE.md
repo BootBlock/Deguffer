@@ -7,8 +7,6 @@ rule here is mandatory. Where one names a *memory note*, open the note before th
 
 ## Safety rules that are also code rules
 
-A refactor loses these most easily.
-
 - **§5.1** Prefer a tool's own eviction command to deleting paths.
 - **§5.2** Never target a tool's root directory. Recognised children only. Unrecognised is Tier 4.
 - **§5.6** Every execution verifies the negative: the tool root, unrecognised siblings and anything
@@ -34,7 +32,7 @@ A type that needs "and" to describe it is two types. A new cache source is a new
 never an edit to a switch. Core depends on `IUserEnvironment`, `IProcessRunner` and
 `IProcessInspector`, never on `Environment.GetFolderPath` or `Process.Start`, so the safety rules
 are testable. A view-model's decisions go to Core, and `Deguffer.App.Tests` tests only how the shell
-wires them. Past about 250 lines, look for the seam. A 500-line file needs a reason.
+wires them. Past about 250 lines, look for the seam. `FileLengthTests` caps a file at 500.
 
 ## G2: no god objects
 
@@ -52,11 +50,13 @@ provider holds its own rules and no orchestration.
   frame up.
 - No knob, extension point or `virtual` for a scenario that does not exist yet.
 - No stringly-typed state where an enum or a record belongs.
-- No `#region`, `Manager`/`Helper`/`Utils` type, or "Part 2" file.
+- No `Manager`/`Helper`/`Utils` type, or "Part 2" file.
+- `CodeRuleSweepTests` holds the rules a pattern finds, on baselines that only shrink. Memory
+  note: *Deguffer code rules the source sweep enforces*.
 
 ## G4: performance, caching and object reuse
 
-- Enumerate with `EnumerateX`, never `GetX`. Never materialise a tree to count it.
+- Never materialise a tree to count it.
 - Bound parallelism with `MaxDegreeOfParallelism`. Never fan out with unbounded `Task.Run`.
 - Cache anything derived from a subprocess or the filesystem for the operation's life.
 - Pass a `CancellationToken` down every async path.
@@ -72,8 +72,8 @@ what planning measured. A record is a value: never clone one to change what shou
 
 ## G7: use sub-agents where they apply
 
-Send fan-out work (gate audits, provider sweeps, API research) to parallel sub-agents with the
-context they need. Keep the synthesis and the final judgement in the main thread.
+Send fan-out work, such as audits and provider sweeps, to parallel sub-agents with the context
+they need. Keep the synthesis and the final judgement in the main thread.
 
 ## G8: what "verified" means
 
@@ -141,8 +141,6 @@ output, logs, fixtures and screenshots are full of real usernames, machine names
 
 ## Public-repository hygiene
 
-Everything committed is world-readable.
-
 - Stay professional and neutral. No TODO names or blames a person.
 - No internal references: private ticket IDs, internal URLs or hosts, or agent process such as
   worktrees, review mechanics and reasoning. Describe what changed and why.
@@ -175,8 +173,8 @@ Every `.md` under `docs/todo/` opens with a `> **Status:**` banner, and a finish
 
 ## Keep this file small
 
-Only rules for every change belong here, each in a few lines. Move detail for one kind of change
-to a memory note a short rule names, and shorten a rule before you add one.
+Only rules for every change belong here, each in a few lines. Move other detail to a memory note
+a short rule names, and shorten a rule before you add one.
 [AGENTS.md](AGENTS.md) stays a pointer to this file. `AgentGuideBudgetTests` fails past 10,000
 characters here, 1,200 in a section, or 600 in `AGENTS.md`. Never raise a budget without asking the
 maintainer.

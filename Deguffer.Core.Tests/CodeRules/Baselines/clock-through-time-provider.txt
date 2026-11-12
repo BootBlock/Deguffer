@@ -1,0 +1,19 @@
+# Uses that predate the rule, by file. Lower a line in the change that removes a use. Never add a
+# line or raise one: that is the maintainer's decision, not a way to pass.
+1 Deguffer.App/Controls/ExploreMap.cs
+1 Deguffer.App/Diagnostics/LaunchTiming.cs
+2 Deguffer.App/ViewModels/CleanViewModel.cs
+1 Deguffer.App/ViewModels/StepViewModel.cs
+1 Deguffer.App/ViewModels/StorageSizeChanges.cs
+1 Deguffer.Core/Providers/ClaudeCodeConversationProvider.cs
+1 Deguffer.Core/Providers/ClaudeCodeDerivedStateProvider.cs
+1 Deguffer.Core/Providers/ClaudeCodeFileHistoryProvider.cs
+1 Deguffer.Core/Providers/FileHistoryProvider.cs
+1 Deguffer.Core/Providers/MediaServerTranscodeProvider.cs
+1 Deguffer.Core/Providers/SetupCleanupProviderBase.cs
+1 Deguffer.Core/Providers/TempDirectoryProvider.cs
+1 Deguffer.Core/Providers/TestBrowserProfileProvider.cs
+1 Deguffer.Core/Providers/VsCodeExtensionLeftoversProvider.cs
+1 Deguffer.Core/Providers/WindowsUpdateLeftoverProvider.cs
+2 Deguffer.Core/Safety/OwnServicingCalls.cs
+2 Deguffer.Core/Scanning/ScanEstimateCache.cs

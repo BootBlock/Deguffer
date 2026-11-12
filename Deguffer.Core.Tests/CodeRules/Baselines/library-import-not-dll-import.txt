@@ -1,0 +1,23 @@
+# Uses that predate the rule, by file. Lower a line in the change that removes a use. Never add a
+# line or raise one: that is the maintainer's decision, not a way to pass.
+2 Deguffer.App/Controls/Direct3D.cs
+3 Deguffer.App/Shell/DisplayScale.cs
+1 Deguffer.App/Shell/HighContrast.cs
+1 Deguffer.App/Shell/ScreenPlace.cs
+1 Deguffer.App/Shell/ShellActions.cs
+2 Deguffer.App/Shell/SystemMotion.cs
+7 Deguffer.App/Shell/TaskbarButton.cs
+2 Deguffer.App/Shell/WindowLong.cs
+1 Deguffer.App/Shell/WindowSizing.cs
+5 Deguffer.App/Shell/WindowStackEvents.cs
+1 Deguffer.Benchmark/RemovalSite.cs
+1 Deguffer.Core/Execution/DiskCleanupNative.cs
+3 Deguffer.Core/Execution/ShellNative.cs
+1 Deguffer.Core/Exploring/Hidden/ShadowStorageCalls.cs
+1 Deguffer.Core/Exploring/Network/ShellNetworkFolder.cs
+4 Deguffer.Core/Memory/ProcessSnapshot.cs
+1 Deguffer.Core/Memory/WindowCalls.cs
+4 Deguffer.Core/Safety/RestartManager.cs
+4 Deguffer.Core/SystemProtection/ShadowCopyCalls.cs
+2 Deguffer.Core/Viewing/WindowStack.cs
+2 Deguffer.Core/Wmi/WbemConnection.cs
