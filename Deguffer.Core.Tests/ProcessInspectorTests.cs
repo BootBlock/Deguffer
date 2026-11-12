@@ -56,6 +56,21 @@ public sealed class ProcessInspectorTests
     }
 
     /// <summary>
+    /// A rule finds a running process by the beginning of its name, and reports the name as Windows
+    /// does, so a program whose executable carries its release number is still seen.
+    /// </summary>
+    [Fact]
+    public void AProcessFoundByTheBeginningOfItsNameReportsTheNameWindowsGives()
+    {
+        using var self = Process.GetCurrentProcess();
+
+        var found = new ProcessInspector().FindRunning(ProcessNameRule.Named().OrStartingWith(self.ProcessName[..^1].ToUpperInvariant()));
+
+        Assert.Contains(self.ProcessName, found);
+        Assert.Empty(new ProcessInspector().FindRunning(ProcessNameRule.Named().OrStartingWith("Deguffer-no-such-process")));
+    }
+
+    /// <summary>
     /// A process that has exited is not running, even while something still holds it open and so
     /// keeps its id taken.
     ///

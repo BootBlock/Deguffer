@@ -20,6 +20,13 @@ public interface IProcessInspector
     IReadOnlyList<string> FindRunning(IEnumerable<string> names);
 
     /// <summary>
+    /// The names of the running processes <paramref name="rule"/> matches, for a program that runs under
+    /// names no fixed list can give: each exact name as the rule spells it, then each name a beginning
+    /// matches, as Windows reports it.
+    /// </summary>
+    IReadOnlyList<string> FindRunning(ProcessNameRule rule);
+
+    /// <summary>
     /// Of <paramref name="names"/>, every process running, each with when it was created, for a
     /// caller that must tell one process of a name from another. A creation time is read at the
     /// moment of the call, and is null where it could not be: for a service on an unelevated run,
@@ -82,17 +89,9 @@ public sealed class ProcessInspector : IProcessInspector
     /// <param name="time">What a snapshot's age is measured by.</param>
     internal ProcessInspector(TimeProvider time) => _snapshot = new(time);
 
-    public IReadOnlyList<string> FindRunning(IEnumerable<string> names)
-    {
-        var wanted = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
-        if (wanted.Count == 0)
-        {
-            return [];
-        }
+    public IReadOnlyList<string> FindRunning(IEnumerable<string> names) => FindRunning(ProcessNameRule.Named(names));
 
-        wanted.IntersectWith(Snapshot().Keys);
-        return [.. wanted];
-    }
+    public IReadOnlyList<string> FindRunning(ProcessNameRule rule) => rule.MatchesNothing ? [] : rule.Among(Snapshot().Keys);
 
     public IReadOnlyList<StartedProcess> FindRunningProcesses(IEnumerable<string> names)
     {

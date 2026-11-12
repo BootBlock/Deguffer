@@ -99,11 +99,14 @@ public sealed class FakeProcessInspector(params string[] running) : IProcessInsp
         return this;
     }
 
-    public IReadOnlyList<string> FindRunning(IEnumerable<string> names)
+    public IReadOnlyList<string> FindRunning(IEnumerable<string> names) => FindRunning(ProcessNameRule.Named(names));
+
+    /// <summary>Matched by the rule itself, as the real inspector matches it, against the snapshot's names.</summary>
+    public IReadOnlyList<string> FindRunning(ProcessNameRule rule)
     {
         var machine = Snapshot();
 
-        return [.. names.Intersect([.. machine.Running, .. machine.Started.Select(process => process.Name)], StringComparer.OrdinalIgnoreCase)];
+        return rule.Among([.. machine.Running, .. machine.Started.Select(process => process.Name)]);
     }
 
     /// <summary>
