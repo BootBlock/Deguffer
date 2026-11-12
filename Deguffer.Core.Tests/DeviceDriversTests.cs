@@ -6,8 +6,9 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// Which packages are in use, read from the devices' own properties, held to what pnputil says when it
-/// is asked to name each package's devices. The listing keeps the shape Windows 11 24H2 writes, with
-/// invented names, and the devices are the properties the same machine reports for it.
+/// is asked to name each package's devices. The listing and the devices are invented, in the shapes
+/// Windows 11 24H2 writes them. Listing phantom devices is the native reader's part, so a device that
+/// is not connected is one more device here: which devices are read is not proven by this suite.
 /// </summary>
 public sealed class DeviceDriversTests
 {

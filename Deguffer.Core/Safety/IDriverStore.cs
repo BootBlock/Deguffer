@@ -45,9 +45,8 @@ public sealed record DriverStoreListing(IReadOnlyList<DriverPackage> Packages, i
 ///
 /// <para>Behind an interface because every part reaches the machine: <c>pnputil</c> lists the packages,
 /// the devices' properties say which are in use, and SetupAPI names each one's folder. A test that
-/// reached any of them would plan against the driver
-/// store of whoever ran the suite, and a plan's §5.2 and §5.6 claims have to be proven against a store
-/// the test built.</para>
+/// reached any of them would plan against the driver store of whoever ran the suite, and a plan's §5.2
+/// and §5.6 claims have to be proven against a store the test built.</para>
 /// </summary>
 public interface IDriverStore
 {

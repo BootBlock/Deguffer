@@ -88,7 +88,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
     {
         _handlers = handlers;
         _system = system ?? SystemDirectories.Current;
-        _store = store ?? new DriverStore(Runner, _system, DeviceDriverReader.Default);
+        _store = store ?? new DriverStore(Runner, _system, DeviceDriverReader.Default, DriverPackageFolders.Default);
         _repository = Path.Combine(_system.WindowsDirectory, "System32", "DriverStore", "FileRepository");
         _volume = LongPath.Display(_system.SystemDrive);
     }

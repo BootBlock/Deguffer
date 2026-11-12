@@ -4,19 +4,15 @@ using Deguffer.Testing;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// The real store's handling of what <c>pnputil</c> and the devices answer. Only listings that name no
-/// package, or a package under a name no machine stages, are driven here: SetupAPI answers either with
-/// no folder, where a real name would ask about this machine's own driver store.
+/// The real store's handling of what <c>pnputil</c>, the devices and the package folders answer, each
+/// stated by the test.
 /// </summary>
 public sealed class DriverStoreTests : IDisposable
 {
-    /// <summary>
-    /// An extension package under a name Windows never gives, <c>oem&lt;N&gt;.inf</c> being the only
-    /// form it uses for a third-party package.
-    /// </summary>
+    /// <summary>The listing without <c>/devices</c>, holding one extension package.</summary>
     private const string ExtensionListing = """
         <PnpUtil>
-            <Driver DriverName="deguffer-test-extension.inf">
+            <Driver DriverName="oem100.inf">
                 <OriginalName>audioext.inf</OriginalName>
                 <ProviderName>Example Audio</ProviderName>
                 <ClassGuid>{e2f84ce7-8efa-411c-aa69-97454ca4cb57}</ClassGuid>
@@ -28,6 +24,7 @@ public sealed class DriverStoreTests : IDisposable
 
     private readonly TempDirectory _temp = new();
     private readonly FakeSystemDirectories _system;
+    private readonly FakeDriverPackageFolders _folders = new(@"C:\Store");
 
     public DriverStoreTests() => _system = new FakeSystemDirectories(_temp.Path);
 
@@ -43,7 +40,7 @@ public sealed class DriverStoreTests : IDisposable
     {
         var runner = new FakeProcessRunner().Responding(PnpUtil, "/enum-drivers", "<PnpUtil />");
 
-        var listing = await new DriverStore(runner, _system, NoDevices).ListAsync(CancellationToken.None);
+        var listing = await new DriverStore(runner, _system, NoDevices, _folders).ListAsync(CancellationToken.None);
 
         var (fileName, arguments, _) = Assert.Single(runner.Invocations);
         Assert.Equal(Path.Combine(_system.WindowsDirectory, "System32", "pnputil.exe"), fileName);
@@ -58,7 +55,7 @@ public sealed class DriverStoreTests : IDisposable
     {
         var runner = new FakeProcessRunner().Responding(PnpUtil, "/enum-drivers", "<PnpUtil />");
 
-        var listing = await new DriverStore(runner, _system, FakeDeviceDriverReader.Unreadable).ListAsync(CancellationToken.None);
+        var listing = await new DriverStore(runner, _system, FakeDeviceDriverReader.Unreadable, _folders).ListAsync(CancellationToken.None);
 
         Assert.Equal(
             ["/enum-drivers /format xml", "/enum-drivers /devices /format xml"],
@@ -81,7 +78,7 @@ public sealed class DriverStoreTests : IDisposable
             .Responding(PnpUtil, "/devices", withDevices)
             .Responding(PnpUtil, "/enum-drivers", ExtensionListing);
 
-        var listing = await new DriverStore(runner, _system, new FakeDeviceDriverReader(new DeviceDriverProperties("usbaudio.inf", [])))
+        var listing = await new DriverStore(runner, _system, new FakeDeviceDriverReader(new DeviceDriverProperties("usbaudio.inf", [])), _folders)
             .ListAsync(CancellationToken.None);
 
         Assert.Equal(2, runner.Invocations.Count);
@@ -92,12 +89,14 @@ public sealed class DriverStoreTests : IDisposable
     public async Task TakesAnExtensionPackagesUseFromTheDevicesWhereADeviceReportsItsExtensions()
     {
         var runner = new FakeProcessRunner().Responding(PnpUtil, "/enum-drivers", ExtensionListing);
-        var devices = new FakeDeviceDriverReader(new DeviceDriverProperties("usbaudio.inf", ["deguffer-test-extension.inf:USB\\0,Install"]));
+        var devices = new FakeDeviceDriverReader(new DeviceDriverProperties("usbaudio.inf", ["oem100.inf:USB\\0,Install"]));
 
-        var listing = await new DriverStore(runner, _system, devices).ListAsync(CancellationToken.None);
+        var listing = await new DriverStore(runner, _system, devices, _folders).ListAsync(CancellationToken.None);
 
         Assert.Single(runner.Invocations);
-        Assert.True(Assert.Single(listing.Packages).InUse);
+        var package = Assert.Single(listing.Packages);
+        Assert.True(package.InUse);
+        Assert.Equal(@"C:\Store\oem100.inf", package.Folder);
     }
 
     [Fact]
@@ -105,7 +104,7 @@ public sealed class DriverStoreTests : IDisposable
     {
         var runner = new FakeProcessRunner().Replying(PnpUtil, _ => new CommandOutcome(5, string.Empty, "Access is denied."));
 
-        var listing = await new DriverStore(runner, _system, NoDevices).ListAsync(CancellationToken.None);
+        var listing = await new DriverStore(runner, _system, NoDevices, _folders).ListAsync(CancellationToken.None);
 
         Assert.Contains("Access is denied.", listing.Failure, StringComparison.Ordinal);
     }
@@ -117,7 +116,7 @@ public sealed class DriverStoreTests : IDisposable
             ? new CommandOutcome(5, string.Empty, "Access is denied.")
             : new CommandOutcome(0, "<PnpUtil />", string.Empty));
 
-        var listing = await new DriverStore(runner, _system, FakeDeviceDriverReader.Unreadable).ListAsync(CancellationToken.None);
+        var listing = await new DriverStore(runner, _system, FakeDeviceDriverReader.Unreadable, _folders).ListAsync(CancellationToken.None);
 
         Assert.Contains("Access is denied.", listing.Failure, StringComparison.Ordinal);
         Assert.Empty(listing.Packages);
@@ -129,7 +128,7 @@ public sealed class DriverStoreTests : IDisposable
     {
         var runner = new FakeProcessRunner().Responding(PnpUtil, "/enum-drivers", "Microsoft PnP Utility\r\n\r\nPNPUTIL [/add-driver <...>");
 
-        var listing = await new DriverStore(runner, _system, NoDevices).ListAsync(CancellationToken.None);
+        var listing = await new DriverStore(runner, _system, NoDevices, _folders).ListAsync(CancellationToken.None);
 
         Assert.NotNull(listing.Failure);
         Assert.Empty(listing.Packages);
