@@ -36,20 +36,21 @@ internal static class TreeAge
     /// </summary>
     public static DateTime? NewestWrite(string directory, ScanTuner tuning, CancellationToken ct)
     {
-        var info = new DirectoryInfo(LongPath.Extended(directory));
+        var extended = LongPath.Extended(directory);
 
-        if (!info.Exists)
+        // Read as a FILETIME, as the listings below read every entry, so a root dated past the year 9999
+        // cannot throw. A directory that is gone or unreadable has no age to give rather than the
+        // Windows epoch, the oldest age there is. See DirectoryAge.
+        if (FileAttributeRead.Read(extended, out var attributes, out _, out _, out var newest) != 0
+            || (attributes & FileAttributes.Directory) == 0)
         {
-            // LastWriteTimeUtc answers for a missing path with the Windows epoch, the oldest age there
-            // is. See DirectoryAge.
             return null;
         }
 
-        var newest = info.LastWriteTimeUtc.ToFileTimeUtc();
         var refused = 0;
 
         BoundedFileWalk.Visit(
-            LongPath.Extended(directory),
+            extended,
             rootState: 0,
             tuning,
             FileNames.Stores,

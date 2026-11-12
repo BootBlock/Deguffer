@@ -46,18 +46,29 @@ public static class EntryTime
     }
 
     /// <summary>
-    /// Make the file <paramref name="path"/> created and last written at the FILETIMEs given, for a time
-    /// no <see cref="DateTime"/> can carry, such as <see cref="PastTheLastDateTime"/>.
+    /// Make <paramref name="path"/>, a file or a directory, created and last written at the FILETIMEs
+    /// given, for a time no <see cref="DateTime"/> can carry, such as <see cref="PastTheLastDateTime"/>.
     /// </summary>
     public static void SetFileTimes(string path, long created, long written)
     {
-        using var handle = File.OpenHandle(LongPath.Extended(path), FileMode.Open, FileAccess.Write);
+        // Backup semantics is what lets CreateFile open a directory as well as a file.
+        using var handle = CreateFile(
+            LongPath.Extended(path), WriteAttributes, ShareAll, 0, OpenExisting, BackupSemantics, 0);
 
-        if (!SetFileTime(handle, created, lastAccess: 0, written))
+        if (handle.IsInvalid || !SetFileTime(handle, created, lastAccess: 0, written))
         {
             throw new Win32Exception(Marshal.GetLastWin32Error(), $"Could not date {path}.");
         }
     }
+
+    private const uint WriteAttributes = 0x0100;
+    private const uint ShareAll = 0x7;
+    private const uint OpenExisting = 3;
+    private const uint BackupSemantics = 0x0200_0000;
+
+    [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern SafeFileHandle CreateFile(
+        string name, uint access, uint share, nint security, uint disposition, uint flags, nint template);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

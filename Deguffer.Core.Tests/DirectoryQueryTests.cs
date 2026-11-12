@@ -64,7 +64,7 @@ public sealed class DirectoryQueryTests : IDisposable
     /// <summary>
     /// A time past the year 9999 is listed as the FILETIME the file carries. NTFS stores whatever a
     /// program sets, and a <see cref="DateTime"/> made of one throws, which failed the walk's worker and
-    /// the whole walk with it (§5.3: nothing throws for a listing).
+    /// the whole walk with it.
     /// </summary>
     [Fact]
     public void ListsATimePastTheYear9999AsTheFileTimeTheFileCarries()

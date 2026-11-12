@@ -61,10 +61,11 @@ public readonly record struct ExploreTimestamp(int MinutesSinceWindowsEpoch)
         FromTicksSinceEpoch(fileTime);
 
     /// <summary>
-    /// A <see cref="DateTime"/> as the directory walk has it, from
-    /// <see cref="FileSystemInfo.CreationTimeUtc"/> and its neighbours.
+    /// A <see cref="DateTime"/> as the framework's file information has it, from
+    /// <see cref="FileSystemInfo.LastWriteTimeUtc"/> and its neighbours. The walk keeps its listings'
+    /// FILETIMEs and reads them through <see cref="FromFileTime"/> instead.
     ///
-    /// <para>Converted to UTC first rather than assumed to be in it. The properties the walk reads
+    /// <para>Converted to UTC first rather than assumed to be in it. The <c>Utc</c> properties
     /// are already UTC and this changes nothing for them, but a local time silently reinterpreted
     /// as UTC is an error that shows up as an hour's drift twice a year and never as a
     /// failure.</para>

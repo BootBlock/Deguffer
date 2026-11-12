@@ -107,12 +107,9 @@ internal static class WalkExploreReader
         // §6.3: the walk is given the extended-length form, and .NET builds every child path from
         // the parent it was handed — so the whole traversal stays past MAX_PATH. The tree keeps the
         // ordinary form, because every path it hands back is one a person reads or a shell opens.
-        var top = new DirectoryInfo(LongPath.Extended(root));
+        var (created, written) = RootTimes(LongPath.Extended(root));
 
-        var builder = new ExploreTreeBuilder(
-            LongPath.Display(root),
-            Created(top),
-            LastWritten(top));
+        var builder = new ExploreTreeBuilder(LongPath.Display(root), created, written);
 
         long items = 0;
         long bytes = 0;
@@ -334,39 +331,24 @@ internal static class WalkExploreReader
 
     private static FileVisibility VisibilityOf(WalkEntry entry) => FileVisibilities.Of(entry.Attributes);
 
-    /// <summary>When the root was made, or unknown where nothing could say.</summary>
-    private static ExploreTimestamp Created(DirectoryInfo root) =>
-        TimeOf(root, static r => r.CreationTimeUtc);
-
-    /// <summary>When the root itself was last written.</summary>
-    private static ExploreTimestamp LastWritten(DirectoryInfo root) =>
-        TimeOf(root, static r => r.LastWriteTimeUtc);
-
     /// <summary>
-    /// One timestamp off the root, or unknown where reading it fails.
+    /// When the root was made and last written, each unknown where nothing could say.
     ///
     /// <para><b>Only the root is read this way.</b> Every other entry's timestamps come from the
     /// listing that found it, so they cost nothing and cannot fail. The root is the one entry nothing
-    /// listed, so the first of these reads goes to the disk — and against a share that has gone away
-    /// that is a real network round trip that raises rather than answering. A scan is not worth
-    /// failing over a date: §5.3 already makes an unreadable path ordinary, the walk below still
-    /// reports what it could reach, and the honest answer for a location nothing can open is that its
-    /// age is not known.</para>
+    /// listed, so this read goes to the disk — and against a share that has gone away that is a real
+    /// network round trip that fails rather than answering. A scan is not worth failing over a date:
+    /// §5.3 already makes an unreadable path ordinary, the walk below still reports what it could
+    /// reach, and the honest answer for a location nothing can open is that its age is not known.</para>
     ///
-    /// <para>An entry that has gone since it was listed answers with the start of the Windows epoch
-    /// rather than failing, and <see cref="ExploreTimestamp"/> reads that as unknown.
+    /// <para>Read as FILETIMEs, as the listing reads every other entry, so a root dated past the year
+    /// 9999 is unknown rather than a <see cref="DateTime"/> that throws. A time Windows never set
+    /// answers zero, which <see cref="ExploreTimestamp"/> reads as unknown too.
     /// <see cref="Providers.DirectoryAge"/> guards the same value for the same reason: January 1601
     /// in an age column is the oldest invitation there is to delete something.</para>
     /// </summary>
-    private static ExploreTimestamp TimeOf(DirectoryInfo root, Func<DirectoryInfo, DateTime> read)
-    {
-        try
-        {
-            return ExploreTimestamp.FromUtc(read(root));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return ExploreTimestamp.Unknown;
-        }
-    }
+    private static (ExploreTimestamp Created, ExploreTimestamp Written) RootTimes(string extended) =>
+        FileAttributeRead.Read(extended, out _, out _, out var created, out var written) == 0
+            ? (ExploreTimestamp.FromFileTime(created), ExploreTimestamp.FromFileTime(written))
+            : (ExploreTimestamp.Unknown, ExploreTimestamp.Unknown);
 }

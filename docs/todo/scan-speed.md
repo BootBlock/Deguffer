@@ -45,7 +45,7 @@ each of them for.
 
 | Issue | Why it is first |
 | --- | --- |
-| #472 | A file whose timestamp is past the year 9999 throws out of the walk, the removal walk included. NTFS accepts such a timestamp from any program. |
+| #472 | A file whose timestamp is past the year 9999 throws out of the walk, the removal walk included. NTFS accepts such a timestamp from any program. Done: the walk keeps each entry's and each root's times as the FILETIMEs Windows reported, so the measuring walk, the removal walk, Explore and the JetBrains age read such a file as newer than any window, or Explore as of unknown age, and nothing throws. |
 
 ### 2. Pass scheduling
 

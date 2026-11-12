@@ -308,6 +308,24 @@ public sealed class WalkExploreReaderTests : IDisposable
     }
 
     /// <summary>
+    /// The root, the one entry nothing listed, is read the same way: a last write past the year 9999 is
+    /// unknown, and its creation is still shown. Empty, so nothing beneath it rolls a date up into it.
+    /// </summary>
+    [Fact]
+    public void ShowsARootWrittenPastTheYear9999AsUnknown()
+    {
+        var made = new DateTime(2021, 4, 5, 9, 15, 0, DateTimeKind.Utc);
+
+        var root = _temp.CreateDirectory("cache");
+        EntryTime.SetFileTimes(root, made.ToFileTimeUtc(), EntryTime.PastTheLastDateTime);
+
+        var tree = WalkExploreReader.Read(root, ScanTuner.Shipped, OccupancyProbe.Default, progress: null, TimeProvider.System, default);
+
+        Assert.Equal(made, tree.CreatedOf(tree.RootNode).Utc);
+        Assert.False(tree.ModifiedOf(tree.RootNode).IsKnown);
+    }
+
+    /// <summary>
     /// The scan's own root is dated too, and it is the one entry nothing enumerated — so it is the
     /// one the reader has to look up itself. Without that its creation date is the unknown the
     /// arrays start at, whatever the disk says.

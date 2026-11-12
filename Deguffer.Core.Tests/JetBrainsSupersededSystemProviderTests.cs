@@ -167,6 +167,22 @@ public sealed class JetBrainsSupersededSystemProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The version folder's own write counts too, so one dated past the year 9999 keeps its version as
+    /// used within the shelf life rather than throwing before the walk begins.
+    /// </summary>
+    [Fact]
+    public async Task KeepsAVersionWhoseFolderIsWrittenPastTheYear9999AsRecentlyUsed()
+    {
+        var old = CreateVersion(Google, Old, home: _install, age: TimeSpan.FromDays(400));
+        EntryTime.SetFileTimes(old, (Now - TimeSpan.FromDays(400)).ToFileTimeUtc(), EntryTime.PastTheLastDateTime);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.DoesNotContain(Path.Combine(old, "caches"), plan.TargetedPaths);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("within the last 180 days", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// The IDE skips what it cannot read and keeps the newest time of the rest, which reads older than
     /// the truth. A folder Windows would not list leaves the age unknown, and the version is kept.
     /// </summary>
