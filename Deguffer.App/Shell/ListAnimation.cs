@@ -39,6 +39,12 @@ internal sealed class ListAnimation
     /// <summary>The item each container last showed, kept past its recycling until the frame's change is played.</summary>
     private readonly Dictionary<UIElement, object> _shown = [];
 
+    /// <summary>
+    /// The group each heading last showed. A list recycles a heading without saying so, so a heading
+    /// found heading another group is brought to rest here, as a row's container is when it is shown.
+    /// </summary>
+    private readonly Dictionary<UIElement, object> _headed = [];
+
     /// <summary>The containers recycled since the last change was played, whose items go with it.</summary>
     private readonly HashSet<UIElement> _released = [];
 
@@ -184,7 +190,7 @@ internal sealed class ListAnimation
     {
         var height = _viewport!.ActualHeight;
 
-        foreach (var (container, item) in _shown.Select(shown => (shown.Key, shown.Value)).Concat(_rows.Headings()))
+        foreach (var (container, item) in _shown.Select(shown => (shown.Key, shown.Value)).Concat(Headings()))
         {
             if (Place(container) is not { } at)
             {
@@ -301,7 +307,7 @@ internal sealed class ListAnimation
         var rows = new List<(object, UIElement, Rect)>();
         var height = _viewport!.ActualHeight;
 
-        foreach (var (container, item) in _rows.Realised().Concat(_rows.Headings()))
+        foreach (var (container, item) in _rows.Realised().Concat(Headings()))
         {
             if (!_released.Contains(container)
                 && Place(container) is { } at
@@ -315,6 +321,22 @@ internal sealed class ListAnimation
         rows.Sort((one, other) => one.Item3.Y.CompareTo(other.Item3.Y));
 
         return rows;
+    }
+
+    /// <summary>The headings laid out now, each brought to rest first if it heads another group than it did.</summary>
+    private IEnumerable<(UIElement Container, object Row)> Headings()
+    {
+        foreach (var (container, group) in _rows.Headings())
+        {
+            if (_headed.TryGetValue(container, out var was) && !ReferenceEquals(was, group))
+            {
+                _moves.Rest(container);
+            }
+
+            _headed[container] = group;
+
+            yield return (container, group);
+        }
     }
 
     /// <summary>The rows the reader is at: under the pointer, then with focus.</summary>

@@ -285,13 +285,13 @@ public sealed class DuplicatesViewModelTests : DuplicatesPageScene
     });
 
     /// <summary>
-    /// Each group reaches the page's grouped source as the list of its copies, in the group's order,
-    /// so every copy is a row of the list, which realises only the rows on screen, rather than a
-    /// part of one row built whole however many copies the group holds (#689). Only the last copy's
-    /// row closes the group's card.
+    /// Each group is the list of its copies, in the group's order, which is the shape the page's
+    /// grouped source reads so that every copy is a row of its own (#689). Only the last copy's row
+    /// closes the group's card. That the page lists the copies through the grouped source is seen by
+    /// driving it, as a test host has no XAML.
     /// </summary>
     [Fact]
-    public void EachGroupIsTheListOfItsCopiesSoEveryCopyIsARowOfItsOwn() => UiThread.Run(async () =>
+    public void EachGroupIsTheListOfItsCopiesInItsOwnOrderAndOnlyItsLastClosesTheCard() => UiThread.Run(async () =>
     {
         var three = DuplicateScene.Group(
             MatchCriteria.Content,
