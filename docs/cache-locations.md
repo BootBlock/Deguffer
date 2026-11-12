@@ -9243,7 +9243,9 @@ pointing into it is offered once, with the administrator rights it needs, rather
 ### What is protected
 
 Both folders themselves, the folder holding each of them, every entry a running program is using,
-and — for `C:\Windows\Temp` — the Windows directory, `WinSxS` and `Windows\Installer`. All of them
+every entry holding work that was never saved (an Arduino IDE sketch, Krita's autosave of a
+never-saved image, Blender's `quit.blend` and autosaves, and the NVIDIA `Highlights` folder), and —
+for `C:\Windows\Temp` — the Windows directory, `WinSxS` and `Windows\Installer`. All of them
 are named in the plan and checked after the run.
 
 The check on a spared entry is stronger than "is it still there". An over-broad rule here would
