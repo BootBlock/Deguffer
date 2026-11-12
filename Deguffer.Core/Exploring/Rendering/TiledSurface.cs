@@ -23,6 +23,7 @@ public sealed class TiledSurface : ExploreSurface
 
     private readonly IReadOnlyList<ExploreTile> _tiles;
     private readonly TileHitTest _hits;
+    private readonly NodeShapes<ExploreTile> _byNode;
 
     /// <summary>The volume a treemap of the whole of it draws beside its root, which each of its tiles lays out too.</summary>
     private readonly VolumeSpace _beside;
@@ -50,6 +51,7 @@ public sealed class TiledSurface : ExploreSurface
     {
         _tiles = tiles;
         _hits = new TileHitTest(tiles, width, height);
+        _byNode = new NodeShapes<ExploreTile>(tiles, static tile => tile.IsNode, static tile => tile.Node, static tile => tile.Depth);
         _beside = beside;
         HasVolumeBeside = TreemapLayout.DrawsBeside(tree.SizeOf(root), beside, width, height, limits);
 
@@ -168,14 +170,8 @@ public sealed class TiledSurface : ExploreSurface
     private List<MapShape> Held(int folder)
     {
         var shapes = new List<MapShape>();
-        var holder = -1;
 
-        for (var i = 0; i < _tiles.Count && holder < 0; i++)
-        {
-            holder = _tiles[i].IsNode && _tiles[i].Node == folder ? i : -1;
-        }
-
-        if (holder < 0)
+        if (_byNode.FirstOf(folder) is not { } holder)
         {
             return shapes;
         }
@@ -244,41 +240,21 @@ public sealed class TiledSurface : ExploreSurface
     }
 
     /// <summary>
-    /// One pass over the shapes, keeping the deepest that is the node or a folder above it. A node
-    /// outside this drawing has none of them drawn here: every shape is this drawing's root or under it.
+    /// The deepest shape that is the node or a folder above it. A node outside this drawing has none of
+    /// them drawn here: every shape is this drawing's root or under it.
     /// </summary>
-    private ExploreTile? Deepest(int node)
-    {
-        var path = PathOf(node);
-        ExploreTile? deepest = null;
-
-        for (var i = 0; i < _tiles.Count; i++)
-        {
-            var tile = _tiles[i];
-
-            if (tile.IsNode && path.Contains(tile.Node) && (deepest is not { } found || tile.Depth > found.Depth))
-            {
-                deepest = tile;
-            }
-        }
-
-        return deepest;
-    }
+    private ExploreTile? Deepest(int node) => _byNode.Deepest(Tree, Root, node) is { } index ? _tiles[index] : null;
 
     public override IReadOnlyList<ExploreOutline> Outlines(IReadOnlySet<int> nodes)
     {
         ArgumentNullException.ThrowIfNull(nodes);
 
-        var outlines = new List<ExploreOutline>();
+        var indices = _byNode.Of(nodes);
+        var outlines = new List<ExploreOutline>(indices.Count);
 
-        for (var i = 0; i < _tiles.Count; i++)
+        foreach (var index in indices)
         {
-            var tile = _tiles[i];
-
-            if (tile.IsNode && nodes.Contains(tile.Node))
-            {
-                outlines.Add(OutlineOf(tile));
-            }
+            outlines.Add(OutlineOf(_tiles[index]));
         }
 
         return outlines;

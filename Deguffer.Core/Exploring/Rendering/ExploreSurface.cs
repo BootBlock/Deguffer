@@ -378,26 +378,6 @@ public abstract class ExploreSurface
     internal BranchHue HueOf(int node) => _hues.Of(node);
 
     /// <summary>
-    /// <paramref name="node"/> and every folder above it, up to this drawing's root, or up to the
-    /// tree's own root for a node outside this drawing. Gathered for each ask rather than kept, because
-    /// it is asked once for a change of folder or a card row lit.
-    /// </summary>
-    protected HashSet<int> PathOf(int node)
-    {
-        var path = new HashSet<int>();
-
-        for (var current = node; ; current = Tree.ParentOf(current))
-        {
-            path.Add(current);
-
-            if (current == Root || Tree.ParentOf(current) == current)
-            {
-                return path;
-            }
-        }
-    }
-
-    /// <summary>
     /// What the shape for this node at this depth is painted.
     ///
     /// <para>Every colour decision the drawing makes, in one place. The rasterisers are handed this

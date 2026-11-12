@@ -10,6 +10,7 @@ namespace Deguffer.Core.Exploring.Rendering;
 public sealed class SunburstSurface : ExploreSurface
 {
     private readonly SectorHitTest _hits;
+    private readonly NodeShapes<ExploreSector> _byNode;
 
     public SunburstSurface(
         ISizedTree tree,
@@ -22,6 +23,8 @@ public sealed class SunburstSurface : ExploreSurface
         : base(tree, root, width, height, limits, colours, style, zoom: null)
     {
         _hits = new SectorHitTest(SunburstLayout.Compute(tree, root, width, height, limits));
+        _byNode = new NodeShapes<ExploreSector>(
+            _hits.Sunburst.Sectors, static sector => sector.Block != MapBlock.Aggregate, static sector => sector.Node, static sector => sector.Depth);
 
         Labels = BuildLabels();
     }
@@ -124,30 +127,22 @@ public sealed class SunburstSurface : ExploreSurface
     /// it, because what it holds is drawn in the rings further out, so the deepest is the node's own
     /// sector wherever it was drawn.
     /// </summary>
-    public override int? ShownAs(int node)
-    {
-        var path = PathOf(node);
-        var sectors = _hits.Sunburst.Sectors;
-        ExploreSector? deepest = null;
-
-        for (var i = 0; i < sectors.Count; i++)
-        {
-            var sector = sectors[i];
-
-            if (sector.Block != MapBlock.Aggregate && path.Contains(sector.Node) && (deepest is not { } found || sector.Depth > found.Depth))
-            {
-                deepest = sector;
-            }
-        }
-
-        return deepest?.Node;
-    }
+    public override int? ShownAs(int node) =>
+        _byNode.Deepest(Tree, Root, node) is { } index ? _hits.Sunburst.Sectors[index].Node : null;
 
     public override IReadOnlyList<ExploreOutline> Outlines(IReadOnlySet<int> nodes)
     {
         ArgumentNullException.ThrowIfNull(nodes);
 
-        return Traced(nodes.Contains);
+        var sunburst = _hits.Sunburst;
+        var outlines = new List<ExploreOutline>();
+
+        foreach (var index in _byNode.Of(nodes))
+        {
+            Trace(sunburst, sunburst.Sectors[index], outlines);
+        }
+
+        return outlines;
     }
 
     /// <summary>Every sector of the nodes asked for: no sector is drawn inside another's ring.</summary>
