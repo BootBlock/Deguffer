@@ -1703,7 +1703,12 @@ unchanged. A shadow copy is ruled out when it comes from another provider, is no
 or was made without writers, because only Windows' own provider makes the kind System Restore keeps.
 Nothing can rule one in, so a copy Windows shares between a restore point and its own backup goes with
 the restore point, and the row says so. Lowering System Protection's limit is a setting, which
-Deguffer names and never changes.
+Deguffer names and never changes. Point-in-time restore, in Windows 11 24H2 and later, keeps shadow
+copies of the whole system in the same storage under the same limit, and Windows says neither which
+copies are its own nor whether System Restore lists them, so they cannot be proved to survive. Where
+it records a snapshot, or its record cannot be read, the row offers nothing, and a clean that finds
+one recorded since the preview removes nothing. Where Windows has the feature, a changed limit is
+unverified rather than failed, because the feature sets that limit itself.
 
 **Other accounts' profiles are offered on the same terms: only through Windows' own route, and only
 where the account is proven gone.** A machine more than one person used keeps a profile folder for

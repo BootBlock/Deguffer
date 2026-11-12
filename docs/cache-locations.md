@@ -8811,8 +8811,10 @@ row as a snapshot would.
 The run checks afterwards, by asking Windows again, that the newest restore point is still listed,
 that every shadow copy that cannot be a restore point's is still listed, and that System Protection's
 limit on each drive is what it was. Where Windows has point-in-time restore, which sets the same limit
-from its own maximum usage, a changed limit is reported as changed and not checked, because the change
-may be that feature's rather than the clean's. A shadow copy is ruled out as a restore point's when another
+from its own maximum usage, a changed limit is reported as unverified rather than as a failure,
+because the change may be that feature's rather than the clean's. A snapshot point-in-time restore
+records after the preview stops the clean before it removes anything, and one recorded during the
+clean is reported as unverified. A shadow copy is ruled out as a restore point's when another
 provider made it, when it is not client-accessible, or when it was made without writers, because only
 Windows' own provider makes the kind System Restore keeps.
 

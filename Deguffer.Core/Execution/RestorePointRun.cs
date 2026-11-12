@@ -31,6 +31,20 @@ internal static class RestorePointRun
                 : listing.Failure ?? "System Restore did not list its restore points.");
         }
 
+        // The plan offered nothing where point-in-time restore recorded a snapshot, and one it records
+        // after the preview leaves the clean just as unable to prove its shadow copies survived.
+        var pointInTime = await Task.Run(protection.ReadPointInTimeRestore, ct).ConfigureAwait(false);
+
+        if (pointInTime.MayKeepSnapshots)
+        {
+            return NotRun(step, pointInTime.Snapshots is PointInTimeSnapshots.Unread
+                ? $"{pointInTime.Failure} Point-in-time restore keeps its snapshots in the same storage, so the clean "
+                    + "could not prove afterwards that they survived."
+                : "Point-in-time restore has recorded a snapshot since the preview. It keeps its snapshots in the same "
+                    + "storage, and Windows does not say which shadow copies are its own, so the clean could not prove "
+                    + "afterwards that they survived.");
+        }
+
         var due = Due(step, listing);
 
         if (due.Count == 0)

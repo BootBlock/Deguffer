@@ -23,7 +23,9 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>§5.6 without a path.</b> The run proves afterwards that the newest restore point, every shadow
 /// copy that cannot be System Restore's, and System Protection's limit on each volume are as they were.
-/// A plan that could not list the shadow copies cannot make that promise, so it offers nothing.</para>
+/// A plan that could not list the shadow copies cannot make that promise, so it offers nothing. Where
+/// Windows has point-in-time restore, which sets the same limit itself, a changed limit is unverified
+/// rather than failed.</para>
 ///
 /// <para><b>Point-in-time restore stops the row.</b> Windows 11 24H2 and later can keep a daily shadow copy
 /// of the whole system volume in the same storage, under the same limit. Windows does not say which shadow

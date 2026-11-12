@@ -269,7 +269,47 @@ public sealed class RestorePointProviderTests : IDisposable
 
         var plan = await Provider().PlanAsync();
 
+        Assert.Contains(plan.Notes, n => n.Message.StartsWith("System Protection's limit is", StringComparison.Ordinal)
+            && !n.Message.Contains("Settings, System, Recovery", StringComparison.Ordinal));
         Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("Point-in-time", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// A snapshot recorded between the preview and the clean leaves the clean as unable to prove its
+    /// shadow copies survived as the plan would have been, so it removes nothing.
+    /// </summary>
+    [Fact]
+    public async Task ASnapshotRecordedAfterThePreviewStopsTheClean()
+    {
+        ThreePoints();
+        _protection.PointInTimeRestore = PointInTimeRestore.Idle;
+
+        var provider = Provider();
+        var plan = await provider.PlanAsync();
+        Step(plan);
+        _protection.PointInTimeRestore = PointInTimeRestore.Keeping;
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.Empty(_protection.Removed);
+        Assert.Equal(3, _protection.Points.Count);
+        Assert.Contains(result.Steps, s => !s.Succeeded && s.Message!.Contains("recorded a snapshot since the preview", StringComparison.Ordinal));
+    }
+
+    /// <summary>A snapshot recorded during the clean is one nothing can prove standing, so the run does not pass.</summary>
+    [Fact]
+    public async Task ASnapshotRecordedDuringTheCleanIsUnverified()
+    {
+        ThreePoints();
+        _protection.PointInTimeRestore = PointInTimeRestore.Idle;
+        _protection.OnRemoved = _ => _protection.PointInTimeRestore = PointInTimeRestore.Keeping;
+
+        var provider = Provider();
+        var result = await provider.ExecuteAsync(await provider.PlanAsync());
+
+        Assert.False(result.Verification!.Passed);
+        Assert.Empty(result.Verification.Failures);
+        Assert.Equal("Point-in-time restore's snapshots", Assert.Single(result.Verification.Unverified).Subject);
     }
 
     /// <summary>The shadow copies the run must prove standing are exactly those that cannot be a restore point's.</summary>
