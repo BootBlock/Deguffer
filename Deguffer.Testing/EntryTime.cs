@@ -1,4 +1,7 @@
+using System.ComponentModel;
+using System.Runtime.InteropServices;
 using Deguffer.Core.Safety;
+using Microsoft.Win32.SafeHandles;
 
 namespace Deguffer.Testing;
 
@@ -11,6 +14,12 @@ namespace Deguffer.Testing;
 /// </summary>
 public static class EntryTime
 {
+    /// <summary>
+    /// A FILETIME in the year 10000, one day past the last instant a <see cref="DateTime"/> can hold.
+    /// NTFS stores whatever a program sets, up to the year 30828, so a listing can meet one.
+    /// </summary>
+    public static readonly long PastTheLastDateTime = DateTime.MaxValue.ToFileTimeUtc() + TimeSpan.TicksPerDay;
+
     /// <summary>Make <paramref name="path"/> created and last written at <paramref name="utc"/>.</summary>
     public static void Set(string path, DateTime utc) => Set(path, created: utc, written: utc);
 
@@ -35,4 +44,22 @@ public static class EntryTime
             File.SetLastWriteTimeUtc(extended, written);
         }
     }
+
+    /// <summary>
+    /// Make the file <paramref name="path"/> created and last written at the FILETIMEs given, for a time
+    /// no <see cref="DateTime"/> can carry, such as <see cref="PastTheLastDateTime"/>.
+    /// </summary>
+    public static void SetFileTimes(string path, long created, long written)
+    {
+        using var handle = File.OpenHandle(LongPath.Extended(path), FileMode.Open, FileAccess.Write);
+
+        if (!SetFileTime(handle, created, lastAccess: 0, written))
+        {
+            throw new Win32Exception(Marshal.GetLastWin32Error(), $"Could not date {path}.");
+        }
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetFileTime(SafeFileHandle file, in long created, nint lastAccess, in long written);
 }

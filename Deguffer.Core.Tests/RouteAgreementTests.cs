@@ -714,7 +714,7 @@ public class RouteAgreementTests
 
         const FileAttributes Recall = (FileAttributes)0x0040_0000;
         const string Listed = @"\\?\C:\cache";
-        var when = new DateTime(2026, 1, 2, 3, 4, 0, DateTimeKind.Utc);
+        var when = new DateTime(2026, 1, 2, 3, 4, 0, DateTimeKind.Utc).ToFileTimeUtc();
 
         var listing = new DirectoryContents(
             Listed,

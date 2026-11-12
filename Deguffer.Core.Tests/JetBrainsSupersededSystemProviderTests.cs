@@ -148,6 +148,25 @@ public sealed class JetBrainsSupersededSystemProviderTests : IDisposable
     }
 
     /// <summary>
+    /// A file last written past the year 9999 is the newest write there is, so its version is kept as
+    /// used within the shelf life, never as of unknown age. The walk once threw on its date.
+    /// </summary>
+    [Fact]
+    public async Task KeepsAVersionHoldingAFileWrittenPastTheYear9999AsRecentlyUsed()
+    {
+        var old = CreateVersion(Google, Old, home: _install, age: TimeSpan.FromDays(400));
+        EntryTime.SetFileTimes(
+            Path.Combine(old, "caches", "deep", "index.dat"),
+            (Now - TimeSpan.FromDays(400)).ToFileTimeUtc(),
+            EntryTime.PastTheLastDateTime);
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.DoesNotContain(Path.Combine(old, "caches"), plan.TargetedPaths);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("within the last 180 days", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// The IDE skips what it cannot read and keeps the newest time of the rest, which reads older than
     /// the truth. A folder Windows would not list leaves the age unknown, and the version is kept.
     /// </summary>

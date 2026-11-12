@@ -328,9 +328,9 @@ internal static class WalkExploreReader
         };
     }
 
-    private static ExploreTimestamp CreatedOf(WalkEntry entry) => ExploreTimestamp.FromUtc(entry.CreationTimeUtc);
+    private static ExploreTimestamp CreatedOf(WalkEntry entry) => ExploreTimestamp.FromFileTime(entry.CreationFileTime);
 
-    private static ExploreTimestamp WrittenOf(WalkEntry entry) => ExploreTimestamp.FromUtc(entry.LastWriteTimeUtc);
+    private static ExploreTimestamp WrittenOf(WalkEntry entry) => ExploreTimestamp.FromFileTime(entry.LastWriteFileTime);
 
     private static FileVisibility VisibilityOf(WalkEntry entry) => FileVisibilities.Of(entry.Attributes);
 
