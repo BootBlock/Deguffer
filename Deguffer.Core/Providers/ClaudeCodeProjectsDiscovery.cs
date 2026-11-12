@@ -65,6 +65,13 @@ public sealed record ClaudeCodeProjects(
     /// asserts that it exists.
     /// </summary>
     public IReadOnlyList<string> Unreached { get; init; } = [];
+
+    /// <summary>
+    /// Every project folder the walk listed and every entry it found in each, so a row protecting
+    /// what the walk found takes §5.6's record from the walk rather than asking again. Null where
+    /// nothing was listed. See <see cref="ListedEntries"/>.
+    /// </summary>
+    internal ListedEntries? Listed { get; init; }
 }
 
 /// <summary>
@@ -160,6 +167,10 @@ public sealed class ClaudeCodeProjectsDiscovery
         var folders = new List<ClaudeCodeProjectFolder>(scan.Directories.Count);
         var transcripts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var unreadable = new List<string>();
+        var listed = new ListedEntries();
+
+        listed.AddAll(scan.Directories);
+        listed.AddAll(scan.Links);
 
         foreach (var directory in scan.Directories)
         {
@@ -169,11 +180,14 @@ public sealed class ClaudeCodeProjectsDiscovery
             var conversations = new List<ClaudeCodeTranscript>();
             var sidecars = new List<ClaudeCodeSidecar>();
             var others = new List<FileSystemInfo>();
+            var entries = new List<FileSystemInfo>();
 
             try
             {
                 foreach (var entry in directory.EnumerateFileSystemInfos())
                 {
+                    entries.Add(entry);
+
                     if (TranscriptSession(entry) is { } session)
                     {
                         transcripts.Add(session);
@@ -205,6 +219,8 @@ public sealed class ClaudeCodeProjectsDiscovery
                 continue;
             }
 
+            // Only once the whole folder was listed, for the reason nothing else from it is kept otherwise.
+            listed.AddFolder(path, entries);
             folders.Add(new ClaudeCodeProjectFolder(path, conversations, sidecars, others));
         }
 
@@ -215,7 +231,10 @@ public sealed class ClaudeCodeProjectsDiscovery
             transcripts,
             unreadable,
             links,
-            Complete: unreadable.Count == 0 && links.Count == 0);
+            Complete: unreadable.Count == 0 && links.Count == 0)
+        {
+            Listed = listed,
+        };
     }
 
     /// <summary>The session a transcript is named for, or null where the entry is not a transcript.</summary>

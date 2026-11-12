@@ -455,7 +455,17 @@ public abstract class CleanupProviderBase : ICleanupProvider
     protected Task<IReadOnlyList<ProtectedPath>> ProtectAsync(
         IReadOnlyList<(string Path, string Reason)> candidates,
         CancellationToken ct) =>
-        ProtectedPathCapture.CaptureAsync(candidates, Scanner.Tuning, ct);
+        ProtectAsync(candidates, listed: null, ct);
+
+    /// <summary>
+    /// The same, taking from <paramref name="listed"/> what this provider's own listings already saw of
+    /// each path while it planned, rather than asking the disk again (G5). See <see cref="ListedEntries"/>.
+    /// </summary>
+    private protected Task<IReadOnlyList<ProtectedPath>> ProtectAsync(
+        IReadOnlyList<(string Path, string Reason)> candidates,
+        ListedEntries? listed,
+        CancellationToken ct) =>
+        ProtectedPathCapture.CaptureAsync(candidates, listed, Scanner.Tuning, ct);
 
     /// <summary>
     /// §5.6 for a plan built on <see cref="CacheLevelWalk"/>: the paths the provider names itself,
@@ -465,13 +475,16 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// <para>The walk's own lists are the ones that must not be left out. A spared child is a sibling
     /// of a targeted one under the same parent, so a plan that only notes it gives §5.6 nothing to
     /// check when a later rule turns out too broad.</para>
+    ///
+    /// <para>The walk listed every child it spared or declined, so none of them is probed again
+    /// (<see cref="LevelWalk.Listed"/>).</para>
     /// </summary>
     private protected Task<IReadOnlyList<ProtectedPath>> ProtectAsync(
         LevelWalk walk,
         IReadOnlyList<(string Path, string Reason)> spared,
         IReadOnlyList<(string Path, string Reason)> named,
         CancellationToken ct) =>
-        ProtectAsync([.. named, .. spared, .. walk.Declined], ct);
+        ProtectAsync([.. named, .. spared, .. walk.Declined], walk.Listed, ct);
 
     /// <summary>§5.3 warning for this provider's processes, or null if none are running.</summary>
     protected PlanNote? BuildRunningProcessNote() =>

@@ -259,6 +259,7 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
                             .Prepend((Path: folder, Reason: ProjectsReason))
                             .Prepend((Path: home, Reason: HomeReason)),
                     ],
+                    survey.Evidence.Projects.Listed,
                     ct).ConfigureAwait(false),
 
                 // Measured during planning, so each was there when the plan was made: the claim

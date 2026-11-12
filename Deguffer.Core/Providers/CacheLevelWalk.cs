@@ -43,6 +43,7 @@ public static class CacheLevelWalk
         var declined = new List<(string Path, string Reason)>();
         var survivors = new List<(string Path, string Reason)>();
         var notes = new List<PlanNote>();
+        var listed = new ListedEntries();
 
         var emptiedAContainer = false;
         var unreadable = false;
@@ -94,6 +95,9 @@ public static class CacheLevelWalk
                 continue;
             }
 
+            listed.AddAll(scan.Links);
+            listed.AddAll(scan.Directories);
+
             foreach (var link in scan.Links)
             {
                 Decline(LongPath.Display(link.FullName));
@@ -116,7 +120,7 @@ public static class CacheLevelWalk
             }
         }
 
-        return new LevelWalk(targets, declined, survivors, notes, emptiedAContainer, unreadable);
+        return new LevelWalk(targets, declined, survivors, notes, emptiedAContainer, unreadable) { Listed = listed };
 
         void Decline(string path)
         {
@@ -182,6 +186,12 @@ public readonly record struct LevelWalk(
     bool EmptiedAContainer,
     bool Unreadable)
 {
+    /// <summary>
+    /// Every child the walk listed, so §5.6's record of a spared or declined child is taken from the
+    /// listing rather than asked again. Null for a walk that listed nothing.
+    /// </summary>
+    internal ListedEntries? Listed { get; init; }
+
     /// <summary>
     /// The children this walk spared that no row offers, which are what a plan asserts survived and
     /// what it counts as left alone. A child another row offers is that row's to take. See

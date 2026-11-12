@@ -390,6 +390,15 @@ public sealed class BenchmarkRequestTests
         Assert.Equal(BenchmarkRequest.DefaultProtectedFolders, BenchmarkRequest.Parse(["protect", @"C:\new"], out _)!.Trees);
     }
 
+    /// <summary>The protect route asks the disk about each folder unless told to record them from a listing.</summary>
+    [Fact]
+    public void TheProtectRouteRecordsFromAListingOnlyWhenAsked()
+    {
+        Assert.False(BenchmarkRequest.Parse(["protect", @"C:\new"], out _)!.Listed);
+        Assert.True(BenchmarkRequest.Parse(["protect", @"C:\new", "--listed", "on"], out _)!.Listed);
+        Assert.False(BenchmarkRequest.Parse(["protect", @"C:\new", "--listed", "off"], out _)!.Listed);
+    }
+
     /// <summary>
     /// Each route takes only what it builds with, so a value given to another would be reported unused,
     /// and a tree too large to build is refused before any of it is.
@@ -409,7 +418,9 @@ public sealed class BenchmarkRequestTests
     [InlineData("protect", "--trees", "4")]
     [InlineData("protect", "--folders", "0")]
     [InlineData("protect", "--folders", "100001")]
+    [InlineData("protect", "--listed", "yes")]
     [InlineData("clean", "--folders", "4")]
+    [InlineData("clean", "--listed", "on")]
     [InlineData("walk", "--files", "10")]
     [InlineData("walk", "--read-only")]
     public void ARemovalValueIsTakenOnlyByItsRouteAndOnlyInRange(string route, params string[] rest)

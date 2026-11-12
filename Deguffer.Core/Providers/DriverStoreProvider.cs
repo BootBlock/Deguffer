@@ -214,7 +214,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         }
 
         var notes = new List<PlanNote>(DriverPackageNotes.Considered(listing, drivers));
-        var unlisted = Unlisted(listing, notes);
+        var (unlisted, listed) = Unlisted(listing, notes);
 
         // A third-party package that did not read, or whose folder Windows would not name, is also a
         // folder the listing does not account for, so an unlisted folder is Windows' own only where
@@ -226,6 +226,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
                 .. matched ? unlisted.Select(folder => (folder, "A driver that is part of Windows, which pnputil does not list as third-party.")) : [],
                 .. WindowsSystemRoot.ExclusionsUnder(_system.WindowsDirectory),
             ],
+            listed,
             ct).ConfigureAwait(false);
 
         if (drivers.Superseded.Count == 0)
@@ -251,11 +252,12 @@ public sealed class DriverStoreProvider : CleanupProviderBase
                 listing,
                 survey,
                 notes,
+                listed,
                 [
                     .. kept,
                     .. matched
                         ? []
-                        : await ProtectAsync([.. unlisted.Select(folder => (folder, DriverPackageNotes.NotAsked))], ct).ConfigureAwait(false),
+                        : await ProtectAsync([.. unlisted.Select(folder => (folder, DriverPackageNotes.NotAsked))], listed, ct).ConfigureAwait(false),
                 ],
                 ct).ConfigureAwait(false),
             _ when survey.MayOffer => await ByHandlerAsync(folders, _volume, keep, matched, notes, kept, ct).ConfigureAwait(false),
@@ -330,6 +332,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         DriverStoreListing listing,
         DiskCleanupSurvey survey,
         List<PlanNote> notes,
+        ListedEntries listed,
         IReadOnlyList<ProtectedPath> kept,
         CancellationToken ct)
     {
@@ -382,7 +385,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
             .Where(folder => accounted.Add(folder) && SupersededDrivers.IsChildOf(folder, _repository))
             .Select(folder => (folder, DriverPackageNotes.NotAsked));
 
-        return Plan(steps, notes, [.. kept, .. await ProtectAsync([.. others], ct).ConfigureAwait(false)]) with { Fallback = measured.Fallback };
+        return Plan(steps, notes, [.. kept, .. await ProtectAsync([.. others], listed, ct).ConfigureAwait(false)]) with { Fallback = measured.Fallback };
     }
 
     private CleanupPlan Plan(IReadOnlyList<CleanupStep> steps, IReadOnlyList<PlanNote> notes, IReadOnlyList<ProtectedPath> protectedPaths) => new()
@@ -422,8 +425,11 @@ public sealed class DriverStoreProvider : CleanupProviderBase
     /// matched, the drivers that are part of Windows, which neither route removes. Windows' own cleanup
     /// decides among the third-party packages, which is why those not offered are asserted only where
     /// the plan names exactly what goes.
+    ///
+    /// <para>With every folder the store's listing returned, so §5.6's record of a package folder is
+    /// taken from that listing rather than asked of each of several hundred folders again.</para>
     /// </summary>
-    private IReadOnlyList<string> Unlisted(DriverStoreListing listing, List<PlanNote> notes)
+    private (IReadOnlyList<string> Unlisted, ListedEntries Listed) Unlisted(DriverStoreListing listing, List<PlanNote> notes)
     {
         var listed = new HashSet<string>(
             listing.Packages.Select(p => p.Folder).OfType<string>().Select(Path.TrimEndingDirectorySeparator),
@@ -439,12 +445,18 @@ public sealed class DriverStoreProvider : CleanupProviderBase
                 + "that the drivers that are part of Windows are still there."));
         }
 
-        return
-        [
-            .. children.Directories
-            .Select(child => LongPath.Display(child.FullName))
-            .Where(child => !listed.Contains(child)),
-        ];
+        var seen = new ListedEntries();
+
+        seen.AddAll(children.Directories);
+        seen.AddAll(children.Links);
+
+        return (
+            [
+                .. children.Directories
+                .Select(child => LongPath.Display(child.FullName))
+                .Where(child => !listed.Contains(child)),
+            ],
+            seen);
     }
 
     /// <summary>The newest of <paramref name="dates"/>, or null where any folder could not be dated.</summary>

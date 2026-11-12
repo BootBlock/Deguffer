@@ -55,6 +55,11 @@ namespace Deguffer.Benchmark;
 /// Auto's build does where the two share a disk, or at normal priority throughout, as every build read
 /// before it could yield. No other route reads it.
 /// </param>
+/// <param name="Listed">
+/// For <see cref="Route.Protect"/>, whether the folders are recorded from a listing of the folder that
+/// holds them, as a row that listed them while it planned records them, rather than each asked of the
+/// disk. Timed both ways, the difference is what reusing the listing saves. No other route reads it.
+/// </param>
 internal sealed record BenchmarkRequest(
     Route Route,
     string Path,
@@ -69,7 +74,8 @@ internal sealed record BenchmarkRequest(
     char Drive,
     Route Racer,
     string? BeforePart,
-    bool BuildYields)
+    bool BuildYields,
+    bool Listed)
 {
     public const int DefaultRuns = 5;
 
@@ -172,6 +178,10 @@ internal sealed record BenchmarkRequest(
                                The default is 100.
         --folders N            Protect only. How many empty folders are built and recorded, 1
                                to 100000. The default is 5000.
+        --listed on|off        Protect only. Whether the folders are recorded from one listing
+                               of the folder that holds them, as a row that listed them while
+                               it planned does, rather than each asked of the disk. The listing
+                               is not timed. The default is off.
         --read-size KiB        Table routes only. How many KiB of records each read asks for, 4
                                to 16384.
         --reads-in-flight N    Table routes only. How many reads are outstanding at once, 1 to 32.
@@ -264,6 +274,7 @@ internal sealed record BenchmarkRequest(
         var racer = Route.Sources;
         string? beforePart = null;
         var buildYields = true;
+        var listed = false;
 
         // Before the options, because the race's defaults depend on the drives it walks and builds
         // on, and a value an option sets has to win over them.
@@ -311,6 +322,7 @@ internal sealed record BenchmarkRequest(
                 "--trees" when route is Route.Clean => TryNumber(value, 1, MaximumTrees, out trees),
                 "--files-per-tree" when route is Route.Clean => TryNumber(value, 0, MaximumFilesPerTree, out filesPerTree),
                 "--folders" when route is Route.Protect => TryNumber(value, 1, MaximumTrees, out trees),
+                "--listed" when route is Route.Protect => TryOnOff(value, out listed),
                 "--build" when route is Route.Race => TryDrive(value, out build),
                 "--racer" when route is Route.Race => TryRacer(value, out racer),
                 "--before-part" when route is Route.Race => TryCommand(value, out beforePart),
@@ -334,7 +346,7 @@ internal sealed record BenchmarkRequest(
                     $"For remove, --files takes a number from 0 to {TreeShape.MaximumFiles}, --depth from 0 to " +
                     $"{TreeShape.MaximumDepth} and --fanout from 1 to {TreeShape.MaximumFanout}, and --read-only takes nothing. " +
                     $"For clean, --trees takes a number from 1 to {MaximumTrees} and --files-per-tree from 0 to {MaximumFilesPerTree}. " +
-                    $"For protect, --folders takes a number from 1 to {MaximumTrees}. " +
+                    $"For protect, --folders takes a number from 1 to {MaximumTrees} and --listed takes on or off. " +
                     "For race, --build takes a drive letter, --racer takes sources or walk, --before-part a command, " +
                     "and --build-priority yield or normal. " +
                     "Nothing else is accepted after the target.";
@@ -384,7 +396,8 @@ internal sealed record BenchmarkRequest(
             build ?? path[0],
             racer,
             beforePart,
-            buildYields);
+            buildYields,
+            listed);
     }
 
     /// <summary>

@@ -94,7 +94,7 @@ static int Benchmark(BenchmarkRequest request, ScanTuner tuner, RemovalSite? sit
         Route.Remove => new RemoveRoute(site!, request.Tree).Timed,
         Route.Clean => new CleanRoute(
             site!, request.Trees, request.Tree, UserEnvironment.Current, SystemDirectories.Current, VolumeInventory.Current).Timed,
-        Route.Protect => new ProtectRoute(site!, request.Trees, tuner).Timed,
+        Route.Protect => new ProtectRoute(site!, request.Trees, request.Listed, tuner).Timed,
         Route.Race => RaceRoute.On(
             VolumeMftSourceFactory.Default,
             request.Path,

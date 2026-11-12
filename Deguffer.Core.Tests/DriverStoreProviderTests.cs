@@ -95,12 +95,14 @@ public sealed class DriverStoreProviderTests : IDisposable
         FakeDriverStore store,
         FakeDiskCleanupHandlers? handlers = null,
         FakeProcessRunner? runner = null,
-        FakeWindowsServicing? servicing = null) =>
+        FakeWindowsServicing? servicing = null,
+        FakeDirectoryScanner? scanner = null) =>
         new(
             handlers ?? new FakeDiskCleanupHandlers((_, _) => new DiskCleanupOutcome(Ran: true)),
             _environment,
             runner ?? new FakeProcessRunner(),
             FakeProcessInspector.NothingRunning,
+            scanner,
             system: _system,
             servicing: servicing ?? FakeWindowsServicing.Settled,
             store: store);
@@ -728,5 +730,38 @@ public sealed class DriverStoreProviderTests : IDisposable
                 p.Path.Equals(path, StringComparison.OrdinalIgnoreCase) && p.HeldContentBefore));
         Assert.False(result.Verification!.Passed);
         Assert.Contains(result.Verification.Failures, c => c.Subject.Equals(reached, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// §5.6's record of a package folder comes from the row's own listing of the store, not from asking
+    /// each of several hundred folders again (G5). A package pnputil is not asked about, removed after
+    /// the listing and before the plan protected it, is recorded as there, which is what the listing saw
+    /// when the plan was made, and the check after the clean reports it gone rather than passing over it
+    /// as never there.
+    /// </summary>
+    [Fact]
+    public async Task APackageFolderIsRecordedAsTheListingSawItAndItsLossIsStillReported()
+    {
+        var older = Staged("oem1.inf", "2022-01-01");
+        var newest = Staged("oem2.inf", "2024-01-01");
+        var alone = Staged("oem3.inf", "2020-01-01", original: "bt.inf");
+        var provider = CreateProvider(
+            new FakeDriverStore(older, newest, alone),
+            FakeDiskCleanupHandlers.NoneRegistered(),
+            PnpUtil([older]),
+            scanner: FakeDirectoryScanner.RemovingOnFirstMeasure(alone.Folder!));
+
+        var plan = await provider.PlanAsync();
+
+        Assert.False(Directory.Exists(alone.Folder));
+        Assert.Equal(
+            PathPresence.Present,
+            Assert.Single(plan.ProtectedPaths, p => p.Path.Equals(alone.Folder, StringComparison.OrdinalIgnoreCase)).PresenceBefore);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.Equal(
+            VerificationOutcome.RemovedFromOutside,
+            Assert.Single(result.Verification!.Checks, c => c.Subject.Equals(alone.Folder, StringComparison.OrdinalIgnoreCase)).Outcome);
     }
 }

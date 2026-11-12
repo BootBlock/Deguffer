@@ -328,7 +328,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
             Steps = steps,
             ProtectedPaths =
             [
-                .. await ProtectAsync([.. Survivors(survey, spared)], ct).ConfigureAwait(false),
+                .. await ProtectAsync([.. Survivors(survey, spared)], survey.Listed(), ct).ConfigureAwait(false),
 
                 // Measured during planning, so each was there when the plan was made: the claim
                 // CleanupPlan.NarrowedTo makes for a step the user declined.
@@ -509,5 +509,31 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
         IReadOnlyList<FileSystemInfo>? RootEntries,
         ClaudeCodeEvidence Evidence,
         MinimumAge Looked,
-        IReadOnlyList<ClaudeCodeClassification> Kinds);
+        IReadOnlyList<ClaudeCodeClassification> Kinds)
+    {
+        /// <summary>
+        /// Everything this look listed: Claude Code's folder, the walk of its top level, the project
+        /// folders, and each folder a kind of leftover was classified in. Nearly every path the plan
+        /// protects was returned by one of them, so §5.6's record of it is taken from there.
+        /// </summary>
+        public ListedEntries Listed()
+        {
+            var listed = new ListedEntries();
+
+            if (RootEntries is not null)
+            {
+                listed.AddFolder(Evidence.Home, RootEntries);
+            }
+
+            listed.Include(Root.Listed);
+            listed.Include(Evidence.Projects.Listed);
+
+            foreach (var kind in Kinds)
+            {
+                listed.Include(kind.Listed);
+            }
+
+            return listed;
+        }
+    }
 }

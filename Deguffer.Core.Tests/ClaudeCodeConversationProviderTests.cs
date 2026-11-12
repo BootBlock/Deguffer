@@ -900,4 +900,36 @@ public sealed class ClaudeCodeConversationProviderTests : IDisposable
 
         Assert.Empty(await CleanedPlaceCoverage.UncoveredAsync(CreateProvider()));
     }
+
+    /// <summary>
+    /// §5.6's record of a project's memory comes from the walk of the project folders that decided
+    /// what to offer, not from asking it again (G5). Removed after the walk and before the plan
+    /// protected it, the memory is recorded as there, which is what the walk saw when the plan was
+    /// made, and the check after the clean reports it gone rather than passing over it as never there.
+    /// </summary>
+    [Fact]
+    public async Task AKeptFolderIsRecordedAsTheWalkSawItAndItsLossIsStillReported()
+    {
+        OldSession(SessionA);
+        var memory = _claude.Memory();
+
+        var provider = new ClaudeCodeConversationProvider(
+            _environment,
+            runner: new FakeProcessRunner(),
+            inspector: FakeProcessInspector.NothingRunning,
+            scanner: FakeDirectoryScanner.RemovingOnFirstMeasure(memory));
+
+        var plan = await provider.PlanAsync();
+
+        Assert.False(Directory.Exists(memory));
+        Assert.Equal(
+            PathPresence.Present,
+            Assert.Single(plan.ProtectedPaths, p => p.Path.Equals(memory, StringComparison.OrdinalIgnoreCase)).PresenceBefore);
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.Equal(
+            VerificationOutcome.RemovedFromOutside,
+            Assert.Single(result.Verification!.Checks, c => c.Subject.Equals(memory, StringComparison.OrdinalIgnoreCase)).Outcome);
+    }
 }

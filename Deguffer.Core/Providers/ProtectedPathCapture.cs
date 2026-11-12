@@ -15,6 +15,12 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>What each path proves is unchanged.</b> Every path is asked the same two questions it was
 /// asked one at a time, and the answers come back in the order the paths were given.</para>
+///
+/// <para><b>Not asked again where the row's own listing answered</b> (G5). A row that listed a
+/// protected path's parent while it planned already knows the path was there, and sometimes whether it
+/// held anything (<see cref="ListedEntries"/>). That answer is recorded as it stands, and describes the
+/// moment the plan was made. Only what the listing left open is asked of the disk, and only those
+/// paths take a slot of the disk's number.</para>
 /// </summary>
 internal static class ProtectedPathCapture
 {
@@ -23,22 +29,54 @@ internal static class ProtectedPathCapture
     /// first reason given for it.
     /// </summary>
     /// <param name="tuning">What the walks of each volume run with. See <see cref="IDirectoryScanner.Tuning"/>.</param>
+    /// <param name="listed">What the row's own listings saw while it planned, or null where it listed nothing worth reusing.</param>
     public static Task<IReadOnlyList<ProtectedPath>> CaptureAsync(
         IReadOnlyList<(string Path, string Reason)> candidates,
+        ListedEntries? listed,
         ScanTuner tuning,
         CancellationToken ct) =>
-        CaptureAsync(candidates, tuning, Probe, ct);
+        CaptureAsync(candidates, listed, tuning, Probe, DirectoryContent.IsPresent, ct);
 
-    /// <summary>The same, with each path's two answers given by <paramref name="probe"/>: the seam a test blocks a probe through.</summary>
+    /// <summary>
+    /// The same, with each unlisted path's two answers given by <paramref name="probe"/> and a listed
+    /// path's open content question by <paramref name="content"/>: the seams a test blocks or counts
+    /// the disk's answers through.
+    /// </summary>
     internal static async Task<IReadOnlyList<ProtectedPath>> CaptureAsync(
         IReadOnlyList<(string Path, string Reason)> candidates,
+        ListedEntries? listed,
         ScanTuner tuning,
         Func<string, Before> probe,
+        Func<string, bool> content,
         CancellationToken ct)
     {
         (string Path, string Reason)[] named = [.. candidates.DistinctBy(c => c.Path, StringComparer.OrdinalIgnoreCase)];
 
-        var found = await DiskBoundWork.EachAsync([.. named.Select(c => c.Path)], tuning, probe, ct).ConfigureAwait(false);
+        var found = new Before[named.Length];
+        var asked = new List<int>(named.Length);
+
+        for (var index = 0; index < named.Length; index++)
+        {
+            if (listed is not null && listed.TryGet(named[index].Path, out var heldContent) && heldContent is { } settled)
+            {
+                found[index] = new Before(PathPresence.Present, settled);
+            }
+            else
+            {
+                asked.Add(index);
+            }
+        }
+
+        var answers = await DiskBoundWork.EachAsync(
+            [.. asked.Select(index => named[index].Path)],
+            tuning,
+            path => listed is not null && listed.TryGet(path, out _) ? new Before(PathPresence.Present, content(path)) : probe(path),
+            ct).ConfigureAwait(false);
+
+        foreach (var (index, before) in asked.Zip(answers))
+        {
+            found[index] = before;
+        }
 
         return [.. named.Zip(found, (c, before) => new ProtectedPath(c.Path, c.Reason, before.Presence, before.HeldContent))];
     }
