@@ -432,6 +432,18 @@ brand (`Deguffer.Core.Providers`); types describe what they do.
   Windows states only to an administrator about the space no folder holds (§7.1), for listing and
   removing restore points (§9), for measuring and removing another account's profile (§9), and for
   changing a machine-wide entry in Installed apps (§7.3).
+- **Elevating can change the account.** A standard user who types an administrator's credentials,
+  and Windows' administrator protection, both give the elevated process another account's token,
+  profile, registry hive and Recycle Bin. While the account Deguffer runs as is not confirmed as the
+  one signed in to the session, every step that reaches that account's folders, its folder in a
+  Recycle Bin, or its own state through a call is withheld and proved standing (§5.6); the window
+  says so; settings are read from the signed-in user's hive, or from none where Windows will not
+  name it; and a refusal read from the registry (a registered WSL disk) is read from every hive
+  Deguffer can name, the running account's included. The Startup and Installed apps pages still
+  read the running account's own entries, and the window says so. What the whole machine shares is unaffected, and
+  is the reason to elevate. Withheld rather than redirected, because a tool's own command (§5.1)
+  and Windows' per-account calls act as the process's account, so a redirected row would be split
+  between two accounts.
 - Enable **long path** support (`\\?\` prefixes or the manifest opt-in). Node and NuGet trees
   routinely exceed `MAX_PATH`, and this is the most likely source of silent partial deletions.
 - Deletion should be genuinely parallel — these trees are hundreds of thousands of small files, and

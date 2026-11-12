@@ -113,7 +113,7 @@ public sealed record AdobeMediaCacheLayout(
             Withhold(Path.Combine(common, FilesFolder));
         }
 
-        var releases = environment.ReadCurrentUserRegistrySubKeyNames(SettingsKey)
+        var releases = environment.UserHive.ReadSubKeyNames(SettingsKey)
             .Where(name => name.StartsWith(ReleaseKeyPrefix, StringComparison.OrdinalIgnoreCase))
             .Order(StringComparer.OrdinalIgnoreCase);
 
@@ -156,7 +156,7 @@ public sealed record AdobeMediaCacheLayout(
         // because Adobe may be using a folder nobody here can name.
         void Setting(string key, string value, string folder, string purpose)
         {
-            var recorded = environment.ReadCurrentUserRegistryValue(key, value);
+            var recorded = environment.UserHive.ReadValue(key, value);
 
             if (string.IsNullOrWhiteSpace(recorded))
             {

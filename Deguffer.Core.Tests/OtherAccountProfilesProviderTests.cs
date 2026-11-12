@@ -161,6 +161,27 @@ public sealed class OtherAccountProfilesProviderTests : IDisposable
     }
 
     /// <summary>
+    /// Elevated as another account, the user signed in to Windows is not the account Deguffer runs as,
+    /// and their profile is still never another account's: it is neither offered nor listed as one,
+    /// whether or not Windows reports it loaded.
+    /// </summary>
+    [Theory]
+    [InlineData(ProfileLoad.Loaded)]
+    [InlineData(ProfileLoad.NotLoaded)]
+    public async Task TheSignedInUsersProfileIsNeitherOfferedNorReportedWhenRunningAsAnotherAccount(ProfileLoad load)
+    {
+        _environment.ElevatedAsAnotherAccount();
+        var signedIn = _profiles.AddEntry(new UserProfile(
+            FakeUserEnvironment.SignedInSecurityIdentifier, Path.Combine(_temp.Path, "Users", "signedinuser"), load, LastUsed: null));
+        Directory.CreateDirectory(signedIn.Folder!);
+
+        var plan = await Provider().PlanAsync();
+
+        Assert.DoesNotContain(plan.Steps, step => step is RemoveProfileStep remove && remove.Profile.Sid == signedIn.Sid);
+        Assert.DoesNotContain(plan.Notes, note => note.Message.StartsWith(ProfileReport.Name(signedIn), StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// Windows' own accounts' profiles are loaded whenever Windows runs, so they must be recognised as
     /// Windows' before they are judged as in use, or every machine would report them.
     /// </summary>

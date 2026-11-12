@@ -85,6 +85,12 @@ public enum FindingStatus
     VirtualMachineKept,
 
     /// <summary>
+    /// Holds only what belongs to the account Deguffer is running as, which is not confirmed as the
+    /// signed-in user's. See <see cref="CleanupPlan.HoldsAnotherAccountsFiles"/>.
+    /// </summary>
+    AnotherAccountKept,
+
+    /// <summary>
     /// A location Deguffer reports on and never acts in, because the only safe route to its space is
     /// the one its own tool provides. It measures zero and can be among the largest files on the drive.
     /// See <see cref="CleanupPlan.ReportsOnly"/>.
@@ -159,6 +165,7 @@ public static class FindingStatusExtensions
             { HoldsMailStores: true } => FindingStatus.MailStoresHeldBack,
             { WaitsForAnUpdate: true } => FindingStatus.UpdateInProgress,
             { HoldsVirtualMachineStorage: true } => FindingStatus.VirtualMachineKept,
+            { HoldsAnotherAccountsFiles: true } => FindingStatus.AnotherAccountKept,
             _ => FindingStatus.AlreadyClear,
         };
     }
@@ -196,6 +203,7 @@ public static class FindingStatusExtensions
         FindingStatus.MailStoresHeldBack => "Outlook data kept",
         FindingStatus.UpdateInProgress => "Update in progress",
         FindingStatus.VirtualMachineKept => "Virtual machine kept",
+        FindingStatus.AnotherAccountKept => "Another account's",
         FindingStatus.ReportOnly => "Report only",
         FindingStatus.AlreadyClear => "Already clear",
         FindingStatus.ReadyToClean => "Ready to clean",

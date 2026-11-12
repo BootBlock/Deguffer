@@ -212,70 +212,41 @@ public interface IUserEnvironment
     IReadOnlyDictionary<string, string> ReadEnvironmentNow();
 
     /// <summary>
-    /// Read a string value from under <c>HKEY_CURRENT_USER</c>, or null when the key, the value or
-    /// the permission to read it is missing.
+    /// The registry hive of the user signed in to this Windows session: where the programs they run
+    /// keep their settings, and the hive a setting Deguffer looks for is read from.
     ///
-    /// <para>Exists because Steam records where it is installed and nothing else on disk does. The
-    /// install directory is not under the profile, it moves with the user's game library, and §5.2's
-    /// "never assume a location" forbids guessing at <c>%PROGRAMFILES(X86)%\Steam</c>.</para>
-    ///
-    /// <para><b>The current user's hive only, and deliberately so.</b> The machine-wide key is
-    /// redirected under <c>WOW6432Node</c> for a 64-bit process, which is a second thing to get
-    /// wrong for an answer about an install this account may never have run. Steam's own client
-    /// writes the per-user value every time it starts, so a user with a Steam cache to reclaim has
-    /// it.</para>
+    /// <para><b>Not always <c>HKEY_CURRENT_USER</c>.</b> That is the hive of the account this process
+    /// runs as, and an elevated process can run as another account: the administrator whose
+    /// credentials a standard user typed in, or the hidden account Windows' administrator protection
+    /// elevates to. Their <c>HKEY_CURRENT_USER</c> holds none of the user's settings, so a provider
+    /// reading it would look in that account's folders for a cache the user moved elsewhere. Where the
+    /// two accounts differ this is the user's hive, under <c>HKEY_USERS</c>, and where Deguffer cannot
+    /// name that hive, because Windows will not say who is signed in or which hive is theirs, it answers
+    /// nothing. See <see cref="RunningAccount"/>.</para>
     /// </summary>
-    /// <param name="keyPath">The key, relative to <c>HKEY_CURRENT_USER</c>.</param>
-    /// <param name="valueName">The value to read.</param>
-    string? ReadCurrentUserRegistryValue(string keyPath, string valueName);
+    IUserHive UserHive { get; }
 
     /// <summary>
-    /// Read a <c>REG_DWORD</c> value from under <c>HKEY_CURRENT_USER</c>, or null when the key, the value
-    /// or the permission to read it is missing, or the value is not a <c>REG_DWORD</c>.
+    /// The hive of the account this process runs as, where that is not the user signed in to the
+    /// session, and null where it is.
     ///
-    /// <para>Exists because WSL records whether a distribution runs in a virtual machine only as a bit
-    /// of its <c>Flags</c> number, and a distribution without that bit has no virtual disk at all. Read
-    /// as a string, the value would be null and the two kinds of distribution would look alike.</para>
+    /// <para>For a refusal, which has to hold for both accounts. WSL registers each distribution in the
+    /// hive of the account that installed it, so a disk either account registered is a live virtual
+    /// machine's, and reading only <see cref="UserHive"/> would leave the other account's open to a
+    /// deletion.</para>
     /// </summary>
-    /// <param name="keyPath">The key, relative to <c>HKEY_CURRENT_USER</c>.</param>
-    /// <param name="valueName">The value to read.</param>
-    int? ReadCurrentUserRegistryNumber(string keyPath, string valueName);
+    IUserHive? RunningAccountHive { get; }
 
     /// <summary>
-    /// The names of the keys directly under a key in <c>HKEY_CURRENT_USER</c>, or none when the key
-    /// or the permission to read it is missing.
+    /// The account signed in to the Windows session this process runs in, or null where Windows will
+    /// not say.
     ///
-    /// <para>Exists because Adobe files its media cache settings under a key whose name carries a
-    /// version, such as <c>Common 13.0</c>, and the version moves between releases. Guessing at the
-    /// names would miss a release nobody listed, and a location that is missed is a cache that is
-    /// never found rather than a wrong deletion, so the names are read instead.</para>
+    /// <para>Separate from <see cref="UserSecurityIdentifier"/> and <see cref="UserName"/>, which name
+    /// the account this process runs as. The two are the same account until the process is elevated
+    /// with another account's credentials, or under administrator protection. <see cref="RunningAccount"/>
+    /// decides what Deguffer does when they differ.</para>
     /// </summary>
-    /// <param name="keyPath">The key, relative to <c>HKEY_CURRENT_USER</c>.</param>
-    IReadOnlyList<string> ReadCurrentUserRegistrySubKeyNames(string keyPath);
-
-    /// <summary>
-    /// The names of the values directly under a key in <c>HKEY_CURRENT_USER</c>, or none when the key
-    /// or the permission to read it is missing.
-    ///
-    /// <para>Exists because the Unity Editor names each of its preferences' values with a hash of the
-    /// preference's name appended, as <c>GICacheFolder_h</c> and digits. The names are read rather
-    /// than the hash computed, so a value is found by what Unity wrote, not by a formula nobody
-    /// here has seen Unity apply.</para>
-    /// </summary>
-    /// <param name="keyPath">The key, relative to <c>HKEY_CURRENT_USER</c>.</param>
-    IReadOnlyList<string> ReadCurrentUserRegistryValueNames(string keyPath);
-
-    /// <summary>
-    /// Read a <c>REG_BINARY</c> value from under <c>HKEY_CURRENT_USER</c>, or null when the key, the
-    /// value or the permission to read it is missing, or the value is not a <c>REG_BINARY</c>.
-    ///
-    /// <para>Exists because the Unity Editor stores a text preference, such as where it keeps its GI
-    /// cache, as bytes rather than as a string, so <see cref="ReadCurrentUserRegistryValue"/> would
-    /// read it as absent.</para>
-    /// </summary>
-    /// <param name="keyPath">The key, relative to <c>HKEY_CURRENT_USER</c>.</param>
-    /// <param name="valueName">The value to read.</param>
-    byte[]? ReadCurrentUserRegistryBytes(string keyPath, string valueName);
+    SignedInAccount? SessionUser { get; }
 
     /// <summary>
     /// Read a string value from under <c>HKEY_LOCAL_MACHINE</c> in the named registry view, or null
@@ -284,7 +255,7 @@ public interface IUserEnvironment
     /// <para>Exists because Jellyfin's installer records where the server keeps its data here and
     /// nowhere else, and the user chooses that folder during the install. The installer is a 32-bit
     /// program, so it writes the key in the 32-bit view, which a 64-bit process reads only by asking
-    /// for that view. <see cref="ReadCurrentUserRegistryValue"/> gives why the machine-wide hive is
+    /// for that view. <see cref="IUserHive.ReadValue"/> gives why the machine-wide hive is
     /// otherwise avoided: here it is the only record there is.</para>
     ///
     /// <para>A <c>REG_EXPAND_SZ</c> value is expanded against this process's environment, which is
@@ -366,6 +337,8 @@ public sealed partial class UserEnvironment : IUserEnvironment
     /// </summary>
     private volatile EnvironmentBlock? _block;
 
+    private readonly Lazy<(IUserHive User, IUserHive? Running)> _hives;
+
     public UserEnvironment()
         : this(ReadMachineEnvironment, ReadUserEnvironment, ProcessStartup)
     {
@@ -391,6 +364,7 @@ public sealed partial class UserEnvironment : IUserEnvironment
         _readMachine = readMachine;
         _readUser = readUser;
         _startup = startup;
+        _hives = new Lazy<(IUserHive User, IUserHive? Running)>(ChooseHives);
     }
 
     public string UserProfile { get; } = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -500,121 +474,6 @@ public sealed partial class UserEnvironment : IUserEnvironment
     public IReadOnlyDictionary<string, string> ReadEnvironmentNow() => _startup.Refresh(_readMachine(), _readUser()).Variables;
 
     /// <summary>
-    /// Not memoised, so no answer here can outlive <see cref="Invalidate"/>. A caller that needs one
-    /// for the life of a planning pass keeps what it derives from it.
-    /// </summary>
-    public string? ReadCurrentUserRegistryValue(string keyPath, string valueName)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(keyPath);
-        ArgumentException.ThrowIfNullOrWhiteSpace(valueName);
-
-        try
-        {
-            using var key = Registry.CurrentUser.OpenSubKey(keyPath);
-
-            // Anything that is not a string is not an answer to this question. A REG_DWORD where a
-            // path was expected would otherwise arrive as its decimal digits and be treated as one.
-            return key?.GetValue(valueName) as string;
-        }
-        catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
-        {
-            // A hive this account may not read, and a key already marked for deletion. Both are
-            // ordinary on a long-lived machine, and both mean the same thing here: nothing said
-            // where the tool is.
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Not memoised, for the reason <see cref="ReadCurrentUserRegistryValue"/> is not.
-    /// </summary>
-    public int? ReadCurrentUserRegistryNumber(string keyPath, string valueName)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(keyPath);
-        ArgumentException.ThrowIfNullOrWhiteSpace(valueName);
-
-        try
-        {
-            using var key = Registry.CurrentUser.OpenSubKey(keyPath);
-
-            // A REG_DWORD arrives as an int and nothing else does, so a string holding digits is not
-            // read as a number.
-            return key?.GetValue(valueName) is int number ? number : null;
-        }
-        catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
-        {
-            // The same two ordinary failures ReadCurrentUserRegistryValue handles, meaning the same
-            // thing: the machine did not say.
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Not memoised, for the reason <see cref="ReadCurrentUserRegistryValue"/> is not.
-    /// </summary>
-    public IReadOnlyList<string> ReadCurrentUserRegistrySubKeyNames(string keyPath)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(keyPath);
-
-        try
-        {
-            using var key = Registry.CurrentUser.OpenSubKey(keyPath);
-
-            return key?.GetSubKeyNames() ?? [];
-        }
-        catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
-        {
-            // The same two ordinary failures ReadCurrentUserRegistryValue handles, meaning the same
-            // thing: nothing said where the tool is.
-            return [];
-        }
-    }
-
-    /// <summary>
-    /// Not memoised, for the reason <see cref="ReadCurrentUserRegistryValue"/> is not.
-    /// </summary>
-    public IReadOnlyList<string> ReadCurrentUserRegistryValueNames(string keyPath)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(keyPath);
-
-        try
-        {
-            using var key = Registry.CurrentUser.OpenSubKey(keyPath);
-
-            return key?.GetValueNames() ?? [];
-        }
-        catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
-        {
-            // The same two ordinary failures ReadCurrentUserRegistryValue handles, meaning the same
-            // thing: nothing said where the tool is.
-            return [];
-        }
-    }
-
-    /// <summary>
-    /// Not memoised, for the reason <see cref="ReadCurrentUserRegistryValue"/> is not.
-    /// </summary>
-    public byte[]? ReadCurrentUserRegistryBytes(string keyPath, string valueName)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(keyPath);
-        ArgumentException.ThrowIfNullOrWhiteSpace(valueName);
-
-        try
-        {
-            using var key = Registry.CurrentUser.OpenSubKey(keyPath);
-
-            // A REG_BINARY arrives as a byte array and nothing else does.
-            return key?.GetValue(valueName) as byte[];
-        }
-        catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
-        {
-            // The same two ordinary failures ReadCurrentUserRegistryValue handles, meaning the same
-            // thing: the machine did not say.
-            return null;
-        }
-    }
-
-    /// <summary>
     /// Not memoised: the one caller memoises the layout it derives for the life of a planning pass, and
     /// a second cache here would be a second thing for <see cref="Invalidate"/> to get wrong.
     /// </summary>
@@ -632,7 +491,7 @@ public sealed partial class UserEnvironment : IUserEnvironment
         }
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
-            // The same two ordinary failures ReadCurrentUserRegistryValue handles, meaning the same
+            // The same two ordinary failures UserHive handles, meaning the same
             // thing: nothing said where the tool is.
             return null;
         }
@@ -654,7 +513,7 @@ public sealed partial class UserEnvironment : IUserEnvironment
         }
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
-            // The same two ordinary failures ReadCurrentUserRegistryValue handles, meaning the same
+            // The same two ordinary failures UserHive handles, meaning the same
             // thing: the machine did not say.
             return [];
         }
@@ -763,7 +622,7 @@ public sealed partial class UserEnvironment : IUserEnvironment
         catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
         {
             // A hive this account may not read, and a key already marked for deletion — the same
-            // two ordinary failures ReadCurrentUserRegistryValue handles, meaning the same thing.
+            // two ordinary failures UserHive handles, meaning the same thing.
         }
 
         return values;

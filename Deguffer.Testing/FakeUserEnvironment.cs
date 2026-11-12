@@ -15,9 +15,7 @@ public sealed class FakeUserEnvironment : IUserEnvironment
     private readonly Dictionary<string, string> _variables = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>What a started tool reads in place of <see cref="_variables"/>, where null is unset.</summary>
     private readonly Dictionary<string, string?> _toolVariables = new(StringComparer.OrdinalIgnoreCase);
-    // Holds a string, an int or bytes, as the registry holds REG_SZ, REG_DWORD and REG_BINARY, so a
-    // read of the wrong type is told nothing, as it would be on a real machine.
-    private readonly Dictionary<string, object> _registry = new(StringComparer.OrdinalIgnoreCase);
+    private readonly FakeUserHive _hive = new();
     private readonly Dictionary<string, string> _machineRegistry = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _movedPersonalFolders = [];
 
@@ -205,24 +203,72 @@ public sealed class FakeUserEnvironment : IUserEnvironment
         return this;
     }
 
-    /// <summary>Pretend <paramref name="valueName"/> is recorded under <paramref name="keyPath"/>.</summary>
+    /// <summary>
+    /// Pretend <paramref name="valueName"/> is recorded under <paramref name="keyPath"/> in the signed-in
+    /// user's hive.
+    /// </summary>
     public FakeUserEnvironment WithRegistryValue(string keyPath, string valueName, string value)
     {
-        _registry[keyPath + "\\" + valueName] = value;
+        _hive.WithValue(keyPath, valueName, value);
         return this;
     }
 
     /// <summary>Pretend the <c>REG_DWORD</c> <paramref name="valueName"/> is recorded under <paramref name="keyPath"/>.</summary>
     public FakeUserEnvironment WithRegistryNumber(string keyPath, string valueName, int value)
     {
-        _registry[keyPath + "\\" + valueName] = value;
+        _hive.WithNumber(keyPath, valueName, value);
         return this;
     }
 
     /// <summary>Pretend the <c>REG_BINARY</c> <paramref name="valueName"/> is recorded under <paramref name="keyPath"/>.</summary>
     public FakeUserEnvironment WithRegistryBytes(string keyPath, string valueName, byte[] value)
     {
-        _registry[keyPath + "\\" + valueName] = value;
+        _hive.WithBytes(keyPath, valueName, value);
+        return this;
+    }
+
+    public IUserHive UserHive => _hive;
+
+    public IUserHive? RunningAccountHive { get; private set; }
+
+    /// <summary>
+    /// The signed-in user is the account the process runs as unless a test says otherwise, so the suite
+    /// plans as the ordinary case does.
+    /// </summary>
+    public SignedInAccount? SessionUser { get; private set; } = new($@"{Domain}\{Account}", SecurityIdentifier);
+
+    /// <summary>
+    /// A recognisably invented second account, on the terms <see cref="SecurityIdentifier"/> gives: the
+    /// user signed in to Windows while the process runs as <see cref="Account"/>.
+    /// </summary>
+    public const string SignedInSecurityIdentifier = "S-1-5-21-1111111111-2222222222-3333333333-1002";
+
+    public const string SignedInName = $@"{Domain}\signedinuser";
+
+    /// <summary>
+    /// Pretend the process was elevated as another account: <see cref="SignedInName"/> is signed in to
+    /// the session, and everything else this environment says is the account the process runs as.
+    /// <paramref name="runningHive"/> is that account's own hive, and <see cref="UserHive"/> stays the
+    /// signed-in user's. Set before the planner is constructed, which reads the account once.
+    /// </summary>
+    public FakeUserEnvironment ElevatedAsAnotherAccount(FakeUserHive? runningHive = null)
+    {
+        SessionUser = new SignedInAccount(SignedInName, SignedInSecurityIdentifier);
+        RunningAccountHive = runningHive ?? new FakeUserHive();
+        return this;
+    }
+
+    /// <summary>Pretend <paramref name="signedIn"/> is signed in to the session.</summary>
+    public FakeUserEnvironment WithSessionUser(SignedInAccount signedIn)
+    {
+        SessionUser = signedIn;
+        return this;
+    }
+
+    /// <summary>Pretend Windows would not say who is signed in to the session.</summary>
+    public FakeUserEnvironment WithNoSessionUser()
+    {
+        SessionUser = null;
         return this;
     }
 
@@ -241,84 +287,24 @@ public sealed class FakeUserEnvironment : IUserEnvironment
     public int EnvironmentReads { get; private set; }
 
     /// <summary>How many times a provider read the registry. Proves a discovery is memoised.</summary>
-    public int RegistryReads { get; private set; }
+    public int RegistryReads => _hive.Reads + _machineReads;
 
-    public string? ReadCurrentUserRegistryValue(string keyPath, string valueName)
-    {
-        RegistryReads++;
-
-        return _registry.TryGetValue(keyPath + "\\" + valueName, out var value) ? value as string : null;
-    }
-
-    public int? ReadCurrentUserRegistryNumber(string keyPath, string valueName)
-    {
-        RegistryReads++;
-
-        return _registry.TryGetValue(keyPath + "\\" + valueName, out var value) && value is int number ? number : null;
-    }
-
-    /// <summary>
-    /// Every key a recorded value sits under, one level below <paramref name="keyPath"/>. A value
-    /// recorded directly under <paramref name="keyPath"/> is not a key, so it names nothing here.
-    /// </summary>
-    public IReadOnlyList<string> ReadCurrentUserRegistrySubKeyNames(string keyPath)
-    {
-        RegistryReads++;
-
-        var prefix = keyPath + "\\";
-
-        return
-        [
-            .. _registry.Keys
-                .Where(entry => entry.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                .Select(entry => entry[prefix.Length..].Split('\\'))
-                .Where(segments => segments.Length > 1)
-                .Select(segments => segments[0])
-                .Distinct(StringComparer.OrdinalIgnoreCase),
-        ];
-    }
-
-    /// <summary>
-    /// Every value recorded directly under <paramref name="keyPath"/>. One recorded under a key below
-    /// it is that key's, so it names nothing here.
-    /// </summary>
-    public IReadOnlyList<string> ReadCurrentUserRegistryValueNames(string keyPath)
-    {
-        RegistryReads++;
-
-        var prefix = keyPath + "\\";
-
-        return
-        [
-            .. _registry.Keys
-                .Where(entry => entry.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                .Select(entry => entry[prefix.Length..])
-                .Where(name => !name.Contains('\\', StringComparison.Ordinal)),
-        ];
-    }
-
-    public byte[]? ReadCurrentUserRegistryBytes(string keyPath, string valueName)
-    {
-        RegistryReads++;
-
-        return _registry.TryGetValue(keyPath + "\\" + valueName, out var value) ? value as byte[] : null;
-    }
+    private int _machineReads;
 
     public string? ReadLocalMachineRegistryValue(string keyPath, string valueName, RegistryView view)
     {
-        RegistryReads++;
+        _machineReads++;
 
         return _machineRegistry.TryGetValue(MachineKey(keyPath, valueName, view), out var value) ? value : null;
     }
 
     /// <summary>
     /// Every key a recorded machine value sits under, one level below <paramref name="keyPath"/> in
-    /// <paramref name="view"/>, read as <see cref="ReadCurrentUserRegistrySubKeyNames"/> reads the
-    /// user's.
+    /// <paramref name="view"/>, read as <see cref="FakeUserHive.ReadSubKeyNames"/> reads a user's.
     /// </summary>
     public IReadOnlyList<string> ReadLocalMachineRegistrySubKeyNames(string keyPath, RegistryView view)
     {
-        RegistryReads++;
+        _machineReads++;
 
         var prefix = $"{view}:{keyPath}\\";
 

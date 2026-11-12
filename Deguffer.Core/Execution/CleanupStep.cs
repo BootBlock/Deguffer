@@ -176,6 +176,30 @@ public abstract record CleanupStep
     /// reach nothing here can state.
     /// </summary>
     public abstract IReadOnlyList<string> Subjects { get; }
+
+    /// <summary>
+    /// Every path this step reaches: what a deletion destroys, and where a command is sent as well as
+    /// the item it names. A step that destroys nothing reaches nothing.
+    ///
+    /// <para>Wider than <see cref="Subjects"/>, and for a different question. A command's
+    /// <see cref="RunCommandStep.MeasuredPaths"/> are a probe rather than a target, so §5.6 asserts
+    /// nothing about them, and they are still the plan's own statement of where the tool works. That is
+    /// what a check asks before a step runs at all: whether it reaches a virtual machine's storage
+    /// (<see cref="VirtualMachineStoragePlan"/>) or another account's folders
+    /// (<see cref="AnotherAccountPlan"/>).</para>
+    /// </summary>
+    public virtual IReadOnlyList<string> Reaches => [];
+
+    /// <summary>
+    /// Whether this step acts on the calling account's own state, whatever path it names: Windows
+    /// empties the caller's Recycle Bin and releases the caller's cloud files, and a tool reads the
+    /// caller's settings to decide what it removes.
+    ///
+    /// <para>For <see cref="AnotherAccountPlan"/>, which withholds what belongs to an account that is
+    /// not the signed-in user's. A path tells it most of that. This tells it the rest, where the path is
+    /// on another drive and the account is in the call.</para>
+    /// </summary>
+    public virtual bool ActsForCallingAccount => false;
 }
 
 /// <summary>
@@ -231,6 +255,18 @@ public sealed record RunCommandStep(string FileName, string Arguments, string Wh
     /// counts: it is a probe of where the tool was sent, and the tool decides what it takes there.
     /// </summary>
     public override IReadOnlyList<string> Subjects => Removes is { } item ? [item] : [];
+
+    public override IReadOnlyList<string> Reaches => [.. MeasuredPaths, .. Subjects];
+
+    /// <summary>
+    /// Whether the tool decides what to remove from the settings of the account that runs it, kept
+    /// somewhere other than where it removes: File History's own command reads the account's backup
+    /// configuration from its profile and removes versions from a backup drive. See
+    /// <see cref="CleanupStep.ActsForCallingAccount"/>.
+    /// </summary>
+    public bool ReadsCallingAccountSettings { get; init; }
+
+    public override bool ActsForCallingAccount => ReadsCallingAccountSettings;
 
     /// <summary>
     /// The locations we expect the command to clear. The command remains the authority on *what*
@@ -365,6 +401,9 @@ public sealed record ReleaseLocalCopiesStep(string SyncRoot, string SyncApp, str
 
     /// <summary>Nothing: the step destroys nothing, so a declined one leaves nothing that could have gone.</summary>
     public override IReadOnlyList<string> Subjects => [];
+
+    /// <summary>The sync app releases what the calling account has synced, and nobody else's.</summary>
+    public override bool ActsForCallingAccount => true;
 }
 
 /// <summary>
@@ -405,6 +444,8 @@ public abstract record DeleteStep(string Path, string What) : CleanupStep
 
     /// <summary>What the removal destroys, which is what a declined or kept one leaves standing.</summary>
     public override IReadOnlyList<string> Subjects => Destroys;
+
+    public override IReadOnlyList<string> Reaches => Destroys;
 
     /// <summary>
     /// Whether the path itself is what is being reclaimed — something nothing will create again —
@@ -592,6 +633,12 @@ public sealed record EmptyRecycleBinStep(string Path, string What) : DeleteStep(
     public string VolumeRoot =>
         System.IO.Path.GetDirectoryName(System.IO.Path.GetDirectoryName(LongPath.Display(Path)))
         ?? string.Empty;
+
+    /// <summary>
+    /// <c>SHEmptyRecycleBin</c> empties the calling account's bin on the volume, whichever folder the
+    /// step names.
+    /// </summary>
+    public override bool ActsForCallingAccount => true;
 
     public override string Description => $"{What} — {LongPath.Display(Path)}";
 }

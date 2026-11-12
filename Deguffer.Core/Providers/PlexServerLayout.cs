@@ -169,7 +169,7 @@ public static class PlexServerLayout
         // may be using a folder nobody here can name.
         (string? Folder, bool Unplaced) Setting(string value, string purpose)
         {
-            var recorded = environment.ReadCurrentUserRegistryValue(RegistryKey, value);
+            var recorded = environment.UserHive.ReadValue(RegistryKey, value);
 
             if (string.IsNullOrWhiteSpace(recorded))
             {

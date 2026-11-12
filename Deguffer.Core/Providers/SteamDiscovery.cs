@@ -164,7 +164,7 @@ public sealed class SteamDiscovery(IUserEnvironment environment)
 
     private SteamInstall Find()
     {
-        var recorded = environment.ReadCurrentUserRegistryValue(RegistryKey, InstallPathValue);
+        var recorded = environment.UserHive.ReadValue(RegistryKey, InstallPathValue);
 
         // Steam writes this as "c:/program files (x86)/steam", so it needs normalising before it can
         // be compared with or joined to anything. Configured also refuses a relative value, which

@@ -217,15 +217,11 @@ public class CrashLogTests
 
         public IReadOnlyDictionary<string, string> ReadEnvironmentNow() => CurrentEnvironment;
 
-        public string? ReadCurrentUserRegistryValue(string keyPath, string valueName) => null;
+        public IUserHive UserHive => Safety.UserHive.Unread;
 
-        public int? ReadCurrentUserRegistryNumber(string keyPath, string valueName) => null;
+        public IUserHive? RunningAccountHive => null;
 
-        public IReadOnlyList<string> ReadCurrentUserRegistrySubKeyNames(string keyPath) => [];
-
-        public IReadOnlyList<string> ReadCurrentUserRegistryValueNames(string keyPath) => [];
-
-        public byte[]? ReadCurrentUserRegistryBytes(string keyPath, string valueName) => null;
+        public SignedInAccount? SessionUser => null;
 
         public string? ReadLocalMachineRegistryValue(string keyPath, string valueName, Microsoft.Win32.RegistryView view) => null;
 

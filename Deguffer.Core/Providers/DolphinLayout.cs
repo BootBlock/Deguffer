@@ -64,7 +64,7 @@ public sealed class DolphinLayout : EmulatorLayout
 
     public override IEnumerable<string> FixedRoots(IUserEnvironment environment)
     {
-        if (LongPath.Configured(environment.ReadCurrentUserRegistryValue(RegistryKey, RegistryValue)) is { } written)
+        if (LongPath.Configured(environment.UserHive.ReadValue(RegistryKey, RegistryValue)) is { } written)
         {
             yield return written;
         }

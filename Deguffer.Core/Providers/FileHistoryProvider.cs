@@ -292,6 +292,10 @@ public sealed class FileHistoryProvider : CleanupProviderBase
                     // File History keeps a catalogue of the versions it holds, and nothing documents what a
                     // cleanup ended part-way leaves in it, so a started cleanup is left to finish.
                     WhenCancelled = CancelledCommand.Finishes,
+
+                    // FhManagew cleans the backups of whichever account runs it, from that account's
+                    // configuration, and the backups are on another drive than its profile.
+                    ReadsCallingAccountSettings = true,
                     Estimated = ScanSize.Approximate(aged.Total.Reclaimable),
                     MeasuredPaths = [target.DataDirectory],
                     MeasuredBefore = probed.Total,

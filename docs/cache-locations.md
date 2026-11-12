@@ -8129,6 +8129,14 @@ carry — so a rule that was even slightly too broad would take another person's
 yours. Deguffer matches your identifier exactly, treats everything else as untouchable, and tells
 you what it is leaving behind.
 
+**Elevated as another account, it empties nothing.** A standard user who types an administrator's
+credentials into the elevation prompt, and Windows' administrator protection, both give the
+elevated Deguffer another account's identity, and `SHEmptyRecycleBin` empties the bin of whoever
+calls it. "Your own bin" would then be that account's, and yours would look like another person's.
+So while the account Deguffer runs as is not the one signed in to Windows, this row offers no bin
+at all, says whose account it is running as, and proves both accounts' bins standing after every
+clean. Open Deguffer without elevating to empty your own.
+
 **If Deguffer cannot establish which account it is running as, it offers nothing at all.** With no
 identifier to match, every bin on the machine belongs to somebody it cannot name, and guessing is
 not available.

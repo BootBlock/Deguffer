@@ -44,4 +44,6 @@ public sealed record RemoveProfileStep(UserProfile Profile, string What) : Clean
     /// list rather than by its path (see <see cref="ProfileRemovalProof"/>).
     /// </summary>
     public override IReadOnlyList<string> Subjects => [];
+
+    public override IReadOnlyList<string> Reaches => [Folder];
 }
