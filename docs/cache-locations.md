@@ -2874,6 +2874,10 @@ cannot tell them apart without guessing, and guessing is the one thing it will n
 live build's folder would save you very little in any case: it is compiled output of code still on
 your disk, so the whole cost of removing it is one slower start.
 
+The installed extensions are in a separate folder, `%USERPROFILE%\.vscode\extensions` for VS Code
+itself, which this row never enters. What the editor leaves there from installs it never finished is
+the [unfinished extension installs row](#vs-code-unfinished-extension-installs)'s.
+
 ### What is protected
 
 **Everything in `User`, which is the most valuable directory in the folder.** The founding audit
@@ -6496,6 +6500,85 @@ build again by itself, without a command from you, so the cost is a wait and not
 
 Neither the extension nor the resolver has a command that removes the browser, so §5.1 has nothing
 to prefer.
+
+---
+
+## VS Code unfinished extension installs
+
+**Tier 1 — regenerable cache.** Pre-selected.
+
+| | |
+| --- | --- |
+| **Location** | `%USERPROFILE%\<dot-folder>\extensions` for VS Code (`.vscode`) and every editor built on it, and the folder `VSCODE_EXTENSIONS` names |
+| **Method** | Delete recognised leftover folders (`.<uuid>` and `<folder>.<hash>.vsctmp`), each whole |
+| **Typical size** | 3,455 MB across nine folders on one workstation, the largest 1,313 MB |
+
+### What it is
+
+An editor built on VS Code installs an extension in two steps. It unpacks the package into a folder
+named `.` followed by a random UUID, inside your extensions folder, and then renames that folder to
+`<publisher>.<name>-<version>`. If the unpacking or the rename fails, the editor tries to delete the
+temporary folder and ignores any error, so a file held open leaves it behind. If the editor closes
+part way through, it never tries. The editor's own clean at start-up deletes only folders ending
+`.vsctmp`, and it never loads a folder whose name starts with a dot, so these folders stay until
+someone deletes them by hand.
+
+On the measured machine, nine such folders held full copies of five extension builds, every one
+older than the build installed. The two largest were builds of one assistant extension that updates
+several times a week.
+
+A `.vsctmp` folder is the other leftover. When the editor removes an extension, it first renames the
+folder to `<folder>.<hash>.vsctmp` and then deletes it. The next start clears any that are left, so
+one stays only when an editor is uninstalled or never restarted.
+
+### What Deguffer does
+
+**It identifies the folder by the editor's own list before it looks inside.** Every folder in your
+profile whose name starts with a dot is asked, so the editor's name never needs to be known. Its
+`extensions` folder is entered only where it holds an `extensions.json` that is a list of entries,
+each with an `identifier` and a `location`, which is the shape the editor writes. An empty list is
+not enough. The folder that `VSCODE_EXTENSIONS` names is asked the same question, and a value that is
+not a full path, or that names a drive root or one of your own folders, is not followed.
+
+Inside an identified folder, exactly two names are recognised:
+
+| Folder | Recognised when |
+| --- | --- |
+| `.<uuid>` | The name is a dot followed by a lower-case UUID in the 8-4-4-4-12 form, the editor's list does not name it, and nothing in it has changed for 7 days |
+| `<folder>.<hash>.vsctmp` | The name ends in a hexadecimal hash and `.vsctmp`, the editor's list does not name it, and nothing in it has changed for 7 days |
+
+**Each folder goes whole or not at all.** The editor writes into a `.<uuid>` folder only while it
+unpacks a package and for at most two minutes of rename attempts, so the age is what tells a folder
+left behind from an install in progress. A folder with anything inside changed in the last 7 days,
+at any depth, is left alone whole. The clean looks at the disk again before it removes each folder,
+and removes nothing from one in which a file has appeared since the preview. A folder a running
+program is using is left alone, and the clean asks again before each removal.
+
+**It reaches only the folders it can see from outside the editor.** An extensions folder moved with
+the `--extensions-dir` option, or a portable install's, is not looked at.
+
+### What is protected
+
+Everything else in the extensions folder is Tier 4: every installed extension, `extensions.json`,
+`.obsolete`, `.init-default-profile-extensions` and any folder whose name Deguffer does not
+recognise, a folder in the leftover shape that the editor's list names included. The extensions
+folder itself is never a target. Each of these is checked after the clean to prove it survived.
+
+A link is never followed, whether it is the extensions folder itself or a folder inside it. Deguffer
+names it and leaves it alone.
+
+### What it costs you
+
+Nothing. The editor never loads these folders, and each installed extension is a separate folder
+that this row never touches. If a build that failed to install is ever needed again, the marketplace
+supplies it.
+
+### Why Tier 1
+
+What is left is a copy of an extension package the editor unpacked and then abandoned. The editor
+keeps no reference to it, and the marketplace holds the original. The editor has no command that
+removes these folders: none of its extension options touches a `.<uuid>` folder, so §5.1 has
+nothing to prefer.
 
 ---
 
