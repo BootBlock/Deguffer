@@ -20,6 +20,7 @@ public sealed class CleanupPlanner
     private readonly Dictionary<ICleanupProvider, int> _places;
     private readonly RowDeclarations? _declarations;
     private readonly IVolumeInventory _volumes;
+    private readonly RunningAccount _account;
 
     /// <param name="declarations">
     /// The declarations the rows that walk a folder consult, admitted here so that they name every row
@@ -31,11 +32,21 @@ public sealed class CleanupPlanner
     /// folder through another letter or mount is still withheld. The machine's own by default, because
     /// it only reads. See <see cref="VirtualMachineStoragePlan"/>.
     /// </param>
+    /// <param name="account">
+    /// The account the providers read the machine as, set against the user signed in to it, so every plan
+    /// withholds what belongs to an account that is not theirs. This process's own by default, because it
+    /// only reads, and because a default that assumed the signed-in user would fail open. See
+    /// <see cref="AnotherAccountPlan"/>.
+    /// </param>
     public CleanupPlanner(
-        IEnumerable<ICleanupProvider> providers, RowDeclarations? declarations = null, IVolumeInventory? volumes = null)
+        IEnumerable<ICleanupProvider> providers,
+        RowDeclarations? declarations = null,
+        IVolumeInventory? volumes = null,
+        RunningAccount? account = null)
     {
         _providers = [.. providers];
         _volumes = volumes ?? VolumeInventory.Current;
+        _account = account ?? RunningAccount.Of(UserEnvironment.Current);
         _places = new Dictionary<ICleanupProvider, int>(_providers.Count, ReferenceEqualityComparer.Instance);
         _declarations = declarations;
 
@@ -170,7 +181,8 @@ public sealed class CleanupPlanner
                 tuning ?? ScanTuner.Shipped,
                 scope ?? ProtectionScope.Everything),
         ],
-        declarations);
+        declarations,
+        account: RunningAccount.Of(environment));
     }
 
     /// <summary>
@@ -522,7 +534,10 @@ public sealed class CleanupPlanner
             // Before any row plans, so every plan in the pass is held to the same set.
             var registered = await RegisteredStorage.ReadAsync(registrars, _volumes, ct).ConfigureAwait(false);
 
-            return await PlanHeldAsync(providers, registered, _volumes, keep, status, found, pass, ct).ConfigureAwait(false);
+            // Once for the pass, so each of the account's folders is followed to its mounts once.
+            var anotherAccount = AnotherAccountPlan.For(_account, _volumes);
+
+            return await PlanHeldAsync(providers, registered, anotherAccount, _volumes, keep, status, found, pass, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -545,6 +560,7 @@ public sealed class CleanupPlanner
     private static async Task<IReadOnlyList<Finding>> PlanHeldAsync(
         IReadOnlyList<ICleanupProvider> providers,
         RegisteredStorage registered,
+        AnotherAccountPlan? anotherAccount,
         IVolumeInventory volumes,
         MinimumAge keep,
         IProgress<string>? status,
@@ -570,7 +586,7 @@ public sealed class CleanupPlanner
 
             try
             {
-                finding = await PlanOneAsync(provider, registered, volumes, keep, checking.Counted(provider), token).ConfigureAwait(false);
+                finding = await PlanOneAsync(provider, registered, anotherAccount, volumes, keep, checking.Counted(provider), token).ConfigureAwait(false);
                 planned = true;
             }
             finally
@@ -604,6 +620,7 @@ public sealed class CleanupPlanner
     private static async Task<Finding> PlanOneAsync(
         ICleanupProvider provider,
         RegisteredStorage registered,
+        AnotherAccountPlan? anotherAccount,
         IVolumeInventory volumes,
         MinimumAge keep,
         IProgress<ScanSize> counted,
@@ -624,6 +641,13 @@ public sealed class CleanupPlanner
         // Applied here rather than inside the provider: the set is the pass's, gathered from every row
         // that registers storage, and no row can see another's records. See VirtualMachineStoragePlan.
         var plan = VirtualMachineStoragePlan.Apply(await provider.PlanAsync(keep, counted, ct).ConfigureAwait(false), registered, volumes);
+
+        // Applied here for the same reason: whose account this process runs as is the run's, and no row
+        // should have to remember to ask. See AnotherAccountPlan.
+        if (anotherAccount is not null)
+        {
+            plan = anotherAccount.Apply(plan);
+        }
 
         return new Finding(provider, present, plan, awaitingFolders);
     }

@@ -52,7 +52,7 @@ public static class VirtualMachineStoragePlan
 
         foreach (var step in plan.Steps)
         {
-            var reach = Reach(step).Select(path => (Path: path, Folder: RegisteredStorage.Reach(path, volumes))).ToList();
+            var reach = step.Reaches.Select(path => (Path: path, Folder: RegisteredStorage.Reach(path, volumes))).ToList();
             var inReach = standing
                 .Where(entry => reach.Any(path => path.Folder.Holds(entry.Reached) || entry.Reached.Holds(path.Folder)))
                 .ToList();
@@ -119,20 +119,6 @@ public static class VirtualMachineStoragePlan
                 ProtectedPaths = [.. ProtectionsFor(own)],
             };
     }
-
-    /// <summary>
-    /// Every path a step reaches: what a deletion destroys, and where a command is sent as well as the
-    /// item it names. A command's <see cref="RunCommandStep.MeasuredPaths"/> are a probe rather than a
-    /// target, and they are still the plan's own statement of where the tool works, which is the
-    /// question here. A step that destroys nothing reaches nothing.
-    /// </summary>
-    private static IEnumerable<string> Reach(CleanupStep step) => step switch
-    {
-        DeleteStep deletion => deletion.Destroys,
-        RunCommandStep command => command.MeasuredPaths.Concat(command.Subjects),
-        RemoveProfileStep profile => [profile.Folder],
-        _ => [],
-    };
 
     /// <summary>
     /// One protection per disk or folder, each on its existence alone, with the presence Windows gave

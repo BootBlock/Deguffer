@@ -2,8 +2,9 @@ namespace Deguffer.Core.Execution;
 
 /// <summary>
 /// What a run owes the rows it is not going to clean: proof that what they leave standing whatever the
-/// user ticks is still standing afterwards. That is the items on the keep list, and the Outlook data
-/// files Deguffer never removes (§9).
+/// user ticks is still standing afterwards. That is the items on the keep list, the Outlook data files
+/// Deguffer never removes (§9), and what belongs to the account Deguffer runs as while that is not the
+/// signed-in user's (<see cref="AnotherAccountPlan"/>).
 ///
 /// <para>Both are checked by every clean (§5.6). A row that runs checks its own, because
 /// <see cref="CleanupPlan.NarrowedTo"/> keeps them protected. Every other row still owes that check:
@@ -20,7 +21,8 @@ public static class StandingProof
     /// <param name="previewed">Every row's finding, with the keep list applied.</param>
     /// <param name="running">The findings the run will carry out, narrowed to what was ticked.</param>
     /// <returns>
-    /// For each row that is not running and holds kept items or Outlook data files, its plan reduced to
+    /// For each row that is not running and holds kept items, Outlook data files or another account's
+    /// files, its plan reduced to
     /// those alone: no steps, nothing to confirm, and a promise the planner checks once every deletion
     /// is done.
     /// </returns>
@@ -39,7 +41,7 @@ public static class StandingProof
         {
             if (!runningProviders.Contains(finding.Provider.Id)
                 && finding.Plan is { } plan
-                && (plan.HoldsKeepListItems || plan.HoldsMailStores))
+                && (plan.HoldsKeepListItems || plan.HoldsMailStores || plan.HoldsAnotherAccountsFiles))
             {
                 owed.Add(finding with { Plan = plan.ProofOnly() });
             }

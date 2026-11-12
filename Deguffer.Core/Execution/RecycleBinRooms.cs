@@ -69,11 +69,11 @@ public sealed class RecycleBinRooms
         }
 
         var key = $@"{VolumeKeys}\{guid}";
-        var limit = _environment.ReadCurrentUserRegistryNumber(key, "MaxCapacity") is { } megabytes and >= 0
+        var limit = _environment.UserHive.ReadNumber(key, "MaxCapacity") is { } megabytes and >= 0
             ? megabytes * Megabyte
             : (long?)null;
 
-        return new RecycleBinRoom(held, limit, _environment.ReadCurrentUserRegistryNumber(key, "NukeOnDelete") is 1);
+        return new RecycleBinRoom(held, limit, _environment.UserHive.ReadNumber(key, "NukeOnDelete") is 1);
     }
 
     /// <summary>

@@ -31,6 +31,7 @@ public sealed class FindingStatusTests
     [InlineData(FindingStatus.MailStoresHeldBack)]
     [InlineData(FindingStatus.UpdateInProgress)]
     [InlineData(FindingStatus.VirtualMachineKept)]
+    [InlineData(FindingStatus.AnotherAccountKept)]
     [InlineData(FindingStatus.ReportOnly)]
     [InlineData(FindingStatus.ReadyToClean)]
     [InlineData(FindingStatus.NeedsElevation)]
@@ -159,8 +160,11 @@ public sealed class FindingStatusTests
         var noMail = notKept with { ProtectedPaths = [Withheld(Withholding.UpdateInProgress), Withheld(Withholding.VirtualMachineStorage)] };
         Assert.Equal(FindingStatus.UpdateInProgress, Found(noMail).ToStatus(false));
 
-        var settled = noMail with { ProtectedPaths = [Withheld(Withholding.VirtualMachineStorage)] };
+        var settled = noMail with { ProtectedPaths = [Withheld(Withholding.VirtualMachineStorage), Withheld(Withholding.AnotherAccount)] };
         Assert.Equal(FindingStatus.VirtualMachineKept, Found(settled).ToStatus(false));
+
+        var noMachine = settled with { ProtectedPaths = [Withheld(Withholding.AnotherAccount)] };
+        Assert.Equal(FindingStatus.AnotherAccountKept, Found(noMachine).ToStatus(false));
 
         Assert.Equal(FindingStatus.AlreadyClear, Found(Plan()).ToStatus(false));
         Assert.Equal(FindingStatus.AlreadyClear, Found(null).ToStatus(false));

@@ -3,8 +3,14 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.VirtualDisks;
 
 /// <summary>
-/// The virtual disks of the WSL distributions this account has registered, read from WSL's own
-/// registration under <c>HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss</c>.
+/// The virtual disks of the WSL distributions registered by the user signed in to Windows and by the
+/// account Deguffer runs as, read from WSL's own registration under
+/// <c>Software\Microsoft\Windows\CurrentVersion\Lxss</c> in each account's hive.
+///
+/// <para><b>Both hives, because this is a refusal.</b> WSL registers a distribution in the hive of the
+/// account that installed it. Elevated as another account, <c>HKEY_CURRENT_USER</c> is that account's
+/// hive, and reading it alone would leave the signed-in user's disks unrecognised as a virtual
+/// machine's storage. See <see cref="IUserEnvironment.RunningAccountHive"/>.</para>
 ///
 /// <para>Microsoft's own page on WSL disk space finds a distribution's disk this way: the subkey whose
 /// <c>DistributionName</c> matches, then <c>ext4.vhdx</c> in its <c>BasePath</c>. WSL's source names the
@@ -50,38 +56,46 @@ public static class WslRegistrations
     ];
 
     /// <summary>
-    /// Every WSL 2 distribution's disk, in the order the registry lists them, each marked with the tool
-    /// that owns it, because the route that frees space in it is that tool's.
+    /// Every WSL 2 distribution's disk, the signed-in user's first and each hive's in the order the
+    /// registry lists them, each marked with the tool that owns it, because the route that frees space
+    /// in it is that tool's.
     /// </summary>
     public static IReadOnlyList<VirtualDisk> Read(IUserEnvironment environment)
     {
         ArgumentNullException.ThrowIfNull(environment);
 
+        IEnumerable<IUserHive> hives = environment.RunningAccountHive is { } running
+            ? [environment.UserHive, running]
+            : [environment.UserHive];
+
         var disks = new List<VirtualDisk>();
 
-        foreach (var subKey in environment.ReadCurrentUserRegistrySubKeyNames(LxssKey))
+        foreach (var hive in hives)
         {
-            // WSL keeps other keys beside the distributions, and only a distribution's is named by
-            // its identifier.
-            if (!Guid.TryParse(subKey, out _))
+            foreach (var subKey in hive.ReadSubKeyNames(LxssKey))
             {
-                continue;
-            }
+                // WSL keeps other keys beside the distributions, and only a distribution's is named by
+                // its identifier.
+                if (!Guid.TryParse(subKey, out _))
+                {
+                    continue;
+                }
 
-            if (Read(environment, $@"{LxssKey}\{subKey}") is { } disk)
-            {
-                disks.Add(disk);
+                if (Read(hive, $@"{LxssKey}\{subKey}") is { } disk)
+                {
+                    disks.Add(disk);
+                }
             }
         }
 
         return disks;
     }
 
-    private static VirtualDisk? Read(IUserEnvironment environment, string key)
+    private static VirtualDisk? Read(IUserHive hive, string key)
     {
-        var name = environment.ReadCurrentUserRegistryValue(key, "DistributionName");
-        var flags = environment.ReadCurrentUserRegistryNumber(key, "Flags");
-        var state = environment.ReadCurrentUserRegistryNumber(key, "State");
+        var name = hive.ReadValue(key, "DistributionName");
+        var flags = hive.ReadNumber(key, "Flags");
+        var state = hive.ReadNumber(key, "State");
 
         if (string.IsNullOrWhiteSpace(name)
             || flags is not { } bits
@@ -94,12 +108,12 @@ public static class WslRegistrations
 
         // Configured takes off the \\?\ prefix WSL has been seen to write here, so the path compares
         // equal to the one Explore draws.
-        if (LongPath.Configured(environment.ReadCurrentUserRegistryValue(key, "BasePath")) is not { } basePath)
+        if (LongPath.Configured(hive.ReadValue(key, "BasePath")) is not { } basePath)
         {
             return null;
         }
 
-        var file = environment.ReadCurrentUserRegistryValue(key, "VhdFileName") is { Length: > 0 } named
+        var file = hive.ReadValue(key, "VhdFileName") is { Length: > 0 } named
             ? named
             : DefaultDiskName;
 

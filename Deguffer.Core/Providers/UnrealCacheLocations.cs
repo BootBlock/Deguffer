@@ -111,12 +111,12 @@ internal static class UnrealCacheLocations
         var localCachePaths = new[]
         {
             environment.GetEnvironmentVariable(LocalCachePath),
-            environment.ReadCurrentUserRegistryValue(LocalCachePathKey, LocalCachePath),
+            environment.UserHive.ReadValue(LocalCachePathKey, LocalCachePath),
         };
 
         var dataPaths = ZenDataPathVariables
             .Select(environment.GetEnvironmentVariable)
-            .Append(environment.ReadCurrentUserRegistryValue(ZenKey, "DataPath"));
+            .Append(environment.UserHive.ReadValue(ZenKey, "DataPath"));
 
         return
         [

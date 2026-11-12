@@ -37,14 +37,14 @@ internal sealed class UnityEditorPreferences
 
     /// <summary>The preferences recorded on <paramref name="environment"/>'s machine, listed once.</summary>
     public static UnityEditorPreferences Read(IUserEnvironment environment) =>
-        new(environment, environment.ReadCurrentUserRegistryValueNames(Key));
+        new(environment, environment.UserHive.ReadValueNames(Key));
 
     /// <summary>
     /// Whether the <c>EditorPrefs.SetBool</c> preference <paramref name="preference"/> is on. False
     /// where it was never set, which is Unity's own default for a flag.
     /// </summary>
     public bool IsOn(string preference) =>
-        ValueName(preference) is { } name && _environment.ReadCurrentUserRegistryNumber(Key, name) is { } value && value != 0;
+        ValueName(preference) is { } name && _environment.UserHive.ReadNumber(Key, name) is { } value && value != 0;
 
     /// <summary>
     /// The <c>EditorPrefs.SetString</c> preference <paramref name="preference"/>, or null where it
@@ -57,9 +57,9 @@ internal sealed class UnityEditorPreferences
             return null;
         }
 
-        var text = _environment.ReadCurrentUserRegistryBytes(Key, name) is { } bytes
+        var text = _environment.UserHive.ReadBytes(Key, name) is { } bytes
             ? Encoding.UTF8.GetString(bytes).TrimEnd('\0')
-            : _environment.ReadCurrentUserRegistryValue(Key, name);
+            : _environment.UserHive.ReadValue(Key, name);
 
         return string.IsNullOrWhiteSpace(text) ? null : text;
     }

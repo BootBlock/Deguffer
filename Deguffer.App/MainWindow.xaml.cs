@@ -72,6 +72,12 @@ public sealed partial class MainWindow : Window
             }
         });
 
+        if (RunningAccount.Of(UserEnvironment.Current).Notice is { } notice)
+        {
+            AccountNotice.Message = notice;
+            AccountNotice.IsOpen = true;
+        }
+
         ContentFrame.Navigated += (_, e) =>
         {
             if (e.Content is Page page)

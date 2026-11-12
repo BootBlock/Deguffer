@@ -107,10 +107,16 @@ public static class ProfileJudgement
     /// By identifier and by folder: an elevated Deguffer runs as the administrator who approved it, and
     /// a folder that holds or is inside its profile would take that profile with it whatever the
     /// identifier says.
+    ///
+    /// <para><b>Both accounts are Deguffer's own.</b> Elevated with another account's credentials, or
+    /// under administrator protection, the process runs as one account and the user signed in to the
+    /// session is another. Neither profile is another account's to offer: one is the account Deguffer
+    /// is running as, and the other is the user's who started it.</para>
     /// </summary>
     private static bool IsRunningAccount(UserProfile profile, IUserEnvironment environment)
     {
-        if (string.Equals(profile.Sid, environment.UserSecurityIdentifier, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(profile.Sid, environment.UserSecurityIdentifier, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(profile.Sid, environment.SessionUser?.SecurityIdentifier, StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }

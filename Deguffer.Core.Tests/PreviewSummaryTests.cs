@@ -27,7 +27,7 @@ public sealed class PreviewSummaryTests
         PreviewSummary.For(statuses, Selectable, Selected, Elevate, Full);
 
     /// <summary>
-    /// The eight states that measure zero and are not clear. None of them may draw the claim that
+    /// The states that measure zero and are not clear. None of them may draw the claim that
     /// the caches are already clear, whatever the totals say.
     /// </summary>
     [Theory]
@@ -39,6 +39,7 @@ public sealed class PreviewSummaryTests
     [InlineData(FindingStatus.MailStoresHeldBack)]
     [InlineData(FindingStatus.UpdateInProgress)]
     [InlineData(FindingStatus.VirtualMachineKept)]
+    [InlineData(FindingStatus.AnotherAccountKept)]
     [InlineData(FindingStatus.AwaitingSourceFolders)]
     [InlineData(FindingStatus.ReportOnly)]
     public void DoesNotCallTheCachesClearOverARowThatIsNotClear(FindingStatus unclear)
@@ -49,7 +50,7 @@ public sealed class PreviewSummaryTests
         Assert.StartsWith("Nothing to reclaim", summary, StringComparison.Ordinal);
     }
 
-    /// <summary>Each of the eight gets words naming its own cause when it is the only one present.</summary>
+    /// <summary>Each of those states gets words naming its own cause when it is the only one present.</summary>
     [Theory]
     [InlineData(FindingStatus.UnreadableRoot, "would not let Deguffer read")]
     [InlineData(FindingStatus.NotExamined, "were not examined")]
@@ -59,6 +60,7 @@ public sealed class PreviewSummaryTests
     [InlineData(FindingStatus.MailStoresHeldBack, "Outlook data files")]
     [InlineData(FindingStatus.UpdateInProgress, "a Windows update that has not finished")]
     [InlineData(FindingStatus.VirtualMachineKept, "a virtual machine's disk or folder")]
+    [InlineData(FindingStatus.AnotherAccountKept, "belong to the account Deguffer is running as")]
     [InlineData(FindingStatus.AwaitingSourceFolders, "need a source folder")]
     [InlineData(FindingStatus.ReportOnly, "only the tool that owns it can free")]
     public void NamesTheCauseWhenOnlyOneKindOfRowIsUnclear(FindingStatus unclear, string expected)
@@ -67,7 +69,7 @@ public sealed class PreviewSummaryTests
     }
 
     /// <summary>
-    /// Naming two causes of eight would be less true than naming none, so a mixture sends the reader
+    /// Naming two of those causes would be less true than naming none, so a mixture sends the reader
     /// to the rows, which each state their own.
     /// </summary>
     [Fact]

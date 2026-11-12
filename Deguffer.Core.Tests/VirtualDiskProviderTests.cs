@@ -69,6 +69,37 @@ public sealed class VirtualDiskProviderTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// WSL registers a distribution in the hive of the account that installed it. Elevated as another
+    /// account, both the signed-in user's distributions and the running account's are virtual machines'
+    /// storage, so a disk registered in either hive is read, and a disk listed only in the signed-in
+    /// user's is refused though the running account's hive lists none.
+    /// </summary>
+    [Fact]
+    public void ADiskEitherAccountRegisteredIsRead()
+    {
+        var mine = Folder("wsl", "Ubuntu");
+        var myDisk = Disk(mine);
+        Register(Ubuntu, "Ubuntu", mine);
+
+        var theirs = Folder("wsl", "Debian");
+        var theirDisk = Disk(theirs);
+        var key = $@"{WslRegistrations.LxssKey}\{Debian}";
+        var running = new FakeUserHive()
+            .WithValue(key, "DistributionName", "Debian")
+            .WithValue(key, "BasePath", theirs)
+            .WithNumber(key, "Flags", Wsl2)
+            .WithNumber(key, "State", Installed);
+
+        _environment.ElevatedAsAnotherAccount(running);
+
+        Assert.Equal([myDisk, theirDisk], WslRegistrations.Read(_environment).Select(disk => disk.Path));
+
+        _environment.ElevatedAsAnotherAccount(new FakeUserHive());
+
+        Assert.Equal([myDisk], WslRegistrations.Read(_environment).Select(disk => disk.Path));
+    }
+
     private string Folder(params string[] parts)
     {
         var folder = Path.Combine([_temp.Path, .. parts]);

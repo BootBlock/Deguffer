@@ -142,6 +142,9 @@ public static class PreviewSummary
         FindingStatus.VirtualMachineKept =>
             "Nothing to reclaim, and some of these hold a virtual machine's disk or folder, which Deguffer never "
             + "removes.",
+        FindingStatus.AnotherAccountKept =>
+            "Nothing to reclaim, and some of these hold only files that belong to the account Deguffer is "
+            + "running as rather than to you, which it leaves alone.",
         FindingStatus.ReportOnly =>
             "Nothing to reclaim here. Some rows report space only the tool that owns it can free, and say how.",
         FindingStatus.AwaitingSourceFolders =>

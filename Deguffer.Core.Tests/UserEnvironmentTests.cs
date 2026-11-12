@@ -384,8 +384,8 @@ public sealed class UserEnvironmentTests : IDisposable
 
         Assert.Equal(
             ["Common 13.0", "Common 25.0"],
-            UserEnvironment.Current.ReadCurrentUserRegistrySubKeyNames(scratch.Path).Order(StringComparer.Ordinal));
-        Assert.Empty(UserEnvironment.Current.ReadCurrentUserRegistrySubKeyNames(scratch.Path + @"\Missing"));
+            UserHive.CurrentUser.ReadSubKeyNames(scratch.Path).Order(StringComparer.Ordinal));
+        Assert.Empty(UserHive.CurrentUser.ReadSubKeyNames(scratch.Path + @"\Missing"));
     }
 
     /// <summary>
@@ -401,10 +401,10 @@ public sealed class UserEnvironmentTests : IDisposable
         scratch.Key.SetValue("Flags", 15, RegistryValueKind.DWord);
         scratch.Key.SetValue("Digits", "15", RegistryValueKind.String);
 
-        Assert.Equal(15, UserEnvironment.Current.ReadCurrentUserRegistryNumber(scratch.Path, "Flags"));
-        Assert.Null(UserEnvironment.Current.ReadCurrentUserRegistryNumber(scratch.Path, "Digits"));
-        Assert.Null(UserEnvironment.Current.ReadCurrentUserRegistryNumber(scratch.Path, "Missing"));
-        Assert.Null(UserEnvironment.Current.ReadCurrentUserRegistryValue(scratch.Path, "Flags"));
+        Assert.Equal(15, UserHive.CurrentUser.ReadNumber(scratch.Path, "Flags"));
+        Assert.Null(UserHive.CurrentUser.ReadNumber(scratch.Path, "Digits"));
+        Assert.Null(UserHive.CurrentUser.ReadNumber(scratch.Path, "Missing"));
+        Assert.Null(UserHive.CurrentUser.ReadValue(scratch.Path, "Flags"));
     }
 
     /// <summary>
@@ -423,8 +423,8 @@ public sealed class UserEnvironmentTests : IDisposable
 
         Assert.Equal(
             ["GICacheEnableCustomPath_h2093405155", "GICacheFolder_h3275139823"],
-            UserEnvironment.Current.ReadCurrentUserRegistryValueNames(scratch.Path).Order(StringComparer.Ordinal));
-        Assert.Empty(UserEnvironment.Current.ReadCurrentUserRegistryValueNames(scratch.Path + @"\Missing"));
+            UserHive.CurrentUser.ReadValueNames(scratch.Path).Order(StringComparer.Ordinal));
+        Assert.Empty(UserHive.CurrentUser.ReadValueNames(scratch.Path + @"\Missing"));
     }
 
     /// <summary>
@@ -441,10 +441,10 @@ public sealed class UserEnvironmentTests : IDisposable
         scratch.Key.SetValue("Text", "D:", RegistryValueKind.String);
         scratch.Key.SetValue("Number", 1, RegistryValueKind.DWord);
 
-        Assert.Equal([0x44, 0x3A, 0], UserEnvironment.Current.ReadCurrentUserRegistryBytes(scratch.Path, "Bytes"));
-        Assert.Null(UserEnvironment.Current.ReadCurrentUserRegistryBytes(scratch.Path, "Text"));
-        Assert.Null(UserEnvironment.Current.ReadCurrentUserRegistryBytes(scratch.Path, "Number"));
-        Assert.Null(UserEnvironment.Current.ReadCurrentUserRegistryBytes(scratch.Path, "Missing"));
-        Assert.Null(UserEnvironment.Current.ReadCurrentUserRegistryValue(scratch.Path, "Bytes"));
+        Assert.Equal([0x44, 0x3A, 0], UserHive.CurrentUser.ReadBytes(scratch.Path, "Bytes"));
+        Assert.Null(UserHive.CurrentUser.ReadBytes(scratch.Path, "Text"));
+        Assert.Null(UserHive.CurrentUser.ReadBytes(scratch.Path, "Number"));
+        Assert.Null(UserHive.CurrentUser.ReadBytes(scratch.Path, "Missing"));
+        Assert.Null(UserHive.CurrentUser.ReadValue(scratch.Path, "Bytes"));
     }
 }

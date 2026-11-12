@@ -106,6 +106,12 @@ public enum Withholding
     /// <see cref="VirtualMachineStoragePlan.ProofFor"/>).
     /// </summary>
     VirtualMachineStorage,
+
+    /// <summary>
+    /// Something that belongs to the account Deguffer is running as, held back because that account is
+    /// not confirmed as the user signed in to Windows. See <see cref="AnotherAccountPlan"/>.
+    /// </summary>
+    AnotherAccount,
 }
 
 /// <summary>A remark attached to a plan: something the user should know before confirming.</summary>
@@ -355,6 +361,14 @@ public sealed record CleanupPlan
         ProtectedPaths.Any(p => p.Withheld == Withholding.VirtualMachineStorage);
 
     /// <summary>
+    /// Whether this plan leaves alone something that belongs to the account Deguffer is running as,
+    /// because that account is not confirmed as the signed-in user's. The same shape as
+    /// <see cref="HoldsMailStores"/>, for the same reason: "Already clear" would be a claim about a
+    /// location that is full and was never offered.
+    /// </summary>
+    public bool HoldsAnotherAccountsFiles => ProtectedPaths.Any(p => p.Withheld == Withholding.AnotherAccount);
+
+    /// <summary>
     /// Every path this plan would destroy, for display and for tests.
     ///
     /// Selected on <see cref="DeleteStep"/> rather than on one concrete kind, so a directory and a
@@ -509,7 +523,8 @@ public sealed record CleanupPlan
 
     /// <summary>
     /// This plan reduced to what a run owes it when it does not run: nothing to do, and what it leaves
-    /// standing whatever anyone chooses to prove — its kept items and its Outlook data files.
+    /// standing whatever anyone chooses to prove — its kept items, its Outlook data files and what
+    /// belongs to an account that is not the signed-in user's.
     ///
     /// <para>For a row the user did not tick, or whose confirmation was declined. Nothing in it runs,
     /// and those files still have to be shown standing once the run is over, because an over-broad rule
@@ -520,6 +535,9 @@ public sealed record CleanupPlan
     public CleanupPlan ProofOnly() => this with
     {
         Steps = [],
-        ProtectedPaths = [.. ProtectedPaths.Where(p => p.Withheld is Withholding.OnKeepList or Withholding.MailStore)],
+        ProtectedPaths =
+        [
+            .. ProtectedPaths.Where(p => p.Withheld is Withholding.OnKeepList or Withholding.MailStore or Withholding.AnotherAccount),
+        ],
     };
 }

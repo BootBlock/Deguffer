@@ -178,6 +178,21 @@ public sealed class FileHistoryProviderTests : IDisposable
     }
 
     /// <summary>
+    /// FhManagew trims the backups of whichever account runs it, from that account's configuration, on a
+    /// drive outside its profile. The step says so, so a run as another account than the signed-in user
+    /// withholds it rather than trimming that account's history in the user's name.
+    /// </summary>
+    [Fact]
+    public async Task TheCommandActsOnTheBackupsOfTheAccountThatRunsIt()
+    {
+        CreateConfiguredDrive();
+
+        var step = Assert.IsType<RunCommandStep>(Assert.Single((await CreateProvider().PlanAsync()).Steps));
+
+        Assert.True(step.ActsForCallingAccount);
+    }
+
+    /// <summary>
     /// The saved versions are wherever the configuration sends them, so only reading it names the
     /// place the command trims.
     /// </summary>
