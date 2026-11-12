@@ -1,0 +1,13 @@
+# Uses that predate the rule, by file. Lower a line in the change that removes a use. Never add a
+# line or raise one: that is the maintainer's decision, not a way to pass.
+1 Deguffer.App/Shell/SelectionWriter.cs
+1 Deguffer.Core/Execution/DiskCleanupHandlers.cs
+1 Deguffer.Core/Execution/PlanSteps.cs
+1 Deguffer.Core/Execution/TreeRemoval.cs
+1 Deguffer.Core/Exploring/Rendering/MapTileDraws.cs
+1 Deguffer.Core/Scanning/LaneWorkers.cs
+1 Deguffer.Core/Scanning/ListWorkers.cs
+5 Deguffer.Core/Scanning/Mft/MftReadPass.cs
+1 Deguffer.Core/Scanning/WalkWorkers.cs
+1 Deguffer.Core/Scanning/WorkerCrew.cs
+1 Deguffer.Core/Scanning/WorkerThreads.cs

@@ -63,12 +63,20 @@ internal static partial class ProductSources
     /// block comment left out. For a sweep that matches a name, because the comments name what the
     /// code never does in order to explain why.
     /// </summary>
-    public static IEnumerable<string> Code(string source)
+    public static IEnumerable<string> Code(string source) => NumberedCode(source).Select(code => code.Line);
+
+    /// <summary>
+    /// The same lines as <see cref="Code"/>, each with its 1-based line number in
+    /// <paramref name="source"/>, for a sweep whose failure names where a violation is.
+    /// </summary>
+    public static IEnumerable<(int Number, string Line)> NumberedCode(string source)
     {
         var inBlock = false;
+        var number = 0;
 
         foreach (var line in source.Split('\n'))
         {
+            number++;
             var trimmed = line.TrimStart();
 
             if (inBlock)
@@ -81,7 +89,7 @@ internal static partial class ProductSources
             }
             else if (!trimmed.StartsWith("//", StringComparison.Ordinal))
             {
-                yield return line;
+                yield return (number, line);
             }
         }
     }

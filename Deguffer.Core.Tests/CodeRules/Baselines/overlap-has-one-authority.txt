@@ -1,0 +1,13 @@
+# Uses that predate the rule, by file. Lower a line in the change that removes a use. Never add a
+# line or raise one: that is the maintainer's decision, not a way to pass.
+1 Deguffer.Core/Execution/AnotherAccountPlan.cs
+1 Deguffer.Core/Execution/RefusalRecord.cs
+1 Deguffer.Core/Execution/RunChanges.cs
+2 Deguffer.Core/Profiles/ProfileJudgement.cs
+1 Deguffer.Core/Providers/CaptureOneCacheProvider.cs
+1 Deguffer.Core/Providers/JellyfinServerLayout.cs
+1 Deguffer.Core/Providers/PlexServerLayout.cs
+1 Deguffer.Core/Providers/PoetryCacheProvider.cs
+1 Deguffer.Core/Providers/SpotifyStorage.cs
+1 Deguffer.Core/Providers/UnrealDerivedDataCacheProvider.cs
+1 Deguffer.Core/Safety/ProtectionScope.cs

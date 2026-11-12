@@ -1,0 +1,34 @@
+# Product files past 500 lines when the rule came in, at their length then. A file may shrink, and
+# its line is lowered when it does; it never grows. Never add a line: split the file instead.
+590 Deguffer.App/Controls/ExploreLayers.cs
+802 Deguffer.App/Controls/ExploreZoom.cs
+1475 Deguffer.App/ViewModels/CleanViewModel.cs
+933 Deguffer.App/ViewModels/ExploreViewModel.cs
+507 Deguffer.App/Views/CleanPage.xaml.cs
+773 Deguffer.App/Views/ExplorePage.xaml.cs
+535 Deguffer.Benchmark/BenchmarkRequest.cs
+550 Deguffer.Core/Execution/CleanupPlan.cs
+886 Deguffer.Core/Execution/CleanupPlanner.cs
+707 Deguffer.Core/Execution/CleanupStep.cs
+1082 Deguffer.Core/Execution/PlanExecutor.cs
+559 Deguffer.Core/Exploring/Acting/ExploreActionPolicy.cs
+917 Deguffer.Core/Exploring/ExploreTree.cs
+835 Deguffer.Core/Exploring/Layout/TreemapLayout.cs
+551 Deguffer.Core/Providers/AffinityModelCacheProvider.cs
+539 Deguffer.Core/Providers/ClaudeCodeDerivedStateProvider.cs
+960 Deguffer.Core/Providers/CleanupProviderBase.cs
+590 Deguffer.Core/Providers/GpuShaderCacheProvider.cs
+537 Deguffer.Core/Providers/MavenRepositoryProvider.cs
+550 Deguffer.Core/Providers/PlatformIoCacheProvider.cs
+646 Deguffer.Core/Providers/PoetryCacheProvider.cs
+540 Deguffer.Core/Providers/RecycleBinProvider.cs
+557 Deguffer.Core/Providers/SquirrelStagingProvider.cs
+529 Deguffer.Core/Providers/SquirrelSupersededVersionProvider.cs
+562 Deguffer.Core/Providers/TempDirectoryProvider.cs
+516 Deguffer.Core/Providers/UnrealDerivedDataCacheProvider.cs
+659 Deguffer.Core/Providers/VcpkgCacheProvider.cs
+903 Deguffer.Core/Safety/FileInformation.cs
+743 Deguffer.Core/Safety/IUserEnvironment.cs
+622 Deguffer.Core/Safety/LongPath.cs
+593 Deguffer.Core/Scanning/DirectoryScanner.cs
+510 Deguffer.Core/Scanning/Mft/MftReadPass.cs

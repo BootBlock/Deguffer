@@ -1,0 +1,12 @@
+# Uses that predate the rule, by file. Lower a line in the change that removes a use. Never add a
+# line or raise one: that is the maintainer's decision, not a way to pass.
+1 Deguffer.App/ViewModels/ExploreNoteQuestion.cs
+1 Deguffer.App/ViewModels/ExploreShortcutFolders.cs
+2 Deguffer.App/ViewModels/ExploreTypes.cs
+1 Deguffer.App/ViewModels/HealthViewModel.cs
+1 Deguffer.App/ViewModels/StartupViewModel.cs
+2 Deguffer.App/Views/InstalledAppsPage.xaml.cs
+2 Deguffer.App/Views/MemoryPage.xaml.cs
+1 Deguffer.App/Views/StartupPage.xaml.cs
+1 Deguffer.Core/Duplicates/DuplicateSearchRun.cs
+1 Deguffer.Core/Exploring/Acting/ExploreActions.cs

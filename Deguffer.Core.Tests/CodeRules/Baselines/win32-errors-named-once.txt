@@ -1,0 +1,25 @@
+# Uses that predate the rule, by file. Lower a line in the change that removes a use. Never add a
+# line or raise one: that is the maintainer's decision, not a way to pass.
+1 Deguffer.App/Shell/ElevatedRelaunch.cs
+1 Deguffer.Core/Execution/DirectoryDeletion.cs
+1 Deguffer.Core/Execution/WindowsSession.cs
+1 Deguffer.Core/InstalledApps/IUninstallLauncher.cs
+2 Deguffer.Core/InstalledApps/IWindowsInstaller.cs
+1 Deguffer.Core/Memory/OwnProcessCounters.cs
+2 Deguffer.Core/Memory/ProcessCalls.cs
+1 Deguffer.Core/Memory/ProcessTableReader.cs
+1 Deguffer.Core/Memory/ServiceTableReader.cs
+4 Deguffer.Core/Profiles/ProfileCalls.cs
+3 Deguffer.Core/Safety/FileInformation.cs
+2 Deguffer.Core/Safety/HandleDeletion.cs
+1 Deguffer.Core/Safety/LongPath.Canonical.cs
+1 Deguffer.Core/Safety/LongPath.cs
+2 Deguffer.Core/Safety/ProcessProbe.cs
+2 Deguffer.Core/Safety/RefusalReason.cs
+1 Deguffer.Core/Safety/RestartManager.cs
+1 Deguffer.Core/Safety/ToolProcessNative.cs
+1 Deguffer.Core/Safety/VolumeCalls.cs
+1 Deguffer.Core/Scanning/Media/StorageQueries.cs
+1 Deguffer.Core/Scanning/Mft/VolumeMftSource.cs
+4 Deguffer.Core/Scanning/WalkListing.cs
+3 Deguffer.Core/SystemProtection/RestorePointCalls.cs

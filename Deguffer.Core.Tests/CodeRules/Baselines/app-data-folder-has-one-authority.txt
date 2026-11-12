@@ -1,0 +1,17 @@
+# Uses that predate the rule, by file. Lower a line in the change that removes a use. Never add a
+# line or raise one: that is the maintainer's decision, not a way to pass.
+1 Deguffer.Core/Configuration/EmulatorFolderStore.cs
+1 Deguffer.Core/Configuration/KeepStore.cs
+1 Deguffer.Core/Configuration/PreferenceStore.cs
+1 Deguffer.Core/Configuration/SelectionStore.cs
+1 Deguffer.Core/Configuration/SourceRootStore.cs
+1 Deguffer.Core/Configuration/WindowPlacementStore.cs
+1 Deguffer.Core/Diagnostics/CrashLog.cs
+1 Deguffer.Core/Duplicates/ChecksumCache.cs
+1 Deguffer.Core/Execution/RefusalRecord.cs
+1 Deguffer.Core/Execution/Sizes/ProviderSizeStore.cs
+1 Deguffer.Core/Exploring/History/ScanHistoryStore.cs
+1 Deguffer.Core/InstalledApps/RegistryBackups.cs
+1 Deguffer.Core/Providers/ComponentStoreSettlement.cs
+1 Deguffer.Core/Safety/IProcessRunner.cs
+1 Deguffer.Core/Scanning/ScanEstimateCache.cs
