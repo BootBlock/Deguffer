@@ -19,6 +19,7 @@ irreversible data loss.
 | A `Deguffer.App` view-model, or `Deguffer.App.Tests` | *A Deguffer view-model's decisions go to Core* |
 | A bound list | *A live list is updated in place, never rebuilt* (in `Global/`) |
 | A control inside a `ContentDialog` | *A ContentDialog content subscription can miss changes* |
+| A `.xaml` file, a page layout, a dialog or text the app shows | *Deguffer UI design rules* |
 | A test | *Deguffer verify by mutation* |
 | A document under `docs/todo/` | *Deguffer plan docs carry a status banner* |
 | A provider | `docs/cache-locations.md`, which describes every provider that ships |

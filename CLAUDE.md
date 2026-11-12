@@ -70,6 +70,11 @@ A stateless collaborator is a singleton (`ProcessRunner.Default`, `UserEnvironme
 once. A compiled regex, `SearchValues`, comparer or lookup set is `static readonly`. Never re-measure
 what planning measured. A record is a value: never clone one to change what should be mutable state.
 
+## G9: one design system for the UI
+
+A XAML or user-text change follows memory note *Deguffer UI design rules*. Each `Design*Tests`
+baseline only goes down: the fix lowers it in the same change.
+
 ## G7: use sub-agents where they apply
 
 Send fan-out work (gate audits, provider sweeps, API research) to parallel sub-agents with the
@@ -94,8 +99,7 @@ Bash (memory note: *Build the App through PowerShell, not Bash*), with no Deguff
 
 ## Do the whole fix, never the cheap one
 
-Take the root-cause fix, never the approach that is quick or touches fewer files. Fix every instance
-at the level the cause lives: if one provider mishandles a path, fix the seam. Update every call
+Fix every instance at the level the cause lives: if one provider mishandles a path, fix the seam. Update every call
 site, test and document it implies, and delete what it supersedes. Complete is measured against the
 defect, not everything nearby. If the right fix is too large or needs someone else's decision, say
 so and leave the defect documented.
@@ -141,8 +145,6 @@ output, logs, fixtures and screenshots are full of real usernames, machine names
 
 ## Public-repository hygiene
 
-Everything committed is world-readable.
-
 - Stay professional and neutral. No TODO names or blames a person.
 - No internal references: private ticket IDs, internal URLs or hosts, or agent process such as
   worktrees, review mechanics and reasoning. Describe what changed and why.
@@ -161,7 +163,7 @@ Whenever you open, action, comment on or close an issue or pull request, reconci
 set. Memory note: *Reconcile a Deguffer issue's labels*.
 
 Everything you post or edit on GitHub ends with this, worded `actioned`, `opened` or `updated`, and
-`pull request` for a PR. If in doubt, include it. A commit message carries none.
+`pull request` for a PR. A commit message carries none.
 
 ```markdown
 ---
@@ -170,13 +172,13 @@ This issue was actioned by an agent on behalf of @BootBlock.
 
 ## Plan docs carry a status
 
-Every `.md` under `docs/todo/` opens with a `> **Status:**` banner, and a finished one moves to
-`docs/todo/done/` in the same change. Memory note: *Deguffer plan docs carry a status banner*.
+Every `docs/todo/` plan opens with a `> **Status:**` banner and moves to `done/` when finished, in
+the same change. Memory note: *Deguffer plan docs carry a status banner*.
 
 ## Keep this file small
 
-Only rules for every change belong here, each in a few lines. Move detail for one kind of change
-to a memory note a short rule names, and shorten a rule before you add one.
+Only rules for every change belong here. Move detail to a memory note a short rule names, and
+shorten a rule before you add one.
 [AGENTS.md](AGENTS.md) stays a pointer to this file. `AgentGuideBudgetTests` fails past 10,000
 characters here, 1,200 in a section, or 600 in `AGENTS.md`. Never raise a budget without asking the
 maintainer.
