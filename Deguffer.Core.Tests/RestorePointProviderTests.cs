@@ -207,6 +207,71 @@ public sealed class RestorePointProviderTests : IDisposable
         Assert.True(plan.WasNotExamined);
     }
 
+    /// <summary>
+    /// Point-in-time restore's snapshots are shadow copies in the same storage, which pass every test that
+    /// rules a copy out and which Windows does not tell apart from a restore point's. Where they may be on
+    /// the machine, the clean could not prove they survived, so the row stands unexamined and removes nothing.
+    /// </summary>
+    [Fact]
+    public async Task SnapshotsPointInTimeRestoreRecordsOfferNothing()
+    {
+        ThreePoints();
+        _protection.PointInTimeRestore = PointInTimeRestore.Keeping;
+
+        var provider = Provider();
+        var plan = await provider.PlanAsync();
+        await provider.ExecuteAsync(plan);
+
+        Assert.True(await provider.IsPresentAsync());
+        Assert.True(plan.IsEmpty);
+        Assert.True(plan.WasNotExamined);
+        Assert.Empty(_protection.Removed);
+        Assert.Equal(3, _protection.Points.Count);
+        Assert.Contains(plan.Notes, n => n.Message.StartsWith("Point-in-time restore records snapshots on this machine.", StringComparison.Ordinal));
+    }
+
+    /// <summary>A record Windows would not show is no evidence that there is no snapshot, so it stops the row too.</summary>
+    [Fact]
+    public async Task APointInTimeRestoreRecordWindowsWouldNotShowOffersNothing()
+    {
+        ThreePoints();
+        const string why = "Windows would not show what point-in-time restore records of its snapshots (access is denied).";
+        _protection.PointInTimeRestore = PointInTimeRestore.Unread(why);
+
+        var plan = await Provider().PlanAsync();
+
+        Assert.True(plan.IsEmpty);
+        Assert.True(plan.WasNotExamined);
+        Assert.Contains(plan.Notes, n => n.Message.StartsWith(why, StringComparison.Ordinal) && n.Message.Contains("could not prove", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Where Windows has the feature and it records no snapshot, the row is offered, and its note names
+    /// both places the shared limit is set.
+    /// </summary>
+    [Fact]
+    public async Task PointInTimeRestoreWithNoSnapshotLeavesTheRowOfferedAndNamesItsSetting()
+    {
+        ThreePoints();
+        _protection.PointInTimeRestore = PointInTimeRestore.Idle;
+
+        var plan = await Provider().PlanAsync();
+
+        Step(plan);
+        Assert.Contains(plan.Notes, n => n.Message.StartsWith("System Protection's limit is", StringComparison.Ordinal)
+            && n.Message.Contains("Settings, System, Recovery", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AWindowsWithoutPointInTimeRestoreNamesOnlySystemProtection()
+    {
+        ThreePoints();
+
+        var plan = await Provider().PlanAsync();
+
+        Assert.DoesNotContain(plan.Notes, n => n.Message.Contains("Point-in-time", StringComparison.OrdinalIgnoreCase));
+    }
+
     /// <summary>The shadow copies the run must prove standing are exactly those that cannot be a restore point's.</summary>
     [Fact]
     public async Task EveryShadowCopyThatCannotBeARestorePointsIsCarriedToBeProved()
@@ -428,6 +493,27 @@ public sealed class RestorePointProviderTests : IDisposable
         var failure = Assert.Single(result.Verification.Failures);
         Assert.Equal(@"System Protection's limit on C:\", failure.Subject);
         Assert.StartsWith("CHANGED", failure.Detail, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Point-in-time restore sets the same limit whenever it chooses, so where Windows has it a changed limit
+    /// is reported, but not as the clean's failure.
+    /// </summary>
+    [Fact]
+    public async Task ALimitPointInTimeRestoreCouldHaveChangedIsUnverifiedRatherThanFailed()
+    {
+        ThreePoints();
+        _protection.PointInTimeRestore = PointInTimeRestore.Idle;
+        _protection.OnRemoved = _ => _protection.Storage = _protection.Storage with { MaximumBytes = 10 * Gigabyte };
+
+        var provider = Provider();
+        var result = await provider.ExecuteAsync(await provider.PlanAsync());
+
+        Assert.Empty(result.Verification!.Failures);
+        var unverified = Assert.Single(result.Verification.Unverified);
+        Assert.Equal(@"System Protection's limit on C:\", unverified.Subject);
+        Assert.StartsWith("CHANGED", unverified.Detail, StringComparison.Ordinal);
+        Assert.Contains("Point-in-time restore sets this limit too", unverified.Detail, StringComparison.Ordinal);
     }
 
     /// <summary>A listing Windows refuses afterwards proves nothing either way, and says so.</summary>

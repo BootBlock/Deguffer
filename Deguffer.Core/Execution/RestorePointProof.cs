@@ -37,9 +37,15 @@ internal static class RestorePointProof
         {
             var storage = protection.ReadStorage();
 
+            // Asked only once a limit has changed, and then once for every volume.
+            var pointInTime = new Lazy<PointInTimeRestore>(protection.ReadPointInTimeRestore);
+
             foreach (var volume in step.Storage.Where(v => v.Storage.Statement is Statement.Stated))
             {
-                yield return Limit(volume, storage.FirstOrDefault(v => string.Equals(v.Volume, volume.Volume, StringComparison.OrdinalIgnoreCase)));
+                yield return Limit(
+                    volume,
+                    storage.FirstOrDefault(v => string.Equals(v.Volume, volume.Volume, StringComparison.OrdinalIgnoreCase)),
+                    pointInTime);
             }
         }
     }
@@ -95,7 +101,12 @@ internal static class RestorePointProof
         };
     }
 
-    private static VerificationCheck Limit(VolumeShadowStorage before, VolumeShadowStorage? after)
+    /// <summary>
+    /// <para><b>A change point-in-time restore could have made is not proved to be the clean's.</b> That
+    /// feature sets this same limit from its own maximum usage, whenever it chooses, so where Windows has it
+    /// a changed limit is reported as changed without being called a failure.</para>
+    /// </summary>
+    private static VerificationCheck Limit(VolumeShadowStorage before, VolumeShadowStorage? after, Lazy<PointInTimeRestore> pointInTime)
     {
         var subject = $"System Protection's limit on {before.Volume}";
         const string reason = "A setting removing restore points never changes.";
@@ -110,13 +121,21 @@ internal static class RestorePointProof
                 + "shows whether its limit changed.");
         }
 
-        return stated.Storage.MaximumBytes == before.Storage.MaximumBytes
-            ? new VerificationCheck(subject, reason, VerificationOutcome.Survived, $"Still {Described(before.Storage.MaximumBytes)}.")
-            : new VerificationCheck(
+        if (stated.Storage.MaximumBytes == before.Storage.MaximumBytes)
+        {
+            return new VerificationCheck(subject, reason, VerificationOutcome.Survived, $"Still {Described(before.Storage.MaximumBytes)}.");
+        }
+
+        var changed = $"CHANGED — it was {Described(before.Storage.MaximumBytes)} and is now {Described(stated.Storage.MaximumBytes)}.";
+
+        return pointInTime.Value.Installed
+            ? new VerificationCheck(
                 subject,
                 reason,
-                VerificationOutcome.Failed,
-                $"CHANGED — it was {Described(before.Storage.MaximumBytes)} and is now {Described(stated.Storage.MaximumBytes)}.");
+                VerificationOutcome.Unverified,
+                $"{changed} Point-in-time restore sets this limit too, from its own maximum usage, so the change may "
+                + "be its own rather than the clean's.")
+            : new VerificationCheck(subject, reason, VerificationOutcome.Failed, changed);
     }
 
     private static string Described(long? maximum) => maximum is { } bytes ? FreeSpace.Format(bytes) : "no limit";

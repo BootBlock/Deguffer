@@ -25,6 +25,13 @@ namespace Deguffer.Core.Providers;
 /// copy that cannot be System Restore's, and System Protection's limit on each volume are as they were.
 /// A plan that could not list the shadow copies cannot make that promise, so it offers nothing.</para>
 ///
+/// <para><b>Point-in-time restore stops the row.</b> Windows 11 24H2 and later can keep a daily shadow copy
+/// of the whole system volume in the same storage, under the same limit. Windows does not say which shadow
+/// copies are that feature's, or whether System Restore lists them, and they pass every test that would
+/// rule a copy out. Where it records a snapshot, or its record cannot be read, the clean could neither
+/// prove afterwards that they survived nor keep the newest restore point by the right list, so nothing is
+/// offered.</para>
+///
 /// <para><b>System Protection's limit is named, never changed.</b> Lowering it is how Windows keeps less
 /// space for restore points in future, and it is a setting rather than a removal, which Deguffer does
 /// not make for the user (<c>docs/cache-locations.md</c>, "Why not Disk Cleanup or Storage Sense").</para>
@@ -82,7 +89,8 @@ public sealed class RestorePointProvider : CleanupProviderBase
             + "of the drive before Windows removes the oldest.",
         Recommendation = "Removed by System Restore itself, one restore point at a time, always keeping the "
             + "newest. To keep less space for restore points in future, lower the limit in System Protection "
-            + "(Control Panel, System, System Protection, Configure). Deguffer never changes that setting.",
+            + "(Control Panel, System, System Protection, Configure). Where Windows has point-in-time restore, "
+            + "its maximum usage (Settings, System, Recovery) is the same limit. Deguffer never changes either.",
     };
 
     public override void InvalidateCaches()
@@ -123,6 +131,13 @@ public sealed class RestorePointProvider : CleanupProviderBase
             return EmptyPlan(listing.Points.Count == 0
                 ? "System Restore keeps no restore point on this machine."
                 : "System Restore keeps only one restore point here, and the newest is never offered.");
+        }
+
+        var pointInTime = await Task.Run(_protection.ReadPointInTimeRestore, ct).ConfigureAwait(false);
+
+        if (pointInTime.MayKeepSnapshots)
+        {
+            return UnexaminedPlan(SharedWithPointInTimeRestore(pointInTime));
         }
 
         var copies = await Task.Run(_protection.ListShadowCopies, ct).ConfigureAwait(false);
@@ -189,7 +204,7 @@ public sealed class RestorePointProvider : CleanupProviderBase
                     Storage = storage,
                 },
             ],
-            Notes = [.. Notes(removes, newest, others.Count, stated)],
+            Notes = [.. Notes(removes, newest, others.Count, stated, pointInTime.Installed)],
         };
     }
 
@@ -206,11 +221,27 @@ public sealed class RestorePointProvider : CleanupProviderBase
         _ => null,
     };
 
+    /// <summary>Why a machine where point-in-time restore may keep snapshots is offered nothing.</summary>
+    private static string SharedWithPointInTimeRestore(PointInTimeRestore pointInTime)
+    {
+        const string why =
+            "Point-in-time restore keeps its snapshots as shadow copies in the same storage as restore points, and "
+            + "Windows does not say which shadow copies are its own, or whether System Restore lists them as restore "
+            + "points.";
+
+        return pointInTime.Snapshots is PointInTimeSnapshots.Unread
+            ? $"{pointInTime.Failure} {why} Without that record, the clean could not prove afterwards that they "
+                + "survived, so nothing is offered."
+            : $"Point-in-time restore records snapshots on this machine. {why} The clean could not prove afterwards "
+                + "that they survived, so nothing is offered.";
+    }
+
     private static IEnumerable<PlanNote> Notes(
         IReadOnlyList<RestorePoint> removes,
         RestorePoint newest,
         int others,
-        IReadOnlyList<VolumeShadowStorage> stated)
+        IReadOnlyList<VolumeShadowStorage> stated,
+        bool pointInTimeRestore)
     {
         yield return new PlanNote(
             PlanNoteSeverity.Information,
@@ -246,8 +277,12 @@ public sealed class RestorePointProvider : CleanupProviderBase
                 PlanNoteSeverity.Information,
                 "System Protection's limit is "
                 + string.Join(", ", limits.Select(volume => $"{Limit(volume.Storage.MaximumBytes)} on {volume.Volume}"))
-                + ". Lowering it in System Protection keeps less space for restore points in future. Deguffer does "
-                + "not change it.");
+                + ". Lowering it in System Protection keeps less space for restore points in future."
+                + (pointInTimeRestore
+                    ? " Point-in-time restore shares this limit, and where it is on, its maximum usage in Settings, "
+                        + "System, Recovery sets it."
+                    : string.Empty)
+                + " Deguffer does not change it.");
         }
     }
 

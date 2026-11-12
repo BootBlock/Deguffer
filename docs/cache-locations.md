@@ -8787,12 +8787,32 @@ Nothing is offered:
 - **where Windows would not list its shadow copies or state their storage.** Without them the clean
   could not check afterwards that other programs' shadow copies survived.
 - **where there is only one restore point**, because the newest is never offered.
+- **where point-in-time restore records a snapshot, or its record cannot be read.** See below.
+
+### Point-in-time restore
+
+Windows 11 24H2 and later can keep a shadow copy of the whole system drive every day for three days,
+as *point-in-time restore*, in the same storage as restore points and under the same limit. Its
+snapshots hold the whole system, your files included, and from Windows' recovery environment they are
+the only way back to the last few days. Windows does not say which shadow copies are point-in-time
+restore's, or whether System Restore lists them as restore points, and they pass every test that rules
+a shadow copy out as a restore point's. So where the feature records a snapshot, the clean could not
+prove afterwards that they survived, or be sure the restore point it keeps is System Restore's newest,
+and nothing is offered. The row says why.
+
+Deguffer reads what point-in-time restore records of its snapshots from
+`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Setup\Recovery\PITR\Snapshots`, the key its own
+library and log name. Whether the feature is on cannot be read there, because a setting nobody changed
+is not recorded, so the row goes by the snapshots instead. A record Windows would not show stops the
+row as a snapshot would.
 
 ### What is protected
 
 The run checks afterwards, by asking Windows again, that the newest restore point is still listed,
 that every shadow copy that cannot be a restore point's is still listed, and that System Protection's
-limit on each drive is what it was. A shadow copy is ruled out as a restore point's when another
+limit on each drive is what it was. Where Windows has point-in-time restore, which sets the same limit
+from its own maximum usage, a changed limit is reported as changed and not checked, because the change
+may be that feature's rather than the clean's. A shadow copy is ruled out as a restore point's when another
 provider made it, when it is not client-accessible, or when it was made without writers, because only
 Windows' own provider makes the kind System Restore keeps.
 
@@ -8810,7 +8830,9 @@ as before.
 Lowering System Protection's limit is how Windows keeps less space for restore points in future, and
 it is a setting rather than a removal. Deguffer does not change settings on your behalf (see
 [Why not Disk Cleanup or Storage Sense](#why-not-disk-cleanup-or-storage-sense)), so the row names the
-limit on each drive and leaves it to you: Control Panel, System, System Protection, Configure.
+limit on each drive and leaves it to you: Control Panel, System, System Protection, Configure. Where
+Windows has point-in-time restore, its maximum usage in Settings, System, Recovery is the same limit,
+and the row names that too.
 
 ### Why Tier 3
 
