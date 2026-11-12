@@ -3,7 +3,7 @@ namespace Deguffer.Core.Scanning.Mft;
 /// <summary>
 /// How hard a pass over the file table drives the disk and the processor: how many bytes each read
 /// asks for, how many reads are outstanding at once, how many threads parse what arrives, and how
-/// many of the attribute lists kept outside the table are read at once.
+/// many reads of the attribute lists kept outside the table are outstanding at once.
 ///
 /// <para>The values change how fast the table is read, never what is read. Every record in use is
 /// still read and numbered by its place in the table, and a short read still ends the pass rather
@@ -87,8 +87,9 @@ public sealed record TableTuning
     public int ParseThreads { get; }
 
     /// <summary>
-    /// How many of the attribute lists kept outside the table are read at once, at most. Apart from
-    /// <see cref="ReadsInFlight"/> because the reads are the opposite kind: a cluster or two each,
+    /// How many reads of the attribute lists kept outside the table are outstanding at once, at most.
+    /// A read is one list, or several close together (<see cref="MftListReadPlanner"/>). Apart from
+    /// <see cref="ReadsInFlight"/> because the reads are the opposite kind: a few clusters each,
     /// scattered over the volume, where a read of the table is megabytes in one place. A drive
     /// reorders and overlaps small reads only when it is given several at once.
     /// </summary>
