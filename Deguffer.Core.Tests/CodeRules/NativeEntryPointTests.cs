@@ -4,11 +4,10 @@ namespace Deguffer.Core.Tests.CodeRules;
 /// Each Win32 call is declared in one file, so its signature, its flags and the meaning of its errors
 /// have one authority.
 ///
-/// <para>Two declarations of one call drift: Deguffer once held two layouts of
-/// <c>WIN32_FIND_DATAW</c> and two shapes of <c>NtCreateFile</c>. The calls declared in more than one
-/// file when this rule came in are listed in <c>Baselines/native-entry-points.txt</c> with how many
-/// files declare each. The number only falls; a new call, or a new copy, is declared in the native
-/// class for its library and nowhere else.</para>
+/// <para>Two declarations of one call drift apart, in the struct layout or the parameter shape they
+/// give it. The calls already declared in more than one file are listed in
+/// <c>Baselines/native-entry-points.txt</c> with how many files declare each. The number only falls;
+/// a new call, or a new copy, is declared in the native class for its library and nowhere else.</para>
 /// </summary>
 public sealed class NativeEntryPointTests
 {

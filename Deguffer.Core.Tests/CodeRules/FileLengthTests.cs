@@ -5,10 +5,11 @@ namespace Deguffer.Core.Tests.CodeRules;
 /// <summary>
 /// No product file grows past 500 lines, and no file that is already past it grows at all.
 ///
-/// <para>CLAUDE.md's G1 says a 500-line file needs a reason. The files past it when this rule came in
-/// are listed in <c>Baselines/file-length.txt</c> at their length then, each a monolith with an issue
-/// open to split it. A listed file may shrink, and its line is lowered when it does, but it may not
-/// grow back: something new in it is a type of its own, or moves a part out first.
+/// <para>A file that long holds more than one responsibility, and becomes the file every change
+/// collides in (G1). The files already past it are listed in <c>Baselines/file-length.txt</c> at their
+/// length, each a monolith with an issue open to split it. A listed file may shrink, and its line is
+/// lowered when it does, but it may not grow back: something new in it is a type of its own, or
+/// moves a part out first.
 /// <c>ExploreMap.cs</c> is left to <see cref="ExploreMapBudgetTests"/>, which holds its budget.</para>
 /// </summary>
 public sealed class FileLengthTests

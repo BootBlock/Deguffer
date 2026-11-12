@@ -54,6 +54,35 @@ public sealed class CodeRuleSweepTests
         Assert.Equal(0, rule.UsesIn(SourceText.Mask($"// {rule.Proof}\n/* {rule.Proof} */\n", rule.View)));
     }
 
+    /// <summary>
+    /// Code that only resembles a breach: a guard before a selection, a call's result, a member that
+    /// returns a step, a handler, a filtered catch. A pattern that counted these would grow a baseline
+    /// with uses nobody can fix.
+    /// </summary>
+    [Theory]
+    [InlineData("selection-is-not-an-enum-ordinal", "if (reset) OrderBox.SelectedIndex = 0;")]
+    [InlineData("selection-is-not-an-enum-ordinal", "var index = Find(name).SelectedIndex;")]
+    [InlineData("step-kind-is-decided-by-the-step", "private static DeleteStep Template => new(\"x\", \"y\");")]
+    [InlineData("async-void-only-for-events", "private async void OnOpened(object sender, object e)")]
+    [InlineData("catch-says-what-it-expects", "catch (IOException ex) when (Expected(ex))")]
+    public void NoRuleCountsWhatOnlyResemblesItsBreach(string name, string code)
+    {
+        var rule = CodeRuleBook.All.Single(rule => rule.Name == name);
+
+        Assert.Equal(0, rule.UsesIn(SourceText.Mask(code, rule.View)));
+    }
+
+    [Theory]
+    [InlineData("step-kind-is-decided-by-the-step", "RunCommandStep command when command.Scheduled is { } => Run(command),")]
+    [InlineData("step-kind-is-decided-by-the-step", "    DeleteStep => Delete(),")]
+    [InlineData("selection-is-not-an-enum-ordinal", "return (RowOrder)OrderBox.SelectedIndex;")]
+    public void EveryRuleFindsEachFormOfItsBreach(string name, string code)
+    {
+        var rule = CodeRuleBook.All.Single(rule => rule.Name == name);
+
+        Assert.Equal(1, rule.UsesIn(SourceText.Mask(code, rule.View)));
+    }
+
     [Fact]
     public void EveryBaselineBelongsToARule()
     {

@@ -12,8 +12,9 @@ namespace Deguffer.Core.Tests.CodeRules;
 /// <see cref="ProductSources.Code"/> drops whole comment lines only, which misses a trailing comment
 /// and every literal.</para>
 ///
-/// <para>An interpolated string is read as a literal from end to end, holes included. A hole is code,
-/// but none of the rules looks for anything a hole could hold that the surrounding code does not.</para>
+/// <para>An interpolated string is read as a literal from end to end, holes included, and a quote
+/// inside a hole does not end it. A hole is code, but none of the rules looks for anything a hole
+/// could hold that the surrounding code does not.</para>
 /// </summary>
 internal static class SourceText
 {
@@ -102,26 +103,103 @@ internal static class SourceText
             return QuotedEnd(source, quote + 1, '\'');
         }
 
-        var quotes = 0;
-        while (quote + quotes < source.Length && source[quote + quotes] == '"')
+        var prefixText = source.AsSpan(start, prefix);
+        var verbatim = prefixText.Contains('@');
+        var interpolated = prefixText.Contains('$');
+
+        // A raw literal never carries @, so @"""" is a verbatim string holding one quote.
+        if (!verbatim)
         {
-            quotes++;
+            var quotes = 0;
+            while (quote + quotes < source.Length && source[quote + quotes] == '"')
+            {
+                quotes++;
+            }
+
+            // Three or more quotes open a raw literal, closed by the same run; two are an empty string.
+            if (quotes >= 3)
+            {
+                var close = source.IndexOf(new string('"', quotes), quote + quotes, StringComparison.Ordinal);
+                return close < 0 ? source.Length : close + quotes;
+            }
+
+            if (quotes == 2)
+            {
+                return quote + 2;
+            }
         }
 
-        // Three or more quotes open a raw literal, closed by the same run; two are an empty string.
-        if (quotes >= 3)
+        if (interpolated)
         {
-            var close = source.IndexOf(new string('"', quotes), quote + quotes, StringComparison.Ordinal);
-            return close < 0 ? source.Length : close + quotes;
+            return InterpolatedEnd(source, quote + 1, verbatim);
         }
 
-        if (quotes == 2)
-        {
-            return quote + 2;
-        }
-
-        var verbatim = source.AsSpan(start, prefix).Contains('@');
         return verbatim ? VerbatimEnd(source, quote + 1) : QuotedEnd(source, quote + 1, '"');
+    }
+
+    /// <summary>
+    /// An interpolated string ends at its own closing quote, never at a quote inside a hole, so
+    /// <c>$"{F("x")}"</c> is one literal.
+    /// </summary>
+    private static int InterpolatedEnd(string source, int from, bool verbatim)
+    {
+        for (var i = from; i < source.Length; i++)
+        {
+            var c = source[i];
+            var next = i + 1 < source.Length ? source[i + 1] : '\0';
+
+            if (c == '{' && next == '{')
+            {
+                i++;
+            }
+            else if (c == '{')
+            {
+                i = HoleEnd(source, i + 1) - 1;
+            }
+            else if (!verbatim && c == '\\')
+            {
+                i++;
+            }
+            else if (verbatim && c == '"' && next == '"')
+            {
+                i++;
+            }
+            else if (c == '"' || (!verbatim && c == '\n'))
+            {
+                return i + 1;
+            }
+        }
+
+        return source.Length;
+    }
+
+    /// <summary>The index after the brace that closes a hole, stepping over the literals inside it.</summary>
+    private static int HoleEnd(string source, int from)
+    {
+        var depth = 1;
+        var i = from;
+
+        while (i < source.Length)
+        {
+            if (IsLiteralStart(source, i, out var prefix))
+            {
+                i = LiteralEnd(source, i, prefix);
+                continue;
+            }
+
+            if (source[i] == '{')
+            {
+                depth++;
+            }
+            else if (source[i] == '}' && --depth == 0)
+            {
+                return i + 1;
+            }
+
+            i++;
+        }
+
+        return source.Length;
     }
 
     private static int QuotedEnd(string source, int from, char quote)

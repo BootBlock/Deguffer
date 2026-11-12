@@ -73,7 +73,7 @@ internal static class RuleBaseline
 
         foreach (var (file, violations) in byFile.OrderBy(file => file.Key, StringComparer.Ordinal))
         {
-            message.Append(CultureInfo.InvariantCulture, $"\n    {file}: {violations.Count}");
+            message.Append(CultureInfo.InvariantCulture, $"\n    {violations.Count} {file}");
         }
 
         Assert.Fail(message.ToString());

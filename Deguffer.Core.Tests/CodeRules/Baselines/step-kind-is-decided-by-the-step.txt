@@ -3,9 +3,9 @@
 2 Deguffer.Core/Execution/AnotherAccountPlan.cs
 2 Deguffer.Core/Execution/CleanupPlan.cs
 1 Deguffer.Core/Execution/ConfirmationRequirement.cs
-8 Deguffer.Core/Execution/MailStorePlan.cs
-12 Deguffer.Core/Execution/PlanExecutor.cs
-2 Deguffer.Core/Execution/PlanVerifier.cs
+9 Deguffer.Core/Execution/MailStorePlan.cs
+18 Deguffer.Core/Execution/PlanExecutor.cs
+3 Deguffer.Core/Execution/PlanVerifier.cs
 3 Deguffer.Core/Execution/RecordedRefusals.cs
 1 Deguffer.Core/Execution/RefusalCheck.cs
 3 Deguffer.Core/Execution/RunReach.cs

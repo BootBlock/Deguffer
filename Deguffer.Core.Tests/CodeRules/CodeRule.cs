@@ -30,6 +30,4 @@ internal sealed record CodeRule(
 
     public bool HoldsIn(string relativePath) =>
         Projects.Any(project => relativePath.StartsWith(project + "/", StringComparison.Ordinal));
-
-    public override string ToString() => Name;
 }

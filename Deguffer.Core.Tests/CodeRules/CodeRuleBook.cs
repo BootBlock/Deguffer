@@ -21,7 +21,7 @@ internal static class CodeRuleBook
 
     private const string StepTypes =
         "RunCommandStep|DeleteStep|DeleteDirectoryStep|ClearDirectoryStep|DeleteFileStep|DiskCleanupStep"
-        + "|EmptyRecycleBinStep|ReleaseLocalCopiesStep|RemoveProfileStep";
+        + "|EmptyRecycleBinStep|ReleaseLocalCopiesStep|RemoveProfileStep|RemoveRestorePointsStep";
 
     public static IReadOnlyList<CodeRule> All { get; } =
     [
@@ -128,14 +128,14 @@ internal static class CodeRuleBook
             Pattern(@"\bconst\s+(?:int|uint|long|ulong)\s+(?:Error[A-Z]\w*|ERROR_\w+)\s*="),
             SourceView.Code,
             Product,
-            "Use the shared Win32 error constants; never declare an error code locally.",
+            "Use the shared Win32 error constants; never declare an error code locally. If it does not exist yet, create it in this change, or ask.",
             "private const int ErrorAccessDenied = 5;"),
         new(
             "app-data-folder-has-one-authority",
             Pattern(@"\bLocalAppData\s*,\s*""Deguffer"""),
             SourceView.CodeAndLiterals,
             Product,
-            "Ask the one type that names Deguffer's data folder.",
+            "Ask the one type that names Deguffer's data folder. If it does not exist yet, create it in this change, or ask.",
             "Path.Combine(environment.LocalAppData, \"Deguffer\", \"keep.json\")"),
         new(
             "link-refusal-sentence-has-one-authority",
@@ -156,11 +156,11 @@ internal static class CodeRuleBook
             Pattern(@"\b(\w+)\s*\.\s*Holds\s*\(\s*(\w+)\s*\)\s*\|\|\s*\2\s*\.\s*Holds\s*\(\s*\1\s*\)|\bContains\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)\s*\|\|\s*(?:[\w.]+\.)?Contains\s*\(\s*\4\s*,\s*\3\s*\)"),
             SourceView.Code,
             Product,
-            "Ask the shared overlap test rather than writing both directions again.",
+            "Ask the shared overlap test rather than writing both directions again. If it does not exist yet, create it in this change, or ask.",
             "a.Holds(b) || b.Holds(a)"),
         new(
             "step-kind-is-decided-by-the-step",
-            Pattern($@"\b(?:is|as)\s+(?:not\s+)?(?:{StepTypes})\b|\bOfType\s*<\s*(?:{StepTypes})\s*>|\bcase\s+(?:{StepTypes})\b|\b(?:{StepTypes})\s+\w+\s*=>"),
+            Pattern($@"\b(?:is|as)\s+(?:not\s+)?(?:{StepTypes})\b|\bOfType\s*<\s*(?:{StepTypes})\s*>|\bcase\s+(?:{StepTypes})\b|(?<=(?:^|[,{{(])\s*)(?:not\s+)?(?:{StepTypes})(?:\s+\w+)?\s*(?:when\b[^\n]*?)?=>"),
             SourceView.Code,
             CoreAndApp,
             "Ask the step: give CleanupStep a member its kinds override, so a new kind cannot be missed (G1).",
@@ -174,7 +174,7 @@ internal static class CodeRuleBook
             "_ = ViewModel.RefreshAsync();"),
         new(
             "selection-is-not-an-enum-ordinal",
-            Pattern(@"\(\s*\w+\s*\)\s*[\w.]*\.\s*SelectedIndex\b|\bSelectedIndex\s*=\s*\(\s*int\s*\)"),
+            Pattern(@"(?:(?<![\w)\]]\s*)|\breturn\s+)\(\s*[A-Z]\w*\s*\)\s*[\w.]*\.\s*SelectedIndex\b|\bSelectedIndex\s*=\s*\(\s*int\s*\)"),
             SourceView.Code,
             [App],
             "Map the choice through an ordered list in Core, never the enum's ordinal.",
@@ -184,7 +184,7 @@ internal static class CodeRuleBook
             Pattern(@"[!=]=\s*1\s*\?\s*\$?@?"""),
             SourceView.CodeAndLiterals,
             Product,
-            "Use the one counted-noun formatter, so every count reads the same way.",
+            "Use the one counted-noun formatter, so every count reads the same way. If it does not exist yet, create it in this change, or ask.",
             "count == 1 ? \"file\" : \"files\""),
     ];
 

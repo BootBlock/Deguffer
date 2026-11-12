@@ -16,6 +16,8 @@ public sealed class SourceTextTests
     [InlineData("var s = $\"{x} GetFiles(\";")]
     [InlineData("var s = \"\"\"\n GetFiles(\n \"\"\";")]
     [InlineData("var s = $$\"\"\"{{x}} GetFiles(\"\"\";")]
+    [InlineData("var s = $\"{F(\"GetFiles(\")}\";")]
+    [InlineData("var s = $@\"{F(\"GetFiles(\")} \"\" \";")]
     public void CodeBlanksCommentsAndLiterals(string source)
     {
         Assert.DoesNotContain("GetFiles(", SourceText.Mask(source, SourceView.Code), StringComparison.Ordinal);
@@ -27,6 +29,8 @@ public sealed class SourceTextTests
     [InlineData("var q = '\\''; Directory.GetFiles(path);")]
     [InlineData("var e = \"\"; Directory.GetFiles(path);")]
     [InlineData("var s = @\"a\\\"; Directory.GetFiles(path);")]
+    [InlineData("var q = @\"\"\"\"; Directory.GetFiles(path);")]
+    [InlineData("var q = $\"{F(\"x\")}\"; Directory.GetFiles(path);")]
     public void CodeKeepsTheCodeAfterALiteral(string source)
     {
         Assert.Contains("GetFiles(", SourceText.Mask(source, SourceView.Code), StringComparison.Ordinal);

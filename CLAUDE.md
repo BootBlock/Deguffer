@@ -77,8 +77,8 @@ A XAML or user-text change follows memory note *Deguffer UI design rules*. A `De
 
 ## G7: use sub-agents where they apply
 
-Send fan-out work, such as audits and provider sweeps, to parallel sub-agents with the context
-they need. Keep the synthesis and the final judgement in the main thread.
+Send fan-out work (gate audits, provider sweeps, API research) to parallel sub-agents with the
+context they need. Keep the synthesis and the final judgement in the main thread.
 
 ## G8: what "verified" means
 
