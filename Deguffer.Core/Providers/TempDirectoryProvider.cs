@@ -45,8 +45,9 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>Somebody's work is never offered, however old it is.</b> Age and use are the only things
 /// that tell abandoned scratch from live scratch, and neither protects work a program keeps here until
-/// it is saved: an unsaved Arduino IDE sketch may be a week old with the IDE closed, and it is the only
-/// copy. <see cref="TemporaryUserWork"/> recognises those entries by name. The clean leaves them
+/// it is saved: an unsaved Arduino IDE sketch or Krita's autosave of a never-saved image may be a week
+/// old with its program closed, and it is the only copy. <see cref="TemporaryUserWork"/> recognises
+/// those entries, folders and files, by name. The clean leaves them
 /// standing, Explore refuses them, and §5.6 asserts each one survived.</para>
 ///
 /// <para><b>The folder itself stays, and that is not a nicety.</b> Every program on the machine
@@ -220,7 +221,7 @@ public sealed class TempDirectoryProvider : CleanupProviderBase
     /// <para>The tenants' too, because this row plans from what they claim. After a clean only the
     /// rows the run changed are planned again, and a tenant with nothing to take is not among them:
     /// its claims would then describe the folder before the clean, and an entry its tool wrote since
-    /// — a Blender autosave — would be this row's to take on its age.</para>
+    /// — a VS Code update download — would be this row's to take on its age.</para>
     /// </summary>
     public override void InvalidateCaches()
     {

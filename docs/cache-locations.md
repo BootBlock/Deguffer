@@ -9142,20 +9142,29 @@ Two rules decide what comes out, and both of them hold back more than a plain "e
 of a temporary folder — Node's compile cache, a Roslyn session, VS Code's downloaded update, NuGet's
 scratch folder, Visual Studio's symbol cache — the row for that tool offers it, under that tool's rules, and this row leaves it
 out and says which rows have it. So each entry is counted once, and an entry that row would keep is
-not taken here for being a week old: a Roslyn session still in use, or Blender's `quit.blend`. That
+not taken here for being a week old, such as a Roslyn session still in use. That
 holds however the tool names the entry, through a `subst` letter or a second mount of the volume
 included. See
 [Tool caches in temporary folders](#tool-caches-in-temporary-folders) and the three sections after it.
 
 **Work that was never saved is never offered, however old it is.** Some programs keep a document
-here until you save it somewhere else, and that copy is the only one. Arduino IDE 2 keeps every
-sketch made with *File > New* in a folder named `.arduinoIDE-unsaved` followed by random characters,
-and offers it again at its next start. Neither rule above protects one: it may be a week old, and
-the IDE may be closed. So this row recognises those folders by name and never offers them, with the
-age limit at 0 too. They are named on the row, refused in Explore, and checked after every clean to
-prove they are still there. The clean looks again before it empties each folder, so a sketch begun
-after the scan is kept as well. No row offers them: Deguffer cannot tell an abandoned experiment
-from a week of work.
+here until you save it somewhere else, and that copy is the only one:
+
+| Entry | What wrote it |
+| --- | --- |
+| A folder named `.arduinoIDE-unsaved` followed by random characters | Arduino IDE 2, for every sketch made with *File > New*. It offers the sketch again at its next start |
+| `krita-<process>-<document>-autosave.kra`, or the same name starting with `.` | Krita, autosaving an image that was never saved. It offers the file back at its next start, and a crash leaves it here |
+| `quit.blend`, and `<process>_autosave.blend` or `<file>_<process>_autosave.blend` | Blender, for *File › Recover › Last Session* and *File › Recover › Auto Save* |
+| The `Highlights` folder | NVIDIA Highlights, in GeForce Experience and the NVIDIA app. It keeps every clip it captures in a folder per game until you save the ones you want to the Gallery, and removes the oldest itself under the limit you set |
+
+Neither rule above protects one: it may be a week old, and its program may be closed. So this row
+recognises these entries by name and never offers them, with the age limit at 0 too. They are named
+on the row, refused in Explore, and checked after every clean to prove they are still there. The
+clean looks again before it empties each folder, so work begun after the scan is kept as well. No
+row offers them: Deguffer cannot tell an abandoned experiment from a week of work. Krita's `.kra~`
+backups are copies of a saved image, so they are ordinary temporary files. A Highlights folder moved
+out of the temporary folder is not this row's to touch. One moved to another name inside it is not
+recognised, because where NVIDIA records the choice is not known.
 
 The size shown already has all of those taken out of it, so the number the scan reports is what the
 clean will actually take — with the one exception described next.
@@ -9404,15 +9413,15 @@ its background downloader. A folder any running program is working inside is lef
 Both questions are asked again when you press Clean, immediately before each entry is removed, so
 an application you open after the scan keeps its download.
 
-**Blender's recovery files are recognised so that nothing takes them.** `quit.blend` and the
-autosave files sit loose in the temporary folder, and hold work that may never have been saved
-anywhere else. Before this row existed, the *Temporary files* row would take them once they were a
-week old. This row names them, keeps them, and checks afterwards that they are still there.
+**Blender's recovery files are not this row's.** `quit.blend` and the autosave files sit loose
+beside the session folders, and hold work that may never have been saved anywhere else. The
+*Temporary files* row keeps them as work that was never saved: see
+[Windows temporary folders](#windows-temporary-folders).
 
 ### What is protected
 
 The temporary folder itself. The Visual Studio Installer's staging folder, and anything in it that
-is not a staged package. `quit.blend`, and every Blender autosave. Anything an application is using.
+is not a staged package. Anything an application is using.
 Among VS Code's other folders, `vscode-typescript` is the TypeScript server's working folder while
 VS Code runs, and it does not match.
 

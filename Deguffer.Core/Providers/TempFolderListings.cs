@@ -42,8 +42,8 @@ public readonly record struct TempFolderEntry(
 /// <see cref="TempMarkerProviderBase.DiscoverToolRootsAsync"/>.</para>
 ///
 /// <para>The "Temporary files" row lists the same folders again for <see cref="TemporaryUserWork"/>,
-/// directories only, through <see cref="ChildDirectories"/>. It is another row with its own reading,
-/// and does not read here.</para>
+/// keeping only the entries it recognises. It is another row with its own reading, and does not read
+/// here.</para>
 /// </summary>
 public sealed class TempFolderListings
 {
