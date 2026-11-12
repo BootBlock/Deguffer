@@ -203,6 +203,76 @@ public sealed class ExploreRowTests : IDisposable
         Assert.Equal(FreeSpace.Format(300), row.SizeLabel);
     }
 
+    /// <summary>
+    /// #680: nearly every row of a snapshot is unchanged, so a later tree that leaves the entry as
+    /// it was words no label and raises nothing, even under another number. The culture changes in
+    /// between, so a label worded again would read in the new culture's format.
+    /// </summary>
+    [Fact]
+    public void ALaterTreeThatLeavesTheEntryAsItWasWordsNothing()
+    {
+        using var culture = new CultureSwap("en-GB");
+        var (first, node) = Dated(at: 0);
+        var (later, moved) = Dated(at: 1);
+        var row = Row(first, node);
+        var labels = (row.SizeLabel, row.StorageLabel, row.AgeLabel, row.DatesLabel, row.Share);
+        var changed = new List<string?>();
+
+        culture.To("de-DE");
+
+        // The case under test: the entry under another number, and a culture that words it apart.
+        Assert.NotEqual(node, moved);
+        Assert.NotEqual(labels.SizeLabel, Row(later, moved).SizeLabel);
+        Assert.NotEqual(labels.DatesLabel, Row(later, moved).DatesLabel);
+
+        row.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+        row.Describe(later, moved, later.SizeOf(later.RootNode), Now.AddHours(1));
+
+        Assert.Empty(changed);
+        Assert.Equal(moved, row.Node);
+        Assert.Equal(labels, (row.SizeLabel, row.StorageLabel, row.AgeLabel, row.DatesLabel, row.Share));
+    }
+
+    /// <summary>
+    /// An entry that did not change in a folder that grew round it keeps its labels, and only its
+    /// bar is measured again, against the folder's new total.
+    /// </summary>
+    [Fact]
+    public void AFolderThatGrewRoundTheEntryMeasuresOnlyItsBarAgain()
+    {
+        using var culture = new CultureSwap("en-GB");
+        var (first, node, _) = Files(MiB(3) / 2, MiB(3) / 2);
+        var (later, _, _) = Files(MiB(3) / 2, MiB(9) / 2);
+        var row = Row(first, node);
+        var changed = new List<string?>();
+
+        culture.To("de-DE");
+        row.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+        row.Describe(later, node, later.SizeOf(later.RootNode), Now);
+
+        Assert.Equal([nameof(ExploreRow.Share)], changed);
+        Assert.Equal(25, row.Share);
+    }
+
+    /// <summary>
+    /// The age is the one label that moves with the clock, so an entry that did not change is
+    /// worded again once a whole day has turned over since the label was worded.
+    /// </summary>
+    [Fact]
+    public void AnAgeIsWordedAgainOnceItsDayTurnsOver()
+    {
+        var (first, node) = Dated(at: 0);
+        var row = Row(first, node);
+
+        Assert.Equal("Yesterday", row.AgeLabel);
+
+        row.Describe(first, node, first.SizeOf(first.RootNode), Now.AddHours(2));
+        Assert.Equal("Yesterday", row.AgeLabel);
+
+        row.Describe(first, node, first.SizeOf(first.RootNode), Now.AddDays(1));
+        Assert.Equal("2 days ago", row.AgeLabel);
+    }
+
     private ExploreRow Row(ExploreTree tree, int node) =>
         new(tree, node, tree.SizeOf(tree.ParentOf(node)), Now, _explore.Guide);
 
@@ -216,4 +286,23 @@ public sealed class ExploreRowTests : IDisposable
 
         return (builder.Build(ExploreChildOrder.BySize), node, node + 1);
     }
+
+    /// <summary>
+    /// A folder holding one dated file of a size whose label has a decimal in it, with
+    /// <paramref name="at"/> empty files added before it, so the same file can be numbered apart
+    /// in two trees.
+    /// </summary>
+    private static (ExploreTree Tree, int Node) Dated(int at)
+    {
+        var builder = new ExploreTreeBuilder(@"C:\Users\testuser\Downloads");
+        var written = Now.AddDays(-1).AddHours(-1);
+        var children = Enumerable.Range(0, at)
+            .Select(index => ExploreFixture.File($"before{index}.bin", 0))
+            .Append(ExploreFixture.Written("setup.exe", MiB(3) / 2, written));
+        var node = builder.AddChildren(ExploreTreeBuilder.RootNode, [.. children]) + at;
+
+        return (builder.Build(ExploreChildOrder.BySize), node);
+    }
+
+    private static long MiB(long count) => count * 1024 * 1024;
 }
