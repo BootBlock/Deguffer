@@ -307,7 +307,7 @@ group card builds every copy at once. The rest are small allocation wins.
 | #678 | Each hover passes over every rectangle of the drawing. |
 | #677 | The branch colouring divides every child of every folder above a drawn shape. |
 | #680 | The List layout formats every row again at each snapshot of a scan. |
-| #679 | Map names reused by position, and rebuilt after a smaller drawing. Measure with #525 first. |
+| #679 | Map names reused by position, and rebuilt after a smaller drawing. Done: the name controls are kept up to the most a drawing has needed and the rest put away, a name of the same tree keeps the control that named its node, and the SpaceMonger lettering shares one text format per line spacing and measures a name again only when its text or spacing changes. Over 24 zoom steps of a 240-file folder in a maximised window, in the SpaceMonger lettering, sampled UI-thread time in `ExploreLabels.Show` fell from a median of 836 ms to 344 ms over three runs of each Release build, and time making name controls from 254 ms to 93 ms. |
 | #683 | The duplicate search groups by size with a list per distinct size, and a 112-byte `FoundFile`. |
 | #687 | The Hugging Face row lists the whole hub before and after each repository it removes. |
 | #684 | Checksums held as hexadecimal strings for the session. |
@@ -369,7 +369,7 @@ scan leaves about 600 MB committed (#738), and Classic names draw through a seco
 | --- | --- |
 | #691 | DISM's analysis creates the restart-pending key that holds the component store, driver store, Windows.old and Windows Update rows in every elevated pass. `type: bug`, `safety`. Done: a pass reads the restart keys and the servicing processes once, before it starts the analysis, and plans every row the update hold governs against that reading. The clean reads both again, and excuses only the `RebootPending` key last written during one of Deguffer's own DISM calls that began with no restart owed. On one machine, an elevated pass of the six system rows held none of them and both component store rows read the analysis. |
 | #706 | The removal policy's per-file check is linear in its rules: 72 GB allocated judging one drive's duplicates. `safety`. |
-| #692 | Delivery Optimization starts PowerShell in every preview for one WMI number: 1.1-1.9 s against 16-30 ms in process. |
+| #692 | Delivery Optimization starts PowerShell in every preview for one WMI number: 1.1-1.9 s against 16-30 ms in process. Done: the figure is `MSFT_DOCurrentStatus.CacheSizeBytes` read in-process through WMI's COM interfaces (`WindowsDeliveryOptimizationStatus`), so neither a preview nor the measurements around a clean start a process, and the clear is the one PowerShell start left. On one machine, unelevated, it gave the cmdlet's own figure. The first query in a new process took 515-1,052 ms and each later one 5-54 ms, against 1,749 ms for the PowerShell route in the same session. |
 | #695, #694 | `Protect` probes in series (1.2-3.6 s for a Claude Code row), and `IsPresent(WinSxS)` walks breadth-first (8.8 MB per call, 5-7 calls per pass). `safety`. #695 done: a plan's protected paths are probed as many at once as the volume's walks run, through `DiskBoundWork`, and answered in their order (`ProtectedPathCapture`), with the `protect` benchmark route to time it. #755 done: a path the row's own listing returned while it planned is recorded from that listing and asked only what the listing left open (`ListedEntries`), on the driver store, the Claude Code conversations, leftovers and rewind snapshots rows, and the rows that protect through `CacheLevelWalk`'s own overload. The `protect` route's `--listed on` halves the capture of 5,000 empty folders (median 72-75 ms against 145-192 ms). Planned on one machine, the conversations row fell from a median of 778-967 ms to 466-642 ms, the leftovers row moved within its noise, and the driver store row is pnputil's time. The records were identical, path for path, for all 10,918 paths. #694 open. |
 | #707 | Explore's policy read every Claude Code transcript's head and tail on the duplicate search's critical path. Done: the declaration reads each transcript's first lines only, a title is read only for a plan and only for what it offers, and a scope that cannot reach the conversations reads none of them. |
 | #696, #697 | Claude Code transcripts: read again every pass, and read 64 KiB at the tail to use about 15 KiB. #696 waits on a decision. |
@@ -387,10 +387,10 @@ scan leaves about 600 MB committed (#738), and Classic names draw through a seco
 | #704 | `RowGhosts.Leave` lays out the whole tree for each leaving row: 65-260 ms per change. |
 | #705 | `ExploreRow` builds every row's full path at build time: 161-171 ms per rescan of 22,431 rows. |
 | #701 | The Hugging Face row's live-tree query omits `LockFilesListed`: 20,100 probes, 117-221 ms and 40 MB. |
-| #710 | MFT attribute lists are read one cluster at a time. Merging touching clusters halves the reads. |
+| #710 | MFT attribute lists are read one cluster at a time. Merging touching clusters halves the reads. Done: lists in cluster order whose clusters touch or are no more than `MftReadGap` apart are read as one, up to the largest a list can be (`MftListReadPlanner`), and a read of several that fails is made again for each list alone. On one shared machine, warm, with 1 MiB reads and 8 list reads in flight, three runs each: the list reads of C: fell from 33,792 to 13,977 and their stage from a median of 1.57 s to 0.83 s, Explore from 6.26 s to 5.56 s; those of P: from 28,513 to 8,809, 3.58 s to 0.81 s, and Explore from 5.85 s to 2.97 s. |
 | #698 | The Topaz row reads 383 uninstall keys before it probes its folder: 28-42 ms. |
 | #700 | The Capture One row examines its sessions twice per pass (code-read estimate). |
-| #693 | pnputil `/devices` costs about 1 s of kernel processor time per pass. Waits on a decision. |
+| #693 | pnputil `/devices` costs about 1 s of kernel processor time per pass. Done: pnputil lists the packages without `/devices`, and which are in use comes from every device's `DEVPKEY_Device_DriverInfPath` and `DEVPKEY_Device_ExtendedConfigurationIds`, phantoms included, read in process (`DeviceDrivers`). Where a device does not read, or the store holds an extension package and no device reports its extensions, pnputil is asked again with `/devices`. On one machine, unelevated, the reading took 12-23 ms for 252 devices and named the same 31 packages in use as pnputil, 3 of them extensions, and the listing fell from 1,585 ms to 290 ms. |
 | #699 | Windows.old is measured in full (96-172 s elevated) to ask whether it is empty. Waits on a decision. |
 | #702 | The Classic names hold 79-83% of a core while a maximized map pans. Waits on a decision. |
 
@@ -398,7 +398,7 @@ scan leaves about 600 MB committed (#738), and Classic names draw through a seco
 
 | Issue | The decision |
 | --- | --- |
-| #693 | Keep pnputil's `/devices` answer, or read device properties in process and accept that extension INFs need their own source. `safety`. |
+| #693 | Keep pnputil's `/devices` answer, or read device properties in process and accept that extension INFs need their own source. `safety`. Decided: read in process, with `DEVPKEY_Device_ExtendedConfigurationIds` as the extension INFs' source, and pnputil's `/devices` answer wherever that reading cannot vouch for every package. |
 | #696 | Keep transcript readings across passes, keyed by length and write time, against the recorded "read afresh" (#531). |
 | #699 | Ask Disk Cleanup's handler for emptiness without its full measure, or take Windows.old's size from the scanner. `safety`. |
 | #702 | The Classic names' look against their cost: two expressions and an image source per name. |

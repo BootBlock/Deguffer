@@ -23,14 +23,17 @@ internal enum AttributeRole
 /// <summary>How an attribute's six raw bytes are read.</summary>
 internal enum SmartRawFormat
 {
-    /// <summary>A count in the low 32 bits. Some drives pack other figures above them.</summary>
+    /// <summary>A count, as wide as the definition's <see cref="RawWidth"/>.</summary>
     Count,
 
-    /// <summary>Hours in the low 32 bits.</summary>
+    /// <summary>Hours, as wide as the definition's <see cref="RawWidth"/>.</summary>
     Hours,
 
-    /// <summary>Degrees in the low byte. Many drives pack the lowest and highest seen above it.</summary>
+    /// <summary>Degrees in the low byte. Many drives pack the lowest and highest seen above it, each differently.</summary>
     Celsius,
+
+    /// <summary>Degrees in bytes 0-1, the lowest seen in bytes 2-3 and the highest seen in bytes 4-5.</summary>
+    CelsiusRange,
 
     /// <summary>The raw value is not used. The normalised value is a percentage.</summary>
     Percent,
@@ -38,12 +41,43 @@ internal enum SmartRawFormat
     /// <summary>A count of 512-byte sectors.</summary>
     Bytes512,
 
+    /// <summary>A count of the drive's logical sectors, whose size Windows reports.</summary>
+    LogicalSectors,
+
     /// <summary>Manufacturers use these bytes differently, so they are shown as they are and judged by nothing.</summary>
     Opaque,
+
+    /// <summary>The raw value is one of the codes a manufacturer's document lists, each with its own meaning.</summary>
+    Status,
+}
+
+/// <summary>How much of the six raw bytes a count or a number of hours fills.</summary>
+internal enum RawWidth
+{
+    /// <summary>The low 32 bits, because many drives pack other figures above them.</summary>
+    LowFourBytes,
+
+    /// <summary>All six bytes, where the manufacturer's document says the figure fills them.</summary>
+    AllSixBytes,
 }
 
 /// <summary>What the page knows about one attribute.</summary>
-internal sealed record AtaAttributeDefinition(string Name, string Explanation, SmartRawFormat Format, AttributeRole Role);
+internal record AtaAttributeDefinition(
+    string Name,
+    string Explanation,
+    SmartRawFormat Format,
+    AttributeRole Role,
+    RawWidth Width = RawWidth.LowFourBytes);
+
+/// <summary>What one documented status code means, and whether it is a concern.</summary>
+internal sealed record AtaStatusCode(string Reading, string Meaning, AttributeStanding Standing);
+
+/// <summary>
+/// An attribute whose raw value is a status code. A code the document does not list is shown as
+/// reported and judged by nothing, because guessing a meaning would mislead.
+/// </summary>
+internal sealed record AtaStatusDefinition(string Name, string Explanation, FrozenDictionary<ulong, AtaStatusCode> Codes)
+    : AtaAttributeDefinition(Name, Explanation, SmartRawFormat.Status, AttributeRole.Information);
 
 /// <summary>
 /// The common ATA SMART attributes, written from manufacturers' public documentation. An ID absent

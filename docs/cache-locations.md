@@ -8481,7 +8481,7 @@ with a dialog that says the loss is permanent.
 | | |
 | --- | --- |
 | **Location** | Wherever Windows keeps it, ordinarily `C:\Windows\ServiceProfiles\NetworkService\AppData\Local\Microsoft\Windows\DeliveryOptimization`; older Windows builds used `C:\Windows\SoftwareDistribution\DeliveryOptimization`, and a policy can move it to another drive |
-| **Method** | `Delete-DeliveryOptimizationCache -Force`, Windows' own command, sized by `Get-DeliveryOptimizationPerfSnap` |
+| **Method** | `Delete-DeliveryOptimizationCache -Force`, Windows' own command, sized by the `CacheSizeBytes` Delivery Optimization reports through WMI (`MSFT_DOCurrentStatus`) |
 | **Typical size** | Nothing at all on a machine set to download from Microsoft only; up to a fifth of the free space on the drive where peer sharing is on |
 
 ### What it is

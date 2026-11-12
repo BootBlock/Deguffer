@@ -1405,7 +1405,9 @@ clearing it costs at most a download that may never be needed. It deletes no pat
 refuses a listing, and the eviction is `Delete-DeliveryOptimizationCache -Force`, never with
 `-IncludePinnedFiles`. Because nothing Deguffer can read holds that figure, a command step gained
 `IToolMeasurement`, so the executor asks the tool again after the run instead of measuring a folder.
-The search index below is unstarted.
+The figure later moved from the cmdlet to the same `CacheSizeBytes` on WMI's `MSFT_DOCurrentStatus`,
+read in-process, so neither a preview nor the measurements around a clean start Windows PowerShell
+(#692). The search index below is unstarted.
 
 The search index is the more interesting one. **On Windows 11 it is `Windows.db`, not the
 `Windows.edb` every guide still names** — 1.94 GB measured, with a further 237 MB in

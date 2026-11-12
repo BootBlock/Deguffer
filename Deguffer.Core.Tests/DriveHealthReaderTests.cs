@@ -231,6 +231,20 @@ public sealed class DriveHealthReaderTests
     }
 
     [Fact]
+    public async Task AWrittenCountInLogicalSectorsIsSizedByTheSectorSizeTheDriveReports()
+    {
+        _probe
+            .Answer(0, DriveQuestion.Device, DriveBytes.Device(DriveBytes.Sata, "Crucial_CT999MX200SSD1", serial: "SATA0", revision: "MU01"))
+            .Answer(0, DriveQuestion.PredictFailure, DriveBytes.Prediction(false, new AtaEntry(246, 100, Raw: 2048)))
+            .Answer(0, DriveQuestion.Alignment, DriveBytes.Alignment(4096, 4096));
+
+        var report = Assert.Single(await ReadAll());
+
+        Assert.Contains(report.Attributes, attribute => attribute is { Name: "Total data written", Reading: "8.0 MB" });
+        Assert.Single(_probe.Asked, asked => asked.Question == DriveQuestion.Alignment);
+    }
+
+    [Fact]
     public async Task ALinkSpeedTheDriveDoesNotLimitSaysOnlyWhatItKnows()
     {
         Sata(0);

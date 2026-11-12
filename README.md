@@ -425,6 +425,11 @@ stated in plain words, with the numbers the drive holds beside it. A drive's ver
 Failing or Unknown, and it says why. Good means the drive reports no problems. Drives can fail with
 no warning, so keep backups whatever this page says.
 
+A reading whose meaning differs from one maker to another is shown as the drive reports it, unless
+the maker documents it for that model family. Micron and Crucial client SATA drives covered by Micron's
+technical note TN-FD-22 get every attribute the note defines, including the lowest and highest
+temperature recorded and the drive's write amplification.
+
 The page reads nothing until you open it, and it reads again only when you press Refresh, because a
 read can wake a sleeping disk. Everything it sends a drive is a read: it never starts a self-test or
 changes a setting. The NVMe drives it was tried on gave everything without administrator rights. For a SATA drive,

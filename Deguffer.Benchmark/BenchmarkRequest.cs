@@ -187,8 +187,8 @@ internal sealed record BenchmarkRequest(
         --reads-in-flight N    Table routes only. How many reads are outstanding at once, 1 to 32.
         --parse-threads N      Table routes only. How many threads parse records, 1 to 64.
         --list-reads-in-flight N
-                               Table routes only. How many attribute lists kept outside the
-                               table are read at once, 1 to 32.
+                               Table routes only. How many reads of the attribute lists kept
+                               outside the table are outstanding at once, 1 to 32.
         --build <drive>        Race only. The volume whose index is built beside the walk.
                                The default is the folder's own.
         --racer sources|walk   Race only. Whether the folder is searched for build outputs, as

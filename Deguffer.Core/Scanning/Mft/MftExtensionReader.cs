@@ -30,7 +30,7 @@ internal static class MftExtensionReader
     /// How many more extension records the table can hold for these records to want, after the
     /// first pass's own.
     /// </param>
-    /// <param name="readsInFlight">How many lists kept outside the table are read at once, at most.</param>
+    /// <param name="readsInFlight">How many reads of the lists kept outside the table are outstanding at once, at most.</param>
     /// <param name="batch">
     /// A buffer of whole records to read a record the first pass never reached into, lent by the
     /// caller so the second pass reuses the first pass's pooled buffer rather than renting another.

@@ -16,20 +16,16 @@ namespace Deguffer.App.Controls;
 ///
 /// <para>The image is drawn again only when the text, its size or its colour changes, or its contents
 /// are lost. It is made again when the map's device is replaced, because an image made on the old
-/// device shows nothing of a write on the new one, and keeps the old device alive.</para>
+/// device shows nothing of a write on the new one, and keeps the old device alive. The text is
+/// measured again only when it or its spacing changes, which is what its natural width depends on: a
+/// name written again unchanged, as most are from one drawing to the next, costs a comparison.</para>
 /// </summary>
 /// <typeparam name="TImage">What the name is drawn into: see <see cref="ILabelCanvas{TImage}"/>.</typeparam>
-internal sealed class ClassicName<TImage>(CompositionDevice device, ILabelCanvas<TImage> canvas)
+internal sealed class ClassicName<TImage>(CompositionDevice device, ClassicFormats formats, ILabelCanvas<TImage> canvas)
     where TImage : class, ICanvasResourceCreatorWithDpi
 {
-    /// <summary>SpaceMonger's type: its own bitmap font is one DirectWrite cannot draw, and this is the outline font Windows ships in its place.</summary>
-    private const string Font = "Microsoft Sans Serif";
-
-    /// <summary>SpaceMonger's 8 point type, in device-independent pixels.</summary>
-    private const float FontSize = 11;
-
-    /// <summary>How far down a line of the type its baseline is, as a fraction of the line's height.</summary>
-    private const float Baseline = 0.8f;
+    /// <summary>The text last measured, at its spacing, and how wide it is, in device-independent pixels, with room to spare.</summary>
+    private (string Text, float Spacing, float Natural)? _measured;
 
     /// <summary>What the image was last drawn with, so it is drawn again only when that changes, or when its contents are lost.</summary>
     private (string Text, float Width, float Height, float Spacing, bool Centred, Color Colour, double Scale)? _drawn;
@@ -72,31 +68,14 @@ internal sealed class ClassicName<TImage>(CompositionDevice device, ILabelCanvas
     private Size Draw(CanvasDevice current, string text, float room, bool centred, Color colour, float spacing, double scale)
     {
         var lines = text.Length == 0 ? 0 : text.Count(c => c == '\n') + 1;
-
-        using var format = new CanvasTextFormat
-        {
-            FontFamily = Font,
-            FontSize = FontSize,
-            WordWrapping = CanvasWordWrapping.NoWrap,
-            LineSpacingMode = CanvasLineSpacingMode.Uniform,
-            LineSpacing = spacing,
-            LineSpacingBaseline = spacing * Baseline,
-        };
-
-        float natural;
-
-        using (var measuring = new CanvasTextLayout(current, text, format, float.MaxValue, float.MaxValue))
-        {
-            natural = (float)Math.Ceiling(measuring.LayoutBounds.Width);
-        }
+        var format = formats.For(spacing);
+        var natural = Measure(current, text, format, spacing);
 
         // Centred in its box where it fits; where it does not, from the box's left, cut off at its
         // right, as SpaceMonger writes a name too long for its box.
         var fits = natural <= room;
         var width = Math.Max(1, fits ? natural : room);
         var height = Math.Max(1, lines * spacing);
-
-        format.HorizontalAlignment = centred && fits ? CanvasHorizontalAlignment.Center : CanvasHorizontalAlignment.Left;
 
         var wanted = (text, width, height, spacing, centred, colour, scale);
 
@@ -114,7 +93,10 @@ internal sealed class ClassicName<TImage>(CompositionDevice device, ILabelCanvas
                 _made = (width, height, scale);
             }
 
-            using var layout = new CanvasTextLayout(current, text, format, width, height);
+            using var layout = new CanvasTextLayout(current, text, format, width, height)
+            {
+                HorizontalAlignment = centred && fits ? CanvasHorizontalAlignment.Center : CanvasHorizontalAlignment.Left,
+            };
             using var session = canvas.Open(Image);
 
             session.TextAntialiasing = CanvasTextAntialiasing.Aliased;
@@ -124,5 +106,21 @@ internal sealed class ClassicName<TImage>(CompositionDevice device, ILabelCanvas
         }
 
         return new Size(width, height);
+    }
+
+    /// <summary>How wide <paramref name="text"/> is in <paramref name="format"/> with no box to fit, as it was last measured where neither has changed.</summary>
+    private float Measure(CanvasDevice current, string text, CanvasTextFormat format, float spacing)
+    {
+        if (_measured is { } measured && measured.Spacing == spacing && string.Equals(measured.Text, text, StringComparison.Ordinal))
+        {
+            return measured.Natural;
+        }
+
+        using var measuring = new CanvasTextLayout(current, text, format, float.MaxValue, float.MaxValue);
+        var natural = (float)Math.Ceiling(measuring.LayoutBounds.Width);
+
+        _measured = (text, spacing, natural);
+
+        return natural;
     }
 }

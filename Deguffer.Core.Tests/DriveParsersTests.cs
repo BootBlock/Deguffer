@@ -215,12 +215,4 @@ public sealed class DriveParsersTests
     [Fact]
     public void AKeySaysNothingOfTheSerial() =>
         Assert.DoesNotContain("TESTSERIAL0001", DriveKey.Of("Model", new DriveSerial("TESTSERIAL0001"), 0).Token, StringComparison.Ordinal);
-
-    [Fact]
-    public void InterfacePathsSplitAtEachTerminator() =>
-        Assert.Equal(["first", "second"], DeviceInterfaces.Split("first\0second\0\0tail".AsSpan()));
-
-    [Fact]
-    public void AnEmptyMultiStringHasNoPaths() =>
-        Assert.Empty(DeviceInterfaces.Split("\0".AsSpan()));
 }
