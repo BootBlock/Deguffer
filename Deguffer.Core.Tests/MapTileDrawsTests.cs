@@ -7,8 +7,9 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// The tiles a moving map wants are drawn on workers and handed to its thread as each finishes, the
-/// most wanted first; a tile no longer wanted is not drawn; and nothing started before a stop, for a
-/// picture that has changed, is ever handed over.
+/// most wanted first; a tile no longer wanted is not drawn; nothing started before a stop, for a
+/// picture that has changed, is ever handed over; and each worker's thread is started once, and ended
+/// when the map is let go.
 /// </summary>
 public sealed class MapTileDrawsTests
 {
@@ -24,6 +25,9 @@ public sealed class MapTileDrawsTests
     private readonly List<(MapTile Tile, byte[] Pixels)> _drawn = [];
 
     private readonly List<(MapTile Tile, CushionQuads Quads, TileColour Ground)> _shaded = [];
+
+    /// <summary>Every worker's thread started, in the order they were, all on the test's own thread.</summary>
+    private readonly List<Thread> _threads = [];
 
     /// <summary>Each tile is handed over painted as the tile paints itself, on the ground asked for.</summary>
     [Fact]
@@ -204,11 +208,121 @@ public sealed class MapTileDrawsTests
         Assert.Equal([keys[0], next], _drawn.Select(drawn => drawn.Tile.Key));
     }
 
+    /// <summary>
+    /// A run of asks, each wanting tiles after the last's were all handed over, starts each worker's
+    /// thread once: the next ask wakes the parked workers rather than starting new threads, which the UI
+    /// thread waited for at every frame of a zoom.
+    /// </summary>
+    [Fact]
+    public void ARunOfAsksStartsEachWorkerOnce()
+    {
+        var picture = Picture(Tree());
+        var draws = Draws(workers: 3);
+        var keys = Keys(level: 4, count: 6);
+
+        for (var ask = 0; ask < 20; ask++)
+        {
+            _drawn.Clear();
+            draws.Want(picture, Tiling, Ground, shade: false, keys);
+            _owner.RunUntil(() => _drawn.Count == keys.Count, $"every tile of ask {ask} to be drawn");
+        }
+
+        Assert.Equal(3, _threads.Count);
+        Assert.All(_threads, thread => Assert.True(thread.IsAlive, "a worker ended between asks"));
+    }
+
+    /// <summary>An ask that wants fewer tiles than there are workers starts only as many as it has tiles for.</summary>
+    [Fact]
+    public void AnAskStartsNoMoreWorkersThanItHasTilesFor()
+    {
+        var draws = Draws(workers: 4);
+
+        draws.Want(Picture(Tree()), Tiling, Ground, shade: false, Keys(level: 4, count: 1));
+        _owner.RunUntil(() => _drawn.Count == 1, "the tile to be drawn");
+
+        Assert.Single(_threads);
+    }
+
+    /// <summary>
+    /// Released, for a map nobody sees, every worker ends, the one drawing a tile once it has finished
+    /// it, and that tile is not handed over. The next ask starts them again and is drawn.
+    /// </summary>
+    [Fact]
+    public void ReleasedEveryWorkerEndsAndTheNextAskStartsThemAgain()
+    {
+        var tree = new GatedTree(Tree());
+        var picture = Picture(tree);
+        var draws = Draws(workers: 2);
+        var keys = Keys(level: 4, count: 4);
+
+        draws.Want(picture, Tiling, Ground, shade: false, keys);
+        _owner.RunUntil(() => _drawn.Count == keys.Count, "every tile to be drawn");
+
+        tree.Close();
+        draws.Want(picture, Tiling, Ground, shade: false, [new MapTileKey(5, 0, 0)]);
+        tree.WaitUntilEntered();
+
+        draws.Release();
+        tree.Open();
+
+        foreach (var thread in _threads)
+        {
+            Assert.True(thread.Join(TimeSpan.FromSeconds(20)), "a worker outlived the release");
+        }
+
+        _owner.RunPending();
+        Assert.Equal(keys.Count, _drawn.Count);
+
+        var after = new MapTileKey(5, 1, 1);
+
+        draws.Want(picture, Tiling, Ground, shade: false, [after]);
+        _owner.RunUntil(() => _drawn.Count > keys.Count, "the tile wanted after the release");
+
+        Assert.Equal(after, _drawn[^1].Tile.Key);
+        Assert.Equal(3, _threads.Count);
+    }
+
+    /// <summary>
+    /// A tile whose layout fails is raised on the owner's thread, where the application's handling of an
+    /// unexpected failure sees it, and the worker that met it goes on to the tiles wanted after it.
+    /// </summary>
+    [Fact]
+    public void AFailedTileIsRaisedOnTheOwnersThreadAndTheWorkerDrawsOn()
+    {
+        var tree = new FailingTree(Tree());
+        var picture = Picture(tree);
+        var draws = Draws(workers: 1);
+
+        tree.Fails = true;
+        draws.Want(picture, Tiling, Ground, shade: false, [new MapTileKey(4, 0, 0)]);
+
+        var failure = Assert.Throws<InvalidOperationException>(() => _owner.RunUntil(() => false, "the failure"));
+        Assert.Equal(FailingTree.Message, failure.Message);
+
+        tree.Fails = false;
+        var after = new MapTileKey(4, 1, 1);
+
+        draws.Want(picture, Tiling, Ground, shade: false, [after]);
+        _owner.RunUntil(() => _drawn.Count > 0, "the tile wanted after the failure");
+
+        Assert.Equal([after], _drawn.Select(drawn => drawn.Tile.Key));
+        Assert.Single(_threads);
+    }
+
     private MapTileDraws Draws(int workers) => new(
         _owner,
         (tile, pixels) => _drawn.Add((tile, pixels[..(int)tile.Bytes])),
         (tile, quads, ground) => _shaded.Add((tile, quads, ground)),
-        workers);
+        workers,
+        Start);
+
+    private void Start(Action work)
+    {
+        var thread = new Thread(work.Invoke) { IsBackground = true, Name = "Test map tiles" };
+
+        _threads.Add(thread);
+        thread.Start();
+    }
 
     private static List<MapTileKey> Keys(int level, int count) =>
         [.. Tiling.Covered(MapViewport.Whole, level, 0.5, 0.5).Take(count)];
@@ -272,6 +386,33 @@ public sealed class MapTileDrawsTests
 
             return tree.ChildrenOf(node);
         }
+
+        public bool IsContainer(int node) => ((ISizedTree)tree).IsContainer(node);
+
+        public int ParentOf(int node) => tree.ParentOf(node);
+    }
+
+    /// <summary>A tree whose root's children cannot be read while it fails, as a defect in a layout would.</summary>
+    private sealed class FailingTree(ExploreTree tree) : ISizedTree
+    {
+        public const string Message = "The layout failed.";
+
+        private volatile bool _fails;
+
+        public bool Fails
+        {
+            get => _fails;
+            set => _fails = value;
+        }
+
+        public int RootNode => tree.RootNode;
+
+        public ExploreChildOrder ChildOrder => tree.ChildOrder;
+
+        public long SizeOf(int node) => tree.SizeOf(node);
+
+        public ReadOnlySpan<int> ChildrenOf(int node) =>
+            node == tree.RootNode && _fails ? throw new InvalidOperationException(Message) : tree.ChildrenOf(node);
 
         public bool IsContainer(int node) => ((ISizedTree)tree).IsContainer(node);
 
