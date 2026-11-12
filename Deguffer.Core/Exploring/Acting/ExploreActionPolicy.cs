@@ -45,6 +45,13 @@ public sealed class ExploreActionPolicy
     /// </summary>
     internal const int Discovery = 8;
 
+    /// <summary>
+    /// How many paths a caller asks <see cref="MayRemove"/> about at once (G4). Measured rather than
+    /// derived from the processor count: each question waits on the volume manager, and a folder of
+    /// a few thousand entries is answered no faster by more than four.
+    /// </summary>
+    internal const int Asking = 4;
+
     private readonly RegionTable _regions;
     private readonly FolderIndex<DeclaredRoot> _toolRoots;
     private readonly FolderIndex<DeclaredRoot> _probedRoots;
@@ -234,6 +241,10 @@ public sealed class ExploreActionPolicy
     /// deleted, and that repetition is deliberate: a shell that forgot to ask, or asked about the
     /// row it had highlighted rather than the one it went on to delete, would otherwise be the only
     /// thing standing between a size picture and <c>C:\Windows</c>.</para>
+    ///
+    /// <para>Safe to call from several threads at once, which <see cref="Asking"/> relies on.
+    /// Everything it reads was built with the policy and is never changed afterwards, and what it
+    /// remembers of where volumes are mounted is kept in concurrent maps.</para>
     /// </summary>
     public ExploreVerdict MayRemove(string path)
     {
