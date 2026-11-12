@@ -7536,7 +7536,7 @@ incremental compilation caches, so the build output row empties each profile aro
 
 Cargo calls its build layout internal and subject to change, so a profile a later Cargo lays out
 differently again is left alone and named until Deguffer learns it. A folder holding `.cargo-lock`
-and no fingerprints is left alone with its own reason. That is what Cargo leaves in `target` when
+and no fingerprints Deguffer can read is left alone with its own reason. That is what Cargo leaves in `target` when
 `build.build-dir` moves its build folder elsewhere: the finished programs, beside a lock that alone
 does not show the rest is Cargo's. A build folder moved that way is not found by either Rust row.
 

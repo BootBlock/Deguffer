@@ -98,9 +98,9 @@ public sealed class CargoTargetLayout
         + "scripts often keep their own output in the target folder.";
 
     private const string LockOnlyReason =
-        "Holds the lock Cargo takes on a build but none of its build records, as the folder of finished "
-        + "programs does when Cargo's build folder is moved elsewhere. The lock alone does not show that "
-        + "the rest is Cargo's, so it is left alone.";
+        "Holds the lock Cargo takes on a build but no build records that could be read, as the folder of "
+        + "finished programs does when Cargo's build folder is moved elsewhere. The lock alone does not "
+        + "show that the rest is Cargo's, so it is left alone.";
 
     private const string TooDeepReason =
         "A target folder nested deeper than Deguffer looks, so nothing inside it was examined.";
@@ -128,7 +128,7 @@ public sealed class CargoTargetLayout
         /// <summary>No <c>.cargo-lock</c>.</summary>
         None,
 
-        /// <summary>A <c>.cargo-lock</c> beside no fingerprints of either layout.</summary>
+        /// <summary>A <c>.cargo-lock</c> beside no fingerprints of either layout that could be read.</summary>
         LockOnly,
 
         /// <summary>A <c>.cargo-lock</c> beside the fingerprints of either layout.</summary>

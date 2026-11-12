@@ -60,7 +60,9 @@ public sealed class CargoBuildUnitLayoutTests : IDisposable
 
     /// <summary>
     /// A profile an older and a newer Cargo both built holds both layouts side by side. All of it is
-    /// Cargo's, so it is one profile, offered once, and nothing inside it is named as left alone.
+    /// Cargo's, so it is one profile, offered once, and nothing inside it is named as left alone. Its
+    /// <c>.fingerprint</c> recognises it before its build units are read, so this guards against the
+    /// build units ever being taken as a part of their own rather than proving their recognition.
     /// </summary>
     [Fact]
     public async Task AProfileHoldingBothLayoutsIsOfferedOnce()
@@ -75,6 +77,24 @@ public sealed class CargoBuildUnitLayoutTests : IDisposable
             [Path.Combine(target, "debug"), profile],
             plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
         Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path.StartsWith(profile, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Build units Windows will not list are not evidence, so a profile that would be recognised by
+    /// them alone is left alone rather than offered on a reading nobody made.
+    /// </summary>
+    [Fact]
+    public async Task BuildUnitsThatCannotBeListedAreNotEvidence()
+    {
+        var target = _cargo.CargoProject("app");
+        var profile = BuildDirectoryFixture.CreateCargoBuildUnitProfile(target, "release");
+
+        using var denied = new DeniedDirectory(Path.Combine(profile, "build"));
+
+        var plan = await _cargo.BuildOutput().PlanAsync();
+
+        Assert.Equal([Path.Combine(target, "debug")], plan.TargetedPaths);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == profile && p.Reason.StartsWith("Holds the lock Cargo takes", StringComparison.Ordinal));
     }
 
     /// <summary>
