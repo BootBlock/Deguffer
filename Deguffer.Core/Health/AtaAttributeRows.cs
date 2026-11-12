@@ -121,16 +121,20 @@ internal static class AtaAttributeRows
                 && value is >= LowestValid and <= HighestValid
                 && value <= threshold));
 
-    private static (string Reading, string Meaning, AttributeStanding Standing) Reading(AtaAttribute attribute, AtaAttributeDefinition known, uint? logicalSectorBytes) =>
-        known.Format is SmartRawFormat.Opaque
-            ? (Value(attribute), $"{known.Explanation} {UnusedNumbers}".TrimStart(), AttributeStanding.Normal)
-            : known.Role switch
-            {
-                AttributeRole.FailureCount => FailureCount(attribute, known),
-                AttributeRole.RemainingLife => RemainingLife(attribute, known),
-                AttributeRole.Temperature => (Temperature(attribute, known.Format), known.Explanation, AttributeStanding.Normal),
-                _ => (Decoded(attribute, known, logicalSectorBytes), known.Explanation, AttributeStanding.Normal),
-            };
+    private static (string Reading, string Meaning, AttributeStanding Standing) Reading(AtaAttribute attribute, AtaAttributeDefinition known, uint? logicalSectorBytes) => known switch
+    {
+        AtaStatusDefinition status => Status(attribute, status),
+        { Format: SmartRawFormat.Opaque } => (Value(attribute), $"{known.Explanation} {UnusedNumbers}".TrimStart(), AttributeStanding.Normal),
+        { Role: AttributeRole.FailureCount } => FailureCount(attribute, known),
+        { Role: AttributeRole.RemainingLife } => RemainingLife(attribute, known),
+        { Role: AttributeRole.Temperature } => (Temperature(attribute, known.Format), known.Explanation, AttributeStanding.Normal),
+        _ => (Decoded(attribute, known, logicalSectorBytes), known.Explanation, AttributeStanding.Normal),
+    };
+
+    private static (string, string, AttributeStanding) Status(AtaAttribute attribute, AtaStatusDefinition status) =>
+        status.Codes.TryGetValue(attribute.Raw, out var code)
+            ? (code.Reading, $"{status.Explanation} {code.Meaning}", code.Standing)
+            : (Code(attribute), $"{status.Explanation} The manufacturer's document does not list this code, so Deguffer shows it as reported.", AttributeStanding.Normal);
 
     /// <summary>The count or hours in the raw value, as wide as the definition says the figure is.</summary>
     private static ulong Figure(AtaAttribute attribute, AtaAttributeDefinition known) =>
@@ -180,10 +184,13 @@ internal static class AtaAttributeRows
             ? HealthText.Size((UInt128)attribute.Raw * size)
             : $"{HealthText.Count(attribute.Raw)} sectors",
         SmartRawFormat.Percent => HealthText.Percent(attribute.Value),
+        SmartRawFormat.Status => Code(attribute),
         _ => HealthText.Count(Figure(attribute, known)),
     };
 
     private static string Value(AtaAttribute attribute) => $"Scored {attribute.Value}";
+
+    private static string Code(AtaAttribute attribute) => $"Code 0x{attribute.Raw:X2}";
 
     private static string Key(AtaAttribute attribute) => $"ata-{attribute.Id}";
 
