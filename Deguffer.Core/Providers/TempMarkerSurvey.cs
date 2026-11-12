@@ -221,12 +221,6 @@ public static class TempMarkerSurvey
 
                 _recognised.Add(path);
 
-                if (marker.Keeps)
-                {
-                    _survivors.Add((path, marker.Reason));
-                    continue;
-                }
-
                 // Never followed, never removed: what is on the far side was never classified.
                 if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
                 {

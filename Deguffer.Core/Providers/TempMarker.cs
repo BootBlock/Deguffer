@@ -27,7 +27,7 @@ namespace Deguffer.Core.Providers;
 /// a file. An entry of the other kind with a matching name is not this marker's.
 /// </param>
 /// <param name="Reason">
-/// Why the entry may go, or — for a marker that <see cref="Keeps"/> — why it must not.
+/// Why the entry may go.
 /// </param>
 public sealed record TempMarker(string Tool, Regex Name, TargetKind Kind, string Reason)
 {
@@ -67,13 +67,6 @@ public sealed record TempMarker(string Tool, Regex Name, TargetKind Kind, string
     /// removed: …" at the clean, where the same question is asked again.
     /// </summary>
     public string InUseReason { get; init; } = "the tool that wrote this is still using it";
-
-    /// <summary>
-    /// Whether this marker names something to leave alone rather than to take. Recognised all the
-    /// same, so the row that knows what it is protects it and asserts it survived, and no other row
-    /// takes it for being old.
-    /// </summary>
-    public bool Keeps { get; init; }
 
     /// <summary>Whether <paramref name="name"/>, an entry of <paramref name="isDirectory"/>'s kind, is this marker's.</summary>
     public bool Recognises(string name, bool isDirectory) =>
