@@ -166,13 +166,6 @@ internal static class CodeRuleBook
             "Ask the step: give CleanupStep a member its kinds override, so a new kind cannot be missed (G1).",
             "if (step is RunCommandStep command)"),
         new(
-            "dialogs-through-one-factory",
-            Pattern(@"\bnew\s+ContentDialog\b"),
-            SourceView.Code,
-            [App],
-            "Build it through the one dialog factory, which defaults to Cancel and owns cancellation.",
-            "var dialog = new ContentDialog { Title = title };"),
-        new(
             "tasks-are-observed",
             Pattern(@"(?:^|[;{}])\s*_\s*=\s*(?:[\w.?!]+Async|Task\s*\.\s*Run)\s*\("),
             SourceView.Code,

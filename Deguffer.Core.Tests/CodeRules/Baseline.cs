@@ -1,15 +1,14 @@
 using System.Globalization;
-using System.Text;
 
 namespace Deguffer.Core.Tests.CodeRules;
 
 /// <summary>
-/// The uses of a rule that predate it, one <c>count key</c> line each, where the key is a
-/// repository-relative path or a native entry point. A missing file is an empty baseline.
+/// A code rule's uses that predate it, read from <c>Baselines/&lt;rule&gt;.txt</c>: one <c>count key</c>
+/// line each, where the key is a repository-relative path or a native entry point. A missing file is
+/// an empty baseline. <see cref="RuleBaseline"/> holds the source to it, so it only shrinks.
 ///
-/// <para>A baseline only shrinks. The sweep fails when a use is added and also when one is removed, so
-/// the work that removes a use lowers its line in the same change, and the next change cannot spend
-/// the room it left.</para>
+/// <para>A file rather than a dictionary in code, because a rule such as the plan identity has over a
+/// hundred entries, and the rule book would otherwise break the file-length rule it states.</para>
 /// </summary>
 internal static class Baseline
 {
@@ -42,44 +41,4 @@ internal static class Baseline
 
     public static IEnumerable<string> Names() =>
         Directory.EnumerateFiles(Folder, "*.txt").Select(Path.GetFileNameWithoutExtension).OfType<string>();
-
-    /// <summary>
-    /// What differs between the baseline and the source, written as baseline lines so a removal can
-    /// be copied in. A growth is never fixed by copying it in.
-    /// </summary>
-    public static string Difference(
-        string name,
-        IReadOnlyDictionary<string, int> expected,
-        IReadOnlyDictionary<string, int> found,
-        string instead)
-    {
-        var grew = found.Where(entry => !expected.TryGetValue(entry.Key, out var was) || entry.Value > was).ToList();
-        var shrank = expected.Where(entry => !found.TryGetValue(entry.Key, out var now) || now < entry.Value).ToList();
-        var text = new StringBuilder();
-
-        if (grew.Count > 0)
-        {
-            text.AppendLine(CultureInfo.InvariantCulture, $"Rule \"{name}\" has new uses. {instead}");
-            text.AppendLine("Do not add them to the baseline: that is the maintainer's decision, not a way to pass.");
-
-            foreach (var (key, count) in grew)
-            {
-                text.AppendLine(CultureInfo.InvariantCulture, $"  {key}: {count}, baseline {expected.GetValueOrDefault(key)}");
-            }
-        }
-
-        if (shrank.Count > 0)
-        {
-            text.AppendLine(CultureInfo.InvariantCulture, $"Rule \"{name}\" has fewer uses than its baseline. Lower Baselines/{name}.txt to:");
-
-            foreach (var (key, _) in shrank)
-            {
-                text.AppendLine(found.TryGetValue(key, out var now)
-                    ? string.Create(CultureInfo.InvariantCulture, $"  {now} {key}")
-                    : $"  (remove the line for {key})");
-            }
-        }
-
-        return text.ToString();
-    }
 }

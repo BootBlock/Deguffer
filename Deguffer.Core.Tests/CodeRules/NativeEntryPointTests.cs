@@ -17,26 +17,15 @@ public sealed class NativeEntryPointTests
     [Fact]
     public void NoWin32CallGainsASecondDeclaration()
     {
-        var found = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        var found = ProductSources.Win32Imports()
+            .Select(call => (Name: call.Key, Files: call.Distinct(StringComparer.OrdinalIgnoreCase).ToList()))
+            .Where(call => call.Files.Count > 1)
+            .SelectMany(call => call.Files.Select(file => new RuleViolation(call.Name, 0, $"declared in {file}")));
 
-        foreach (var call in ProductSources.Win32Imports())
-        {
-            var files = call.Distinct(StringComparer.OrdinalIgnoreCase).Count();
-
-            if (files > 1)
-            {
-                found[call.Key] = files;
-            }
-        }
-
-        var expected = Baseline.Read(BaselineName);
-
-        Assert.True(
-            expected.SequenceEqual(found),
-            Baseline.Difference(
-                BaselineName,
-                expected,
-                found,
-                "Call the one declaration that exists, or move the declarations into one native class."));
+        RuleBaseline.Hold(
+            $"{BaselineName}. Call the one declaration that exists, or move the declarations into one native "
+                + $"class. The baseline is Baselines/{BaselineName}.txt.",
+            found,
+            Baseline.Read(BaselineName));
     }
 }

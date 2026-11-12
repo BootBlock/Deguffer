@@ -21,6 +21,13 @@ internal sealed record CodeRule(
 {
     public int UsesIn(string maskedSource) => Pattern.Matches(maskedSource).Count;
 
+    /// <summary>Each use in <paramref name="maskedSource"/>, at its line in the file.</summary>
+    public IEnumerable<RuleViolation> ViolationsIn(string path, string maskedSource) =>
+        Pattern.Matches(maskedSource).Select(match => new RuleViolation(
+            path,
+            maskedSource.AsSpan(0, match.Index).Count('\n') + 1,
+            match.Value.Trim()));
+
     public bool HoldsIn(string relativePath) =>
         Projects.Any(project => relativePath.StartsWith(project + "/", StringComparison.Ordinal));
 

@@ -19,28 +19,12 @@ public sealed class CodeRuleSweepTests
     public void NoRuleGrowsPastItsBaseline(string name)
     {
         var rule = CodeRuleBook.All.Single(rule => rule.Name == name);
-        var found = new SortedDictionary<string, int>(StringComparer.Ordinal);
 
-        foreach (var (path, text) in ProductFiles.Value)
-        {
-            if (!rule.HoldsIn(path))
-            {
-                continue;
-            }
+        var found = ProductFiles.Value
+            .Where(file => rule.HoldsIn(file.Path))
+            .SelectMany(file => rule.ViolationsIn(file.Path, SourceText.Mask(file.Text, rule.View)));
 
-            var uses = rule.UsesIn(SourceText.Mask(text, rule.View));
-
-            if (uses > 0)
-            {
-                found[path] = uses;
-            }
-        }
-
-        var expected = Baseline.Read(name);
-
-        Assert.True(
-            expected.SequenceEqual(found),
-            Baseline.Difference(name, expected, found, rule.Instead));
+        RuleBaseline.Hold($"{name}. {rule.Instead} The baseline is Baselines/{name}.txt.", found, Baseline.Read(name));
     }
 
     /// <summary>
