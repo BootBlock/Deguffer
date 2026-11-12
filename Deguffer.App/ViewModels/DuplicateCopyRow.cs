@@ -48,6 +48,9 @@ public sealed partial class DuplicateCopyRow : ObservableObject
 
     public GroupMarks Group => Owner.Marks;
 
+    /// <summary>Whether the copy is its group's last, whose row closes the group's card.</summary>
+    public bool IsLast => ReferenceEquals(Owner[^1], this);
+
     /// <summary>The start of the path, which another copy's path starts with too.</summary>
     public string Same { get; }
 

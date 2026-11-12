@@ -182,7 +182,7 @@ public sealed class DuplicatesViewModelTests : DuplicatesPageScene
         Assert.Equal(NotifyCollectionChangedAction.Reset, changes[0].Action);
         Assert.All(changes.Skip(1), change => Assert.Equal(NotifyCollectionChangedAction.Add, change.Action));
         Assert.Equal([0, 1, 0, 2], changes.Skip(1).Select(change => change.NewStartingIndex));
-        Assert.Equal(["c.jpg", "a.jpg", "d.jpg", "b.jpg"], page.Groups.Select(row => row.Copies[0].Copy.Name));
+        Assert.Equal(["c.jpg", "a.jpg", "d.jpg", "b.jpg"], page.Groups.Select(row => row[0].Copy.Name));
         Assert.Same(firstShown[0], page.Groups[1]);
         Assert.Equal(page.Marks!.Groups, page.Groups.Select(row => row.Marks));
     });
@@ -199,7 +199,7 @@ public sealed class DuplicatesViewModelTests : DuplicatesPageScene
 
         Assert.Equal(
             [("content.jpg", false), ("name.jpg", true), ("size.jpg", true)],
-            page.Groups.Select(row => (row.Copies[0].Copy.Name, row.HasMayDiffer)));
+            page.Groups.Select(row => (row[0].Copy.Name, row.HasMayDiffer)));
         Assert.All(page.Groups.Where(row => row.HasMayDiffer), row => Assert.Equal(row.Marks.Group.MayDiffer, row.MayDiffer));
     });
 
@@ -257,7 +257,7 @@ public sealed class DuplicatesViewModelTests : DuplicatesPageScene
         page.StopCommand.Execute(null);
         await searching;
 
-        Assert.Equal(["kept.jpg"], page.Groups.Select(row => row.Copies[0].Copy.Name));
+        Assert.Equal(["kept.jpg"], page.Groups.Select(row => row[0].Copy.Name));
         Assert.StartsWith("Stopped.", page.Headline, StringComparison.Ordinal);
         Assert.Equal(DuplicateSearchNotes.Stopped, page.Notes[^1]);
         Assert.False(page.IsSearching);
@@ -285,6 +285,39 @@ public sealed class DuplicatesViewModelTests : DuplicatesPageScene
     });
 
     /// <summary>
+    /// Each group reaches the page's grouped source as the list of its copies, in the group's order,
+    /// so every copy is a row of the list, which realises only the rows on screen, rather than a
+    /// part of one row built whole however many copies the group holds (#689). Only the last copy's
+    /// row closes the group's card.
+    /// </summary>
+    [Fact]
+    public void EachGroupIsTheListOfItsCopiesSoEveryCopyIsARowOfItsOwn() => UiThread.Run(async () =>
+    {
+        var three = DuplicateScene.Group(
+            MatchCriteria.Content,
+            _scene.Copy(Path.Combine(_scene.Folder("Documents"), "beach.jpg")),
+            _scene.Copy(Path.Combine(_scene.Folder("Downloads"), "beach.jpg")),
+            _scene.Copy(Path.Combine(_scene.Folder("Desktop"), "beach.jpg")));
+        var page = PageWithPhotos(Finds(three, _scene.Pair("a.jpg", 2048)));
+
+        await page.SearchCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, page.Groups.Count);
+
+        foreach (var group in page.Groups)
+        {
+            // The shape a grouped CollectionViewSource reads each group as, without a property path.
+            var rows = Assert.IsAssignableFrom<System.Collections.IList>(group).Cast<DuplicateCopyRow>().ToList();
+
+            Assert.Equal(group.Marks.Group.Files, rows.Select(row => row.Copy));
+            Assert.All(rows, row => Assert.Same(group, row.Owner));
+            Assert.Equal(rows.Select((_, at) => at == rows.Count - 1), rows.Select(row => row.IsLast));
+        }
+
+        Assert.Contains(page.Groups, group => group.Count == 3);
+    });
+
+    /// <summary>
     /// Each copy's row shows its own path, cut where Core says it differs from the others', so the
     /// part picked out is that copy's and not another's.
     /// </summary>
@@ -300,7 +333,7 @@ public sealed class DuplicatesViewModelTests : DuplicatesPageScene
 
         await page.SearchCommand.ExecuteAsync(null);
 
-        var copies = Assert.Single(page.Groups).Copies;
+        var copies = Assert.Single(page.Groups);
         var paths = PathDifference.Of([.. group.Files.Select(copy => copy.Path)]);
 
         // The fixture holds three different differences, so a row given another copy's parts shows.
@@ -364,7 +397,7 @@ public sealed class DuplicatesViewModelTests : DuplicatesPageScene
         Assert.Equal(
             [("1", "large.jpg"), ("1", "large.jpg"), ("2", "small.jpg"), ("2", "small.jpg")],
             rows.Select(row => (row[0], Path.GetFileName(row[1]))));
-        Assert.Equal(page.Groups.SelectMany(row => row.Copies).Select(copy => copy.Copy.Path), rows.Select(row => row[1]));
+        Assert.Equal(page.Groups.SelectMany(row => row).Select(copy => copy.Copy.Path), rows.Select(row => row[1]));
         Assert.Equal("Saved 2 groups and 4 copies as results.csv.", page.CsvOutcome);
 
         // A new search's list is not the one saved, so the line about the save goes with the old list.

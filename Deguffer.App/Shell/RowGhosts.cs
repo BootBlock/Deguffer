@@ -118,16 +118,15 @@ internal sealed class RowGhosts
                 return new Stood(at, branchContent, list.ItemTemplate, list.ItemTemplateSelector);
             }
 
-            var content = at;
-
-            if (container.ContentTemplateRoot is FrameworkElement root && VisualTreeHelper.GetParent(root) is not null)
-            {
-                var origin = root.TransformToVisual(container).TransformPoint(default);
-                content = WithMargin(root, new Windows.Foundation.Rect(at.X + origin.X, at.Y + origin.Y, root.ActualWidth, root.ActualHeight));
-            }
-
-            return new Stood(content, null, list.ItemTemplate, list.ItemTemplateSelector);
+            return new Stood(ContentOf(container, at), null, list.ItemTemplate, list.ItemTemplateSelector);
         }
+
+        /// <summary>
+        /// How a group heading standing at <paramref name="at"/> is drawn: by the template its list's
+        /// group style gave it, which is not the list's template for a row.
+        /// </summary>
+        public static Stood Of(ListViewBaseHeaderItem heading, Windows.Foundation.Rect at) =>
+            new(ContentOf(heading, at), null, heading.ContentTemplate, heading.ContentTemplateSelector);
 
         /// <summary>
         /// How <paramref name="root"/>, a template's root standing at <paramref name="at"/>, is drawn
@@ -135,6 +134,19 @@ internal sealed class RowGhosts
         /// </summary>
         public static Stood Of(FrameworkElement root, Windows.Foundation.Rect at, object? template) =>
             new(WithMargin(root, at), null, template as DataTemplate, template as DataTemplateSelector);
+
+        /// <summary>Where the content of <paramref name="container"/>, standing at <paramref name="at"/>, stood.</summary>
+        private static Windows.Foundation.Rect ContentOf(ContentControl container, Windows.Foundation.Rect at)
+        {
+            if (container.ContentTemplateRoot is not FrameworkElement root || VisualTreeHelper.GetParent(root) is null)
+            {
+                return at;
+            }
+
+            var origin = root.TransformToVisual(container).TransformPoint(default);
+
+            return WithMargin(root, new Windows.Foundation.Rect(at.X + origin.X, at.Y + origin.Y, root.ActualWidth, root.ActualHeight));
+        }
 
         /// <summary>
         /// Where a template's root stood, with its margin. The ghost draws the template again, margin

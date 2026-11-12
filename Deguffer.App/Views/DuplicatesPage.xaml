@@ -14,6 +14,8 @@
         <controls:WidthGroup x:Key="ModifiedWidths" />
         <controls:WidthGroup x:Key="SizeWidths" />
 
+        <CollectionViewSource x:Key="GroupedCopies" IsSourceGrouped="True" />
+
         <!-- What happens to a copy, on the tier chip's shape: marked in the critical colour, because
              a marked copy is what a removal takes, and staying in the success colour. The words say
              it, so the colour only reinforces them (§6.5). -->
@@ -41,81 +43,95 @@
              without colour; then whether it is marked or stays, what kind of copy it is, its time
              and size. A marked copy's row is tinted as well as labelled. Under it, why it may not be
              marked or kept, and why a mark was refused or what a removal did, as text rather than a
-             tooltip, so pointer, keyboard and screen reader all reach it. -->
+             tooltip, so pointer, keyboard and screen reader all reach it. Each copy is a row of the
+             list, drawing its piece of its group's card: the sides, and under the last copy the
+             bottom edge (CardRows). -->
         <DataTemplate x:Key="CopyTemplate" x:DataType="vm:DuplicateCopyRow">
-            <Grid AutomationProperties.Name="{x:Bind Description, Mode=OneWay}">
-                <Border Background="{ThemeResource SystemFillColorCriticalBackgroundBrush}" CornerRadius="4"
-                        Visibility="{x:Bind IsMarked, Mode=OneWay}" />
+            <Border Background="{ThemeResource LayerFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="{x:Bind controls:CardRows.Sides(IsLast)}"
+                    CornerRadius="{x:Bind controls:CardRows.Corners(IsLast)}"
+                    Padding="{x:Bind controls:CardRows.Inside(IsLast)}"
+                    AutomationProperties.Name="{x:Bind Description, Mode=OneWay}">
+                <Grid>
+                    <Border Background="{ThemeResource SystemFillColorCriticalBackgroundBrush}" CornerRadius="4"
+                            Visibility="{x:Bind IsMarked, Mode=OneWay}" />
 
-                <Grid Padding="8,4,12,4" ColumnSpacing="12" ColumnDefinitions="Auto,*,Auto,Auto,Auto" RowDefinitions="Auto,Auto,Auto">
-                    <!-- The check box shows the copy's mark as Core holds it, and asks Core to change
-                         it: a refused mark never shows as made. -->
-                    <CheckBox MinWidth="0" Padding="0" VerticalAlignment="Center"
-                              IsChecked="{x:Bind IsMarked, Mode=OneWay}"
-                              Command="{x:Bind ToggleCommand}"
-                              AutomationProperties.Name="{x:Bind MarkName}"
-                              AutomationProperties.HelpText="{x:Bind Description, Mode=OneWay}" />
+                    <Grid Padding="8,4,12,4" ColumnSpacing="12" ColumnDefinitions="Auto,*,Auto,Auto,Auto" RowDefinitions="Auto,Auto,Auto">
+                        <!-- The check box shows the copy's mark as Core holds it, and asks Core to change
+                             it: a refused mark never shows as made. -->
+                        <CheckBox MinWidth="0" Padding="0" VerticalAlignment="Center"
+                                  IsChecked="{x:Bind IsMarked, Mode=OneWay}"
+                                  Command="{x:Bind ToggleCommand}"
+                                  AutomationProperties.Name="{x:Bind MarkName}"
+                                  AutomationProperties.HelpText="{x:Bind Description, Mode=OneWay}" />
 
-                    <TextBlock Grid.Column="1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" IsTextSelectionEnabled="True"
-                               ToolTipService.ToolTip="{x:Bind Copy.Path}">
-                        <Run Text="{x:Bind Same}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" /><Run Text="{x:Bind Differs}" FontWeight="SemiBold"
-                             TextDecorations="Underline"
-                             Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" /><Run Text="{x:Bind SameEnd}" />
-                    </TextBlock>
+                        <TextBlock Grid.Column="1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" IsTextSelectionEnabled="True"
+                                   ToolTipService.ToolTip="{x:Bind Copy.Path}">
+                            <Run Text="{x:Bind Same}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" /><Run Text="{x:Bind Differs}" FontWeight="SemiBold"
+                                 TextDecorations="Underline"
+                                 Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" /><Run Text="{x:Bind SameEnd}" />
+                        </TextBlock>
 
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                        <ContentControl Content="Marked" Style="{StaticResource MarkedChip}"
-                                        Visibility="{x:Bind IsMarked, Mode=OneWay}"
-                                        ToolTipService.ToolTip="A removal takes this copy, once you confirm the list, and only if its bytes still match a copy that stays."
-                                        AutomationProperties.AccessibilityView="Raw" />
-                        <ContentControl Content="Stays" Style="{StaticResource StaysChip}"
-                                        Visibility="{x:Bind Stays, Mode=OneWay}"
-                                        ToolTipService.ToolTip="Unmarked, so no removal takes this copy."
-                                        AutomationProperties.AccessibilityView="Raw" />
-                        <ContentControl Content="Reference" Style="{StaticResource StandingChip}"
-                                        Visibility="{x:Bind IsReference}"
-                                        ToolTipService.ToolTip="In a reference location: matched, and never marked or removed."
-                                        AutomationProperties.AccessibilityView="Raw" />
-                        <ContentControl Content="Several names" Style="{StaticResource StandingChip}"
-                                        Visibility="{x:Bind HasSeveralNames}"
-                                        ToolTipService.ToolTip="Removing one name of a file with several frees nothing, so none is marked."
-                                        AutomationProperties.AccessibilityView="Raw" />
-                    </StackPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <ContentControl Content="Marked" Style="{StaticResource MarkedChip}"
+                                            Visibility="{x:Bind IsMarked, Mode=OneWay}"
+                                            ToolTipService.ToolTip="A removal takes this copy, once you confirm the list, and only if its bytes still match a copy that stays."
+                                            AutomationProperties.AccessibilityView="Raw" />
+                            <ContentControl Content="Stays" Style="{StaticResource StaysChip}"
+                                            Visibility="{x:Bind Stays, Mode=OneWay}"
+                                            ToolTipService.ToolTip="Unmarked, so no removal takes this copy."
+                                            AutomationProperties.AccessibilityView="Raw" />
+                            <ContentControl Content="Reference" Style="{StaticResource StandingChip}"
+                                            Visibility="{x:Bind IsReference}"
+                                            ToolTipService.ToolTip="In a reference location: matched, and never marked or removed."
+                                            AutomationProperties.AccessibilityView="Raw" />
+                            <ContentControl Content="Several names" Style="{StaticResource StandingChip}"
+                                            Visibility="{x:Bind HasSeveralNames}"
+                                            ToolTipService.ToolTip="Removing one name of a file with several frees nothing, so none is marked."
+                                            AutomationProperties.AccessibilityView="Raw" />
+                        </StackPanel>
 
-                    <Border Grid.Column="3" controls:WidthGroup.Group="{StaticResource ModifiedWidths}">
-                        <TextBlock VerticalAlignment="Center" HorizontalAlignment="Right" Text="{x:Bind Modified}"
-                                   Style="{StaticResource SecondaryText}" TextWrapping="NoWrap"
-                                   AutomationProperties.AccessibilityView="Raw" />
-                    </Border>
-                    <Border Grid.Column="4" MinWidth="64" controls:WidthGroup.Group="{StaticResource SizeWidths}">
-                        <TextBlock VerticalAlignment="Center" HorizontalAlignment="Right" Text="{x:Bind Size}"
-                                   AutomationProperties.AccessibilityView="Raw" />
-                    </Border>
+                        <Border Grid.Column="3" controls:WidthGroup.Group="{StaticResource ModifiedWidths}">
+                            <TextBlock VerticalAlignment="Center" HorizontalAlignment="Right" Text="{x:Bind Modified}"
+                                       Style="{StaticResource SecondaryText}" TextWrapping="NoWrap"
+                                       AutomationProperties.AccessibilityView="Raw" />
+                        </Border>
+                        <Border Grid.Column="4" MinWidth="64" controls:WidthGroup.Group="{StaticResource SizeWidths}">
+                            <TextBlock VerticalAlignment="Center" HorizontalAlignment="Right" Text="{x:Bind Size}"
+                                       AutomationProperties.AccessibilityView="Raw" />
+                        </Border>
 
-                    <Grid Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="4" ColumnSpacing="6" ColumnDefinitions="Auto,*"
-                          Visibility="{x:Bind HasReasons, Mode=OneWay}">
-                        <FontIcon Glyph="&#xE946;" Style="{StaticResource LineGlyph}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        <TextBlock Grid.Column="1" TextWrapping="Wrap" Text="{x:Bind Reasons, Mode=OneWay}"
-                                   Style="{StaticResource SecondaryText}" FontSize="12"
-                                   AutomationProperties.AccessibilityView="Raw" />
-                    </Grid>
-                    <Grid Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="4" ColumnSpacing="6" ColumnDefinitions="Auto,*"
-                          Visibility="{x:Bind HasNote, Mode=OneWay}">
-                        <FontIcon Glyph="&#xE7BA;" Style="{StaticResource LineGlyph}" Foreground="{ThemeResource SystemFillColorCautionBrush}" />
-                        <TextBlock Grid.Column="1" TextWrapping="Wrap" Text="{x:Bind Note, Mode=OneWay}"
-                                   Foreground="{ThemeResource SystemFillColorCautionBrush}"
-                                   AutomationProperties.LiveSetting="Polite" />
+                        <Grid Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="4" ColumnSpacing="6" ColumnDefinitions="Auto,*"
+                              Visibility="{x:Bind HasReasons, Mode=OneWay}">
+                            <FontIcon Glyph="&#xE946;" Style="{StaticResource LineGlyph}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Column="1" TextWrapping="Wrap" Text="{x:Bind Reasons, Mode=OneWay}"
+                                       Style="{StaticResource SecondaryText}" FontSize="12"
+                                       AutomationProperties.AccessibilityView="Raw" />
+                        </Grid>
+                        <Grid Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="4" ColumnSpacing="6" ColumnDefinitions="Auto,*"
+                              Visibility="{x:Bind HasNote, Mode=OneWay}">
+                            <FontIcon Glyph="&#xE7BA;" Style="{StaticResource LineGlyph}" Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                            <TextBlock Grid.Column="1" TextWrapping="Wrap" Text="{x:Bind Note, Mode=OneWay}"
+                                       Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                       AutomationProperties.LiveSetting="Polite" />
+                        </Grid>
                     </Grid>
                 </Grid>
-            </Grid>
+            </Border>
         </DataTemplate>
 
-        <!-- One group, on a card of its own so where one ends and the next begins needs no reading:
-             what kind of file it is and its name, how many copies of what size and what matched
-             them, what its copies that could go occupy, how many are marked, the checksum, the
-             sentences a name, size or time match and a rule carry, then every copy. -->
-        <DataTemplate x:Key="GroupTemplate" x:DataType="vm:DuplicateGroupRow">
-            <Border Style="{StaticResource CardStyle}" Padding="16,14,16,10" Margin="0,0,0,10">
+        <!-- One group's heading, the top of a card its copies' rows go on drawing, so where one group
+             ends and the next begins needs no reading: what kind of file it is and its name, how
+             many copies of what size and what matched them, what its copies that could go occupy,
+             how many are marked, the checksum, and the sentences a name, size or time match and a
+             rule carry. The gap between cards is above each heading, where no row's pointer-over
+             highlight reaches. -->
+        <DataTemplate x:Key="GroupHeading" x:DataType="vm:DuplicateGroupRow">
+            <Border Margin="0,10,0,0" Padding="16,14,16,8"
+                    Background="{ThemeResource LayerFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1,1,1,0" CornerRadius="8,8,0,0">
                 <StackPanel Spacing="8">
                     <Grid ColumnSpacing="14" ColumnDefinitions="Auto,*,Auto"
                           AutomationProperties.Name="{x:Bind Description, Mode=OneWay}">
@@ -172,17 +188,55 @@
                     </Grid>
 
                     <Border Style="{StaticResource Divider}" />
-
-                    <ItemsControl ItemsSource="{x:Bind Copies}" ItemTemplate="{StaticResource CopyTemplate}"
-                                  IsTabStop="False" />
                 </StackPanel>
             </Border>
         </DataTemplate>
 
-        <Style x:Key="GroupContainer" TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
+        <!-- A copy's container draws nothing of its own. The default lays its content inside a
+             rounded backplate inset from the row's edges, which breaks the card's sides into a dashed
+             line from row to row. Focus is the system's own rectangle, drawn round the row. -->
+        <Style x:Key="CopyContainer" TargetType="ListViewItem">
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+            <Setter Property="Margin" Value="0" />
             <Setter Property="Padding" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="UseSystemFocusVisuals" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListViewItem">
+                        <ContentPresenter Control.IsTemplateFocusTarget="True"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          ContentTransitions="{TemplateBinding ContentTransitions}"
+                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Nor does a heading's container, because its template is the card's top.
+             The default draws a divider under the heading and sets a heading-sized font that every
+             text in it would inherit. -->
+        <Style x:Key="GroupHeadingContainer" TargetType="ListViewHeaderItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="IsTabStop" Value="False" />
+            <Setter Property="FontSize" Value="{ThemeResource ControlContentThemeFontSize}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListViewHeaderItem">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          ContentTransitions="{TemplateBinding ContentTransitions}"
+                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Page.Resources>
 
@@ -507,18 +561,25 @@
                        Text="{x:Bind ViewModel.CsvOutcome, Mode=OneWay}" AutomationProperties.LiveSetting="Polite" />
 
             <!-- Groups arrive while the reader reads, each inserted where its space puts it. Keeping
-                 the items in view holds the rows on screen still while one goes in above them. -->
+                 the items in view holds the rows on screen still while one goes in above them.
+                 Every copy is a row of its own under its group's heading, handed over as a grouped
+                 source from code-behind, so the list realises only the copies on screen however
+                 many a group holds. A heading does not stick at the top: it is the top of its card,
+                 and drawn over the rows scrolling under it, it would hide the copies it heads. -->
             <ListView x:Name="GroupsList" Grid.Row="2" SelectionMode="None" Padding="0"
                       Visibility="{x:Bind ViewModel.HasGroups, Mode=OneWay}"
                       AutomationProperties.Name="Duplicate groups"
-                      ItemsSource="{x:Bind ViewModel.Groups}"
-                      ItemTemplate="{StaticResource GroupTemplate}"
-                      ItemContainerStyle="{StaticResource GroupContainer}">
+                      ItemTemplate="{StaticResource CopyTemplate}"
+                      ItemContainerStyle="{StaticResource CopyContainer}">
                 <ListView.ItemsPanel>
                     <ItemsPanelTemplate>
-                        <ItemsStackPanel ItemsUpdatingScrollMode="KeepItemsInView" />
+                        <ItemsStackPanel ItemsUpdatingScrollMode="KeepItemsInView" AreStickyGroupHeadersEnabled="False" />
                     </ItemsPanelTemplate>
                 </ListView.ItemsPanel>
+                <ListView.GroupStyle>
+                    <GroupStyle HeaderTemplate="{StaticResource GroupHeading}"
+                                HeaderContainerStyle="{StaticResource GroupHeadingContainer}" />
+                </ListView.GroupStyle>
             </ListView>
 
             <StackPanel Grid.Row="2" Spacing="12" MaxWidth="460" Margin="0,24,0,0"

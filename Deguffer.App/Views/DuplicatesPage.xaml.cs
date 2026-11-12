@@ -9,6 +9,7 @@ using Deguffer.Core.InstalledApps;
 using Deguffer.Core.Safety;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Navigation;
 
 namespace Deguffer.App.Views;
@@ -59,6 +60,12 @@ public sealed partial class DuplicatesPage : Page
         ViewModel.ReplacedByElevatedInstance += (_, _) => Application.Current.Exit();
 
         InitializeComponent();
+
+        // Handed over here rather than bound in the resources, where an x:Bind has no page to
+        // evaluate against. Each group is the list of its copies, so every copy is a row.
+        var groupedCopies = (CollectionViewSource)Resources["GroupedCopies"];
+        groupedCopies.Source = ViewModel.Groups;
+        GroupsList.ItemsSource = groupedCopies.View;
 
         ListAnimation.Play(LocationsList, SystemMotion.Current);
         ListAnimation.Play(NotesList, SystemMotion.Current);

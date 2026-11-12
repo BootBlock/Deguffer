@@ -175,14 +175,16 @@ internal sealed class ListAnimation
     }
 
     /// <summary>
-    /// Read where every row on screen stands, as drawn: a row part of the way through a glide is
-    /// where the glide has it, so a change during one carries on from there rather than jumping.
+    /// Read where every row and heading on screen stands, as drawn: a row part of the way through a
+    /// glide is where the glide has it, so a change during one carries on from there rather than
+    /// jumping. A row is read by what its container last showed, because the list may already map
+    /// the container to another item; a heading holds its own.
     /// </summary>
     private void Stand()
     {
         var height = _viewport!.ActualHeight;
 
-        foreach (var (container, item) in _shown)
+        foreach (var (container, item) in _shown.Select(shown => (shown.Key, shown.Value)).Concat(_rows.Headings()))
         {
             if (Place(container) is not { } at)
             {
@@ -293,13 +295,13 @@ internal sealed class ListAnimation
         }
     }
 
-    /// <summary>Every row on screen now, and where it stands, from the top down.</summary>
+    /// <summary>Every row and heading on screen now, and where it stands, from the top down.</summary>
     private List<(object Item, UIElement Container, Rect At)> Standing()
     {
         var rows = new List<(object, UIElement, Rect)>();
         var height = _viewport!.ActualHeight;
 
-        foreach (var (container, item) in _rows.Realised())
+        foreach (var (container, item) in _rows.Realised().Concat(_rows.Headings()))
         {
             if (!_released.Contains(container)
                 && Place(container) is { } at

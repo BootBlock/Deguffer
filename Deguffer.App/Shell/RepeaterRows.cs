@@ -91,6 +91,9 @@ internal sealed class RepeaterRows : IListRows
         }
     }
 
+    /// <summary>A repeater lays its items out without headings.</summary>
+    public IEnumerable<(UIElement Container, object Row)> Headings() => [];
+
     /// <summary>A repeater's element is its template's root, so the ghost stands where the element did.</summary>
     public RowGhosts.Stood Draw(UIElement container, Rect at, UIElement viewport) =>
         RowGhosts.Stood.Of((FrameworkElement)container, at, _repeater.ItemTemplate);
