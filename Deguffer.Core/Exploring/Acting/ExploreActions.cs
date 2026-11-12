@@ -60,13 +60,6 @@ public sealed class ExploreActions
     private readonly RunningActions _running;
     private readonly IRecycleBin? _recycleBin;
 
-    /// <summary>
-    /// How many paths <see cref="NoteAsync"/> asks about at once (G4). Measured rather than derived
-    /// from the processor count: each question waits on the volume manager, and a folder of a few
-    /// thousand entries is answered no faster by more than four.
-    /// </summary>
-    private const int Asking = 4;
-
     private PolicyBuild? _current;
 
     /// <param name="build">
@@ -243,7 +236,7 @@ public sealed class ExploreActions
             {
                 Parallel.ForEach(
                     items,
-                    new ParallelOptions { MaxDegreeOfParallelism = Asking, CancellationToken = ct },
+                    new ParallelOptions { MaxDegreeOfParallelism = ExploreActionPolicy.Asking, CancellationToken = ct },
                     item => build!.Ask(item.Path));
 
                 return ExploreRefusalNote.For(items, build!.Ask);
@@ -320,17 +313,27 @@ public sealed class ExploreActions
 
         // Asked again rather than read from what the page was told, because this is the path that
         // deletes, and a volume mounted since an answer was kept has changed what that answer is.
-        var policy = building.Result;
-        var (allowed, _) = ExploreRemover.Partition(items, policy);
-
+        //
         // What the bin cannot take is treated as the policy's refusals are: not asked about, and
         // reported with why. The prompt promises the bin, and a yes to a move that never happens is
-        // the lesson the policy's refusals are kept out of the prompt to avoid teaching. A folder is
-        // answered by a walk of everything inside it, which is why this is off the page's thread, and
-        // it is asked once per removal rather than at each change of selection.
-        IReadOnlyList<ExploreItemOutcome> binRefused = mode == ExploreRemovalMode.RecycleBin && allowed.Count > 0
-            ? await Task.Run(() => ExploreRemover.WhatTheBinCannotTake(allowed, _recycleBin, ct), ct).ConfigureAwait(true)
-            : [];
+        // the lesson the policy's refusals are kept out of the prompt to avoid teaching. It is asked
+        // once per removal rather than at each change of selection.
+        //
+        // Both off the page's thread: each item is a question to the volume manager, and a folder is
+        // answered by the bin with a walk of everything inside it.
+        var policy = building.Result;
+        var (allowed, binRefused) = await Task.Run(
+                () =>
+                {
+                    var (allowed, _) = ExploreRemover.Partition(items, policy, ct);
+                    IReadOnlyList<ExploreItemOutcome> binRefused = mode == ExploreRemovalMode.RecycleBin && allowed.Count > 0
+                        ? ExploreRemover.WhatTheBinCannotTake(allowed, _recycleBin, ct)
+                        : [];
+
+                    return (allowed, binRefused);
+                },
+                ct)
+            .ConfigureAwait(true);
 
         HashSet<string> notGoing = [.. binRefused.Select(refusal => refusal.Path)];
         IReadOnlyList<ExploreItem> going = notGoing.Count == 0 ? allowed : [.. allowed.Where(item => !notGoing.Contains(item.Path))];
