@@ -97,15 +97,18 @@ public sealed class AnotherAccountPlanTests : IDisposable
 
     /// <summary>
     /// A tool's own command works where the plan measured it, and a tool run as this account clears this
-    /// account's cache, so a command measured in the profile is withheld though it names no subject.
+    /// account's cache, so a command measured in the profile is withheld though it names no subject. What
+    /// it measured is proved standing on its existence, so the row says whose files it holds rather than
+    /// reading as already clear.
     /// </summary>
     [Fact]
     public void ACommandWorkingInTheRunningAccountsFoldersIsWithheld()
     {
         _environment.ElevatedAsAnotherAccount();
+        var cache = Holding(_environment.LocalAppData, "npm-cache");
         var command = new RunCommandStep("npm.cmd", "cache clean --force", "Clear npm's cache")
         {
-            MeasuredPaths = [Holding(_environment.LocalAppData, "npm-cache")],
+            MeasuredPaths = [cache],
             WhenCancelled = CancelledCommand.Finishes,
         };
         var machine = new RunCommandStep("dism.exe", "/Online /Cleanup-Image /StartComponentCleanup", "Clean the component store")
@@ -114,7 +117,18 @@ public sealed class AnotherAccountPlanTests : IDisposable
             WhenCancelled = CancelledCommand.Finishes,
         };
 
-        Assert.Equal([machine], Apply(Planning(command, machine)).Steps);
+        var applied = Apply(Planning(command, machine));
+
+        Assert.Equal([machine], applied.Steps);
+        Assert.True(applied.HoldsAnotherAccountsFiles);
+        Assert.True(applied.HasSomethingToProve);
+        var proof = Assert.Single(applied.ProtectedPaths);
+        Assert.Equal(cache, proof.Path);
+        Assert.Equal(PathPresence.Present, proof.PresenceBefore);
+        Assert.False(proof.HeldContentBefore);
+
+        var onlyTheCommand = Apply(Planning(command));
+        Assert.Equal(FindingStatus.AnotherAccountKept, new Finding(new FakeCleanupProvider("test"), IsPresent: true, onlyTheCommand).ToStatus(false));
     }
 
     /// <summary>
@@ -140,7 +154,13 @@ public sealed class AnotherAccountPlanTests : IDisposable
             },
         ];
 
-        Assert.Empty(Apply(Planning(steps)).Steps);
+        var applied = Apply(Planning(steps));
+
+        Assert.Empty(applied.Steps);
+
+        // The release names no path it destroys, and its folder is still what it leaves standing.
+        Assert.Contains(applied.ProtectedPaths, p => p.Path == elsewhere && p.Withheld == Withholding.AnotherAccount);
+        Assert.True(applied.HasSomethingToProve);
     }
 
     /// <summary>

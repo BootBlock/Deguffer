@@ -137,9 +137,10 @@
             <Grid RowDefinitions="Auto,*">
                 <!--
                     Above every page, and never closable: while Deguffer runs as an account that is not
-                    the one signed in to Windows, every page's rows for one account's files are held
-                    back, and a reader who closed this would be left with rows that say so and no reason
-                    why. Opened by the window only when Core has something to say (RunningAccount.Notice).
+                    the one signed in to Windows, the Storage page holds back its rows for one account's
+                    files and the Startup and Installed apps pages list that account's own entries, and a
+                    reader who closed this would be left with no reason why. Opened by the window only
+                    when Core has something to say (RunningAccount.Notice).
                 -->
                 <InfoBar x:Name="AccountNotice"
                          Grid.Row="0"

@@ -221,7 +221,8 @@ public interface IUserEnvironment
     /// elevates to. Their <c>HKEY_CURRENT_USER</c> holds none of the user's settings, so a provider
     /// reading it would look in that account's folders for a cache the user moved elsewhere. Where the
     /// two accounts differ this is the user's hive, under <c>HKEY_USERS</c>, and where Deguffer cannot
-    /// say who is signed in it answers nothing. See <see cref="RunningAccount"/>.</para>
+    /// name that hive, because Windows will not say who is signed in or which hive is theirs, it answers
+    /// nothing. See <see cref="RunningAccount"/>.</para>
     /// </summary>
     IUserHive UserHive { get; }
 

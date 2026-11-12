@@ -81,14 +81,16 @@ public sealed class RunningAccount
             $"Deguffer is running as {Name}, but {SignedIn?.Name} is signed in to Windows. Rows for one "
             + $"account's own files, such as its temporary files, application caches and Recycle Bin, would "
             + $"reach {Name}'s rather than yours, so Deguffer leaves them alone in this window and says so on "
-            + "each row. Rows for what the whole machine shares work as usual. To clean your own files, "
-            + "close this window and open Deguffer again without administrator rights.",
+            + "each row. Rows for what the whole machine shares work as usual. The Startup and Installed apps "
+            + $"pages list {Name}'s own entries for one account, not yours. To clean your own files, close this "
+            + "window and open Deguffer again without administrator rights.",
 
         AccountStanding.Unconfirmed =>
             $"Deguffer is running as {Name}, and Windows would not say who is signed in. Rows for one "
             + "account's own files, such as its temporary files, application caches and Recycle Bin, might "
             + "reach another account's rather than yours, so Deguffer leaves them alone and says so on each "
-            + "row. Rows for what the whole machine shares work as usual.",
+            + "row. Rows for what the whole machine shares work as usual. The Startup and Installed apps pages "
+            + $"list {Name}'s own entries for one account.",
 
         _ => null,
     };

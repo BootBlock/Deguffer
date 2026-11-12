@@ -1,6 +1,7 @@
 using System.Security.Principal;
 using Deguffer.Core.Safety;
 using Deguffer.Testing;
+using Microsoft.Win32;
 
 namespace Deguffer.Core.Tests;
 
@@ -85,6 +86,22 @@ public sealed class RunningAccountTests : IDisposable
         {
             Assert.Contains(expected, folders, StringComparer.OrdinalIgnoreCase);
         }
+    }
+
+    /// <summary>
+    /// The signed-in user's identifier where a name lookup cannot give it, such as a domain account away
+    /// from its domain: their loaded hive names them in its <c>Volatile Environment</c> key. Read from the
+    /// real registry, because the key is Windows' own and this user is signed in.
+    /// </summary>
+    [Fact]
+    public void ASignedInUsersLoadedHiveNamesTheirIdentifier()
+    {
+        using var session = Registry.CurrentUser.OpenSubKey("Volatile Environment")!;
+        var user = (string)session.GetValue("USERNAME")!;
+        var domain = (string)session.GetValue("USERDOMAIN")!;
+
+        Assert.Equal(WindowsIdentity.GetCurrent().User!.Value, UserEnvironment.LoadedHiveOf(user, domain));
+        Assert.Null(UserEnvironment.LoadedHiveOf(user + "-nobody", domain));
     }
 
     /// <summary>

@@ -1,5 +1,7 @@
 using System.Runtime.InteropServices;
+using System.Security;
 using System.Security.Principal;
+using Microsoft.Win32;
 
 namespace Deguffer.Core.Safety;
 
@@ -62,7 +64,7 @@ public sealed partial class UserEnvironment
         // asked only for an account that is not this process's.
         var identifier = string.Equals(name, $@"{Environment.UserDomainName}\{Environment.UserName}", StringComparison.OrdinalIgnoreCase)
             ? WindowsIdentity.GetCurrent().User?.Value
-            : IdentifierOf(name);
+            : IdentifierOf(name) ?? LoadedHiveOf(user, domain);
 
         return new SignedInAccount(name, identifier);
     }
@@ -85,6 +87,52 @@ public sealed partial class UserEnvironment
             // carrying the Win32 error, and the answer is the same: no identifier.
             return null;
         }
+    }
+
+    /// <summary>
+    /// The identifier of the signed-in account whose hive Windows has loaded under <c>HKEY_USERS</c>,
+    /// found by the user and domain its <c>Volatile Environment</c> key records, or null where no hive
+    /// this process may read names them.
+    ///
+    /// <para>For the account a name lookup cannot answer: a domain account away from its domain. Windows
+    /// writes that key into each signed-in user's hive at sign-in and keeps the hive loaded while they
+    /// are signed in, so it answers offline. An administrator may read every loaded hive, and any other
+    /// account only its own.</para>
+    /// </summary>
+    internal static string? LoadedHiveOf(string user, string domain)
+    {
+        foreach (var hive in Registry.Users.GetSubKeyNames())
+        {
+            // Each hive's classes are loaded beside it as <SID>_Classes, and Windows' own service
+            // accounts' hives never belong to somebody signed in.
+            var person = hive.StartsWith("S-1-5-21-", StringComparison.Ordinal)
+                || hive.StartsWith("S-1-12-1-", StringComparison.Ordinal);
+
+            if (!person || hive.EndsWith("_Classes", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            try
+            {
+                using var session = Registry.Users.OpenSubKey($@"{hive}\Volatile Environment");
+
+                if (session?.GetValue("USERNAME") is string named
+                    && session.GetValue("USERDOMAIN") is string inDomain
+                    && string.Equals(named, user, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(inDomain, domain, StringComparison.OrdinalIgnoreCase))
+                {
+                    return hive;
+                }
+            }
+            catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException or IOException)
+            {
+                // Another account's hive, which only an administrator may read, or one being unloaded as
+                // its user signs out. Neither names the signed-in user.
+            }
+        }
+
+        return null;
     }
 
     private static string? QuerySession(int infoClass)

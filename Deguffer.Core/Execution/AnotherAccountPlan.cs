@@ -62,25 +62,50 @@ public sealed class AnotherAccountPlan
         return plan with
         {
             Steps = [.. plan.Steps.Except(withheld)],
-            ProtectedPaths =
-            [
-                .. plan.ProtectedPaths,
-                .. withheld
-                    .SelectMany(step => step.Subjects.Select(path => (Path: path, Marker: (step as RunCommandStep)?.Scheduled?.Marker)))
-                    .Select(subject => new ProtectedPath(
-                        subject.Path,
-                        $"Belongs to {_account.Name}, the account Deguffer is running as, so Deguffer left it alone.",
-                        // Measured during planning, so it was there when the plan was made, and its content
-                        // asked of the disk: the claims CleanupPlan.NarrowedTo makes for a step the user
-                        // declined, for the reasons it gives. The content is what proves a bin standing,
-                        // because a call that empties one leaves its folder in place.
-                        PresenceBefore: PathPresence.Present,
-                        DirectoryContent.IsPresent(subject.Path),
-                        Withheld: Withholding.AnotherAccount,
-                        Marker: subject.Marker)),
-            ],
+            ProtectedPaths = [.. plan.ProtectedPaths, .. withheld.SelectMany(Proofs)],
             Notes = [.. plan.Notes, new PlanNote(PlanNoteSeverity.Warning, WhyWithheld(withheld.Count))],
         };
+    }
+
+    /// <summary>
+    /// What a withheld step leaves for §5.6 to prove standing, so every withheld step leaves something:
+    /// a row whose steps were all withheld then reads as holding another account's files rather than as
+    /// already clear, and a run proves them standing.
+    /// </summary>
+    private IEnumerable<ProtectedPath> Proofs(CleanupStep step)
+    {
+        var reason = $"Belongs to {_account.Name}, the account Deguffer is running as, so Deguffer left it alone.";
+        var marker = (step as RunCommandStep)?.Scheduled?.Marker;
+
+        if (step.Subjects.Count > 0)
+        {
+            // Measured during planning, so it was there when the plan was made, and its content asked of
+            // the disk: the claims CleanupPlan.NarrowedTo makes for a step the user declined, for the
+            // reasons it gives. The content is what proves a bin standing, because a call that empties one
+            // leaves its folder in place.
+            return step.Subjects.Select(path => new ProtectedPath(
+                path,
+                reason,
+                PresenceBefore: PathPresence.Present,
+                DirectoryContent.IsPresent(path),
+                Withheld: Withholding.AnotherAccount,
+                Marker: marker));
+        }
+
+        // A tool's command names no subject and a cloud release destroys nothing, so where each works is
+        // what is left standing. Asked of the disk, because a command's measured paths are probes and
+        // need not all exist. On existence alone: the tool that owns a cache goes on writing to it and
+        // trimming it, so a question about its content would cry wolf about a folder nothing in the run
+        // touched.
+        IReadOnlyList<string> places = step is ReleaseLocalCopiesStep release ? [release.SyncRoot] : step.Reaches;
+
+        return places.Select(path => new ProtectedPath(
+            path,
+            reason,
+            LongPath.ProbeEntry(path),
+            HeldContentBefore: false,
+            Withheld: Withholding.AnotherAccount,
+            Marker: marker));
     }
 
     private bool BelongsToAccount(CleanupStep step) =>

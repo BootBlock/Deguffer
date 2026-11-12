@@ -437,8 +437,10 @@ brand (`Deguffer.Core.Providers`); types describe what they do.
   profile, registry hive and Recycle Bin. While the account Deguffer runs as is not confirmed as the
   one signed in to the session, every step that reaches that account's folders, its folder in a
   Recycle Bin, or its own state through a call is withheld and proved standing (§5.6); the window
-  says so; settings are read from the signed-in user's hive; and a refusal read from the registry
-  (a registered WSL disk) is read from both hives. What the whole machine shares is unaffected, and
+  says so; settings are read from the signed-in user's hive, or from none where Windows will not
+  name it; and a refusal read from the registry (a registered WSL disk) is read from every hive
+  Deguffer can name, the running account's included. The Startup and Installed apps pages still
+  read the running account's own entries, and the window says so. What the whole machine shares is unaffected, and
   is the reason to elevate. Withheld rather than redirected, because a tool's own command (§5.1)
   and Windows' per-account calls act as the process's account, so a redirected row would be split
   between two accounts.
