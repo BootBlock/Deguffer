@@ -44,9 +44,9 @@ public sealed partial class DesignDialogTests
     {
         var found = AppSources().SelectMany(file => file.Code
             .Where(code => Construction().IsMatch(code.Line))
-            .Select(code => new DesignViolation(file.Name, code.Number, "builds a ContentDialog by hand")));
+            .Select(code => new RuleViolation(file.Name, code.Number, "builds a ContentDialog by hand")));
 
-        DesignBaseline.Hold("a ContentDialog is built by the shell's one dialog factory", found, ConstructionBaseline);
+        RuleBaseline.Hold("a ContentDialog is built by the shell's one dialog factory", found, ConstructionBaseline);
     }
 
     private static IEnumerable<(string Name, IReadOnlyList<(int Number, string Line)> Code)> AppSources() =>

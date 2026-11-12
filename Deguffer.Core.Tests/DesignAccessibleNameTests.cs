@@ -35,7 +35,7 @@ public sealed class DesignAccessibleNameTests
             .Where(button => !ShellMarkup.Sets(button, "AutomationProperties.Name") || !ShellMarkup.Sets(button, "ToolTipService.ToolTip"))
             .Select(button => file.At(button, $"icon-only <{button.Name.LocalName}> lacks an AutomationProperties.Name or a ToolTipService.ToolTip")));
 
-        DesignBaseline.Hold("an icon-only button has an accessible name and a tooltip", found, new Dictionary<string, int>());
+        RuleBaseline.Hold("an icon-only button has an accessible name and a tooltip", found, new Dictionary<string, int>());
     }
 
     [Fact]
@@ -46,7 +46,7 @@ public sealed class DesignAccessibleNameTests
             .Where(element => !IsNamedOrRaw(element))
             .Select(element => file.At(element, $"<{element.Name.LocalName}> has no accessible name and is not hidden as decoration")));
 
-        DesignBaseline.Hold("a progress indicator is named, or Raw beside text that says the same", found, ProgressBaseline);
+        RuleBaseline.Hold("a progress indicator is named, or Raw beside text that says the same", found, ProgressBaseline);
     }
 
     [Fact]
@@ -59,7 +59,7 @@ public sealed class DesignAccessibleNameTests
                 && !chip.Ancestors().Any(ancestor => ShellMarkup.IsPressable(ancestor) && ShellMarkup.Sets(ancestor, "AutomationProperties.Name")))
             .Select(chip => file.At(chip, "a chip has no accessible name, is not Raw and is not inside a named button")));
 
-        DesignBaseline.Hold("a chip sets AutomationProperties.Name, or is Raw, or sits in a named button", found, ChipBaseline);
+        RuleBaseline.Hold("a chip sets AutomationProperties.Name, or is Raw, or sits in a named button", found, ChipBaseline);
     }
 
     private static bool IsNamedOrRaw(System.Xml.Linq.XElement element) =>

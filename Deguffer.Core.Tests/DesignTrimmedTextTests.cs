@@ -38,6 +38,6 @@ public sealed class DesignTrimmedTextTests
                 && !text.Attributes().Any(attribute => attribute.Name.LocalName.StartsWith("TrimmedText.", StringComparison.Ordinal)))
             .Select(text => file.At(text, "a trimmed TextBlock has no tooltip to read it whole")));
 
-        DesignBaseline.Hold("a TextBlock with TextTrimming can be read whole through a tooltip", found, Baseline);
+        RuleBaseline.Hold("a TextBlock with TextTrimming can be read whole through a tooltip", found, Baseline);
     }
 }

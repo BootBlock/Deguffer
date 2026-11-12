@@ -36,6 +36,6 @@ public sealed class DesignOpacityTests
             .Where(element => element.DescendantsAndSelf().Any(inner => Legible.Contains(inner.Name.LocalName) || ShellMarkup.IsPressable(inner)))
             .Select(element => file.At(element, $"<{element.Name.LocalName}> with Opacity=\"{element.Attribute("Opacity")!.Value}\" holds text or a control")));
 
-        DesignBaseline.Hold("translucency is on a background brush, never element Opacity over text or a control", found, Baseline);
+        RuleBaseline.Hold("translucency is on a background brush, never element Opacity over text or a control", found, Baseline);
     }
 }

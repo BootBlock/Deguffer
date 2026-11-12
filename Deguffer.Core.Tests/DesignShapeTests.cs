@@ -31,6 +31,6 @@ public sealed class DesignShapeTests
                         || (element.Name.LocalName == "CornerRadius" && !element.HasElements))))
             .Select(element => file.At(element, $"<{element.Name.LocalName}> sets a literal corner radius")));
 
-        DesignBaseline.Hold("a corner radius comes from a resource in App.xaml, never a literal", found, Baseline);
+        RuleBaseline.Hold("a corner radius comes from a resource in App.xaml, never a literal", found, Baseline);
     }
 }

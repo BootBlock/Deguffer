@@ -25,7 +25,7 @@ public sealed partial class DesignColourTests
                 .Where(value => HexColour().IsMatch(value))
                 .Select(value => file.At(element, $"<{element.Name.LocalName}> writes the colour {value.Trim()}"))));
 
-        DesignBaseline.Hold("no literal colour outside a theme dictionary", found, new Dictionary<string, int>());
+        RuleBaseline.Hold("no literal colour outside a theme dictionary", found, new Dictionary<string, int>());
     }
 
     [GeneratedRegex(@"^\s*#(?:[0-9A-Fa-f]{3,4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})\s*$")]

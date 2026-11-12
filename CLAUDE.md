@@ -7,8 +7,6 @@ rule here is mandatory. Where one names a *memory note*, open the note before th
 
 ## Safety rules that are also code rules
 
-A refactor loses these most easily.
-
 - **§5.1** Prefer a tool's own eviction command to deleting paths.
 - **§5.2** Never target a tool's root directory. Recognised children only. Unrecognised is Tier 4.
 - **§5.6** Every execution verifies the negative: the tool root, unrecognised siblings and anything
@@ -34,7 +32,7 @@ A type that needs "and" to describe it is two types. A new cache source is a new
 never an edit to a switch. Core depends on `IUserEnvironment`, `IProcessRunner` and
 `IProcessInspector`, never on `Environment.GetFolderPath` or `Process.Start`, so the safety rules
 are testable. A view-model's decisions go to Core, and `Deguffer.App.Tests` tests only how the shell
-wires them. Past about 250 lines, look for the seam. A 500-line file needs a reason.
+wires them. Past about 250 lines, look for the seam.
 
 ## G2: no god objects
 
@@ -52,11 +50,13 @@ provider holds its own rules and no orchestration.
   frame up.
 - No knob, extension point or `virtual` for a scenario that does not exist yet.
 - No stringly-typed state where an enum or a record belongs.
-- No `#region`, `Manager`/`Helper`/`Utils` type, or "Part 2" file.
+- No `Manager`/`Helper`/`Utils` type, or "Part 2" file.
+- `CodeRuleSweepTests` holds the rules a pattern finds. Memory note: *Deguffer code rules the
+  source sweep enforces*.
 
 ## G4: performance, caching and object reuse
 
-- Enumerate with `EnumerateX`, never `GetX`. Never materialise a tree to count it.
+- Never materialise a tree to count it.
 - Bound parallelism with `MaxDegreeOfParallelism`. Never fan out with unbounded `Task.Run`.
 - Cache anything derived from a subprocess or the filesystem for the operation's life.
 - Pass a `CancellationToken` down every async path.
@@ -72,8 +72,8 @@ what planning measured. A record is a value: never clone one to change what shou
 
 ## G9: one design system for the UI
 
-A XAML or user-text change follows memory note *Deguffer UI design rules*. Each `Design*Tests`
-baseline only goes down: the fix lowers it in the same change.
+A XAML or user-text change follows memory note *Deguffer UI design rules*. A `Design*Tests` or
+`CodeRules` baseline only goes down: the fix lowers it in the same change.
 
 ## G7: use sub-agents where they apply
 

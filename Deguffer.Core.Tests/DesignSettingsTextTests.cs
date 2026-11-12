@@ -27,6 +27,6 @@ public sealed class DesignSettingsTextTests
                 && ShellMarkup.Literal(element, "Description") is { Length: > DescriptionBudget })
             .Select(row => file.At(row, $"'{row.Attribute("Title")?.Value}' is described in {row.Attribute("Description")!.Value.Length} characters, over {DescriptionBudget}")));
 
-        DesignBaseline.Hold($"a settings row's visible description is at most {DescriptionBudget} characters", found, Baseline);
+        RuleBaseline.Hold($"a settings row's visible description is at most {DescriptionBudget} characters", found, Baseline);
     }
 }

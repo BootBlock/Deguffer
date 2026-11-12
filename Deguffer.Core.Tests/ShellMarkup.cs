@@ -111,5 +111,5 @@ internal sealed record MarkupFile(string Name, XDocument Document, int Lines)
 
     public bool IsApplicationResources => Name == "Deguffer.App/App.xaml";
 
-    public DesignViolation At(XObject node, string detail) => new(Name, ShellMarkup.LineOf(node), detail);
+    public RuleViolation At(XObject node, string detail) => new(Name, ShellMarkup.LineOf(node), detail);
 }

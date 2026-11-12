@@ -23,6 +23,7 @@ irreversible data loss.
 | A test | *Deguffer verify by mutation* |
 | A document under `docs/todo/` | *Deguffer plan docs carry a status banner* |
 | A provider | `docs/cache-locations.md`, which describes every provider that ships |
+| Any product code, or a `CodeRules` baseline | *Deguffer code rules the source sweep enforces* |
 
 ## Compliance checklist (lane 1)
 
@@ -50,6 +51,23 @@ Quote the `CLAUDE.md` rule each finding breaks.
   `ProcessRunner.Default` and `UserEnvironment.Current` injected once. A `Regex`, `SearchValues`,
   comparer or lookup set built per call rather than `static readonly`. A directory re-measured after
   planning measured it.
+- **Code rules.** A line added to, or a count raised in, `Deguffer.Core.Tests/CodeRules/Baselines`:
+  the sweep's baselines only shrink. The rules that need judgement, which no pattern finds:
+  - Behaviour chosen by a type test or a switch on a type where a member the types override
+    belongs, or a policy pasted into each provider where the base class or `PlanAsync` applies it
+    once (the running-process note, held caches, plan identity).
+  - A second copy of a mechanism that exists: a walk, a reader of a settings format, a store's read
+    and fall-back, a status line, a latest-wins refresh, an elevation offer, a dialog. Name the twin.
+  - A method or constructor taking more than eight parameters, or a boolean parameter that selects
+    behaviour: a parameter object, an enum, or two methods.
+  - An interface past about twelve members, or a fake that stubs members its test never reads: the
+    consumer takes a narrower interface.
+  - A comment that narrates a past defect or the change history ("used to", "no longer", "was
+    found"), or states a call-site count that will go stale.
+  - A `!` on a value whose non-null state no type enforces, or several nullable members standing
+    in for a union.
+  - A public member only tests call, or a second public type in a file that is not a small
+    companion of the first.
 - **No secrets or personal data.** A real path, profile, machine or share name, or pasted scan or
   log output, in source, a test, a fixture, a comment or a commit message. A fixture path is
   recognisably invented, such as `C:\Users\testuser\...`.

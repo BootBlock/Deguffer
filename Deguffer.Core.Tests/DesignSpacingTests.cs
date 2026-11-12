@@ -44,7 +44,7 @@ public sealed class DesignSpacingTests
             .Where(set => set.Value is not null && ShellMarkup.Lengths(set.Value).Any(length => !OnTheGrid(length)))
             .Select(set => file.At(element, $"{set.Property}=\"{set.Value}\" is off the 4 px grid"))));
 
-        DesignBaseline.Hold("margins, padding and spacing are multiples of 4 (or a 1 px hairline)", found, Baseline);
+        RuleBaseline.Hold("margins, padding and spacing are multiples of 4 (or a 1 px hairline)", found, Baseline);
     }
 
     private static bool OnTheGrid(double length) => length is 0 or 1 or -1 || Math.Abs(length % 4) == 0;

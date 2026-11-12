@@ -28,7 +28,7 @@ public sealed class DesignTargetSizeTests
                 .Where(axis => TooSmall(button, axis.Item1, axis.Item2))
                 .Select(axis => file.At(button, $"<{button.Name.LocalName}> can be smaller than {Minimum} px in {axis.Item1.ToLowerInvariant()}"))));
 
-        DesignBaseline.Hold("a pressable control is at least 24 x 24 epx", found, Baseline);
+        RuleBaseline.Hold("a pressable control is at least 24 x 24 epx", found, Baseline);
     }
 
     private static bool TooSmall(System.Xml.Linq.XElement button, string size, string minimum)

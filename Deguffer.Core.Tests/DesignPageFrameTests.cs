@@ -42,7 +42,7 @@ public sealed class DesignPageFrameTests
             return Enumerable.Repeat(page.At(page.Document.Root!, $"the page has {titles} PageTitle headings, not one"), Math.Abs(titles - 1));
         });
 
-        DesignBaseline.Hold("every page opens with exactly one PageTitle", found, TitleBaseline);
+        RuleBaseline.Hold("every page opens with exactly one PageTitle", found, TitleBaseline);
     }
 
     [Fact]
@@ -57,7 +57,7 @@ public sealed class DesignPageFrameTests
                 .Where(style => !style.Elements().Any(setter => ShellMarkup.SetterLiteral(setter, "AutomationProperties.HeadingLevel") == heading.Item2))
                 .Select(style => app.At(style, $"{heading.Item1} does not set AutomationProperties.HeadingLevel to {heading.Item2}")));
 
-        DesignBaseline.Hold("PageTitle is a level-one heading and SectionHeading a level-two heading", found, HeadingBaseline);
+        RuleBaseline.Hold("PageTitle is a level-one heading and SectionHeading a level-two heading", found, HeadingBaseline);
     }
 
     [Fact]
@@ -67,6 +67,6 @@ public sealed class DesignPageFrameTests
             .Where(element => element.Name.LocalName == "Pivot")
             .Select(pivot => file.At(pivot, "a Pivot, where the shell uses a SelectorBar")));
 
-        DesignBaseline.Hold("no Pivot: switch between lists with a SelectorBar", found, PivotBaseline);
+        RuleBaseline.Hold("no Pivot: switch between lists with a SelectorBar", found, PivotBaseline);
     }
 }

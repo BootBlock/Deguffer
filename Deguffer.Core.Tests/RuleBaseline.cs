@@ -3,25 +3,29 @@ using System.Text;
 
 namespace Deguffer.Core.Tests;
 
-/// <summary>One place where the shell breaks a design rule.</summary>
-internal sealed record DesignViolation(string File, int Line, string Detail)
+/// <summary>
+/// One place where the product source breaks a rule. <paramref name="Line"/> is 0 where the place is
+/// not a line, such as a Win32 call declared in a second file.
+/// </summary>
+internal sealed record RuleViolation(string File, int Line, string Detail)
 {
-    public override string ToString() => $"{File}:{Line} {Detail}";
+    public override string ToString() => Line > 0 ? $"{File}:{Line} {Detail}" : $"{File} {Detail}";
 }
 
 /// <summary>
-/// A ratchet for a design rule the shell broke in many places before the rule was written. Each rule
-/// keeps a count of the violations each file had then. A file that goes over its count fails, so no
-/// new violation lands anywhere, and a file that goes under fails as well, so the change that fixes
-/// one lowers the count in the same commit and the fixed place cannot quietly break again.
+/// A ratchet for a rule the product source broke in many places before the rule was written, the
+/// design rules and the code rules alike. Each rule keeps a count of the violations each file (or
+/// other key, such as a Win32 call) had then. A key that goes over its count fails, so no new
+/// violation lands anywhere, and a key that goes under fails as well, so the change that fixes one
+/// lowers the count in the same commit and the fixed place cannot quietly break again.
 ///
-/// <para>A file the baseline does not name has a count of zero. A rule whose baseline is empty is a
+/// <para>A key the baseline does not name has a count of zero. A rule whose baseline is empty is a
 /// plain rule with no exceptions. Raising a count to make a change pass is the maintainer's
 /// decision, never a way to land work.</para>
 /// </summary>
-internal static class DesignBaseline
+internal static class RuleBaseline
 {
-    public static void Hold(string rule, IEnumerable<DesignViolation> found, IReadOnlyDictionary<string, int> baseline)
+    public static void Hold(string rule, IEnumerable<RuleViolation> found, IReadOnlyDictionary<string, int> baseline)
     {
         var byFile = found.GroupBy(violation => violation.File, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
@@ -41,7 +45,7 @@ internal static class DesignBaseline
             return;
         }
 
-        var message = new StringBuilder($"Design rule: {rule}");
+        var message = new StringBuilder($"Rule: {rule}");
 
         foreach (var (file, violations) in over)
         {
@@ -49,7 +53,14 @@ internal static class DesignBaseline
 
             foreach (var violation in violations.OrderBy(violation => violation.Line))
             {
-                message.Append(CultureInfo.InvariantCulture, $"\n  line {violation.Line}: {violation.Detail}");
+                if (violation.Line > 0)
+                {
+                    message.Append(CultureInfo.InvariantCulture, $"\n  line {violation.Line}: {violation.Detail}");
+                }
+                else
+                {
+                    message.Append(CultureInfo.InvariantCulture, $"\n  {violation.Detail}");
+                }
             }
         }
 
@@ -62,7 +73,7 @@ internal static class DesignBaseline
 
         foreach (var (file, violations) in byFile.OrderBy(file => file.Key, StringComparer.Ordinal))
         {
-            message.Append(CultureInfo.InvariantCulture, $"\n    [\"{file}\"] = {violations.Count},");
+            message.Append(CultureInfo.InvariantCulture, $"\n    {violations.Count} {file}");
         }
 
         Assert.Fail(message.ToString());

@@ -75,7 +75,7 @@ public sealed partial class DesignUserTextTests
     [Fact]
     public void CountsAreWrittenWithTheirRealPlural()
     {
-        DesignBaseline.Hold("no \"(s)\" plural in a string literal", InLiterals(ShownSources(), Plural(), "writes a plural as \"(s)\""), PluralBaseline);
+        RuleBaseline.Hold("no \"(s)\" plural in a string literal", InLiterals(ShownSources(), Plural(), "writes a plural as \"(s)\""), PluralBaseline);
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public sealed partial class DesignUserTextTests
     {
         var app = TestProjects.SourceFiles(Path.Combine(MarkdownGuide.RepositoryRoot, "Deguffer.App"));
 
-        DesignBaseline.Hold("no exception Message interpolated into text the shell shows", InLiterals(app, ExceptionMessage(), "shows an exception's own message"), ExceptionTextBaseline);
+        RuleBaseline.Hold("no exception Message interpolated into text the shell shows", InLiterals(app, ExceptionMessage(), "shows an exception's own message"), ExceptionTextBaseline);
     }
 
     [Fact]
@@ -94,7 +94,7 @@ public sealed partial class DesignUserTextTests
             .Where(attribute => BinaryUnit().IsMatch(attribute.Value))
             .Select(attribute => file.At(attribute, $"writes the unit in \"{attribute.Value}\"")));
 
-        DesignBaseline.Hold(
+        RuleBaseline.Hold(
             "sizes are KB, MB and GB, never KiB, MiB, GiB or TiB",
             InLiterals(ShownSources(), BinaryUnit(), "writes a KiB-style unit").Concat(markup),
             UnitBaseline);
@@ -105,9 +105,9 @@ public sealed partial class DesignUserTextTests
     {
         var found = ShownSources().SelectMany(file => Lines(file)
             .Where(code => DatePattern().IsMatch(code.Line))
-            .Select(code => new DesignViolation(code.File, code.Number, "formats a date with a fixed pattern")));
+            .Select(code => new RuleViolation(code.File, code.Number, "formats a date with a fixed pattern")));
 
-        DesignBaseline.Hold("a date is formatted through the culture, never a fixed pattern", found, DatePatternBaseline);
+        RuleBaseline.Hold("a date is formatted through the culture, never a fixed pattern", found, DatePatternBaseline);
     }
 
     /// <summary>The projects whose words reach a user: the shell, and the Core that words its sentences.</summary>
@@ -117,11 +117,11 @@ public sealed partial class DesignUserTextTests
     private static IEnumerable<string> ShellSources() =>
         TestProjects.SourceFiles(Path.Combine(MarkdownGuide.RepositoryRoot, "Deguffer.App"));
 
-    private static IEnumerable<DesignViolation> InLiterals(IEnumerable<string> files, Regex pattern, string detail) =>
+    private static IEnumerable<RuleViolation> InLiterals(IEnumerable<string> files, Regex pattern, string detail) =>
         files.SelectMany(file => Lines(file)
             .SelectMany(code => StringLiteral().Matches(code.Line)
                 .Where(literal => pattern.IsMatch(literal.Value))
-                .Select(_ => new DesignViolation(code.File, code.Number, detail))));
+                .Select(_ => new RuleViolation(code.File, code.Number, detail))));
 
     private static IEnumerable<(string File, int Number, string Line)> Lines(string file)
     {

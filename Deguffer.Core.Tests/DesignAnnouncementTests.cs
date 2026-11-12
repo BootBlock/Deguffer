@@ -29,6 +29,6 @@ public sealed class DesignAnnouncementTests
             .Where(element => ShellMarkup.Sets(element, "AutomationProperties.LiveSetting"))
             .Select(element => file.At(element, $"<{element.Name.LocalName}> declares a live setting that nothing raises")));
 
-        DesignBaseline.Hold("a changing status announces through the shared mechanism, not a bare LiveSetting", found, Baseline);
+        RuleBaseline.Hold("a changing status announces through the shared mechanism, not a bare LiveSetting", found, Baseline);
     }
 }

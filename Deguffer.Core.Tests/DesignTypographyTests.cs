@@ -40,6 +40,6 @@ public sealed class DesignTypographyTests
                 || (!file.IsApplicationResources && ShellMarkup.SetterLiteral(element, "FontSize") is not null))
             .Select(element => file.At(element, $"<{element.Name.LocalName}> sets a literal font size")));
 
-        DesignBaseline.Hold("text takes its size from a ramp style or a named resource, never a literal FontSize", found, Baseline);
+        RuleBaseline.Hold("text takes its size from a ramp style or a named resource, never a literal FontSize", found, Baseline);
     }
 }
