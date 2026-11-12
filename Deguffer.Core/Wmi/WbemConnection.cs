@@ -19,6 +19,12 @@ internal static class WbemConnection
     /// <summary><c>WBEM_INFINITE</c>.</summary>
     public const int Infinite = -1;
 
+    /// <summary>
+    /// <c>WBEM_S_TIMEDOUT</c>: <c>IEnumWbemClassObject.Next</c> waited its timeout with nothing to give.
+    /// A success code, so a caller that waits a finite time tells it apart from the end of the results.
+    /// </summary>
+    public const int TimedOut = 0x40004;
+
     private const int AccessDenied = unchecked((int)0x80070005);
 
     /// <summary><c>WBEM_E_ACCESS_DENIED</c>.</summary>
