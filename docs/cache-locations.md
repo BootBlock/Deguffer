@@ -7512,7 +7512,8 @@ only copy of a change. So the row is not pre-selected, and is confirmed on its o
 ## Per-project build output
 
 **Tier 1 for .NET intermediate output, the caches in Visual Studio's `.vs` folders, Nx's task cache,
-Rust's incremental compilation caches and three Python tools' caches, Tier 2 for the rest.** With [Git LFS old file versions](#git-lfs-old-file-versions) and the workspace half of [Nx task caches](#nx-task-caches),
+Rust's incremental compilation caches, Godot's shader caches and three Python tools' caches, Tier 2
+for the rest.** With [Git LFS old file versions](#git-lfs-old-file-versions) and the workspace half of [Nx task caches](#nx-task-caches),
 the only thing Deguffer looks for inside your own folders, and the only thing it will not look for
 anywhere else.
 
@@ -7526,6 +7527,9 @@ anywhere else.
 | `DerivedDataCache` | An Unreal project's own derived data cache | 2 |
 | `target` | Rust build output: what Cargo wrote inside it, and nothing else | 2 |
 | `incremental` in each profile inside `target` | Rust's incremental compilation caches | 1 |
+| `imported` inside `.godot` or `godot` | A Godot 4 project's imported assets, and nothing else in the folder | 2 |
+| `shader_cache` inside `.godot` or `godot` | A Godot 4 project's compiled shaders, and nothing else in the folder | 1 |
+| `.import`, `import` | A Godot 3 project's imported assets | 2 |
 | `node_modules` | Installed Node.js dependencies | 2 |
 | `.venv`, `venv` | A Python virtual environment | 2 |
 | `.pytest_cache` | pytest's record of the last run | 1 |
@@ -7588,6 +7592,8 @@ the tool itself writes inside it.
 | `Library` | `Assets`, `Packages`, `ProjectSettings` | — |
 | `Intermediate` / `DerivedDataCache` | A file ending in `.uproject`, whose name is the project's own | — |
 | `target` | `Cargo.toml` | `CACHEDIR.TAG`, opening with the tagging specification's header. Only Cargo's own children inside it are removed: see *Inside `target`, only what Cargo wrote*, below |
+| `imported`, `shader_cache` inside a Godot data folder | `project.godot` beside the data folder, whose settings say Godot 4 and name that folder | Only what Godot writes. See [Godot's data folder](#godots-data-folder-two-caches-and-nothing-else) |
+| `.import` / `import` | `project.godot`, whose settings say Godot 3 and name that folder | Only imported files with their `.md5` records, and a `.gdignore` |
 | `node_modules` | `package.json`, **and a lock file** | — |
 | `.venv` / `venv` | A dependency manifest: `requirements.txt`, `pyproject.toml`, `Pipfile`, `setup.py` or `environment.yml` | `pyvenv.cfg` |
 | `.pytest_cache` | A file pytest reads its settings from: `pytest.toml`, `.pytest.toml`, `pytest.ini`, `.pytest.ini`, `pyproject.toml`, `tox.ini` or `setup.cfg` | `CACHEDIR.TAG` with the header, then "created by pytest" |
@@ -7787,6 +7793,9 @@ Everything except the one directory in each row, the caches inside `.vs`, or wha
   dependencies and copied assets that no build reproduces — so it is out of scope entirely.
 - **`target` itself, and everything in it that Cargo did not write.** See *Inside `target`, only
   what Cargo wrote*, above.
+- **A Godot project's data folder, and everything in it but the two caches**, including
+  `export_credentials.cfg`, which holds the project's export passwords and encryption key. See
+  [Godot's data folder](#godots-data-folder-two-caches-and-nothing-else).
 - **Every directory that was left alone**, whether because it could not be confirmed or because
   something is using it. Those sit in the same trees as the targets, separated only by evidence,
   which is exactly the situation where an over-broad rule takes one with the other.
@@ -7803,6 +7812,8 @@ Everything except the one directory in each row, the caches inside `.vs`, or wha
 | `DerivedDataCache` | Unreal compiles the project's shaders again the next time it opens, which on a large project can take tens of minutes. |
 | `target` | The next build recompiles the project and every dependency, per profile — minutes to hours on a large workspace, and anything you built and are running from `target` goes with it. Anything else your own scripts keep there stays. |
 | `incremental` in a profile | The next build compiles the project's own crates in full once, and is incremental again after that. Compiled dependencies and built programs stay, so nothing is downloaded and no dependency is compiled again. |
+| `imported`, `.import` | The Godot editor imports every asset again the next time the project opens. On a large project that takes minutes. |
+| `shader_cache` | The Godot editor compiles its shaders again the next time the project opens, so that start is slower. |
 | `node_modules` | The project will not build or run until dependencies are installed again. The lock file pins the versions, so what comes back is what was there. |
 | `.venv` / `venv` | The environment has to be created again and the install re-run from the manifest. **A manifest only lists what somebody wrote down** — check it covers what you had before removing an environment you still use. |
 | `.pytest_cache` | pytest makes it again on its next run. Until a run has finished, `--lf` and `--ff` have no record of what failed, so they run everything. |
@@ -7853,6 +7864,43 @@ only by re-downloading gigabytes or re-indexing for minutes" — is met by each 
   kept there.
 
 None of them is pre-selected, and each needs an acknowledgement before it runs.
+
+### Godot's data folder: two caches, and nothing else
+
+A Godot 4 project keeps its project data in `.godot` beside `project.godot`, or in `godot` where the
+project turns `application/config/use_hidden_project_data_directory` off. Godot's documentation
+calls it "project cache data", but the editor also keeps `export_credentials.cfg` there, holding
+the script encryption key and every export option marked secret, such as a keystore password.
+Beside it are the editor's state for the project, the C# build output and caches the editor
+rewrites, and an add-on can keep anything it likes there. So the folder is never offered, and only
+two children inside it are:
+
+- **`imported`**, Tier 2, where every file is named `<asset>-<md5>.<extension>` with the `.md5`
+  record the importer writes beside each asset's products. The editor imports the assets again by
+  itself, which on a large project takes minutes.
+- **`shader_cache`**, Tier 1, where every file is a shader variant at
+  `<shader>\<sha256>\<sha1>[.<api>].cache`. The editor compiles them again on the next start.
+
+Each is its own row, so the shader cache can be taken alone. One file in any other shape leaves that
+cache alone, and the scan names it. A Godot 3 project kept the same import cache as the whole of its
+data folder, `.import`, which is offered whole on a row of its own.
+
+**The folder's name is read from `project.godot`, never guessed.** `config_version` says which
+engine wrote the file, and the setting above says whether the name starts with a dot. A
+`project.binary`, an `override.cfg` that names the setting, or a feature-tag variant of it, such as
+`.windows`, could change the answer, so a project with one is left alone. A settings-override file
+the project names inside it is read the same way. One kept outside the project, in `user://`,
+cannot be read from the project, and is the one case where the name rests on `project.godot` alone.
+The content rules above then decide what is offered. Git is asked as well, and a data folder holding
+a tracked file is left alone.
+
+**An open editor is found by where it works.** The Godot editor holds nothing open in the data
+folder, so a delete would not fail on a lock: it would leave the editor's resources pointing at
+files that are gone. But the editor changes its working directory to the project it opens, whether
+it is given `--path` or a `project.godot`, and the project manager and the editor's own game runs
+both pass `--path`. So the check in *A project you are using now is never offered*, above, holds a
+project back while an editor has it open, and no list of the editor's versioned program names is
+needed.
 
 ### Not reached: `dist` and Dart's `build`
 

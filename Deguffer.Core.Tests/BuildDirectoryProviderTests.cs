@@ -651,6 +651,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         Node,
         Python,
         Unreal,
+        Godot,
     }
 
     /// <summary>
@@ -672,6 +673,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     [InlineData(Toolchain.Node)]
     [InlineData(Toolchain.Python)]
     [InlineData(Toolchain.Unreal)]
+    [InlineData(Toolchain.Godot)]
     public async Task ExploreRefusesABuildDirectoryAProgramIsWorkingInTheProjectOf(Toolchain toolchain)
     {
         var root = ApproveRootInProfile();
@@ -781,6 +783,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     [InlineData(Toolchain.Node)]
     [InlineData(Toolchain.Python)]
     [InlineData(Toolchain.Unreal)]
+    [InlineData(Toolchain.Godot)]
     public async Task ExploreRefusesABuildDirectoryAProgramIsRunningFromInside(Toolchain toolchain)
     {
         var root = ApproveRootInProfile();
@@ -807,6 +810,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     [InlineData(Toolchain.Node)]
     [InlineData(Toolchain.Python)]
     [InlineData(Toolchain.Unreal)]
+    [InlineData(Toolchain.Godot)]
     public async Task ExploreAllowsABuildDirectoryAProgramIsOnlyBelowTheProjectOf(Toolchain toolchain)
     {
         var root = ApproveRootInProfile();
@@ -834,6 +838,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     [InlineData(Toolchain.Node)]
     [InlineData(Toolchain.Python)]
     [InlineData(Toolchain.Unreal)]
+    [InlineData(Toolchain.Godot)]
     public async Task ExploreDeclaresNothingOutsideEveryApprovedRoot(Toolchain toolchain)
     {
         ApproveRootInProfile();
@@ -856,6 +861,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     [InlineData(Toolchain.Node)]
     [InlineData(Toolchain.Python)]
     [InlineData(Toolchain.Unreal)]
+    [InlineData(Toolchain.Godot)]
     public async Task ExploreDeclaresNothingTheRecogniserRejects(Toolchain toolchain)
     {
         var root = ApproveRootInProfile();
@@ -1128,6 +1134,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
     [InlineData(Toolchain.Node)]
     [InlineData(Toolchain.Python)]
     [InlineData(Toolchain.Unreal)]
+    [InlineData(Toolchain.Godot)]
     public async Task CleanedPlacesCoverEveryBuildDirectoryThePlanRemoves(Toolchain toolchain)
     {
         var root = ApproveRoot();
@@ -1175,6 +1182,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         Toolchain.Node => Node(live: live),
         Toolchain.Python => Python(live: live),
         Toolchain.Unreal => Unreal(live: live),
+        Toolchain.Godot => Godot(live: live),
         _ => throw new ArgumentOutOfRangeException(nameof(toolchain), toolchain, null),
     };
 
@@ -1186,15 +1194,21 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         Toolchain.Node => BuildDirectoryFixture.CreateNodeProject(project),
         Toolchain.Python => BuildDirectoryFixture.CreatePythonProject(project),
         Toolchain.Unreal => BuildDirectoryFixture.CreateUnrealProject(project),
+        Toolchain.Godot => GodotProjectFixture.CreateProject(project),
         _ => throw new ArgumentOutOfRangeException(nameof(toolchain), toolchain, null),
     };
 
     /// <summary>
     /// What the toolchain's row offers from a build directory <see cref="CreateRecognised"/> made: the
-    /// directory itself, or for Cargo, whose <c>target</c> is a tool root, the one profile inside it.
+    /// directory itself, or for Cargo and Godot, whose <c>target</c> and data folder are tool roots,
+    /// the one part inside it the row offers.
     /// </summary>
-    private static string Offered(Toolchain toolchain, string build) =>
-        toolchain == Toolchain.Cargo ? Path.Combine(build, "debug") : build;
+    private static string Offered(Toolchain toolchain, string build) => toolchain switch
+    {
+        Toolchain.Cargo => Path.Combine(build, "debug"),
+        Toolchain.Godot => Path.Combine(build, "imported"),
+        _ => build,
+    };
 
     /// <summary>
     /// A project whose build directory has the right name and lacks one piece of the evidence, so
@@ -1207,6 +1221,7 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         Toolchain.Node => BuildDirectoryFixture.CreateNodeProject(project, lockFile: null),
         Toolchain.Python => BuildDirectoryFixture.CreatePythonProject(project, writeConfig: false),
         Toolchain.Unreal => BuildDirectoryFixture.CreateUnrealProject(project, descriptor: null),
+        Toolchain.Godot => GodotProjectFixture.CreateProject(project, dataFolderName: "godot"),
         _ => throw new ArgumentOutOfRangeException(nameof(toolchain), toolchain, null),
     };
 
@@ -1262,6 +1277,16 @@ public sealed class BuildDirectoryProviderTests : IDisposable
         scanner ??= new FakeDirectoryScanner();
 
         return new UnrealIntermediateProvider(
+            _roots, OverVolumes(scanner, volumes), live ?? FakeLiveTreeInspector.NothingLive, _environment,
+            new FakeProcessRunner(), FakeProcessInspector.NothingRunning, scanner);
+    }
+
+    private BuildDirectoryProvider Godot(
+        IDirectoryScanner? scanner = null, ILiveTreeInspector? live = null, IVolumeInventory? volumes = null)
+    {
+        scanner ??= new FakeDirectoryScanner();
+
+        return new GodotImportCacheProvider(
             _roots, OverVolumes(scanner, volumes), live ?? FakeLiveTreeInspector.NothingLive, _environment,
             new FakeProcessRunner(), FakeProcessInspector.NothingRunning, scanner);
     }

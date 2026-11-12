@@ -58,12 +58,12 @@ public sealed class CleanupPlanner
     /// Claude Code's sessions leave behind, its conversations, its rewind snapshots and the logs of the MCP servers it runs, the
     /// caches, installer downloads and logs named tools leave in the temporary folders, the
     /// per-volume Recycle Bins, the Windows File History target, the cache Dropbox keeps in each Dropbox folder, the crash
-    /// dumps, the Windows servicing logs, the Windows component store's own cleanup and its reset, and the per-project build output, Unreal's included, inside the user's own
+    /// dumps, the Windows servicing logs, the Windows component store's own cleanup and its reset, and the per-project build output, Unreal's and the import and shader caches of Godot projects included, inside the user's own
     /// approved folders — which the audit did not cover, and which were investigated on their own
     /// terms before being added. Their reasoning and their rejected alternatives are in
     /// <c>docs/cache-locations.md</c>.
     ///
-    /// Tier 1 throughout except Unity, Unreal's per-project intermediate files and derived data, Cargo's per-project build output apart from its incremental compilation caches, node_modules, Python virtual
+    /// Tier 1 throughout except Unity, Unreal's per-project intermediate files and derived data, Cargo's per-project build output apart from its incremental compilation caches, the import caches of Godot projects, node_modules, Python virtual
     /// environments, conda, Maven, vcpkg, Steam's shader caches, the shared Unreal Engine derived data cache, Unity's GI cache, Affinity's models, Topaz Labs' models, Capture One's previews, DaVinci Resolve's render cache, PlatformIO, the STM32Cube firmware zips, the global cache of Yarn 2 and later, Playwright, Puppeteer, the Azure Functions Core Tools
     /// releases, the graphics driver installer files, the installer downloads in the temporary folders, the superseded Squirrel builds, the local copies of cloud files, the Dropbox cache and the component store's cleanup, which are Tier 2, and the
     /// Recycle Bins, the component store's reset, the File History target, the crash dumps, the servicing logs, the Epic
@@ -190,6 +190,10 @@ public sealed class CleanupPlanner
         // only while both read the same layout.
         var cargoTargets = new CargoTargetSurvey();
 
+        // One reading of each Godot project's settings and data folder for the three Godot rows, the
+        // two Godot 4 ones dividing its data folder between them as the Rust rows divide a target.
+        var godotProjects = new GodotProjectSurvey();
+
         return
         [
             new DotNetObjProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
@@ -199,6 +203,9 @@ public sealed class CleanupPlanner
             new UnrealProjectDerivedDataProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
             new CargoTargetProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner, targets: cargoTargets),
             new CargoIncrementalProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner, targets: cargoTargets),
+            new GodotImportCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner, projects: godotProjects),
+            new GodotShaderCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner, projects: godotProjects),
+            new Godot3ImportCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner, projects: godotProjects),
             new NodeModulesProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
             new PythonVirtualEnvironmentProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),
             new PytestCacheProvider(roots, sourceTrees, liveTrees, environment, scanner: scanner),

@@ -303,6 +303,7 @@ public sealed class ProviderInvalidationTests : IDisposable
         : parameter == typeof(SquirrelDiscovery) ? new SquirrelDiscovery(_environment)
         : parameter == typeof(SteamDiscovery) ? new SteamDiscovery(_environment)
         : parameter == typeof(CargoTargetSurvey) ? new CargoTargetSurvey()
+        : parameter == typeof(GodotProjectSurvey) ? new GodotProjectSurvey()
         : parameter == typeof(SymbolStoreDiscovery)
             ? new SymbolStoreDiscovery(_environment, new FakeSystemDirectories(_temp.Path), _volumes)
         : parameter == typeof(ChromiumUserDataDiscovery) ? new ChromiumUserDataDiscovery(_environment)

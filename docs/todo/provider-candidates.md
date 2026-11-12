@@ -457,7 +457,7 @@ are expired only by `clear-cache --gc`.
 
 | Candidate | Verdict | Tier | Measured |
 | --- | --- | --- | --- |
-| Godot `.godot\imported` and `.godot\shader_cache` | Build later, named children only | 2 and 1 | **14.0 GB across 36 projects** |
+| Godot `.godot\imported` and `.godot\shader_cache` | ✅ **Built** ([#598](https://github.com/BootBlock/Deguffer/issues/598)), named children only, and Godot 3's `.import` | 2 and 1 | **14.0 GB across 36 projects** |
 | JetBrains-platform system directories of superseded versions | ✅ **Built** | 1 | 633 MB, one superseded Android Studio |
 | Flutter/Dart `.dart_tool` | ✅ **Built** | 2 | 288 MB across 2 projects |
 | Python tool caches that write `CACHEDIR.TAG` | ✅ **Built**, as a declared table | 1–2 | One `.pytest_cache` |
@@ -501,6 +501,19 @@ No documented command clears the import cache. Godot 3 kept the same cache in a 
 (5 MB across 4 here).
 
 **Gap:** whether a running Godot editor holds files in `.godot` open. A live-project veto needs it.
+
+✅ **Done** ([#598](https://github.com/BootBlock/Deguffer/issues/598)). `GodotImportCacheProvider`
+offers `imported` (Tier 2) and `GodotShaderCacheProvider` offers `shader_cache` (Tier 1), each on its
+own row, and `Godot3ImportCacheProvider` offers a Godot 3 project's `.import` whole (Tier 2). The data
+folder's name is read from `project.godot`, and a project whose `project.binary`, `override.cfg`,
+feature-tag variant or settings-override file could change it is declined. A cache is offered only
+where every file in it has the shape the importer or the renderer writes, and git is asked about
+tracked files. **The gap closed the other way:** the editor holds no file open there, but it changes
+its working directory to the project it opens (`--path` or a `project.godot` argument, in
+`main.cpp`), and the project manager and the editor's own game runs pass `--path`. So the shared
+live-tree veto finds an open editor by where it works, and no match on the editor's versioned
+executable name is needed. The `<asset>.import` files beside the assets are protected by the project
+folder's own §5.6 entry rather than listed one by one, which would walk the whole project.
 
 ### Superseded JetBrains-platform system directories — Build, Tier 1, measured
 
@@ -943,7 +956,7 @@ Items 3 and 4 changed shipped text, and were made with the run-wide refusal of r
 Not a schedule: cost against value, given the machinery that exists.
 
 1. **Godot `imported` and `shader_cache`** — the largest measured item, on the Unity provider's
-   shape.
+   shape. ✅ Done.
 2. **Upgrade Discarded Files, `LiveKernelReportsPath`, `Logs\DISM`** — rows in existing providers.
    ✅ The first two are done: Upgrade Discarded Files as its own Tier 3 provider, not a row.
 3. **A run-wide refusal of registered virtual disks** — before any new virtualisation report.
@@ -962,6 +975,7 @@ Not a schedule: cost against value, given the machinery that exists.
    Deguffer hosts it directly? Every handler-based entry above depends on the answer.
 2. Does `ISearchCatalogManager::Reset` need elevation, and does it shrink `Windows.db`?
 3. Does a running Godot editor, or a running JetBrains IDE, hold files open in the folders proposed
-   for it? Each needs a live-project veto, and neither is established.
+   for it? Each needs a live-project veto, and neither is established. ✅ Answered for Godot: it
+   holds none, and works in the project it opens, which the live-tree veto reads.
 4. What does an elevated, read-only pass find behind the folders that refused a listing: Defender's
    `LocalCopy` and `Support`, `Diagnosis`, `SystemTemp`, BranchCache and `WindowsApps`?

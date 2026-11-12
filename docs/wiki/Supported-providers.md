@@ -2,7 +2,7 @@
 
 # Supported providers
 
-Deguffer knows 134 locations. Each one is a *provider*: a single class that names one cache,
+Deguffer knows 137 locations. Each one is a *provider*: a single class that names one cache,
 log or leftover, the tool that writes it, and the children it recognises. Anything a provider
 does not recognise is left alone.
 
@@ -146,6 +146,9 @@ For where each location is, how Deguffer cleans it and what the next use costs, 
 | .NET intermediate build output | the .NET SDK and MSBuild | Microsoft | 1 | Observed |
 | Dart and Flutter tool folders | pub, the Dart and Flutter package manager, and the Flutter tool | Google | 2 | Observed |
 | Git LFS old file versions | Git LFS, the Git extension that keeps large files outside a repository's history | the Git LFS project, started by GitHub | 2 | Observed |
+| Godot 3 project import caches | the Godot 3 editor | the Godot Engine project | 2 | Observed |
+| Godot project import caches | the Godot editor | the Godot Engine project | 2 | Observed |
+| Godot project shader caches | the Godot editor | the Godot Engine project | 1 | Observed |
 | mypy caches | mypy, the static type checker for Python | the mypy project | 1 | Researched |
 | Node.js project dependencies | npm, pnpm or yarn — whichever package manager installed the project | each package manager's own publisher; Node.js itself is stewarded by the OpenJS Foundation | 2 | Observed |
 | nox environments | nox, the Python test automation tool | the nox project | 2 | Researched |
