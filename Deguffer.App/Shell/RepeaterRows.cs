@@ -1,4 +1,5 @@
 using System.Collections.Specialized;
+using Deguffer.Core.Viewing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -35,7 +36,7 @@ internal sealed class RepeaterRows : IListRows
             Hear();
 
             // New items altogether, which a list view reports as a reset.
-            Changed?.Invoke([], true);
+            Changed?.Invoke([], ListChange.Reset);
         });
 
         Hear();
@@ -45,7 +46,7 @@ internal sealed class RepeaterRows : IListRows
 
     public event Action<UIElement>? Released;
 
-    public event Action<IReadOnlyList<object>, bool>? Changed;
+    public event Action<IReadOnlyList<object>, ListChange>? Changed;
 
     public FrameworkElement List => _repeater;
 
@@ -124,6 +125,15 @@ internal sealed class RepeaterRows : IListRows
             ? [.. added.Cast<object>()]
             : [];
 
-        Changed?.Invoke(arrived, e.Action == NotifyCollectionChangedAction.Reset);
+        Changed?.Invoke(arrived, Kind(e.Action));
     }
+
+    private static ListChange Kind(NotifyCollectionChangedAction action) => action switch
+    {
+        NotifyCollectionChangedAction.Add => ListChange.Inserted,
+        NotifyCollectionChangedAction.Move => ListChange.Moved,
+        NotifyCollectionChangedAction.Remove => ListChange.Removed,
+        NotifyCollectionChangedAction.Replace => ListChange.Replaced,
+        _ => ListChange.Reset,
+    };
 }

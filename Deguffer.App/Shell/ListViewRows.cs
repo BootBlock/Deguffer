@@ -1,3 +1,4 @@
+using Deguffer.Core.Viewing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -40,7 +41,7 @@ internal sealed class ListViewRows : IListRows
 
     public event Action<UIElement>? Released;
 
-    public event Action<IReadOnlyList<object>, bool>? Changed;
+    public event Action<IReadOnlyList<object>, ListChange>? Changed;
 
     public FrameworkElement List => _list;
 
@@ -102,6 +103,14 @@ internal sealed class ListViewRows : IListRows
         ? RowGhosts.Stood.Of(heading, at)
         : RowGhosts.Stood.Of(_list, (SelectorItem)container, at, viewport);
 
+    private static ListChange Kind(CollectionChange change) => change switch
+    {
+        CollectionChange.ItemInserted => ListChange.Inserted,
+        CollectionChange.ItemRemoved => ListChange.Removed,
+        CollectionChange.ItemChanged => ListChange.Replaced,
+        _ => ListChange.Reset,
+    };
+
     /// <summary>
     /// What a row is about. A tree view's flattened list can hold a node for each row rather than the
     /// row itself, and its row is then the node's content.
@@ -160,7 +169,7 @@ internal sealed class ListViewRows : IListRows
                 ? [group]
                 : [];
 
-        Changed?.Invoke(arrived, e.CollectionChange == CollectionChange.Reset);
+        Changed?.Invoke(arrived, Kind(e.CollectionChange));
     }
 
     private void OnContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
@@ -187,6 +196,6 @@ internal sealed class ListViewRows : IListRows
                 ? [row]
                 : [];
 
-        Changed?.Invoke(arrived, e.CollectionChange == CollectionChange.Reset);
+        Changed?.Invoke(arrived, Kind(e.CollectionChange));
     }
 }
