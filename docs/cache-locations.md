@@ -326,11 +326,18 @@ uv is a Python package and project manager. Its cache holds the archives it down
 wheels it unpacked from them, and every environment uv creates links to or copies from those
 wheels. That is why a second environment with the same dependencies costs almost nothing to make.
 
-The cache is one child of `%LOCALAPPDATA%\uv`, and that folder is uv's whole state directory, not a
-cache directory. Beside the cache it holds:
+On Windows uv keeps only its cache under `%LOCALAPPDATA%\uv`. Everything else it owns is in the
+roaming profile, and none of it is a cache:
 
-- **`tools`** — every command-line tool you installed with `uv tool install`.
-- **`python`** — the Python interpreters uv downloaded and manages.
+| What | Where | Moved by |
+| --- | --- | --- |
+| **`tools`**: every command-line tool you installed with `uv tool install` | the state folder | `UV_TOOL_DIR` |
+| **`python`**: the Python interpreters uv downloaded and manages | the state folder | `UV_PYTHON_INSTALL_DIR` |
+| **`credentials`**: the passwords and tokens `uv auth login` saved, in plain text | the state folder | |
+| **`uv.toml`**: your uv settings | `%APPDATA%\uv` | |
+
+The state folder is `%APPDATA%\uv\data` where that folder exists, which is the layout of an install
+from before late 2024, and `%APPDATA%\uv` itself otherwise.
 
 ### What Deguffer does
 
@@ -338,6 +345,13 @@ It asks `uv cache dir` where the cache is, because `UV_CACHE_DIR`, `--cache-dir`
 key in `uv.toml` can all move it. It then runs `uv cache clean`, which removes the cache directory,
 and uv makes it again on the next use. Where uv gives no answer, Deguffer measures the default
 location, and uv's own command still clears wherever its cache really is.
+
+It asks `uv tool dir` and `uv python dir` in the same pass, because the variables above can move the
+tools and interpreters anywhere. Where uv gives no answer, it uses the layout above.
+
+If the cache is set to one of uv's own folders, to a folder inside one, or to a folder that holds one,
+Deguffer offers nothing and says why. uv's clean removes the whole cache directory, so it would take
+the tools, interpreters, credentials or settings with it.
 
 Deguffer does **not** pass `--force`. That flag tells uv to ignore its own check for a cache in use,
 so Deguffer warns you when `uv` or `uvx` is running and leaves the judgement to uv.
@@ -347,11 +361,14 @@ one another, and nothing shows that a clean stopped part-way leaves only whole e
 
 ### What is protected
 
-`%LOCALAPPDATA%\uv` itself, **`tools`** and **`python`**. Deguffer asserts that all three survived the
-run. Reclaiming the cache by deleting its parent folder would uninstall every tool you installed with
-uv and every interpreter it manages, and none of them is a cache.
+`%LOCALAPPDATA%\uv` itself, the state folder, the **`tools`** and **`python`** folders uv reports,
+**`credentials`** and **`uv.toml`**. Deguffer asserts that each survived the run. Where Windows will not
+say whether `%APPDATA%\uv\data` exists, Deguffer protects both possible state folders.
 
-In Explore, Deguffer refuses everything in `%LOCALAPPDATA%\uv` except `cache`.
+In Explore, Deguffer refuses everything in `%LOCALAPPDATA%\uv` except `cache`, all of `%APPDATA%\uv`,
+and the tool and interpreter folders uv reports wherever they are. Removing any of them would
+uninstall every tool you installed with uv and every interpreter it manages, and break every virtual
+environment built on one of those interpreters.
 
 ### What it costs you
 
@@ -362,8 +379,8 @@ untouched.
 ### Why Tier 1
 
 Everything removed came from a package index, or was built from something that did, and uv fetches
-it again on demand. The parts of the folder that are not regenerable on demand are its siblings,
-and they are never a candidate.
+it again on demand. What uv keeps that is not regenerable on demand is in other folders, and they are
+never a candidate.
 
 ---
 

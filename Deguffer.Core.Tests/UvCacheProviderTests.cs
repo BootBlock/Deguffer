@@ -1,4 +1,5 @@
 using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Testing;
@@ -7,8 +8,8 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// uv is a §5.1 provider, so most of what matters is that it asks the tool rather than assuming.
-/// The rest carries §5.6 for the case that makes uv different from npm: the cache sits inside a
-/// state directory that also holds installed tools and interpreters.
+/// The rest carries §5.6 for the case that makes uv different from npm: the tools, interpreters and
+/// credentials a clean must spare are in another profile from the cache, and a moved cache can overlap them.
 /// </summary>
 public sealed class UvCacheProviderTests : IDisposable
 {
@@ -172,32 +173,204 @@ public sealed class UvCacheProviderTests : IDisposable
         Assert.DoesNotContain("--force", step.Arguments, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The layout uv really writes on Windows: the cache in the local profile, and the tools,
+    /// interpreters, credentials and configuration in the roaming one.
+    /// </summary>
     [Fact]
-    public async Task NeverTargetsTheUvStateRootBecauseToolsAndInterpretersLiveThere()
+    public async Task NeverTargetsUvsStateBecauseToolsAndInterpretersLiveThere()
+    {
+        _environment.WithExecutable("uv");
+        CreateCache();
+        var provider = CreateProvider(UvAnsweringNothing());
+        var tools = _temp.CreateDirectory("profile", "AppData", "Roaming", "uv", "tools");
+        _temp.CreateFile(512, "profile", "AppData", "Roaming", "uv", "tools", "ruff", "ruff.exe");
+        var python = _temp.CreateDirectory("profile", "AppData", "Roaming", "uv", "python");
+        var credentials = _temp.CreateFile(64, "profile", "AppData", "Roaming", "uv", "credentials", "credentials.toml");
+        var configuration = _temp.CreateFile(64, "profile", "AppData", "Roaming", "uv", "uv.toml");
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Empty(plan.TargetedPaths);
+        Assert.All(
+            plan.Steps.OfType<RunCommandStep>().SelectMany(s => s.MeasuredPaths),
+            path => Assert.False(LongPath.Contains(path, provider.RoamingRoot) || LongPath.Contains(provider.RoamingRoot, path)));
+
+        // Not merely unmentioned — asserted to survive (§5.6).
+        foreach (var survivor in new[] { provider.LocalRoot, provider.RoamingRoot, tools, python, Path.GetDirectoryName(credentials)!, configuration })
+        {
+            Assert.Contains(plan.ProtectedPaths, p =>
+                p.Path.Equals(survivor, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
+        }
+    }
+
+    /// <summary>
+    /// uv never makes <c>tools</c> or <c>python</c> under the local profile, so their survival there
+    /// proved nothing.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotProtectFoldersUvNeverMakesBesideTheCache()
     {
         _environment.WithExecutable("uv");
         CreateCache();
         var provider = CreateProvider(UvAnsweringNothing());
 
-        var tools = Path.Combine(provider.StateRoot, "tools");
-        Directory.CreateDirectory(tools);
-        File.WriteAllBytes(Path.Combine(tools, "ruff.exe"), new byte[512]);
+        var plan = await provider.PlanAsync();
+
+        Assert.DoesNotContain(plan.ProtectedPaths, p =>
+            p.Path.Equals(Path.Combine(provider.LocalRoot, "tools"), StringComparison.OrdinalIgnoreCase)
+            || p.Path.Equals(Path.Combine(provider.LocalRoot, "python"), StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ProtectsTheToolAndPythonFoldersUvReports()
+    {
+        _environment.WithExecutable("uv");
+        CreateCache();
+        var tools = _temp.CreateDirectory("elsewhere", "uv-tools");
+        var python = _temp.CreateDirectory("elsewhere", "uv-python");
+        var runner = UvAnsweringNothing().Responding(Uv, "tool dir", tools).Responding(Uv, "python dir", python);
+
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.Contains(runner.Invocations, i => i.Arguments == "tool dir --color never");
+        Assert.Contains(runner.Invocations, i => i.Arguments == "python dir --color never");
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == tools && p.PresenceBefore is PathPresence.Present);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == python && p.PresenceBefore is PathPresence.Present);
+    }
+
+    /// <summary>
+    /// An install from before late 2024 keeps its state in <c>%APPDATA%\uv\data</c>, and uv keeps using it
+    /// wherever it exists. Elsewhere the state is in <c>%APPDATA%\uv</c> itself.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FallsBackToTheLegacyStateFolderOnlyWhereItExists(bool legacy)
+    {
+        _environment.WithExecutable("uv");
+        CreateCache();
+        var provider = CreateProvider(UvAnsweringNothing());
+
+        if (legacy)
+        {
+            Directory.CreateDirectory(Path.Combine(provider.RoamingRoot, "data"));
+        }
 
         var plan = await provider.PlanAsync();
 
-        Assert.DoesNotContain(provider.StateRoot, plan.TargetedPaths, StringComparer.OrdinalIgnoreCase);
-        Assert.All(
-            plan.Steps.OfType<RunCommandStep>().SelectMany(s => s.MeasuredPaths),
-            path => Assert.NotEqual(
-                provider.StateRoot.TrimEnd(Path.DirectorySeparatorChar),
-                path.TrimEnd(Path.DirectorySeparatorChar),
-                StringComparer.OrdinalIgnoreCase));
+        var used = legacy ? Path.Combine(provider.RoamingRoot, "data") : provider.RoamingRoot;
+        var unused = legacy ? provider.RoamingRoot : Path.Combine(provider.RoamingRoot, "data");
 
-        // Not merely unmentioned — asserted to survive (§5.6).
-        Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(tools, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
-        Assert.Contains(plan.ProtectedPaths, p =>
-            p.Path.Equals(provider.StateRoot, StringComparison.OrdinalIgnoreCase) && p.PresenceBefore is PathPresence.Present);
+        foreach (var bucket in new[] { "tools", "python", "credentials" })
+        {
+            Assert.Contains(plan.ProtectedPaths, p => p.Path == Path.Combine(used, bucket));
+            Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path == Path.Combine(unused, bucket));
+        }
+    }
+
+    /// <summary>A refusal is no evidence that the legacy folder is absent, so both candidates survive.</summary>
+    [Fact]
+    public async Task ProtectsBothStateFoldersWhenWindowsWillNotSayWhichIsUsed()
+    {
+        _environment.WithExecutable("uv");
+        CreateCache();
+        var provider = CreateProvider(UvAnsweringNothing());
+        var legacy = _temp.CreateDirectory("profile", "AppData", "Roaming", "uv", "data");
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(legacy);
+
+        var plan = await provider.PlanAsync();
+
+        foreach (var root in new[] { legacy, provider.RoamingRoot })
+        {
+            Assert.Contains(plan.ProtectedPaths, p => p.Path == Path.Combine(root, "tools"));
+            Assert.Contains(plan.ProtectedPaths, p => p.Path == Path.Combine(root, "python"));
+            Assert.Contains(plan.ProtectedPaths, p => p.Path == Path.Combine(root, "credentials"));
+        }
+    }
+
+    /// <summary>
+    /// <c>uv cache clean</c> removes the whole cache folder, so a cache set inside a state folder, or to
+    /// a folder holding one, would be cleaned with what is around or under it.
+    /// </summary>
+    [Theory]
+    [InlineData("tools-inside")]
+    [InlineData("state-root")]
+    [InlineData("holds-roaming")]
+    [InlineData("holds-local")]
+    public async Task OffersNothingWhenTheCacheOverlapsUvsOwnFolders(string shape)
+    {
+        _environment.WithExecutable("uv");
+        var provider = CreateProvider();
+        var tools = _temp.CreateDirectory("elsewhere", "uv-tools");
+        var cache = shape switch
+        {
+            "tools-inside" => Path.Combine(tools, "cache"),
+            "state-root" => provider.RoamingRoot,
+            "holds-roaming" => _environment.RoamingAppData,
+            _ => _environment.LocalAppData,
+        };
+        Directory.CreateDirectory(cache);
+        File.WriteAllBytes(Path.Combine(cache, "payload.bin"), new byte[2048]);
+        var runner = new FakeProcessRunner().Responding(Uv, "cache dir", cache).Responding(Uv, "tool dir", tools);
+        provider = CreateProvider(runner);
+
+        var plan = await provider.PlanAsync();
+
+        Assert.True(plan.IsEmpty);
+        Assert.Empty(plan.Steps);
+        Assert.Contains("overlaps", Assert.Single(plan.Notes).Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(await provider.CleanedPlacesAsync(), place => place.Path == cache);
+    }
+
+    [Fact]
+    public async Task VerificationFailsLoudlyIfTheInstalledToolsVanished()
+    {
+        _environment.WithExecutable("uv");
+        CreateCache();
+        var provider = CreateProvider(UvAnsweringNothing());
+        var tools = _temp.CreateDirectory("profile", "AppData", "Roaming", "uv", "tools");
+
+        var plan = await provider.PlanAsync();
+        Directory.Delete(tools, recursive: true);
+
+        var verification = await provider.VerifyAsync(plan);
+
+        Assert.False(verification.Passed);
+        Assert.Contains(verification.Failures, c => c.Subject.Equals(tools, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// §7.1 refuses the whole roaming folder, and everything in it, because none of it is a cache.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("tools")]
+    [InlineData("python")]
+    [InlineData("credentials")]
+    [InlineData("uv.toml")]
+    [InlineData(@"data\tools")]
+    public void ExploreRefusesEverythingInTheRoamingFolder(string relative)
+    {
+        var provider = CreateProvider();
+        var policy = new ExploreActionPolicy([], provider.ToolRoots, new FakeVolumeInventory());
+
+        Assert.False(policy.MayRemove(Path.Combine(provider.RoamingRoot, relative)).IsAllowed);
+    }
+
+    [Fact]
+    public async Task DeclaresTheToolAndPythonFoldersUvReportsForExplore()
+    {
+        _environment.WithExecutable("uv");
+        var tools = _temp.CreateDirectory("elsewhere", "uv-tools");
+        var python = _temp.CreateDirectory("elsewhere", "uv-python");
+        var runner = UvAnsweringNothing().Responding(Uv, "tool dir", tools).Responding(Uv, "python dir", python);
+
+        var discovered = await CreateProvider(runner).DiscoverToolRootsAsync();
+
+        Assert.Equal([tools, python], discovered.Select(root => root.Path));
+        Assert.All(discovered, root => Assert.False(root.Recognises(new ToolRootChild("ruff", ChildKind.Folder))));
     }
 
     [Fact]
@@ -215,7 +388,7 @@ public sealed class UvCacheProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task VerificationFailsLoudlyIfTheStateRootVanished()
+    public async Task VerificationFailsLoudlyIfTheLocalFolderVanished()
     {
         _environment.WithExecutable("uv");
         CreateCache();
@@ -224,13 +397,13 @@ public sealed class UvCacheProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         // Simulate the over-broad rule §5.6 exists to catch: clearing the cache took uv with it.
-        Directory.Delete(provider.StateRoot, recursive: true);
+        Directory.Delete(provider.LocalRoot, recursive: true);
 
         var verification = await provider.VerifyAsync(plan);
 
         Assert.False(verification.Passed);
         Assert.Contains(verification.Failures, c =>
-            c.Subject.Equals(provider.StateRoot, StringComparison.OrdinalIgnoreCase));
+            c.Subject.Equals(provider.LocalRoot, StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
