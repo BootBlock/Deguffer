@@ -62,22 +62,42 @@ internal sealed record UvStorage(
     ];
 
     /// <summary>
-    /// The survivor a clean of <see cref="Cache"/> would take with it, or null where it takes none.
+    /// How <see cref="Cache"/> overlaps what uv must keep, or null where it does not.
     ///
     /// <para><c>uv cache clean</c> removes the whole cache folder, and <c>cache-dir</c> can name any folder.
-    /// Set to the state root, or to a folder holding it, the clean would uninstall every tool and
-    /// interpreter. A cache inside one of uv's own state folders would be removed from under it.</para>
+    /// Set to a survivor, or to a folder holding one, the clean would take it: the state root would go with
+    /// every tool and interpreter. Set inside one of uv's own folders, the clean would remove something
+    /// from a folder §5.2 and Explore treat as wholly uv's, where nothing is recognised as disposable.</para>
     /// </summary>
-    public string? CacheConflict()
+    public UvCacheConflict? CacheConflict()
     {
-        var cache = Path.TrimEndingDirectorySeparator(Cache.Path);
+        if (Survivors.Select(survivor => survivor.Path).FirstOrDefault(survivor => LongPath.Contains(Cache.Path, survivor)) is { } held)
+        {
+            return new UvCacheConflict(held, CacheHoldsIt: true);
+        }
+
         var owned = FoldersFor(Tools, "tools").Concat(FoldersFor(Python, "python")).Concat(StateRoots).Append(RoamingRoot);
 
-        return owned.FirstOrDefault(folder => LongPath.Contains(Path.TrimEndingDirectorySeparator(folder), cache))
-            ?? Survivors.Select(survivor => survivor.Path).FirstOrDefault(survivor => LongPath.Contains(cache, survivor));
+        return owned.FirstOrDefault(folder => LongPath.Contains(folder, Cache.Path)) is { } around
+            ? new UvCacheConflict(around, CacheHoldsIt: false)
+            : null;
     }
+
+    /// <summary>What the plan tells the user when it declines a cache that overlaps uv's own folders.</summary>
+    public static string DescribeConflict(string cache, UvCacheConflict conflict) => conflict.CacheHoldsIt
+        ? $"uv's cache directory is set to {cache}, which holds {conflict.Folder}. uv's own clean removes the "
+          + "whole cache directory, so it would take uv's tools, interpreters, credentials or settings with it. "
+          + "Deguffer offers nothing until the cache is moved to a folder of its own."
+        : $"uv's cache directory is set to {cache}, inside {conflict.Folder}, which holds uv's tools, "
+          + "interpreters, credentials or settings and none of whose contents Deguffer removes. Deguffer offers "
+          + "nothing until the cache is moved to a folder of its own.";
 
     /// <summary>The folder uv reported, or the default in every candidate state root where it did not.</summary>
     private IEnumerable<string> FoldersFor(AskedLocation asked, string bucket) =>
         asked.Answered ? [asked.Path] : StateRoots.Select(root => Path.Combine(root, bucket));
 }
+
+/// <summary>A cache directory that overlaps one of uv's own folders.</summary>
+/// <param name="Folder">The folder it overlaps.</param>
+/// <param name="CacheHoldsIt">True where the cache holds the folder, false where it sits inside it.</param>
+internal readonly record struct UvCacheConflict(string Folder, bool CacheHoldsIt);

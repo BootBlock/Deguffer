@@ -30,7 +30,7 @@ public sealed class UvCacheProviderTests : IDisposable
     private FakeProcessRunner UvAnsweringNothing() =>
         new FakeProcessRunner().Responding(Uv, "cache dir", string.Empty);
 
-    /// <summary>Create uv's state directory with a populated cache, and return the cache path.</summary>
+    /// <summary>Create uv's local folder with a populated cache, and return the cache path.</summary>
     private string CreateCache(long bytes = 4096)
     {
         var cache = Path.Combine(_environment.LocalAppData, "uv", "cache");
@@ -291,15 +291,20 @@ public sealed class UvCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// <c>uv cache clean</c> removes the whole cache folder, so a cache set inside a state folder, or to
-    /// a folder holding one, would be cleaned with what is around or under it.
+    /// <c>uv cache clean</c> removes the whole cache folder, so a cache set to a folder holding one of
+    /// uv's own would take it, and one inside such a folder would be removed from a folder nothing in
+    /// is disposable. uv can print a <c>cache-dir</c> as it was typed, so each spelling of the state
+    /// root must be caught as the state root.
     /// </summary>
     [Theory]
-    [InlineData("tools-inside")]
-    [InlineData("state-root")]
-    [InlineData("holds-roaming")]
-    [InlineData("holds-local")]
-    public async Task OffersNothingWhenTheCacheOverlapsUvsOwnFolders(string shape)
+    [InlineData("tools-inside", "plain", "inside")]
+    [InlineData("state-root", "plain", "which holds")]
+    [InlineData("state-root", "forward-slashes", "which holds")]
+    [InlineData("state-root", "dot-segment", "which holds")]
+    [InlineData("state-root", "trailing-dot", "which holds")]
+    [InlineData("holds-roaming", "plain", "which holds")]
+    [InlineData("holds-local", "plain", "which holds")]
+    public async Task OffersNothingWhenTheCacheOverlapsUvsOwnFolders(string shape, string spelling, string says)
     {
         _environment.WithExecutable("uv");
         var provider = CreateProvider();
@@ -313,15 +318,22 @@ public sealed class UvCacheProviderTests : IDisposable
         };
         Directory.CreateDirectory(cache);
         File.WriteAllBytes(Path.Combine(cache, "payload.bin"), new byte[2048]);
-        var runner = new FakeProcessRunner().Responding(Uv, "cache dir", cache).Responding(Uv, "tool dir", tools);
+        var printed = spelling switch
+        {
+            "forward-slashes" => cache.Replace('\\', '/'),
+            "dot-segment" => Path.Combine(cache, "tools") + @"\..",
+            "trailing-dot" => cache + ".",
+            _ => cache,
+        };
+        var runner = new FakeProcessRunner().Responding(Uv, "cache dir", printed).Responding(Uv, "tool dir", tools);
         provider = CreateProvider(runner);
 
         var plan = await provider.PlanAsync();
 
         Assert.True(plan.IsEmpty);
         Assert.Empty(plan.Steps);
-        Assert.Contains("overlaps", Assert.Single(plan.Notes).Message, StringComparison.Ordinal);
-        Assert.DoesNotContain(await provider.CleanedPlacesAsync(), place => place.Path == cache);
+        Assert.Contains($"set to {cache}, {says} ", Assert.Single(plan.Notes).Message, StringComparison.Ordinal);
+        Assert.Equal([provider.DefaultCacheDirectory], (await provider.CleanedPlacesAsync()).Select(place => place.Path));
     }
 
     [Fact]

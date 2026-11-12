@@ -1577,7 +1577,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData("nuget", "NuGet.Config")]                    // private feed credentials
     [InlineData("maven", "settings-security.xml")]           // the master password
     [InlineData("platformio", "packages")]                   // the installed toolchains
-    [InlineData("uv", "tools")]                              // what 'uv tool install' put there
+    [InlineData("uv", "something-unrecognised")]             // its roaming folder has a theory of its own
     [InlineData("pip", "pip.ini")]                           // private index URLs
     [InlineData("poetry", "virtualenvs")]                    // every environment on the machine
     [InlineData("pipenv", "pkgs")]                           // the download destination pipenv names to pip

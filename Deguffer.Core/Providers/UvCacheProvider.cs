@@ -170,10 +170,7 @@ public sealed class UvCacheProvider : CleanupProviderBase
 
         if (storage.CacheConflict() is { } conflict)
         {
-            return EmptyPlan(
-                $"uv's cache directory is set to {cacheDirectory}, which overlaps {conflict}. uv's own clean "
-                + "removes the whole cache directory, so it would take uv's tools, interpreters, credentials "
-                + "or settings with it. Deguffer offers nothing until the cache is moved to a folder of its own.");
+            return EmptyPlan(UvStorage.DescribeConflict(cacheDirectory, conflict));
         }
 
         if (NothingToPlanFor(cacheDirectory, located.DescribeAbsent("uv", "cache directory")) is { } nothing)
@@ -250,7 +247,10 @@ public sealed class UvCacheProvider : CleanupProviderBase
         // --color never because uv colourises a path when it thinks it is writing to a terminal, and
         // the escape sequences would land inside the parsed path.
         var outcome = await Runner.RunAsync(uv, $"{query} --color never", ToolRun.Query, ct).ConfigureAwait(false);
+        var printed = AskedLocation.FromLastRootedLine(outcome, fallback);
 
-        return AskedLocation.FromLastRootedLine(outcome, fallback);
+        // Resolved as configuration, because uv can print a cache-dir as it was typed: forward slashes
+        // or a '..' would compare equal to none of uv's folders and walk past the overlap check.
+        return AskedLocation.Of(printed.Answered ? LongPath.Configured(printed.Path) : null, fallback);
     }
 }

@@ -349,9 +349,10 @@ location, and uv's own command still clears wherever its cache really is.
 It asks `uv tool dir` and `uv python dir` in the same pass, because the variables above can move the
 tools and interpreters anywhere. Where uv gives no answer, it uses the layout above.
 
-If the cache is set to one of uv's own folders, to a folder inside one, or to a folder that holds one,
-Deguffer offers nothing and says why. uv's clean removes the whole cache directory, so it would take
-the tools, interpreters, credentials or settings with it.
+If the cache is set to one of uv's own folders, or to a folder that holds one, Deguffer offers nothing
+and says why: uv's clean removes the whole cache directory, so it would take the tools, interpreters,
+credentials or settings with it. If the cache is set to a folder inside one of them, Deguffer offers
+nothing either, because it removes nothing from those folders.
 
 Deguffer does **not** pass `--force`. That flag tells uv to ignore its own check for a cache in use,
 so Deguffer warns you when `uv` or `uvx` is running and leaves the judgement to uv.
