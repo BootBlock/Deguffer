@@ -88,16 +88,20 @@ internal static class AtaAttributeRows
         && value is >= LowestValid and <= HighestValid
         && value <= threshold;
 
-    private static (string Reading, string Meaning, AttributeStanding Standing) Reading(AtaAttribute attribute, AtaAttributeDefinition known) =>
-        known.Format is SmartRawFormat.Opaque
-            ? (Value(attribute), $"{known.Explanation} {UnusedNumbers}".TrimStart(), AttributeStanding.Normal)
-            : known.Role switch
-            {
-                AttributeRole.FailureCount => FailureCount(attribute, known),
-                AttributeRole.RemainingLife => RemainingLife(attribute, known),
-                AttributeRole.Temperature => (Temperature(attribute), known.Explanation, AttributeStanding.Normal),
-                _ => (Decoded(attribute, known.Format), known.Explanation, AttributeStanding.Normal),
-            };
+    private static (string Reading, string Meaning, AttributeStanding Standing) Reading(AtaAttribute attribute, AtaAttributeDefinition known) => known switch
+    {
+        AtaStatusDefinition status => Status(attribute, status),
+        { Format: SmartRawFormat.Opaque } => (Value(attribute), $"{known.Explanation} {UnusedNumbers}".TrimStart(), AttributeStanding.Normal),
+        { Role: AttributeRole.FailureCount } => FailureCount(attribute, known),
+        { Role: AttributeRole.RemainingLife } => RemainingLife(attribute, known),
+        { Role: AttributeRole.Temperature } => (Temperature(attribute), known.Explanation, AttributeStanding.Normal),
+        _ => (Decoded(attribute, known.Format), known.Explanation, AttributeStanding.Normal),
+    };
+
+    private static (string, string, AttributeStanding) Status(AtaAttribute attribute, AtaStatusDefinition status) =>
+        status.Codes.TryGetValue(attribute.Raw, out var code)
+            ? (code.Reading, $"{status.Explanation} {code.Meaning}", code.Standing)
+            : ($"Code 0x{attribute.Raw:X2}", $"{status.Explanation} The manufacturer's document does not list this code, so Deguffer shows it as reported.", AttributeStanding.Normal);
 
     private static (string, string, AttributeStanding) FailureCount(AtaAttribute attribute, AtaAttributeDefinition known)
     {
