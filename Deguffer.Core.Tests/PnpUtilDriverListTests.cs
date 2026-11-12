@@ -3,8 +3,8 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// Reading <c>pnputil /enum-drivers /devices /format xml</c>. The fixture keeps the shape Windows 11
-/// 24H2 writes, with invented names.
+/// Reading <c>pnputil /enum-drivers /format xml</c>, with and without <c>/devices</c>. The fixture keeps
+/// the shape Windows 11 24H2 writes with <c>/devices</c>, with invented names.
 /// </summary>
 public sealed class PnpUtilDriverListTests
 {
@@ -42,7 +42,7 @@ public sealed class PnpUtilDriverListTests
     [Fact]
     public void ReadsEachPackageFromTheListing()
     {
-        var (packages, unread) = PnpUtilDriverList.Parse(Listing, name => $@"C:\Store\{name}")!.Value;
+        var (packages, unread) = PnpUtilDriverList.ParseWithDevices(Listing, name => $@"C:\Store\{name}")!.Value;
 
         Assert.Equal(0, unread);
         Assert.Equal(2, packages.Count);
@@ -68,7 +68,7 @@ public sealed class PnpUtilDriverListTests
     [Fact]
     public void ReadsTheDateMonthFirst()
     {
-        var (packages, _) = PnpUtilDriverList.Parse(Listing, Nowhere)!.Value;
+        var (packages, _) = PnpUtilDriverList.ParseWithDevices(Listing, Nowhere)!.Value;
 
         Assert.Equal(new DateOnly(2022, 7, 22), packages[0].Date);
         Assert.Equal(new Version(23, 40, 0, 4), packages[0].Version);
@@ -80,7 +80,7 @@ public sealed class PnpUtilDriverListTests
     {
         var damaged = Listing.Replace("07/22/2022 23.40.0.4", "22/07/2022 23.40.0.4", StringComparison.Ordinal);
 
-        var (packages, unread) = PnpUtilDriverList.Parse(damaged, Nowhere)!.Value;
+        var (packages, unread) = PnpUtilDriverList.ParseWithDevices(damaged, Nowhere)!.Value;
 
         Assert.Equal(1, unread);
         Assert.Equal("oem100.inf", Assert.Single(packages).PublishedName);
@@ -92,6 +92,27 @@ public sealed class PnpUtilDriverListTests
     [InlineData("<?xml version=\"1.0\"?><Other />")]
     public void RefusesTextThatIsNotTheListing(string text)
     {
-        Assert.Null(PnpUtilDriverList.Parse(text, Nowhere));
+        Assert.Null(PnpUtilDriverList.ParseWithDevices(text, Nowhere));
+        Assert.Null(PnpUtilDriverList.Parse(text, Nowhere, _ => true));
+    }
+
+    /// <summary>
+    /// The listing without <c>/devices</c> names no devices, so each package's use is what the devices'
+    /// own properties say, asked by its published name.
+    /// </summary>
+    [Fact]
+    public void TakesEachPackagesUseFromTheDevicesWhenTheListingDoesNotNameThem()
+    {
+        var asked = new List<string>();
+
+        var (packages, _) = PnpUtilDriverList.Parse(Listing, Nowhere, name =>
+        {
+            asked.Add(name);
+            return name == "oem12.inf";
+        })!.Value;
+
+        Assert.Equal(["oem12.inf", "oem100.inf"], asked);
+        Assert.True(packages.Single(p => p.PublishedName == "oem12.inf").InUse);
+        Assert.False(packages.Single(p => p.PublishedName == "oem100.inf").InUse);
     }
 }

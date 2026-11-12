@@ -5,7 +5,7 @@ using System.Xml.Linq;
 namespace Deguffer.Core.Safety;
 
 /// <summary>
-/// What <c>pnputil /enum-drivers /devices /format xml</c> says about the driver store.
+/// What <c>pnputil /enum-drivers /format xml</c> says about the driver store.
 ///
 /// <para><b>The XML, never the text.</b> The text form's labels are translated, so a parser keyed on
 /// "Published Name:" reads nothing on a German Windows. The XML's element names are not, and its
@@ -17,16 +17,45 @@ namespace Deguffer.Core.Safety;
 /// </summary>
 public static class PnpUtilDriverList
 {
-    /// <summary>The arguments that produce the listing this reads.</summary>
-    public const string Arguments = "/enum-drivers /devices /format xml";
+    /// <summary>
+    /// The listing without each package's devices, read by <see cref="Parse"/>. Naming the devices is
+    /// almost all of pnputil's cost, and <see cref="DeviceDrivers"/> answers which packages are in use.
+    /// </summary>
+    public const string Arguments = "/enum-drivers /format xml";
 
-    /// <param name="xml">The listing.</param>
+    /// <summary>
+    /// The listing with each package's devices, read by <see cref="ParseWithDevices"/>, for where the
+    /// devices' own properties cannot say which packages are in use.
+    /// </summary>
+    public const string ArgumentsWithDevices = "/enum-drivers /devices /format xml";
+
+    /// <param name="xml">The listing <see cref="Arguments"/> produce.</param>
     /// <param name="locate">Each package's folder in the driver store, given its published name.</param>
+    /// <param name="inUse">Whether some device is installed with a package, given its published name.</param>
     /// <returns>
     /// The packages, and how many entries were left out because they did not read; or null where the
     /// text is not the listing at all.
     /// </returns>
-    public static (IReadOnlyList<DriverPackage> Packages, int Unread)? Parse(string xml, Func<string, string?> locate)
+    public static (IReadOnlyList<DriverPackage> Packages, int Unread)? Parse(
+        string xml,
+        Func<string, string?> locate,
+        Func<string, bool> inUse)
+    {
+        ArgumentNullException.ThrowIfNull(inUse);
+
+        return Read(xml, locate, (_, published) => inUse(published));
+    }
+
+    /// <summary>As <see cref="Parse"/>, with each package in use where the listing names a device for it.</summary>
+    /// <param name="xml">The listing <see cref="ArgumentsWithDevices"/> produce.</param>
+    /// <param name="locate">Each package's folder in the driver store, given its published name.</param>
+    public static (IReadOnlyList<DriverPackage> Packages, int Unread)? ParseWithDevices(string xml, Func<string, string?> locate) =>
+        Read(xml, locate, (entry, _) => entry.Element("Devices")?.Elements("Device").Any() == true);
+
+    private static (IReadOnlyList<DriverPackage> Packages, int Unread)? Read(
+        string xml,
+        Func<string, string?> locate,
+        Func<XElement, string, bool> inUse)
     {
         ArgumentNullException.ThrowIfNull(locate);
 
@@ -52,7 +81,7 @@ public static class PnpUtilDriverList
 
         foreach (var entry in document.Root.Elements("Driver"))
         {
-            if (Read(entry, locate) is { } package)
+            if (Package(entry, locate, inUse) is { } package)
             {
                 packages.Add(package);
             }
@@ -65,7 +94,7 @@ public static class PnpUtilDriverList
         return (packages, unread);
     }
 
-    private static DriverPackage? Read(XElement entry, Func<string, string?> locate)
+    private static DriverPackage? Package(XElement entry, Func<string, string?> locate, Func<XElement, string, bool> inUse)
     {
         var published = (string?)entry.Attribute("DriverName");
         var original = Text(entry, "OriginalName");
@@ -86,7 +115,7 @@ public static class PnpUtilDriverList
             Text(entry, "ExtensionId"),
             date,
             version,
-            InUse: entry.Element("Devices")?.Elements("Device").Any() == true,
+            InUse: inUse(entry, published),
             Folder: locate(published));
     }
 

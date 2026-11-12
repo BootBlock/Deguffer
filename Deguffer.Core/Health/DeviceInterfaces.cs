@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Deguffer.Core.Native;
 
 namespace Deguffer.Core.Health;
 
@@ -33,7 +34,7 @@ internal static partial class DeviceInterfaces
 
             if (result == Success)
             {
-                return Split(buffer);
+                return MultiString.Split(buffer);
             }
 
             if (result != BufferSmall)
@@ -49,20 +50,6 @@ internal static partial class DeviceInterfaces
         {
             return CM_Get_Device_Interface_List(ref guid, nint.Zero, pointer, length, PresentOnly);
         }
-    }
-
-    /// <summary>A multi-string: each path ended by a null, and the set ended by an empty one.</summary>
-    internal static IReadOnlyList<string> Split(ReadOnlySpan<char> multiString)
-    {
-        var paths = new List<string>();
-
-        while (multiString.IndexOf('\0') is var end and > 0)
-        {
-            paths.Add(multiString[..end].ToString());
-            multiString = multiString[(end + 1)..];
-        }
-
-        return paths;
     }
 
     [LibraryImport("cfgmgr32.dll", EntryPoint = "CM_Get_Device_Interface_List_SizeW")]
