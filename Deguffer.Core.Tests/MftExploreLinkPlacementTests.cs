@@ -75,21 +75,39 @@ public sealed class MftExploreLinkPlacementTests
     /// <para>Measured on this thread, which places the names and assembles the tree, against the same
     /// table read with no other name. The bound is a byte a record: the name's node and its own column
     /// slots are a few hundred bytes in all, and growing the columns again would be 35 a record.</para>
+    ///
+    /// <para>Each table is measured as the least of several reads (#757). Assembling orders names and
+    /// children in parallel loops, and now and then the thread pool's own bookkeeping for those loops
+    /// lands on this thread, about 7 KB at a time. That is added to a read, never taken from one, so
+    /// the least of a few reads is the read without it, and the two tables then differ by the few
+    /// hundred bytes the name costs.</para>
     /// </summary>
     [Fact]
     public void ATableWithAnotherNameDoesNotCopyItsColumnsToMakeRoomForIt()
     {
         const int Files = 20_000;
+        const int Reads = 5;
 
         using var plain = Table(linked: false);
         using var linked = Table(linked: true);
 
-        Allocated(plain);
-        Allocated(linked);
-
-        var extra = Allocated(linked) - Allocated(plain);
+        var extra = Least(linked) - Least(plain);
 
         Assert.InRange(extra, 0, Files);
+
+        static long Least(IMftSource source)
+        {
+            // The first read also pays for warming the reader up, which only raises it, so one read
+            // more than Reads is taken.
+            var least = long.MaxValue;
+
+            for (var read = 0; read <= Reads; read++)
+            {
+                least = Math.Min(least, Allocated(source));
+            }
+
+            return least;
+        }
 
         static IMftSource Table(bool linked)
         {
