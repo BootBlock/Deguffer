@@ -617,6 +617,71 @@ public sealed class ExploreActionsTests : IDisposable
     }
 
     /// <summary>
+    /// A removal asks the policy about every item once before the question and once after it, and
+    /// never on the page's thread: each question goes to the volume manager, and a selection of
+    /// twenty thousand items asked there held the window for seconds before the dialog appeared and
+    /// again after it was answered. The answers still come back in the order the items were picked.
+    /// </summary>
+    [Fact]
+    public async Task ARemovalAsksThePolicyAboutEachItemOffThePagesThreadBeforeAndAfterTheQuestion()
+    {
+        var refusedFolder = _temp.CreateDirectory("kept");
+        ExploreItem[] items =
+        [
+            .. Enumerable.Range(0, 12).Select(i => Item(i % 3 == 0
+                ? _temp.CreateFile(8, "kept", $"{i}.bin")
+                : _temp.CreateFile(8, "loose", $"{i}.bin"))),
+        ];
+        var volumes = new FakeVolumeInventory();
+        var prompt = new FakeExploreConfirmation(answer: true);
+        var actions = Actions(_ => Task.FromResult(Policy(refusing: refusedFolder, volumes: volumes)), prompt);
+        var page = new QueuedContext();
+        var pageThread = Environment.CurrentManagedThreadId;
+        var asked = new ConcurrentQueue<(string Path, int Thread, bool AfterTheQuestion)>();
+
+        IReadOnlyList<ExploreItem> acting = [];
+
+        actions.Prepare();
+        volumes.Asked = path => asked.Enqueue((LongPath.Display(path), Environment.CurrentManagedThreadId, prompt.FirstAsked.IsCompleted));
+
+        Task<ExploreRemovalReport?> removing;
+        var previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(page);
+
+        try
+        {
+            removing = actions.RemoveAsync(items, ExploreRemovalMode.Permanent, acting: going => acting = going);
+            page.RunUntil(() => removing.IsCompleted, "the removal");
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+
+        var report = await removing;
+
+        Assert.DoesNotContain(asked, question => question.Thread == pageThread);
+        Assert.All(items, item =>
+        {
+            var before = asked.Count(question => question.Path == item.Path && !question.AfterTheQuestion);
+            var after = asked.Count(question => question.Path == item.Path && question.AfterTheQuestion);
+
+            Assert.True(before > 0, $"'{item.Path}' was never asked about before the question");
+            Assert.Equal(before, after);
+        });
+
+        string[] loose = [.. items.Where(item => !item.Path.StartsWith(refusedFolder, StringComparison.Ordinal)).Select(item => item.Path)];
+        string[] kept = [.. items.Where(item => item.Path.StartsWith(refusedFolder, StringComparison.Ordinal)).Select(item => item.Path)];
+
+        Assert.Single(prompt.Asked);
+        Assert.Equal(loose, acting.Select(item => item.Path));
+        Assert.Equal(loose, report!.Removed.Select(outcome => outcome.Path));
+        Assert.Equal(kept, report.Refused.Select(outcome => outcome.Path));
+        Assert.All(kept, path => Assert.True(File.Exists(path), $"'{path}' was refused and must survive"));
+        Assert.True(report.Verification.Passed);
+    }
+
+    /// <summary>
     /// Run <paramref name="body"/> with no synchronisation context, so Ready is raised inline as the
     /// build completes rather than posted to the test runner's own context and heard later, on
     /// another thread, after the assertions have run.
