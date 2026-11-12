@@ -93,11 +93,12 @@ internal static partial class AtaVendorOverlay
     /// <summary>
     /// Samsung, "Using SMART Attributes to Estimate Drive Lifetime" (WHP-SSD-SSDSMARTATTRIBUTES-APR16J),
     /// which covers the PM863 and SM863. For 177, 179, 181, 182 and 183 the normalised value is the
-    /// percentage left, and the paper advises replacing the drive once one falls below 10. The 845 DC
-    /// note counts used reserve blocks in 179's raw value where this paper counts unused ones, so 179
-    /// is read by its normalised value only. The paper states no unit for 242, so 242 stays as reported.
-    /// Its timed workload attributes, 245 to 247, mean something only during a measurement that a
-    /// vendor command starts, which Deguffer never sends (§7.6).
+    /// percentage left. The paper advises replacing the drive once 179, 181, 182 or 183 falls below 10,
+    /// which the general warning at 10 or less already gives. The 845 DC note counts used reserve
+    /// blocks in 179's raw value where this paper counts unused ones, so 179 is read by its normalised
+    /// value only. The paper states no unit for 242, so 242 stays as reported. Its timed workload
+    /// attributes, 245 to 247, describe a measurement that Samsung's tool starts with a vendor command,
+    /// which Deguffer never sends (§7.6).
     /// </summary>
     private static AtaAttributeDefinition? SamsungPm863OrSm863Of(byte id) => id switch
     {

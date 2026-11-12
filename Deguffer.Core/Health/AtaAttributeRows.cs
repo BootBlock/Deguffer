@@ -101,7 +101,7 @@ internal static class AtaAttributeRows
     private static (string, string, AttributeStanding) Status(AtaAttribute attribute, AtaStatusDefinition status) =>
         status.Codes.TryGetValue(attribute.Raw, out var code)
             ? (code.Reading, $"{status.Explanation} {code.Meaning}", code.Standing)
-            : ($"Code 0x{attribute.Raw:X2}", $"{status.Explanation} The manufacturer's document does not list this code, so Deguffer shows it as reported.", AttributeStanding.Normal);
+            : (Code(attribute), $"{status.Explanation} The manufacturer's document does not list this code, so Deguffer shows it as reported.", AttributeStanding.Normal);
 
     private static (string, string, AttributeStanding) FailureCount(AtaAttribute attribute, AtaAttributeDefinition known)
     {
@@ -129,10 +129,13 @@ internal static class AtaAttributeRows
         SmartRawFormat.Hours => HealthText.Hours(attribute.Raw & LowDoubleWord),
         SmartRawFormat.Bytes512 => HealthText.Size((UInt128)attribute.Raw * DriveRequests.SectorBytes),
         SmartRawFormat.Percent => HealthText.Percent(attribute.Value),
+        SmartRawFormat.Status => Code(attribute),
         _ => HealthText.Count(attribute.Raw & LowDoubleWord),
     };
 
     private static string Value(AtaAttribute attribute) => $"Scored {attribute.Value}";
+
+    private static string Code(AtaAttribute attribute) => $"Code 0x{attribute.Raw:X2}";
 
     private static string Key(AtaAttribute attribute) => $"ata-{attribute.Id}";
 

@@ -120,7 +120,7 @@ public sealed class AtaVendorOverlayTests
     [InlineData(179, 10, AttributeStanding.Watch)]
     [InlineData(183, 10, AttributeStanding.Watch)]
     [InlineData(181, 11, AttributeStanding.Normal)]
-    public void SamsungAllowancesWarnAtTheWhitePapersThreshold(byte id, byte value, AttributeStanding expected) =>
+    public void SamsungAllowancesWarnBeforeTheWhitePapersReplacementPoint(byte id, byte value, AttributeStanding expected) =>
         Assert.Equal(expected, Row(id, Pm863, value: value).Standing);
 
     [Theory]
