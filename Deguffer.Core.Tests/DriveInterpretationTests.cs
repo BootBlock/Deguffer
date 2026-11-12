@@ -13,8 +13,11 @@ public sealed class DriveInterpretationTests
     private static AtaAttribute Attribute(byte id, byte value = 100, ulong raw = 0, bool preFail = false, byte? threshold = null) =>
         new(id, preFail, value, 100, raw, threshold);
 
+    /// <summary>An invented PM863 part number, which Samsung's own documents cover for 177 and 241.</summary>
+    private const string SamsungCovered = "SAMSUNG MZ7LM999HCTE-00000";
+
     private static HealthAttribute Row(AtaAttribute attribute, string model = "Test Model") =>
-        Assert.Single(AtaAttributeRows.Of([attribute], model));
+        Assert.Single(AtaAttributeRows.Of([attribute], AtaDrives.Named(model)));
 
     private static IReadOnlyList<HealthAttribute> Nvme(byte[] health, NvmeController? controller = null)
     {
@@ -89,20 +92,20 @@ public sealed class DriveInterpretationTests
     [Fact]
     public void AVendorOverlayAppliesOnlyToItsOwnDrives()
     {
-        Assert.Equal("Remaining life", Row(Attribute(177, value: 50), "SAMSUNG SSD 860").Name);
+        Assert.Equal("Remaining life", Row(Attribute(177, value: 50), SamsungCovered).Name);
         Assert.Equal("Wear levelling count", Row(Attribute(177, value: 50), "Other SSD").Name);
     }
 
     [Fact]
     public void RemainingLifeAtOrBelowTheLimitIsWatch()
     {
-        Assert.Equal(AttributeStanding.Watch, Row(Attribute(177, value: 10), "SAMSUNG SSD").Standing);
-        Assert.Equal(AttributeStanding.Normal, Row(Attribute(177, value: 11), "SAMSUNG SSD").Standing);
+        Assert.Equal(AttributeStanding.Watch, Row(Attribute(177, value: 10), SamsungCovered).Standing);
+        Assert.Equal(AttributeStanding.Normal, Row(Attribute(177, value: 11), SamsungCovered).Standing);
     }
 
     [Fact]
     public void ANamedWrittenCounterStatesASize() =>
-        Assert.Equal("1.0 MB", Row(Attribute(241, raw: 2048), "SAMSUNG SSD").Reading);
+        Assert.Equal("1.0 MB", Row(Attribute(241, raw: 2048), SamsungCovered).Reading);
 
     [Fact]
     public void HoursStateTheTimeTheyComeTo() =>

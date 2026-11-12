@@ -158,7 +158,7 @@ public sealed class DriveHealthReader(IDriveProbe probe, IVolumeInventory invent
             return Empty(drive, DriveVerdict.Unknown, NotReported) with { Facts = facts };
         }
 
-        var readout = reader.Read(device, descriptor.Model);
+        var readout = reader.Read(device, descriptor);
         var verdict = DriveAssessment.Verdict(readout.Attributes, readout.HasPrimarySignal);
 
         return new DriveHealth(
