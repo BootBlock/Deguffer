@@ -127,7 +127,7 @@ remove one by any route.
 
 ## Storage
 
-Each of the 124 sources has its own provider, which knows what that location is and what sits next
+Each of the 137 sources has its own provider, which knows what that location is and what sits next
 to it. Rows for tools you do not have are hidden unless you ask the Storage page to show them. Build
 output and project caches, such as `node_modules`, `obj`, Rust's `target`, Python's `.tox` and
 `.pytest_cache` folders, and the caches in Visual Studio's `.vs` folders, are only looked for
@@ -182,6 +182,7 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | Nx workspace task caches | `.nx\cache` beside an `nx.json` under your own source folders, only where Nx's own `terminalOutputs` folder is inside and the Nx that reads its index is 23.3 or later; never the rest of `.nx`, and nothing while Nx is running in the workspace. Researched |
 | .NET intermediate build output | `obj` folders under your own source folders |
 | Rust incremental compilation caches | The `incremental` folder in each build profile inside `target` folders under your own source folders; the rest of each build stays |
+| Godot project shader caches | `shader_cache` inside a Godot 4 project's `.godot` folder under your own source folders, only where every file in it is one Godot's renderer wrote; never the rest of `.godot`, and nothing while the Godot editor has the project open |
 | Visual Studio solution caches | Inside the `.vs` folder beside a solution under your own source folders: the design-time build and project evaluation caches, the Find in Files index, and the C++ browsing database and precompiled headers, each only where the files inside it are the ones Visual Studio writes; never Copilot conversations or snapshots, solution options or window layouts, and nothing while the solution is open |
 | Dart analysis server cache | |
 | Roslyn solution index cache | One dated row per set of indexes, so that sets left behind when a program moved folder can go; never the rest of Visual Studio's folder |
@@ -250,6 +251,8 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | nox environments | `.nox` folders under your own source folders, only where nox's cache tag and `.gitignore` are inside and a `noxfile.py` is next to it. Researched |
 | Dart and Flutter tool folders | `.dart_tool` folders under your own source folders, only where pub's own package configuration is inside, `pubspec.yaml` and `pubspec.lock` are next to it, and git tracks nothing inside it |
 | Git LFS old file versions | Old versions of large files in `.git\lfs\objects` in the Git repositories under your own source folders, removed only by Git LFS's own prune after the repository's server confirms it still holds each one. A repository whose remote is a folder, whose store is shared, or that something is working in is left alone |
+| Godot project import caches | `imported` inside a Godot 4 project's `.godot` folder under your own source folders, only where every file in it is one Godot's importer wrote; never the rest of `.godot`, which holds the export passwords, and nothing while the Godot editor has the project open. Godot imports every asset again on the next open |
+| Godot 3 project import caches | A Godot 3 project's `.import` folder under your own source folders, only where every file in it is one Godot's importer wrote |
 | Rust build output | What Cargo wrote inside `target` folders under your own source folders: each build profile, each target platform's folder, `doc` and `tmp`; never `target` itself, the incremental caches, which are a Tier 1 row, or anything else a build script keeps there |
 | Unity project library | |
 | Unreal project intermediate files | `Intermediate` next to a `.uproject` under your own source folders; never `Saved` or `Binaries`. Researched |

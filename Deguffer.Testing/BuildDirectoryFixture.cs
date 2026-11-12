@@ -290,20 +290,20 @@ public static class BuildDirectoryFixture
         return tool;
     }
 
-    private static string Directory(params string[] segments)
+    internal static string Directory(params string[] segments)
     {
         var full = Path.Combine(segments);
         System.IO.Directory.CreateDirectory(LongPath.Extended(full));
         return full;
     }
 
-    private static void WriteText(string path, string content)
+    internal static void WriteText(string path, string content)
     {
         System.IO.Directory.CreateDirectory(LongPath.Extended(Path.GetDirectoryName(path)!));
         File.WriteAllText(LongPath.Extended(path), content);
     }
 
-    private static void WriteBytes(string path, int bytes)
+    internal static void WriteBytes(string path, int bytes)
     {
         System.IO.Directory.CreateDirectory(LongPath.Extended(Path.GetDirectoryName(path)!));
         File.WriteAllBytes(LongPath.Extended(path), new byte[bytes]);

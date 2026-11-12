@@ -72,7 +72,7 @@ public static class BuildDirectorySignature
             }
         }
 
-        if (kind.ConfirmsContents is { } confirms && !confirms(directory))
+        if (kind.ConfirmsContents is { } confirms && !confirms(directory, ct))
         {
             return null;
         }
