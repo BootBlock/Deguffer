@@ -259,8 +259,8 @@ you would lose by deleting it. By default, only Tier 1 rows that are not marked 
 | Unreal project derived data cache | A project's own `DerivedDataCache` under your own source folders. Researched |
 | Superseded application versions | Older versions that a Squirrel-updated app still keeps |
 | CapCut superseded builds | Older builds of CapCut and Jianying Pro in `Apps`, never the build its launcher starts or the newest, and nothing while it is running. Researched |
-| Temporary files | Emptied in place, taking only what nothing has touched for seven days; anything a tool's own row offers is left to that row |
-| Installer downloads in temporary folders | Updates that VS Code, Docker Desktop and the Visual Studio Installer downloaded, and Blender's crashed sessions, only while the application is closed; never Blender's recovery files |
+| Temporary files | Emptied in place, taking only what nothing has touched for seven days; anything a tool's own row offers is left to that row; never work that was never saved, such as an Arduino IDE sketch, Krita's or Blender's autosave, or NVIDIA Highlights clips |
+| Installer downloads in temporary folders | Updates that VS Code, Docker Desktop and the Visual Studio Installer downloaded, and Blender's crashed sessions, only while the application is closed |
 | Previous Windows installation | `Windows.old` and Setup's leftovers, removed by Windows' own Disk Cleanup handlers once the upgrade can no longer be undone and no update is unfinished |
 | Leftover Windows update folders | `$WinREAgent` and `$GetCurrent`, which Microsoft does not document. They are offered on Deguffer's own stated judgement, as a whole, once nothing inside has changed for 30 days |
 | Superseded driver packages | Older versions of drivers in Windows' driver store, removed by Windows' own Disk Cleanup handler; never the newest version of a driver, one that a device is using, or one that is part of Windows |

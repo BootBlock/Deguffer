@@ -18,16 +18,15 @@ namespace Deguffer.Core.Providers;
 /// dearer in a different way: a bake made for a file that was never saved points into the session's
 /// folder, so a recovered autosave can reach for it.</para>
 ///
+/// <para>Blender's recovery files, <c>quit.blend</c> and the autosaves, sit loose beside its session
+/// folders. They are somebody's work, not something left behind, so <see cref="TemporaryUserWork"/>
+/// recognises them and the "Temporary files" row keeps them. No marker here matches them.</para>
+///
 /// <para><b>Held back while its application runs</b>, because none of these names ties a folder to a
 /// process. VS Code applies a downloaded update from its folder when it restarts, and deleting the
 /// flag file beside the installer changes what the installer does; Docker's update behaviour is not
 /// published, so it is treated the same way. The clean asks again before removing each one, so an
 /// application started while the preview was on screen keeps its download.</para>
-///
-/// <para><b>Blender's unsaved work is named here so that nothing takes it.</b> <c>quit.blend</c> and
-/// the autosave files sit loose in the temporary folder, where the "Temporary files" row would take
-/// them on their age. They hold work that was never saved anywhere else, so this row recognises them,
-/// keeps them, and asserts they survived.</para>
 /// </summary>
 public sealed partial class TempInstallerDownloadProvider : TempMarkerProviderBase
 {
@@ -71,13 +70,6 @@ public sealed partial class TempInstallerDownloadProvider : TempMarkerProviderBa
     [GeneratedRegex(@"\Ablender_[a-z][0-9]{5}\z", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex BlenderSession();
 
-    [GeneratedRegex(@"\Aquit\.blend\z", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex BlenderQuit();
-
-    /// <summary>An autosave: the process identifier, with the file's own name before it where it had one.</summary>
-    [GeneratedRegex(@"\A(?:.+_)?[0-9]+_autosave\.blend\z", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex BlenderAutosave();
-
     private static readonly TempMarker[] TopLevel =
     [
         new(
@@ -107,24 +99,6 @@ public sealed partial class TempInstallerDownloadProvider : TempMarkerProviderBa
             + "here, so recovering that file will not find it.")
         {
             HeldBy = ["blender"],
-        },
-        new(
-            BlenderTool,
-            BlenderQuit(),
-            TargetKind.File,
-            "Blender's copy of the last session, which File › Recover › Last Session opens. It may be "
-            + "the only copy of unsaved work, so it is never removed.")
-        {
-            Keeps = true,
-        },
-        new(
-            BlenderTool,
-            BlenderAutosave(),
-            TargetKind.File,
-            "A file Blender autosaved, which File › Recover › Auto Save opens. It may be the only copy "
-            + "of unsaved work, so it is never removed.")
-        {
-            Keeps = true,
         },
     ];
 
@@ -160,7 +134,7 @@ public sealed partial class TempInstallerDownloadProvider : TempMarkerProviderBa
     public override string WhatHappensOnNextUse =>
         "The next update of VS Code, Docker Desktop or Visual Studio downloads what it needs again, "
         + "which for Visual Studio can be more than a gigabyte. Nothing is removed while its "
-        + "application is running, and Blender's recovery files are never removed.";
+        + "application is running.";
 
     public override ProviderBasis Basis => ProviderBasis.Observed;
 
@@ -174,7 +148,7 @@ public sealed partial class TempInstallerDownloadProvider : TempMarkerProviderBa
             + "behind whenever Blender is closed forcibly.",
         Recommendation = "Deguffer offers only folders these applications' own names identify, and "
             + "only while the application is not running. An update downloads again when it is next "
-            + "needed. Blender's recovery files are kept.",
+            + "needed.",
     };
 
     protected override string NothingLeftBehind =>

@@ -32,11 +32,18 @@ internal static class FolderEntries
     /// Each entry as <paramref name="transform"/> reads it, on the same terms as <see cref="Of(string)"/>,
     /// for a caller that keeps less of an entry than a <see cref="FileSystemInfo"/>.
     /// </summary>
-    public static IReadOnlyList<T>? Of<T>(string folder, FileSystemEnumerable<T>.FindTransform transform)
+    /// <param name="include">
+    /// Where given, keeps only the entries it accepts, asked before an entry becomes an object, for a
+    /// caller that wants a few entries of a folder holding tens of thousands.
+    /// </param>
+    public static IReadOnlyList<T>? Of<T>(
+        string folder,
+        FileSystemEnumerable<T>.FindTransform transform,
+        FileSystemEnumerable<T>.FindPredicate? include = null)
     {
         var entries = new List<T>();
 
-        using var listing = new DirectoryListing<T>(folder, transform);
+        using var listing = new DirectoryListing<T>(folder, transform, include);
 
         while (listing.MoveNext())
         {

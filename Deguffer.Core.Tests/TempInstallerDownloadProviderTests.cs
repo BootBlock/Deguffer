@@ -8,8 +8,8 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// Updater downloads go only while their application is not running, the Visual Studio Installer's
-/// staging folder is found through its own state file and nowhere else, and Blender's unsaved work
-/// is recognised so that it is kept.
+/// staging folder is found through its own state file and nowhere else, and a crashed Blender
+/// session's folder goes without its recovery files.
 /// </summary>
 public sealed class TempInstallerDownloadProviderTests : IDisposable
 {
@@ -169,11 +169,11 @@ public sealed class TempInstallerDownloadProviderTests : IDisposable
 
     /// <summary>
     /// A crashed session's folder goes once Blender is closed, and the recovery files beside it are
-    /// recognised so they are kept and claimed: the temporary-folder row would otherwise take them on
-    /// their age.
+    /// neither taken nor claimed. They are somebody's work, which the temporary-folder row keeps; a
+    /// claim here would leave them to a row that never offers them, and so to no row's §5.6 check.
     /// </summary>
     [Fact]
-    public async Task TakesACrashedBlenderSessionAndKeepsItsRecoveryFiles()
+    public async Task TakesACrashedBlenderSessionAndLeavesItsRecoveryFilesToTheTemporaryFilesRow()
     {
         Entry(4096, "blender_a12345", "cache", "bake.bphys");
         var quit = Entry(2048, "quit.blend");
@@ -182,9 +182,7 @@ public sealed class TempInstallerDownloadProviderTests : IDisposable
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
 
-        Assert.Equal(Path.Combine(UserTemp, "blender_a12345"), Assert.Single(plan.Steps.OfType<DeleteDirectoryStep>()).Path);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(quit, StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(plan.ProtectedPaths, p => p.Path.Equals(autosave, StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(Path.Combine(UserTemp, "blender_a12345"), Assert.IsType<DeleteDirectoryStep>(Assert.Single(plan.Steps)).Path);
 
         var result = await provider.ExecuteAsync(plan);
 
@@ -193,8 +191,8 @@ public sealed class TempInstallerDownloadProviderTests : IDisposable
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
 
         var claimed = await provider.ClaimedEntriesAsync([UserTemp]);
-        Assert.Contains(quit, claimed, StringComparer.OrdinalIgnoreCase);
-        Assert.Contains(autosave, claimed, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain(quit, claimed, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain(autosave, claimed, StringComparer.OrdinalIgnoreCase);
     }
 
     [Fact]
