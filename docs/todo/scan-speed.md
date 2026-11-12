@@ -367,7 +367,7 @@ scan leaves about 600 MB committed (#738), and Classic names draw through a seco
 
 | Issue | Note |
 | --- | --- |
-| #691 | DISM's analysis creates the restart-pending key that holds the component store, driver store, Windows.old and Windows Update rows in every elevated pass. `type: bug`, `safety`. First, because it changes what an elevated pass offers. |
+| #691 | DISM's analysis creates the restart-pending key that holds the component store, driver store, Windows.old and Windows Update rows in every elevated pass. `type: bug`, `safety`. Done: a pass reads the restart keys and the servicing processes once, before it starts the analysis, and plans every row the update hold governs against that reading. The clean reads both again, and excuses only the `RebootPending` key last written during one of Deguffer's own DISM calls that began with no restart owed. On one machine, an elevated pass of the six system rows held none of them and both component store rows read the analysis. |
 | #706 | The removal policy's per-file check is linear in its rules: 72 GB allocated judging one drive's duplicates. `safety`. |
 | #692 | Delivery Optimization starts PowerShell in every preview for one WMI number: 1.1-1.9 s against 16-30 ms in process. |
 | #695, #694 | `Protect` probes in series (1.2-3.6 s for a Claude Code row), and `IsPresent(WinSxS)` walks breadth-first (8.8 MB per call, 5-7 calls per pass). `safety`. #695 done: a plan's protected paths are probed as many at once as the volume's walks run, through `DiskBoundWork`, and answered in their order (`ProtectedPathCapture`), with the `protect` benchmark route to time it. #694 open. |
@@ -398,7 +398,6 @@ scan leaves about 600 MB committed (#738), and Classic names draw through a seco
 
 | Issue | The decision |
 | --- | --- |
-| #691 | How to tell DISM's own restart-pending key from a real unfinished update: read the key before the analysis starts, run the analysis after the hold checks, or stop starting it at the pass start. |
 | #693 | Keep pnputil's `/devices` answer, or read device properties in process and accept that extension INFs need their own source. `safety`. |
 | #696 | Keep transcript readings across passes, keyed by length and write time, against the recorded "read afresh" (#531). |
 | #699 | Ask Disk Cleanup's handler for emptiness without its full measure, or take Windows.old's size from the scanner. `safety`. |

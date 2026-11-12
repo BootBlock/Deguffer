@@ -118,6 +118,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         _protection = protection;
         _profiles = profiles;
         Servicing = servicing ?? WindowsServicing.Current;
+        _planningServicing = PlanningServicing.For(Servicing, inspector);
         _executor = new PlanExecutor(
             runner, Scanner, _refusals, emptier, cloud, handlers, Servicing, inspector, time, environment,
             protection: protection, volumes: machine, profiles: profiles);
@@ -147,6 +148,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
 
     private readonly IVolumeInventory _machine;
 
+    private readonly PlanningServicing _planningServicing;
     private readonly ConcurrentDictionary<string, ReachedFolder> _reached = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
@@ -160,6 +162,13 @@ public abstract class CleanupProviderBase : ICleanupProvider
 
     /// <summary>Where Windows is in servicing itself. See the constructor's parameter.</summary>
     protected IWindowsServicing Servicing { get; }
+
+    /// <summary>
+    /// What Windows servicing was doing when this planning pass first asked, which a plan asks the
+    /// update hold of rather than <see cref="Servicing"/> and <see cref="Inspector"/> live. See
+    /// <see cref="PlanningServicing"/>.
+    /// </summary>
+    protected ServicingState ServicingThisPass => _planningServicing.State;
 
     protected IProcessRunner Runner { get; }
 
@@ -204,6 +213,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
     {
         Environment.Invalidate();
         Inspector.Invalidate();
+        _planningServicing.Invalidate();
         Scanner.Invalidate();
         _reached.Clear();
         _volumes.Forget();

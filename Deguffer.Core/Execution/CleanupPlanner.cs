@@ -258,7 +258,7 @@ public sealed class CleanupPlanner
 
         // One analysis of the component store for both its rows: the analysis takes a minute or more,
         // and the cleanup and the reset ask it the same question.
-        var componentStore = new ComponentStoreAnalysis(SystemDirectories.Current, ProcessRunner.Default);
+        var componentStore = new ComponentStoreAnalysis(SystemDirectories.Current, ProcessRunner.Default, OwnServicingCalls.Current);
 
         // One record of what each of the store's cleanups left, because the reset settles the cleanup's
         // row as well as its own, within the session as across sessions.

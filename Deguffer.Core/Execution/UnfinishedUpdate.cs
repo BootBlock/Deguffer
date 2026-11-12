@@ -32,19 +32,25 @@ internal static class UnfinishedUpdate
     private static readonly HashSet<string> ServicingStack = new(["TiWorker", "TrustedInstaller"], StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Why nothing an update left may be offered on this machine right now, or null where nothing
-    /// says an update is going on.
+    /// Why nothing an update left may be offered on this machine, as <paramref name="state"/> describes
+    /// it, or null where nothing says an update is going on.
     /// </summary>
+    /// <param name="state">
+    /// A planning pass's one reading (<see cref="PlanningServicing"/>), or the machine read afresh by a
+    /// clean.
+    /// </param>
     /// <param name="ownCalls">
     /// Deguffer's own calls into the servicing stack, for a DISM command alone, whose stack the hold
-    /// then does not take for an update where <paramref name="ownCalls"/> shows Deguffer woke it. An
-    /// update that reuses that stack cannot be told from it, which is safe only for DISM: Windows runs
-    /// one servicing session at a time, and DISM refuses to clean while a restart is owed. Null for
-    /// a removal by path, which nothing serialises against an update, so any servicing stack holds it.
+    /// then does not take for an update where <paramref name="ownCalls"/> shows Deguffer woke it, and
+    /// whose session key it does not take for a restart owed where Deguffer's call wrote it (see
+    /// <see cref="OwnServicingCalls.Wrote"/>). An update that reuses that stack cannot be told from it,
+    /// which is safe only for DISM: Windows runs one servicing session at a time, and DISM refuses to
+    /// clean while a restart is owed. Null for a removal by path, which nothing serialises against an
+    /// update, so any servicing stack or restart key holds it.
     /// </param>
-    public static string? HoldsEverything(IWindowsServicing servicing, IProcessInspector inspector, OwnServicingCalls? ownCalls = null)
+    public static string? HoldsEverything(ServicingState state, OwnServicingCalls? ownCalls = null)
     {
-        if (servicing.IsRestartPending)
+        if (state.Restart.Marks.Any(mark => ownCalls?.Wrote(mark) is not true))
         {
             return "Windows is waiting for a restart to finish installing an update, and these may be "
                 + "part of it. They are offered once Windows has restarted.";
@@ -52,7 +58,7 @@ internal static class UnfinishedUpdate
 
         IReadOnlyList<string> running =
         [
-            .. inspector.FindRunningProcesses(Processes)
+            .. state.Running
                 .Where(process => !(ownCalls is not null && ServicingStack.Contains(process.Name) && process.StartedAt is { } started && ownCalls.Started(started)))
                 .Select(process => process.Name)
                 .Distinct(StringComparer.OrdinalIgnoreCase),

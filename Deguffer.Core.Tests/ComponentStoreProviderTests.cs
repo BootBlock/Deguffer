@@ -181,7 +181,7 @@ public sealed class ComponentStoreProviderTests : IDisposable
     public async Task BothRowsOfferOneOverheadAndAConfirmationOfBothCountsItOnce()
     {
         Analyses(null, 21 * Gigabyte);
-        var analysis = new ComponentStoreAnalysis(_system, _runner);
+        var analysis = new ComponentStoreAnalysis(_system, _runner, OwnServicingCalls.For(_servicing));
         IReadOnlyList<CleanupPlan> plans = [await Cleanup(analysis).PlanAsync(), await Reset(analysis).PlanAsync()];
 
         Assert.All(plans, plan => Assert.Equal(ComponentStoreProviderBase.Overhead, Assert.Single(plan.Steps).SharesReclaim));
@@ -193,7 +193,7 @@ public sealed class ComponentStoreProviderTests : IDisposable
     public async Task BothRowsShareOneAnalysisPerPlanningPass()
     {
         Analyses(null, 21 * Gigabyte);
-        var analysis = new ComponentStoreAnalysis(_system, _runner);
+        var analysis = new ComponentStoreAnalysis(_system, _runner, OwnServicingCalls.For(_servicing));
         var cleanup = Cleanup(analysis);
         var reset = Reset(analysis);
 
@@ -345,7 +345,7 @@ public sealed class ComponentStoreProviderTests : IDisposable
         var inspector = FakeProcessInspector.NothingRunning;
         WakingTheServicingStack(inspector, 21 * Gigabyte, 21 * Gigabyte, 19 * Gigabyte);
 
-        var provider = Cleanup(inspector, new OwnServicingCalls());
+        var provider = Cleanup(inspector, new OwnServicingCalls(_servicing));
         var plan = await provider.PlanAsync();
         var result = await provider.ExecuteAsync(plan);
 
@@ -367,7 +367,7 @@ public sealed class ComponentStoreProviderTests : IDisposable
         // The next scan finds the store changed since the clean, or the clean would have settled the row.
         Analyses(_ => inspector.WithRunning("TiWorker", DateTimeOffset.UtcNow), 21 * Gigabyte, 21 * Gigabyte, 19 * Gigabyte, 20 * Gigabyte);
 
-        var provider = Cleanup(inspector, new OwnServicingCalls());
+        var provider = Cleanup(inspector, new OwnServicingCalls(_servicing));
         Assert.True(Assert.Single((await provider.ExecuteAsync(await provider.PlanAsync())).Steps).Succeeded);
 
         // The scan reads the machine afresh, and the premise is that it finds the stack running.
@@ -390,7 +390,7 @@ public sealed class ComponentStoreProviderTests : IDisposable
         var inspector = FakeProcessInspector.NothingRunning;
         Analyses(null, 21 * Gigabyte);
 
-        var provider = Cleanup(inspector, new OwnServicingCalls());
+        var provider = Cleanup(inspector, new OwnServicingCalls(_servicing));
         var plan = await provider.PlanAsync();
         inspector.WithRunning("TiWorker", DateTimeOffset.UtcNow).PassTheReadingLimit();
         var result = await provider.ExecuteAsync(plan);
@@ -416,11 +416,66 @@ public sealed class ComponentStoreProviderTests : IDisposable
             return new CommandOutcome(0, Report(21 * Gigabyte), string.Empty);
         });
 
-        var provider = Cleanup(inspector, new OwnServicingCalls());
+        var provider = Cleanup(inspector, new OwnServicingCalls(_servicing));
         var plan = await provider.PlanAsync();
         var result = await provider.ExecuteAsync(plan);
 
         Assert.False(Assert.Single(result.Steps).Succeeded);
+        Assert.DoesNotContain(_runner.Invocations, call => IsCleanup(call.Arguments));
+    }
+
+    /// <summary>
+    /// #691: for as long as a DISM session lasts, Windows keeps its servicing session key, one of the
+    /// keys that say a restart is owed, and it can still be present as the check after the analysis
+    /// reads it. The key Deguffer's own analysis wrote does not hold the cleanup it measured for.
+    /// </summary>
+    [Fact]
+    public async Task TheSessionKeyDeguffersOwnAnalysisWroteDoesNotHoldTheCleanup()
+    {
+        var sizes = new Queue<long>([21 * Gigabyte, 21 * Gigabyte, 19 * Gigabyte]);
+        _runner.Replying(Dism, arguments =>
+        {
+            if (!IsAnalysis(arguments))
+            {
+                return new CommandOutcome(0, "The operation completed successfully.", string.Empty);
+            }
+
+            _servicing.ServicingSessionWritten = DateTimeOffset.UtcNow;
+            return new CommandOutcome(0, Report(sizes.Dequeue()), string.Empty);
+        });
+
+        var provider = Cleanup(FakeProcessInspector.NothingRunning, new OwnServicingCalls(_servicing));
+        var plan = await provider.PlanAsync();
+
+        // The preview's DISM exited, and Windows removed the key with its session.
+        _servicing.ServicingSessionWritten = null;
+        var result = await provider.ExecuteAsync(plan);
+
+        var step = Assert.Single(result.Steps);
+        Assert.True(step.Succeeded, step.Message);
+        Assert.Equal(2 * Gigabyte, step.BytesReclaimed);
+        Assert.Contains(_runner.Invocations, call => IsCleanup(call.Arguments));
+    }
+
+    /// <summary>
+    /// A session key written while none of Deguffer's own calls ran is another servicing session's,
+    /// which may be an update's, so it holds the cleanup.
+    /// </summary>
+    [Fact]
+    public async Task ASessionKeyWrittenOutsideDeguffersOwnCallsHoldsTheCleanup()
+    {
+        Analyses(null, 21 * Gigabyte);
+
+        var provider = Cleanup(FakeProcessInspector.NothingRunning, new OwnServicingCalls(_servicing));
+        var plan = await provider.PlanAsync();
+        Assert.Single(plan.Steps);
+
+        _servicing.ServicingSessionWritten = DateTimeOffset.UtcNow;
+        var result = await provider.ExecuteAsync(plan);
+
+        var step = Assert.Single(result.Steps);
+        Assert.False(step.Succeeded);
+        Assert.Contains("waiting for a restart", step.Message, StringComparison.Ordinal);
         Assert.DoesNotContain(_runner.Invocations, call => IsCleanup(call.Arguments));
     }
 
@@ -509,7 +564,7 @@ public sealed class ComponentStoreProviderTests : IDisposable
     public async Task CleaningAndResettingInOneCleanCountEachReclaimOnce()
     {
         Analyses(null, 21 * Gigabyte, 21 * Gigabyte, 19 * Gigabyte, 19 * Gigabyte, 18 * Gigabyte);
-        var analysis = new ComponentStoreAnalysis(_system, _runner);
+        var analysis = new ComponentStoreAnalysis(_system, _runner, OwnServicingCalls.For(_servicing));
         var cleanup = Cleanup(analysis);
         var reset = Reset(analysis);
         var cleanupPlan = await cleanup.PlanAsync();

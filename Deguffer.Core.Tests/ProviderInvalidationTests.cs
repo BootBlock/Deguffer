@@ -337,14 +337,14 @@ public sealed class ProviderInvalidationTests : IDisposable
         // Never the real one: it would read the machine's installed programs.
         : parameter == typeof(IUninstallRegistry) ? new FakeUninstallRegistry()
         : parameter == typeof(IWindowsServicing) ? FakeWindowsServicing.Settled
-        : parameter == typeof(OwnServicingCalls) ? new OwnServicingCalls()
+        : parameter == typeof(OwnServicingCalls) ? new OwnServicingCalls(FakeWindowsServicing.Settled)
 
         // Never the real one: it would list the driver store of whoever ran the suite.
         : parameter == typeof(IDriverStore) ? new FakeDriverStore()
 
         // Built on a fake runner: the real DISM would analyse the component store of whoever ran the suite.
         : parameter == typeof(ComponentStoreAnalysis)
-            ? new ComponentStoreAnalysis(new FakeSystemDirectories(_temp.Path), new FakeProcessRunner())
+            ? new ComponentStoreAnalysis(new FakeSystemDirectories(_temp.Path), new FakeProcessRunner(), new OwnServicingCalls(FakeWindowsServicing.Settled))
         : parameter == typeof(ComponentStoreSettlement) ? new ComponentStoreSettlement(_environment)
         : parameter == typeof(INamedMutexes) ? FakeNamedMutexes.None
         : parameter == typeof(IReadOnlyList<ITemporaryFolderTenant>) ? Array.Empty<ITemporaryFolderTenant>()
