@@ -186,7 +186,47 @@ internal static class CodeRuleBook
             Product,
             "Use the one counted-noun formatter, so every count reads the same way. If it does not exist yet, create it in this change, or ask.",
             "count == 1 ? \"file\" : \"files\""),
+        new(
+            "parallel-options-are-bounded",
+            Pattern(
+                @"(?:\bnew\s+(?:[\w.]+\.)?ParallelOptions(?>\s*(?:\(\s*\)\s*)?)|\bParallelOptions\??\s+\w+\s*(?:\{[^}]*\}\s*)?=\s*new\s*\(\s*\)(?>\s*))(?:\{(?![^}]*\bMaxDegreeOfParallelism\s*=(?>\s*)(?!-))[^}]*\}|(?!\s*\{))"
+                + @"|\bParallel\s*\.\s*(?:For|ForEach|Invoke)\s*\((?![^;]*(?:ParallelOptions|\bnew\s*\(\s*\)|\b\w*[Oo]ptions\b))"
+                + @"|\bParallel\s*\.\s*(?:For|ForEach|Invoke|ForEachAsync)\s*\([^;]*?\bnew\s*\(\s*\)\s*\{(?![^}]*\bMaxDegreeOfParallelism\s*=(?>\s*)(?!-))"
+                + @"|\.\s*AsParallel\s*\(\s*\)(?![^;]*\.\s*WithDegreeOfParallelism\s*\()"),
+            SourceView.Code,
+            Product,
+            "Set MaxDegreeOfParallelism to a bound in the options' initialiser, from the walk tuning or DiskBoundWork where the work is the disk's (G4).",
+            "var options = new ParallelOptions { CancellationToken = ct };"),
+        new(
+            "no-forced-collection",
+            Pattern(@"\bGC\s*\.\s*Collect\s*\("),
+            SourceView.Code,
+            CoreAndApp,
+            "Release what holds the memory, or hand back the buffers; a forced collection stalls every thread (G4).",
+            "GC.Collect();"),
+        new(
+            "no-thread-sleep",
+            Pattern(@"\bThread\s*\.\s*Sleep\s*\("),
+            SourceView.Code,
+            CoreAndApp,
+            "Wait on what signals the condition, with the operation's token, or a TimeProvider delay a test can advance.",
+            "Thread.Sleep(100);"),
+        new(
+            "whole-file-reads-are-own-stores",
+            Pattern(@"\bFile\s*\.\s*ReadAll(?:Text|Bytes|Lines)(?:Async)?\s*\(|\b(?:XDocument|XElement|XmlDocument)\s*\.\s*Load\s*\("),
+            SourceView.Code,
+            CoreAndApp,
+            "Read a file another program wrote through BoundedFile with its format's limit, and Deguffer's own store through StoreFile. If StoreFile has no reader yet, create it in this change, or ask.",
+            "var text = File.ReadAllText(path);"),
+        new(
+            "no-powershell-start",
+            Pattern(@"""[^""\n]*\b(?:powershell|pwsh)(?:\.exe\b|\s+-)[^""\n]*""", RegexOptions.IgnoreCase),
+            SourceView.CodeAndLiterals,
+            CoreAndApp,
+            "Ask WMI through WbemConnection, a Win32 call or WindowsPrincipal in process. Only a vendor's own clear command may start PowerShell (§5.1).",
+            "runner.RunAsync(\"powershell.exe\", arguments, ct)"),
     ];
 
-    private static Regex Pattern(string pattern) => new(pattern, RegexOptions.Multiline | RegexOptions.CultureInvariant);
+    private static Regex Pattern(string pattern, RegexOptions extra = RegexOptions.None) =>
+        new(pattern, RegexOptions.Multiline | RegexOptions.CultureInvariant | extra);
 }

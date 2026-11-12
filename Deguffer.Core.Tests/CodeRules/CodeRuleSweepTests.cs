@@ -65,6 +65,13 @@ public sealed class CodeRuleSweepTests
     [InlineData("step-kind-is-decided-by-the-step", "private static DeleteStep Template => new(\"x\", \"y\");")]
     [InlineData("async-void-only-for-events", "private async void OnOpened(object sender, object e)")]
     [InlineData("catch-says-what-it-expects", "catch (IOException ex) when (Expected(ex))")]
+    [InlineData("parallel-options-are-bounded", "new ParallelOptions\n{\n    CancellationToken = ct,\n    MaxDegreeOfParallelism = lanes,\n}")]
+    [InlineData("parallel-options-are-bounded", "ParallelOptions options = new() { MaxDegreeOfParallelism = lanes };")]
+    [InlineData("parallel-options-are-bounded", "Parallel.ForEach(items, new ParallelOptions { MaxDegreeOfParallelism = lanes }, Measure);")]
+    [InlineData("parallel-options-are-bounded", "items.AsParallel().WithDegreeOfParallelism(lanes).Select(Measure)")]
+    [InlineData("parallel-options-are-bounded", "var options = new ParallelOptions() { MaxDegreeOfParallelism = lanes };")]
+    [InlineData("no-powershell-start", "Problem(\"Windows PowerShell could not ask Hyper-V\")")]
+    [InlineData("no-powershell-start", "Path.Combine(local, \"Microsoft\", \"Windows\", \"PowerShell\", \"ModuleAnalysisCache\")")]
     public void NoRuleCountsWhatOnlyResemblesItsBreach(string name, string code)
     {
         var rule = CodeRuleBook.All.Single(rule => rule.Name == name);
@@ -76,6 +83,20 @@ public sealed class CodeRuleSweepTests
     [InlineData("step-kind-is-decided-by-the-step", "RunCommandStep command when command.Scheduled is { } => Run(command),")]
     [InlineData("step-kind-is-decided-by-the-step", "    DeleteStep => Delete(),")]
     [InlineData("selection-is-not-an-enum-ordinal", "return (RowOrder)OrderBox.SelectedIndex;")]
+    [InlineData("parallel-options-are-bounded", "Parallel.For(0, n, new ParallelOptions(), Step);")]
+    [InlineData("parallel-options-are-bounded", "new ParallelOptions\n{\n    CancellationToken = ct,\n}")]
+    [InlineData("parallel-options-are-bounded", "new System.Threading.Tasks.ParallelOptions { CancellationToken = ct }")]
+    [InlineData("parallel-options-are-bounded", "ParallelOptions options = new() { CancellationToken = ct };")]
+    [InlineData("parallel-options-are-bounded", "Parallel.ForEach(paths, Measure);")]
+    [InlineData("parallel-options-are-bounded", "Parallel.ForEach(paths, new() { CancellationToken = ct }, Measure);")]
+    [InlineData("parallel-options-are-bounded", "private ParallelOptions Options { get; } = new() { CancellationToken = ct };")]
+    [InlineData("parallel-options-are-bounded", "ParallelOptions? options = new() { CancellationToken = ct };")]
+    [InlineData("parallel-options-are-bounded", "new ParallelOptions { MaxDegreeOfParallelism = -1, CancellationToken = ct }")]
+    [InlineData("parallel-options-are-bounded", "items.AsParallel().Select(Measure)")]
+    [InlineData("no-powershell-start", "Path.Combine(host, \"pwsh.exe\")")]
+    [InlineData("no-powershell-start", "runner.RunAsync(\"cmd.exe\", \"/c powershell -NoProfile -Command Get-VM\", ct)")]
+    [InlineData("no-powershell-start", "new ProcessStartInfo(\"powershell.exe -NoProfile\")")]
+    [InlineData("whole-file-reads-are-own-stores", "var document = XDocument.Load(stream);")]
     public void EveryRuleFindsEachFormOfItsBreach(string name, string code)
     {
         var rule = CodeRuleBook.All.Single(rule => rule.Name == name);
@@ -88,7 +109,8 @@ public sealed class CodeRuleSweepTests
     {
         var known = CodeRuleBook.All.Select(rule => rule.Name)
             .Append(FileLengthTests.BaselineName)
-            .Append(NativeEntryPointTests.BaselineName);
+            .Append(NativeEntryPointTests.BaselineName)
+            .Append(FrameHookTests.BaselineName);
 
         Assert.Empty(Baseline.Names().Except(known, StringComparer.Ordinal));
     }

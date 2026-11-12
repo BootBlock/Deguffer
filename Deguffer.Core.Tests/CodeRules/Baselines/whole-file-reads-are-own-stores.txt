@@ -1,0 +1,22 @@
+# Uses that predate the rule, by file. Lower a line in the change that removes a use. Never add a
+# line or raise one: that is the maintainer's decision, not a way to pass.
+# Deguffer's own stores, until StoreFile has a reader. AzureFunctionsToolTags checks the length first.
+# #1036 moves Mozilla, Squirrel, vcpkg, WindowsInstalledPackages and XmlFile to a bounded read.
+1 Deguffer.Core/Configuration/EmulatorFolderStore.cs
+1 Deguffer.Core/Configuration/KeepStore.cs
+1 Deguffer.Core/Configuration/PreferenceStore.cs
+1 Deguffer.Core/Configuration/SelectionStore.cs
+1 Deguffer.Core/Configuration/SourceRootStore.cs
+1 Deguffer.Core/Configuration/WindowPlacementStore.cs
+1 Deguffer.Core/Execution/RefusalRecord.cs
+1 Deguffer.Core/Execution/Sizes/ProviderSizeStore.cs
+1 Deguffer.Core/InstalledApps/RegistryBackupListing.cs
+1 Deguffer.Core/InstalledApps/RegistryBackups.cs
+1 Deguffer.Core/Providers/AzureFunctionsToolTags.cs
+1 Deguffer.Core/Providers/ComponentStoreSettlement.cs
+1 Deguffer.Core/Providers/MozillaProfileDiscovery.cs
+1 Deguffer.Core/Providers/SquirrelReleaseIndex.cs
+1 Deguffer.Core/Providers/VcpkgDiscovery.cs
+1 Deguffer.Core/Safety/XmlFile.cs
+1 Deguffer.Core/Scanning/ScanEstimateCache.cs
+1 Deguffer.Core/Startup/WindowsInstalledPackages.cs

@@ -1,0 +1,5 @@
+# Uses that predate the rule, by file. Lower a line in the change that removes a use. Never add a
+# line or raise one: that is the maintainer's decision, not a way to pass.
+# DeliveryOptimizationCache runs the vendor's own clear command (§5.1). #1038 removes HyperVMachines.
+1 Deguffer.Core/Providers/DeliveryOptimizationCache.cs
+1 Deguffer.Core/VirtualDisks/HyperVMachines.cs

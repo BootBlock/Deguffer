@@ -24,6 +24,7 @@ irreversible data loss.
 | A document under `docs/todo/` | *Deguffer plan docs carry a status banner* |
 | A provider | `docs/cache-locations.md`, which describes every provider that ships |
 | Any product code, or a `CodeRules` baseline | *Deguffer code rules the source sweep enforces* |
+| Hot-path code: the walk, the file table, planning, a clean, the duplicate search, drawing or UI-thread work | *Deguffer performance rules* |
 
 ## Compliance checklist (lane 1)
 
@@ -42,11 +43,19 @@ Quote the `CLAUDE.md` rule each finding breaks.
   forwarding every member, a `catch (Exception)` that swallows or rethrows unchanged, a null check
   on a value that cannot be null, a speculative knob or `virtual`, stringly-typed state, `#region`,
   a `Manager`/`Helper`/`Utils` type, a "Part 2" file.
-- **G4, performance.** `GetFiles`/`GetDirectories`/`GetFileSystemEntries` where `EnumerateX`
-  belongs. A tree materialised to count it. `Task.Run` fan-out with no `MaxDegreeOfParallelism`. A
-  subprocess or filesystem probe repeated where it should be cached for the operation (asking npm
-  where its cache is more than once is the canonical case). An async path with no
-  `CancellationToken`. An `IEnumerable<T>` enumerated twice. A bound list cleared and refilled.
+- **G4, performance.** The sweep holds the patterns (`CodeRuleSweepTests`, `FrameHookTests`); judge
+  the rest by frequency, per memory note *Deguffer performance rules*. A tree materialised to count
+  it. `Task.Run` fan-out with no bound. A subprocess or filesystem probe repeated where it should be
+  cached for the operation (asking npm where its cache is more than once is the canonical case). A
+  fact a listing or measurement already returned asked of the disk again, `ProtectAsync` without
+  the row's `ListedEntries` included. Independent disk questions over many paths run one at a time
+  where `DiskBoundWork` fits, or independent awaits made in turn. Per entry, per frame or per
+  snapshot: a LINQ chain, a capturing lambda, an interface `foreach` or a string built only to
+  compare; scratch sized to a table allocated each time; a per-drawing fact recomputed per call. On
+  the UI thread: I/O, progress capped by count rather than time, a property raised on every change
+  rather than on the transition, a visual built for a surface nobody sees. A cache bounded only when
+  written. Per-item work inside a lock shared by workers. An async path with no `CancellationToken`.
+  An `IEnumerable<T>` enumerated twice. A bound list cleared and refilled.
 - **G5, object reuse.** `new ProcessRunner()` or `new UserEnvironment()` per call rather than
   `ProcessRunner.Default` and `UserEnvironment.Current` injected once. A `Regex`, `SearchValues`,
   comparer or lookup set built per call rather than `static readonly`. A directory re-measured after
