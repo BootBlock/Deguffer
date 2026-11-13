@@ -34,13 +34,18 @@ namespace Deguffer.Core.Providers;
 /// One entry per path: its age one level down, read by its measurement. See
 /// <see cref="ScanResult.LastWritten"/>.
 /// </param>
+/// <param name="FileKept">
+/// One entry per path: for one file, whether the guard it was measured under keeps it. See
+/// <see cref="ScanResult.FileKept"/>.
+/// </param>
 public sealed record ScanBatch(
     IReadOnlyList<ScanSize> Sizes,
     FallbackReason Fallback,
     IReadOnlyList<bool> WithheldRecent,
     IReadOnlyList<IReadOnlyList<string>> MailStores,
     IReadOnlyList<bool> Reached,
-    IReadOnlyList<DateTime?> LastWritten)
+    IReadOnlyList<DateTime?> LastWritten,
+    IReadOnlyList<bool?> FileKept)
 {
     public ScanSize Total => TotalOf(..);
 

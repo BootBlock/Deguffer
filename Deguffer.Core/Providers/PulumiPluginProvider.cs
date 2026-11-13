@@ -319,9 +319,12 @@ public sealed class PulumiPluginProvider : CleanupProviderBase
 
         var (planned, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
 
+        var recentFiles = await RecentFileSteps.KeptAsync([.. planned.OfType<DeleteFileStep>()], keep, Scanner.Tuning, ct).ConfigureAwait(false);
+
         var recentKeys = planned
             .OfType<DeleteStep>()
-            .Where(step => step.WithheldRecent || (step is DeleteFileStep && keep.ProtectsFile(step.Path)))
+            .Where(step => step.WithheldRecent)
+            .Concat(recentFiles)
             .Select(step => step.Identity!.Key)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 

@@ -44,6 +44,8 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner
 
     private readonly TimeProvider _clock;
 
+    private readonly ReadEntry _read;
+
     /// <param name="tuner">What each walk runs with, asked as the walk starts.</param>
     public ParallelEnumerationScanner(ScanTuner tuner)
         : this(tuner, DirectoryQuery.List, TimeProvider.System)
@@ -56,22 +58,37 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner
     /// reported before it ends.
     /// </summary>
     internal ParallelEnumerationScanner(ScanTuner tuner, ListDirectory list, TimeProvider clock)
-        : this(tuner, FallbackReason.None, new ParallelEnumerationScanner[Enum.GetValues<FallbackReason>().Length], list, clock)
+        : this(tuner, list, clock, LongPath.ReadEntry)
+    {
+    }
+
+    /// <summary>
+    /// The scanner above, reading each path it is handed through <paramref name="read"/>: the seam a
+    /// test counts the reads of a file through, and proves they overlap by.
+    /// </summary>
+    internal ParallelEnumerationScanner(ScanTuner tuner, ListDirectory list, TimeProvider clock, ReadEntry read)
+        : this(tuner, FallbackReason.None, new ParallelEnumerationScanner[Enum.GetValues<FallbackReason>().Length], list, clock, read)
     {
         foreach (var reason in Enum.GetValues<FallbackReason>())
         {
-            _byReason[(int)reason] = reason is FallbackReason.None ? this : new(tuner, reason, _byReason, list, clock);
+            _byReason[(int)reason] = reason is FallbackReason.None ? this : new(tuner, reason, _byReason, list, clock, read);
         }
     }
 
     private ParallelEnumerationScanner(
-        ScanTuner tuner, FallbackReason reason, ParallelEnumerationScanner[] byReason, ListDirectory list, TimeProvider clock)
+        ScanTuner tuner,
+        FallbackReason reason,
+        ParallelEnumerationScanner[] byReason,
+        ListDirectory list,
+        TimeProvider clock,
+        ReadEntry read)
     {
         _tuner = tuner;
         _reason = reason;
         _byReason = byReason;
         _list = list;
         _clock = clock;
+        _read = read;
     }
 
     /// <summary>Same walk, attributed to whichever reason sent the caller here.</summary>
@@ -195,10 +212,15 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner
     /// of <paramref name="keeps"/>, with each directory's slot left for its walk, and the walks the
     /// directories need. On a worker thread, because it reads each path and asks each volume's device.
     ///
-    /// <para>The directory is asked about first, as <see cref="HardLinkAwareScanner"/> asks, so a
-    /// directory costs one attribute read before its walk. A file is asked about only where no
-    /// directory is there, and a refusal is met once: the read fails the same way whichever kind is
-    /// asked for, so a refused file is answered as a refused directory is.</para>
+    /// <para><b>One attribute read a path, whichever kind it is.</b> The read describes a directory's
+    /// time for its walk, and a file's length and times for its measurement. A refusal is met once,
+    /// and a refused file is answered as a refused directory is, because the read fails the same way
+    /// whichever kind is there.</para>
+    ///
+    /// <para><b>Several paths at once</b>, through <see cref="DiskBoundWork"/>, because a row may offer
+    /// thousands of single files. Under the volume's walk tuning and the shared listing budget, so the
+    /// reads share the disk with the walks of the rows planned beside this one, and answered in the
+    /// order asked.</para>
     /// </summary>
     private (ScanResult[][] Results, long[] Owns, IReadOnlyList<IReadOnlyList<DirectoryWalk>> Walks) Probe(
         IReadOnlyList<ScanRequest> asked,
@@ -206,6 +228,13 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner
         RunningPaths running,
         CancellationToken ct)
     {
+        var read = DiskBoundWork.Each(
+            [.. asked.Select(question => question.Path)],
+            _tuner,
+            ListingBudget.Shared,
+            path => (Presence: _read(path, out var reading), Reading: reading),
+            ct);
+
         var results = new ScanResult[asked.Count][];
         var directories = new List<int>(asked.Count);
 
@@ -214,14 +243,20 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner
 
         for (var i = 0; i < asked.Count; i++)
         {
-            ct.ThrowIfCancellationRequested();
+            var (presence, reading) = read[i];
 
-            var path = asked[i].Path;
-
-            switch (LongPath.ProbeDirectoryTime(path, out owns[i]))
+            switch (presence)
             {
-                case PathPresence.Present:
+                case PathPresence.Present when reading.IsDirectory:
+                    owns[i] = reading.NewestFileTime;
                     directories.Add(i);
+                    break;
+
+                case PathPresence.Present:
+                    results[i] = MeasureFile(asked[i].Path, reading, keeps);
+
+                    // A file is read whole, so its reading is final, and it counts before any walk starts.
+                    running.Report(i, results[i][0].Size);
                     break;
 
                 case PathPresence.Refused:
@@ -230,11 +265,7 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner
 
                 // An absent path measures zero, and that is a complete answer.
                 default:
-                    results[i] = TryMeasureFile(path, keeps) is { } file
-                        ? [.. file.Select(reading => ScanResult.Direct(reading.Size, reading.WithheldRecent) with { MailStores = reading.MailStores })]
-                        : [.. Each(keeps, new Walked(ScanSize.Zero, false, [], RootReach.Reached)).Select(Slow)];
-
-                    // A file is read whole, so its reading is final, and it counts before any walk starts.
+                    results[i] = [.. Each(keeps, new Walked(ScanSize.Zero, false, [], RootReach.Reached)).Select(Slow)];
                     running.Report(i, results[i][0].Size);
                     break;
             }
@@ -269,7 +300,7 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner
     /// </summary>
     /// <param name="owns">
     /// Each root's own time, from the attribute read that found it, as
-    /// <see cref="LongPath.ProbeDirectoryTime(string, out long)"/> gives it, in the order of
+    /// <see cref="EntryReading.NewestFileTime"/> gives it, in the order of
     /// <paramref name="asked"/>.
     /// </param>
     private Walked[][] Measure(
@@ -409,57 +440,42 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner
     private static Walked[] Each(MinimumAge[] keeps, Walked walked) => [.. keeps.Select(_ => walked)];
 
     /// <summary>
-    /// The length of <paramref name="path"/> if it is a file, or null for anything else — a
-    /// directory, an absent path, or one we were refused. §5.3 makes the refusal ordinary rather
-    /// than an error, and a null then leaves the caller to measure the path as a directory, which
-    /// answers zero for something that is not there and <see cref="RootReach.NotDescribed"/> for a
-    /// refusal.
+    /// The file at <paramref name="path"/>, measured from the attribute read that found it, once for
+    /// each of <paramref name="keeps"/>.
     ///
-    /// Deguffer measured only directories until <c>C:\Windows\MEMORY.DMP</c>, which is a single
-    /// file and the largest reclaim it knows about. Answering zero for it — which is what this
-    /// scanner did — produces a step nobody can select, because a step with nothing to reclaim is
-    /// not offerable.
-    ///
-    /// <para>One reading for each of <paramref name="keeps"/>, from one read of the file.</para>
+    /// <para>Deguffer measured only directories until <c>C:\Windows\MEMORY.DMP</c>, which is a single
+    /// file and the largest reclaim it knows about. Answering zero for it, which is what this scanner
+    /// did, produces a step nobody can select, because a step with nothing to reclaim is not
+    /// offerable.</para>
     /// </summary>
-    private static Walked[]? TryMeasureFile(string path, MinimumAge[] keeps)
+    private ScanResult[] MeasureFile(string path, EntryReading reading, MinimumAge[] keeps)
     {
-        try
+        // §9: zero, and named, whatever its age and whatever mark it carries, because the removal
+        // leaves it either way. The same answer a kept file gets, for the same reason, with the store's
+        // own name on it so the plan can protect it.
+        if (MailStore.Is(path))
         {
-            var file = new FileInfo(LongPath.Extended(path));
+            IReadOnlyList<string> store = [LongPath.Display(LongPath.Extended(path))];
 
-            if (!file.Exists)
-            {
-                return null;
-            }
-
-            // §9: zero, and named, whatever its age and whatever mark it carries, because the removal
-            // leaves it either way. The same answer a kept file gets, for the same reason, with the
-            // store's own name on it so the plan can protect it.
-            if (MailStore.Is(file.Name))
-            {
-                return Each(keeps, new Walked(ScanSize.Zero, false, [LongPath.Display(file.FullName)], RootReach.Reached));
-            }
-
-            // A link's length is its own, not its target's, and following one would count a tree
-            // this scanner never looked inside — the same rule BoundedFileWalk applies to every
-            // entry it enumerates.
-            if ((file.Attributes & FileAttributes.ReparsePoint) != 0)
-            {
-                return null;
-            }
-
-            // A file the guard keeps is still a file, so this stays an answer rather than becoming
-            // a null that would send the caller off to measure it as a directory. Zero is what the
-            // removal will reclaim from it, and a step with nothing to reclaim is not offerable —
-            // which is the outcome a protected single file should have.
-            return [.. keeps.Select(keep => keep.Protects(file)
-                ? new Walked(ScanSize.Zero, true, [], RootReach.Reached)
-                : new Walked(new ScanSize(file.Length, file.Length, Entries: 1), false, [], RootReach.Reached))];
+            return [.. keeps.Select(_ => ScanResult.Direct(ScanSize.Zero) with { MailStores = store })];
         }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+
+        // A link's length is its own, not its target's, and following one would count a tree this
+        // scanner never looked inside: the same rule BoundedFileWalk applies to every entry it
+        // enumerates. So it measures zero, as a path with nothing there does, and the guard still
+        // judges it by its own times, as the removal judges it.
+        if (reading.IsReparsePoint)
         {
-            return null;
+            var link = Slow(new Walked(ScanSize.Zero, false, [], RootReach.Reached));
+
+            return [.. keeps.Select(keep => link with { FileKept = keep.Protects(reading.NewestFileTime) })];
         }
+
+        // A file the guard keeps is still a file, so this stays an answer rather than a zero for a
+        // path that is not there. Zero is what the removal will reclaim from it, and a step with
+        // nothing to reclaim is not offerable, which is the outcome a protected single file should have.
+        return [.. keeps.Select(keep => keep.Protects(reading.NewestFileTime)
+            ? ScanResult.Direct(ScanSize.Zero, withheldRecent: true) with { FileKept = true }
+            : ScanResult.Direct(new ScanSize(reading.Length, reading.Length, Entries: 1)) with { FileKept = false })];
     }
 }
