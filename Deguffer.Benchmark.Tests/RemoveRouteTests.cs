@@ -87,7 +87,7 @@ public sealed class RemoveRouteTests : IDisposable
     /// file kept beside the tree, and a folder outside the site are all still there (§5.6).
     /// </summary>
     [Fact]
-    public void TheRouteRemovesWhatItBuiltAndNothingBesideIt()
+    public async Task TheRouteRemovesWhatItBuiltAndNothingBesideIt()
     {
         var outside = _temp.CreateFile(10, "outside", "kept.txt");
         var site = RemovalSite.Create(Path.Combine(_temp.Path, "site"), out _)!;
@@ -95,11 +95,11 @@ public sealed class RemoveRouteTests : IDisposable
 
         for (var run = 0; run < 2; run++)
         {
-            route.Before!(CancellationToken.None);
+            await route.Before!(CancellationToken.None);
             Assert.True(Directory.Exists(site.Place("tree")));
 
-            var tally = route.Run(CancellationToken.None);
-            route.After!();
+            var tally = await route.Run(CancellationToken.None);
+            await route.After!();
 
             Assert.False(Directory.Exists(site.Place("tree")));
             Assert.True(File.Exists(Path.Combine(site.Beside, "kept")));
@@ -115,13 +115,13 @@ public sealed class RemoveRouteTests : IDisposable
 
     /// <summary>A read-only file is one the removal has to clear before it can delete it, and it still goes.</summary>
     [Fact]
-    public void AReadOnlyTreeIsRemovedInFull()
+    public async Task AReadOnlyTreeIsRemovedInFull()
     {
         var site = RemovalSite.Create(Path.Combine(_temp.Path, "site"), out _)!;
         var route = new RemoveRoute(site, Shape with { ReadOnly = true }).Timed;
 
-        route.Before!(CancellationToken.None);
-        var tally = route.Run(CancellationToken.None);
+        await route.Before!(CancellationToken.None);
+        var tally = await route.Run(CancellationToken.None);
 
         Assert.True(tally.Complete);
         Assert.False(Directory.Exists(site.Place("tree")));
@@ -132,13 +132,13 @@ public sealed class RemoveRouteTests : IDisposable
     /// whole tree, the file pass tries every file, and the folder pass every folder and the root.
     /// </summary>
     [Fact]
-    public void EachPassIsReportedWithWhatItDealtWith()
+    public async Task EachPassIsReportedWithWhatItDealtWith()
     {
         var site = RemovalSite.Create(Path.Combine(_temp.Path, "site"), out _)!;
         var route = new RemoveRoute(site, Shape).Timed;
 
-        route.Before!(CancellationToken.None);
-        var passes = route.Run(CancellationToken.None).Passes!;
+        await route.Before!(CancellationToken.None);
+        var passes = (await route.Run(CancellationToken.None)).Passes!;
 
         Assert.Equal(Shape.Files, passes.Files.Entries);
         Assert.Equal(Shape.Folders + 1, passes.Folders.Entries);
@@ -150,36 +150,36 @@ public sealed class RemoveRouteTests : IDisposable
 
     /// <summary>A removal that reached beside its target is a defect to stop on, never a faster run.</summary>
     [Fact]
-    public void AKeptFileThatIsGoneAfterARunStopsTheBenchmark()
+    public async Task AKeptFileThatIsGoneAfterARunStopsTheBenchmark()
     {
         var site = RemovalSite.Create(Path.Combine(_temp.Path, "site"), out _)!;
         var route = new RemoveRoute(site, Shape).Timed;
 
-        route.Before!(CancellationToken.None);
-        route.Run(CancellationToken.None);
+        await route.Before!(CancellationToken.None);
+        await route.Run(CancellationToken.None);
         File.Delete(Path.Combine(site.Beside, "kept"));
 
-        Assert.Contains("§5.6", Assert.Throws<InvalidOperationException>(route.After!).Message, StringComparison.Ordinal);
+        Assert.Contains("§5.6", (await Assert.ThrowsAsync<InvalidOperationException>(async () => await route.After!())).Message, StringComparison.Ordinal);
     }
 
     /// <summary>A run cancelled part-way is not a result, so it is thrown for the run loop to report.</summary>
     [Fact]
-    public void ACancelledRunIsThrownRatherThanReported()
+    public async Task ACancelledRunIsThrownRatherThanReported()
     {
         var site = RemovalSite.Create(Path.Combine(_temp.Path, "site"), out _)!;
         var route = new RemoveRoute(site, Shape).Timed;
-        route.Before!(CancellationToken.None);
+        await route.Before!(CancellationToken.None);
 
-        Assert.Throws<OperationCanceledException>(() => route.Run(new CancellationToken(canceled: true)));
+        await Assert.ThrowsAsync<OperationCanceledException>(async () => await route.Run(new CancellationToken(canceled: true)));
     }
 
     /// <summary>When the runs end the site goes, with whatever a run left in it, and nothing beside it does.</summary>
     [Fact]
-    public void RemovingTheSiteTakesItAndNothingBesideIt()
+    public async Task RemovingTheSiteTakesItAndNothingBesideIt()
     {
         var outside = _temp.CreateFile(10, "outside", "kept.txt");
         var site = RemovalSite.Create(Path.Combine(_temp.Path, "site"), out _)!;
-        new RemoveRoute(site, Shape).Timed.Before!(CancellationToken.None);
+        await new RemoveRoute(site, Shape).Timed.Before!(CancellationToken.None);
 
         Assert.True(site.RemoveAll());
 

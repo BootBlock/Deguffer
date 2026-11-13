@@ -65,6 +65,7 @@ internal sealed class ContentMatching
 
     /// <param name="groups">The candidates, each group sharing a length.</param>
     /// <param name="confirmed">Given each group as it is confirmed, from any thread, one at a time.</param>
+    /// <param name="timings">Given each read by its lane and part, for a caller that measures the search, or null.</param>
     /// <exception cref="OperationCanceledException">The search was stopped; the groups already given stand.</exception>
     public async Task MatchAsync(
         IReadOnlyList<CandidateGroup> groups,
@@ -72,12 +73,16 @@ internal sealed class ContentMatching
         ChecksumAlgorithm algorithm,
         Action<DuplicateGroup> confirmed,
         IProgress<DuplicateSearchProgress>? progress,
-        CancellationToken ct)
+        CancellationToken ct,
+        DuplicateSearchTimings? timings = null)
     {
+        var lanes = ReadingLanes.Of(groups.SelectMany(group => group.Files).Select(file => file.Volume), _media);
+
         var run = new Run(
             this,
-            ReadingLanes.Of(groups.SelectMany(group => group.Files).Select(file => file.Volume), _media),
+            lanes,
             new StageMeasure(DuplicateSearchStage.ComparingContent, groups.SelectMany(group => group.Files).Sum(file => ContentReader.MostToRead(file.Length)), progress, _clock),
+            timings?.Comparing(lanes.Readers),
             criteria,
             algorithm,
             confirmed,
@@ -87,10 +92,10 @@ internal sealed class ContentMatching
     }
 
     /// <summary>
-    /// The checksum of one file's <paramref name="part"/>, or null where it was left out, through a
-    /// running checksum by <paramref name="algorithm"/> no other reader holds at the time.
+    /// What became of reading one file's <paramref name="part"/>, counted where it was left out,
+    /// through a running checksum by <paramref name="algorithm"/> no other reader holds at the time.
     /// </summary>
-    private ContentChecksum? Read(DuplicateCandidate file, ContentPart part, ChecksumAlgorithm algorithm, IdleChecksums idle, CancellationToken ct)
+    private ContentReading Read(DuplicateCandidate file, ContentPart part, ChecksumAlgorithm algorithm, IdleChecksums idle, CancellationToken ct)
     {
         var checksum = idle.Take(algorithm);
 
@@ -100,9 +105,6 @@ internal sealed class ContentMatching
 
             switch (reading.Result)
             {
-                case ContentReadResult.Read:
-                    return reading.Checksum;
-
                 case ContentReadResult.Gone:
                     Interlocked.Increment(ref _gone);
                     break;
@@ -124,7 +126,7 @@ internal sealed class ContentMatching
                     break;
             }
 
-            return null;
+            return reading;
         }
         finally
         {
@@ -173,14 +175,16 @@ internal sealed class ContentMatching
         private ConcurrentBag<Checksum> Of(ChecksumAlgorithm algorithm) => _idle.GetOrAdd(algorithm, static _ => []);
     }
 
-    /// <summary>One file of a <see cref="Reading"/>, by its place there.</summary>
-    private readonly record struct FileRead(Reading Group, int File);
+    /// <summary>One file of a <see cref="Reading"/>, by its place there, and the lane that reads it.</summary>
+    private readonly record struct FileRead(Reading Group, int File, int Lane);
 
     /// <summary>One call of <see cref="MatchAsync"/>: its lanes, its measure, and the running checksums its readers share.</summary>
+    /// <param name="timed">What records each read for a caller that measures the search, or null.</param>
     private sealed class Run(
         ContentMatching matching,
         ReadingLanes lanes,
         StageMeasure measure,
+        ContentLaneSpans? timed,
         MatchCriteria criteria,
         ChecksumAlgorithm algorithm,
         Action<DuplicateGroup> confirmed,
@@ -212,18 +216,25 @@ internal sealed class ContentMatching
 
             for (var file = 0; file < group.Files.Count; file++)
             {
-                yield return (lanes.LaneOf(group.Files[file].Volume), new FileRead(group, file), space);
+                var lane = lanes.LaneOf(group.Files[file].Volume);
+
+                yield return (lane, new FileRead(group, file, lane), space);
             }
         }
 
         private void ReadOne(FileRead read)
         {
-            var (group, file) = read;
+            var (group, file, lane) = read;
             var candidate = group.Files[file];
+            var bytes = ContentReader.BytesOf(group.Part, candidate.Length);
+            var started = timed?.Now() ?? 0;
 
-            group.Checksums[file] = matching.Read(
+            var reading = matching.Read(
                 candidate, group.Part, ContentReader.AlgorithmOf(group.Part, candidate.Length, algorithm), _idle, ct);
-            measure.Done(ContentReader.BytesOf(group.Part, candidate.Length));
+
+            timed?.Read(lane, group.Part, reading, bytes, started);
+            group.Checksums[file] = reading.Result is ContentReadResult.Read ? reading.Checksum : null;
+            measure.Done(bytes);
 
             if (Interlocked.Decrement(ref group.Unread) == 0)
             {

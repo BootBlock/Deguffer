@@ -81,6 +81,7 @@ public sealed class DuplicateSearcher
     /// space it could free, which needs the program folders finding read) before the first one arrives.
     /// </param>
     /// <param name="located">What <see cref="Locate"/> answered for <paramref name="search"/>, or null to locate it here.</param>
+    /// <param name="timings">Given how long each part of the search took and what it read, for a caller that measures it, or null.</param>
     /// <exception cref="ArgumentException">The search compares content by a checksum this machine does not offer.</exception>
     /// <exception cref="OperationCanceledException">The search was stopped before its candidates were all found.</exception>
     public async Task<DuplicateSearchResult> SearchAsync(
@@ -90,7 +91,8 @@ public sealed class DuplicateSearcher
         IProgress<DuplicateSearchProgress>? progress = null,
         Func<CandidateFinding, CancellationToken, Task>? candidatesFound = null,
         CancellationToken ct = default,
-        SearchLocations? located = null)
+        SearchLocations? located = null,
+        DuplicateSearchTimings? timings = null)
     {
         ArgumentNullException.ThrowIfNull(search);
 
@@ -101,7 +103,7 @@ public sealed class DuplicateSearcher
             throw new ArgumentException("Windows on this computer does not provide that checksum.", nameof(search));
         }
 
-        var finding = await _finder.FindAsync(search, policy, progress, ct, located)
+        var finding = await _finder.FindAsync(search, policy, progress, ct, located, timings)
             .ConfigureAwait(false);
 
         if (candidatesFound is not null)
@@ -137,7 +139,9 @@ public sealed class DuplicateSearcher
                 await _remembered.WhenStoredAsync(ct).ConfigureAwait(false);
             }
 
-            await matching.MatchAsync(finding.Groups, search.Criteria, search.Algorithm, Confirm, progress, ct).ConfigureAwait(false);
+            timings?.Start(DuplicateSearchPart.Comparison);
+            await matching.MatchAsync(finding.Groups, search.Criteria, search.Algorithm, Confirm, progress, ct, timings).ConfigureAwait(false);
+            timings?.End(DuplicateSearchPart.Comparison);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Deguffer.Core.Duplicates;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Mft;
@@ -287,6 +288,109 @@ public sealed class ReportTests
             "1,000 build folders of 100 empty files in 7 folders, removed as one plan with nothing running",
             Deguffer.Benchmark.Tuning.Describe(
                 Route.Clean, WalkTuning.Default, TableTuning.Default, snapshots: true, LinkRead.Name, CleanRoute.Shape(100), trees: 1000));
+    }
+
+    /// <summary>
+    /// Where a duplicate search's time went: each part, indented as a part of the elapsed time, and what
+    /// none covers. Then what each part kept and asked about, each stage of the comparison with what
+    /// became of its reads, each lane, and the groups confirmed. The stages overlap, so each has its own
+    /// time and they need not add up to the comparison's.
+    /// </summary>
+    [Fact]
+    public void ADuplicateSearchReportsEachPartEachStageAndEachLane()
+    {
+        var text = Render(Route.Duplicates, Searched());
+
+        Assert.Contains(
+            string.Join(
+                '\n',
+                "  scan             2.000 s",
+                "  walk             500.0 ms",
+                "  identification   1.500 s",
+                "  comparison       5.000 s",
+                "  the rest         1.000 s",
+                "files kept         10",
+                "files identified   9",
+                "files named        1",
+                "first and last blocks",
+                "  files            3",
+                "  remembered       1",
+                "  left out         1",
+                "  read             1.0 MiB",
+                "  took             3.000 s",
+                "whole files",
+                "  files            1",
+                "  remembered       0",
+                "  left out         0",
+                "  read             3.0 MiB",
+                "  took             2.000 s",
+                "lane 1",
+                "  readers          4",
+                "  took             5.000 s",
+                "  blocks read      3",
+                "  whole read       1",
+                "  read             4.0 MiB",
+                "groups             2"),
+            text,
+            StringComparison.Ordinal);
+        Assert.Equal("MiB/s read         0.4", Line(text, "MiB/s read"));
+        Assert.DoesNotContain("folders at once", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>The checksum and the cache change what a read costs, so both are stated.</summary>
+    [Theory]
+    [InlineData(false, "each run starting with no checksums kept")]
+    [InlineData(true, "each run starting with the checksums an untimed search kept, loaded from their store")]
+    public void TheDuplicatesRouteStatesItsChecksumAndItsCache(bool warm, string cache) =>
+        Assert.Equal(
+            "the values a search uses for each drive's kind, under the shipped settings, content compared by SHA-256, " + cache,
+            Deguffer.Benchmark.Tuning.Describe(
+                Route.Duplicates, WalkTuning.Default, TableTuning.Default, snapshots: true, LinkRead.Name, BenchmarkRequest.DefaultTree, trees: 1,
+                ChecksumAlgorithm.Sha256, warm));
+
+    /// <summary>
+    /// A ten-second search: a scan of two seconds, a walk of half of one and identification of one and
+    /// a half, then five seconds of comparison in one lane of four readers. Its first stage reads three
+    /// files over three seconds, one of them remembered and one left out, and its second reads one
+    /// whole file of 3 MiB over the last two.
+    /// </summary>
+    private static RunSample Searched()
+    {
+        var clock = new ManualTimeProvider();
+        var stages = new DuplicateSearchTimings(clock);
+
+        Part(DuplicateSearchPart.Scan, 2);
+        Part(DuplicateSearchPart.Walk, 0.5);
+        Part(DuplicateSearchPart.Identification, 1.5);
+        stages.Kept = 10;
+        stages.Identified = 9;
+        stages.Named = 1;
+
+        stages.Start(DuplicateSearchPart.Comparison);
+        var lanes = stages.Comparing([4]);
+        Read(ContentPart.Ends, new ContentReading(ContentReadResult.Read, default), 1 << 20, 1);
+        Read(ContentPart.Ends, new ContentReading(ContentReadResult.Read, default, Remembered: true), 1 << 20, 1);
+        Read(ContentPart.Ends, ContentReading.LeftOut(ContentReadResult.ReadFailed), 1 << 20, 1);
+        Read(ContentPart.Whole, new ContentReading(ContentReadResult.Read, default), 3 << 20, 2);
+        stages.End(DuplicateSearchPart.Comparison);
+
+        var run = Run(10, bytes: 4L << 20);
+
+        return run with { Tally = run.Tally with { Search = new SearchTimes(stages, Groups: 2) } };
+
+        void Part(DuplicateSearchPart part, double seconds)
+        {
+            stages.Start(part);
+            clock.Advance(TimeSpan.FromSeconds(seconds));
+            stages.End(part);
+        }
+
+        void Read(ContentPart part, ContentReading reading, long bytes, double seconds)
+        {
+            var started = lanes.Now();
+            clock.Advance(TimeSpan.FromSeconds(seconds));
+            lanes.Read(0, part, reading, bytes, started);
+        }
     }
 
     private static RunSample Removal(double walk, double files, double folders, StepTimes? steps = null)

@@ -58,7 +58,7 @@ internal sealed class CleanRoute
             volumes: volumes);
     }
 
-    public RouteRun Timed => new(Run, Build, Check);
+    public RouteRun Timed => RouteRun.Blocking(Run, Build, Check);
 
     /// <summary>The shape of each build folder holding <paramref name="files"/> files.</summary>
     public static TreeShape Shape(long files) => new(files, TreeDepth, TreeFanout);

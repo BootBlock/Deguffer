@@ -30,6 +30,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Deguffer.Core.Tests" />
     <InternalsVisibleTo Include="Deguffer.App.Tests" />
+    <InternalsVisibleTo Include="Deguffer.Benchmark.Tests" />
   </ItemGroup>
 
   <ItemGroup>

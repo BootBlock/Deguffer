@@ -4,9 +4,8 @@ using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Media;
-using Deguffer.Testing;
 
-namespace Deguffer.Core.Tests;
+namespace Deguffer.Testing;
 
 /// <summary>
 /// A scratch drive for a duplicate search: a volume whose top is a scratch folder, Windows' own

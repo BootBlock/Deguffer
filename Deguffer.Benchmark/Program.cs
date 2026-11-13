@@ -17,12 +17,13 @@ if (request is null)
 {
     Console.Error.WriteLine(error);
     Console.Error.WriteLine();
-    Console.Error.WriteLine(BenchmarkRequest.Usage);
+    Console.Error.WriteLine(Usage.Text);
     return 1;
 }
 
 TableCensus? census = null;
 RemovalSite? site = null;
+ChecksumStoreFolder? store = null;
 
 if (request.Route.ReadsTable())
 {
@@ -61,9 +62,14 @@ else if (request.Folders.Any(folder => LongPath.ProbeDirectory(folder) is not Pa
     return 2;
 }
 
+if (request.Route is Route.Duplicates)
+{
+    store = ChecksumStoreFolder.Create(UserEnvironment.Current);
+}
+
 try
 {
-    return Benchmark(request, tuner, site, census);
+    return await BenchmarkAsync(request, tuner, site, store, census);
 }
 finally
 {
@@ -73,41 +79,20 @@ finally
     {
         Console.Error.WriteLine("The folder the benchmark created could not be removed in full. What is left is inside it.");
     }
+
+    if (store is not null && !await store.RemoveAsync())
+    {
+        Console.Error.WriteLine("The folder the benchmark kept its checksums in, in the temporary folder, could not be removed in full.");
+    }
 }
 
-static int Benchmark(BenchmarkRequest request, ScanTuner tuner, RemovalSite? site, TableCensus? census)
+static async Task<int> BenchmarkAsync(BenchmarkRequest request, ScanTuner tuner, RemovalSite? site, ChecksumStoreFolder? store, TableCensus? census)
 {
     var built = $@"{request.Drive}:\";
     var relation = request.Route is Route.Race
         ? DiskRelations.Of(request.Path[0], tuner.StorageOf(request.Path), request.Drive, tuner.StorageOf(built))
         : DiskRelation.Unknown;
     var buildYields = RaceRoute.BuildYields(request.BuildYields, relation);
-
-    var route = request.Route switch
-    {
-        Route.Walk => new RouteRun(ct => WalkRoute.Run(request.Path, request.Walk, ct)),
-        Route.Measure => new RouteRun(ct => MeasureRoute.Run(request.Path, request.Walk, ct)),
-        Route.ExploreWalk => new RouteRun(ct => ExploreWalkRoute.Run(request.Path, request.Walk, request.Snapshots, ct)),
-        Route.Sources => new RouteRun(ct => SourcesRoute.Run(request.Path, request.Walk, ct)),
-        Route.Links => new RouteRun(ct => LinksRoute.Run(request.Path, request.ReadBy, ct)),
-        Route.Folders => new RouteRun(ct => FoldersRoute.Run(VolumeMftSourceFactory.Default, request.Folders, ct)),
-        Route.Remove => new RemoveRoute(site!, request.Tree).Timed,
-        Route.Clean => new CleanRoute(
-            site!, request.Trees, request.Tree, UserEnvironment.Current, SystemDirectories.Current, VolumeInventory.Current).Timed,
-        Route.Protect => new ProtectRoute(site!, request.Trees, request.Listed, tuner).Timed,
-        Route.Race => RaceRoute.On(
-            VolumeMftSourceFactory.Default,
-            request.Path,
-            request.Racer,
-            request.Walk,
-            request.Drive,
-            request.Table,
-            buildYields,
-            request.BeforePart).Timed,
-        Route.Scan => AutoScanRoute.On(VolumeMftSourceFactory.Default, request.Path, tuner),
-        _ => new RouteRun(ct => TableRoutes.Run(
-            request.Route, VolumeMftSourceFactory.Default, request.Path, request.Table, opened: null, ct)),
-    };
 
     using var cancel = new CancellationTokenSource();
     Console.CancelKeyPress += (_, e) =>
@@ -122,13 +107,51 @@ static int Benchmark(BenchmarkRequest request, ScanTuner tuner, RemovalSite? sit
 
     try
     {
+        // Inside the try, because the duplicates route asks this machine's protections before its
+        // runs, which a cancel can stop.
+        var route = request.Route switch
+        {
+            Route.Walk => RouteRun.Blocking(ct => WalkRoute.Run(request.Path, request.Walk, ct)),
+            Route.Measure => RouteRun.Blocking(ct => MeasureRoute.Run(request.Path, request.Walk, ct)),
+            Route.ExploreWalk => RouteRun.Blocking(ct => ExploreWalkRoute.Run(request.Path, request.Walk, request.Snapshots, ct)),
+            Route.Sources => RouteRun.Blocking(ct => SourcesRoute.Run(request.Path, request.Walk, ct)),
+            Route.Links => RouteRun.Blocking(ct => LinksRoute.Run(request.Path, request.ReadBy, ct)),
+            Route.Folders => RouteRun.Blocking(ct => FoldersRoute.Run(VolumeMftSourceFactory.Default, request.Folders, ct)),
+            Route.Duplicates => (await DuplicatesRoute.OnThisMachineAsync(
+                request.Folders, request.Checksum, request.WarmCache, store!.Store, tuner, cancel.Token)).Timed,
+            Route.Remove => new RemoveRoute(site!, request.Tree).Timed,
+            Route.Clean => new CleanRoute(
+                site!, request.Trees, request.Tree, UserEnvironment.Current, SystemDirectories.Current, VolumeInventory.Current).Timed,
+            Route.Protect => new ProtectRoute(site!, request.Trees, request.Listed, tuner).Timed,
+            Route.Race => RaceRoute.On(
+                VolumeMftSourceFactory.Default,
+                request.Path,
+                request.Racer,
+                request.Walk,
+                request.Drive,
+                request.Table,
+                buildYields,
+                request.BeforePart).Timed,
+            Route.Scan => AutoScanRoute.On(VolumeMftSourceFactory.Default, request.Path, tuner),
+            _ => RouteRun.Blocking(ct => TableRoutes.Run(
+                request.Route, VolumeMftSourceFactory.Default, request.Path, request.Table, opened: null, ct)),
+        };
+
         for (var i = 1; i <= request.Runs; i++)
         {
             Console.Error.WriteLine($"Run {i} of {request.Runs}...");
 
-            route.Before?.Invoke(cancel.Token);
-            runs.Add(Timing.Measure(route.Run, cancel.Token));
-            route.After?.Invoke();
+            if (route.Before is { } before)
+            {
+                await before(cancel.Token);
+            }
+
+            runs.Add(await Timing.MeasureAsync(route.Run, cancel.Token));
+
+            if (route.After is { } after)
+            {
+                await after();
+            }
         }
     }
     catch (OperationCanceledException)
@@ -141,6 +164,14 @@ static int Benchmark(BenchmarkRequest request, ScanTuner tuner, RemovalSite? sit
         // Building a tree, the one thing here that writes. Its message names the file, so only the
         // error is repeated.
         Console.Error.WriteLine($"The tree could not be built: error 0x{ex.HResult:X8}.");
+        return 2;
+    }
+    catch (Exception ex) when (store is not null && ex is IOException or UnauthorizedAccessException)
+    {
+        // Emptying the route's own checksum store before a cold run, the one thing the route writes
+        // beside what a search writes. Its message names the store's folder, so only the error is
+        // repeated.
+        Console.Error.WriteLine($"The checksum store could not be emptied for a cold run: error 0x{ex.HResult:X8}.");
         return 2;
     }
     catch (IOException ex)
@@ -175,7 +206,7 @@ static int Benchmark(BenchmarkRequest request, ScanTuner tuner, RemovalSite? sit
                 request.Table,
                 buildYields,
                 request.BeforePart is not null)
-            : Tuning.Describe(request.Route, request.Walk, request.Table, request.Snapshots, request.ReadBy, request.Tree, request.Trees),
+            : Tuning.Describe(request.Route, request.Walk, request.Table, request.Snapshots, request.ReadBy, request.Tree, request.Trees, request.Checksum, request.WarmCache),
         [.. request.Folders.Concat(request.Route is Route.Race ? [built] : []).Select(MeasuredPlace.Of).Distinct()],
         MachineFacts.Current,
         runs,

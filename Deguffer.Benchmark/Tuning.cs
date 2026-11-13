@@ -1,4 +1,5 @@
 using System.Globalization;
+using Deguffer.Core.Duplicates;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Mft;
 
@@ -16,8 +17,11 @@ internal static class Tuning
 {
     /// <param name="tree">The tree a removal route builds, or each of the clean route's. No other route reads it.</param>
     /// <param name="trees">How many trees the clean route builds, or folders the protect route records. No other route reads it.</param>
+    /// <param name="checksum">The checksum the duplicates route compares content by. No other route reads it.</param>
+    /// <param name="warmCache">Whether the duplicates route starts each run with checksums kept. No other route reads it.</param>
     public static string Describe(
-        Route route, WalkTuning walk, TableTuning table, bool snapshots, LinkRead readBy, TreeShape tree, int trees)
+        Route route, WalkTuning walk, TableTuning table, bool snapshots, LinkRead readBy, TreeShape tree, int trees,
+        ChecksumAlgorithm checksum = ChecksumAlgorithm.XxHash128, bool warmCache = false)
     {
         // The shape is stated because it is the whole of what one removal result is a result for.
         if (route is Route.Remove)
@@ -54,6 +58,16 @@ internal static class Tuning
                 CultureInfo.InvariantCulture,
                 $"{table.ReadBytes / 1024} KiB reads, {table.ReadsInFlight} in flight, parsed on {table.ParseThreads} threads, " +
                 $"{table.ListReadsInFlight} list reads in flight");
+        }
+
+        // The checksum and the cache are stated because each changes what the reads cost: the
+        // checksum how long hashing a whole file takes, and the cache whether it is read at all.
+        if (route is Route.Duplicates)
+        {
+            return $"the values a search uses for each drive's kind, under the shipped settings, content compared by {checksum.Name()}, "
+                + (warmCache
+                    ? "each run starting with the checksums an untimed search kept, loaded from their store"
+                    : "each run starting with no checksums kept");
         }
 
         if (route is Route.Folders)

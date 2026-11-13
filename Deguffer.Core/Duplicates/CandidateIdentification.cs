@@ -38,6 +38,7 @@ internal sealed class CandidateIdentification
     private readonly FileInformation _files;
     private readonly MatchCriteria _criteria;
     private readonly VolumeMediaCache _media;
+    private readonly DuplicateSearchTimings? _timings;
     private readonly Dictionary<FoundFile, IdentifiedFile?> _identified = [];
 
     private int _empty;
@@ -46,11 +47,13 @@ internal sealed class CandidateIdentification
     private int _unidentified;
 
     /// <param name="media">The disks behind each volume, and their kind, so the files are identified in lanes by disk.</param>
-    public CandidateIdentification(FileInformation files, MatchCriteria criteria, VolumeMediaCache media)
+    /// <param name="timings">Given how many files were asked about and how many had their names listed, or null.</param>
+    public CandidateIdentification(FileInformation files, MatchCriteria criteria, VolumeMediaCache media, DuplicateSearchTimings? timings = null)
     {
         _files = files;
         _criteria = criteria;
         _media = media;
+        _timings = timings;
     }
 
     /// <summary>What this stage left out, to add to what the walk left out.</summary>
@@ -116,6 +119,8 @@ internal sealed class CandidateIdentification
         {
             _identified[unasked[file]] = identified[file];
         }
+
+        _timings?.Identified += unasked.Count;
     }
 
     /// <summary>
@@ -145,6 +150,8 @@ internal sealed class CandidateIdentification
                 : null,
             progress,
             ct).ConfigureAwait(false);
+
+        _timings?.Named = linked.Count;
 
         ILookup<FileIdentity, string>? reached = null;
 
