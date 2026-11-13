@@ -321,7 +321,7 @@ public sealed partial class ExploreSelection : ObservableObject
             // refused folder hatched as going would tell the user the opposite of what will happen.
             // Picked and items were taken together, so they name the same things in the same order.
             void Acting(IReadOnlyList<ExploreItem> allowed) =>
-                MarkRemoving(tree, [.. picked.Where((_, i) => allowed.Contains(items[i]))]);
+                MarkRemoving(tree, ExploreGoing.Picks(picked, items, allowed));
 
             if (await _actions.RemoveAsync(items, mode, Acting, lastWord, ct) is not { } report)
             {
