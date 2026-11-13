@@ -15,6 +15,24 @@ namespace Deguffer.Core.Safety;
 /// </summary>
 public static class StoreFile
 {
+    /// <summary>
+    /// The whole text of <paramref name="file"/>. Only for a store Deguffer wrote through
+    /// <see cref="Replace(string, string)"/>: its size is Deguffer's own doing, where a file another
+    /// program wrote is read through <see cref="BoundedFile"/> with its format's limit.
+    /// </summary>
+    /// <exception cref="IOException">The file is missing, held or unreadable, as the caller's own policy then decides.</exception>
+    /// <exception cref="UnauthorizedAccessException">The file is refused.</exception>
+    public static string Read(string file)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(file);
+
+        // Shared for reading, so a read beside the replace a moment later takes the whole of one or
+        // the other, never a mix: the replace moves a finished file over this one.
+        using var reader = new StreamReader(new FileStream(LongPath.Extended(file), FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete));
+
+        return reader.ReadToEnd();
+    }
+
     /// <summary>Replace <paramref name="file"/> with <paramref name="contents"/>, creating its folder where it has none.</summary>
     public static void Replace(string file, string contents) =>
         Replace(file, stream =>

@@ -35,6 +35,9 @@ internal enum SmartRawFormat
     /// <summary>Degrees in bytes 0-1, the lowest seen in bytes 2-3 and the highest seen in bytes 4-5.</summary>
     CelsiusRange,
 
+    /// <summary>Degrees in bytes 0-1, the highest seen in bytes 2-3 and the lowest seen in bytes 4-5.</summary>
+    CelsiusRangeHighestFirst,
+
     /// <summary>The raw value is not used. The normalised value is a percentage.</summary>
     Percent,
 

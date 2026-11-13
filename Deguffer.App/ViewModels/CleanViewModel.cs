@@ -7,6 +7,7 @@ using Deguffer.Core.Configuration;
 using Deguffer.Core.Diagnostics;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Execution.Sizes;
+using Deguffer.Core.Execution.Timing;
 using Deguffer.Core.Health;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Retrim;
@@ -43,6 +44,7 @@ public sealed partial class CleanViewModel : ObservableObject
     private readonly RunningActions _running;
     private readonly BusyWork _work;
     private readonly Func<IConfirmationPrompt> _prompt;
+    private readonly PlanTimeHistory _planTimes;
     private readonly ReportOrigin _origin;
 
     /// <summary>The keep list the rows were last brought up to date with. See <see cref="ApplyKeepList"/>.</summary>
@@ -139,6 +141,7 @@ public sealed partial class CleanViewModel : ObservableObject
         _running = running;
         _work = work;
         _prompt = prompt;
+        _planTimes = new PlanTimeHistory(new PlanTimeStore(environment));
         WhenComplete = whenComplete;
         Retrim = retrim;
         ScanChoice = scanChoice;
@@ -903,14 +906,17 @@ public sealed partial class CleanViewModel : ObservableObject
         // Fixed here, once, for the whole pass. See KeepFilesChangedWithinHours.
         var keep = MinimumAge.WithinHours(KeepFilesChangedWithinHours, DateTime.UtcNow);
 
+        // Every scan is timed, and Core keeps only one that planned every row, so which count is its call.
+        var timed = new PlanTimeLog();
+
         await Sizes.BeginAsync(ct);
 
         try
         {
             await Task.Run(
                 () => measured is null
-                    ? _planner.PlanAllAsync(keep, progress, found, ct)
-                    : _planner.PlanAsync(measured, keep, progress, found, ct),
+                    ? _planner.PlanAllAsync(keep, progress, found, timed, ct)
+                    : _planner.PlanAsync(measured, keep, progress, found, timed, ct),
                 ct);
         }
         finally
@@ -920,6 +926,9 @@ public sealed partial class CleanViewModel : ObservableObject
 
         HasPreview = true;
         CanElevate = ElevationOffer.ShouldOffer(_isElevated, Findings.Select(f => f.Finding));
+
+        // Past the finally, which a failed or cancelled pass leaves by. On a worker: it writes the file.
+        await Task.Run(() => _planTimes.RecordFullPass(_planner.Providers, timed.Times, _isElevated), CancellationToken.None);
     }
 
     /// <summary>
@@ -965,7 +974,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
         try
         {
-            await Task.Run(() => _planner.PlanAsync(providers, keep, progress, found, ct), ct);
+            await Task.Run(() => _planner.PlanAsync(providers, keep, progress, found, ct: ct), ct);
         }
         finally
         {
@@ -1343,9 +1352,8 @@ public sealed partial class CleanViewModel : ObservableObject
     /// Keep one item, or stop keeping it, from its row's item list.
     ///
     /// <para>The list is then applied to every row rather than this one alone, so the page's totals
-    /// and its sentence move with the row. A change that could not be saved is said out loud, because
-    /// a kept item silently offered again after a restart is the failure the keep list exists to
-    /// prevent.</para>
+    /// and its sentence move with the row. A change that could not be saved is said out loud
+    /// (<see cref="KeepSaveNotice"/>).</para>
     /// </summary>
     public void ToggleKeep(FindingViewModel row, StepViewModel step)
     {
@@ -1367,16 +1375,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
         if (!saved)
         {
-            Report(
-                _keeps.StoredListUnreadable
-                    ? $"{(keeping ? "Kept" : "Stopped keeping")} {identity.Name} for this session only. Deguffer "
-                      + "could not read the keep list saved in %LOCALAPPDATA%\\Deguffer\\keep.json when it "
-                      + "started, so it is not saving over it. Repair or remove that file, then restart Deguffer."
-                    : keeping
-                        ? $"Kept {identity.Name} for now, but Deguffer could not save the keep list, so it will be "
-                          + "offered again after a restart. Check that %LOCALAPPDATA%\\Deguffer is writable."
-                        : $"{identity.Name} is still on your keep list: Deguffer could not save the change.",
-                InfoBarSeverity.Warning);
+            Report(KeepSaveNotice.For(keeping, identity.Name, _keeps.StoredListUnreadable), InfoBarSeverity.Warning);
         }
     }
 

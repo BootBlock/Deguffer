@@ -1,5 +1,6 @@
 using System.Globalization;
 using Deguffer.Core.Duplicates;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Mft;
 
@@ -42,6 +43,15 @@ internal static class Tuning
             return string.Create(
                 CultureInfo.InvariantCulture,
                 $"{trees:N0} empty folders, each recorded as a plan records a protected path, with the walk a scan uses for the drive's kind");
+        }
+
+        // The bound is stated because past it a pass is as long as its slowest row plus what ran
+        // before that row started, so a result at one bound says little about another.
+        if (route is Route.Plan)
+        {
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"the default planner under the shipped settings, {CleanupPlanner.ProvidersAtOnce} providers at once, one planner for every run");
         }
 
         if (route is Route.Scan)
