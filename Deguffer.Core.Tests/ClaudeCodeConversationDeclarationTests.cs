@@ -40,7 +40,7 @@ public sealed class ClaudeCodeConversationDeclarationTests : IDisposable
             runner: new FakeProcessRunner(),
             inspector: inspector ?? FakeProcessInspector.NothingRunning,
             scope: scope,
-            transcripts: _reads.Reader);
+            transcripts: new ClaudeCodeTranscriptAnswers(_reads.Reader));
 
     private ExploreActionPolicy Policy(IEnumerable<ToolRoot> roots, IEnumerable<ToolRoot>? probed = null) =>
         new([], roots, _volumes, probedRoots: probed);

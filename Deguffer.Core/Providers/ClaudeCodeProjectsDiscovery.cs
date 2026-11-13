@@ -20,10 +20,14 @@ public sealed record ClaudeCodeSidecar(string Path, string SessionId, bool IsLin
 /// When Claude Code last appended to it, which is when the session was last used. Claude Code's own
 /// clean-up ages a conversation by the same timestamp.
 /// </param>
+/// <param name="Length">
+/// Its length in bytes when it was listed. With <paramref name="LastWrittenUtc"/>, what says that it
+/// has not changed since it was last read (<see cref="ClaudeCodeTranscriptAnswers"/>).
+/// </param>
 /// <param name="IsLink">
 /// Whether it is a symbolic link. Named rather than dropped, and never read through.
 /// </param>
-public sealed record ClaudeCodeTranscript(string Path, string SessionId, DateTime LastWrittenUtc, bool IsLink);
+public sealed record ClaudeCodeTranscript(string Path, string SessionId, DateTime LastWrittenUtc, long Length, bool IsLink);
 
 /// <summary>One project folder under <see cref="ClaudeCodeHome.Projects"/>, and what it holds.</summary>
 /// <param name="Path">The folder, in display form. Never a target: the project's memory is inside it.</param>
@@ -195,6 +199,7 @@ public sealed class ClaudeCodeProjectsDiscovery
                             LongPath.Display(entry.FullName),
                             session,
                             entry.LastWriteTimeUtc,
+                            ((FileInfo)entry).Length,
                             entry.Attributes.HasFlag(FileAttributes.ReparsePoint)));
                     }
                     else if (entry is DirectoryInfo && ClaudeCodeHome.IsSessionId(entry.Name))
