@@ -27,7 +27,7 @@
 516 Deguffer.Core/Providers/UnrealDerivedDataCacheProvider.cs
 659 Deguffer.Core/Providers/VcpkgCacheProvider.cs
 889 Deguffer.Core/Safety/FileInformation.cs
-743 Deguffer.Core/Safety/IUserEnvironment.cs
+739 Deguffer.Core/Safety/IUserEnvironment.cs
 622 Deguffer.Core/Safety/LongPath.cs
 593 Deguffer.Core/Scanning/DirectoryScanner.cs
 510 Deguffer.Core/Scanning/Mft/MftReadPass.cs

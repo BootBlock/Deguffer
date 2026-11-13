@@ -9713,9 +9713,9 @@ configuration and state files are not registered, because Hyper-V's answer names
 
 - **Hyper-V** answers only an elevated account or a member of Hyper-V Administrators, and a
   third-party write-up ([Altaro](https://www.altaro.com/hyper-v/?p=21601)) reports `Get-VM` listing
-  nothing, rather than failing, for anyone else. So Deguffer asks first, and
-  for any other account the row says that whether there are machines is not known. It asks only
-  where the Hyper-V module is installed. The route: delete checkpoints with `Remove-VMCheckpoint`,
+  nothing, rather than failing, for anyone else. So Deguffer asks its own token first, and
+  for any other account the row says that whether there are machines is not known, with nothing
+  started. It asks only where the Hyper-V module is installed. The route: delete checkpoints with `Remove-VMCheckpoint`,
   which merges them, then compact with `Optimize-VHD` while the machine is off
   ([Optimize-VHD](https://learn.microsoft.com/en-us/powershell/module/hyper-v/optimize-vhd)).
 - **VMware Workstation** keeps no single complete list, so the machines are its library and its
