@@ -46,15 +46,17 @@ internal sealed class NameSortKeys
 
     private readonly UInt128[] _keys;
 
-    private readonly int[] _nameNumbers;
+    // Each node's name as the keys are numbered, which can differ from how the names compared whole
+    // are: see Kept.
+    private readonly int[] _keyNumbers;
 
     private readonly Comparison<int> _byName;
 
-    private NameSortKeys(UInt128[] keys, int[] nameNumbers, Comparison<int> byName)
+    private NameSortKeys(UInt128[] keys, int[] keyNumbers, int[] nameNumbers, NamePool.Frozen names)
     {
         _keys = keys;
-        _nameNumbers = nameNumbers;
-        _byName = byName;
+        _keyNumbers = keyNumbers;
+        _byName = (left, right) => ExploreTree.CompareByName(nameNumbers, names, left, right);
     }
 
     /// <summary>
@@ -64,9 +66,30 @@ internal sealed class NameSortKeys
     public static NameSortKeys Of(int[] nameNumbers, NamePool.Frozen names, int workers, CancellationToken ct)
     {
         var keys = new UInt128[names.Count];
+        Make(keys, from: 0, names, workers, ct);
 
+        return new NameSortKeys(keys, nameNumbers, nameNumbers, names);
+    }
+
+    /// <summary>
+    /// Numbers made before, for ordering the nodes <paramref name="nameNumbers"/> names in
+    /// <paramref name="names"/>: the number of each node's name is <paramref name="keys"/> at
+    /// <paramref name="keyNumbers"/>, which numbers the names as the pool the keys were made from did.
+    ///
+    /// <para>For keys kept from one tree to the next of one read, whose pool numbers each name once
+    /// and for good. A tree that keeps only some of those names numbers them again
+    /// (<see cref="NamePool.Keeping"/>), so its own numbers would find another name's key.</para>
+    /// </summary>
+    public static NameSortKeys Kept(UInt128[] keys, int[] keyNumbers, int[] nameNumbers, NamePool.Frozen names) =>
+        new(keys, keyNumbers, nameNumbers, names);
+
+    /// <summary>
+    /// Write the number of each name of <paramref name="names"/> from number <paramref name="from"/>
+    /// on into <paramref name="keys"/>, on up to <paramref name="workers"/> threads.
+    /// </summary>
+    public static void Make(UInt128[] keys, int from, NamePool.Frozen names, int workers, CancellationToken ct) =>
         Parallel.ForEach(
-            Partitioner.Create(0, keys.Length, NamesPerShare),
+            Partitioner.Create(from, names.Count, NamesPerShare),
             new ParallelOptions { MaxDegreeOfParallelism = workers, CancellationToken = ct },
             share =>
             {
@@ -75,10 +98,6 @@ internal sealed class NameSortKeys
                     keys[number] = KeyOf(names[number]);
                 }
             });
-
-        return new NameSortKeys(
-            keys, nameNumbers, (left, right) => ExploreTree.CompareByName(nameNumbers, names, left, right));
-    }
 
     /// <summary>
     /// Put <paramref name="siblings"/> in name order, in place.
@@ -94,7 +113,7 @@ internal sealed class NameSortKeys
 
         for (var i = 0; i < length; i++)
         {
-            keys[i] = _keys[_nameNumbers[siblings[i]]];
+            keys[i] = _keys[_keyNumbers[siblings[i]]];
         }
 
         MemoryExtensions.Sort(keys, siblings);

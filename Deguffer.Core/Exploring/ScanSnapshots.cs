@@ -14,7 +14,7 @@ namespace Deguffer.Core.Exploring;
 ///
 /// <para>One cadence for both routes. What each route hands over differs: the walk captures its
 /// builder under the lock (<see cref="ExploreTreeBuilder.Capture"/>), and the file table's read
-/// copies its columns while the parse threads go on writing them
+/// copies its flags and parents while the parse threads go on writing them
 /// (<see cref="MftExploreColumns.CopyPresent"/>). Either way a snapshot is ordered as
 /// <see cref="SnapshotAssembly.Order"/> says when it is captured, which is how a change of view while
 /// the scan runs reaches the next snapshot.</para>

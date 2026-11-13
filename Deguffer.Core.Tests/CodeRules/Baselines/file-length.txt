@@ -11,7 +11,7 @@
 707 Deguffer.Core/Execution/CleanupStep.cs
 1082 Deguffer.Core/Execution/PlanExecutor.cs
 559 Deguffer.Core/Exploring/Acting/ExploreActionPolicy.cs
-917 Deguffer.Core/Exploring/ExploreTree.cs
+630 Deguffer.Core/Exploring/ExploreTree.cs
 835 Deguffer.Core/Exploring/Layout/TreemapLayout.cs
 551 Deguffer.Core/Providers/AffinityModelCacheProvider.cs
 539 Deguffer.Core/Providers/ClaudeCodeDerivedStateProvider.cs
