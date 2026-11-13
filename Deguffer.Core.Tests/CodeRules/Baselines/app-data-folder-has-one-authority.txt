@@ -9,7 +9,6 @@
 1 Deguffer.Core/Diagnostics/CrashLog.cs
 1 Deguffer.Core/Duplicates/ChecksumCache.cs
 1 Deguffer.Core/Execution/RefusalRecord.cs
-1 Deguffer.Core/Execution/Sizes/ProviderSizeStore.cs
 1 Deguffer.Core/Exploring/History/ScanHistoryStore.cs
 1 Deguffer.Core/InstalledApps/RegistryBackups.cs
 1 Deguffer.Core/Providers/ComponentStoreSettlement.cs

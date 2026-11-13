@@ -1,5 +1,6 @@
 using Deguffer.Benchmark;
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Media;
@@ -142,6 +143,7 @@ static async Task<int> BenchmarkAsync(BenchmarkRequest request, ScanTuner tuner,
                 buildYields,
                 request.BeforePart).Timed,
             Route.Scan => AutoScanRoute.On(VolumeMftSourceFactory.Default, request.Path, tuner),
+            Route.Plan => new PlanRoute(CleanupPlanner.CreateDefault()).Timed,
             _ => RouteRun.Blocking(ct => TableRoutes.Run(
                 request.Route, VolumeMftSourceFactory.Default, request.Path, request.Table, opened: null, ct)),
         };
