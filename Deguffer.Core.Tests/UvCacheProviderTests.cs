@@ -51,6 +51,28 @@ public sealed class UvCacheProviderTests : IDisposable
         Assert.Equal(0, plan.EstimatedBytes);
     }
 
+    /// <summary>
+    /// #450: uv is asked where its cache, tools and interpreters are as the pass begins, and the plan
+    /// awaits those answers.
+    /// </summary>
+    [Fact]
+    public async Task AsksUvWhereItKeepsThingsAsThePassBegins()
+    {
+        _environment.WithExecutable("uv");
+        CreateCache();
+        var runner = UvAnsweringNothing();
+
+        await EarlyStartProof.StartsBeforeItPlansAsync(CreateProvider(runner), runner, "cache dir", "tool dir", "python dir");
+    }
+
+    [Fact]
+    public async Task StartsNothingAsThePassBeginsWhenUvIsNotInstalled()
+    {
+        var runner = new FakeProcessRunner();
+
+        await EarlyStartProof.StartsNothingAsync(CreateProvider(runner), runner);
+    }
+
     [Fact]
     public async Task AsksUvWhereItsCacheIsRatherThanAssuming()
     {

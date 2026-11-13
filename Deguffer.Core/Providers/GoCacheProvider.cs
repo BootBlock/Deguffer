@@ -209,6 +209,13 @@ public sealed class GoCacheProvider : CleanupProviderBase
         base.InvalidateCaches();
     }
 
+    /// <summary>
+    /// Go's answer for where its caches and workspaces are, asked as the pass begins: <c>go env</c>
+    /// reads Go's settings files before it answers, and the row can measure nothing until it has.
+    /// </summary>
+    public override Task BeginPass(PassStart start) =>
+        start.Ask(ct => Environment.FindExecutable("go") is { } go ? ResolveLocationsAsync(go, ct) : Task.CompletedTask);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         if (Environment.FindExecutable("go") is not { } go)
