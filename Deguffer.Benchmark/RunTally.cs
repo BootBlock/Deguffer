@@ -54,6 +54,7 @@ namespace Deguffer.Benchmark;
 /// it (<see cref="RunSample.KeptBytes"/>), or null for a route that keeps nothing.
 /// </param>
 /// <param name="Race">What each part of a round of the race route took. Null for every other route.</param>
+/// <param name="Planning">When each provider of the plan route's pass ran. Null for every other route.</param>
 internal readonly record struct RunTally(
     long Items,
     long BytesRead,
@@ -70,4 +71,5 @@ internal readonly record struct RunTally(
     MftStageTimings? Stages = null,
     TimeSpan OpenTime = default,
     RaceTimes? Race = null,
-    MftOpenTimings? Open = null);
+    MftOpenTimings? Open = null,
+    PlanRun? Planning = null);

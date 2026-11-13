@@ -4,7 +4,10 @@ namespace Deguffer.Benchmark;
 /// One route as the run loop drives it: what is timed, and what comes before and after each timed
 /// run without being timed.
 /// </summary>
-/// <param name="Run">The work that is timed.</param>
+/// <param name="Run">
+/// The work that is timed, awaited, so a route whose work is asynchronous, as a planning pass is, is
+/// timed without blocking a thread on it.
+/// </param>
 /// <param name="Before">
 /// Made ready before each run, outside its time: the tree a removal route removes is built here.
 /// Nothing for a route that only reads.
@@ -14,6 +17,13 @@ namespace Deguffer.Benchmark;
 /// its target (§5.6). Nothing for a route that only reads.
 /// </param>
 internal sealed record RouteRun(
-    Func<CancellationToken, RunTally> Run,
+    Func<CancellationToken, ValueTask<RunTally>> Run,
     Action<CancellationToken>? Before = null,
-    Action? After = null);
+    Action? After = null)
+{
+    /// <summary>A route whose timed work is synchronous.</summary>
+    public RouteRun(Func<CancellationToken, RunTally> Run, Action<CancellationToken>? Before = null, Action? After = null)
+        : this(ct => ValueTask.FromResult(Run(ct)), Before, After)
+    {
+    }
+}

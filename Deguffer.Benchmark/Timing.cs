@@ -7,7 +7,7 @@ namespace Deguffer.Benchmark;
 /// </summary>
 internal static class Timing
 {
-    public static RunSample Measure(Func<CancellationToken, RunTally> run, CancellationToken ct)
+    public static async Task<RunSample> MeasureAsync(Func<CancellationToken, ValueTask<RunTally>> run, CancellationToken ct)
     {
         // What the previous run left behind is collected before the clock starts, so one run's
         // garbage is not collected inside the next run's time.
@@ -22,7 +22,7 @@ internal static class Timing
         var processorBefore = Environment.CpuUsage.TotalTime;
         var clock = Stopwatch.StartNew();
 
-        var tally = run(ct);
+        var tally = await run(ct).ConfigureAwait(false);
 
         clock.Stop();
         var processor = Environment.CpuUsage.TotalTime - processorBefore;

@@ -1,5 +1,6 @@
 using Deguffer.Benchmark;
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Media;
@@ -17,7 +18,7 @@ if (request is null)
 {
     Console.Error.WriteLine(error);
     Console.Error.WriteLine();
-    Console.Error.WriteLine(BenchmarkRequest.Usage);
+    Console.Error.WriteLine(BenchmarkUsage.Text);
     return 1;
 }
 
@@ -63,7 +64,7 @@ else if (request.Folders.Any(folder => LongPath.ProbeDirectory(folder) is not Pa
 
 try
 {
-    return Benchmark(request, tuner, site, census);
+    return await BenchmarkAsync(request, tuner, site, census);
 }
 finally
 {
@@ -75,7 +76,7 @@ finally
     }
 }
 
-static int Benchmark(BenchmarkRequest request, ScanTuner tuner, RemovalSite? site, TableCensus? census)
+static async Task<int> BenchmarkAsync(BenchmarkRequest request, ScanTuner tuner, RemovalSite? site, TableCensus? census)
 {
     var built = $@"{request.Drive}:\";
     var relation = request.Route is Route.Race
@@ -105,6 +106,7 @@ static int Benchmark(BenchmarkRequest request, ScanTuner tuner, RemovalSite? sit
             buildYields,
             request.BeforePart).Timed,
         Route.Scan => AutoScanRoute.On(VolumeMftSourceFactory.Default, request.Path, tuner),
+        Route.Plan => new PlanRoute(CleanupPlanner.CreateDefault()).Timed,
         _ => new RouteRun(ct => TableRoutes.Run(
             request.Route, VolumeMftSourceFactory.Default, request.Path, request.Table, opened: null, ct)),
     };
@@ -127,7 +129,7 @@ static int Benchmark(BenchmarkRequest request, ScanTuner tuner, RemovalSite? sit
             Console.Error.WriteLine($"Run {i} of {request.Runs}...");
 
             route.Before?.Invoke(cancel.Token);
-            runs.Add(Timing.Measure(route.Run, cancel.Token));
+            runs.Add(await Timing.MeasureAsync(route.Run, cancel.Token));
             route.After?.Invoke();
         }
     }

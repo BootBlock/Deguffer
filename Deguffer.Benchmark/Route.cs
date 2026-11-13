@@ -98,13 +98,19 @@ internal enum Route
     /// whichever answers first.
     /// </summary>
     Scan,
+
+    /// <summary>
+    /// Plan every provider as a Storage scan does, with the default planner, and time when each took a
+    /// slot and ended: what a scan's time is spent on, row by row. It only plans and never cleans.
+    /// </summary>
+    Plan,
 }
 
 internal static class RouteFacts
 {
     /// <summary>Whether the route reads a volume's file table, which needs administrator rights.</summary>
     public static bool ReadsTable(this Route route) =>
-        route is not (Route.Walk or Route.Measure or Route.ExploreWalk or Route.Sources or Route.Links or Route.Folders)
+        route is not (Route.Walk or Route.Measure or Route.ExploreWalk or Route.Sources or Route.Links or Route.Folders or Route.Plan)
             && !route.Builds();
 
     /// <summary>Whether the route builds what it removes in a folder it creates.</summary>
@@ -156,6 +162,7 @@ internal static class RouteFacts
         Route.Sources => "candidates",
         Route.Links => "files",
         Route.Protect => "paths",
+        Route.Plan => "providers",
         _ => "records",
     };
 }

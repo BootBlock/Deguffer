@@ -5,6 +5,7 @@ using System.Text.Json.Serialization.Metadata;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Execution.Sizes;
+using Deguffer.Core.Execution.Timing;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
@@ -78,6 +79,10 @@ public class StoreContractTests
         new(StrictStoreJson.Default.ComponentStoreStates, new ComponentStoreSettlement.Stored(1, new Dictionary<string, ComponentStoreSettlement.StoredState>
         {
             ["10.0.26100.1"] = new(ExplorerSize: 9, ActualSize: 8, SharedWithWindows: 7, BackupsAndDisabledFeatures: 6, CacheAndTemporaryData: 5, ReclaimablePackages: 4),
+        })),
+        new(StrictStoreJson.Default.PlanningTimes, new PlanTimeStore.Stored(1, new Dictionary<string, PlanTimeStore.StoredTime[]>
+        {
+            ["conda"] = [new(TakenUtc, Microseconds: 5_232_000, Elevated: true)],
         })),
     ];
 

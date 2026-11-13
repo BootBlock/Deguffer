@@ -1,5 +1,6 @@
 using Deguffer.Core.Cloud;
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Execution.Timing;
 using Deguffer.Core.Profiles;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
@@ -21,6 +22,7 @@ public sealed class CleanupPlanner
     private readonly RowDeclarations? _declarations;
     private readonly IVolumeInventory _volumes;
     private readonly RunningAccount _account;
+    private readonly TimeProvider _time;
 
     /// <param name="declarations">
     /// The declarations the rows that walk a folder consult, admitted here so that they name every row
@@ -38,15 +40,18 @@ public sealed class CleanupPlanner
     /// only reads, and because a default that assumed the signed-in user would fail open. See
     /// <see cref="AnotherAccountPlan"/>.
     /// </param>
+    /// <param name="time">The clock each provider's plan is timed on (<see cref="ProviderPlanTime"/>). The system's by default.</param>
     public CleanupPlanner(
         IEnumerable<ICleanupProvider> providers,
         RowDeclarations? declarations = null,
         IVolumeInventory? volumes = null,
-        RunningAccount? account = null)
+        RunningAccount? account = null,
+        TimeProvider? time = null)
     {
         _providers = [.. providers];
         _volumes = volumes ?? VolumeInventory.Current;
         _account = account ?? RunningAccount.Of(UserEnvironment.Current);
+        _time = time ?? TimeProvider.System;
         _places = new Dictionary<ICleanupProvider, int>(_providers.Count, ReferenceEqualityComparer.Instance);
         _declarations = declarations;
 
@@ -467,12 +472,19 @@ public sealed class CleanupPlanner
     /// inside it: every provider then agrees about which files are recent, and a plan previewed at
     /// the top of the pass protects the same files as one previewed at the bottom.
     /// </param>
+    /// <param name="timed">
+    /// When each provider that planned took its slot and ended, reported just before its finding and
+    /// under the same lock. The planner keeps none of it: what is remembered across passes, and which
+    /// passes count, is <see cref="PlanTimeHistory"/>'s to decide. A provider whose plan failed or was
+    /// stopped reports nothing, because it did not plan.
+    /// </param>
     public Task<IReadOnlyList<Finding>> PlanAllAsync(
         MinimumAge keep = default,
         IProgress<string>? status = null,
         IProgress<Finding>? found = null,
+        IProgress<ProviderPlanTime>? timed = null,
         CancellationToken ct = default) =>
-        PlanAsync(_providers, keep, status, found, ct);
+        PlanAsync(_providers, keep, status, found, timed, ct);
 
     /// <summary>
     /// Preview <paramref name="providers"/> alone, on the same terms <see cref="PlanAllAsync"/> previews
@@ -482,14 +494,20 @@ public sealed class CleanupPlanner
     /// Every other provider's finding still describes the disk, and measuring it again costs a walk of
     /// its tree for an answer already on screen. See <see cref="RunChanges"/> for which those are.</para>
     /// </summary>
+    /// <param name="timed">As <see cref="PlanAllAsync"/> takes it.</param>
     public async Task<IReadOnlyList<Finding>> PlanAsync(
         IReadOnlyList<ICleanupProvider> providers,
         MinimumAge keep = default,
         IProgress<string>? status = null,
         IProgress<Finding>? found = null,
+        IProgress<ProviderPlanTime>? timed = null,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(providers);
+
+        // Every offset is from here, so the reading of the registered storage before the first slot is
+        // part of what the first provider's start says it waited for.
+        var clock = new PassClock(_time);
 
         // Every row that registers a virtual machine's storage is read for every pass, a re-plan of a
         // few rows included: the refusal is the run's, and a re-planned row whose location holds a
@@ -537,7 +555,7 @@ public sealed class CleanupPlanner
             // Once for the pass, so each of the account's folders is followed to its mounts once.
             var anotherAccount = AnotherAccountPlan.For(_account, _volumes);
 
-            return await PlanHeldAsync(providers, registered, anotherAccount, _volumes, keep, status, found, pass, ct).ConfigureAwait(false);
+            return await PlanHeldAsync(providers, registered, anotherAccount, _volumes, keep, status, found, timed, clock, pass, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -565,6 +583,8 @@ public sealed class CleanupPlanner
         MinimumAge keep,
         IProgress<string>? status,
         IProgress<Finding>? found,
+        IProgress<ProviderPlanTime>? timed,
+        PassClock clock,
         CancellationTokenSource pass,
         CancellationToken ct)
     {
@@ -582,6 +602,7 @@ public sealed class CleanupPlanner
 
             Finding finding;
             var planned = false;
+            var began = clock.Now;
             checking.Started(provider);
 
             try
@@ -604,12 +625,15 @@ public sealed class CleanupPlanner
                 }
             }
 
+            // Read before the lock, so a row's time does not include its wait for another row's report.
+            var time = new ProviderPlanTime(provider, began, clock.Now);
             findings[index] = finding;
 
             // One at a time, so a caller's progress handler never runs beside itself: the preview's
             // inserts each row into a list that is not safe to change from two threads at once.
             lock (reporting)
             {
+                timed?.Report(time);
                 found?.Report(finding);
             }
         }).ConfigureAwait(false);
@@ -774,7 +798,7 @@ public sealed class CleanupPlanner
             }
         }
 
-        var weights = Weigh([.. plans.Select(p => p.Plan)]);
+        var weights = ProgressWeights.ForRun([.. plans.Select(p => p.Plan)]);
         var total = weights.Sum();
         var results = new List<CleanupResult>(plans.Count);
         var done = 0.0;
@@ -853,34 +877,4 @@ public sealed class CleanupPlanner
             .VerifyAsync(plan, reach, residue, CancellationToken.None)
             .ConfigureAwait(false),
     };
-
-    /// <summary>
-    /// Each plan's share of the bar: a plan that deletes is weighted by what it frees, and a plan run
-    /// only to be verified gets nothing, because the part of a run that takes any time is the
-    /// deleting.
-    ///
-    /// <para>Weighed apart rather than handed to <see cref="ProgressWeights"/> as a zero. That rule
-    /// shares the bar equally where nothing carries a figure, so beside a command step whose tool
-    /// reports none the verification would take half, and the bar would sit there while the command
-    /// ran. Only a run holding nothing but verification shares the bar between those plans.</para>
-    /// </summary>
-    private static IReadOnlyList<double> Weigh(IReadOnlyList<CleanupPlan> plans)
-    {
-        var deleting = ProgressWeights.For(plans.Where(p => !p.IsEmpty).Select(p => p.EstimatedBytes));
-
-        if (deleting.Count == 0)
-        {
-            return ProgressWeights.For(plans.Select(_ => 0L));
-        }
-
-        var weights = new List<double>(plans.Count);
-        var next = 0;
-
-        foreach (var plan in plans)
-        {
-            weights.Add(plan.IsEmpty ? 0 : deleting[next++]);
-        }
-
-        return weights;
-    }
 }

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Deguffer.Core.Execution;
+using Deguffer.Core.Execution.Timing;
 using Deguffer.Core.Scanning.Mft;
 
 namespace Deguffer.Benchmark;
@@ -44,7 +45,12 @@ internal static class Report
 
         Line(text, "Deguffer benchmark");
         Field(text, "route", route.ToString().ToLowerInvariant());
-        Field(text, places.Count == 1 ? "place" : "places", string.Join(", ", places));
+        // The plan route names no place: each provider looks where it looks.
+        if (places.Count > 0)
+        {
+            Field(text, places.Count == 1 ? "place" : "places", string.Join(", ", places));
+        }
+
         Field(text, "tuning", tuning);
         Field(text, "machine", Describe(machine));
         Field(text, "collector", machine.Collector.ToString());
@@ -71,6 +77,12 @@ internal static class Report
             // rate of nothing. The parts are below.
             Row(text, "round", Duration(first.Elapsed.TotalSeconds), Over(later, r => r.Elapsed.TotalSeconds, Duration));
             RaceRows(text, first, later);
+        }
+        else if (route is Route.Plan)
+        {
+            // A pass's rate in providers is the rate of nothing: one provider waits on a tool for
+            // seconds and the next answers in a millisecond.
+            Row(text, "elapsed", Duration(first.Elapsed.TotalSeconds), Over(later, r => r.Elapsed.TotalSeconds, Duration));
         }
         else
         {
@@ -101,7 +113,7 @@ internal static class Report
         {
             RemovalRows(text, first, later);
         }
-        else if (!route.ReadsTable())
+        else if (!route.ReadsTable() && route is not Route.Plan)
         {
             Row(text, "folders at once", Count(first.Tally.PeakListings), Over(later, r => r.Tally.PeakListings, Count));
         }
@@ -124,7 +136,80 @@ internal static class Report
         Row(text, "peak working set", Bytes(first.PeakWorkingSet), later.Length > 0 ? Bytes(later.Max(r => r.PeakWorkingSet)) : string.Empty);
         Row(text, itemName, Count(first.Tally.Items), Over(later, r => r.Tally.Items, Count));
 
+        if (route is Route.Plan)
+        {
+            PlanRows(text, first, later);
+        }
+
         return text.ToString();
+    }
+
+    /// <summary>
+    /// When each provider of a planning pass took a slot, when it ended and how long it took, from the
+    /// start of the pass, in the order the first run started them, which is the order the pass handed
+    /// out its slots. Named by id, which is a fixed word and never a place. The later runs' columns are
+    /// each the median of that column alone, so a row's start, end and time need not add up there.
+    /// </summary>
+    private static void PlanRows(StringBuilder text, RunSample first, RunSample[] later)
+    {
+        var times = PlanOf(first).Times
+            .OrderBy(time => time.Began)
+            .ThenBy(time => time.Provider.Id, StringComparer.Ordinal)
+            .ToArray();
+        var idWidth = Math.Max("provider".Length, times.Length == 0 ? 0 : times.Max(time => time.Provider.Id.Length)) + 2;
+
+        Line(text);
+        PlanRow(text, idWidth, string.Empty, ["first run", string.Empty, string.Empty, later.Length > 0 ? "later runs: median" : string.Empty]);
+        PlanRow(text, idWidth, "provider", ["start", "end", "took", .. later.Length > 0 ? new[] { "start", "end", "took" } : []]);
+
+        foreach (var time in times)
+        {
+            var id = time.Provider.Id;
+            string[] columns =
+            [
+                Duration(time.Began.TotalSeconds),
+                Duration(time.Ended.TotalSeconds),
+                Duration(time.Elapsed.TotalSeconds),
+                .. later.Length > 0
+                    ? new[]
+                    {
+                        Duration(Median(later, r => TimeOf(r, id).Began)),
+                        Duration(Median(later, r => TimeOf(r, id).Ended)),
+                        Duration(Median(later, r => TimeOf(r, id).Elapsed)),
+                    }
+                    : [],
+            ];
+
+            PlanRow(text, idWidth, id, columns);
+        }
+    }
+
+    private static double Median(RunSample[] runs, Func<RunSample, TimeSpan> measure) =>
+        Spread.Of([.. runs.Select(run => measure(run).TotalSeconds)]).Median;
+
+    /// <summary>
+    /// A run's pass. Every run of the plan route records one, so a run without it was not measured as
+    /// the others were, and no median of them holds.
+    /// </summary>
+    private static PlanRun PlanOf(RunSample run) =>
+        run.Tally.Planning ?? throw new InvalidOperationException("Every run of the plan route carries its providers' times.");
+
+    /// <summary>A later run's time for one provider. Every pass plans every provider, so one missing was a different pass.</summary>
+    private static ProviderPlanTime TimeOf(RunSample run, string id) =>
+        PlanOf(run).Of(id) ?? throw new InvalidOperationException("Every run of the plan route plans the same providers.");
+
+    private const int PlanColumnWidth = 11;
+
+    private static void PlanRow(StringBuilder text, int idWidth, string id, IReadOnlyList<string> columns)
+    {
+        var line = new StringBuilder(id.PadRight(idWidth));
+
+        foreach (var column in columns)
+        {
+            line.Append(column.PadRight(PlanColumnWidth));
+        }
+
+        Line(text, line.ToString().TrimEnd());
     }
 
     /// <summary>

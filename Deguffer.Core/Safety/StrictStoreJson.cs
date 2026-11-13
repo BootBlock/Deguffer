@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Deguffer.Core.Execution.Sizes;
+using Deguffer.Core.Execution.Timing;
 using Deguffer.Core.Providers;
 
 namespace Deguffer.Core.Safety;
@@ -16,4 +17,5 @@ namespace Deguffer.Core.Safety;
     RespectNullableAnnotations = true)]
 [JsonSerializable(typeof(ProviderSizeStore.Stored), TypeInfoPropertyName = "ProviderSizes")]
 [JsonSerializable(typeof(ComponentStoreSettlement.Stored), TypeInfoPropertyName = "ComponentStoreStates")]
+[JsonSerializable(typeof(PlanTimeStore.Stored), TypeInfoPropertyName = "PlanningTimes")]
 internal sealed partial class StrictStoreJson : JsonSerializerContext;

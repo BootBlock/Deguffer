@@ -23,9 +23,9 @@ public sealed class TimingTests
     private static byte[]? _leftBehind;
 
     [Fact]
-    public void MeasuresWhatTheResultKeepsAndLetsItGo()
+    public async Task MeasuresWhatTheResultKeepsAndLetsItGo()
     {
-        var sample = Timing.Measure(_ => new RunTally(1, 0, Complete: true, Kept: new KeptResult(new byte[Held])), CancellationToken.None);
+        var sample = await Timing.MeasureAsync(_ => ValueTask.FromResult(new RunTally(1, 0, Complete: true, Kept: new KeptResult(new byte[Held]))), CancellationToken.None);
 
         Assert.InRange(sample.KeptBytes, Held - Tolerance, Held + Tolerance);
         Assert.Null(sample.Tally.Kept);
@@ -36,15 +36,15 @@ public sealed class TimingTests
     /// what its result keeps. Here the run keeps such a buffer in a field of its own.
     /// </summary>
     [Fact]
-    public void WhatTheRunLeavesBehindIsNotCountedAsKept()
+    public async Task WhatTheRunLeavesBehindIsNotCountedAsKept()
     {
         try
         {
-            var sample = Timing.Measure(
+            var sample = await Timing.MeasureAsync(
                 _ =>
                 {
                     _leftBehind = new byte[Held];
-                    return new RunTally(1, 0, Complete: true, Kept: new KeptResult(new byte[Held / 4]));
+                    return ValueTask.FromResult(new RunTally(1, 0, Complete: true, Kept: new KeptResult(new byte[Held / 4])));
                 },
                 CancellationToken.None);
 
@@ -61,16 +61,16 @@ public sealed class TimingTests
     /// clock starts cannot make a run look busier than it was.
     /// </summary>
     [Fact]
-    public void MeasuresTheProcessorTimeOfTheRunAlone()
+    public async Task MeasuresTheProcessorTimeOfTheRunAlone()
     {
         Spin(TimeSpan.FromMilliseconds(400));
 
-        var idle = Timing.Measure(_ => new RunTally(1, 0, Complete: true), CancellationToken.None);
-        var busy = Timing.Measure(
+        var idle = await Timing.MeasureAsync(_ => ValueTask.FromResult(new RunTally(1, 0, Complete: true)), CancellationToken.None);
+        var busy = await Timing.MeasureAsync(
             _ =>
             {
                 Spin(TimeSpan.FromMilliseconds(200));
-                return new RunTally(1, 0, Complete: true);
+                return ValueTask.FromResult(new RunTally(1, 0, Complete: true));
             },
             CancellationToken.None);
 
@@ -79,8 +79,8 @@ public sealed class TimingTests
     }
 
     [Fact]
-    public void ARunThatKeepsNothingKeepsNothing() =>
-        Assert.Equal(0, Timing.Measure(_ => new RunTally(1, 0, Complete: true), CancellationToken.None).KeptBytes);
+    public async Task ARunThatKeepsNothingKeepsNothing() =>
+        Assert.Equal(0, (await Timing.MeasureAsync(_ => ValueTask.FromResult(new RunTally(1, 0, Complete: true)), CancellationToken.None)).KeptBytes);
 
     /// <summary>
     /// Keeps the processor busy until the process has spent <paramref name="processor"/> of it, which on
