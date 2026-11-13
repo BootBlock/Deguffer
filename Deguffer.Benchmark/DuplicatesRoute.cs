@@ -17,7 +17,7 @@ namespace Deguffer.Benchmark;
 ///
 /// <para><b>Its own checksums, never the app's.</b> The cache is kept in a
 /// <see cref="ChecksumStoreFolder"/>, so a run neither reads what the person's searches kept nor
-/// changes it. Cold, every run starts with that store gone, as a first search does. Warm, an
+/// changes it (<see cref="CacheStart"/>). Cold, every run starts with that store gone, as a first search does. Warm, an
 /// untimed search over the same folders fills it once, and every run loads it afresh, as the first
 /// search after the app starts again does.</para>
 ///
@@ -31,29 +31,32 @@ internal sealed class DuplicatesRoute
     private readonly VolumeMediaCache _media;
     private readonly ExploreActionPolicy _policy;
     private readonly DuplicateSearch _search;
-    private readonly bool _warm;
+    private readonly CacheStart _start;
     private readonly string _store;
 
-    private ChecksumCache? _cache;
+    /// <summary>The cache the next run searches through, made afresh before each run.</summary>
+    private ChecksumCache _cache;
+
     private bool _filled;
 
     /// <param name="policy">Explore's policy, whose refusals the search passes over.</param>
-    /// <param name="warm">Whether each run starts with the checksums an untimed search kept, rather than with none.</param>
+    /// <param name="start">What the checksum cache holds as each run starts.</param>
     /// <param name="store">The file the checksums are kept in, inside the route's own folder.</param>
     public DuplicatesRoute(
         CandidateFinder finder,
         VolumeMediaCache media,
         ExploreActionPolicy policy,
         DuplicateSearch search,
-        bool warm,
+        CacheStart start,
         string store)
     {
         _finder = finder;
         _media = media;
         _policy = policy;
         _search = search;
-        _warm = warm;
+        _start = start;
         _store = store;
+        _cache = new ChecksumCache(store, TimeProvider.System);
     }
 
     public RouteRun Timed => new(RunAsync, BeforeAsync, AfterAsync);
@@ -69,7 +72,7 @@ internal sealed class DuplicatesRoute
     /// search.
     /// </summary>
     public static async Task<DuplicatesRoute> OnThisMachineAsync(
-        IReadOnlyList<string> folders, ChecksumAlgorithm checksum, bool warm, string store, ScanTuner tuner, CancellationToken ct)
+        IReadOnlyList<string> folders, ChecksumAlgorithm checksum, CacheStart start, string store, ScanTuner tuner, CancellationToken ct)
     {
         var media = new VolumeMediaCache(StorageQueries.Machine);
         var finder = new CandidateFinder(
@@ -86,20 +89,31 @@ internal sealed class DuplicatesRoute
         var scope = ProtectionScope.Within([.. folders, .. located.Locations.Select(location => location.Folder)], VolumeInventory.Current);
         var protections = await MachineProtections.ForThisMachineAsync(scope, ct).ConfigureAwait(false);
 
-        return new DuplicatesRoute(finder, media, protections.Policy, search, warm, store);
+        return new DuplicatesRoute(finder, media, protections.Policy, search, start, store);
     }
 
     private async ValueTask BeforeAsync(CancellationToken ct)
     {
-        if (!_warm)
+        if (_start is CacheStart.Cold)
         {
             File.Delete(LongPath.Extended(_store));
         }
         else if (!_filled)
         {
             var filling = new ChecksumCache(_store, TimeProvider.System);
-            await SearchAsync(filling, timings: null, progress: null, ct).ConfigureAwait(false);
-            await filling.WhenStoredAsync(ct).ConfigureAwait(false);
+
+            try
+            {
+                await SearchAsync(filling, timings: null, progress: null, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                // A search stopped while it reads still writes what it read, so the write is waited
+                // for whichever way the search ended, before anything removes the store's folder.
+                await filling.WhenStoredAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+
+            ct.ThrowIfCancellationRequested();
             _filled = true;
         }
 
@@ -110,11 +124,17 @@ internal sealed class DuplicatesRoute
     {
         var timings = new DuplicateSearchTimings();
         var scanned = new LastScanCount();
-        var result = await SearchAsync(_cache!, timings, scanned, ct).ConfigureAwait(false);
+        var result = await SearchAsync(_cache, timings, scanned, ct).ConfigureAwait(false);
 
-        // A search stopped while it reads returns what it confirmed rather than throwing. A run stopped
-        // part-way is not a result, so it is thrown here for the run loop to report.
-        ct.ThrowIfCancellationRequested();
+        // A search stopped while it reads returns what it confirmed rather than throwing, and writes
+        // what it read behind itself. A run stopped part-way is not a result, so it is thrown here for
+        // the run loop to report, once that write has ended: the loop skips the wait after the run,
+        // and the store's folder is removed next.
+        if (ct.IsCancellationRequested)
+        {
+            await _cache.WhenStoredAsync(CancellationToken.None).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+        }
 
         return new RunTally(
             scanned.Entries,
@@ -123,7 +143,7 @@ internal sealed class DuplicatesRoute
             Search: new SearchTimes(timings, result.Groups.Count));
     }
 
-    private ValueTask AfterAsync() => new(_cache!.WhenStoredAsync(CancellationToken.None));
+    private ValueTask AfterAsync() => new(_cache.WhenStoredAsync(CancellationToken.None));
 
     private Task<DuplicateSearchResult> SearchAsync(
         ChecksumCache cache, DuplicateSearchTimings? timings, IProgress<DuplicateSearchProgress>? progress, CancellationToken ct) =>

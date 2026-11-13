@@ -31,7 +31,7 @@ public sealed class DuplicatesRouteTests : IDisposable
     {
         WriteTree();
         var store = ChecksumStoreFolder.Create(_tree.Environment);
-        var route = Route(store, warm: false).Timed;
+        var route = Route(store, CacheStart.Cold).Timed;
 
         await route.Before!(CancellationToken.None);
         var tally = await route.Run(CancellationToken.None);
@@ -67,7 +67,7 @@ public sealed class DuplicatesRouteTests : IDisposable
     public async Task EachColdRunReadsEveryFileAgain()
     {
         WriteTree();
-        var route = Route(ChecksumStoreFolder.Create(_tree.Environment), warm: false).Timed;
+        var route = Route(ChecksumStoreFolder.Create(_tree.Environment), CacheStart.Cold).Timed;
 
         await route.Before!(CancellationToken.None);
         var first = await route.Run(CancellationToken.None);
@@ -88,7 +88,7 @@ public sealed class DuplicatesRouteTests : IDisposable
     public async Task AWarmRunReadsNoByteAndConfirmsTheSameGroups()
     {
         WriteTree();
-        var route = Route(ChecksumStoreFolder.Create(_tree.Environment), warm: true).Timed;
+        var route = Route(ChecksumStoreFolder.Create(_tree.Environment), CacheStart.Warm).Timed;
 
         await route.Before!(CancellationToken.None);
         var tally = await route.Run(CancellationToken.None);
@@ -102,15 +102,15 @@ public sealed class DuplicatesRouteTests : IDisposable
     }
 
     /// <summary>
-    /// The checksums go to the route's own folder in the temporary folder and never to the store the
-    /// app keeps, which the person's searches read; the folder goes when the route is done with it.
+    /// The checksums go to the route's own folder in the temporary folder, the only store the route is
+    /// given, and the folder goes when the route is done with it.
     /// </summary>
     [Fact]
-    public async Task ItsChecksumsAreKeptInItsOwnFolderAndNeverInTheApps()
+    public async Task ItsChecksumsAreKeptInItsOwnFolderWhichGoesWhenItIsDone()
     {
         WriteTree();
         var store = ChecksumStoreFolder.Create(_tree.Environment);
-        var route = Route(store, warm: true).Timed;
+        var route = Route(store, CacheStart.Warm).Timed;
 
         await route.Before!(CancellationToken.None);
         await route.Run(CancellationToken.None);
@@ -118,18 +118,17 @@ public sealed class DuplicatesRouteTests : IDisposable
 
         Assert.StartsWith(_tree.Environment.TempPath + Path.DirectorySeparatorChar, store.Root, StringComparison.Ordinal);
         Assert.True(File.Exists(store.Store));
-        Assert.False(File.Exists(ChecksumCache.FileOf(_tree.Environment)));
 
         Assert.True(await store.RemoveAsync());
         Assert.False(Directory.Exists(store.Root));
     }
 
-    private DuplicatesRoute Route(ChecksumStoreFolder store, bool warm) => new(
+    private DuplicatesRoute Route(ChecksumStoreFolder store, CacheStart start) => new(
         _tree.Finder(),
         new VolumeMediaCache(new FakeStorageQueries()),
         _tree.Policy(),
         DuplicatesRoute.Search([Data], ChecksumAlgorithm.XxHash128),
-        warm,
+        start,
         store.Store);
 
     private void WriteTree()

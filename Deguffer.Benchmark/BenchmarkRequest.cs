@@ -65,10 +65,9 @@ namespace Deguffer.Benchmark;
 /// For <see cref="Route.Duplicates"/>, the checksum the content is compared by, one this machine
 /// offers. No other route reads it.
 /// </param>
-/// <param name="WarmCache">
-/// For <see cref="Route.Duplicates"/>, whether each run starts with the checksums an untimed search
-/// over the same folders kept, rather than with none. Timed both ways, the difference is what a
-/// second search saves. No other route reads it.
+/// <param name="Cache">
+/// For <see cref="Route.Duplicates"/>, what the checksum cache holds as each run starts. Timed both
+/// ways, the difference is what a second search saves. No other route reads it.
 /// </param>
 internal sealed record BenchmarkRequest(
     Route Route,
@@ -87,7 +86,7 @@ internal sealed record BenchmarkRequest(
     bool BuildYields,
     bool Listed,
     ChecksumAlgorithm Checksum,
-    bool WarmCache)
+    CacheStart Cache)
 {
     public const int DefaultRuns = 5;
 
@@ -177,7 +176,7 @@ internal sealed record BenchmarkRequest(
         var buildYields = true;
         var listed = false;
         var checksum = ChecksumAlgorithm.XxHash128;
-        var warmCache = false;
+        var cache = CacheStart.Cold;
 
         // Before the options, because the race's defaults depend on the drives it walks and builds
         // on, and a value an option sets has to win over them.
@@ -231,7 +230,7 @@ internal sealed record BenchmarkRequest(
                 "--before-part" when route is Route.Race => TryCommand(value, out beforePart),
                 "--build-priority" when route is Route.Race => TryYield(value, out buildYields),
                 "--checksum" when route is Route.Duplicates => TryChecksum(value, out checksum),
-                "--cache" when route is Route.Duplicates => TryCache(value, out warmCache),
+                "--cache" when route is Route.Duplicates => TryCache(value, out cache),
                 _ => false,
             };
 
@@ -305,7 +304,7 @@ internal sealed record BenchmarkRequest(
             buildYields,
             listed,
             checksum,
-            warmCache);
+            cache);
     }
 
     /// <summary>
@@ -417,9 +416,9 @@ internal sealed record BenchmarkRequest(
 
     private static string Unhyphenated(string name) => name.Replace("-", string.Empty, StringComparison.Ordinal);
 
-    private static bool TryCache(string? text, out bool warm)
+    private static bool TryCache(string? text, out CacheStart cache)
     {
-        warm = text is "warm";
+        cache = text is "warm" ? CacheStart.Warm : CacheStart.Cold;
         return text is "cold" or "warm";
     }
 

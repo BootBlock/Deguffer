@@ -86,7 +86,7 @@ public sealed class BenchmarkRequestTests
         Assert.Equal([Path.GetFullPath("first"), @"C:\second"], request.Folders);
         Assert.Equal(request.Folders[0], request.Path);
         Assert.Equal(ChecksumAlgorithm.Sha256, request.Checksum);
-        Assert.True(request.WarmCache);
+        Assert.Equal(CacheStart.Warm, request.Cache);
         Assert.Equal(2, request.Runs);
     }
 
@@ -97,7 +97,7 @@ public sealed class BenchmarkRequestTests
         var request = BenchmarkRequest.Parse(["duplicates", @"C:\photos"], out _)!;
 
         Assert.Equal(ChecksumAlgorithm.XxHash128, request.Checksum);
-        Assert.False(request.WarmCache);
+        Assert.Equal(CacheStart.Cold, request.Cache);
     }
 
     /// <summary>A checksum is named as other tools print it, in any case, with or without its hyphen.</summary>

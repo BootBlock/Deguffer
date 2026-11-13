@@ -344,9 +344,7 @@ public sealed class ReportTests
     public void TheDuplicatesRouteStatesItsChecksumAndItsCache(bool warm, string cache) =>
         Assert.Equal(
             "the values a search uses for each drive's kind, under the shipped settings, content compared by SHA-256, " + cache,
-            Deguffer.Benchmark.Tuning.Describe(
-                Route.Duplicates, WalkTuning.Default, TableTuning.Default, snapshots: true, LinkRead.Name, BenchmarkRequest.DefaultTree, trees: 1,
-                ChecksumAlgorithm.Sha256, warm));
+            Deguffer.Benchmark.Tuning.DescribeDuplicates(ChecksumAlgorithm.Sha256, warm ? CacheStart.Warm : CacheStart.Cold));
 
     /// <summary>
     /// A ten-second search: a scan of two seconds, a walk of half of one and identification of one and

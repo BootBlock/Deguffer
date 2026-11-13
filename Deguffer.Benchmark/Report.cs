@@ -331,7 +331,7 @@ internal static class Report
 
     /// <summary>A run's lane at <paramref name="index"/>, or an empty one where the run made fewer lanes.</summary>
     private static ContentLaneTimes LaneOf(RunSample run, int index) =>
-        SearchOf(run).Stages.Lanes is { } lanes && index < lanes.Count ? lanes[index] : new ContentLaneTimes(0, default, default, TimeSpan.Zero);
+        index < SearchOf(run).Stages.Lanes.Count ? SearchOf(run).Stages.Lanes[index] : new ContentLaneTimes(0, default, default, TimeSpan.Zero);
 
     private static double LaneBytes(RunSample run, int index) => LaneOf(run, index).Ends.Bytes + LaneOf(run, index).Whole.Bytes;
 

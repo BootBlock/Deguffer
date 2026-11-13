@@ -64,7 +64,16 @@ else if (request.Folders.Any(folder => LongPath.ProbeDirectory(folder) is not Pa
 
 if (request.Route is Route.Duplicates)
 {
-    store = ChecksumStoreFolder.Create(UserEnvironment.Current);
+    try
+    {
+        store = ChecksumStoreFolder.Create(UserEnvironment.Current);
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+    {
+        // Its message names the temporary folder, which names the account, so only the error is repeated.
+        Console.Error.WriteLine($"The folder for the route's checksums could not be created in the temporary folder: error 0x{ex.HResult:X8}.");
+        return 2;
+    }
 }
 
 try
@@ -118,7 +127,7 @@ static async Task<int> BenchmarkAsync(BenchmarkRequest request, ScanTuner tuner,
             Route.Links => RouteRun.Blocking(ct => LinksRoute.Run(request.Path, request.ReadBy, ct)),
             Route.Folders => RouteRun.Blocking(ct => FoldersRoute.Run(VolumeMftSourceFactory.Default, request.Folders, ct)),
             Route.Duplicates => (await DuplicatesRoute.OnThisMachineAsync(
-                request.Folders, request.Checksum, request.WarmCache, store!.Store, tuner, cancel.Token)).Timed,
+                request.Folders, request.Checksum, request.Cache, store!.Store, tuner, cancel.Token)).Timed,
             Route.Remove => new RemoveRoute(site!, request.Tree).Timed,
             Route.Clean => new CleanRoute(
                 site!, request.Trees, request.Tree, UserEnvironment.Current, SystemDirectories.Current, VolumeInventory.Current).Timed,
@@ -168,10 +177,9 @@ static async Task<int> BenchmarkAsync(BenchmarkRequest request, ScanTuner tuner,
     }
     catch (Exception ex) when (store is not null && ex is IOException or UnauthorizedAccessException)
     {
-        // Emptying the route's own checksum store before a cold run, the one thing the route writes
-        // beside what a search writes. Its message names the store's folder, so only the error is
-        // repeated.
-        Console.Error.WriteLine($"The checksum store could not be emptied for a cold run: error 0x{ex.HResult:X8}.");
+        // Emptying or writing the route's own checksum store, or a file the search read, either of
+        // which can fail as any file can. Its message names the file, so only the error is repeated.
+        Console.Error.WriteLine($"The duplicate search or its checksum store could not read or write a file: error 0x{ex.HResult:X8}.");
         return 2;
     }
     catch (IOException ex)
@@ -206,7 +214,9 @@ static async Task<int> BenchmarkAsync(BenchmarkRequest request, ScanTuner tuner,
                 request.Table,
                 buildYields,
                 request.BeforePart is not null)
-            : Tuning.Describe(request.Route, request.Walk, request.Table, request.Snapshots, request.ReadBy, request.Tree, request.Trees, request.Checksum, request.WarmCache),
+            : request.Route is Route.Duplicates
+                ? Tuning.DescribeDuplicates(request.Checksum, request.Cache)
+                : Tuning.Describe(request.Route, request.Walk, request.Table, request.Snapshots, request.ReadBy, request.Tree, request.Trees),
         [.. request.Folders.Concat(request.Route is Route.Race ? [built] : []).Select(MeasuredPlace.Of).Distinct()],
         MachineFacts.Current,
         runs,
