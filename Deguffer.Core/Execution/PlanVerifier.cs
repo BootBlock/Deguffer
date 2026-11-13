@@ -54,16 +54,21 @@ public static class PlanVerifier
         var places = runReach?.PlacesOn(inventory) ?? new RunPlaces(RunReach.Of([plan]), inventory);
         var checks = new List<VerificationCheck>(plan.ProtectedPaths.Count);
 
+        // Read once for the whole verification rather than once for each protected path. A plan is
+        // verified once its own removals are over, and the run starts the next plan only after that,
+        // so the record does not grow while it is read.
+        var enteredRoots = residue?.EnteredRoots ?? [];
+
         foreach (var protectedPath in plan.ProtectedPaths)
         {
             ct.ThrowIfCancellationRequested();
-            checks.Add(Check(protectedPath, places, residue));
+            checks.Add(Check(protectedPath, places, residue, enteredRoots));
         }
 
         foreach (var release in plan.Steps.OfType<ReleaseLocalCopiesStep>())
         {
             checks.AddRange(ReleasedFileProof.Checks(
-                release, cloud ?? CloudFiles.Default, missing => Check(missing, places, residue), ct));
+                release, cloud ?? CloudFiles.Default, missing => Check(missing, places, residue, enteredRoots), ct));
         }
 
         foreach (var removal in plan.Steps.OfType<RemoveRestorePointsStep>())
@@ -81,7 +86,8 @@ public static class PlanVerifier
         return new VerificationResult { Checks = checks };
     }
 
-    private static VerificationCheck Check(ProtectedPath protectedPath, RunPlaces places, RunResidue? residue)
+    private static VerificationCheck Check(
+        ProtectedPath protectedPath, RunPlaces places, RunResidue? residue, IReadOnlyList<string> enteredRoots)
     {
         // A path that was never there cannot be evidence of survival. Recording it with an honest
         // detail keeps the report from overstating what the run actually established.
@@ -98,7 +104,7 @@ public static class PlanVerifier
 
         if (after is PathPresence.Refused)
         {
-            return Unmeasured(protectedPath, places, residue);
+            return Unmeasured(protectedPath, places, residue, enteredRoots);
         }
 
         if (after is PathPresence.Present)
@@ -107,7 +113,7 @@ public static class PlanVerifier
             // Deguffer's own removal as the one that went inside, where an emptied folder may still be
             // a tool's doing in a run that holds a command. And it does not depend on what the folder
             // still holds, which is the thing a refusal hides.
-            if (WasEntered(protectedPath.Path, places, residue))
+            if (WasEntered(protectedPath.Path, places, residue, enteredRoots))
             {
                 return new VerificationCheck(
                     protectedPath.Path,
@@ -207,8 +213,9 @@ public static class PlanVerifier
     /// <see cref="RunResidue"/> records that from the removal itself rather than from the disk, so a
     /// refusal afterwards hides nothing it knows.</para>
     /// </summary>
-    private static VerificationCheck Unmeasured(ProtectedPath protectedPath, RunPlaces places, RunResidue? residue) =>
-        WasEntered(protectedPath.Path, places, residue)
+    private static VerificationCheck Unmeasured(
+        ProtectedPath protectedPath, RunPlaces places, RunResidue? residue, IReadOnlyList<string> enteredRoots) =>
+        WasEntered(protectedPath.Path, places, residue, enteredRoots)
             ? new VerificationCheck(
                 protectedPath.Path,
                 protectedPath.Reason,
@@ -403,8 +410,13 @@ public static class PlanVerifier
     /// Whether a removal in this run went inside <paramref name="path"/> and left something standing
     /// there: <see cref="RunResidue.Entered"/>, asked as the path is named and as each removal's root
     /// names it, because a removal records what it left in the form its root was named in.
+    ///
+    /// <para><b>Followed only where a removal left something standing.</b> Following a path asks the
+    /// machine about every folder from its drive root down, and in the ordinary run no removal left
+    /// anything standing, so no root could name it and the answer is already no (G4).</para>
     /// </summary>
-    private static bool WasEntered(string path, RunPlaces places, RunResidue? residue)
+    /// <param name="enteredRoots"><see cref="RunResidue.EnteredRoots"/>, read once for the verification.</param>
+    private static bool WasEntered(string path, RunPlaces places, RunResidue? residue, IReadOnlyList<string> enteredRoots)
     {
         if (residue is null)
         {
@@ -416,9 +428,14 @@ public static class PlanVerifier
             return true;
         }
 
+        if (enteredRoots.Count == 0)
+        {
+            return false;
+        }
+
         var folder = places.At(path);
 
-        return residue.EnteredRoots.Any(root => places.At(root).Naming(folder, root) is { } named && residue.Entered(named));
+        return enteredRoots.Any(root => places.At(root).Naming(folder, root) is { } named && residue.Entered(named));
     }
 
     /// <summary>

@@ -1,3 +1,5 @@
+using System.IO.Enumeration;
+
 namespace Deguffer.Core.Safety;
 
 /// <summary>
@@ -21,9 +23,14 @@ namespace Deguffer.Core.Safety;
 /// it is never recorded as having held something, which keeps a refusal out of the evidence rather
 /// than making one of it.</para>
 ///
-/// <para><b>It stops at the first content it finds</b> (G4), so a tree with a file near the top
-/// costs a listing or two. The expensive shape is a deep tree of nothing but empty folders, which is
-/// walked whole, because that is exactly the tree the answer has to be about.</para>
+/// <para><b>It stops at the first content it finds, and it walks depth first</b> (G4). A folder
+/// that holds anything usually holds it a level or two below its first subfolder, so entering each
+/// subfolder as it is listed answers inside the first branch. Breadth first, a wide folder whose top
+/// level holds only folders, as <c>C:\Windows\WinSxS</c> does, is listed almost whole before the
+/// first file. The walk keeps one open listing per level on a stack of its own, so a deep tree
+/// cannot exhaust the thread's stack, and reads each entry in place, building a path only for a
+/// folder it enters. The expensive shape is a tree of nothing but empty folders, which is walked
+/// whole, because that is exactly the tree the answer has to be about.</para>
 ///
 /// <para>§6.3: the walk starts from the extended-length form, and .NET builds every child from the
 /// parent it was given. The answer is a boolean, so no test can observe that form; the test past
@@ -86,35 +93,58 @@ public static class DirectoryContent
 
     private static Finding Walk(string path)
     {
-        var root = LongPath.Extended(path);
-        var pending = new Queue<string>([root]);
+        // The bottom listing is the directory asked about, and each one above it is a subfolder of the
+        // one below, entered when it was listed.
+        var open = new Stack<DirectoryListing<string?>>();
 
-        while (pending.TryDequeue(out var directory))
+        try
         {
-            using var listing = DirectoryListing.Of(directory);
+            open.Push(FolderListing(LongPath.Extended(path)));
 
-            while (listing.MoveNext())
+            while (open.TryPeek(out var listing))
             {
-                var entry = listing.Current;
-
-                if (entry is not DirectoryInfo || (entry.Attributes & FileAttributes.ReparsePoint) != 0)
+                if (listing.MoveNext())
                 {
-                    return Finding.Content;
+                    // Null is anything but a folder that can be entered: a file, or a link of any kind.
+                    if (listing.Current is not { } folder)
+                    {
+                        return Finding.Content;
+                    }
+
+                    open.Push(FolderListing(folder));
+                    continue;
                 }
 
-                pending.Enqueue(entry.FullName);
+                // Absent is the path not being there, or a subfolder going between being listed and
+                // being opened. Neither is content.
+                if (listing.Outcome is PathPresence.Refused)
+                {
+                    // Refused, or not a directory at all, whether at the open or partway through. Below
+                    // the directory asked about, a refused subfolder is something seen and not
+                    // readable. The directory itself is the bottom listing, however deep the walk went
+                    // before its own listing failed, and nothing it was refused on was seen.
+                    return open.Count > 1 ? Finding.Content : Finding.Unlisted;
+                }
+
+                open.Pop().Dispose();
             }
 
-            // Absent is the path not being there, or a subdirectory going between being listed and
-            // being read. Neither is content.
-            if (listing.Outcome is PathPresence.Refused)
+            return Finding.Empty;
+        }
+        finally
+        {
+            while (open.TryPop(out var listing))
             {
-                // Refused, or not a directory at all. Below the root, a refused subdirectory is
-                // something seen and not readable; at the root, nothing was seen.
-                return directory != root ? Finding.Content : Finding.Unlisted;
+                listing.Dispose();
             }
         }
-
-        return Finding.Empty;
     }
+
+    /// <summary>
+    /// A directory's entries, each read where the listing holds it: the extended path of a folder the
+    /// walk can enter, or null for content. A link to a folder is content, so it is never entered.
+    /// </summary>
+    private static DirectoryListing<string?> FolderListing(string directory) =>
+        new(directory, static (ref FileSystemEntry entry) =>
+            entry.IsDirectory && (entry.Attributes & FileAttributes.ReparsePoint) == 0 ? entry.ToFullPath() : null);
 }
