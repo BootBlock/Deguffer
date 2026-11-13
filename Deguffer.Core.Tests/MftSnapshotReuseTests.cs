@@ -143,7 +143,7 @@ public sealed class MftSnapshotReuseTests
     [Theory]
     [InlineData(ExploreChildOrder.ByName)]
     [InlineData(ExploreChildOrder.BySize)]
-    public void ASnapshotDrawnFromReusedRoomDrawsWhatOneDrawnAfreshDraws(ExploreChildOrder order)
+    public void ASnapshotDrawnFromReusedRoomDrawsWhatOneFromAWholeCopyDraws(ExploreChildOrder order)
     {
         const int count = 400;
         var (columns, names) = Table(count);
