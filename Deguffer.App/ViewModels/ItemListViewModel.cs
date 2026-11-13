@@ -15,7 +15,7 @@ namespace Deguffer.App.ViewModels;
 /// decides what a search shows and counts the ticks it hides, and <see cref="ItemSelection"/> decides
 /// what a checkbox standing for several items shows and what a click on it writes. This type keeps
 /// the list on screen in step with the row. What a run takes is still the row's
-/// <see cref="FindingViewModel.SelectedFinding"/>, narrowed in Core.</para>
+/// ticked steps, narrowed in Core (<see cref="Core.Execution.ChosenSteps"/>).</para>
 /// </summary>
 public sealed partial class ItemListViewModel : ObservableObject, IDisposable
 {

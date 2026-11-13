@@ -48,6 +48,7 @@ public sealed partial class CleanPage : Page
         var planner = CleanupPlanner.CreateDefault(App.Preferences, tuning: App.ScanTuning);
         ViewModel = new CleanViewModel(
             planner,
+            new PlanNarrowing(App.ScanTuning),
             UserEnvironment.Current,
             VolumeInventory.Current,
             ElevatedRelaunch.IsElevated,
@@ -403,24 +404,9 @@ public sealed partial class CleanPage : Page
             // Deferred, because the rows are only just visible again and a control that has not been
             // laid out cannot take focus. A preview that replaced the rows leaves nothing to find,
             // and that is correct: the row the list came from no longer exists.
-            DispatcherQueue.TryEnqueueGuarded(() => FocusItemsLinkOf(row));
+            DispatcherQueue.TryEnqueueGuarded(() => RowItemsLink.Focus(FindingsList, row));
         }
     }
-
-    private void FocusItemsLinkOf(FindingViewModel row)
-    {
-        if (FindingsList.ContainerFromItem(row) is DependencyObject container
-            && ItemsLinkIn(container, row) is { } link)
-        {
-            link.Focus(FocusState.Programmatic);
-        }
-    }
-
-    private static HyperlinkButton? ItemsLinkIn(DependencyObject parent, FindingViewModel row) =>
-        VisualTree.Descendants<HyperlinkButton>(parent).FirstOrDefault(link =>
-            link.Tag is FindingViewModel tagged
-            && ReferenceEquals(tagged, row)
-            && AutomationProperties.GetName(link) == row.Text.ItemsLinkName);
 
     private async Task ShowProviderInfoAsync(FindingViewModel finding)
     {

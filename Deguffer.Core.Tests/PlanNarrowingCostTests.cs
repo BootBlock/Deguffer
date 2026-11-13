@@ -1,11 +1,12 @@
 using System.Collections;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// <see cref="CleanupPlan.NarrowedTo"/> runs on the UI thread when Clean is pressed, once per row, and
+/// <see cref="ChosenSteps"/> is built on the UI thread when Clean is pressed, once per row, and
 /// a row of thousands of steps is ordinary. The choice is asked of a set, so the cost grows with the
 /// steps rather than with the steps times the ticked steps, and the set compares steps by value, so
 /// the steps kept and the steps declined are the ones they were before.
@@ -20,12 +21,12 @@ public sealed class PlanNarrowingCostTests
     /// machine.
     /// </summary>
     [Fact]
-    public void TheChoiceIsWalkedOnceHoweverManyStepsThePlanHas()
+    public async Task TheChoiceIsWalkedOnceHoweverManyStepsThePlanHas()
     {
         var plan = PlanOf(1_000);
         var chosen = new CountedChoice([.. plan.Steps.Take(999)]);
 
-        var narrowed = plan.NarrowedTo(chosen);
+        var narrowed = await plan.NarrowedToAsync(chosen);
 
         Assert.Equal(1, chosen.Walks);
         Assert.Equal(999, narrowed.Steps.Count);
@@ -36,12 +37,12 @@ public sealed class PlanNarrowingCostTests
     /// another instance is the same choice. Each declined step stays standing under §5.6.
     /// </summary>
     [Fact]
-    public void AStepIsChosenByValueAndEveryDeclinedStepIsProtected()
+    public async Task AStepIsChosenByValueAndEveryDeclinedStepIsProtected()
     {
         var plan = PlanOf(6);
         IReadOnlyList<CleanupStep> chosen = [Step(1), Step(4)];
 
-        var narrowed = plan.NarrowedTo(chosen);
+        var narrowed = await plan.NarrowedToAsync(chosen);
 
         Assert.Equal([PathOf(1), PathOf(4)], narrowed.TargetedPaths);
         Assert.Equal(
@@ -51,11 +52,11 @@ public sealed class PlanNarrowingCostTests
     }
 
     [Fact]
-    public void ChoosingEveryStepByValueLeavesThePlanAsItWas()
+    public async Task ChoosingEveryStepByValueLeavesThePlanAsItWas()
     {
         var plan = PlanOf(3);
 
-        Assert.Same(plan, plan.NarrowedTo([Step(0), Step(1), Step(2)]));
+        Assert.Same(plan, await plan.NarrowedToAsync([Step(0), Step(1), Step(2)]));
     }
 
     private static CleanupPlan PlanOf(int steps) => new()

@@ -80,7 +80,7 @@ public sealed class AnotherAccountPlan
         if (step.Subjects.Count > 0)
         {
             // Measured during planning, so it was there when the plan was made, and its content asked of
-            // the disk: the claims CleanupPlan.NarrowedTo makes for a step the user declined, for the
+            // the disk: the claims ChosenSteps makes for a step the user declined, for the
             // reasons it gives. The content is what proves a bin standing, because a call that empties one
             // leaves its folder in place.
             return step.Subjects.Select(path => new ProtectedPath(

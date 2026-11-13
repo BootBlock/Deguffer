@@ -894,7 +894,7 @@ public sealed class RecycleBinProviderTests : IDisposable
     /// §5.6 across a selection, which is where a per-volume row makes the negative do real work.
     ///
     /// <para>A user who ticks one drive's bin and leaves another's alone has said, in as many words,
-    /// that the second must survive. <see cref="CleanupPlan.NarrowedTo"/> turns that into a
+    /// that the second must survive. <see cref="ChosenSteps"/> turns that into a
     /// protected path for exactly this reason: the declined bin and the selected one are siblings in
     /// shape, so a rule that reached too far takes both. With a route that empties in place, the
     /// declined bin is still standing afterwards however far the call reached, so the check has to
@@ -912,7 +912,7 @@ public sealed class RecycleBinProviderTests : IDisposable
         var plan = await provider.PlanAsync();
 
         var chosen = plan.Steps.Single(s => ((DeleteStep)s).Path.Equals(mine, StringComparison.OrdinalIgnoreCase));
-        var narrowed = plan.NarrowedTo([chosen]);
+        var narrowed = await plan.NarrowedToAsync([chosen]);
 
         var result = await provider.ExecuteAsync(narrowed);
 

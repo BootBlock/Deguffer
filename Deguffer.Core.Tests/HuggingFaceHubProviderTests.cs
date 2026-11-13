@@ -360,7 +360,7 @@ public sealed class HuggingFaceHubProviderTests : IDisposable
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
         var chosen = plan.Steps.Single(step => step.Subjects.Contains(Folder(Gpt2)));
-        var narrowed = plan.NarrowedTo([chosen]);
+        var narrowed = await plan.NarrowedToAsync([chosen]);
 
         Assert.Contains(narrowed.ProtectedPaths, p => p.Path == Folder(Whisper));
 

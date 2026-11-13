@@ -1638,7 +1638,7 @@ eviction command. This is neither: the file survives, and the correct §5.6 nega
 file **still exists and is still readable**.
 
 §6's work has since made the *place* for it, without building any of it. Deletions now share a
-`DeleteStep` base, and `CleanupPlan.TargetedPaths` and `NarrowedTo` select on that rather than on one
+`DeleteStep` base, and `CleanupPlan.TargetedPaths` and `ChosenSteps` select on that rather than on one
 concrete kind — so this belongs beside `DeleteStep` and `RunCommandStep`, contributing no targeted
 path and a §5.6 negative that asserts survival instead of removal. What remains is the design
 decision itself, which should still be taken deliberately rather than discovered while writing a

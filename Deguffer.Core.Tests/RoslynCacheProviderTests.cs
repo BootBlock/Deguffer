@@ -286,7 +286,7 @@ public sealed class RoslynCacheProviderTests : IDisposable
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
 
-        var narrowed = plan.NarrowedTo(plan.Steps.OfType<DeleteDirectoryStep>()
+        var narrowed = await plan.NarrowedToAsync(plan.Steps.OfType<DeleteDirectoryStep>()
             .Where(s => s.Path.Equals(chosen, StringComparison.OrdinalIgnoreCase))
             .ToList());
 

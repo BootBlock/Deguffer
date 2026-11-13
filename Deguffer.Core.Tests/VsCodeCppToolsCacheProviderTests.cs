@@ -248,7 +248,7 @@ public sealed class VsCodeCppToolsCacheProviderTests : IDisposable
             .Where(s => s.Path.Equals(chosen, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        var narrowed = plan.NarrowedTo(keep);
+        var narrowed = await plan.NarrowedToAsync(keep);
 
         Assert.Equal([chosen], narrowed.TargetedPaths);
         Assert.Contains(narrowed.ProtectedPaths, p => p.Path.Equals(deselected, StringComparison.OrdinalIgnoreCase));
@@ -274,7 +274,7 @@ public sealed class VsCodeCppToolsCacheProviderTests : IDisposable
         CreateAt(root, "ipch", 1024);
 
         var plan = await CreateProvider().PlanAsync();
-        var narrowed = plan.NarrowedTo(plan.Steps);
+        var narrowed = await plan.NarrowedToAsync(plan.Steps);
 
         Assert.Same(plan, narrowed);
     }

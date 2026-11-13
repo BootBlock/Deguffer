@@ -98,7 +98,8 @@ public class CleanViewModelChosenScanTests
     /// The Scan split button is disabled whole on <c>IsIdle</c>, since its command disables only the
     /// primary half and the template leaves that half's disabled text on the accent. So it has to go
     /// off for a scan and a clean alike, and come back on, with a notification each way for the
-    /// binding to follow.
+    /// binding to follow. A clean goes off twice: while it narrows the ticked rows, and while it runs,
+    /// with the confirmation asked of an idle page between them.
     /// </summary>
     [Fact]
     public void TheScanButtonIsOffWhileAScanOrACleanRunsAndBackOnAfter()
@@ -131,7 +132,7 @@ public class CleanViewModelChosenScanTests
 
         Assert.False(idleWhileCleaning);
         Assert.True(page.ViewModel.IsIdle);
-        Assert.Equal([false, true, false, true], told);
+        Assert.Equal([false, true, false, true, false, true], told);
     }
 
     /// <summary>

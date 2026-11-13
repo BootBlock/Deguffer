@@ -217,7 +217,7 @@ public sealed class PulumiPluginProviderTests : IDisposable
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
-        var result = await provider.ExecuteAsync(plan.NarrowedTo([plan.Steps.Single(step => step.Identity!.Key == Aws)]));
+        var result = await provider.ExecuteAsync(await plan.NarrowedToAsync([plan.Steps.Single(step => step.Identity!.Key == Aws)]));
 
         var outcome = Assert.Single(result.Steps);
         Assert.True(outcome.Succeeded);
@@ -252,7 +252,7 @@ public sealed class PulumiPluginProviderTests : IDisposable
 
         var provider = CreateProvider();
         var plan = await provider.PlanAsync();
-        var result = await provider.ExecuteAsync(plan.NarrowedTo([plan.Steps.Single(step => step.Identity!.Key == Aws)]));
+        var result = await provider.ExecuteAsync(await plan.NarrowedToAsync([plan.Steps.Single(step => step.Identity!.Key == Aws)]));
 
         Assert.NotNull(result.Verification);
         Assert.False(result.Verification.Passed);
@@ -541,7 +541,7 @@ public sealed class PulumiPluginProviderTests : IDisposable
         Assert.All(aws.Skip(1), step => Assert.True(Assert.IsType<DeleteFileStep>(step).IsLeftover));
         Assert.Contains(plan.Notes, note => note.Message.Contains("Pulumi is not installed", StringComparison.Ordinal));
 
-        var result = await provider.ExecuteAsync(plan.NarrowedTo(aws));
+        var result = await provider.ExecuteAsync(await plan.NarrowedToAsync(aws));
 
         Assert.NotNull(result.Verification);
         Assert.True(result.Verification.Passed);

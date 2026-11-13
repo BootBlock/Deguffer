@@ -410,7 +410,7 @@ public sealed record ReleaseLocalCopiesStep(string SyncRoot, string SyncApp, str
 /// A step that destroys one path outright.
 ///
 /// The base exists so that "everything this plan would remove" is one question with one answer:
-/// <see cref="CleanupPlan.TargetedPaths"/> selects on this type, and <see cref="CleanupPlan.NarrowedTo"/>
+/// <see cref="CleanupPlan.TargetedPaths"/> selects on this type, and <see cref="ChosenSteps"/>
 /// reads <see cref="Subjects"/>, which this type answers with <see cref="Destroys"/>. So a new kind of
 /// deletion joins the §5.2 assertions and the §5.6 negative by construction rather than by somebody
 /// remembering to update an <c>OfType</c> clause.

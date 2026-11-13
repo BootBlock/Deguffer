@@ -430,7 +430,7 @@ public sealed class ChromiumCacheProviderTests : IDisposable
             new[] { shared, work, personal }.Order(StringComparer.OrdinalIgnoreCase),
             plan.TargetedPaths.Order(StringComparer.OrdinalIgnoreCase));
 
-        var narrowed = plan.NarrowedTo(
+        var narrowed = await plan.NarrowedToAsync(
             [.. plan.Steps.Where(s => s is DeleteDirectoryStep d && d.Path.Equals(work, StringComparison.OrdinalIgnoreCase))]);
 
         var result = await provider.ExecuteAsync(narrowed);

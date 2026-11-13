@@ -116,7 +116,8 @@ public sealed class StandingProofTests : IDisposable
     public async Task ARowThatRunsOwesNothingMore()
     {
         var row = await PlaywrightRowKeepingChromium();
-        var narrowed = row with { Plan = row.Plan!.NarrowedTo(row.Plan.Steps) };
+        var plan = row.Plan!;
+        var narrowed = row with { Plan = await plan.NarrowedToAsync(plan.Steps) };
 
         Assert.Contains(narrowed.Plan!.ProtectedPaths, p => p.Withheld == Withholding.OnKeepList);
         Assert.Empty(StandingProof.For([row], running: [narrowed]));

@@ -90,7 +90,7 @@ internal static class UnfinishedUpdate
         path,
         "Left alone because the Windows update that wrote it has not finished.",
         // Found during planning, so it was there when the plan was made — the claim
-        // CleanupPlan.NarrowedTo makes, for the reason it gives.
+        // ChosenSteps makes, for the reason it gives.
         PresenceBefore: PathPresence.Present,
         HeldContentBefore: false,
         Withheld: Withholding.UpdateInProgress);

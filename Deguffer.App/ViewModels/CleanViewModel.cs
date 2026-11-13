@@ -35,6 +35,7 @@ namespace Deguffer.App.ViewModels;
 public sealed partial class CleanViewModel : ObservableObject
 {
     private readonly CleanupPlanner _planner;
+    private readonly PlanNarrowing _narrowing;
     private readonly IUserEnvironment _environment;
     private readonly IVolumeInventory _volumes;
     private readonly bool _isElevated;
@@ -80,6 +81,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// <summary>How much of what Deguffer recognises the rows on screen were measured from. See <see cref="ScanCoverage"/>.</summary>
     private ScanCoverage _coverage;
 
+    /// <param name="narrowing">Narrows each ticked row to its ticked steps when Clean is pressed.</param>
     /// <param name="volumes">Where the profile's volume is asked how full it is, before and after a run.</param>
     /// <param name="isElevated">
     /// Whether this process holds administrator rights. Read once by the page and handed down, so
@@ -115,6 +117,7 @@ public sealed partial class CleanViewModel : ObservableObject
     /// <param name="driveHealth">What Health last read of each volume's drives. See <see cref="DriveHealth"/>.</param>
     public CleanViewModel(
         CleanupPlanner planner,
+        PlanNarrowing narrowing,
         IUserEnvironment environment,
         IVolumeInventory volumes,
         bool isElevated,
@@ -132,6 +135,7 @@ public sealed partial class CleanViewModel : ObservableObject
         HealthByVolume driveHealth)
     {
         _planner = planner;
+        _narrowing = narrowing;
         _environment = environment;
         _volumes = volumes;
         _isElevated = isElevated;
@@ -368,24 +372,8 @@ public sealed partial class CleanViewModel : ObservableObject
     /// <summary>The Cancel button's words, which read as already pressed once it has been.</summary>
     public string CancelLabel => IsCancellingClean ? "Cancelling…" : "Cancel";
 
-    /// <summary>How far through that clean, 0 to 100.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CleanPercentLabel))]
-    public partial double CleanPercent { get; set; }
-
-    /// <summary>
-    /// The same figure in words, beside the bar. §6.5's rule for the backdrop is the same rule
-    /// here: nothing may be readable only as a graphic.
-    /// </summary>
-    public string CleanPercentLabel => $"{CleanPercent:0}%";
-
-    /// <summary>
-    /// What the clean under way has removed so far, as each row's run finishes. Counted from the
-    /// run's own results the way <see cref="RemovedLabel"/> is (<see cref="RunFigures"/>), so it never
-    /// runs ahead of what was removed and it lands on the figure the card states when the run ends.
-    /// </summary>
-    [ObservableProperty]
-    public partial string RemovedSoFarLabel { get; set; } = string.Empty;
+    /// <summary>How far the clean under way has got.</summary>
+    public CleanProgressViewModel CleanProgress { get; } = new();
 
     partial void OnShowNotInstalledChanged(bool value) => RefilterRows();
 
@@ -642,12 +630,40 @@ public sealed partial class CleanViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanClean), IncludeCancelCommand = true)]
     private async Task CleanAsync(CancellationToken ct)
     {
-        var selectedRows = Findings.Where(f => f.IsSelected).ToList();
+        // The ticks are read on the UI thread and each row is narrowed off it, because every declined
+        // subject is a content walk and a row can decline thousands. The confirmation below is asked
+        // of these narrowed rows, which are the ones that execute.
+        List<Finding> selected;
 
-        // Narrowed to the ticked steps, once. SelectedFinding rebuilds the plan on every access, so
-        // reading it again further down would hand the confirmation check a different instance from
-        // the one that executes — equal by value today, but not a property to depend on silently.
-        var selected = selectedRows.Select(f => f.SelectedFinding).ToList();
+        // Busy while the walks run, so no scan or keep can change the rows under the narrowing (a step
+        // kept now would still be in the narrowed plan), and Cancel can stop it.
+        IsBusy = true;
+
+        try
+        {
+            // Narrowed again where a tick changed while the walks ran, so what runs is what the page
+            // shows ticked. See TickedRows.
+            TickedRows ticked;
+            IReadOnlyList<CleanupPlan> narrowed;
+
+            do
+            {
+                ticked = TickedRows.Of(Findings);
+                narrowed = await _narrowing.NarrowAsync(ticked.Choices, ct);
+            }
+            while (!ticked.AreCurrent(Findings));
+
+            selected = ticked.With(narrowed);
+        }
+        catch (OperationCanceledException)
+        {
+            Report("Clean cancelled. Nothing was removed.", InfoBarSeverity.Warning);
+            return;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
 
         // Read once for the whole run. The preference can change under a live page — Settings is a
         // navigation away — and asking under one rule then executing under another would either
@@ -660,8 +676,8 @@ public sealed partial class CleanViewModel : ObservableObject
         // selection deleted its Tier 1 rows with no confirmation of any kind, including when the
         // user declined the one dialog they were shown.
         //
-        // Asked before IsBusy is raised, so declining leaves the screen exactly as it was rather
-        // than flickering through a busy state for an operation that never started.
+        // Asked with the page idle again, before the run raises IsBusy, so declining leaves the screen
+        // as it was: no run result is cleared and nothing is shown as under way.
         var unasked = ConfirmationRequirement.NotPromptedFor(selected, f => f.Plan, requireTypedPhrase);
 
         if (ConfirmCleanAsync is { } confirm && unasked.Count > 0)
@@ -762,14 +778,20 @@ public sealed partial class CleanViewModel : ObservableObject
             });
             var completed = new Progress<double>(fraction =>
             {
-                SetCleanProgress(fraction);
+                CleanProgress.Advance(fraction);
                 work.Report(fraction);
             });
-            List<CleanupResult> removedSoFar = [];
-            var landed = new Progress<CleanupResult>(result => CountRemoved(removedSoFar, result));
 
-            CleanPercent = 0;
-            RemovedSoFarLabel = FreeSpace.Format(RunFigures.For(removedSoFar).Removed);
+            // The volume is read again as each row lands, so the bar under the figure drains by what
+            // the disk actually gave back. Read rather than worked out from the count, because the two
+            // differ whenever anything else writes during the run (§5.4).
+            var landed = new Progress<CleanupResult>(result =>
+            {
+                CleanProgress.Count(result);
+                FreeSpaceNow = FreeSpaceOfProfile();
+            });
+
+            CleanProgress.Start();
             IsCleaning = true;
 
             // The planner is started whatever the token says, and never throws for it: a clean
@@ -1208,37 +1230,6 @@ public sealed partial class CleanViewModel : ObservableObject
         }
 
         ReportPreviewSummary();
-    }
-
-    /// <summary>
-    /// Takes a report from the run and moves the bar, but not for every one of them.
-    ///
-    /// A directory removal reports every 256 files, which on a fast volume is hundreds of reports a
-    /// second, and each one that reaches the property raises a change notification and re-lays out
-    /// the bar. Half a percent is under two pixels on any window this screen fits in, so anything
-    /// smaller is spent for nothing. The end is always taken, because the one value the bar has to
-    /// arrive at is the last one.
-    /// </summary>
-    private void SetCleanProgress(double fraction)
-    {
-        var percent = Math.Clamp(fraction * 100, 0, 100);
-
-        if (percent >= 100 || percent - CleanPercent >= 0.5)
-        {
-            CleanPercent = percent;
-        }
-    }
-
-    /// <summary>
-    /// Count one more row's run into the figure beside the used space, and read the volume again so
-    /// the bar under it drains by what the disk actually gave back. Read rather than worked out from
-    /// the count, because the two differ whenever anything else writes during the run (§5.4).
-    /// </summary>
-    private void CountRemoved(List<CleanupResult> removedSoFar, CleanupResult result)
-    {
-        removedSoFar.Add(result);
-        RemovedSoFarLabel = FreeSpace.Format(RunFigures.For(removedSoFar).Removed);
-        FreeSpaceNow = FreeSpaceOfProfile();
     }
 
     private void Report(string message, InfoBarSeverity severity = InfoBarSeverity.Informational)

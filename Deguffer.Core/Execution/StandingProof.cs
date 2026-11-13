@@ -7,7 +7,7 @@ namespace Deguffer.Core.Execution;
 /// signed-in user's (<see cref="AnotherAccountPlan"/>).
 ///
 /// <para>Both are checked by every clean (§5.6). A row that runs checks its own, because
-/// <see cref="CleanupPlan.NarrowedTo"/> keeps them protected. Every other row still owes that check:
+/// <see cref="ChosenSteps"/> keeps them protected. Every other row still owes that check:
 /// a row left unticked, a row whose every item is kept and so can never be ticked, and a row whose
 /// confirmation was declined. An over-broad rule somewhere else in the run is exactly what could take
 /// one of those.</para>
