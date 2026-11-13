@@ -128,6 +128,43 @@ public sealed class ExplorePointerTests
         Assert.Equal(new int?[] { 1, 2 }, map.Reports.Select(hit => hit?.Node));
     }
 
+    /// <summary>
+    /// Tiles coming in, fading in and going under a still pointer, over the same drawing, outline the shape
+    /// again only where the tile it is found on changed, and never report it again: most of them arrive
+    /// under the same shape on the same tile, or away from the pointer.
+    /// </summary>
+    [Fact]
+    public void TilesComingAndGoingUnderAStillPointerOutlineOnlyAChangeOfTile()
+    {
+        var map = new Map();
+
+        map.Pointer.MoveTo(FirstLeft);
+        map.Pointer.Follow();
+
+        var tile = Drawing.Tile(new MapTiling(Width, Height), new MapTileKey(0, 0, 0));
+        var onTile = new MapLocation(Drawing, MapViewport.Whole, (float)FirstLeft.X, (float)FirstLeft.Y, tile, Reading);
+
+        // Tiles elsewhere arrive and fade in: the pointer is over the drawing as it was.
+        map.Pointer.Follow();
+        map.Pointer.Follow();
+
+        Assert.Equal(1, map.Outlines);
+
+        // The tile under the pointer comes in, and fades in.
+        map.Places[FirstLeft] = onTile;
+        map.Pointer.Follow();
+        map.Pointer.Follow();
+
+        Assert.Equal(2, map.Outlines);
+
+        // It goes, and the drawing answers again.
+        map.Places[FirstLeft] = At(FirstLeft);
+        map.Pointer.Follow();
+
+        Assert.Equal(3, map.Outlines);
+        Assert.Equal(new int?[] { 1 }, map.Reports.Select(hit => hit?.Node));
+    }
+
     /// <summary>A pointer that has left is over nothing: its light goes, the outline goes, and the readout says so.</summary>
     [Fact]
     public void APointerLeavingIsOverNothing()

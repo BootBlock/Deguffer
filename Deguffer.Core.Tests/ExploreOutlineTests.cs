@@ -20,6 +20,26 @@ public sealed class ExploreOutlineTests
     private static readonly DateTime Now = new(2026, 6, 1, 12, 0, 0, DateTimeKind.Utc);
 
     /// <summary>
+    /// Outlines are the same where they go round the same nodes through the same points in the same order,
+    /// whichever lists hold them, and different where any of that differs.
+    /// </summary>
+    [Fact]
+    public void OutlinesAreTheSameByNodeAndPointNotByList()
+    {
+        ExploreOutline Square(int node, float left) =>
+            new(node, [new(left, 0), new(left + 10, 0), new(left + 10, 10), new(left, 10)]);
+
+        Assert.True(ExploreOutline.Same([Square(1, 0), Square(2, 10)], [Square(1, 0), Square(2, 10)]));
+        Assert.True(ExploreOutline.Same([], []));
+
+        Assert.False(ExploreOutline.Same([Square(1, 0)], [Square(2, 0)]));
+        Assert.False(ExploreOutline.Same([Square(1, 0)], [Square(1, 1)]));
+        Assert.False(ExploreOutline.Same([Square(1, 0)], [Square(1, 0), Square(2, 10)]));
+        Assert.False(ExploreOutline.Same([Square(1, 0), Square(2, 10)], [Square(2, 10), Square(1, 0)]));
+        Assert.False(ExploreOutline.Same([Square(1, 0)], [new ExploreOutline(1, [new(0, 0), new(10, 0), new(10, 10)])]));
+    }
+
+    /// <summary>
     /// A rectangle's outline is that rectangle. The shell draws a line through these points and
     /// nothing corrects it afterwards, so a corner out of place is a line round the wrong shape.
     /// </summary>
