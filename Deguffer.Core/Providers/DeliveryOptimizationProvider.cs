@@ -122,8 +122,8 @@ public sealed class DeliveryOptimizationProvider : CleanupProviderBase
 
     /// <summary>
     /// Windows asked what the cache holds as the pass begins: the answer comes from the Delivery
-    /// Optimization service through WMI, and a cold read, with the service stopped and WMI's provider
-    /// unloaded as they are after a while idle, took 0.6 to 3.5 s on one machine against 0.1 s warm.
+    /// Optimization service through WMI, and the first query in a new process took 515 to 1,052 ms on
+    /// one machine, against 5 to 54 ms for each later one (#692).
     ///
     /// <para><b>It takes no place under the pass's bound on tool queries.</b> The read starts no process:
     /// its wait is the service starting and answering, so it adds nothing to what the bound shares out,

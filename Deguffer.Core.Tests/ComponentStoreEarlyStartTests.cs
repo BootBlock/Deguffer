@@ -120,32 +120,26 @@ public sealed class ComponentStoreEarlyStartTests : IDisposable
     /// still asks, and is told to elevate.
     /// </summary>
     [Fact]
-    public void AnAccountThatIsNotAnAdministratorStartsNothingEarly()
+    public async Task AnAccountThatIsNotAnAdministratorStartsNothingEarly()
     {
         var environment = new FakeUserEnvironment(_temp.Path);
         var runner = new FakeProcessRunner();
         var row = new ComponentStoreCleanupProvider(environment, runner, FakeProcessInspector.NothingRunning, _system, _servicing);
-        using var start = new PassStart(1, CancellationToken.None);
 
-        row.BeginPass(start);
-
-        Assert.Empty(runner.Invocations);
+        await EarlyStartProof.StartsNothingAsync(row, runner);
     }
 
     /// <summary>A Windows that keeps no component store has nothing to analyse.</summary>
     [Fact]
-    public void AWindowsWithNoComponentStoreStartsNothingEarly()
+    public async Task AWindowsWithNoComponentStoreStartsNothingEarly()
     {
         Directory.Delete(_store, recursive: true);
         var runner = new FakeProcessRunner();
-        using var start = new PassStart(1, CancellationToken.None);
 
         foreach (var row in Rows(runner))
         {
-            row.BeginPass(start);
+            await EarlyStartProof.StartsNothingAsync(row, runner);
         }
-
-        Assert.Empty(runner.Invocations);
     }
 
     /// <summary>

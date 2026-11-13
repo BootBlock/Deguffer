@@ -120,13 +120,13 @@ public sealed class DriverStoreProvider : CleanupProviderBase
 
     /// <summary>
     /// The pass's listing, and with it Windows' cleanup asked what it would clear
-    /// (<see cref="DriverStoreReading"/>), started as the pass begins: <c>pnputil</c>'s listing took 1.2 to
-    /// 2.1 s and the survey 3.5 to 4.1 s elevated, and this row's first tool started 2.3 s into a pass
-    /// when its turn came.
+    /// (<see cref="DriverStoreReading"/>), started as the pass begins: the listing and the survey each take
+    /// seconds, and this row stands far enough down the planner's list that its slot comes seconds into
+    /// the pass.
     ///
-    /// <para><b>The servicing reading is still taken before DISM starts.</b> The listing asks the pass's
-    /// one reading (<see cref="PlanningServicing"/>) before it starts the survey, as it did when the row's
-    /// turn came. Whichever of this and the component store's start asks first takes the reading, and the
+    /// <para><b>The servicing reading is taken before DISM starts.</b> The listing asks the pass's one
+    /// reading (<see cref="PlanningServicing"/>) before it starts the survey. Whichever of this and the
+    /// component store's start asks first takes the reading, and the
     /// other waits for it, so the component store starts DISM only once it has been taken.</para>
     ///
     /// <para><b>It takes no place under the pass's bound on tool queries.</b> <c>pnputil</c> is a native
