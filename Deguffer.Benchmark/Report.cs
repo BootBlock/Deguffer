@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Deguffer.Core.Diagnostics;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Execution.Timing;
 using Deguffer.Core.Scanning.Mft;
@@ -138,6 +139,7 @@ internal static class Report
 
         if (route is Route.Plan)
         {
+            CallRows(text, first, later);
             PlanRows(text, first, later);
         }
 
@@ -181,6 +183,39 @@ internal static class Report
             ];
 
             PlanRow(text, idWidth, id, columns);
+        }
+    }
+
+    /// <summary>
+    /// How many of each costly question to Windows a planning pass asked, and the time they took summed,
+    /// so calls made side by side each count their own (#516). Counts and times only, never a place.
+    /// </summary>
+    private static void CallRows(StringBuilder text, RunSample first, RunSample[] later)
+    {
+        var calls = Enum.GetValues<MachineCall>();
+        var width = calls.Max(call => call.ToString().Length) + 2;
+
+        Line(text);
+        PlanRow(text, width, string.Empty, ["first run", string.Empty, later.Length > 0 ? "later runs: median" : string.Empty]);
+        PlanRow(text, width, "machine call", ["calls", "took", .. later.Length > 0 ? new[] { "calls", "took" } : []]);
+
+        foreach (var call in calls)
+        {
+            var counted = PlanOf(first).Of(call);
+            string[] columns =
+            [
+                Count(counted.Calls),
+                Duration(counted.Elapsed.TotalSeconds),
+                .. later.Length > 0
+                    ? new[]
+                    {
+                        Count(Spread.Of([.. later.Select(r => (double)PlanOf(r).Of(call).Calls)]).Median),
+                        Duration(Median(later, r => PlanOf(r).Of(call).Elapsed)),
+                    }
+                    : [],
+            ];
+
+            PlanRow(text, width, call.ToString(), columns);
         }
     }
 

@@ -138,7 +138,9 @@ Deguffer.Benchmark plan --runs 6 > %TEMP%\deguffer-plan.txt
   settings, and cleans nothing. It takes no target and no option but `--runs`. It reports the whole
   pass, and for each provider, by its id, when it took one of the pass's slots, when it ended and
   how long it took, measured from the start of the pass and listed in the order the first run
-  started them. One planner serves every run, so the first run is a pass from a fresh process and
+  started them. It also counts the costly questions the pass asked Windows (where a volume is
+  mounted, Restart Manager sessions, final paths and readings of the process table) and the time
+  they took, summed. One planner serves every run, so the first run is a pass from a fresh process and
   the later runs are warm. The result states how many providers are planned at once and whether the
   prompt was elevated: run it from both to compare, because some providers ask their slowest
   question only with administrator rights. A provider's id names no place, but write the result

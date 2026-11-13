@@ -57,7 +57,8 @@ internal static class BenchmarkUsage
                             asks about the volume: open it, find its table, and race the
                             walk against the build, after an untimed walk. Elevated.
           plan              Plan every provider as a Storage scan does, and time the whole
-                            pass and when each provider took a slot and ended. The first run
+                            pass, when each provider took a slot and ended, and the costly
+                            questions it asked Windows. The first run
                             is a fresh process, the later runs warm. It only plans: nothing
                             is cleaned. Run it elevated and not to compare the two. Write
                             its output outside the source tree, as every report.

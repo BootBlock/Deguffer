@@ -1,3 +1,4 @@
+using Deguffer.Core.Diagnostics;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Execution.Timing;
 
@@ -19,9 +20,15 @@ internal sealed class PlanRoute(CleanupPlanner planner)
     private async ValueTask<RunTally> RunAsync(CancellationToken ct)
     {
         var timed = new PlanTimeLog();
+        var calls = new MachineCallTally();
+        IReadOnlyList<Finding> findings;
 
-        var findings = await planner.PlanAllAsync(timed: timed, ct: ct).ConfigureAwait(false);
+        // Opened in this flow, so every slot and task the pass starts is counted in it (#516).
+        using (calls.CountIn())
+        {
+            findings = await planner.PlanAllAsync(timed: timed, ct: ct).ConfigureAwait(false);
+        }
 
-        return new RunTally(findings.Count, BytesRead: 0, Complete: true, Planning: new PlanRun(timed.Times));
+        return new RunTally(findings.Count, BytesRead: 0, Complete: true, Planning: new PlanRun(timed.Times, PlanRun.CallsOf(calls)));
     }
 }
