@@ -38,22 +38,36 @@ public sealed class CondaCacheProvider : CleanupProviderBase
     private const string CleanCategories = "clean --index-cache --packages --tarballs --tempfiles";
 
     private readonly ISystemDirectories _systemDirectories;
+    private readonly ToolAnswerMemory _memory;
 
     private readonly PassMemo<string?> _conda = new();
     private readonly PassMemo<Task<CondaInstallation?>> _installation = new();
 
+    /// <param name="environment">The account conda runs as, and where its configuration is searched.</param>
+    /// <param name="runner">Starts conda.</param>
+    /// <param name="inspector">Finds a conda that is running.</param>
+    /// <param name="scanner">Measures the package caches.</param>
+    /// <param name="systemDirectories">Where the all-users installation and configuration are.</param>
+    /// <param name="memory">
+    /// Where conda's <c>info --json</c> answer is remembered between passes; by default the memory for
+    /// <paramref name="runner"/>, which is the process-wide one for the real runner.
+    /// </param>
     public CondaCacheProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
-        ISystemDirectories? systemDirectories = null)
+        ISystemDirectories? systemDirectories = null,
+        ToolAnswerMemory? memory = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
-            scanner) =>
+            scanner)
+    {
         _systemDirectories = systemDirectories ?? SystemDirectories.Current;
+        _memory = memory ?? ToolAnswerMemory.For(runner);
+    }
 
     public override string Id => "conda";
 
@@ -182,7 +196,9 @@ public sealed class CondaCacheProvider : CleanupProviderBase
 
     /// <summary>
     /// Both answers are configuration: <c>CONDA_EXE</c> and <c>.condarc</c> move them, and a
-    /// rescan must describe the machine as it is now.
+    /// rescan must describe the machine as it is now. The pass's answers are forgotten; the memory
+    /// keeps conda's <c>info --json</c> answer only while everything conda read to give it
+    /// (<see cref="CondaInputs"/>) is unchanged, and asks again the moment any of it is not.
     /// </summary>
     public override void InvalidateCaches()
     {
@@ -376,13 +392,27 @@ public sealed class CondaCacheProvider : CleanupProviderBase
         return roots.SelectMany(_ => products, (root, product) => Path.Combine(root, product));
     }
 
-    private async Task<CondaInstallation?> ResolveInstallationAsync(string conda, CancellationToken ct)
-    {
-        var installation = await _installation.Get(() => AskInstallationAsync(conda, ct)).ConfigureAwait(false);
+    /// <summary>
+    /// conda's answer, remembered across passes while its inputs are unchanged. The plan reads it too,
+    /// because it only runs conda's own clean (§5.1) and deletes nothing by path: a missed input can
+    /// misstate the figure, never move a deletion.
+    /// </summary>
+    private Task<CondaInstallation?> ResolveInstallationAsync(string conda, CancellationToken ct) =>
+        _installation.Get(() =>
+        {
+            // One reading for the block the answer is compared by and the variables naming its
+            // inputs, so the two can never describe different moments.
+            var variables = Environment.ToolEnvironment;
 
-
-        return installation;
-    }
+            return _memory.AskAsync(
+                new ToolQuestion<CondaInstallation?>(
+                    $"info --json|{conda}",
+                    variables,
+                    installation => CondaInputs.Of(conda, installation, Environment, _systemDirectories.ProgramData, variables),
+                    static installation => installation is not null,
+                    ct2 => AskInstallationAsync(conda, ct2)),
+                ct);
+        });
 
     private async Task<CondaInstallation?> AskInstallationAsync(string conda, CancellationToken ct)
     {

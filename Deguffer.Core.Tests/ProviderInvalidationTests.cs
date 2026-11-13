@@ -316,6 +316,7 @@ public sealed class ProviderInvalidationTests : IDisposable
         : parameter == typeof(ClaudeCodeProjectsDiscovery) ? new ClaudeCodeProjectsDiscovery(_environment, volumes: _volumes)
         : parameter == typeof(IVolumeInventory) ? _volumes
         : parameter == typeof(ISystemDirectories) ? new FakeSystemDirectories(_temp.Path)
+        : parameter == typeof(ToolAnswerMemory) ? new ToolAnswerMemory(new ManualTimeProvider())
         : parameter == typeof(ICurrentPreferences) ? new FakePreferences(AppPreferences.Default)
         : parameter == typeof(TimeProvider) ? new ManualTimeProvider()
         : parameter == typeof(ToolAnswerMemory) ? new ToolAnswerMemory(new ManualTimeProvider())
