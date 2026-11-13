@@ -66,6 +66,18 @@ internal static class EarlyStartProof
         Assert.Empty(runner.Invocations);
     }
 
+    /// <summary>
+    /// Begins a pass for <paramref name="provider"/> alone, after it forgets the last pass's answers, and
+    /// waits for what it started: for an adopter whose question starts no process, which its test then
+    /// counts at the seam it asks through.
+    /// </summary>
+    public static async Task BeginPassAsync(ICleanupProvider provider)
+    {
+        provider.InvalidateCaches();
+
+        await BeginAsync(provider);
+    }
+
     private static async Task BeginAsync(ICleanupProvider provider)
     {
         using var start = new PassStart(1, CancellationToken.None);

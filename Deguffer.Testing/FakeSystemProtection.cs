@@ -97,14 +97,30 @@ public sealed class FakeSystemProtection : ISystemProtection
         return answer;
     }
 
-    public ShadowCopyListing ListShadowCopies() => CopiesAnswer switch
+    /// <summary>How many times the shadow copies were listed.</summary>
+    public int CopyListings { get; private set; }
+
+    /// <summary>How many times the storage was read.</summary>
+    public int StorageReadings { get; private set; }
+
+    public ShadowCopyListing ListShadowCopies()
     {
-        ListingAnswer.Listed => ShadowCopyListing.Of([.. Copies]),
-        ListingAnswer.NeedsElevation => ShadowCopyListing.Refused,
-        _ => ShadowCopyListing.Failed("The Volume Shadow Copy service did not list its shadow copies (error 0x80004005)."),
-    };
+        CopyListings++;
+
+        return CopiesAnswer switch
+        {
+            ListingAnswer.Listed => ShadowCopyListing.Of([.. Copies]),
+            ListingAnswer.NeedsElevation => ShadowCopyListing.Refused,
+            _ => ShadowCopyListing.Failed("The Volume Shadow Copy service did not list its shadow copies (error 0x80004005)."),
+        };
+    }
 
     public PointInTimeRestore ReadPointInTimeRestore() => PointInTimeRestore;
 
-    public IReadOnlyList<VolumeShadowStorage> ReadStorage() => [new VolumeShadowStorage(SystemVolume, Storage), .. OtherVolumes];
+    public IReadOnlyList<VolumeShadowStorage> ReadStorage()
+    {
+        StorageReadings++;
+
+        return [new VolumeShadowStorage(SystemVolume, Storage), .. OtherVolumes];
+    }
 }

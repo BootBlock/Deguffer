@@ -368,6 +368,43 @@ public sealed class VirtualDiskProviderTests : IDisposable
         Assert.Contains($"{FreeSpace.Format(4096)} on the drive", Text(plan), StringComparison.Ordinal);
     }
 
+    /// <summary>#450: Docker is asked for its own figure as the pass begins, and the plan reports that answer.</summary>
+    [Fact]
+    public async Task AsksDockerForItsOwnFigureAsThePassBegins()
+    {
+        DockerSettings("{}");
+        Disk(Folder("profile", "AppData", "Local", "Docker", "wsl", "disk"), "docker_data.vhdx");
+        _environment.WithExecutable("docker");
+        var runner = new FakeProcessRunner().Responding(_environment.FindExecutable("docker")!, "system df", DockerUsage);
+        var provider = Provider(runner, new FakeProcessInspector(DockerInsideFigure.EngineProcess));
+
+        var plan = await EarlyStartProof.StartsBeforeItPlansAsync(provider, runner, "system df");
+
+        Assert.Single(plan.Notes, note => note.Message.StartsWith("Inside Docker's data disk", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AsksDockerNothingAsThePassBeginsWhenDockerDesktopIsNotRunning()
+    {
+        DockerSettings("{}");
+        Disk(Folder("profile", "AppData", "Local", "Docker", "wsl", "disk"), "docker_data.vhdx");
+        _environment.WithExecutable("docker");
+        var runner = new FakeProcessRunner();
+
+        await EarlyStartProof.StartsNothingAsync(Provider(runner), runner);
+    }
+
+    /// <summary>The refused case: a data disk Docker Desktop's settings name but that is not there is not asked about.</summary>
+    [Fact]
+    public async Task AsksDockerNothingAsThePassBeginsWhereItsDataDiskIsMissing()
+    {
+        DockerSettings("{}");
+        _environment.WithExecutable("docker");
+        var runner = new FakeProcessRunner();
+
+        await EarlyStartProof.StartsNothingAsync(Provider(runner, new FakeProcessInspector(DockerInsideFigure.EngineProcess)), runner);
+    }
+
     /// <summary>
     /// The one command this provider may run, and the only one it runs, across presence, planning, the
     /// declarations Explore reads, a run and its verification: Docker's own read of its disk usage, sent

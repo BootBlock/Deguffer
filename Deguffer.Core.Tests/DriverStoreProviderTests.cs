@@ -369,6 +369,88 @@ public sealed class DriverStoreProviderTests : IDisposable
     }
 
     /// <summary>
+    /// #450: the store is listed, and Windows' cleanup asked what it would clear, as the pass begins, and
+    /// the plan reads both answers rather than asking again.
+    /// </summary>
+    [Fact]
+    public async Task ListsTheStoreAndAsksWindowsCleanupAsThePassBegins()
+    {
+        var store = new FakeDriverStore(Staged("oem1.inf", "2022-01-01"), Staged("oem2.inf", "2024-01-01"));
+        var handlers = new FakeDiskCleanupHandlers((_, _) => new DiskCleanupOutcome(Ran: true));
+        var provider = CreateProvider(store, handlers);
+
+        await EarlyStartProof.BeginPassAsync(provider);
+
+        Assert.Equal(1, store.Listings);
+        Assert.Single(handlers.Surveyed);
+
+        var plan = await provider.PlanAsync().WaitAsync(Hung);
+
+        Assert.Equal(1, store.Listings);
+        Assert.Single(handlers.Surveyed);
+        Assert.Equal(DriverStoreProvider.Handler, Assert.IsType<DiskCleanupStep>(Assert.Single(plan.Steps)).Handler);
+    }
+
+    [Fact]
+    public async Task StartsNothingAsThePassBeginsWhereWindowsKeepsNoDriverStore()
+    {
+        Directory.Delete(_store);
+        var store = new FakeDriverStore();
+        var handlers = new FakeDiskCleanupHandlers((_, _) => new DiskCleanupOutcome(Ran: true));
+
+        await EarlyStartProof.BeginPassAsync(CreateProvider(store, handlers));
+
+        Assert.Equal(0, store.Listings);
+        Assert.Empty(handlers.Surveyed);
+    }
+
+    /// <summary>
+    /// The refused case: an update unfinished when the pass begins holds every package back, so the pass
+    /// lists the store, which presence needs, and never asks Windows' cleanup.
+    /// </summary>
+    [Fact]
+    public async Task AsksWindowsCleanupNothingAsThePassBeginsWhileAnUpdateIsUnfinished()
+    {
+        var store = new FakeDriverStore(Staged("oem1.inf", "2022-01-01"), Staged("oem2.inf", "2024-01-01"));
+        var handlers = new FakeDiskCleanupHandlers((_, _) => new DiskCleanupOutcome(Ran: true));
+        var provider = CreateProvider(store, handlers, servicing: new FakeWindowsServicing { IsRestartPending = true });
+
+        await EarlyStartProof.BeginPassAsync(provider);
+
+        Assert.Equal(1, store.Listings);
+        Assert.Empty(handlers.Surveyed);
+        Assert.True((await provider.PlanAsync().WaitAsync(Hung)).WaitsForAnUpdate);
+        Assert.Empty(handlers.Surveyed);
+    }
+
+    /// <summary>
+    /// A pass that ends before this row plans stops the survey it started, and what it started ends only
+    /// once the handler has returned, so the next pass never finds Windows' cleanup still measuring.
+    /// </summary>
+    [Fact]
+    public async Task APassThatEndsBeforeTheRowPlansEndsTheSurveyItStarted()
+    {
+        var handlers = StillMeasuring();
+        var provider = CreateProvider(
+            ListedWhileMeasuring(handlers, new DriverStoreListing([Staged("oem1.inf", "2022-01-01"), Staged("oem2.inf", "2024-01-01")])),
+            handlers);
+        using var pass = new CancellationTokenSource();
+        using var start = new PassStart(1, pass.Token);
+        provider.InvalidateCaches();
+
+        var started = provider.BeginPass(start);
+        await handlers.SurveyStarted.WaitAsync(Hung);
+
+        // The listing answers as soon as the survey has started, so only the survey can hold this open.
+        Assert.NotSame(started, await Task.WhenAny(started, Task.Delay(TimeSpan.FromMilliseconds(200))));
+
+        await pass.CancelAsync();
+        await started.WaitAsync(Hung);
+
+        Assert.Equal([(DriverStoreProvider.Handler, true)], handlers.Returned);
+    }
+
+    /// <summary>
     /// A pass that found the row present and ended before planning it, as a cancelled preview does:
     /// the next pass's invalidation stops the survey that pass started rather than leaving Windows'
     /// cleanup measuring beside whatever runs next.

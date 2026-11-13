@@ -212,6 +212,33 @@ public sealed class DeliveryOptimizationProviderTests : IDisposable
         Assert.Equal(0, _status.Reads);
     }
 
+    /// <summary>#450: Windows is asked what the cache holds as the pass begins, and the plan awaits that answer.</summary>
+    [Fact]
+    public async Task AsksWindowsWhatTheCacheHoldsAsThePassBegins()
+    {
+        InstallModule();
+        ReportCache(CacheBytes);
+        var provider = CreateProvider();
+
+        await EarlyStartProof.BeginPassAsync(provider);
+
+        Assert.Equal(1, _status.Reads);
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(1, _status.Reads);
+        Assert.Equal(CacheBytes, Assert.IsType<RunCommandStep>(Assert.Single(plan.Steps)).EstimatedBytes);
+    }
+
+    [Fact]
+    public async Task AsksNothingAsThePassBeginsWithoutTheModule()
+    {
+        await EarlyStartProof.BeginPassAsync(CreateProvider());
+
+        Assert.Equal(0, _status.Reads);
+        Assert.Empty(_runner.Invocations);
+    }
+
     /// <summary>
     /// What the clean freed is Windows' figure before less Windows' figure after. The folder cannot
     /// be measured, so without asking again the run would report the whole estimate as freed. The

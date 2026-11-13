@@ -38,6 +38,13 @@ internal sealed class EarlyDiskCleanupSurvey
         _answer = Task.Run(() => handlers.Survey(handler, volume, question, stop), stop);
     }
 
+    /// <summary>
+    /// Ended once the handler has returned, for a pass that started the survey and must not end while
+    /// the handler still runs. It faults where the handler threw, which is the answer's business, so a
+    /// caller waiting only for the return suppresses it.
+    /// </summary>
+    public Task Returned => _answer;
+
     /// <summary>The handler's answer, once it has given one.</summary>
     /// <exception cref="OperationCanceledException">The pass was cancelled while the handler measured.</exception>
     /// <exception cref="InvalidOperationException">The question was already taken, discarded or abandoned.</exception>
