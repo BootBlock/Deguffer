@@ -13,7 +13,7 @@ namespace Deguffer.Core.Providers;
 /// How many days Claude Code keeps a conversation nobody uses, or null where Deguffer cannot tell.
 /// </param>
 /// <param name="Tuning">What the provider's walks run with, under which the session folders are dated.</param>
-/// <param name="Reader">Where each conversation's lines are read.</param>
+/// <param name="Transcripts">Where each conversation's lines are read, or what they said when last read.</param>
 internal sealed record ClaudeCodeConversationEvidence(
     ClaudeCodeProjects Projects,
     ClaudeCodeSessionList Sessions,
@@ -21,7 +21,7 @@ internal sealed record ClaudeCodeConversationEvidence(
     DateTime RecentSinceUtc,
     long? RetentionDays,
     ScanTuner Tuning,
-    ClaudeCodeTranscriptReader Reader);
+    ClaudeCodeTranscriptAnswers Transcripts);
 
 /// <summary>A session every rule has passed, and that may be offered.</summary>
 /// <param name="Transcript">The conversation.</param>
@@ -137,7 +137,7 @@ internal static class ClaudeCodeConversations
 
         var transcripts = projects.Folders
             .SelectMany(folder => folder.Transcripts)
-            .ToLookup(transcript => transcript.SessionId, transcript => transcript.Path, StringComparer.OrdinalIgnoreCase);
+            .ToLookup(transcript => transcript.SessionId, StringComparer.OrdinalIgnoreCase);
 
         var undated = new List<Session>();
         var candidates = new List<Candidate>();
@@ -219,8 +219,8 @@ internal static class ClaudeCodeConversations
             }
         }
 
-        var placed = Placements(candidates, evidence.Reader, ct);
-        var starts = new ClaudeCodeSessionStarts(transcripts, evidence.Reader);
+        var placed = Placements(candidates, evidence.Transcripts, ct);
+        var starts = new ClaudeCodeSessionStarts(transcripts, evidence.Transcripts);
         var occupancy = ClaudeCodeOccupancy.Of(evidence.Sessions, starts, ct);
         var offers = new List<ClaudeCodeConversationOffer>(candidates.Count);
         var unplaced = 0;
@@ -294,14 +294,14 @@ internal static class ClaudeCodeConversations
     /// <see cref="ListWorkers"/>.
     /// </summary>
     private static ClaudeCodePlacement?[] Placements(
-        List<Candidate> candidates, ClaudeCodeTranscriptReader reader, CancellationToken ct)
+        List<Candidate> candidates, ClaudeCodeTranscriptAnswers transcripts, CancellationToken ct)
     {
         var placed = new ClaudeCodePlacement?[candidates.Count];
 
         ListWorkers.Run(
             candidates.Count,
             ReadParallelism,
-            index => placed[index] = reader.Place(candidates[index].Session.Transcript.Path, ct),
+            index => placed[index] = transcripts.Place(candidates[index].Session.Transcript, ct),
             ct);
 
         return placed;

@@ -66,7 +66,7 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
     private readonly ClaudeCodeSessionRegistry _sessions;
     private readonly ISystemDirectories _system;
     private readonly ProtectionScope _scope;
-    private readonly ClaudeCodeTranscriptReader _transcripts;
+    private readonly ClaudeCodeTranscriptAnswers _transcripts;
 
     private readonly PassMemo<Survey?> _survey = new();
     private readonly PassMemo<ClaudeCodeClassification> _described = new();
@@ -86,7 +86,10 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
     /// be or hold. The machine's own by default.
     /// </param>
     /// <param name="scope">What the declaration will be asked about. <see cref="ProtectionScope.Everything"/> where none is given.</param>
-    /// <param name="transcripts">Where each conversation's lines are read. The disk where none is given.</param>
+    /// <param name="transcripts">
+    /// Where each conversation's lines are read, and what they said when last read. The disk, and what
+    /// every pass in the app read from it, where none is given.
+    /// </param>
     public ClaudeCodeConversationProvider(
         IUserEnvironment? environment = null,
         ClaudeCodeSessionRegistry? sessions = null,
@@ -97,7 +100,7 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
         ISystemDirectories? system = null,
         IVolumeInventory? volumes = null,
         ProtectionScope? scope = null,
-        ClaudeCodeTranscriptReader? transcripts = null)
+        ClaudeCodeTranscriptAnswers? transcripts = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
@@ -109,7 +112,7 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
         _projects = projects ?? new ClaudeCodeProjectsDiscovery(Environment, _system, Volumes);
         _sessions = sessions ?? new ClaudeCodeSessionRegistry(Environment, Inspector, _system, LiveVolumes);
         _scope = scope ?? ProtectionScope.Everything;
-        _transcripts = transcripts ?? ClaudeCodeTranscriptReader.Default;
+        _transcripts = transcripts ?? ClaudeCodeTranscriptAnswers.Shared;
     }
 
     public override string Id => "claude-code-conversations";
@@ -417,9 +420,13 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
         // Fixed once, for the reason MinimumAge is an instant rather than a duration: the preview and the
         // clean must agree about what is recent, however long the preview sits on screen.
         var now = DateTime.UtcNow;
+        var projects = _projects.Look(ct);
+
+        // Only once a listing is in hand, which is what says which kept answers are still of use.
+        _transcripts.Retain(projects.Folders.SelectMany(listed => listed.Transcripts));
 
         var evidence = new ClaudeCodeConversationEvidence(
-            _projects.Look(ct),
+            projects,
             _sessions.Read(ct),
             _sessions,
             now - ClaudeCodeSessionRegistry.RecentWindow,

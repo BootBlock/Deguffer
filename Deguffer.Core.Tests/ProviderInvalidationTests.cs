@@ -299,7 +299,7 @@ public sealed class ProviderInvalidationTests : IDisposable
             ? new SourceDirectoryDiscovery(new FakeDirectoryScanner(), new FakeVolumeInventory())
         : parameter == typeof(ILiveTreeInspector) ? FakeLiveTreeInspector.NothingLive
         : parameter == typeof(ProtectionScope) ? ProtectionScope.Everything
-        : parameter == typeof(ClaudeCodeTranscriptReader) ? ClaudeCodeTranscriptReader.Default
+        : parameter == typeof(ClaudeCodeTranscriptAnswers) ? new ClaudeCodeTranscriptAnswers(ClaudeCodeTranscriptReader.Default)
         : parameter == typeof(SquirrelDiscovery) ? new SquirrelDiscovery(_environment)
         : parameter == typeof(SteamDiscovery) ? new SteamDiscovery(_environment)
         : parameter == typeof(CargoTargetSurvey) ? new CargoTargetSurvey()
