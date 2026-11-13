@@ -290,6 +290,26 @@ public sealed class ArduinoCacheProviderTests : IDisposable
         Assert.True(plan.WasNotExamined);
     }
 
+    /// <summary>#450: the CLI is asked where its folders are as the pass begins, and the plan awaits those answers.</summary>
+    [Fact]
+    public async Task AsksTheCliWhereItsFoldersAreAsThePassBegins()
+    {
+        InstalledData();
+        var runner = CliAnswering();
+
+        await EarlyStartProof.StartsBeforeItPlansAsync(
+            CreateProvider(runner), runner, "directories.data", "directories.downloads", "build_cache.path", "directories.user");
+    }
+
+    [Fact]
+    public async Task StartsNothingAsThePassBeginsWhenNoCliIsInstalled()
+    {
+        InstalledData();
+        var runner = new FakeProcessRunner();
+
+        await EarlyStartProof.StartsNothingAsync(CreateProvider(runner), runner);
+    }
+
     /// <summary>
     /// §7.1: Explore may remove the staging folder and the build cache's parts, and nothing else in the
     /// data folder.

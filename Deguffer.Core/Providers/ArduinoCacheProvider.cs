@@ -222,6 +222,14 @@ public sealed class ArduinoCacheProvider : CleanupProviderBase
         base.InvalidateCaches();
     }
 
+    /// <summary>
+    /// Every Arduino configuration's folders, asked as the pass begins: four <c>config get</c> starts in
+    /// turn for each CLI and configuration, and again for each where the machine's variables have changed,
+    /// which is up to sixteen and all of this row's wait before it can look at the disk. Where no CLI is
+    /// found, the answers ask nothing.
+    /// </summary>
+    public override Task BeginPass(PassStart start) => start.Ask(_installations.AskAsync);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var answers = await _installations.AskAsync(ct).ConfigureAwait(false);

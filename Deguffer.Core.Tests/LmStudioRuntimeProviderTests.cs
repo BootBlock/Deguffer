@@ -97,6 +97,32 @@ public sealed class LmStudioRuntimeProviderTests : IDisposable
         Assert.True((await CreateProvider().PlanAsync()).IsEmpty);
     }
 
+    /// <summary>#450: a running LM Studio is asked for its runtimes as the pass begins, and the plan awaits that answer.</summary>
+    [Fact]
+    public async Task AsksLmStudioForItsRuntimesAsThePassBegins()
+    {
+        Install($"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0");
+        Listing($"{Cuda12}@2.46.0", $"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0");
+
+        var plan = await EarlyStartProof.StartsBeforeItPlansAsync(CreateProvider(), _runner, "runtime ls");
+
+        Assert.Single(plan.Steps);
+    }
+
+    [Fact]
+    public async Task StartsNothingAsThePassBeginsWhenLmStudioIsNotInstalled() =>
+        await EarlyStartProof.StartsNothingAsync(CreateProvider(), _runner);
+
+    /// <summary><c>lms</c> would start a closed LM Studio, so a pass that begins with it closed asks nothing.</summary>
+    [Fact]
+    public async Task StartsNothingAsThePassBeginsWhenLmStudioIsClosed()
+    {
+        Install($"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0");
+        Listing($"{Cuda12}@2.46.0", $"{Cuda12}@2.46.0", $"{Cuda12}@2.45.0");
+
+        await EarlyStartProof.StartsNothingAsync(new LmStudioRuntimeProvider(_environment, _runner, FakeProcessInspector.NothingRunning), _runner);
+    }
+
     /// <summary>One version of each line is a working install with nothing to reclaim.</summary>
     [Fact]
     public async Task IsNotPresentWithOneVersionOfEachLine()

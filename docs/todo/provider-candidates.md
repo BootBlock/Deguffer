@@ -130,9 +130,9 @@ holds "the running state of virtual machines" and is the size of the VM's memory
 No primary source was found for `.vmgs`, `.vsv` or `.bin`; all are live state, Tier 4.
 
 ✅ done: `HyperVDiskProvider`. One read-only Windows PowerShell query, run only where the Hyper-V
-module is installed, asks first whether the account is elevated or in Hyper-V Administrators,
-because a third-party write-up ([Altaro](https://www.altaro.com/hyper-v/?p=21601)) reports `Get-VM`
-listing nothing rather than failing for anyone else. It then reads each machine's
+module is installed and only for an account Deguffer's own token shows is elevated or in Hyper-V
+Administrators, because a third-party write-up ([Altaro](https://www.altaro.com/hyper-v/?p=21601))
+reports `Get-VM` listing nothing rather than failing for anyone else. It reads each machine's
 attached disks, each checkpoint's disks and each disk's `ParentPath`. Any other answer is said to
 leave the machines unknown. Explore does not describe these disks, because only a run of PowerShell
 can ask Hyper-V.
@@ -237,7 +237,8 @@ Rancher are added.
 ### What the virtualisation reports need before any of them ships ✅ done
 
 Shipped: a report implements `IRegistersVirtualMachineStorage` and returns each disk or VM folder as
-a `VirtualMachineStorage`. The planner reads every registration before a pass (`RegisteredStorage`),
+a `VirtualMachineStorage`. The planner reads every registration as a pass begins (`RegisteredStorage`)
+and holds each row's plan to it before reporting the row,
 `VirtualMachineStoragePlan` withholds any step of any row that reaches one and protects it
 (`Withholding.VirtualMachineStorage`), every clean proves all of them standing through
 `VirtualMachineStoragePlan.ProofFor`, whichever rows were scanned, and Explore refuses each one from

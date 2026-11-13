@@ -116,7 +116,13 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
 
     public PassHold HoldCaches() => PassHold.Nothing;
 
-    public Task BeginPass(CancellationToken ct) => Task.CompletedTask;
+    /// <summary>
+    /// The tool query it starts as a pass begins, under the pass's bound as a provider's is, or null for
+    /// a provider that starts nothing early.
+    /// </summary>
+    public Func<CancellationToken, Task>? EarlyQuery { get; set; }
+
+    public Task BeginPass(PassStart start) => EarlyQuery is null ? Task.CompletedTask : start.Ask(EarlyQuery);
 
     public Task<bool> IsPresentAsync(CancellationToken ct = default) => Task.FromResult(IsPresent);
 

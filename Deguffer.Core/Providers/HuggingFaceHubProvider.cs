@@ -78,6 +78,7 @@ public sealed class HuggingFaceHubProvider : CleanupProviderBase
     private readonly ISystemDirectories _system;
     private readonly ILiveTreeInspector _liveTrees;
     private readonly PassMemo<Task<HuggingFaceEnvironment?>> _environment = new();
+    private readonly PassMemo<Task<CheckedAnswer<HuggingFaceHubListing>>> _listing = new();
 
     public HuggingFaceHubProvider(
         IUserEnvironment? environment = null,
@@ -224,9 +225,25 @@ public sealed class HuggingFaceHubProvider : CleanupProviderBase
     public override void InvalidateCaches()
     {
         _environment.Forget();
+        _listing.Forget();
         _liveTrees.Invalidate();
         base.InvalidateCaches();
     }
+
+    /// <summary>
+    /// The Hugging Face tool's two answers, asked as the pass begins: its version and where its hub cache
+    /// is, then its listing of that cache. hf is a Python program, slow to start, and the listing waits
+    /// on the first.
+    /// </summary>
+    public override Task BeginPass(PassStart start) =>
+        start.Ask(async ct =>
+        {
+            if (Environment.FindExecutable("hf") is { } hf
+                && await ResolveEnvironmentAsync(hf, ct).ConfigureAwait(false) is { } reported)
+            {
+                await ResolveListingAsync(hf, reported, ct).ConfigureAwait(false);
+            }
+        });
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
@@ -242,52 +259,12 @@ public sealed class HuggingFaceHubProvider : CleanupProviderBase
                 + "installed or where its cache is. Nothing is offered.");
         }
 
-        if (!reported.KnowsSharedBlobs)
+        if ((await ResolveListingAsync(hf, reported, ct).ConfigureAwait(false)).Refused(out var refusal, out var listing))
         {
-            return UnexaminedPlan(
-                (reported.Version is { } version ? $"The Hugging Face tool installed is version {version}. " : "The Hugging Face tool did not say which version it is. ")
-                + $"Deguffer needs {HuggingFaceEnvironment.SharedBlobsVersion} or later, because older versions "
-                + "do not remove a repository's files from the store that repositories share. Update it with "
-                + "'pip install -U huggingface_hub', then scan again.");
+            return refusal;
         }
 
-        if (reported.HubCache is not { } hub)
-        {
-            return UnexaminedPlan("'hf env' did not say where the Hugging Face hub cache is, so nothing is offered.");
-        }
-
-        if (WhyNotExamined(hub) is { } declined)
-        {
-            return EmptyPlan(
-                $"The Hugging Face hub cache is set to '{hub}', and Deguffer will not run 'hf cache rm' there: "
-                + $"{declined} It is leaving it alone.");
-        }
-
-        if (NothingToPlanFor(hub, $"The Hugging Face tool has downloaded nothing yet ({hub} does not exist).", out var hubIsLink) is { } nothing)
-        {
-            return nothing;
-        }
-
-        if (hubIsLink)
-        {
-            return UnexaminedPlan(
-                $"Leaving '{hub}' alone: it is a link to somewhere else, and Deguffer does not look through a link.");
-        }
-
-        // §5.6 asserts every entry beside the repositories offered, read from this listing, so a cache
-        // that will not be listed offers nothing.
-        if (FolderEntries.Of(hub) is not { } entries)
-        {
-            return UnreadableRootPlan(hub);
-        }
-
-        var listed = await Runner.RunAsync(hf, HuggingFaceCommands.List(hub), ToolRun.Query, ct).ConfigureAwait(false);
-
-        if (!listed.Succeeded || HuggingFaceCacheListing.TryRead(listed.StandardOutput) is not { } repositories)
-        {
-            return UnexaminedPlan(
-                "The Hugging Face tool did not list its cache in a form Deguffer can read, so nothing is offered.");
-        }
+        var (hub, entries, repositories) = listing;
 
         var notes = new List<PlanNote>
         {
@@ -314,7 +291,7 @@ public sealed class HuggingFaceHubProvider : CleanupProviderBase
             Removes = item.Folder,
             TargetCheck = new HuggingFaceRepositoryUse(_liveTrees, item.Folder),
             Identity = new ItemIdentity(item.Repository.Id, item.Repository.RepoId),
-            Group = GroupOf(item.Repository.Type),
+            Group = item.Repository.Type.Heading(),
         }).ToList();
 
         if (steps.Count > 0)
@@ -434,16 +411,6 @@ public sealed class HuggingFaceHubProvider : CleanupProviderBase
             ct);
     }
 
-    /// <summary>The heading a repository is listed under, by what kind of repository it is.</summary>
-    private static string GroupOf(HuggingFaceRepositoryType type) => type switch
-    {
-        HuggingFaceRepositoryType.Model => "Models",
-        HuggingFaceRepositoryType.Dataset => "Datasets",
-        HuggingFaceRepositoryType.Space => "Spaces",
-        HuggingFaceRepositoryType.Kernel => "Kernels",
-        _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
-    };
-
     /// <summary>
     /// Why <paramref name="folder"/> must not be examined as Hugging Face's, as the end of a sentence,
     /// or null where it may be.
@@ -454,6 +421,65 @@ public sealed class HuggingFaceHubProvider : CleanupProviderBase
 
     private Task<HuggingFaceEnvironment?> ResolveEnvironmentAsync(string hf, CancellationToken ct) =>
         _environment.Get(() => AskEnvironmentAsync(hf, ct));
+
+    private Task<CheckedAnswer<HuggingFaceHubListing>> ResolveListingAsync(string hf, HuggingFaceEnvironment reported, CancellationToken ct) =>
+        _listing.Get(() => AskListingAsync(hf, reported, ct));
+
+    /// <summary>
+    /// The tool's listing of its hub cache, asked only where the version removes shared files, the cache is
+    /// a folder Deguffer may run the tool in, and Windows lists it.
+    /// </summary>
+    private async Task<CheckedAnswer<HuggingFaceHubListing>> AskListingAsync(string hf, HuggingFaceEnvironment reported, CancellationToken ct)
+    {
+        if (!reported.KnowsSharedBlobs)
+        {
+            return UnexaminedPlan(
+                (reported.Version is { } version ? $"The Hugging Face tool installed is version {version}. " : "The Hugging Face tool did not say which version it is. ")
+                + $"Deguffer needs {HuggingFaceEnvironment.SharedBlobsVersion} or later, because older versions "
+                + "do not remove a repository's files from the store that repositories share. Update it with "
+                + "'pip install -U huggingface_hub', then scan again.");
+        }
+
+        if (reported.HubCache is not { } hub)
+        {
+            return UnexaminedPlan("'hf env' did not say where the Hugging Face hub cache is, so nothing is offered.");
+        }
+
+        if (WhyNotExamined(hub) is { } declined)
+        {
+            return EmptyPlan(
+                $"The Hugging Face hub cache is set to '{hub}', and Deguffer will not run 'hf cache rm' there: "
+                + $"{declined} It is leaving it alone.");
+        }
+
+        if (NothingToPlanFor(hub, $"The Hugging Face tool has downloaded nothing yet ({hub} does not exist).", out var hubIsLink) is { } nothing)
+        {
+            return nothing;
+        }
+
+        if (hubIsLink)
+        {
+            return UnexaminedPlan(
+                $"Leaving '{hub}' alone: it is a link to somewhere else, and Deguffer does not look through a link.");
+        }
+
+        // §5.6 asserts every entry beside the repositories offered, read from this listing, so a cache
+        // that will not be listed offers nothing.
+        if (FolderEntries.Of(hub) is not { } entries)
+        {
+            return UnreadableRootPlan(hub);
+        }
+
+        var listed = await Runner.RunAsync(hf, HuggingFaceCommands.List(hub), ToolRun.Query, ct).ConfigureAwait(false);
+
+        if (!listed.Succeeded || HuggingFaceCacheListing.TryRead(listed.StandardOutput) is not { } repositories)
+        {
+            return UnexaminedPlan(
+                "The Hugging Face tool did not list its cache in a form Deguffer can read, so nothing is offered.");
+        }
+
+        return new HuggingFaceHubListing(hub, entries, repositories);
+    }
 
     private async Task<HuggingFaceEnvironment?> AskEnvironmentAsync(string hf, CancellationToken ct)
     {

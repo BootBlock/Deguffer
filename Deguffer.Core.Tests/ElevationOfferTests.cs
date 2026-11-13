@@ -253,7 +253,7 @@ public sealed class ElevationOfferTests
 
         public PassHold HoldCaches() => PassHold.Nothing;
 
-        public Task BeginPass(CancellationToken ct) => Task.CompletedTask;
+        public Task BeginPass(PassStart start) => Task.CompletedTask;
 
         public Task<bool> IsPresentAsync(CancellationToken ct = default) => Task.FromResult(true);
 

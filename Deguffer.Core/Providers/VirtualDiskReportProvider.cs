@@ -33,6 +33,12 @@ public abstract class VirtualDiskReportProvider : CleanupProviderBase, IRegister
     /// <summary>What the tool records, read once per planning pass and shared by presence and planning (G4).</summary>
     private readonly PassMemo<Task<VirtualDiskInventory>> _inventory = new();
 
+    /// <summary>
+    /// Each recorded disk measured from outside, once per planning pass, so a row that decides from the
+    /// measurement what to ask its tool at the pass's start asks on the figures its plan reports (G4).
+    /// </summary>
+    private readonly PassMemo<Task<IReadOnlyList<(VirtualDisk Disk, VirtualDiskSize Size)>>> _measured = new();
+
     protected VirtualDiskReportProvider(
         IUserEnvironment environment, IProcessRunner runner, IProcessInspector inspector, IDirectoryScanner? scanner)
         : base(environment, runner, inspector, scanner)
@@ -50,6 +56,7 @@ public abstract class VirtualDiskReportProvider : CleanupProviderBase, IRegister
     public override void InvalidateCaches()
     {
         _inventory.Forget();
+        _measured.Forget();
         base.InvalidateCaches();
     }
 
@@ -77,8 +84,7 @@ public abstract class VirtualDiskReportProvider : CleanupProviderBase, IRegister
     protected sealed override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var inventory = await InventoryAsync(ct).ConfigureAwait(false);
-
-        var measured = inventory.Disks.Select(disk => (Disk: disk, Size: VirtualDiskFile.Measure(disk))).ToList();
+        var measured = await MeasuredAsync(ct).ConfigureAwait(false);
 
         return new CleanupPlan
         {
@@ -107,6 +113,12 @@ public abstract class VirtualDiskReportProvider : CleanupProviderBase, IRegister
     protected virtual Task<DockerInsideReading?> InsideAsync(
         IReadOnlyList<(VirtualDisk Disk, VirtualDiskSize Size)> measured, CancellationToken ct) =>
         Task.FromResult<DockerInsideReading?>(null);
+
+    /// <summary>The pass's measurement of every disk the tool records.</summary>
+    protected Task<IReadOnlyList<(VirtualDisk Disk, VirtualDiskSize Size)>> MeasuredAsync(CancellationToken ct) =>
+        _measured.Get(async () =>
+            (IReadOnlyList<(VirtualDisk Disk, VirtualDiskSize Size)>)
+            [.. (await InventoryAsync(ct).ConfigureAwait(false)).Disks.Select(disk => (Disk: disk, Size: VirtualDiskFile.Measure(disk)))]);
 
     private Task<VirtualDiskInventory> InventoryAsync(CancellationToken ct) => _inventory.Get(() => ReadInventoryAsync(ct));
 }

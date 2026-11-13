@@ -110,6 +110,43 @@ public sealed class ComposerCacheProviderTests : IDisposable
         Assert.True((await provider.PlanAsync()).IsEmpty);
     }
 
+    /// <summary>#450: Composer is asked for every setting as the pass begins, and the plan awaits those answers.</summary>
+    [Fact]
+    public async Task AsksComposerForItsSettingsAsThePassBegins()
+    {
+        PopulateCache();
+        var runner = ComposerAnswering();
+
+        await EarlyStartProof.StartsBeforeItPlansAsync(
+            CreateProvider(runner),
+            runner,
+            "\" home",
+            "\" data-dir",
+            "\" cache-dir",
+            "cache-files-dir",
+            "cache-repo-dir",
+            "cache-vcs-dir",
+            "cache-read-only");
+    }
+
+    [Fact]
+    public async Task StartsNothingAsThePassBeginsWhenComposerIsNotInstalled()
+    {
+        var runner = new FakeProcessRunner();
+
+        await EarlyStartProof.StartsNothingAsync(CreateProvider(runner), runner);
+    }
+
+    /// <summary>The plan refuses a <c>COMPOSER</c> project before it asks, so the pass asks nothing either.</summary>
+    [Fact]
+    public async Task StartsNothingAsThePassBeginsWhereComposerNamesAProject()
+    {
+        _environment.WithToolEnvironmentVariable("COMPOSER", @"C:\Users\testuser\Projects\app\composer.json");
+        var runner = ComposerAnswering();
+
+        await EarlyStartProof.StartsNothingAsync(CreateProvider(runner), runner);
+    }
+
     [Fact]
     public async Task PlansComposersClearCacheFromDeguffersOwnFolder()
     {

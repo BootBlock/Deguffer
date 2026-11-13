@@ -151,6 +151,39 @@ public sealed class HuggingFaceHubProviderTests : IDisposable
         Assert.False(await new HuggingFaceHubProvider(environment, _runner, liveTrees: _liveTrees).IsPresentAsync());
     }
 
+    /// <summary>
+    /// #450: the tool is asked its version and where its cache is, then to list the cache, as the pass
+    /// begins, and the plan awaits both answers.
+    /// </summary>
+    [Fact]
+    public async Task AsksTheToolItsEnvironmentAndItsListingAsThePassBegins()
+    {
+        Install((Gpt2, 548_000_000));
+
+        var plan = await EarlyStartProof.StartsBeforeItPlansAsync(CreateProvider(), _runner, HuggingFaceCommands.Environment, "cache ls ");
+
+        Assert.Single(plan.Steps);
+    }
+
+    [Fact]
+    public async Task StartsNothingAsThePassBeginsWhenTheToolIsNotInstalled()
+    {
+        var runner = new FakeProcessRunner();
+
+        await EarlyStartProof.StartsNothingAsync(
+            new HuggingFaceHubProvider(new FakeUserEnvironment(_temp.Path), runner, liveTrees: _liveTrees), runner);
+    }
+
+    /// <summary>The listing waits, as in the plan, on a version that removes a repository's shared files.</summary>
+    [Fact]
+    public async Task StopsAfterItsEnvironmentAsThePassBeginsWhenTheToolIsTooOld()
+    {
+        Version = "1.31.0";
+        Install((Gpt2, 548_000_000));
+
+        await EarlyStartProof.StartsOnlyAsync(CreateProvider(), _runner, HuggingFaceCommands.Environment);
+    }
+
     [Fact]
     public async Task IsNotPresentWhereTheToolHasDownloadedNothing()
     {

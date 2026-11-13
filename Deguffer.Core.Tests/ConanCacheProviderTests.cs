@@ -301,6 +301,48 @@ public sealed class ConanCacheProviderTests : IDisposable
         Assert.Empty(runner.Invocations);
     }
 
+    /// <summary>#450: Conan is asked for its home and its store as the pass begins, and the plan awaits those answers.</summary>
+    [Fact]
+    public async Task AsksConanForItsHomeAndStoreAsThePassBegins()
+    {
+        CreateHome(DefaultHome);
+        CreateStore(Store);
+        var runner = Answering();
+
+        await EarlyStartProof.StartsBeforeItPlansAsync(CreateProvider(runner), runner, "config home", "config show core.cache:storage_path");
+    }
+
+    [Fact]
+    public async Task StartsNothingAsThePassBeginsWhenConanIsNotInstalled()
+    {
+        var runner = new FakeProcessRunner();
+        var provider = new ConanCacheProvider(
+            new ConanRcWalk(_temp.Path), new FakeUserEnvironment(_temp.Path), runner, FakeProcessInspector.NothingRunning);
+
+        await EarlyStartProof.StartsNothingAsync(provider, runner);
+    }
+
+    /// <summary>Asking would make the home, so a pass that begins before it exists asks nothing.</summary>
+    [Fact]
+    public async Task StartsNothingAsThePassBeginsWhereConansHomeDoesNotExist()
+    {
+        var runner = Answering();
+
+        await EarlyStartProof.StartsNothingAsync(CreateProvider(runner), runner);
+        Assert.False(Directory.Exists(DefaultHome));
+    }
+
+    /// <summary>The plan holds back while Conan runs before it asks anything, so the pass does too.</summary>
+    [Fact]
+    public async Task StartsNothingAsThePassBeginsWhileConanRuns()
+    {
+        CreateHome(DefaultHome);
+        CreateStore(Store);
+        var runner = Answering();
+
+        await EarlyStartProof.StartsNothingAsync(CreateProvider(runner, new FakeProcessInspector("conan")), runner);
+    }
+
     [Theory]
     [InlineData("conan2")]
     [InlineData(@"\Users\testuser\.conan2")]

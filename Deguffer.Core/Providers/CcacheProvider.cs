@@ -184,6 +184,13 @@ public sealed class CcacheProvider : CleanupProviderBase
         base.InvalidateCaches();
     }
 
+    /// <summary>
+    /// ccache's answer for where its cache is, asked as the pass begins. ccache itself starts quickly,
+    /// but a process start inside a busy pass is not, and the row can measure nothing until it answers.
+    /// </summary>
+    public override Task BeginPass(PassStart start) =>
+        start.Ask(ct => Environment.FindExecutable("ccache") is { } ccache ? ResolveLocationAsync(ccache, ct) : Task.CompletedTask);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         if (Environment.FindExecutable("ccache") is not { } ccache)

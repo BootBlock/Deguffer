@@ -34,7 +34,7 @@ public sealed class HyperVDiskProvider : VirtualDiskReportProvider
             inspector ?? ProcessInspector.Default,
             scanner)
     {
-        _machines = new HyperVMachines(system ?? SystemDirectories.Current, Runner);
+        _machines = new HyperVMachines(system ?? SystemDirectories.Current, Environment, Runner);
     }
 
     public override string Id => "hyper-v-disks";

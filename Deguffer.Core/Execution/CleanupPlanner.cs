@@ -533,8 +533,7 @@ public sealed class CleanupPlanner
         // What a provider starts at the top of the pass, and the reading of the registered storage, end
         // with it, however it ends: a pass that fails or is cancelled must not leave a tool running beside
         // the next pass's own.
-        using var stop = new PassStop(ct);
-        var started = new List<Task>(providers.Count + 1);
+        using var start = new PassStart(PassStart.ToolsAtOnce, ct);
 
         try
         {
@@ -547,30 +546,19 @@ public sealed class CleanupPlanner
             // runs while the rows ahead of it plan, rather than starting only when its turn comes.
             foreach (var provider in providers)
             {
-                started.Add(provider.BeginPass(stop.Work));
+                start.Begin(provider);
             }
 
-            // Beside the rows rather than before them (see PlanningPass). One reading for the pass, so
-            // every plan in it is still held to the same set.
-            var registered = PlanningPass.ReadRegisteredAsync(registrars, _volumes, stop);
-            started.Add(registered);
-
             // The account's folders are followed to their mounts once for the pass.
-            var terms = new PassTerms(registered, AnotherAccountPlan.For(_account, _volumes), keep);
+            var terms = new PassTerms(registrars, AnotherAccountPlan.For(_account, _volumes), keep);
 
-            return await new PlanningPass(providers, terms, _volumes, clock, stop).RunAsync(status, found, timed).ConfigureAwait(false);
+            using var pass = new PlanningPass(providers, terms, _volumes, clock, start, ct);
+            return await pass.RunAsync(status, found, timed).ConfigureAwait(false);
         }
         finally
         {
-            await stop.EndWorkAsync().ConfigureAwait(false);
-
-            // Until each has ended, not only been told to: a tool ends after its cancellation is asked
-            // for, and the next pass may start its own the moment this one returns. How each ended is
-            // not thrown here. A plan that awaited it reported it, a plan that asked after it failed
-            // asked again and reported its own answer, a failed reading of the registered storage was
-            // thrown by the plans held to it, and a pass that ended before any plan asked reports why it
-            // ended, which is the answer its caller is owed.
-            await Task.WhenAll(started).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            // Before the holds end, because what was started may still be reading what they keep.
+            await start.EndAsync().ConfigureAwait(false);
 
             foreach (var hold in holds)
             {

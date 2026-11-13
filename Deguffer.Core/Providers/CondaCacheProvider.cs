@@ -41,6 +41,7 @@ public sealed class CondaCacheProvider : CleanupProviderBase
 
     private readonly PassMemo<string?> _conda = new();
     private readonly PassMemo<Task<CondaInstallation?>> _installation = new();
+    private readonly PassMemo<Task<CheckedAnswer<CondaClean>>> _clean = new();
 
     public CondaCacheProvider(
         IUserEnvironment? environment = null,
@@ -188,8 +189,24 @@ public sealed class CondaCacheProvider : CleanupProviderBase
     {
         _conda.Forget();
         _installation.Forget();
+        _clean.Forget();
         base.InvalidateCaches();
     }
+
+    /// <summary>
+    /// Both of conda's answers, asked as the pass begins: where its caches are, then what its own clean
+    /// would remove from them. conda is a Python program, slow to start, and its two questions in series
+    /// are a warm pass's longest tool chain.
+    /// </summary>
+    public override Task BeginPass(PassStart start) =>
+        start.Ask(async ct =>
+        {
+            if (FindConda() is { } conda
+                && await ResolveInstallationAsync(conda, ct).ConfigureAwait(false) is { } installation)
+            {
+                await ResolveCleanAsync(conda, installation, ct).ConfigureAwait(false);
+            }
+        });
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
@@ -205,29 +222,13 @@ public sealed class CondaCacheProvider : CleanupProviderBase
             return UnexaminedPlan("conda did not describe where its package caches are, so nothing is offered rather than guessed.");
         }
 
-        var caches = ReachedDirectories.Of(installation.PackageCacheDirs);
-        if (NothingToPlanFor(caches, "Conda is installed but has cached nothing yet.") is { } nothing)
+        if ((await ResolveCleanAsync(conda, installation, ct).ConfigureAwait(false)).Refused(out var refusal, out var clean))
         {
-            return nothing;
+            return refusal;
         }
 
+        var (caches, preview) = clean;
         var packageCaches = caches.Present;
-
-        var outcome = await Runner
-            .RunAsync(conda, CleanCategories + " --dry-run --json", ToolRun.Query, ct)
-            .ConfigureAwait(false);
-
-        // The report is the authority rather than the exit code: a conda dry run ends by raising
-        // an exit exception whose code has differed between versions, so a parseable, successful
-        // report is accepted from either.
-        var preview = CondaReport.TryReadCleanPreview(outcome.StandardOutput);
-        if (preview is null)
-        {
-            return UnexaminedPlan(
-                "conda did not report what its own clean command would remove, so nothing is "
-                + "offered — measuring the caches directly would count the packages your "
-                + "environments still use.");
-        }
 
         // Deguffer's own probe of the same directories, for the after-run delta. It is a far
         // larger number than the estimate, because it counts everything the environments link,
@@ -376,13 +377,8 @@ public sealed class CondaCacheProvider : CleanupProviderBase
         return roots.SelectMany(_ => products, (root, product) => Path.Combine(root, product));
     }
 
-    private async Task<CondaInstallation?> ResolveInstallationAsync(string conda, CancellationToken ct)
-    {
-        var installation = await _installation.Get(() => AskInstallationAsync(conda, ct)).ConfigureAwait(false);
-
-
-        return installation;
-    }
+    private Task<CondaInstallation?> ResolveInstallationAsync(string conda, CancellationToken ct) =>
+        _installation.Get(() => AskInstallationAsync(conda, ct));
 
     private async Task<CondaInstallation?> AskInstallationAsync(string conda, CancellationToken ct)
     {
@@ -392,6 +388,42 @@ public sealed class CondaCacheProvider : CleanupProviderBase
             ? CondaReport.TryReadInstallation(outcome.StandardOutput)
             : null;
     }
+
+    private Task<CheckedAnswer<CondaClean>> ResolveCleanAsync(string conda, CondaInstallation installation, CancellationToken ct) =>
+        _clean.Get(() => AskCleanAsync(conda, installation, ct));
+
+    /// <summary>
+    /// conda's dry run, asked only where a package cache it named is there, so a conda that has cached
+    /// nothing is not started a second time to say so.
+    /// </summary>
+    private async Task<CheckedAnswer<CondaClean>> AskCleanAsync(string conda, CondaInstallation installation, CancellationToken ct)
+    {
+        var caches = ReachedDirectories.Of(installation.PackageCacheDirs);
+        if (NothingToPlanFor(caches, "Conda is installed but has cached nothing yet.") is { } nothing)
+        {
+            return nothing;
+        }
+
+        var outcome = await Runner
+            .RunAsync(conda, CleanCategories + " --dry-run --json", ToolRun.Query, ct)
+            .ConfigureAwait(false);
+
+        // The report is the authority rather than the exit code: a conda dry run ends by raising
+        // an exit exception whose code has differed between versions, so a parseable, successful
+        // report is accepted from either.
+        if (CondaReport.TryReadCleanPreview(outcome.StandardOutput) is not { } preview)
+        {
+            return UnexaminedPlan(
+                "conda did not report what its own clean command would remove, so nothing is "
+                + "offered — measuring the caches directly would count the packages your "
+                + "environments still use.");
+        }
+
+        return new CondaClean(caches, preview);
+    }
+
+    /// <summary>The package caches conda named, as Windows described them, and its dry run over them.</summary>
+    private sealed record CondaClean(ReachedDirectories Caches, CondaCleanPreview Preview);
 
     private static string Describe(IReadOnlyList<string> paths) =>
         string.Join(", ", paths.Select(LongPath.Display));

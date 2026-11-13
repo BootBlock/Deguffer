@@ -19,16 +19,16 @@ namespace Deguffer.Core.VirtualDisks;
 /// <para><b>Hyper-V's answer is only an answer to an account it trusts.</b> Every Hyper-V cmdlet refused an
 /// account that is neither elevated nor in Hyper-V Administrators where the survey measured it, and a
 /// third-party write-up (Altaro, <c>altaro.com/hyper-v/?p=21601</c>) reports <c>Get-VM</c> returning no
-/// machines at all, rather than failing, for such an account. So the query asks first whether this account
-/// is either, and an account that is not is told that whether it has machines is not known, never that it
-/// has none.</para>
+/// machines at all, rather than failing, for such an account. So this process's own token is asked first
+/// whether it is either (<see cref="IUserEnvironment.IsHyperVAdministrator"/>), and an account that is not
+/// is told that whether it has machines is not known, never that it has none, with nothing started.</para>
 /// </summary>
-public sealed class HyperVMachines(ISystemDirectories system, IProcessRunner runner)
+public sealed class HyperVMachines(ISystemDirectories system, IUserEnvironment environment, IProcessRunner runner)
 {
     /// <summary>
-    /// The query, in Windows PowerShell 5.1. It writes one JSON object: <c>allowed</c> false for an account
-    /// Hyper-V would not answer, an <c>error</c> where Hyper-V failed, or each machine. S-1-5-32-578 is the
-    /// well-known identifier of Hyper-V Administrators. Every array is built with <c>@()</c> and the object
+    /// The query, in Windows PowerShell 5.1. It writes one JSON object: an <c>error</c> where Hyper-V
+    /// failed, or each machine. It is run only for an account Hyper-V answers, and Windows PowerShell runs
+    /// with this process's token, so it does not ask again. Every array is built with <c>@()</c> and the object
     /// is passed rather than piped, because Windows PowerShell's <c>ConvertTo-Json</c> otherwise writes a
     /// list of one as that one, and nothing at all for an empty list piped to it. A parent that will not
     /// be read is listed under <c>unfollowed</c>, so a chain cut short is said rather than hidden.
@@ -37,10 +37,6 @@ public sealed class HyperVMachines(ISystemDirectories system, IProcessRunner run
         """
         $ErrorActionPreference = 'Stop'
         [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
-        $principal = New-Object Security.Principal.WindowsPrincipal ([Security.Principal.WindowsIdentity]::GetCurrent())
-        $allowed = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) -or
-            $principal.IsInRole((New-Object Security.Principal.SecurityIdentifier 'S-1-5-32-578'))
-        if (-not $allowed) { ConvertTo-Json -InputObject ([pscustomobject]@{ allowed = $false }) -Compress; exit 0 }
         try {
             $machines = @(foreach ($vm in @(Get-VM)) {
                 $attached = @(Get-VMHardDiskDrive -VM $vm | Where-Object { $_.Path } | ForEach-Object { [string]$_.Path })
@@ -60,9 +56,9 @@ public sealed class HyperVMachines(ISystemDirectories system, IProcessRunner run
                     name = [string]$vm.Name; state = [string]$vm.State; checkpoints = $checkpoints.Count
                     attached = $attached; kept = @($kept + $parents); unfollowed = $unfollowed }
             })
-            ConvertTo-Json -InputObject ([pscustomobject]@{ allowed = $true; machines = $machines }) -Depth 4 -Compress
+            ConvertTo-Json -InputObject ([pscustomobject]@{ machines = $machines }) -Depth 4 -Compress
         } catch {
-            ConvertTo-Json -InputObject ([pscustomobject]@{ allowed = $true; error = [string]$_.Exception.Message }) -Compress
+            ConvertTo-Json -InputObject ([pscustomobject]@{ error = [string]$_.Exception.Message }) -Compress
         }
         """;
 
@@ -95,14 +91,22 @@ public sealed class HyperVMachines(ISystemDirectories system, IProcessRunner run
 
     /// <summary>
     /// Each machine's disks, or why Hyper-V would not say. Nothing is run where the module is not
-    /// installed, and a module folder Windows will not describe is asked anyway, because a refusal is not
-    /// an absence.
+    /// installed, or for an account Hyper-V would refuse, and a module folder Windows will not describe is
+    /// asked anyway, because a refusal is not an absence. The module comes first, so a machine without
+    /// Hyper-V's tools has no row for any account.
     /// </summary>
     public async Task<VirtualDiskInventory> ReadAsync(CancellationToken ct)
     {
         if (LongPath.ProbeDirectory(Module) == PathPresence.Absent)
         {
             return VirtualDiskInventory.Empty;
+        }
+
+        if (!environment.IsHyperVAdministrator)
+        {
+            return Problem(
+                "Hyper-V answers only an elevated PowerShell or a member of the Hyper-V Administrators group, and "
+                + $"Deguffer is running as neither, {Unanswered}");
         }
 
         var outcome = await runner.RunAsync(PowerShell, Arguments, Run, ct).ConfigureAwait(false);
@@ -127,16 +131,9 @@ public sealed class HyperVMachines(ISystemDirectories system, IProcessRunner run
             using var document = JsonDocument.Parse(answer);
             var root = document.RootElement;
 
-            if (root.ValueKind != JsonValueKind.Object || Property(root, "allowed") is not { } allowed)
+            if (root.ValueKind != JsonValueKind.Object)
             {
                 return Problem($"Hyper-V's answer could not be read, {Unanswered}");
-            }
-
-            if (allowed.ValueKind != JsonValueKind.True)
-            {
-                return Problem(
-                    "Hyper-V answers only an elevated PowerShell or a member of the Hyper-V Administrators group, and "
-                    + $"Deguffer is running as neither, {Unanswered}");
             }
 
             if (Text(root, "error") is { } error)
