@@ -17,6 +17,7 @@ internal sealed class YarnToolFixture : IDisposable
 {
     private readonly TempDirectory _temp = new();
     private readonly ManualTimeProvider _clock = new();
+    private int _since;
 
     public YarnToolFixture()
     {
@@ -70,7 +71,36 @@ internal sealed class YarnToolFixture : IDisposable
     /// <summary>What a Yarn 1 clean does when it runs, beyond being recorded.</summary>
     public Action<string>? OnClean { get; set; }
 
-    public int Asked(string arguments) => Runner.Invocations.Count(i => i.Arguments == arguments);
+    /// <summary>The memory's key for which Yarn runs, the question both rows share.</summary>
+    public string VersionKey => $"-v;config get yarn-path;config get yarnPath --json|{Yarn}";
+
+    /// <summary>The memory's key for where Yarn 1 keeps its cache.</summary>
+    public string ClassicKey => $"cache dir|{Yarn}";
+
+    /// <summary>The memory's key for Berry's settings.</summary>
+    public string BerryKey => $"config get globalFolder enableCacheClean --json|{Yarn}";
+
+    /// <summary>How often Yarn was asked <paramref name="arguments"/> since its answers were last trusted.</summary>
+    public int Asked(string arguments) => Runner.Invocations.Skip(_since).Count(i => i.Arguments == arguments);
+
+    /// <summary>
+    /// Runs <paramref name="pass"/> until the answers to <paramref name="keys"/> are trusted: the first
+    /// holds them, the second confirms them, and a third with nothing changed must start nothing. The
+    /// counts then start again, so a test counts only what its change asked.
+    /// </summary>
+    /// <param name="pass">One pass, its provider's caches invalidated first.</param>
+    public async Task TrustAsync(Func<Task> pass, params string[] keys)
+    {
+        await pass();
+        await pass();
+        Assert.All(keys, key => Assert.True(Memory.Holds(key), key));
+
+        var started = Runner.Invocations.Count;
+        await pass();
+        Assert.Equal(started, Runner.Invocations.Count);
+
+        _since = Runner.Invocations.Count;
+    }
 
     public void Dispose() => _temp.Dispose();
 

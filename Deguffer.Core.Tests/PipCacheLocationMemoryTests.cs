@@ -12,6 +12,10 @@ namespace Deguffer.Core.Tests;
 /// <para>The pip here is a real launcher in the temp tree naming a real interpreter file, because the
 /// launcher is how the provider learns <c>sys.prefix</c>, and a launcher it cannot read is never
 /// remembered.</para>
+///
+/// <para>Each "asks again" case starts from a trusted answer (<see cref="TrustAsync"/>), so only the
+/// change it names can explain the ask, and each "not kept" case asks three times, because a kept
+/// answer would be confirmed by the second ask and served to the third.</para>
 /// </summary>
 public sealed class PipCacheLocationMemoryTests : IDisposable
 {
@@ -25,6 +29,7 @@ public sealed class PipCacheLocationMemoryTests : IDisposable
     private readonly string _interpreter;
     private string _answer;
     private int _exitCode;
+    private int _since;
 
     public PipCacheLocationMemoryTests()
     {
@@ -54,7 +59,10 @@ public sealed class PipCacheLocationMemoryTests : IDisposable
 
     public void Dispose() => _temp.Dispose();
 
-    private int LocationQueries => _runner.Invocations.Count(i => i.Arguments.Contains("cache dir", StringComparison.Ordinal));
+    /// <summary>How often pip was asked where its cache is since its answer was last trusted.</summary>
+    private int LocationQueries => _runner.Invocations.Skip(_since).Count(i => i.Arguments.Contains("cache dir", StringComparison.Ordinal));
+
+    private string Key => $"cache dir --no-color|{_pip}";
 
     private PipCacheProvider CreateProvider() =>
         new(_environment, _runner, FakeProcessInspector.NothingRunning, scanner: null, _system, _memory);
@@ -69,6 +77,36 @@ public sealed class PipCacheLocationMemoryTests : IDisposable
     {
         provider.InvalidateCaches();
         await provider.PlanAsync();
+    }
+
+    /// <summary>
+    /// Passes until pip's answer is trusted: the first holds it, the second confirms it, and a third
+    /// with nothing changed must ask nothing. The count then starts again.
+    /// </summary>
+    private async Task TrustAsync(PipCacheProvider provider)
+    {
+        await provider.PlanAsync();
+        await SecondPassAsync(provider);
+        Assert.True(_memory.Holds(Key));
+
+        await SecondPassAsync(provider);
+        Assert.Equal(2, LocationQueries);
+
+        _since = _runner.Invocations.Count;
+    }
+
+    /// <summary>
+    /// Three passes that each ask: a kept answer would have been confirmed by the second and served to
+    /// the third.
+    /// </summary>
+    private async Task AssertNeverKeptAsync(PipCacheProvider provider)
+    {
+        await provider.PlanAsync();
+        await SecondPassAsync(provider);
+        await SecondPassAsync(provider);
+
+        Assert.Equal(3, LocationQueries);
+        Assert.False(_memory.Holds(Key));
     }
 
     /// <summary>
@@ -88,14 +126,17 @@ public sealed class PipCacheLocationMemoryTests : IDisposable
     }
 
     [Fact]
-    public async Task ASecondPassWithNothingChangedStartsNoLocationQuery()
+    public async Task APassOnceTheAnswerIsConfirmedWithNothingChangedStartsNoLocationQuery()
     {
         var provider = CreateProvider();
         await provider.PlanAsync();
+        Assert.False(_memory.Holds(Key));
+        await SecondPassAsync(provider);
+        Assert.True(_memory.Holds(Key));
 
         await SecondPassAsync(provider);
 
-        Assert.Equal(1, LocationQueries);
+        Assert.Equal(2, LocationQueries);
     }
 
     /// <summary>Each place pip reads its configuration or its code from, relative to the temp tree.</summary>
@@ -119,24 +160,24 @@ public sealed class PipCacheLocationMemoryTests : IDisposable
     public async Task ChangingADeclaredInputAsksAgain(string relative, InputChange change)
     {
         var provider = CreateProvider();
-        await provider.PlanAsync();
+        await TrustAsync(provider);
 
         Apply(Path.Combine(_temp.Path, relative), change);
         await SecondPassAsync(provider);
 
-        Assert.Equal(2, LocationQueries);
+        Assert.Equal(1, LocationQueries);
     }
 
     [Fact]
     public async Task AVariableSetInTheToolEnvironmentAsksAgain()
     {
         var provider = CreateProvider();
-        await provider.PlanAsync();
+        await TrustAsync(provider);
 
         _environment.WithToolEnvironmentVariable("PIP_CACHE_DIR", Path.Combine(_temp.Path, "elsewhere"));
         await SecondPassAsync(provider);
 
-        Assert.Equal(2, LocationQueries);
+        Assert.Equal(1, LocationQueries);
     }
 
     [Fact]
@@ -145,27 +186,25 @@ public sealed class PipCacheLocationMemoryTests : IDisposable
         var named = _temp.CreateFile(16, "named", "pip.ini");
         _environment.WithEnvironmentVariable("PIP_CONFIG_FILE", named);
         var provider = CreateProvider();
-        await provider.PlanAsync();
-        await SecondPassAsync(provider);
-        Assert.Equal(1, LocationQueries);
+        await TrustAsync(provider);
 
         File.WriteAllText(named, "[global]\ncache-dir = elsewhere\n");
         await SecondPassAsync(provider);
 
-        Assert.Equal(2, LocationQueries);
+        Assert.Equal(1, LocationQueries);
     }
 
     [Fact]
     public async Task ReplacingTheExecutableAsksAgain()
     {
         var provider = CreateProvider();
-        await provider.PlanAsync();
+        await TrustAsync(provider);
 
         // The same interpreter, so only the launcher itself says pip was reinstalled.
         DistlibLaunchers.Write(_pip, _interpreter);
         await SecondPassAsync(provider);
 
-        Assert.Equal(2, LocationQueries);
+        Assert.Equal(1, LocationQueries);
     }
 
     /// <summary>
@@ -176,12 +215,8 @@ public sealed class PipCacheLocationMemoryTests : IDisposable
     public async Task AnswerFromALauncherNamingNoInterpreterIsNotKept()
     {
         File.WriteAllText(_pip, "@echo off\r\npython -m pip %*\r\n");
-        var provider = CreateProvider();
-        await provider.PlanAsync();
 
-        await SecondPassAsync(provider);
-
-        Assert.Equal(2, LocationQueries);
+        await AssertNeverKeptAsync(CreateProvider());
     }
 
     /// <summary>
@@ -194,38 +229,30 @@ public sealed class PipCacheLocationMemoryTests : IDisposable
         var marker = _temp.CreateFile(16, "pyvenv.cfg");
         using var denied = DeniedDirectory.WithUnreadableFile(marker);
         Assert.Equal(PathPresence.Refused, InputStamp.Of(marker).Presence);
-        var provider = CreateProvider();
-        await provider.PlanAsync();
 
-        await SecondPassAsync(provider);
-
-        Assert.Equal(2, LocationQueries);
+        await AssertNeverKeptAsync(CreateProvider());
     }
 
     [Fact]
     public async Task AnAnswerPipDidNotGiveIsNotKept()
     {
         _exitCode = 1;
-        var provider = CreateProvider();
-        await provider.PlanAsync();
 
-        await SecondPassAsync(provider);
-
-        Assert.Equal(2, LocationQueries);
+        await AssertNeverKeptAsync(CreateProvider());
     }
 
     /// <summary>
-    /// Explore builds fresh providers for each policy, so the answer one heard must reach the next
-    /// through the memory they share.
+    /// Explore builds fresh providers for each policy, so the answer one heard and confirmed must reach
+    /// the next through the memory they share.
     /// </summary>
     [Fact]
     public async Task ASecondProviderOnTheSameMemoryAnswersWhereItCleansWithoutAsking()
     {
-        await CreateProvider().PlanAsync();
+        await TrustAsync(CreateProvider());
 
         var places = await CreateProvider().CleanedPlacesAsync();
 
-        Assert.Equal(1, LocationQueries);
+        Assert.Equal(0, LocationQueries);
         Assert.Contains(places, place => place.Path == _answer);
     }
 
@@ -239,7 +266,7 @@ public sealed class PipCacheLocationMemoryTests : IDisposable
     {
         var provider = CreateProvider();
         var first = _answer;
-        await provider.PlanAsync();
+        await TrustAsync(provider);
 
         var roamingConfig = Path.Combine(_environment.RoamingAppData, "pip", "pip.ini");
         _answer = CreateCache("moved-cache");
@@ -247,7 +274,7 @@ public sealed class PipCacheLocationMemoryTests : IDisposable
         provider.InvalidateCaches();
         var plan = await provider.PlanAsync();
 
-        Assert.Equal(2, LocationQueries);
+        Assert.Equal(1, LocationQueries);
         Assert.Empty(plan.TargetedPaths);
         Assert.Equal([_answer], Assert.Single(plan.Steps.OfType<RunCommandStep>()).MeasuredPaths);
         Assert.DoesNotContain(plan.Steps.OfType<RunCommandStep>(), step => step.MeasuredPaths.Contains(first));

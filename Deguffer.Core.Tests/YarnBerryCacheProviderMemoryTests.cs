@@ -10,6 +10,9 @@ namespace Deguffer.Core.Tests;
 /// Berry's answer about where its global folder is outlives a pass for what the row declares, while
 /// everything Yarn read to give it is unchanged (#447). The plan deletes by path under that folder
 /// (§5.2), so it asks Berry afresh every time, whatever the memory holds.
+///
+/// <para>Each "asks again" case starts from trusted answers (<see cref="TrustAsync"/>), so only the
+/// change it names can explain the ask.</para>
 /// </summary>
 public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
 {
@@ -31,6 +34,35 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
     private FakeUserEnvironment Environment => _yarn.Environment;
 
     private int Asked => _yarn.Asked("config get globalFolder --json");
+
+    /// <summary>Asks where the row cleans until which Yarn runs and Berry's settings are both trusted.</summary>
+    private Task TrustAsync(YarnBerryCacheProvider provider) =>
+        _yarn.TrustAsync(
+            async () =>
+            {
+                provider.InvalidateCaches();
+                await provider.CleanedPlacesAsync();
+            },
+            _yarn.VersionKey,
+            _yarn.BerryKey);
+
+    /// <summary>
+    /// Three passes over what the row declares, each asking which Yarn runs and Berry's settings: a
+    /// kept answer would have been confirmed by the second and served to the third.
+    /// </summary>
+    private async Task AssertNeverKeptAsync(YarnBerryCacheProvider provider)
+    {
+        await provider.CleanedPlacesAsync();
+        provider.InvalidateCaches();
+        await provider.CleanedPlacesAsync();
+        provider.InvalidateCaches();
+        await provider.CleanedPlacesAsync();
+
+        Assert.Equal(3, _yarn.Asked("-v"));
+        Assert.Equal(3, Asked);
+        Assert.False(_yarn.Memory.Holds(_yarn.VersionKey));
+        Assert.False(_yarn.Memory.Holds(_yarn.BerryKey));
+    }
 
     private static string WorkingFolder => Path.Combine("AppData", "Local", "Deguffer", "tool-working-directory");
 
@@ -54,17 +86,22 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
     ];
 
     [Fact]
-    public async Task ASecondPassAfterInvalidationWithNothingChangedStartsNoQueryForWhatTheRowDeclares()
+    public async Task APassOnceTheAnswersAreConfirmedWithNothingChangedStartsNoQueryForWhatTheRowDeclares()
     {
         var provider = Provider();
 
         await provider.CleanedPlacesAsync();
+        Assert.False(_yarn.Memory.Holds(_yarn.BerryKey));
+        provider.InvalidateCaches();
+        await provider.CleanedPlacesAsync();
+        Assert.True(_yarn.Memory.Holds(_yarn.VersionKey));
+        Assert.True(_yarn.Memory.Holds(_yarn.BerryKey));
         provider.InvalidateCaches();
         var places = await provider.CleanedPlacesAsync();
         var roots = await provider.DiscoverToolRootsAsync();
 
-        Assert.Equal(1, Asked);
-        Assert.Equal(1, _yarn.Asked("-v"));
+        Assert.Equal(2, Asked);
+        Assert.Equal(2, _yarn.Asked("-v"));
         Assert.Contains(places, p => p.Path == Path.Combine(_first, "cache"));
         Assert.Contains(roots, r => r.Path == _first);
     }
@@ -78,14 +115,8 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
     public async Task ABerryAnswerIsNotKeptWhileAYarn1RcFileCouldHaveHandedYarnOn()
     {
         _yarn.Write(".yarnrc");
-        var provider = Provider();
 
-        await provider.CleanedPlacesAsync();
-        provider.InvalidateCaches();
-        await provider.CleanedPlacesAsync();
-
-        Assert.Equal(2, _yarn.Asked("-v"));
-        Assert.Equal(2, Asked);
+        await AssertNeverKeptAsync(Provider());
     }
 
     /// <summary>
@@ -97,13 +128,8 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
     {
         _yarn.Environment.WithEnvironmentVariable("YARN_RC_FILENAME", ".berryrc.yml");
         _yarn.Write(".yarnrc.yml");
-        var provider = Provider();
 
-        await provider.CleanedPlacesAsync();
-        provider.InvalidateCaches();
-        await provider.CleanedPlacesAsync();
-
-        Assert.Equal(2, _yarn.Asked("-v"));
+        await AssertNeverKeptAsync(Provider());
     }
 
     /// <summary>Both settings are asked together, so a miss costs one round of waiting.</summary>
@@ -128,13 +154,14 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
     {
         _yarn.Version = "1.22.22";
         var provider = Provider();
+        await TrustYarn1Async(provider);
         Assert.Empty(await provider.DiscoverToolRootsAsync());
 
         _yarn.ReplaceScript("4.18.1");
         provider.InvalidateCaches();
         var roots = await provider.DiscoverToolRootsAsync();
 
-        Assert.Equal(2, _yarn.Asked("-v"));
+        Assert.Equal(1, _yarn.Asked("-v"));
         Assert.Equal(1, Asked);
         Assert.Contains(roots, r => r.Path == _first);
     }
@@ -148,23 +175,22 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
     {
         _yarn.Version = "1.22.22";
         var provider = Provider();
-        await provider.DiscoverToolRootsAsync();
-        Assert.True(_yarn.Memory.Holds($"-v;config get yarn-path;config get yarnPath --json|{_yarn.Yarn}"));
+        await TrustYarn1Async(provider);
 
         _yarn.Version = "4.18.1";
         var plan = await provider.PlanAsync();
 
-        Assert.Equal(2, _yarn.Asked("-v"));
+        Assert.Equal(1, _yarn.Asked("-v"));
         Assert.Equal([Path.Combine(_first, "cache")], plan.Steps.OfType<DeleteDirectoryStep>().Select(s => s.Path));
     }
 
     /// <summary>
-    /// Explore builds a fresh set of providers for each policy. The second build is answered from the
-    /// memory the first filled, and still refuses the global folder Berry reported and everything in it
-    /// beside the cache.
+    /// Explore builds a fresh set of providers for each policy. The first build holds Yarn's answers
+    /// and the second confirms them; a third is answered from the memory they filled, and still refuses
+    /// the global folder Berry reported and everything in it beside the cache.
     /// </summary>
     [Fact]
-    public async Task ASecondExploreBuildAnswersFromMemoryWithoutAskingYarn()
+    public async Task AnExploreBuildOnceTheAnswersAreConfirmedAnswersFromMemoryWithoutAskingYarn()
     {
         var global = Path.Combine(Environment.UserProfile, "berry-global");
         YarnToolFixture.WriteAt(global, "cache", Archive);
@@ -172,14 +198,19 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
         _yarn.BerryGlobalFolder = global;
 
         var first = await ExploreActionPolicy.ForAsync(_yarn.System, Environment, new FakeVolumeInventory(), [Provider()]);
-        var second = await ExploreActionPolicy.ForAsync(_yarn.System, Environment, new FakeVolumeInventory(), [Provider()]);
+        await ExploreActionPolicy.ForAsync(_yarn.System, Environment, new FakeVolumeInventory(), [Provider()]);
+        Assert.True(_yarn.Memory.Holds(_yarn.VersionKey));
+        Assert.True(_yarn.Memory.Holds(_yarn.BerryKey));
+        Assert.Equal(2, Asked);
 
-        Assert.Equal(1, Asked);
-        Assert.Equal(1, _yarn.Asked("-v"));
+        var third = await ExploreActionPolicy.ForAsync(_yarn.System, Environment, new FakeVolumeInventory(), [Provider()]);
+
+        Assert.Equal(2, Asked);
+        Assert.Equal(2, _yarn.Asked("-v"));
         Assert.False(first.MayRemove(global).IsAllowed);
-        Assert.False(second.MayRemove(global).IsAllowed);
+        Assert.False(third.MayRemove(global).IsAllowed);
         Assert.Contains("This is the global folder of Yarn 2", first.MayRemove(Path.Combine(global, "store")).Reason, StringComparison.Ordinal);
-        Assert.Contains("This is the global folder of Yarn 2", second.MayRemove(Path.Combine(global, "store")).Reason, StringComparison.Ordinal);
+        Assert.Contains("This is the global folder of Yarn 2", third.MayRemove(Path.Combine(global, "store")).Reason, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -188,12 +219,12 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
     {
         var provider = Provider();
 
-        await provider.CleanedPlacesAsync();
+        await TrustAsync(provider);
         provider.InvalidateCaches();
         _yarn.Change(input);
         await provider.CleanedPlacesAsync();
 
-        Assert.Equal(2, Asked);
+        Assert.Equal(1, Asked);
     }
 
     [Theory]
@@ -204,12 +235,12 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
     {
         var provider = Provider();
 
-        await provider.CleanedPlacesAsync();
+        await TrustAsync(provider);
         provider.InvalidateCaches();
         File.Delete(Path.Combine(Environment.UserProfile, input));
         await provider.CleanedPlacesAsync();
 
-        Assert.Equal(2, Asked);
+        Assert.Equal(1, Asked);
     }
 
     /// <summary>A renamed rc file is read in place of <c>.yarnrc.yml</c>, so writing it asks again.</summary>
@@ -221,16 +252,13 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
         Environment.WithEnvironmentVariable("YARN_RC_FILENAME", "custom.yml");
         var provider = Provider();
 
-        await provider.CleanedPlacesAsync();
-        provider.InvalidateCaches();
-        await provider.CleanedPlacesAsync();
-        Assert.Equal(1, Asked);
+        await TrustAsync(provider);
 
         provider.InvalidateCaches();
         _yarn.Change(input);
         await provider.CleanedPlacesAsync();
 
-        Assert.Equal(2, Asked);
+        Assert.Equal(1, Asked);
     }
 
     [Fact]
@@ -238,12 +266,12 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
     {
         var provider = Provider();
 
-        await provider.CleanedPlacesAsync();
+        await TrustAsync(provider);
         provider.InvalidateCaches();
         Environment.WithToolEnvironmentVariable("YARN_GLOBAL_FOLDER", Path.Combine(_yarn.Temp, "elsewhere"));
         await provider.CleanedPlacesAsync();
 
-        Assert.Equal(2, Asked);
+        Assert.Equal(1, Asked);
     }
 
     [Fact]
@@ -251,36 +279,38 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
     {
         var provider = Provider();
 
-        await provider.CleanedPlacesAsync();
+        await TrustAsync(provider);
         provider.InvalidateCaches();
         _yarn.ReplaceYarn();
         await provider.CleanedPlacesAsync();
 
-        Assert.Equal(2, Asked);
-        Assert.Equal(2, _yarn.Asked("-v"));
+        Assert.Equal(1, Asked);
+        Assert.Equal(1, _yarn.Asked("-v"));
     }
 
     /// <summary>
-    /// Explore builds a fresh set of providers for each policy. The second asks nothing, because the
-    /// answer is kept by the memory of the runner they share, not by the provider that asked.
+    /// Explore builds a fresh set of providers for each policy. Once the answers are confirmed, another
+    /// asks nothing, because they are kept by the memory of the runner they share, not by the provider
+    /// that asked.
     /// </summary>
     [Fact]
     public async Task ASecondProviderOnTheSameMemoryAnswersWithoutAsking()
     {
-        await Provider().DiscoverToolRootsAsync();
+        await TrustAsync(Provider());
         var second = Provider();
         var roots = await second.DiscoverToolRootsAsync();
         var places = await second.CleanedPlacesAsync();
 
-        Assert.Equal(1, Asked);
-        Assert.Equal(1, _yarn.Asked("-v"));
+        Assert.Equal(0, Asked);
+        Assert.Equal(0, _yarn.Asked("-v"));
         Assert.Contains(roots, r => r.Path == _first);
         Assert.Contains(places, p => p.Path == Path.Combine(_first, "cache"));
     }
 
     /// <summary>
-    /// Both rows ask which Yarn runs through one question, so Yarn 1's plan and what Berry's row declares
-    /// start <c>yarn -v</c> once between them. Berry's plan asks afresh, which the test above covers.
+    /// Both rows ask which Yarn runs through one question, declaring the same inputs, so the answer Yarn
+    /// 1's plan holds is the one what Berry's row declares confirms, and neither row starts
+    /// <c>yarn -v</c> again. Berry's plan asks afresh, which the test above covers.
     /// </summary>
     [Fact]
     public async Task BothRowsShareOneVersionQuestion()
@@ -292,13 +322,15 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
         var berry = Provider();
 
         await classic.PlanAsync();
+        Assert.False(_yarn.Memory.Holds(_yarn.VersionKey));
         await berry.CleanedPlacesAsync();
+        Assert.True(_yarn.Memory.Holds(_yarn.VersionKey));
         classic.InvalidateCaches();
         berry.InvalidateCaches();
         await berry.DiscoverToolRootsAsync();
         await classic.PlanAsync();
 
-        Assert.Equal(1, _yarn.Asked("-v"));
+        Assert.Equal(2, _yarn.Asked("-v"));
     }
 
     /// <summary>
@@ -337,13 +369,21 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
         Assert.True(File.Exists(Path.Combine(_first, "cache", Archive)));
     }
 
+    /// <summary>
+    /// The failure comes after trusted answers, from an ask replacing Yarn forced, so a failure kept as
+    /// an answer would read the same inputs before and after and be served to the next pass.
+    /// </summary>
     [Fact]
     public async Task AFailedLocationQueryIsNotKept()
     {
-        _yarn.LocationFails = true;
         var provider = Provider();
+        await TrustAsync(provider);
 
+        _yarn.ReplaceYarn();
+        _yarn.LocationFails = true;
+        provider.InvalidateCaches();
         await provider.CleanedPlacesAsync();
+        Assert.False(_yarn.Memory.Holds(_yarn.BerryKey));
         provider.InvalidateCaches();
         await provider.CleanedPlacesAsync();
 
@@ -352,19 +392,25 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
 
     /// <summary>
     /// A failed script question leaves a script in use that no input names: which Yarn runs and the
-    /// global folder are used and asked again next time.
+    /// global folder are used and asked again next time. The failure comes after trusted answers, from
+    /// an ask replacing Yarn forced, so only the failed script question can refuse them.
     /// </summary>
     [Fact]
     public async Task AFailedScriptQueryIsUsedButNotKept()
     {
-        _yarn.ScriptFails = true;
         var provider = Provider();
+        await TrustAsync(provider);
 
-        var first = await provider.CleanedPlacesAsync();
+        _yarn.ReplaceYarn();
+        _yarn.ScriptFails = true;
+        provider.InvalidateCaches();
+        var failed = await provider.CleanedPlacesAsync();
+        Assert.False(_yarn.Memory.Holds(_yarn.VersionKey));
+        Assert.False(_yarn.Memory.Holds(_yarn.BerryKey));
         provider.InvalidateCaches();
         await provider.CleanedPlacesAsync();
 
-        Assert.Contains(first, p => p.Path == Path.Combine(_first, "cache"));
+        Assert.Contains(failed, p => p.Path == Path.Combine(_first, "cache"));
         Assert.Equal(2, Asked);
         Assert.Equal(2, _yarn.Asked("-v"));
     }
@@ -378,8 +424,7 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
     public async Task ThePlanAsksAfreshEvenWhenTheMemoryHoldsTheAnswer()
     {
         var provider = Provider();
-        await provider.DiscoverToolRootsAsync();
-        Assert.True(_yarn.Memory.Holds($"config get globalFolder enableCacheClean --json|{_yarn.Yarn}"));
+        await TrustAsync(provider);
 
         var moved = Path.Combine(_yarn.Temp, "caches", "berry-moved");
         YarnToolFixture.WriteAt(moved, "cache", Archive);
@@ -387,10 +432,23 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
 
         var plan = await provider.PlanAsync();
 
-        Assert.Equal(2, Asked);
+        Assert.Equal(1, Asked);
         Assert.Equal([Path.Combine(moved, "cache")], plan.Steps.OfType<DeleteDirectoryStep>().Select(s => s.Path));
         Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path.StartsWith(_first, StringComparison.OrdinalIgnoreCase));
     }
+
+    /// <summary>
+    /// Asks where the row cleans until which Yarn runs is trusted, for a Yarn 1 on the PATH, where the
+    /// row asks Berry's settings nothing.
+    /// </summary>
+    private Task TrustYarn1Async(YarnBerryCacheProvider provider) =>
+        _yarn.TrustAsync(
+            async () =>
+            {
+                provider.InvalidateCaches();
+                await provider.DiscoverToolRootsAsync();
+            },
+            _yarn.VersionKey);
 
     private YarnBerryCacheProvider Provider() =>
         new(Environment, _yarn.Runner, FakeProcessInspector.NothingRunning, system: _yarn.System, memory: _yarn.Memory);

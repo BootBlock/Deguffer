@@ -12,6 +12,9 @@ namespace Deguffer.Core.Tests;
 /// <para>The plan only runs npm's own clean (§5.1), so it plans from the remembered answer: a missed
 /// input could misstate the figure, never move what is removed. Each declared input still has a case
 /// here, because a missed one is a moved cache measured where npm no longer keeps it.</para>
+///
+/// <para>Each "asks again" case starts from a trusted answer (<see cref="TrustAsync"/>), so only the
+/// change it names can explain the ask.</para>
 /// </summary>
 public sealed class NpmCacheProviderMemoryTests : IDisposable
 {
@@ -22,6 +25,7 @@ public sealed class NpmCacheProviderMemoryTests : IDisposable
     private readonly FakeProcessRunner _runner = new();
     private readonly string _npm;
     private readonly string _cache;
+    private int _since;
 
     public NpmCacheProviderMemoryTests()
     {
@@ -69,16 +73,20 @@ public sealed class NpmCacheProviderMemoryTests : IDisposable
     ];
 
     [Fact]
-    public async Task ASecondPassAfterInvalidationWithNothingChangedStartsNoQuery()
+    public async Task APassOnceTheAnswerIsConfirmedWithNothingChangedStartsNoQuery()
     {
         var provider = Provider();
 
         await provider.PlanAsync();
+        Assert.False(_memory.Holds(Key));
         provider.InvalidateCaches();
-        var second = await provider.PlanAsync();
+        await provider.PlanAsync();
+        Assert.True(_memory.Holds(Key));
+        provider.InvalidateCaches();
+        var third = await provider.PlanAsync();
 
-        Assert.Equal(1, Asked);
-        Assert.Contains(second.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(Path.Combine(_cache, "_cacache")));
+        Assert.Equal(2, Asked);
+        Assert.Contains(third.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(Path.Combine(_cache, "_cacache")));
     }
 
     /// <summary>Writing an input that is there, or creating one that is not, asks npm again.</summary>
@@ -89,7 +97,7 @@ public sealed class NpmCacheProviderMemoryTests : IDisposable
         var path = Path.Combine(_environment.UserProfile, input);
         var provider = Provider();
 
-        await provider.PlanAsync();
+        await TrustAsync(provider);
         provider.InvalidateCaches();
 
         if (File.Exists(path))
@@ -107,7 +115,7 @@ public sealed class NpmCacheProviderMemoryTests : IDisposable
 
         await provider.PlanAsync();
 
-        Assert.Equal(2, Asked);
+        Assert.Equal(1, Asked);
     }
 
     [Theory]
@@ -118,12 +126,12 @@ public sealed class NpmCacheProviderMemoryTests : IDisposable
     {
         var provider = Provider();
 
-        await provider.PlanAsync();
+        await TrustAsync(provider);
         provider.InvalidateCaches();
         File.Delete(Path.Combine(_environment.UserProfile, input));
         await provider.PlanAsync();
 
-        Assert.Equal(2, Asked);
+        Assert.Equal(1, Asked);
     }
 
     [Fact]
@@ -131,12 +139,12 @@ public sealed class NpmCacheProviderMemoryTests : IDisposable
     {
         var provider = Provider();
 
-        await provider.PlanAsync();
+        await TrustAsync(provider);
         provider.InvalidateCaches();
         _environment.WithToolEnvironmentVariable("npm_config_cache", Path.Combine(_temp.Path, "elsewhere"));
         await provider.PlanAsync();
 
-        Assert.Equal(2, Asked);
+        Assert.Equal(1, Asked);
     }
 
     [Fact]
@@ -144,19 +152,20 @@ public sealed class NpmCacheProviderMemoryTests : IDisposable
     {
         var provider = Provider();
 
-        await provider.PlanAsync();
+        await TrustAsync(provider);
         provider.InvalidateCaches();
         var replacement = Path.Combine(_temp.Path, "npm.cmd.new");
         File.WriteAllText(replacement, "@echo a newer npm");
         File.Move(replacement, _npm, overwrite: true);
         await provider.PlanAsync();
 
-        Assert.Equal(2, Asked);
+        Assert.Equal(1, Asked);
     }
 
     /// <summary>
-    /// Explore builds a fresh set of providers for each policy. The second asks nothing, because the
-    /// answer is kept by the memory of the runner they share, not by the provider that asked.
+    /// Explore builds a fresh set of providers for each policy. Once the answer is confirmed, another
+    /// asks nothing, because the answer is kept by the memory of the runner they share, not by the
+    /// provider that asked.
     /// </summary>
     [Fact]
     public async Task ASecondProviderOnTheSameMemoryAnswersCleanedPlacesWithoutAsking()
@@ -165,9 +174,11 @@ public sealed class NpmCacheProviderMemoryTests : IDisposable
         _runner.Responding(_npm, "config get", NpmConfig(moved));
 
         await Provider().CleanedPlacesAsync();
+        await Provider().CleanedPlacesAsync();
+        Assert.True(_memory.Holds(Key));
         var places = await Provider().CleanedPlacesAsync();
 
-        Assert.Equal(1, Asked);
+        Assert.Equal(2, Asked);
         Assert.Contains(places, p => p.Path == Path.Combine(moved, "_cacache"));
     }
 
@@ -181,7 +192,7 @@ public sealed class NpmCacheProviderMemoryTests : IDisposable
     {
         var provider = Provider();
         var oldContent = Path.Combine(_cache, "_cacache", "content-v2", "blob");
-        await provider.PlanAsync();
+        await TrustAsync(provider);
 
         var moved = Path.Combine(_temp.Path, "elsewhere", "npm-cache");
         var npxPackage = WriteAt(moved, "_npx", "0123abcd", "node_modules", "tool.js");
@@ -204,6 +215,7 @@ public sealed class NpmCacheProviderMemoryTests : IDisposable
 
         var plan = await provider.PlanAsync();
 
+        Assert.Equal(1, Asked);
         var command = Assert.IsType<RunCommandStep>(Assert.Single(plan.Steps));
         Assert.Equal([Path.Combine(moved, "_cacache")], command.MeasuredPaths);
         Assert.Contains(plan.ProtectedPaths, p => p.Path == moved);
@@ -222,13 +234,21 @@ public sealed class NpmCacheProviderMemoryTests : IDisposable
         Assert.False(Directory.Exists(Path.Combine(moved, "_cacache")));
     }
 
+    /// <summary>
+    /// The failure comes after a trusted answer, from an ask an input change forced, so a failure kept
+    /// as an answer would read the same inputs before and after and be served to the next pass.
+    /// </summary>
     [Fact]
     public async Task AFailedQueryIsNotKept()
     {
-        _runner.Responding(_npm, "config get", NpmConfig(_cache), exitCode: 1);
         var provider = Provider();
+        await TrustAsync(provider);
 
+        File.AppendAllText(Path.Combine(_environment.UserProfile, ".npmrc"), "changed");
+        _runner.Responding(_npm, "config get", NpmConfig(_cache), exitCode: 1);
+        provider.InvalidateCaches();
         await provider.PlanAsync();
+        Assert.False(_memory.Holds(Key));
         provider.InvalidateCaches();
         await provider.PlanAsync();
 
@@ -237,7 +257,8 @@ public sealed class NpmCacheProviderMemoryTests : IDisposable
 
     /// <summary>
     /// An answer that leaves out a file npm reads names no file to watch, so a change to it would go
-    /// unnoticed: it is planned from and asked again.
+    /// unnoticed: it is planned from and asked again, each of three passes, where a kept answer would
+    /// have been confirmed by the second and served to the third.
     /// </summary>
     [Theory]
     [InlineData("prefix")]
@@ -252,12 +273,36 @@ public sealed class NpmCacheProviderMemoryTests : IDisposable
         var first = await provider.PlanAsync();
         provider.InvalidateCaches();
         await provider.PlanAsync();
+        provider.InvalidateCaches();
+        await provider.PlanAsync();
 
-        Assert.Equal(2, Asked);
+        Assert.Equal(3, Asked);
+        Assert.False(_memory.Holds(Key));
         Assert.Contains(first.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(Path.Combine(_cache, "_cacache")));
     }
 
-    private int Asked => _runner.Invocations.Count(i => i.Arguments.StartsWith("config get", StringComparison.Ordinal));
+    /// <summary>How often npm was asked where its cache is since its answer was last trusted.</summary>
+    private int Asked => _runner.Invocations.Skip(_since).Count(i => i.Arguments.StartsWith("config get", StringComparison.Ordinal));
+
+    private string Key => $"config get {NpmLocations.Keys}|{_npm}";
+
+    /// <summary>
+    /// Passes until npm's answer is trusted: the first holds it, the second confirms it, and a third
+    /// with nothing changed must ask nothing. The count then starts again.
+    /// </summary>
+    private async Task TrustAsync(NpmCacheProvider provider)
+    {
+        await provider.PlanAsync();
+        provider.InvalidateCaches();
+        await provider.PlanAsync();
+        Assert.True(_memory.Holds(Key));
+
+        provider.InvalidateCaches();
+        await provider.PlanAsync();
+        Assert.Equal(2, Asked);
+
+        _since = _runner.Invocations.Count;
+    }
 
     private NpmCacheProvider Provider() =>
         new(_environment, _runner, FakeProcessInspector.NothingRunning, null, _memory);

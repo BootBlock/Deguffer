@@ -13,7 +13,8 @@ namespace Deguffer.Core.Tests;
 ///
 /// <para>Every provider here shares one <see cref="ToolAnswerMemory"/> whose clock runs a minute ahead
 /// of the files the fixture writes, as a real ask starts long after a configuration file was saved, so
-/// an unchanged answer is always kept and only a changed input can explain a second ask.</para>
+/// an unchanged answer is always confirmed by the next ask. Each "asks again" case starts from trusted
+/// answers (<see cref="TrustAsync"/>), so only the change it names can explain the ask.</para>
 /// </summary>
 public sealed class PoetryLocationMemoryTests : IDisposable
 {
@@ -26,6 +27,7 @@ public sealed class PoetryLocationMemoryTests : IDisposable
     private readonly ToolAnswerMemory _memory;
     private readonly FakeProcessRunner _runner = new();
     private readonly string _poetry;
+    private int _since;
 
     public PoetryLocationMemoryTests()
     {
@@ -48,7 +50,11 @@ public sealed class PoetryLocationMemoryTests : IDisposable
 
     private string RoamingConfig => Path.Combine(_environment.RoamingAppData, "pypoetry", "config.toml");
 
-    private int Asked(string setting) => _runner.Invocations.Count(invocation => invocation.Arguments.StartsWith(setting, StringComparison.Ordinal));
+    /// <summary>How often Poetry was asked for <paramref name="setting"/> since its answers were last trusted.</summary>
+    private int Asked(string setting) =>
+        _runner.Invocations.Skip(_since).Count(invocation => invocation.Arguments.StartsWith(setting, StringComparison.Ordinal));
+
+    private string Key(string setting) => $"{setting}|{_poetry}";
 
     /// <summary>Poetry's answer from now on: its cache at <paramref name="cache"/>, the environments in it.</summary>
     private void Answering(string cache) =>
@@ -91,17 +97,41 @@ public sealed class PoetryLocationMemoryTests : IDisposable
         return roots[0].Path;
     }
 
+    /// <summary>
+    /// Passes until both of Poetry's answers are trusted: the first holds them, the second confirms
+    /// them, and a third with nothing changed must ask nothing. The counts then start again.
+    /// </summary>
+    private async Task TrustAsync(PoetryCacheProvider provider)
+    {
+        await DeclaredCacheAsync(provider);
+        provider.InvalidateCaches();
+        await DeclaredCacheAsync(provider);
+        Assert.True(_memory.Holds(Key(CacheDir)));
+        Assert.True(_memory.Holds(Key(VirtualenvsPath)));
+
+        provider.InvalidateCaches();
+        await DeclaredCacheAsync(provider);
+        Assert.Equal(2, Asked(CacheDir));
+        Assert.Equal(2, Asked(VirtualenvsPath));
+
+        _since = _runner.Invocations.Count;
+    }
+
     [Fact]
-    public async Task ASecondPassAfterAnInvalidationWithNothingChangedStartsNoLocationQuery()
+    public async Task APassOnceTheAnswersAreConfirmedWithNothingChangedStartsNoLocationQuery()
     {
         var provider = CreateProvider();
 
         await DeclaredCacheAsync(provider);
+        Assert.False(_memory.Holds(Key(CacheDir)));
+        provider.InvalidateCaches();
+        await DeclaredCacheAsync(provider);
+        Assert.True(_memory.Holds(Key(CacheDir)));
         provider.InvalidateCaches();
         var cache = await DeclaredCacheAsync(provider);
 
-        Assert.Equal(1, Asked(CacheDir));
-        Assert.Equal(1, Asked(VirtualenvsPath));
+        Assert.Equal(2, Asked(CacheDir));
+        Assert.Equal(2, Asked(VirtualenvsPath));
         Assert.Equal(DefaultCache, cache, StringComparer.OrdinalIgnoreCase);
     }
 
@@ -178,10 +208,7 @@ public sealed class PoetryLocationMemoryTests : IDisposable
         }
 
         var provider = CreateProvider();
-        await DeclaredCacheAsync(provider);
-        provider.InvalidateCaches();
-        await DeclaredCacheAsync(provider);
-        Assert.Equal(1, Asked(CacheDir));
+        await TrustAsync(provider);
 
         switch (change)
         {
@@ -197,55 +224,61 @@ public sealed class PoetryLocationMemoryTests : IDisposable
         provider.InvalidateCaches();
         await DeclaredCacheAsync(provider);
 
-        Assert.Equal(2, Asked(CacheDir));
-        Assert.Equal(2, Asked(VirtualenvsPath));
+        Assert.Equal(1, Asked(CacheDir));
+        Assert.Equal(1, Asked(VirtualenvsPath));
     }
 
     [Fact]
     public async Task AVariableSetInTheToolEnvironmentAsksAgain()
     {
         var provider = CreateProvider();
-        await DeclaredCacheAsync(provider);
+        await TrustAsync(provider);
 
         _environment.WithToolEnvironmentVariable("POETRY_CACHE_DIR", MovedCache);
         Answering(MovedCache);
         provider.InvalidateCaches();
 
         Assert.Equal(MovedCache, await DeclaredCacheAsync(provider), StringComparer.OrdinalIgnoreCase);
-        Assert.Equal(2, Asked(CacheDir));
+        Assert.Equal(1, Asked(CacheDir));
     }
 
     [Fact]
     public async Task TheExecutableReplacedAsksAgain()
     {
         var provider = CreateProvider();
-        await DeclaredCacheAsync(provider);
+        await TrustAsync(provider);
 
         File.WriteAllText(_poetry, "poetry 2.1, a newer build");
         provider.InvalidateCaches();
         await DeclaredCacheAsync(provider);
 
-        Assert.Equal(2, Asked(CacheDir));
+        Assert.Equal(1, Asked(CacheDir));
     }
 
     /// <summary>
-    /// Explore builds a fresh set of providers for each policy. The second build is answered from the
-    /// memory the first filled, and still refuses everything Poetry reported.
+    /// Explore builds a fresh set of providers for each policy. The first build holds Poetry's answers
+    /// and the second confirms them; a third is answered from the memory they filled, and still
+    /// refuses everything Poetry reported.
     /// </summary>
     [Fact]
-    public async Task ASecondExploreBuildAnswersFromMemoryWithoutAskingPoetry()
+    public async Task AnExploreBuildOnceTheAnswersAreConfirmedAnswersFromMemoryWithoutAskingPoetry()
     {
         CreateCache(MovedCache);
         Answering(MovedCache);
         var system = new FakeSystemDirectories(_temp.Path);
 
         var first = await ExploreActionPolicy.ForAsync(system, _environment, new FakeVolumeInventory(), [CreateProvider()]);
-        var second = CreateProvider();
-        var policy = await ExploreActionPolicy.ForAsync(system, _environment, new FakeVolumeInventory(), [second]);
-        var places = await second.CleanedPlacesAsync();
+        await ExploreActionPolicy.ForAsync(system, _environment, new FakeVolumeInventory(), [CreateProvider()]);
+        Assert.True(_memory.Holds(Key(CacheDir)));
+        Assert.True(_memory.Holds(Key(VirtualenvsPath)));
+        Assert.Equal(2, Asked(CacheDir));
 
-        Assert.Equal(1, Asked(CacheDir));
-        Assert.Equal(1, Asked(VirtualenvsPath));
+        var third = CreateProvider();
+        var policy = await ExploreActionPolicy.ForAsync(system, _environment, new FakeVolumeInventory(), [third]);
+        var places = await third.CleanedPlacesAsync();
+
+        Assert.Equal(2, Asked(CacheDir));
+        Assert.Equal(2, Asked(VirtualenvsPath));
         Assert.False(first.MayRemove(MovedCache).IsAllowed);
         Assert.False(policy.MayRemove(MovedCache).IsAllowed);
         Assert.False(policy.MayRemove(Path.Combine(MovedCache, "virtualenvs", "myproject-py3.12")).IsAllowed);
@@ -303,14 +336,22 @@ public sealed class PoetryLocationMemoryTests : IDisposable
 
     /// <summary>
     /// A failed <c>config cache-dir</c> is no answer, and the default it falls back to is not kept. The
-    /// environments' setting, which Poetry did answer, is a question of its own and is kept.
+    /// environments' setting, which Poetry did answer, is a question of its own and is kept. The
+    /// failure comes after trusted answers, from an ask an input change forced, so a failure kept as an
+    /// answer would read the same inputs before and after and be served to the next pass.
     /// </summary>
     [Fact]
     public async Task AFailedQueryIsNotKept()
     {
-        _runner.Responding(_poetry, CacheDir, string.Empty, exitCode: 1);
         var provider = CreateProvider();
+        await TrustAsync(provider);
+
+        Write(RoamingConfig, "[virtualenvs]");
+        _runner.Responding(_poetry, CacheDir, string.Empty, exitCode: 1);
+        provider.InvalidateCaches();
         Assert.Equal(DefaultCache, await DeclaredCacheAsync(provider), StringComparer.OrdinalIgnoreCase);
+        Assert.False(_memory.Holds(Key(CacheDir)));
+        Assert.True(_memory.Holds(Key(VirtualenvsPath)));
 
         Answering(MovedCache);
         provider.InvalidateCaches();
@@ -331,24 +372,24 @@ public sealed class PoetryLocationMemoryTests : IDisposable
     {
         CreateCache(MovedCache);
         var provider = CreateProvider();
-        await DeclaredCacheAsync(provider);
+        await TrustAsync(provider);
         provider.InvalidateCaches();
 
         // Moved by something no declared input records, and the declaration still reads the memory.
         Answering(MovedCache);
         Assert.Equal(DefaultCache, await DeclaredCacheAsync(provider), StringComparer.OrdinalIgnoreCase);
-        Assert.Equal(1, Asked(CacheDir));
+        Assert.Equal(0, Asked(CacheDir));
 
         var plan = await provider.PlanAsync();
 
-        Assert.Equal(2, Asked(CacheDir));
-        Assert.Equal(2, Asked(VirtualenvsPath));
+        Assert.Equal(1, Asked(CacheDir));
+        Assert.Equal(1, Asked(VirtualenvsPath));
         Assert.Equal([Path.Combine(MovedCache, "artifacts")], plan.TargetedPaths);
         Assert.DoesNotContain(plan.TargetedPaths, path => LongPath.Contains(DefaultCache, path));
 
         provider.InvalidateCaches();
 
         Assert.Equal(MovedCache, await DeclaredCacheAsync(provider), StringComparer.OrdinalIgnoreCase);
-        Assert.Equal(2, Asked(CacheDir));
+        Assert.Equal(1, Asked(CacheDir));
     }
 }

@@ -12,7 +12,9 @@ namespace Deguffer.Core.Tests;
 /// of its own, so an input dropped from <see cref="PnpmStoreAnswer.InputsFor"/> fails by name.
 ///
 /// <para>The clock the memory reads is an hour ahead of the fixture, as a real ask starts long after
-/// a configuration file was last saved, so an answer is kept rather than refused as read mid-write.</para>
+/// a configuration file was last saved, so an answer is confirmed by the next ask rather than refused
+/// as read mid-write. Each "asks again" case starts from a trusted answer (<see cref="TrustAsync"/>),
+/// so only the change it names can explain the ask.</para>
 /// </summary>
 public sealed class PnpmStoreProviderMemoryTests : IDisposable
 {
@@ -22,6 +24,7 @@ public sealed class PnpmStoreProviderMemoryTests : IDisposable
     private readonly ToolAnswerMemory _memory;
     private readonly string _pnpm;
     private readonly FakeProcessRunner _runner;
+    private int _since;
 
     public PnpmStoreProviderMemoryTests()
     {
@@ -59,9 +62,12 @@ public sealed class PnpmStoreProviderMemoryTests : IDisposable
 
     private string GlobalConfig => InProfile(Path.Combine("AppData", "Roaming", "npm", "etc", "npmrc"));
 
-    private int StoreAsks => _runner.Invocations.Count(i => i.Arguments == "store path");
+    /// <summary>How often pnpm was asked where its store is since its answer was last trusted.</summary>
+    private int StoreAsks => _runner.Invocations.Skip(_since).Count(i => i.Arguments == "store path");
 
-    private int GlobalConfigAsks => _runner.Invocations.Count(i => i.Arguments == "config get globalconfig");
+    private int GlobalConfigAsks => _runner.Invocations.Skip(_since).Count(i => i.Arguments == "config get globalconfig");
+
+    private string Key => $"store path, config get globalconfig|{_pnpm}";
 
     /// <summary>Every file pnpm reads with no variable moving it, relative to the profile.</summary>
     public static TheoryData<string, Change> DeclaredInputs() => Cases(
@@ -106,16 +112,20 @@ public sealed class PnpmStoreProviderMemoryTests : IDisposable
         Path.Combine("moved-corepack", "v1", "pnpm", "10.0.0"));
 
     [Fact]
-    public async Task ASecondPassWithNothingChangedStartsNoLocationQuery()
+    public async Task APassOnceTheAnswerIsConfirmedWithNothingChangedStartsNoLocationQuery()
     {
         var provider = CreateProvider();
 
         await provider.PlanAsync();
+        Assert.False(_memory.Holds(Key));
+        provider.InvalidateCaches();
+        await provider.PlanAsync();
+        Assert.True(_memory.Holds(Key));
         provider.InvalidateCaches();
         var plan = await provider.PlanAsync();
 
-        Assert.Equal(1, StoreAsks);
-        Assert.Equal(1, GlobalConfigAsks);
+        Assert.Equal(2, StoreAsks);
+        Assert.Equal(2, GlobalConfigAsks);
         Assert.Equal([Store], Assert.Single(plan.Steps.OfType<RunCommandStep>()).MeasuredPaths);
     }
 
@@ -141,20 +151,20 @@ public sealed class PnpmStoreProviderMemoryTests : IDisposable
     public async Task AVariableSetInTheToolEnvironmentAsksAgain()
     {
         var provider = CreateProvider();
-        await provider.PlanAsync();
+        await TrustAsync(provider);
 
         _environment.WithToolEnvironmentVariable("npm_config_store_dir", InProfile("elsewhere"));
         provider.InvalidateCaches();
         await provider.PlanAsync();
 
-        Assert.Equal(2, StoreAsks);
+        Assert.Equal(1, StoreAsks);
     }
 
     [Fact]
     public async Task TheExecutableReplacedAsksAgain()
     {
         var provider = CreateProvider();
-        await provider.PlanAsync();
+        await TrustAsync(provider);
 
         // A copy keeping the old file's size and last-write time, as an installer may leave it.
         var replacement = Path.Combine(_temp.Path, "pnpm.cmd.new");
@@ -166,7 +176,7 @@ public sealed class PnpmStoreProviderMemoryTests : IDisposable
         provider.InvalidateCaches();
         await provider.PlanAsync();
 
-        Assert.Equal(2, StoreAsks);
+        Assert.Equal(1, StoreAsks);
     }
 
     /// <summary>
@@ -180,14 +190,14 @@ public sealed class PnpmStoreProviderMemoryTests : IDisposable
         _environment.WithEnvironmentVariable("XDG_CONFIG_HOME", "relative-config");
         var provider = CreateProvider();
 
-        await provider.PlanAsync();
+        await TrustAsync(provider);
         var rc = Path.Combine(ToolInputs.WorkingDirectory(_environment), "relative-config", "pnpm", "rc");
         Directory.CreateDirectory(Path.GetDirectoryName(rc)!);
         File.WriteAllText(rc, "store-dir=D:\elsewhere");
         provider.InvalidateCaches();
         await provider.PlanAsync();
 
-        Assert.Equal(2, StoreAsks);
+        Assert.Equal(1, StoreAsks);
     }
 
     [Fact]
@@ -196,46 +206,51 @@ public sealed class PnpmStoreProviderMemoryTests : IDisposable
         _environment.WithEnvironmentVariable("XDG_CONFIG_HOME", "relative-config");
         var provider = CreateProvider();
 
-        await provider.PlanAsync();
+        await TrustAsync(provider);
         provider.InvalidateCaches();
         await provider.PlanAsync();
 
-        Assert.Equal(1, StoreAsks);
+        Assert.Equal(0, StoreAsks);
     }
 
     /// <summary>
     /// Explore builds a fresh set of providers for each policy, so the second set must be answered
-    /// from what the first heard rather than start pnpm again.
+    /// from what the first heard and confirmed rather than start pnpm again.
     /// </summary>
     [Fact]
     public async Task ASecondProviderOnTheSameMemoryAsksNothing()
     {
-        await CreateProvider().PlanAsync();
+        await TrustAsync(CreateProvider());
 
         var second = CreateProvider();
         var roots = await second.DiscoverToolRootsAsync();
         var places = await second.CleanedPlacesAsync();
 
-        Assert.Equal(1, StoreAsks);
+        Assert.Equal(0, StoreAsks);
         Assert.Contains(roots, r => r.Path.Equals(Store, StringComparison.OrdinalIgnoreCase));
         Assert.Contains(places, p => p.Path.Equals(Store, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
-    /// §7.1: each Explore policy build constructs its providers afresh, and the second build refuses
-    /// the store as the first did without starting pnpm again.
+    /// §7.1: each Explore policy build constructs its providers afresh. The first build holds pnpm's
+    /// answer and the second confirms it; a third refuses the store as they did without starting pnpm
+    /// again.
     /// </summary>
     [Fact]
-    public async Task ASecondExplorePolicyBuildAnswersFromMemoryWithoutAskingPnpm()
+    public async Task AnExplorePolicyBuildOnceTheAnswerIsConfirmedAnswersFromMemoryWithoutAskingPnpm()
     {
         var system = new FakeSystemDirectories(_temp.CreateDirectory("machine"));
 
         var first = await ExploreActionPolicy.ForAsync(system, _environment, new FakeVolumeInventory(), [CreateProvider()]);
-        var second = await ExploreActionPolicy.ForAsync(system, _environment, new FakeVolumeInventory(), [CreateProvider()]);
+        await ExploreActionPolicy.ForAsync(system, _environment, new FakeVolumeInventory(), [CreateProvider()]);
+        Assert.True(_memory.Holds(Key));
+        Assert.Equal(2, StoreAsks);
 
-        Assert.Equal(1, StoreAsks);
+        var third = await ExploreActionPolicy.ForAsync(system, _environment, new FakeVolumeInventory(), [CreateProvider()]);
+
+        Assert.Equal(2, StoreAsks);
         Assert.False(first.MayRemove(Store).IsAllowed);
-        Assert.False(second.MayRemove(Store).IsAllowed);
+        Assert.False(third.MayRemove(Store).IsAllowed);
     }
 
     /// <summary>
@@ -247,14 +262,14 @@ public sealed class PnpmStoreProviderMemoryTests : IDisposable
     {
         var moved = Populate(InProfile(Path.Combine(".pnpm-store", "v10")));
         var provider = CreateProvider();
-        await provider.PlanAsync();
+        await TrustAsync(provider);
 
         Write(".npmrc", $"store-dir={Path.GetDirectoryName(moved)}");
         _runner.Responding(_pnpm, "store path", moved + "\r\n");
         provider.InvalidateCaches();
         var plan = await provider.PlanAsync();
 
-        Assert.Equal(2, StoreAsks);
+        Assert.Equal(1, StoreAsks);
         Assert.Empty(plan.TargetedPaths);
         Assert.Equal([moved], Assert.Single(plan.Steps.OfType<RunCommandStep>()).MeasuredPaths);
 
@@ -274,13 +289,21 @@ public sealed class PnpmStoreProviderMemoryTests : IDisposable
         Assert.Contains(verification.Failures, c => c.Subject.Equals(moved, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// The failure comes after a trusted answer, from an ask an input change forced, so a failure kept
+    /// as an answer would read the same inputs before and after and be served to the next pass.
+    /// </summary>
     [Fact]
     public async Task AFailedStoreQueryIsNotKept()
     {
-        _runner.Responding(_pnpm, "store path", Store, exitCode: 1);
         var provider = CreateProvider();
+        await TrustAsync(provider);
 
+        Write(".npmrc", "registry=https://registry.example.test/");
+        _runner.Responding(_pnpm, "store path", Store, exitCode: 1);
+        provider.InvalidateCaches();
         Assert.True((await provider.PlanAsync()).WasNotExamined);
+        Assert.False(_memory.Holds(Key));
         provider.InvalidateCaches();
         await provider.PlanAsync();
 
@@ -289,7 +312,8 @@ public sealed class PnpmStoreProviderMemoryTests : IDisposable
 
     /// <summary>
     /// Without the global configuration's path an edit to that file would go unnoticed, so the store
-    /// serves the pass that asked and the next pass asks again.
+    /// serves the pass that asked and the next pass asks again. The answer comes after a trusted one,
+    /// from an ask an input change forced, so only the missing path can refuse it.
     /// </summary>
     [Theory]
     [InlineData("", 0)]
@@ -300,10 +324,14 @@ public sealed class PnpmStoreProviderMemoryTests : IDisposable
     {
         // Null stands for the real global configuration's path, printed by a query that failed: a
         // failed query is no answer, whatever it printed.
-        _runner.Responding(_pnpm, "config get globalconfig", printed ?? GlobalConfig, exitCode);
         var provider = CreateProvider();
+        await TrustAsync(provider);
 
+        Write(".npmrc", "registry=https://registry.example.test/");
+        _runner.Responding(_pnpm, "config get globalconfig", printed ?? GlobalConfig, exitCode);
+        provider.InvalidateCaches();
         var plan = await provider.PlanAsync();
+        Assert.False(_memory.Holds(Key));
         provider.InvalidateCaches();
         await provider.PlanAsync();
 
@@ -327,10 +355,10 @@ public sealed class PnpmStoreProviderMemoryTests : IDisposable
     }
 
     /// <summary>
-    /// A pass, a second pass that must ask nothing (so the case proves the answer was kept), the
-    /// change, and a third pass that must ask again. The input's folder exists from the start, so no
-    /// folder appears beside the input. A rewrite changes nothing but the input, so it is the case
-    /// that fails by name where a file inside a listed folder drops out of the declaration.
+    /// A trusted answer (so the case proves the answer was kept), the change, and a pass that must ask
+    /// again. The input's folder exists from the start, so no folder appears beside the input. A
+    /// rewrite changes nothing but the input, so it is the case that fails by name where a file inside
+    /// a listed folder drops out of the declaration.
     /// </summary>
     private async Task AssertAsksAgainAfterAsync(string relative, Change change)
     {
@@ -343,11 +371,7 @@ public sealed class PnpmStoreProviderMemoryTests : IDisposable
         }
 
         var provider = CreateProvider();
-        await provider.PlanAsync();
-        provider.InvalidateCaches();
-        await provider.PlanAsync();
-
-        Assert.Equal(1, StoreAsks);
+        await TrustAsync(provider);
 
         switch (change)
         {
@@ -363,7 +387,26 @@ public sealed class PnpmStoreProviderMemoryTests : IDisposable
         provider.InvalidateCaches();
         await provider.PlanAsync();
 
+        Assert.Equal(1, StoreAsks);
+    }
+
+    /// <summary>
+    /// Passes until pnpm's answer is trusted: the first holds it, the second confirms it, and a third
+    /// with nothing changed must ask nothing. The count then starts again.
+    /// </summary>
+    private async Task TrustAsync(PnpmStoreProvider provider)
+    {
+        await provider.PlanAsync();
+        provider.InvalidateCaches();
+        await provider.PlanAsync();
+        Assert.True(_memory.Holds(Key));
+
+        provider.InvalidateCaches();
+        await provider.PlanAsync();
         Assert.Equal(2, StoreAsks);
+        Assert.Equal(2, GlobalConfigAsks);
+
+        _since = _runner.Invocations.Count;
     }
 
     /// <summary>A provider on the shared memory.</summary>

@@ -12,7 +12,8 @@ namespace Deguffer.Core.Tests;
 ///
 /// <para>Every provider here shares one <see cref="ToolAnswerMemory"/> whose clock runs a minute ahead
 /// of the files the fixture writes, as a real ask starts long after a configuration file was saved, so
-/// an unchanged answer is always kept and only a changed input can explain a second ask.</para>
+/// an unchanged answer is always confirmed by the next ask. Each "asks again" case starts from a
+/// trusted answer (<see cref="TrustAsync"/>), so only the change it names can explain the ask.</para>
 /// </summary>
 public sealed class CondaLocationMemoryTests : IDisposable
 {
@@ -25,6 +26,7 @@ public sealed class CondaLocationMemoryTests : IDisposable
     private readonly ToolAnswerMemory _memory;
     private readonly FakeProcessRunner _runner = new();
     private readonly string _conda;
+    private int _since;
 
     public CondaLocationMemoryTests()
     {
@@ -51,7 +53,10 @@ public sealed class CondaLocationMemoryTests : IDisposable
 
     private static string Environments(string prefix) => Path.Combine(prefix, "envs");
 
-    private int Asked => _runner.Invocations.Count(invocation => invocation.Arguments == Info);
+    /// <summary>How often conda was asked where it keeps things since its answer was last trusted.</summary>
+    private int Asked => _runner.Invocations.Skip(_since).Count(invocation => invocation.Arguments == Info);
+
+    private string Key => $"{Info}|{_conda}";
 
     private static string Quote(string path) => "\"" + path.Replace("\\", "\\\\") + "\"";
 
@@ -98,16 +103,38 @@ public sealed class CondaLocationMemoryTests : IDisposable
             .WithToolEnvironmentVariable("CONDA_PREFIX", Path.Combine(_temp.Path, "active"))
             .WithToolEnvironmentVariable("CONDARC", Path.Combine(_temp.Path, "custom", "condarc.yml"));
 
+    /// <summary>
+    /// Passes until conda's answer is trusted: the first holds it, the second confirms it, and a third
+    /// with nothing changed must ask nothing. The count then starts again.
+    /// </summary>
+    private async Task TrustAsync(CondaCacheProvider provider)
+    {
+        await provider.DiscoverToolRootsAsync();
+        provider.InvalidateCaches();
+        await provider.DiscoverToolRootsAsync();
+        Assert.True(_memory.Holds(Key));
+
+        provider.InvalidateCaches();
+        await provider.DiscoverToolRootsAsync();
+        Assert.Equal(2, Asked);
+
+        _since = _runner.Invocations.Count;
+    }
+
     [Fact]
-    public async Task ASecondPassAfterAnInvalidationWithNothingChangedStartsNoLocationQuery()
+    public async Task APassOnceTheAnswerIsConfirmedWithNothingChangedStartsNoLocationQuery()
     {
         var provider = CreateProvider();
 
         await provider.PlanAsync();
+        Assert.False(_memory.Holds(Key));
+        provider.InvalidateCaches();
+        await provider.PlanAsync();
+        Assert.True(_memory.Holds(Key));
         provider.InvalidateCaches();
         var plan = await provider.PlanAsync();
 
-        Assert.Equal(1, Asked);
+        Assert.Equal(2, Asked);
         Assert.Equal([PackageCache(Miniconda)], Assert.Single(plan.Steps.OfType<RunCommandStep>()).MeasuredPaths);
     }
 
@@ -175,10 +202,7 @@ public sealed class CondaLocationMemoryTests : IDisposable
         }
 
         var provider = CreateProvider();
-        await provider.DiscoverToolRootsAsync();
-        provider.InvalidateCaches();
-        await provider.DiscoverToolRootsAsync();
-        Assert.Equal(1, Asked);
+        await TrustAsync(provider);
 
         switch (change)
         {
@@ -194,7 +218,7 @@ public sealed class CondaLocationMemoryTests : IDisposable
         provider.InvalidateCaches();
         await provider.DiscoverToolRootsAsync();
 
-        Assert.Equal(2, Asked);
+        Assert.Equal(1, Asked);
     }
 
     /// <summary>
@@ -217,57 +241,59 @@ public sealed class CondaLocationMemoryTests : IDisposable
         Directory.CreateDirectory(ToolInputs.WorkingDirectory(_environment));
 
         var provider = CreateProvider();
-        await provider.DiscoverToolRootsAsync();
-        provider.InvalidateCaches();
-        await provider.DiscoverToolRootsAsync();
-        Assert.Equal(1, Asked);
+        await TrustAsync(provider);
 
         Write(path, "pkgs_dirs: []");
         provider.InvalidateCaches();
         await provider.DiscoverToolRootsAsync();
 
-        Assert.Equal(2, Asked);
+        Assert.Equal(1, Asked);
     }
 
     [Fact]
     public async Task AVariableSetInTheToolEnvironmentAsksAgain()
     {
         var provider = CreateProvider();
-        await provider.DiscoverToolRootsAsync();
+        await TrustAsync(provider);
 
         _environment.WithToolEnvironmentVariable("CONDA_PKGS_DIRS", Path.Combine(_temp.Path, "elsewhere"));
         provider.InvalidateCaches();
         await provider.DiscoverToolRootsAsync();
 
-        Assert.Equal(2, Asked);
+        Assert.Equal(1, Asked);
     }
 
     [Fact]
     public async Task TheExecutableReplacedAsksAgain()
     {
         var provider = CreateProvider();
-        await provider.DiscoverToolRootsAsync();
+        await TrustAsync(provider);
 
         File.WriteAllText(_conda, "conda 24.11, a newer build");
         provider.InvalidateCaches();
         await provider.DiscoverToolRootsAsync();
 
-        Assert.Equal(2, Asked);
+        Assert.Equal(1, Asked);
     }
 
     /// <summary>
-    /// Explore builds a fresh set of providers for each policy. The second build is answered from the
-    /// memory the first filled, and still refuses everything conda reported.
+    /// Explore builds a fresh set of providers for each policy. The first build holds conda's answer
+    /// and the second confirms it; a third is answered from the memory they filled, and still refuses
+    /// everything conda reported.
     /// </summary>
     [Fact]
-    public async Task ASecondExploreBuildAnswersFromMemoryWithoutAskingConda()
+    public async Task AnExploreBuildOnceTheAnswerIsConfirmedAnswersFromMemoryWithoutAskingConda()
     {
         var first = await ExploreActionPolicy.ForAsync(_system, _environment, new FakeVolumeInventory(), [CreateProvider()]);
-        var second = CreateProvider();
-        var policy = await ExploreActionPolicy.ForAsync(_system, _environment, new FakeVolumeInventory(), [second]);
-        var places = await second.CleanedPlacesAsync();
+        await ExploreActionPolicy.ForAsync(_system, _environment, new FakeVolumeInventory(), [CreateProvider()]);
+        Assert.True(_memory.Holds(Key));
+        Assert.Equal(2, Asked);
 
-        Assert.Equal(1, Asked);
+        var third = CreateProvider();
+        var policy = await ExploreActionPolicy.ForAsync(_system, _environment, new FakeVolumeInventory(), [third]);
+        var places = await third.CleanedPlacesAsync();
+
+        Assert.Equal(2, Asked);
         Assert.False(first.MayRemove(Miniconda).IsAllowed);
         Assert.False(policy.MayRemove(Miniconda).IsAllowed);
         Assert.False(policy.MayRemove(Path.Combine(PackageCache(Miniconda), "numpy-1.26.4-py312")).IsAllowed);
@@ -287,14 +313,14 @@ public sealed class CondaLocationMemoryTests : IDisposable
         Populate(Path.Combine(PackageCache(Miniforge), "scipy-1.13.0-py312"));
         var environments = Populate(Path.Combine(Environments(Miniforge), "science"));
         var provider = CreateProvider();
-        await provider.PlanAsync();
+        await TrustAsync(provider);
 
         Write(Path.Combine(_environment.UserProfile, ".condarc"), "root_prefix: miniforge3");
         Answering(Miniforge);
         provider.InvalidateCaches();
         var plan = await provider.PlanAsync();
 
-        Assert.Equal(2, Asked);
+        Assert.Equal(1, Asked);
         Assert.Equal([PackageCache(Miniforge)], Assert.Single(plan.Steps.OfType<RunCommandStep>()).MeasuredPaths);
         Assert.Empty(plan.TargetedPaths);
 
@@ -314,13 +340,21 @@ public sealed class CondaLocationMemoryTests : IDisposable
         Assert.Contains(verification.Failures, failure => LongPath.Contains(failure.Subject, environments));
     }
 
+    /// <summary>
+    /// The failure comes after a trusted answer, from an ask an input change forced, so a failure kept
+    /// as an answer would read the same inputs before and after and be served to the next pass.
+    /// </summary>
     [Fact]
     public async Task AFailedQueryIsNotKept()
     {
-        _runner.Responding(_conda, Info, "{}", exitCode: 1);
         var provider = CreateProvider();
+        await TrustAsync(provider);
+
+        Write(Path.Combine(_environment.UserProfile, ".condarc"), "channels: [defaults]");
+        _runner.Responding(_conda, Info, "{}", exitCode: 1);
+        provider.InvalidateCaches();
         Assert.Contains((await provider.PlanAsync()).Notes, n => n.Message.Contains("conda did not describe", StringComparison.Ordinal));
-        Assert.False(_memory.Holds($"{Info}|{_conda}"));
+        Assert.False(_memory.Holds(Key));
 
         Answering(Miniconda);
         provider.InvalidateCaches();
