@@ -1,4 +1,5 @@
 using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Testing;
@@ -68,16 +69,80 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
         Assert.Contains(roots, r => r.Path == _first);
     }
 
-    /// <summary>The three settings are asked together, so a miss costs one round of waiting.</summary>
+    /// <summary>Both settings are asked together, so a miss costs one round of waiting.</summary>
     [Fact]
     public async Task AsksTheSettingsTogether()
     {
-        var held = new HeldRuns(together: 3);
-        _yarn.Runner.Holding(_yarn.Yarn, "--json", held);
+        var held = new HeldRuns(together: 2);
+        _yarn.Runner.Holding(_yarn.Yarn, "globalFolder", held).Holding(_yarn.Yarn, "enableCacheClean", held);
 
         await Provider().PlanAsync();
 
         Assert.True(held.StartedTogether);
+    }
+
+    /// <summary>
+    /// The script answers <c>yarn -v</c> in the program's place. Yarn 1.22 is remembered; a Yarn 4
+    /// release copied over the script, with every rc file unchanged, asks which Yarn runs again, so this
+    /// row reads Berry's settings and declares the global folder they name.
+    /// </summary>
+    [Fact]
+    public async Task ReplacingTheScriptAsksWhichYarnAgain()
+    {
+        _yarn.Version = "1.22.22";
+        var provider = Provider();
+        Assert.Empty(await provider.DiscoverToolRootsAsync());
+
+        _yarn.ReplaceScript("4.18.1");
+        provider.InvalidateCaches();
+        var roots = await provider.DiscoverToolRootsAsync();
+
+        Assert.Equal(2, _yarn.Asked("-v"));
+        Assert.Equal(1, Asked);
+        Assert.Contains(roots, r => r.Path == _first);
+    }
+
+    /// <summary>
+    /// The plan deletes by path under a folder Berry's settings name, so it asks which Yarn runs afresh
+    /// too: a remembered Yarn 1 would skip those settings, and the cache Berry now keeps would go unseen.
+    /// </summary>
+    [Fact]
+    public async Task ThePlanAsksWhichYarnAfreshEvenWhenTheMemoryHoldsIt()
+    {
+        _yarn.Version = "1.22.22";
+        var provider = Provider();
+        await provider.DiscoverToolRootsAsync();
+        Assert.True(_yarn.Memory.Holds($"-v;config get yarn-path;config get yarnPath --json|{_yarn.Yarn}"));
+
+        _yarn.Version = "4.18.1";
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(2, _yarn.Asked("-v"));
+        Assert.Equal([Path.Combine(_first, "cache")], plan.Steps.OfType<DeleteDirectoryStep>().Select(s => s.Path));
+    }
+
+    /// <summary>
+    /// Explore builds a fresh set of providers for each policy. The second build is answered from the
+    /// memory the first filled, and still refuses the global folder Berry reported and everything in it
+    /// beside the cache.
+    /// </summary>
+    [Fact]
+    public async Task ASecondExploreBuildAnswersFromMemoryWithoutAskingYarn()
+    {
+        var global = Path.Combine(Environment.UserProfile, "berry-global");
+        YarnToolFixture.WriteAt(global, "cache", Archive);
+        YarnToolFixture.WriteAt(global, "store", "v1", "index.js");
+        _yarn.BerryGlobalFolder = global;
+
+        var first = await ExploreActionPolicy.ForAsync(_yarn.System, Environment, new FakeVolumeInventory(), [Provider()]);
+        var second = await ExploreActionPolicy.ForAsync(_yarn.System, Environment, new FakeVolumeInventory(), [Provider()]);
+
+        Assert.Equal(1, Asked);
+        Assert.Equal(1, _yarn.Asked("-v"));
+        Assert.False(first.MayRemove(global).IsAllowed);
+        Assert.False(second.MayRemove(global).IsAllowed);
+        Assert.Contains("This is the global folder of Yarn 2", first.MayRemove(Path.Combine(global, "store")).Reason, StringComparison.Ordinal);
+        Assert.Contains("This is the global folder of Yarn 2", second.MayRemove(Path.Combine(global, "store")).Reason, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -176,7 +241,10 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
         Assert.Contains(places, p => p.Path == Path.Combine(_first, "cache"));
     }
 
-    /// <summary>Both rows ask which Yarn runs through one question, so a pass of both starts <c>yarn -v</c> once.</summary>
+    /// <summary>
+    /// Both rows ask which Yarn runs through one question, so Yarn 1's plan and what Berry's row declares
+    /// start <c>yarn -v</c> once between them. Berry's plan asks afresh, which the test above covers.
+    /// </summary>
     [Fact]
     public async Task BothRowsShareOneVersionQuestion()
     {
@@ -187,10 +255,10 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
         var berry = Provider();
 
         await classic.PlanAsync();
-        await berry.PlanAsync();
+        await berry.CleanedPlacesAsync();
         classic.InvalidateCaches();
         berry.InvalidateCaches();
-        await berry.PlanAsync();
+        await berry.DiscoverToolRootsAsync();
         await classic.PlanAsync();
 
         Assert.Equal(1, _yarn.Asked("-v"));
@@ -246,8 +314,8 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
     }
 
     /// <summary>
-    /// A failed script question leaves a script in use that no input names: the global folder is
-    /// used and asked again next time.
+    /// A failed script question leaves a script in use that no input names: which Yarn runs and the
+    /// global folder are used and asked again next time.
     /// </summary>
     [Fact]
     public async Task AFailedScriptQueryIsUsedButNotKept()
@@ -261,6 +329,7 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
 
         Assert.Contains(first, p => p.Path == Path.Combine(_first, "cache"));
         Assert.Equal(2, Asked);
+        Assert.Equal(2, _yarn.Asked("-v"));
     }
 
     /// <summary>
@@ -273,7 +342,7 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
     {
         var provider = Provider();
         await provider.DiscoverToolRootsAsync();
-        Assert.True(_yarn.Memory.Holds($"config get globalFolder enableCacheClean yarnPath --json|{_yarn.Yarn}"));
+        Assert.True(_yarn.Memory.Holds($"config get globalFolder enableCacheClean --json|{_yarn.Yarn}"));
 
         var moved = Path.Combine(_yarn.Temp, "caches", "berry-moved");
         YarnToolFixture.WriteAt(moved, "cache", Archive);

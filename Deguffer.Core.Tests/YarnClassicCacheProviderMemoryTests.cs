@@ -1,4 +1,5 @@
 using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Testing;
@@ -76,16 +77,60 @@ public sealed class YarnClassicCacheProviderMemoryTests : IDisposable
         Assert.Equal([Root], Assert.IsType<RunCommandStep>(Assert.Single(second.Steps)).MeasuredPaths);
     }
 
-    /// <summary>The script is asked beside the cache, not after it, so a miss costs one round of waiting.</summary>
+    /// <summary>Both script settings are asked beside the version, not after it, so a miss costs one round of waiting.</summary>
     [Fact]
-    public async Task AsksTheScriptBesideTheCache()
+    public async Task AsksTheScriptBesideTheVersion()
     {
-        var held = new HeldRuns(together: 2);
-        _yarn.Runner.Holding(_yarn.Yarn, "cache dir", held).Holding(_yarn.Yarn, "yarn-path", held);
+        var held = new HeldRuns(together: 3);
+        _yarn.Runner.Holding(_yarn.Yarn, "-v", held).Holding(_yarn.Yarn, "config get yarn", held);
 
         await Provider().PlanAsync();
 
         Assert.True(held.StartedTogether);
+    }
+
+    /// <summary>
+    /// The script answers <c>yarn -v</c> in the program's place, so a newer release copied over it, with
+    /// every rc file unchanged, asks which Yarn runs again, and a Yarn 4 there is never sent Yarn 1's clean.
+    /// </summary>
+    [Fact]
+    public async Task ReplacingTheScriptAsksWhichYarnAgain()
+    {
+        var provider = Provider();
+        await provider.PlanAsync();
+
+        _yarn.ReplaceScript("4.18.1");
+        provider.InvalidateCaches();
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(2, _yarn.Asked("-v"));
+        Assert.Empty(plan.Steps);
+        Assert.Contains(plan.Notes, n => n.Message.Contains("Yarn 4.18.1, not Yarn 1", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Corepack opens a relative <c>COREPACK_HOME</c> from the folder it runs in, so that is the home
+    /// stamped: nothing changed there keeps the answer, and a release written there asks again.
+    /// </summary>
+    [Fact]
+    public async Task ARelativeCorepackHomeIsReadFromTheToolsWorkingFolder()
+    {
+        var home = Path.Combine(ToolInputs.WorkingDirectory(Environment), "relative-corepack");
+        Directory.CreateDirectory(Path.Combine(home, "yarn"));
+        Environment.WithToolEnvironmentVariable("COREPACK_HOME", "relative-corepack");
+        var provider = Provider();
+
+        await provider.PlanAsync();
+        provider.InvalidateCaches();
+        await provider.PlanAsync();
+        Assert.Equal(1, _yarn.Asked("-v"));
+
+        YarnToolFixture.WriteAt(home, "yarn", "yarn-4.5.0.tgz");
+        provider.InvalidateCaches();
+        await provider.PlanAsync();
+
+        Assert.Equal(2, _yarn.Asked("-v"));
+        Assert.Equal(2, Asked);
     }
 
     [Theory]
@@ -195,6 +240,30 @@ public sealed class YarnClassicCacheProviderMemoryTests : IDisposable
     }
 
     /// <summary>
+    /// Explore builds a fresh set of providers for each policy. The second build is answered from the
+    /// memory the first filled, and still refuses the cache root Yarn 1 reported and anything in it
+    /// that is not a versioned cache folder.
+    /// </summary>
+    [Fact]
+    public async Task ASecondExploreBuildAnswersFromMemoryWithoutAskingYarn()
+    {
+        var moved = Path.Combine(Environment.UserProfile, "caches", "yarn");
+        Populate(moved);
+        var stranger = YarnToolFixture.WriteAt(moved, "stranger.bin");
+        _yarn.ClassicRoot = moved;
+
+        var first = await ExploreActionPolicy.ForAsync(_yarn.System, Environment, new FakeVolumeInventory(), [Provider()]);
+        var second = await ExploreActionPolicy.ForAsync(_yarn.System, Environment, new FakeVolumeInventory(), [Provider()]);
+
+        Assert.Equal(1, Asked);
+        Assert.Equal(1, _yarn.Asked("-v"));
+        Assert.False(first.MayRemove(moved).IsAllowed);
+        Assert.False(second.MayRemove(moved).IsAllowed);
+        Assert.Contains("This is Yarn 1's cache.", first.MayRemove(stranger).Reason, StringComparison.Ordinal);
+        Assert.Contains("This is Yarn 1's cache.", second.MayRemove(stranger).Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// §5.6 when the cache moved between two passes: the second plan sends the clean to the new root and
     /// leaves the old one, and the run leaves Yarn's data, Berry's folder and everything beside the
     /// new root standing.
@@ -256,8 +325,8 @@ public sealed class YarnClassicCacheProviderMemoryTests : IDisposable
     }
 
     /// <summary>
-    /// A failed script question leaves a script in use that no input names: the location is planned
-    /// from and asked again next time.
+    /// A failed script question leaves a script in use that no input names: which Yarn runs and the
+    /// location are planned from and asked again next time.
     /// </summary>
     [Fact]
     public async Task AFailedScriptQueryIsPlannedFromButNotKept()
@@ -271,6 +340,7 @@ public sealed class YarnClassicCacheProviderMemoryTests : IDisposable
 
         Assert.Equal([Root], Assert.IsType<RunCommandStep>(Assert.Single(first.Steps)).MeasuredPaths);
         Assert.Equal(2, Asked);
+        Assert.Equal(2, _yarn.Asked("-v"));
     }
 
     [Fact]

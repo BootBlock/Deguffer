@@ -53,9 +53,10 @@ public sealed class YarnBerryCacheProvider : CleanupProviderBase
     private readonly PassMemo<Task<YarnBerryCache?>> _remembered = new();
 
     /// <summary>
-    /// Berry's settings asked afresh, for the plan alone. A memo of its own, because a declaration read
-    /// first in the pass would otherwise hand the plan a remembered global folder, and this row deletes
-    /// by path under it (§5.2), where a missed input would move a deletion rather than misstate a figure.
+    /// Which Yarn runs and Berry's settings, asked afresh, for the plan alone. A memo of its own,
+    /// because a declaration read first in the pass would otherwise hand the plan a remembered version
+    /// or global folder, and this row deletes by path under it (§5.2), where a missed input would move
+    /// a deletion rather than misstate a figure.
     /// </summary>
     private readonly PassMemo<Task<YarnBerryCache?>> _planned = new();
 
@@ -70,7 +71,7 @@ public sealed class YarnBerryCacheProvider : CleanupProviderBase
     /// <param name="memory">
     /// Where Yarn's answers about which Yarn it is and where its global folder is are kept while
     /// nothing Yarn read has changed: the memory for <paramref name="runner"/> when null, which is the
-    /// process-wide one for the real runner. The plan asks Berry's settings afresh whatever it holds.
+    /// process-wide one for the real runner. The plan asks Yarn afresh whatever it holds.
     /// </param>
     public YarnBerryCacheProvider(
         IUserEnvironment? environment = null,
@@ -147,7 +148,7 @@ public sealed class YarnBerryCacheProvider : CleanupProviderBase
     /// Which Yarn runs, and where it keeps its global folder, are configuration that can change between
     /// scans. The pass's answers are forgotten here, and the memory keeps Yarn's answers only while
     /// everything <see cref="YarnToolInputs"/> declares, and the environment Yarn is started with, read
-    /// the same. The plan asks Berry's settings afresh in any case.
+    /// the same. The plan asks Yarn afresh in any case.
     /// </summary>
     public override void InvalidateCaches()
     {
@@ -160,7 +161,7 @@ public sealed class YarnBerryCacheProvider : CleanupProviderBase
     {
         var notes = new List<PlanNote>();
         var yarn = Environment.FindExecutable("yarn");
-        var answer = yarn is null ? null : await _planned.Get(() => AskAsync(yarn, afresh: true, ct)).ConfigureAwait(false);
+        var answer = yarn is null ? null : await _planned.Get(() => FreshAnswerAsync(yarn, ct)).ConfigureAwait(false);
 
         if (answer is { Settings.CleanDisabled: true })
         {
@@ -300,36 +301,45 @@ public sealed class YarnBerryCacheProvider : CleanupProviderBase
     /// <summary>Berry's answer through the memory, once per pass, for the declarations. Null where there is no yarn.</summary>
     private Task<YarnBerryCache?> RememberedAsync(CancellationToken ct) =>
         Environment.FindExecutable("yarn") is { } yarn
-            ? _remembered.Get(() => AskAsync(yarn, afresh: false, ct))
+            ? _remembered.Get(() => RememberedAnswerAsync(yarn, ct))
             : Task.FromResult<YarnBerryCache?>(null);
 
     /// <summary>
-    /// Which Yarn runs, from the memory, and for Berry its settings, from the memory or, where
-    /// <paramref name="afresh"/>, from Berry now. Null where Yarn would not say which it is.
+    /// Which Yarn runs and, for Berry, its settings, each from the memory while nothing Yarn read has
+    /// changed. Null where Yarn would not say which it is.
     /// </summary>
-    private async Task<YarnBerryCache?> AskAsync(string yarn, bool afresh, CancellationToken ct)
+    private async Task<YarnBerryCache?> RememberedAnswerAsync(string yarn, CancellationToken ct)
     {
-        if (await YarnVersion.AskAsync(_memory, Environment, Runner, yarn, ct).ConfigureAwait(false) is not { } version)
-        {
-            return null;
-        }
+        var which = await YarnVersionAnswer.AskAsync(_memory, Environment, Runner, yarn, ct).ConfigureAwait(false);
 
-        if (!version.IsBerry)
-        {
-            return new YarnBerryCache(version, Settings: null);
-        }
-
-        var question = new ToolQuestion<YarnBerrySettings>(
-            $"config get globalFolder enableCacheClean yarnPath --json|{yarn}",
-            Environment.ToolEnvironment,
-            answer => YarnToolInputs.Berry(Environment, yarn, answer.Script),
-            static answer => answer.IsAnswer,
-            askCt => YarnBerrySettings.AskAsync(Runner, yarn, askCt));
-
-        var settings = afresh
-            ? await _memory.AskAfreshAsync(question, ct).ConfigureAwait(false)
-            : await _memory.AskAsync(question, ct).ConfigureAwait(false);
-
-        return new YarnBerryCache(version, settings);
+        return which.Version is not { } version ? null
+            : !version.IsBerry ? new YarnBerryCache(version, Settings: null)
+            : new YarnBerryCache(version, await _memory.AskAsync(SettingsQuestion(yarn, which), ct).ConfigureAwait(false));
     }
+
+    /// <summary>
+    /// Which Yarn runs and, for Berry, its settings, each from Yarn now whatever the memory holds: the
+    /// plan deletes by path under the global folder (§5.2), and a remembered version could skip the
+    /// settings that move the folder or turn the clean off. Null where Yarn would not say which it is.
+    /// </summary>
+    private async Task<YarnBerryCache?> FreshAnswerAsync(string yarn, CancellationToken ct)
+    {
+        var which = await YarnVersionAnswer.AskAfreshAsync(_memory, Environment, Runner, yarn, ct).ConfigureAwait(false);
+
+        return which.Version is not { } version ? null
+            : !version.IsBerry ? new YarnBerryCache(version, Settings: null)
+            : new YarnBerryCache(version, await _memory.AskAfreshAsync(SettingsQuestion(yarn, which), ct).ConfigureAwait(false));
+    }
+
+    /// <summary>
+    /// Berry's settings, which depend on the script <paramref name="which"/> named, so they are declared
+    /// with that script and kept only where Yarn said which script it runs.
+    /// </summary>
+    private ToolQuestion<YarnBerrySettings> SettingsQuestion(string yarn, YarnVersionAnswer which) =>
+        new(
+            $"config get globalFolder enableCacheClean --json|{yarn}",
+            Environment.ToolEnvironment,
+            _ => YarnToolInputs.Berry(Environment, yarn, which.Script),
+            answer => answer.Answered && which.IsAnswer,
+            askCt => YarnBerrySettings.AskAsync(Runner, yarn, askCt));
 }

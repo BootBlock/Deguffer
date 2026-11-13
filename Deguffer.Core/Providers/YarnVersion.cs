@@ -1,12 +1,10 @@
 using System.Text.RegularExpressions;
-using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Providers;
 
 /// <summary>
-/// Which Yarn the <c>yarn</c> on the PATH runs, as <c>yarn -v</c> printed it from Deguffer's own folder.
-/// Yarn 1's row and Berry's both ask it, through one question in the memory, so a pass and the passes
-/// after it start <c>yarn -v</c> once between them.
+/// Which Yarn the <c>yarn</c> on the PATH runs, as <c>yarn -v</c> printed it from Deguffer's own folder
+/// (<see cref="YarnVersionAnswer"/>).
 ///
 /// <para><b>The version is asked, never inferred from the program's location.</b> Yarn 1 hands
 /// itself off to whatever a <c>yarn-path</c> or <c>yarnPath</c> setting names before it reads any
@@ -29,29 +27,6 @@ internal sealed partial record YarnVersion(string Text)
 
     /// <summary>Whether this is Yarn 2 or later, the only Yarn whose settings name Berry's global folder.</summary>
     public bool IsBerry => BerryVersion().IsMatch(Text);
-
-    /// <summary>
-    /// Which Yarn <paramref name="yarn"/> runs, from <paramref name="memory"/> while nothing it reads to
-    /// decide has changed. Null where it would not say.
-    ///
-    /// <para>Both rows declare the same inputs for it (<see cref="YarnToolInputs.Version"/>), or each
-    /// would find the other's answer stale and ask again.</para>
-    /// </summary>
-    public static Task<YarnVersion?> AskAsync(
-        ToolAnswerMemory memory, IUserEnvironment environment, IProcessRunner runner, string yarn, CancellationToken ct) =>
-        memory.AskAsync(
-            new ToolQuestion<YarnVersion?>(
-                $"-v|{yarn}",
-                environment.ToolEnvironment,
-                _ => YarnToolInputs.Version(environment, yarn),
-                static version => version is not null,
-                askCt => RunAsync(runner, yarn, askCt)),
-            ct);
-
-    private static async Task<YarnVersion?> RunAsync(IProcessRunner runner, string yarn, CancellationToken ct) =>
-        (await runner.RunAsync(yarn, "-v", ToolRun.Query, ct).ConfigureAwait(false)).LastLine is { } version
-            ? new YarnVersion(version)
-            : null;
 
     [GeneratedRegex(@"^1\.\d+\.\d+$", RegexOptions.CultureInvariant)]
     private static partial Regex ClassicVersion();

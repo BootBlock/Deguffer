@@ -327,10 +327,15 @@ public sealed class YarnClassicCacheProvider : CleanupProviderBase
     /// Which Yarn runs and, for Yarn 1, where its cache is, each through the memory, once per pass.
     /// The plan runs Yarn's own clean (§5.1), sent to a root it vets on the disk as it plans, so a
     /// remembered answer can at worst misstate the figure. Null where Yarn would not say which it is.
+    ///
+    /// <para>The location depends on the script the version answer named, so it is declared with that
+    /// script and kept only where Yarn said which script it runs.</para>
     /// </summary>
     private async Task<YarnClassicCache?> AskAsync(string yarn, CancellationToken ct)
     {
-        if (await YarnVersion.AskAsync(_memory, Environment, Runner, yarn, ct).ConfigureAwait(false) is not { } version)
+        var which = await YarnVersionAnswer.AskAsync(_memory, Environment, Runner, yarn, ct).ConfigureAwait(false);
+
+        if (which.Version is not { } version)
         {
             return null;
         }
@@ -342,10 +347,10 @@ public sealed class YarnClassicCacheProvider : CleanupProviderBase
 
         var location = await _memory.AskAsync(
             new ToolQuestion<YarnClassicLocation>(
-                $"cache dir;config get yarn-path|{yarn}",
+                $"cache dir|{yarn}",
                 Environment.ToolEnvironment,
-                answer => YarnToolInputs.Classic(Environment, yarn, answer.Script),
-                static answer => answer.IsAnswer,
+                _ => YarnToolInputs.Classic(Environment, yarn, which.Script),
+                answer => answer.Reported is not null && which.IsAnswer,
                 askCt => YarnClassicLocation.AskAsync(Runner, yarn, askCt)),
             ct).ConfigureAwait(false);
 
