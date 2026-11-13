@@ -154,7 +154,8 @@ public sealed class PipCacheLocationMemoryTests : IDisposable
         var provider = CreateProvider();
         await provider.PlanAsync();
 
-        DistlibLaunchers.Write(_pip, Path.Combine(_temp.Path, "Python313", "python.exe"));
+        // The same interpreter, so only the launcher itself says pip was reinstalled.
+        DistlibLaunchers.Write(_pip, _interpreter);
         await SecondPassAsync(provider);
 
         Assert.Equal(2, LocationQueries);
@@ -168,6 +169,24 @@ public sealed class PipCacheLocationMemoryTests : IDisposable
     public async Task AnswerFromALauncherNamingNoInterpreterIsNotKept()
     {
         File.WriteAllText(_pip, "@echo off\r\npython -m pip %*\r\n");
+        var provider = CreateProvider();
+        await provider.PlanAsync();
+
+        await SecondPassAsync(provider);
+
+        Assert.Equal(2, LocationQueries);
+    }
+
+    /// <summary>
+    /// Whether the interpreter sits in a virtual environment decides <c>sys.prefix</c>. Where Windows
+    /// will not say, the prefix is unknown, and so is what pip read from it.
+    /// </summary>
+    [Fact]
+    public async Task AnAnswerIsNotKeptWhileTheVirtualEnvironmentMarkerCannotBeRead()
+    {
+        var marker = _temp.CreateFile(16, "pyvenv.cfg");
+        using var denied = DeniedDirectory.WithUnreadableFile(marker);
+        Assert.Equal(PathPresence.Refused, InputStamp.Of(marker).Presence);
         var provider = CreateProvider();
         await provider.PlanAsync();
 

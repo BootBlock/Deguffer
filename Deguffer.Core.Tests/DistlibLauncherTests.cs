@@ -50,6 +50,33 @@ public sealed class DistlibLauncherTests : IDisposable
         Assert.Equal(@"C:\Python312\python.exe", DistlibLauncher.InterpreterIn(launcher));
     }
 
+    /// <summary>
+    /// A comment may hold anything, a decoy end record included, so the record is the one whose own
+    /// comment reaches exactly the end of the file.
+    /// </summary>
+    [Fact]
+    public void IgnoresAnEndRecordInsideTheArchivesComment()
+    {
+        var archive = DistlibLaunchers.Archive();
+        byte[] comment = [0x50, 0x4B, 0x05, 0x06, .. new byte[18], (byte)'x'];
+        archive[^2] = (byte)comment.Length;
+        byte[] launcher = [.. Encoding.ASCII.GetBytes("MZ\n#!C:\\Python312\\python.exe\r\n"), .. archive, .. comment];
+
+        Assert.Equal(@"C:\Python312\python.exe", DistlibLauncher.InterpreterIn(launcher));
+    }
+
+    /// <summary>
+    /// The shebang is the line that ends where the archive starts, not any earlier line of the
+    /// executable that happens to read like one.
+    /// </summary>
+    [Fact]
+    public void NamesNoInterpreterWhereOnlyAnEarlierLineReadsAsAShebang()
+    {
+        byte[] launcher = [.. Encoding.ASCII.GetBytes("MZ\n#!C:\\Elsewhere\\python.exe\nC:\\Python312\\python.exe\r\n"), .. DistlibLaunchers.Archive()];
+
+        Assert.Null(DistlibLauncher.InterpreterIn(launcher));
+    }
+
     [Theory]
     [InlineData("@echo off\r\npython -m pip %*\r\n")]
     [InlineData("")]
@@ -77,11 +104,16 @@ public sealed class DistlibLauncherTests : IDisposable
         Assert.Null(DistlibLauncher.InterpreterIn(launcher));
     }
 
-    /// <summary>An archive whose directory claims to start before the file does is no launcher.</summary>
-    [Fact]
-    public void NamesNoInterpreterWhereTheArchiveWouldStartBeforeTheFile()
+    /// <summary>
+    /// An archive whose directory places its start before the file's is cut short, and one that
+    /// starts the file has no shebang before it: neither is a launcher.
+    /// </summary>
+    [Theory]
+    [InlineData(10)]
+    [InlineData(0)]
+    public void NamesNoInterpreterWhereTheArchiveStartsAtOrBeforeTheFile(int missing)
     {
-        var archive = DistlibLaunchers.Archive();
+        var archive = DistlibLaunchers.Archive()[missing..];
 
         Assert.Null(DistlibLauncher.InterpreterIn(archive));
     }
