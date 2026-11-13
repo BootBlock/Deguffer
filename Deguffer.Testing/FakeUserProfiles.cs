@@ -83,8 +83,17 @@ public sealed class FakeUserProfiles : IUserProfiles
 
     public string? MachineAccountDomain() => Domain;
 
-    public AccountReading LookUp(string sid) =>
-        Accounts.TryGetValue(sid, out var reading) ? reading : new AccountReading(AccountAnswer.NotFound);
+    /// <summary>How many accounts were looked up, so a test can hold a pass to looking each one up once.</summary>
+    public int Lookups => Volatile.Read(ref _lookups);
+
+    private int _lookups;
+
+    public AccountReading LookUp(string sid)
+    {
+        Interlocked.Increment(ref _lookups);
+
+        return Accounts.TryGetValue(sid, out var reading) ? reading : new AccountReading(AccountAnswer.NotFound);
+    }
 
     public ProfileRemoval Remove(string sid)
     {

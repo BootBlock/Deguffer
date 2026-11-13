@@ -50,9 +50,7 @@ public sealed class PassStart : IDisposable
     }
 
     /// <summary>
-    /// The pass's token, cancelled when the pass ends, fails or is cancelled. For work started early
-    /// that takes no place: one long answer whose wait is not spent starting an interpreter, and which
-    /// would lengthen the pass if it queued behind the rest.
+    /// The pass's token, cancelled when the pass ends, fails or is cancelled.
     /// </summary>
     public CancellationToken Token { get; }
 
@@ -80,6 +78,24 @@ public sealed class PassStart : IDisposable
         {
             _places.Release();
         }
+    }
+
+    /// <summary>
+    /// Starts <paramref name="query"/> under <see cref="Token"/> at once, off the planner's thread, and
+    /// without a place. Returns without waiting for it.
+    ///
+    /// <para>For a question whose wait is spent on another part of Windows rather than on an
+    /// interpreter loading: a service, a driver store or an engine that does the work while the asker
+    /// sleeps. It adds almost nothing to what the bound shares out, and queued behind every package
+    /// manager's query it would start only once they had ended.</para>
+    /// </summary>
+    /// <param name="query">The provider's check and its question, run off the planner's thread for the reason <see cref="Ask"/> gives.</param>
+    /// <returns>The work, ended once the query's has.</returns>
+    public Task AskAtOnce(Func<CancellationToken, Task> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        return Task.Run(() => query(Token), Token);
     }
 
     /// <summary>Has <paramref name="provider"/> start what its plan will wait on, and keeps it to wait for.</summary>

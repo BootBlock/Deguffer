@@ -92,6 +92,44 @@ public sealed class PassStartTests
     }
 
     /// <summary>
+    /// A question asked at once runs while every place is held, so a service's answer is not queued
+    /// behind the interpreters.
+    /// </summary>
+    [Fact]
+    public async Task AQuestionAskedAtOnceRunsWhileEveryPlaceIsHeld()
+    {
+        using var start = new PassStart(1, CancellationToken.None);
+        var release = new TaskCompletionSource();
+
+        var holding = start.Ask(ct => release.Task.WaitAsync(ct));
+        var asked = start.AskAtOnce(_ => Task.CompletedTask);
+
+        await asked.WaitAsync(Deadline);
+        Assert.False(holding.IsCompleted);
+
+        release.SetResult();
+        await holding.WaitAsync(Deadline);
+    }
+
+    /// <summary>A question asked at once after the pass has ended never starts.</summary>
+    [Fact]
+    public async Task AQuestionAskedAtOnceAfterThePassEndedNeverStarts()
+    {
+        using var pass = new CancellationTokenSource();
+        using var start = new PassStart(1, pass.Token);
+        var asked = 0;
+
+        await pass.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => start.AskAtOnce(_ =>
+        {
+            Interlocked.Increment(ref asked);
+            return Task.CompletedTask;
+        }).WaitAsync(Deadline));
+        Assert.Equal(0, asked);
+    }
+
+    /// <summary>
     /// The query runs off the thread that asked, so a provider's check before its question, a search of
     /// <c>PATH</c> or a probe of a folder, does not hold up the providers the planner asks after it.
     /// </summary>

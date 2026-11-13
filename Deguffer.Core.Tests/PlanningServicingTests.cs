@@ -111,6 +111,27 @@ public sealed class PlanningServicingTests : IDisposable
     }
 
     /// <summary>
+    /// #450: the driver store starts its listing as the pass begins too, and ahead of the component store
+    /// in the planner's list it may read the machine first. Whichever reads first, the reading is taken
+    /// before DISM starts, so the analysis holds back neither the driver store nor any other row.
+    /// </summary>
+    [Fact]
+    public async Task ADriverStoreStartedAheadOfTheAnalysisIsPlannedAgainstTheMachineBeforeIt()
+    {
+        var dism = AnalysisWakingTheServicingStack();
+        var rows = Rows(dism).Reverse().ToArray();
+
+        var findings = await new CleanupPlanner(rows).PlanAllAsync();
+
+        Assert.Single(dism.Invocations);
+        Assert.All(rows, row =>
+        {
+            var plan = Assert.Single(findings, finding => finding.Provider == row).Plan!;
+            Assert.False(plan.WaitsForAnUpdate, $"{row.Name} was held: {string.Join(" ", plan.Notes.Select(n => n.Message))}");
+        });
+    }
+
+    /// <summary>
     /// The unrecognised case: a restart already owed when the pass began is an update's for all the
     /// pass can tell, so it holds every row, and DISM is never asked.
     /// </summary>
