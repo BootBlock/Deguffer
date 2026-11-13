@@ -140,6 +140,71 @@ public sealed class LabelFadeTests
         });
     }
 
+    /// <summary>
+    /// A stepped fade is gone no later than the fade it stands for, by under one step, and is whole
+    /// where its drawing put the name, so moving a name's fade to its step never leaves it over a
+    /// neighbour and never dims it at rest.
+    /// </summary>
+    [Theory]
+    [InlineData(1f / 1024)]
+    [InlineData(0.01f)]
+    [InlineData(0.2f)]
+    [InlineData(0.5f)]
+    [InlineData(0.7f)]
+    [InlineData(ExploreLabel.AtRest / ExploreLabel.FadeRange)]
+    [InlineData(0.9f)]
+    [InlineData(0.99f)]
+    public void AStepFadesNoLaterThanTheFadeItStandsFor(float gone)
+    {
+        var fade = new LabelFade(gone, Math.Min(ExploreLabel.AtRest, gone * ExploreLabel.FadeRange));
+        var stepped = LabelFade.AtStep(fade.Step);
+
+        Assert.InRange(stepped.Gone, gone, gone * MathF.Pow(2, 1f / LabelFade.StepsPerOctave) * 1.0001f);
+        Assert.True(stepped.Whole > stepped.Gone, $"whole at {stepped.Whole}, not above gone at {stepped.Gone}");
+        Assert.True(stepped.Whole <= ExploreLabel.AtRest, $"whole only at {stepped.Whole}");
+    }
+
+    /// <summary>A fade that starts exactly on a step is that step, and is not rounded to the next one.</summary>
+    [Fact]
+    public void AFadeOnAStepIsThatStep()
+    {
+        for (var step = -160; step < 0; step++)
+        {
+            Assert.Equal(step, LabelFade.AtStep(step).Step);
+        }
+    }
+
+    /// <summary>
+    /// The fades of names whose fades are close together are one step, so a map gives them one
+    /// opacity, and names whose fades are a step apart are not.
+    /// </summary>
+    [Fact]
+    public void FadesWithinAStepShareIt()
+    {
+        var step = LabelFade.AtStep(-20);
+
+        Assert.Equal(-20, new LabelFade(step.Gone * 0.99f, step.Whole).Step);
+        Assert.Equal(-20, new LabelFade(step.Gone * 0.97f, step.Whole).Step);
+        Assert.Equal(-21, new LabelFade(step.Gone * 0.95f, step.Whole).Step);
+    }
+
+    /// <summary>
+    /// A name is as opaque as the less opaque of its two axes, none at or below a fade's gone point and
+    /// all of it at or above its whole one.
+    /// </summary>
+    [Fact]
+    public void ANameIsAsOpaqueAsItsLessOpaqueAxis()
+    {
+        var across = new LabelFade(0.4f, 0.5f);
+        var down = new LabelFade(0.2f, 0.4f);
+
+        Assert.Equal(1, LabelFade.Opacity<Real>(across, down, 1, 1).Value, 5);
+        Assert.Equal(0.5, LabelFade.Opacity<Real>(across, down, 0.45, 1).Value, 5);
+        Assert.Equal(0.25, LabelFade.Opacity<Real>(across, down, 1, 0.25).Value, 5);
+        Assert.Equal(0.25, LabelFade.Opacity<Real>(across, down, 0.45, 0.25).Value, 5);
+        Assert.Equal(0, LabelFade.Opacity<Real>(across, down, 0.3, 1).Value, 5);
+    }
+
     private static ExploreLabel Label(float x, float y, float width, bool centred, LabelRoom room) =>
         new(Node: 1, x, y, width, Rotation: 0, centred, Black, Bytes: 1000, room,
             LabelAxis.Fixed(centred ? x + (width / 2) : x), LabelAxis.Fixed(y));
