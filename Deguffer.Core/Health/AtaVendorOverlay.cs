@@ -18,10 +18,10 @@ internal static partial class AtaVendorOverlay
 
     private const string LifeLeft = "How much of the drive's rated write life is left.";
 
-    private static readonly AtaAttributeDefinition RemainingLife = new(
+    internal static readonly AtaAttributeDefinition RemainingLife = new(
         "Remaining life", LifeLeft, SmartRawFormat.Percent, AttributeRole.RemainingLife);
 
-    private static readonly AtaAttributeDefinition RemainingLifeInLowByte = new(
+    internal static readonly AtaAttributeDefinition RemainingLifeInLowByte = new(
         "Remaining life", LifeLeft, SmartRawFormat.PercentInLowByte, AttributeRole.RemainingLife);
 
     private static readonly AtaAttributeDefinition TotalWritten = new(
@@ -57,13 +57,13 @@ internal static partial class AtaVendorOverlay
     private static readonly AtaAttributeDefinition SuddenPowerLoss = new(
         "Unexpected power loss", "Times power was lost without warning, so the drive had to recover its data when next switched on.", SmartRawFormat.Count, AttributeRole.Usage);
 
-    private static readonly AtaAttributeDefinition WearRange = new(
+    internal static readonly AtaAttributeDefinition WearRange = new(
         "Wear range", "How far apart the most and least erased blocks of flash memory are, as a share of the erases each block is rated for. A low figure means the drive spreads its wear evenly.", SmartRawFormat.PercentInLowByte, AttributeRole.Information);
 
-    private static readonly AtaAttributeDefinition GigabytesWritten = new(
+    internal static readonly AtaAttributeDefinition GigabytesWritten = new(
         "Total data written", "How much the computer has written to the drive over its life.", SmartRawFormat.Gigabytes, AttributeRole.Usage);
 
-    private static readonly AtaAttributeDefinition GigabytesRead = new(
+    internal static readonly AtaAttributeDefinition GigabytesRead = new(
         "Total data read", "How much the computer has read from the drive over its life.", SmartRawFormat.Gigabytes, AttributeRole.Usage);
 
     private static readonly AtaAttributeDefinition GigabytesWrittenToFlash = new(
@@ -95,7 +95,7 @@ internal static partial class AtaVendorOverlay
         : SamsungPm863OrSm863().IsMatch(drive.Model) ? SamsungPm863OrSm863Of(id)
         : Samsung845Dc().IsMatch(drive.Model) ? Samsung845DcOf(id)
         : SeagateFireCuda120().IsMatch(drive.Model) ? SeagateFireCuda120Of(id)
-        : null;
+        : KingstonSata.Of(id, drive);
 
     /// <summary>
     /// Whether <paramref name="threshold"/> fails its attribute whatever the value. TN-FD-22 table 7 makes
