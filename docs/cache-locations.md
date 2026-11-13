@@ -1555,7 +1555,9 @@ Deguffer asks for beside the version; and every environment variable Yarn is sta
 The remembered answers only decide what Explore and a duplicate search are told. A preview asks Yarn
 which it is and where its global folder is again every time, because this row removes the cache by
 path rather than through Yarn's own command. Which Yarn answered is remembered once for both rows,
-for everything but this row's preview. See Yarn's
+for everything but this row's preview. While a Yarn 1 `.yarnrc` (or `.yarn\config`, `%YARN_CONFIG%`
+or a Yarn 1 config folder) is there, a Berry answer is not remembered at all: Yarn 1 can hand itself
+to a Berry script named there, and Berry does not report it, so nothing would notice it replaced. See Yarn's
 [`.yarnrc.yml`](https://yarnpkg.com/configuration/yarnrc) documentation and
 [Corepack](https://github.com/nodejs/corepack).
 
