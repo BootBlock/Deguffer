@@ -12,6 +12,11 @@ namespace Deguffer.Core.Providers;
 /// every rc file reads the same. Declared with the version's inputs, it asks again. Which setting
 /// names it depends on which Yarn read it, so both are asked beside <c>-v</c>, and the one the
 /// reported version answers is used.</para>
+///
+/// <para><b>A Berry answer is not kept while a Yarn 1 rc file could have handed Yarn on.</b> Yarn 1
+/// reads <c>yarn-path</c> from its own rc files and runs the script it names, and when that script is
+/// a Berry, Berry reports only the <c>yarnPath</c> its own <c>.yarnrc.yml</c> holds. Nothing then
+/// names the script that answered, so nothing could notice it replaced.</para>
 /// </summary>
 /// <param name="Version">What <c>yarn -v</c> printed, or null where it would not say.</param>
 /// <param name="Script">
@@ -51,7 +56,7 @@ internal sealed record YarnVersionAnswer(YarnVersion? Version, YarnScriptSetting
             $"-v;config get yarn-path;config get yarnPath --json|{yarn}",
             environment.ToolEnvironment,
             answer => YarnToolInputs.Version(environment, yarn, answer.Script),
-            static answer => answer.IsAnswer,
+            answer => answer.IsAnswer && !(answer.Version is { IsBerry: true } && YarnToolInputs.MayHandYarnOnUnreported(environment)),
             askCt => RunAsync(runner, yarn, askCt));
 
     /// <summary>

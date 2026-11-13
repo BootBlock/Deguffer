@@ -70,6 +70,24 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
     }
 
     /// <summary>Both settings are asked together, so a miss costs one round of waiting.</summary>
+    /// <summary>
+    /// A Yarn 1 on the PATH reads <c>yarn-path</c> from <c>~\.yarnrc</c> and runs the script it names.
+    /// When that is a Berry, Berry reports no script, so nothing could notice the script replaced, and
+    /// the answer is asked again on each pass rather than kept.
+    /// </summary>
+    [Fact]
+    public async Task ABerryAnswerIsNotKeptWhileAYarn1RcFileCouldHaveHandedYarnOn()
+    {
+        _yarn.Write(".yarnrc");
+        var provider = Provider();
+
+        await provider.CleanedPlacesAsync();
+        provider.InvalidateCaches();
+        await provider.CleanedPlacesAsync();
+
+        Assert.Equal(2, _yarn.Asked("-v"));
+    }
+
     [Fact]
     public async Task AsksTheSettingsTogether()
     {

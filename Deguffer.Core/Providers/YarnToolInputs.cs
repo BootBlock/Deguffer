@@ -64,6 +64,32 @@ internal static class YarnToolInputs
     }
 
     /// <summary>
+    /// Whether any rc file Yarn 1 reads <c>yarn-path</c> from is there, or could not be read: the files
+    /// in which a Yarn 1 on the PATH can name a script Berry would not report
+    /// (<see cref="YarnVersionAnswer"/>). A folder Yarn 1 reads a config from counts when it holds
+    /// anything.
+    /// </summary>
+    public static bool MayHandYarnOnUnreported(IUserEnvironment environment)
+    {
+        List<string> files =
+        [
+            .. ToolInputs.InEachFolderUp(ToolInputs.WorkingDirectory(environment), ".yarnrc"),
+            Path.Combine(environment.UserProfile, ".yarnrc"),
+            Path.Combine(environment.UserProfile, ".yarn", "config"),
+        ];
+
+        if (NamedBy(environment, "YARN_CONFIG") is { } configured)
+        {
+            files.Add(configured);
+        }
+
+        string[] folders = [Path.Combine(environment.UserProfile, ".config", "yarn"), Path.Combine(environment.LocalAppData, "Yarn", "Config")];
+
+        return files.Any(static file => InputStamp.Of(file).Presence is not PathPresence.Absent)
+            || folders.Any(static folder => FolderEntries.Of(folder) is null or { Count: > 0 });
+    }
+
+    /// <summary>
     /// Every rc file Yarn 1 reads
     /// (<a href="https://classic.yarnpkg.com/en/docs/yarnrc">.yarnrc</a>,
     /// <a href="https://github.com/yarnpkg/yarn/blob/v1.22.22/src/util/rc.js">rc.js</a>): a
