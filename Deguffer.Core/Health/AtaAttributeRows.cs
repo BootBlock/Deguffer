@@ -12,10 +12,6 @@ internal static class AtaAttributeRows
     private const string ErrorCountKey = "errors";
     private const string WriteAmplificationKey = "write-amplification";
 
-    private const uint LowDoubleWord = 0xFFFF_FFFF;
-    private const ulong LowByte = 0xFF;
-    private const ulong Word = 0xFFFF;
-    private const int BitsPerWord = 16;
     private const int LifeLeftWarningPercent = 10;
 
     /// <summary>The range of values and thresholds that mean something. 0, 254 and 255 are reserved.</summary>
@@ -129,23 +125,19 @@ internal static class AtaAttributeRows
         { Format: SmartRawFormat.Opaque } => (Value(attribute), $"{known.Explanation} {UnusedNumbers}".TrimStart(), AttributeStanding.Normal),
         { Role: AttributeRole.FailureCount } => FailureCount(attribute, known),
         { Role: AttributeRole.RemainingLife } => RemainingLife(attribute, known),
-        { Role: AttributeRole.Temperature } => (Temperature(attribute, known.Format), known.Explanation, AttributeStanding.Normal),
-        { Format: SmartRawFormat.Gigabytes } => (HealthText.StatedGigabytes(Figure(attribute, known)), $"{known.Explanation} {UnstatedGigabyte}", AttributeStanding.Normal),
-        _ => (Decoded(attribute, known, logicalSectorBytes), known.Explanation, AttributeStanding.Normal),
+        { Role: AttributeRole.Temperature } => (AtaRawReading.Temperature(attribute, known.Format), known.Explanation, AttributeStanding.Normal),
+        { Format: SmartRawFormat.Gigabytes } => (HealthText.StatedGigabytes(AtaRawReading.Figure(attribute, known)), $"{known.Explanation} {UnstatedGigabyte}", AttributeStanding.Normal),
+        _ => (AtaRawReading.Decoded(attribute, known, logicalSectorBytes), known.Explanation, AttributeStanding.Normal),
     };
 
     private static (string, string, AttributeStanding) Status(AtaAttribute attribute, AtaStatusDefinition status) =>
         status.Codes.TryGetValue(attribute.Raw, out var code)
             ? (code.Reading, $"{status.Explanation} {code.Meaning}", code.Standing)
-            : (Code(attribute), $"{status.Explanation} The manufacturer's document does not list this code, so Deguffer shows it as reported.", AttributeStanding.Normal);
-
-    /// <summary>The count or hours in the raw value, as wide as the definition says the figure is.</summary>
-    private static ulong Figure(AtaAttribute attribute, AtaAttributeDefinition known) =>
-        known.Width is RawWidth.AllSixBytes ? attribute.Raw : attribute.Raw & LowDoubleWord;
+            : (AtaRawReading.Code(attribute), $"{status.Explanation} The manufacturer's document does not list this code, so Deguffer shows it as reported.", AttributeStanding.Normal);
 
     private static (string, string, AttributeStanding) FailureCount(AtaAttribute attribute, AtaAttributeDefinition known)
     {
-        var count = Figure(attribute, known);
+        var count = AtaRawReading.Figure(attribute, known);
 
         return count == 0
             ? ("None", $"{known.Explanation} None so far.", AttributeStanding.Normal)
@@ -154,54 +146,14 @@ internal static class AtaAttributeRows
 
     private static (string, string, AttributeStanding) RemainingLife(AtaAttribute attribute, AtaAttributeDefinition known)
     {
-        var left = Percentage(attribute, known);
+        var left = AtaRawReading.Percentage(attribute, known);
 
         return left <= LifeLeftWarningPercent
             ? ($"{left}% left", $"{known.Explanation} The drive is near the end of its rated life, so plan to replace it.", AttributeStanding.Watch)
             : ($"{left}% left", known.Explanation, AttributeStanding.Normal);
     }
 
-    /// <summary>The percentage a <see cref="SmartRawFormat.Percent"/> or <see cref="SmartRawFormat.PercentInLowByte"/> attribute reports.</summary>
-    private static int Percentage(AtaAttribute attribute, AtaAttributeDefinition known) =>
-        known.Format is SmartRawFormat.PercentInLowByte ? (int)(attribute.Raw & LowByte) : attribute.Value;
-
-    private static string Temperature(AtaAttribute attribute, SmartRawFormat format)
-    {
-        if (format is not SmartRawFormat.CelsiusRange)
-        {
-            var celsius = (int)(attribute.Raw & LowByte);
-
-            return celsius == 0 ? "Not reported" : HealthText.Temperature(celsius);
-        }
-
-        var current = (int)(attribute.Raw & Word);
-        var lowest = (int)((attribute.Raw >> BitsPerWord) & Word);
-        var highest = (int)((attribute.Raw >> (2 * BitsPerWord)) & Word);
-
-        // A drive that has recorded no highest has recorded no range either.
-        return (current, highest) switch
-        {
-            (0, _) => "Not reported",
-            (_, 0) => HealthText.Temperature(current),
-            _ => $"{HealthText.Temperature(current)} (lowest {HealthText.Temperature(lowest)}, highest {HealthText.Temperature(highest)})",
-        };
-    }
-
-    private static string Decoded(AtaAttribute attribute, AtaAttributeDefinition known, uint? logicalSectorBytes) => known.Format switch
-    {
-        SmartRawFormat.Hours => HealthText.Hours(Figure(attribute, known)),
-        SmartRawFormat.Bytes512 => HealthText.Size((UInt128)attribute.Raw * DriveRequests.SectorBytes),
-        SmartRawFormat.LogicalSectors => logicalSectorBytes is { } size
-            ? HealthText.Size((UInt128)attribute.Raw * size)
-            : $"{HealthText.Count(attribute.Raw)} sectors",
-        SmartRawFormat.Percent or SmartRawFormat.PercentInLowByte => HealthText.Percent(Percentage(attribute, known)),
-        SmartRawFormat.Status => Code(attribute),
-        _ => HealthText.Count(Figure(attribute, known)),
-    };
-
     private static string Value(AtaAttribute attribute) => $"Scored {attribute.Value}";
-
-    private static string Code(AtaAttribute attribute) => $"Code 0x{attribute.Raw:X2}";
 
     private static string Key(AtaAttribute attribute) => $"ata-{attribute.Id}";
 

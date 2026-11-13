@@ -54,6 +54,33 @@ internal enum SmartRawFormat
     /// </summary>
     Gigabytes,
 
+    /// <summary>A count of 32 MiB units, each 65,536 sectors of 512 bytes, as wide as the definition's <see cref="RawWidth"/>.</summary>
+    Units32MiB,
+
+    /// <summary>Minutes, as wide as the definition's <see cref="RawWidth"/>. FFFFh means the drive has not measured it yet.</summary>
+    Minutes,
+
+    /// <summary>The raw value divided by 1024 is a percentage. FFFFh means the drive has not measured it yet.</summary>
+    PercentPer1024,
+
+    /// <summary>The raw value is a whole percentage. FFFFh means the drive has not measured it yet.</summary>
+    RawPercent,
+
+    /// <summary>
+    /// Degrees in bytes 0-1, the lowest seen in byte 2, the highest seen in byte 3, and in bytes 4-5 the
+    /// times the drive ran hotter than it is rated for.
+    /// </summary>
+    CelsiusWithOverheats,
+
+    /// <summary>
+    /// A power-loss capacitor test: the microseconds the capacitor took to discharge in bytes 0-1, the
+    /// minutes since that test in bytes 2-3, and the number of tests in bytes 4-5.
+    /// </summary>
+    CapacitorTest,
+
+    /// <summary>How hard the drive is slowing itself to cool down, as a percentage in byte 0, and the times it has done so in bytes 1-4.</summary>
+    ThrottleStatus,
+
     /// <summary>Manufacturers use these bytes differently, so they are shown as they are and judged by nothing.</summary>
     Opaque,
 

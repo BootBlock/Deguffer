@@ -8,7 +8,7 @@ namespace Deguffer.Core.Scanning;
 /// </summary>
 public static class FreeSpace
 {
-    private static readonly string[] Units = ["B", "KB", "MB", "GB", "TB"];
+    private static readonly string[] Units = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
 
     /// <summary>
     /// A size in words, qualified where it is a prediction rather than a measurement.
@@ -35,9 +35,16 @@ public static class FreeSpace
     private static string Items(long entries) => entries == 1 ? "1 item" : $"{entries:N0} items";
 
     /// <summary>Human-readable size, in the binary units Windows itself reports.</summary>
-    public static string Format(long bytes)
+    public static string Format(long bytes) => Scaled(Math.Abs((double)bytes), bytes < 0 ? "-" : string.Empty);
+
+    /// <summary>
+    /// A size a drive reports in a counter wider than <see cref="long"/>, such as a lifetime total of
+    /// 48-bit units, which can pass the largest <see cref="long"/> and must not be stated as less.
+    /// </summary>
+    public static string FormatWide(UInt128 bytes) => Scaled((double)bytes, string.Empty);
+
+    private static string Scaled(double value, string sign)
     {
-        double value = Math.Abs(bytes);
         var unit = 0;
 
         while (value >= 1024 && unit < Units.Length - 1)
@@ -46,7 +53,6 @@ public static class FreeSpace
             unit++;
         }
 
-        var sign = bytes < 0 ? "-" : string.Empty;
         var precision = unit >= 2 && value < 100 ? 1 : 0;
 
         return $"{sign}{value.ToString($"F{precision}")} {Units[unit]}";

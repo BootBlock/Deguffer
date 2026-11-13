@@ -15,8 +15,22 @@ public class FreeSpaceTests
     [InlineData(1023, "1023 B")]
     [InlineData(1024, "1 KB")]
     [InlineData(1536 * 1024, "1.5 MB")]
+    [InlineData(1L << 50, "1.0 PB")]
+    [InlineData(long.MaxValue, "8.0 EB")]
     public void FormatsSizesInTheBinaryUnitsWindowsReports(long bytes, string expected) =>
         Assert.Equal(expected, FreeSpace.Format(bytes));
+
+    /// <summary>
+    /// A drive's lifetime counter can pass the largest <see cref="long"/>. Holding it there would state
+    /// a total about a thousand times too small, so the wide form goes on to the larger units.
+    /// </summary>
+    [Fact]
+    public void StatesASizePastTheLargestLongInFull()
+    {
+        Assert.Equal("1.0 ZB", FreeSpace.FormatWide(UInt128.One << 70));
+        Assert.Equal("1.0 YB", FreeSpace.FormatWide(UInt128.One << 80));
+        Assert.Equal("1.5 MB", FreeSpace.FormatWide(1536U * 1024));
+    }
 
     /// <summary>
     /// §5.4 reports the free-space *change*, which is negative whenever the machine wrote more
