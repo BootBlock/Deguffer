@@ -148,7 +148,8 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
         var results = new ScanResult[asked.Count][];
         var directories = new List<int>(asked.Count);
 
-        // Each directory's own time, from the read that found it, which dates it with its listing.
+        // Each entry's own time, from the read that found it: a directory's dates it with its listing,
+        // and a file's is the time the guard judges it by.
         var owns = new long[asked.Count];
 
         for (var i = 0; i < asked.Count; i++)

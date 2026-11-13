@@ -23,8 +23,8 @@ public sealed class FileTargetReadTests : IDisposable
     public void Dispose() => _temp.Dispose();
 
     /// <summary>
-    /// A file costs one read, as a directory and an absent path do. Asking for a directory first read
-    /// a file once to learn none was there, and again for its length and times.
+    /// A file costs one read, as a directory and an absent path do: the read that finds a file sizes and
+    /// dates it as well.
     /// </summary>
     [Fact]
     public async Task EachPathIsReadOnceWhateverItIs()
@@ -191,11 +191,11 @@ public sealed class FileTargetReadTests : IDisposable
     }
 
     /// <summary>
-    /// The link-aware scanner judges a file by the time its own probe read, once for each guard, and
-    /// gives the plan the same verdict.
+    /// The link-aware scanner gives the plan a verdict on a file for each guard it measures under, and
+    /// withholds the file only under the guard that keeps it.
     /// </summary>
     [Fact]
-    public async Task TheLinkAwareScannerJudgesAFileFromTheReadThatFoundIt()
+    public async Task TheLinkAwareScannerGivesAVerdictOnAFileForEachGuard()
     {
         var recent = _temp.CreateFile(4096, "store", "recent.bin");
         var guard = MinimumAge.WithinHours(8, DateTime.UtcNow);

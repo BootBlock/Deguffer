@@ -299,11 +299,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         // user's value for all of them.
         var effective = MinimumAge.Stricter(plan.Keep, keep);
         var guarded = effective.IsOn
-            ? Guarded(
-                plan,
-                effective,
-                keep,
-                await RecentFileSteps.KeptAsync([.. plan.Steps.OfType<DeleteFileStep>()], effective, Scanner.Tuning, ct).ConfigureAwait(false))
+            ? Guarded(plan, effective, keep, await RecentFileSteps.KeptAsync([.. plan.Steps.OfType<DeleteFileStep>()], effective, Scanner.Tuning, ct).ConfigureAwait(false))
             : plan;
 
         // Stamped here for the reason the guard is: no provider held the defect, and a provider
@@ -648,7 +644,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
         // already without whatever the removal leaves standing and nothing is measured to be taken off.
         // The target's own path comes first in its group, so the group's age is the target's.
         var (each, measured) = await MeasureGroupsAsync(
-            [.. targets.Select(t => (IReadOnlyList<ScanRequest>)[new ScanRequest(t.Path, BoundsOf(t)), .. Whole(t.IndexedBy ?? [])])],
+            [.. targets.Select(t => (IReadOnlyList<ScanRequest>)[new ScanRequest(t.Path, t.Bounds), .. Whole(t.IndexedBy ?? [])])],
             keep,
             ct).ConfigureAwait(false);
 
@@ -834,22 +830,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// For a group of one file, whether the guard it was measured under keeps it. See
     /// <see cref="ScanResult.FileKept"/>.
     /// </param>
-    private readonly record struct GroupMeasure(
-        ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores, DateTime? LastWritten, bool? FileKept);
-
-    /// <summary>
-    /// What the removal of <paramref name="target"/> leaves standing, for its measurement to leave
-    /// out: the folder itself where it is emptied in place, as a Recycle Bin's folder is, and the
-    /// entries a folder emptied in place is told to leave. See <see cref="ScanBounds"/>.
-    /// </summary>
-    private static ScanBounds BoundsOf(DeletionTarget target) => target.Kind switch
-    {
-        TargetKind.DirectoryContents => new ScanBounds(
-            KeepRoot: true,
-            [.. target.Spared ?? [], .. target.OwnedElsewhere ?? [], .. target.UserWork ?? []]),
-        TargetKind.RecycleBin => ScanBounds.Contents,
-        _ => default,
-    };
+    private readonly record struct GroupMeasure(ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores, DateTime? LastWritten, bool? FileKept);
 
     /// <summary>
     /// The guard applied to a finished plan: carried onto it, said out loud, and — for a step whose

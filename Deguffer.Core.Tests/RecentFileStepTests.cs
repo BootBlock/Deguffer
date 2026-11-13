@@ -86,7 +86,7 @@ public sealed class RecentFileStepTests : IDisposable
 
     /// <summary>
     /// A link written just now is withdrawn, though the file it points at is old: the removal judges a
-    /// link by its own times, and the measurement said so.
+    /// link by its own times, and so does the plan.
     /// </summary>
     [Fact]
     public async Task ARecentlyWrittenLinkIsWithdrawn()

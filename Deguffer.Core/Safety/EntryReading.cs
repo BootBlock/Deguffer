@@ -5,8 +5,7 @@ namespace Deguffer.Core.Safety;
 /// from what it points at, to size a file, and to date either kind, without asking Windows again.
 ///
 /// <para>Here so that a measurement handed a path it cannot classify in advance pays one read for it,
-/// whichever kind it turns out to be. Asking for a directory and then for a file read a file twice,
-/// once to learn that no directory was there.</para>
+/// whichever kind it turns out to be: the read that finds a file has already sized and dated it.</para>
 /// </summary>
 /// <param name="Attributes">The attributes Windows reported.</param>
 /// <param name="Length">The length in bytes: a link's own, never its target's, and zero for a directory.</param>

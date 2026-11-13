@@ -1,3 +1,5 @@
+using Deguffer.Core.Scanning;
+
 namespace Deguffer.Core.Providers;
 
 /// <summary>Which kind of removal a target becomes.</summary>
@@ -97,4 +99,17 @@ public readonly record struct DeletionTarget(
     IReadOnlyList<string>? Spared = null,
     IReadOnlyList<string>? OwnedElsewhere = null,
     IReadOnlyList<string>? UserWork = null,
-    bool DatedOneLevelDown = false);
+    bool DatedOneLevelDown = false)
+{
+    /// <summary>
+    /// What the removal of this target leaves standing, for its measurement to leave out: the folder
+    /// itself where it is emptied in place, as a Recycle Bin's folder is, and the entries a folder
+    /// emptied in place is told to leave. See <see cref="ScanBounds"/>.
+    /// </summary>
+    public ScanBounds Bounds => Kind switch
+    {
+        TargetKind.DirectoryContents => new ScanBounds(KeepRoot: true, [.. Spared ?? [], .. OwnedElsewhere ?? [], .. UserWork ?? []]),
+        TargetKind.RecycleBin => ScanBounds.Contents,
+        _ => default,
+    };
+}

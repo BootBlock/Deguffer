@@ -8,14 +8,14 @@
 773 Deguffer.App/Views/ExplorePage.xaml.cs
 550 Deguffer.Core/Execution/CleanupPlan.cs
 771 Deguffer.Core/Execution/CleanupPlanner.cs
-707 Deguffer.Core/Execution/CleanupStep.cs
+689 Deguffer.Core/Execution/CleanupStep.cs
 1082 Deguffer.Core/Execution/PlanExecutor.cs
 559 Deguffer.Core/Exploring/Acting/ExploreActionPolicy.cs
 598 Deguffer.Core/Exploring/ExploreTree.cs
 835 Deguffer.Core/Exploring/Layout/TreemapLayout.cs
 551 Deguffer.Core/Providers/AffinityModelCacheProvider.cs
 539 Deguffer.Core/Providers/ClaudeCodeDerivedStateProvider.cs
-960 Deguffer.Core/Providers/CleanupProviderBase.cs
+956 Deguffer.Core/Providers/CleanupProviderBase.cs
 590 Deguffer.Core/Providers/GpuShaderCacheProvider.cs
 537 Deguffer.Core/Providers/MavenRepositoryProvider.cs
 540 Deguffer.Core/Providers/PlatformIoCacheProvider.cs
@@ -28,6 +28,5 @@
 659 Deguffer.Core/Providers/VcpkgCacheProvider.cs
 889 Deguffer.Core/Safety/FileInformation.cs
 739 Deguffer.Core/Safety/IUserEnvironment.cs
-622 Deguffer.Core/Safety/LongPath.cs
 593 Deguffer.Core/Scanning/DirectoryScanner.cs
 510 Deguffer.Core/Scanning/Mft/MftReadPass.cs

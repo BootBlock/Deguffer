@@ -9,8 +9,7 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>On the measurement's word where it can be taken.</b> The scanner judged each file it
 /// measured by the file's own times, from the read that sized it, and the step carries that verdict
-/// (<see cref="DeleteFileStep.AgeVerdict"/>). Reading each file again to ask the same question cost a
-/// row of thousands of files a further read of each, one after another.</para>
+/// (<see cref="DeleteFileStep.AgeVerdict"/>), so the file is not asked the same question twice.</para>
 ///
 /// <para><b>The file is read where the verdict cannot answer</b>: a step built without one, and a
 /// verdict given under a guard other than <paramref name="keep"/>, such as the user's guard where a

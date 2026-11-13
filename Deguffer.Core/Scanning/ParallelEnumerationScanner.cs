@@ -213,15 +213,14 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner
     /// directories need. On a worker thread, because it reads each path and asks each volume's device.
     ///
     /// <para><b>One attribute read a path, whichever kind it is.</b> The read describes a directory's
-    /// time for its walk, and a file's length and times for its measurement, so a file is not asked
-    /// about twice: once to learn that no directory is there, and again for its length. A refusal is
-    /// met once, and a refused file is answered as a refused directory is, because the read fails the
-    /// same way whichever kind is there.</para>
+    /// time for its walk, and a file's length and times for its measurement. A refusal is met once,
+    /// and a refused file is answered as a refused directory is, because the read fails the same way
+    /// whichever kind is there.</para>
     ///
-    /// <para><b>Several paths at once</b>, through <see cref="DiskBoundWork"/>: a row offering
-    /// thousands of single files waited on each read in turn. Under the volume's walk tuning and the
-    /// shared listing budget, so the reads share the disk with the walks of the rows planned beside
-    /// this one, and answered in the order asked.</para>
+    /// <para><b>Several paths at once</b>, through <see cref="DiskBoundWork"/>, because a row may offer
+    /// thousands of single files. Under the volume's walk tuning and the shared listing budget, so the
+    /// reads share the disk with the walks of the rows planned beside this one, and answered in the
+    /// order asked.</para>
     /// </summary>
     private (ScanResult[][] Results, long[] Owns, IReadOnlyList<IReadOnlyList<DirectoryWalk>> Walks) Probe(
         IReadOnlyList<ScanRequest> asked,
@@ -301,7 +300,7 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner
     /// </summary>
     /// <param name="owns">
     /// Each root's own time, from the attribute read that found it, as
-    /// <see cref="LongPath.ProbeDirectoryTime(string, out long)"/> gives it, in the order of
+    /// <see cref="EntryReading.NewestFileTime"/> gives it, in the order of
     /// <paramref name="asked"/>.
     /// </param>
     private Walked[][] Measure(
