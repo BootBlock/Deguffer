@@ -247,7 +247,7 @@ public sealed class YarnClassicCacheProviderMemoryTests : IDisposable
     [Fact]
     public async Task ASecondExploreBuildAnswersFromMemoryWithoutAskingYarn()
     {
-        var moved = Path.Combine(_yarn.Temp, "caches", "yarn");
+        var moved = Path.Combine(Environment.UserProfile, "caches", "yarn");
         Populate(moved);
         var stranger = YarnToolFixture.WriteAt(moved, "stranger.bin");
         _yarn.ClassicRoot = moved;
@@ -259,7 +259,8 @@ public sealed class YarnClassicCacheProviderMemoryTests : IDisposable
         Assert.Equal(1, _yarn.Asked("-v"));
         Assert.False(first.MayRemove(moved).IsAllowed);
         Assert.False(second.MayRemove(moved).IsAllowed);
-        Assert.False(second.MayRemove(stranger).IsAllowed);
+        Assert.Contains("This is Yarn 1's cache.", first.MayRemove(stranger).Reason, StringComparison.Ordinal);
+        Assert.Contains("This is Yarn 1's cache.", second.MayRemove(stranger).Reason, StringComparison.Ordinal);
     }
 
     /// <summary>

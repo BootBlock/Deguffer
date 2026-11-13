@@ -129,16 +129,20 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
     [Fact]
     public async Task ASecondExploreBuildAnswersFromMemoryWithoutAskingYarn()
     {
-        var store = YarnToolFixture.WriteAt(_first, "store", "v1", "index.js");
+        var global = Path.Combine(Environment.UserProfile, "berry-global");
+        YarnToolFixture.WriteAt(global, "cache", Archive);
+        YarnToolFixture.WriteAt(global, "store", "v1", "index.js");
+        _yarn.BerryGlobalFolder = global;
 
         var first = await ExploreActionPolicy.ForAsync(_yarn.System, Environment, new FakeVolumeInventory(), [Provider()]);
         var second = await ExploreActionPolicy.ForAsync(_yarn.System, Environment, new FakeVolumeInventory(), [Provider()]);
 
         Assert.Equal(1, Asked);
         Assert.Equal(1, _yarn.Asked("-v"));
-        Assert.False(first.MayRemove(_first).IsAllowed);
-        Assert.False(second.MayRemove(_first).IsAllowed);
-        Assert.False(second.MayRemove(Path.GetDirectoryName(store)!).IsAllowed);
+        Assert.False(first.MayRemove(global).IsAllowed);
+        Assert.False(second.MayRemove(global).IsAllowed);
+        Assert.Contains("This is the global folder of Yarn 2", first.MayRemove(Path.Combine(global, "store")).Reason, StringComparison.Ordinal);
+        Assert.Contains("This is the global folder of Yarn 2", second.MayRemove(Path.Combine(global, "store")).Reason, StringComparison.Ordinal);
     }
 
     [Theory]
