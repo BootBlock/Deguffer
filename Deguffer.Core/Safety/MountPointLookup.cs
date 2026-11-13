@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Deguffer.Core.Diagnostics;
 
 namespace Deguffer.Core.Safety;
 
@@ -75,7 +76,14 @@ internal sealed partial class MountPointLookup
 
         var extended = LongPath.Extended(qualified);
 
-        return ProvenRoot(extended) ?? _askWindows(extended);
+        if (ProvenRoot(extended) is { } root)
+        {
+            return root;
+        }
+
+        using var timing = MachineCallTally.Time(MachineCall.VolumePathName);
+
+        return _askWindows(extended);
     }
 
     /// <summary>
