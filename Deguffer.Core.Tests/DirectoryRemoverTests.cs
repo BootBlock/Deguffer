@@ -1055,7 +1055,7 @@ public sealed class DirectoryRemoverTests : IDisposable
     /// <para>That failure is silent and runs in the dangerous direction — every spared entry would
     /// be deleted, and the outcome would look exactly like a successful clear. The assertion is
     /// therefore on what survived a spare declared in display form, which is the form a plan carries.
-    /// Stripping <c>LongPath.Extended</c> from <c>RemovalBounds.SparedPaths</c> fails this and
+    /// Stripping <c>LongPath.Extended</c> from <c>BoundPaths</c> fails this and
     /// nothing else in the suite.</para>
     /// </summary>
     [Fact]
@@ -1073,6 +1073,42 @@ public sealed class DirectoryRemoverTests : IDisposable
         Assert.Equal(1, outcome.Spared);
         Assert.True(File.Exists(Path.Combine(spared, "payload.bin")), "the spared entry was deleted");
         Assert.Equal(0, outcome.BytesReclaimed);
+    }
+
+    /// <summary>
+    /// A bound path written with a trailing separator, as a path read from a setting or built by
+    /// appending a separator arrives, holds back the entry it names. A walk's entries never end in a
+    /// separator, so matching the path exactly would delete every such entry while the outcome reported
+    /// a clean removal.
+    /// </summary>
+    [Theory]
+    [InlineData(nameof(RemovalBounds.Spared))]
+    [InlineData(nameof(RemovalBounds.UserWork))]
+    [InlineData(nameof(RemovalBounds.OwnedElsewhere))]
+    public async Task LeavesAnEntryABoundPathWithATrailingSeparatorNames(string member)
+    {
+        var root = _temp.CreateDirectory("scratch");
+        var payload = _temp.CreateFile(512, "scratch", "held", "payload.bin");
+        var loose = _temp.CreateFile(256, "scratch", "abandoned.tmp");
+        TempDirectory.Age(payload, TimeSpan.FromDays(30));
+        TempDirectory.Age(loose, TimeSpan.FromDays(30));
+
+        string[] held = [Path.Combine(root, "held") + Path.DirectorySeparatorChar];
+        var bounds = member switch
+        {
+            nameof(RemovalBounds.Spared) => new RemovalBounds(KeepRoot: true, held),
+            nameof(RemovalBounds.UserWork) => new RemovalBounds(KeepRoot: true, [], UserWork: held),
+            _ => new RemovalBounds(KeepRoot: true, [], OwnedElsewhere: held),
+        };
+
+        var outcome = await DirectoryRemover.RemoveAsync(root, bounds: bounds);
+
+        Assert.True(File.Exists(payload), "the held-back entry was deleted");
+        Assert.True(Directory.Exists(root), "the root a bound keeps was deleted");
+        Assert.False(File.Exists(loose));
+        Assert.Equal(256, outcome.BytesReclaimed);
+        Assert.Equal(member is nameof(RemovalBounds.Spared) ? 1 : 0, outcome.Spared);
+        Assert.Equal(member is nameof(RemovalBounds.UserWork) ? 1 : 0, outcome.UserWork);
     }
 
     /// <summary>

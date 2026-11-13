@@ -48,38 +48,19 @@ public sealed record RemovalBounds(
     public static readonly RemovalBounds None = new(KeepRoot: false, []);
 
     /// <summary>
-    /// The spared paths as a set the walk can ask cheaply, in the form
-    /// <see cref="Scanning.WalkEntry.FullName"/> arrives in.
+    /// Every path held back, filed under the folder it sits in, in the extended form a walk meets entries
+    /// in. Built once per removal, because the walk asks it of every folder of a tree of hundreds of
+    /// thousands.
     ///
-    /// <para>Built once per removal rather than per entry: the walk asks this of every file and
-    /// directory in a tree of hundreds of thousands, and a linear scan of a list there is per-entry
-    /// work for an answer a hash lookup gives (G4).</para>
-    ///
-    /// <para><see cref="LongPath.Extended"/> on the way in, because an enumeration below an extended
-    /// root yields extended children, and a set holding display paths would match none of them —
-    /// which fails silently and in the dangerous direction: every spared path would be deleted.</para>
+    /// <para><see cref="LongPath.Extended"/> on the way in, because a walk below an extended root lists
+    /// extended children, and an index of display paths would match none of them. That fails silently
+    /// and in the dangerous direction: every held-back path would be deleted.</para>
     /// </summary>
-    internal IReadOnlySet<string> SparedPaths { get; } = ExtendedSet(Spared);
+    internal BoundPaths Paths { get; } = new(UserWork ?? [], Spared, OwnedElsewhere ?? []);
 
-    /// <summary>
-    /// <see cref="OwnedElsewhere"/> as a set the walk can ask cheaply, on the terms
-    /// <see cref="SparedPaths"/> gives.
-    /// </summary>
-    internal IReadOnlySet<string> OwnedElsewherePaths { get; } = ExtendedSet(OwnedElsewhere ?? []);
-
-    /// <summary>
-    /// <see cref="UserWork"/> as a set the walk can ask cheaply, on the terms
-    /// <see cref="SparedPaths"/> gives.
-    /// </summary>
-    internal IReadOnlySet<string> UserWorkPaths { get; } = ExtendedSet(UserWork ?? []);
-
-    /// <summary>Whether any entry is held back by path, so the walk needs each entry's full path.</summary>
-    internal bool IsBounded => SparedPaths.Count > 0 || OwnedElsewherePaths.Count > 0 || UserWorkPaths.Count > 0;
+    /// <summary>Whether any entry is held back by path, so the walk has to ask about each folder.</summary>
+    internal bool IsBounded => !Paths.IsEmpty;
 
     /// <summary>Whether <paramref name="extended"/> is an entry this removal leaves standing by its path.</summary>
-    internal bool HoldsBack(string extended) =>
-        SparedPaths.Contains(extended) || OwnedElsewherePaths.Contains(extended) || UserWorkPaths.Contains(extended);
-
-    private static HashSet<string> ExtendedSet(IReadOnlyList<string> paths) =>
-        new(paths.Select(LongPath.Extended), StringComparer.OrdinalIgnoreCase);
+    internal bool HoldsBack(string extended) => Paths.Of(extended) is not BoundReason.None;
 }
