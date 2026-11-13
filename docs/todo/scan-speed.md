@@ -35,7 +35,7 @@ each of them for.
 
 | Issue | What it adds |
 | --- | --- |
-| #443 | Per-provider planning time, and a benchmark route that times a whole planning pass. |
+| #443 | Per-provider planning time, and a benchmark route that times a whole planning pass. Done: a pass reports each provider's start and end through `timed`, `PlanTimeHistory` keeps the median of each provider's last five full passes at each elevation, and `Deguffer.Benchmark plan` prints the whole pass and each provider's start, end and time. |
 | #476 | A benchmark route that runs several walks of one volume at once. |
 | #477 | The experiment that separates the two causes of the half-speed raced walk (`after-the-scanner.md` item 7). Done: neither cause holds warm; a read through the volume's handle does (#544). |
 | #479 | Timing of each stage of an index build, to explain the system volume's slow read per record. |
