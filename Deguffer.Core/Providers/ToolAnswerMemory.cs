@@ -22,11 +22,14 @@ namespace Deguffer.Core.Providers;
 /// <see cref="CoarseTimes"/>, because the tool may have read them before the change. The next ask
 /// then reads them again, unchanged, and keeps that answer.</para>
 ///
+/// <para><b>Public only so a public provider can take one</b> (a test hands two providers the same
+/// memory, as two Explore builds share <see cref="Shared"/>). Asking stays inside Core.</para>
+///
 /// <para><b>Two askers at once both ask.</b> Sharing one ask between them would hand one caller the
 /// cancellation of another, and two Explore builds rarely overlap. Either answer is right, so the
 /// later one stands.</para>
 /// </summary>
-internal sealed class ToolAnswerMemory
+public sealed class ToolAnswerMemory
 {
     /// <summary>
     /// How much earlier than the tool's start an input may be written and still be taken as read: the
@@ -59,7 +62,7 @@ internal sealed class ToolAnswerMemory
     /// The remembered answer where the tool's inputs read as they did when it gave it, or the tool's
     /// answer now, which is then remembered.
     /// </summary>
-    public async Task<T> AskAsync<T>(ToolQuestion<T> question, CancellationToken ct)
+    internal async Task<T> AskAsync<T>(ToolQuestion<T> question, CancellationToken ct)
     {
         if (_answers.TryGetValue(question.Key, out var held)
             && held.Answer is T answer
@@ -76,7 +79,7 @@ internal sealed class ToolAnswerMemory
     /// under the location it plans from, where a missed input would move a deletion (§5.2) rather
     /// than misstate a figure.
     /// </summary>
-    public async Task<T> AskAfreshAsync<T>(ToolQuestion<T> question, CancellationToken ct)
+    internal async Task<T> AskAfreshAsync<T>(ToolQuestion<T> question, CancellationToken ct)
     {
         var started = _time.GetUtcNow() - CoarseTimes;
         var answer = await question.Ask(ct).ConfigureAwait(false);
