@@ -43,7 +43,11 @@ internal enum ContentReadResult
 
 /// <summary>What <see cref="ContentReader.Read"/> answered.</summary>
 /// <param name="Checksum">The checksum of what was read, where <paramref name="Result"/> is <see cref="ContentReadResult.Read"/>.</param>
-internal readonly record struct ContentReading(ContentReadResult Result, ContentChecksum Checksum)
+/// <param name="Remembered">
+/// Whether <paramref name="Checksum"/> is one an earlier search read (<see cref="ChecksumCache"/>), so
+/// no byte of the file was read this time.
+/// </param>
+internal readonly record struct ContentReading(ContentReadResult Result, ContentChecksum Checksum, bool Remembered = false)
 {
     public static ContentReading LeftOut(ContentReadResult result) => new(result, default);
 }
@@ -207,7 +211,7 @@ internal sealed class ContentReader
             // this account may not read, is left out as a read would leave it (§7.4).
             if (remembers && _remembered!.Find(opened.State!, part, checksum.Algorithm) is { } known)
             {
-                return new ContentReading(ContentReadResult.Read, known);
+                return new ContentReading(ContentReadResult.Read, known, Remembered: true);
             }
 
             ContentChecksum? read;

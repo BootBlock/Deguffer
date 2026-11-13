@@ -42,7 +42,7 @@ internal sealed class ProtectRoute
         _folders = [.. Enumerable.Range(0, folders).Select(i => (site.Place($"f{i}"), "A folder the benchmark built to record."))];
     }
 
-    public RouteRun Timed => new(Run, Build, Check);
+    public RouteRun Timed => RouteRun.Blocking(Run, Build, Check);
 
     private void Build(CancellationToken ct)
     {

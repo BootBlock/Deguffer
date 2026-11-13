@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Deguffer.Core.Duplicates;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Scanning.Mft;
 
@@ -100,6 +101,11 @@ internal static class Report
         else if (route.Removes())
         {
             RemovalRows(text, first, later);
+        }
+        else if (route is Route.Duplicates)
+        {
+            Row(text, "MiB/s read", Rate(first.MegabytesPerSecond), Over(later, r => r.MegabytesPerSecond, Rate));
+            SearchRows(text, first, later);
         }
         else if (!route.ReadsTable())
         {
@@ -263,6 +269,83 @@ internal static class Report
         MftBuildStage.ChildLinks => "  child links",
         MftBuildStage.TreeAssembly => "  tree assembly",
         _ => throw new ArgumentOutOfRangeException(nameof(stage), stage, "Not a stage of a table read."),
+    };
+
+    /// <summary>
+    /// Where a duplicate search's time went: each part in the order it runs, and what none covers, so
+    /// the rows add up to the elapsed time. Then what each part kept, asked about and read, each stage
+    /// of the comparison and each lane of it. The two stages overlap, so their times can add up to more
+    /// than the comparison's. A part or stage a run never reached reads as zero.
+    /// </summary>
+    private static void SearchRows(StringBuilder text, RunSample first, RunSample[] later)
+    {
+        var search = SearchOf(first);
+
+        foreach (var part in Enum.GetValues<DuplicateSearchPart>())
+        {
+            Row(text, PartName(part), Duration(search.Stages.Of(part).TotalSeconds), Over(later, r => SearchOf(r).Stages.Of(part).TotalSeconds, Duration));
+        }
+
+        Row(text, "  the rest", Duration(SearchRest(first)), Over(later, SearchRest, Duration));
+        Row(text, "files kept", Count(search.Stages.Kept), Over(later, r => SearchOf(r).Stages.Kept, Count));
+        Row(text, "files identified", Count(search.Stages.Identified), Over(later, r => SearchOf(r).Stages.Identified, Count));
+        Row(text, "files named", Count(search.Stages.Named), Over(later, r => SearchOf(r).Stages.Named, Count));
+        ReadRows(text, "first and last blocks", first, later, static stages => stages.Ends);
+        ReadRows(text, "whole files", first, later, static stages => stages.Whole);
+
+        for (var lane = 0; lane < search.Stages.Lanes.Count; lane++)
+        {
+            var index = lane;
+
+            Line(text, string.Create(Invariant, $"lane {index + 1}"));
+            Row(text, "  readers", Count(search.Stages.Lanes[index].Readers), Over(later, r => LaneOf(r, index).Readers, Count));
+            Row(text, "  took", Duration(search.Stages.Lanes[index].Elapsed.TotalSeconds), Over(later, r => LaneOf(r, index).Elapsed.TotalSeconds, Duration));
+            Row(text, "  blocks read", Count(search.Stages.Lanes[index].Ends.Files), Over(later, r => LaneOf(r, index).Ends.Files, Count));
+            Row(text, "  whole read", Count(search.Stages.Lanes[index].Whole.Files), Over(later, r => LaneOf(r, index).Whole.Files, Count));
+            Row(text, "  read", Bytes(LaneBytes(first, index)), Over(later, r => LaneBytes(r, index), Bytes));
+        }
+
+        Row(text, "groups", Count(search.Groups), Over(later, r => SearchOf(r).Groups, Count));
+    }
+
+    /// <summary>One stage of the comparison: the reads it made, what became of them, the bytes it read and how long it took.</summary>
+    private static void ReadRows(
+        StringBuilder text, string stage, RunSample first, RunSample[] later, Func<DuplicateSearchTimings, ContentReadTally> tally)
+    {
+        var read = tally(SearchOf(first).Stages);
+
+        Line(text, stage);
+        Row(text, "  files", Count(read.Files), Over(later, r => tally(SearchOf(r).Stages).Files, Count));
+        Row(text, "  remembered", Count(read.Remembered), Over(later, r => tally(SearchOf(r).Stages).Remembered, Count));
+        Row(text, "  left out", Count(read.LeftOut), Over(later, r => tally(SearchOf(r).Stages).LeftOut, Count));
+        Row(text, "  read", Bytes(read.Bytes), Over(later, r => tally(SearchOf(r).Stages).Bytes, Bytes));
+        Row(text, "  took", Duration(read.Elapsed.TotalSeconds), Over(later, r => tally(SearchOf(r).Stages).Elapsed.TotalSeconds, Duration));
+    }
+
+    /// <summary>
+    /// A run's search. Every run of the duplicates route is timed stage by stage, so a run without its
+    /// stages was not measured as the others were, and no median of them holds.
+    /// </summary>
+    private static SearchTimes SearchOf(RunSample run) =>
+        run.Tally.Search ?? throw new InvalidOperationException("Every run of the duplicates route carries its stage timings.");
+
+    /// <summary>A run's lane at <paramref name="index"/>, or an empty one where the run made fewer lanes.</summary>
+    private static ContentLaneTimes LaneOf(RunSample run, int index) =>
+        index < SearchOf(run).Stages.Lanes.Count ? SearchOf(run).Stages.Lanes[index] : new ContentLaneTimes(0, default, default, TimeSpan.Zero);
+
+    private static double LaneBytes(RunSample run, int index) => LaneOf(run, index).Ends.Bytes + LaneOf(run, index).Whole.Bytes;
+
+    /// <summary>The run's time outside the parts: resolving the locations and reading the program folders before the scan, and what comes after the last part.</summary>
+    private static double SearchRest(RunSample run) =>
+        (run.Elapsed - Enum.GetValues<DuplicateSearchPart>().Aggregate(TimeSpan.Zero, (sum, part) => sum + SearchOf(run).Stages.Of(part))).TotalSeconds;
+
+    private static string PartName(DuplicateSearchPart part) => part switch
+    {
+        DuplicateSearchPart.Scan => "  scan",
+        DuplicateSearchPart.Walk => "  walk",
+        DuplicateSearchPart.Identification => "  identification",
+        DuplicateSearchPart.Comparison => "  comparison",
+        _ => throw new ArgumentOutOfRangeException(nameof(part), part, "Not a part of a duplicate search."),
     };
 
     /// <summary>

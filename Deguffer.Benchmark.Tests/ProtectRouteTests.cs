@@ -19,16 +19,16 @@ public sealed class ProtectRouteTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void EveryFolderIsRecordedOnEveryRun(bool listed)
+    public async Task EveryFolderIsRecordedOnEveryRun(bool listed)
     {
         var site = RemovalSite.Create(Path.Combine(_temp.Path, "site"), out _)!;
         var route = new ProtectRoute(site, Folders, listed, ScanTuner.Shipped).Timed;
 
         for (var run = 0; run < 2; run++)
         {
-            route.Before!(CancellationToken.None);
-            var tally = route.Run(CancellationToken.None);
-            route.After!();
+            await route.Before!(CancellationToken.None);
+            var tally = await route.Run(CancellationToken.None);
+            await route.After!();
 
             Assert.True(tally.Complete);
             Assert.Equal(Folders, tally.Items);
@@ -43,14 +43,14 @@ public sealed class ProtectRouteTests : IDisposable
     /// later runs time the reads alone.
     /// </summary>
     [Fact]
-    public void TheFoldersAreBuiltBeforeTheFirstRunOnly()
+    public async Task TheFoldersAreBuiltBeforeTheFirstRunOnly()
     {
         var site = RemovalSite.Create(Path.Combine(_temp.Path, "site"), out _)!;
         var route = new ProtectRoute(site, Folders, listed: false, ScanTuner.Shipped).Timed;
 
-        route.Before!(CancellationToken.None);
+        await route.Before!(CancellationToken.None);
         Directory.Delete(site.Place("f5"));
-        route.Before!(CancellationToken.None);
+        await route.Before!(CancellationToken.None);
 
         Assert.False(Directory.Exists(site.Place("f5")));
         Assert.Equal(Folders - 1, Directory.EnumerateDirectories(site.Root, "f*").Count());
@@ -64,15 +64,15 @@ public sealed class ProtectRouteTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ARecordThatDoesNotMatchTheFolderBuiltStopsTheBenchmark(bool listed)
+    public async Task ARecordThatDoesNotMatchTheFolderBuiltStopsTheBenchmark(bool listed)
     {
         var site = RemovalSite.Create(Path.Combine(_temp.Path, "site"), out _)!;
         var route = new ProtectRoute(site, Folders, listed, ScanTuner.Shipped).Timed;
 
-        route.Before!(CancellationToken.None);
+        await route.Before!(CancellationToken.None);
         File.WriteAllBytes(Path.Combine(site.Place("f3"), "stray.bin"), [1]);
-        route.Run(CancellationToken.None);
+        await route.Run(CancellationToken.None);
 
-        Assert.Contains("§5.6", Assert.Throws<InvalidOperationException>(route.After!).Message, StringComparison.Ordinal);
+        Assert.Contains("§5.6", (await Assert.ThrowsAsync<InvalidOperationException>(async () => await route.After!())).Message, StringComparison.Ordinal);
     }
 }

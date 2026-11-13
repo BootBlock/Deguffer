@@ -180,7 +180,7 @@ reflection on the UI thread.
 | #516 | Counts and times of the volume, Restart Manager and final-path calls in a planning pass. |
 | #502 | A benchmark route that times a removal pass by pass, and a clean of many small trees. |
 | #503 | How long each step of a clean took, and where a removal spent it. |
-| #511 | A benchmark route that times each stage of a duplicate search, per disk. |
+| #511 | A benchmark route that times each stage of a duplicate search, per disk. Done: the `duplicates` route times the scan, the walk, identification and the comparison, the first-and-last-blocks and full-content stages apart with what each read, and each lane, cold or warm from a checksum store of its own. Over one source tree of 5,254 entries on solid state, the comparison took a median of 139 ms cold and 59 ms warm, with no byte read warm. |
 | #525 | UI-thread milestones: time to first frame, to first map, and to apply a snapshot or a group. |
 
 #### 1. The checks before a deletion

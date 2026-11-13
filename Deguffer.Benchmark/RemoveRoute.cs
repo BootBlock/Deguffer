@@ -15,7 +15,7 @@ internal sealed class RemoveRoute(RemovalSite site, TreeShape shape)
 {
     private string Tree => site.Place("tree");
 
-    public RouteRun Timed => new(Run, Build, site.ProveBesideStanding);
+    public RouteRun Timed => RouteRun.Blocking(Run, Build, site.ProveBesideStanding);
 
     private void Build(CancellationToken ct) => SynthesisedTree.Build(Tree, shape, ct);
 
