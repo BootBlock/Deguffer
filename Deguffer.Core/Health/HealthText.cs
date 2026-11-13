@@ -17,6 +17,13 @@ internal static class HealthText
 
     internal static string Percent(int percent) => $"{percent}%";
 
+    /// <summary>
+    /// A count of gigabytes in the unit a drive's document gives, where the document does not say whether a
+    /// gigabyte is 10^9 or 2^30 bytes. <see cref="Size"/> states bytes in binary units, so the count cannot
+    /// be passed through it without guessing the base.
+    /// </summary>
+    internal static string StatedGigabytes(UInt128 count) => $"{Count(count)} GB";
+
     /// <summary>A size, held at the largest the shared formatter can state rather than wrapped into nonsense.</summary>
     internal static string Size(UInt128 bytes) => FreeSpace.Format(bytes > long.MaxValue ? long.MaxValue : (long)bytes);
 
