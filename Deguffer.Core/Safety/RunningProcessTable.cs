@@ -1,3 +1,5 @@
+using Deguffer.Core.Diagnostics;
+
 namespace Deguffer.Core.Safety;
 
 /// <param name="Id">
@@ -93,6 +95,8 @@ internal static class RunningProcessTable
 {
     public static ProcessTable Read(IProcessTableCalls calls, CancellationToken ct = default)
     {
+        using var timing = MachineCallTally.Time(MachineCall.ProcessTable);
+
         var readable = LayoutIsSound(calls);
         var verified = readable;
         var commandLines = CommandLinesAreReadable(calls);
