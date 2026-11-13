@@ -38,11 +38,21 @@ internal enum SmartRawFormat
     /// <summary>The raw value is not used. The normalised value is a percentage.</summary>
     Percent,
 
+    /// <summary>A percentage in the low raw byte, where the document fixes the normalised value and gives the figure there.</summary>
+    PercentInLowByte,
+
     /// <summary>A count of 512-byte sectors.</summary>
     Bytes512,
 
     /// <summary>A count of the drive's logical sectors, whose size Windows reports.</summary>
     LogicalSectors,
+
+    /// <summary>
+    /// A count of gigabytes, as wide as the definition's <see cref="RawWidth"/>. It is shown in the
+    /// document's own unit, because a document that does not say whether a gigabyte is 10^9 or 2^30 bytes
+    /// cannot be turned into bytes without guessing.
+    /// </summary>
+    Gigabytes,
 
     /// <summary>Manufacturers use these bytes differently, so they are shown as they are and judged by nothing.</summary>
     Opaque,

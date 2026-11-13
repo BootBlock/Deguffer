@@ -13,6 +13,7 @@ internal static class AtaAttributeRows
     private const string WriteAmplificationKey = "write-amplification";
 
     private const uint LowDoubleWord = 0xFFFF_FFFF;
+    private const ulong LowByte = 0xFF;
     private const ulong Word = 0xFFFF;
     private const int BitsPerWord = 16;
     private const int LifeLeftWarningPercent = 10;
@@ -23,6 +24,7 @@ internal static class AtaAttributeRows
     private const int HighestValid = 253;
 
     private const string UnusedNumbers = "Manufacturers use this number differently, so Deguffer shows it as reported.";
+    private const string UnstatedGigabyte = "The drive counts in gigabytes, and its maker does not say whether a gigabyte is a thousand or 1,024 megabytes, so Deguffer shows the count as the drive gives it.";
     private const string BackUpAdvice = "This can mean the drive is starting to fail. Back up important files.";
 
     internal static HealthAttribute Prediction(bool predictsFailure) => new(
@@ -128,6 +130,7 @@ internal static class AtaAttributeRows
         { Role: AttributeRole.FailureCount } => FailureCount(attribute, known),
         { Role: AttributeRole.RemainingLife } => RemainingLife(attribute, known),
         { Role: AttributeRole.Temperature } => (Temperature(attribute, known.Format), known.Explanation, AttributeStanding.Normal),
+        { Format: SmartRawFormat.Gigabytes } => (HealthText.StatedGigabytes(Figure(attribute, known)), $"{known.Explanation} {UnstatedGigabyte}", AttributeStanding.Normal),
         _ => (Decoded(attribute, known, logicalSectorBytes), known.Explanation, AttributeStanding.Normal),
     };
 
@@ -149,16 +152,24 @@ internal static class AtaAttributeRows
             : (HealthText.Count(count), $"{known.Explanation} {BackUpAdvice}", AttributeStanding.Watch);
     }
 
-    private static (string, string, AttributeStanding) RemainingLife(AtaAttribute attribute, AtaAttributeDefinition known) =>
-        attribute.Value <= LifeLeftWarningPercent
-            ? ($"{attribute.Value}% left", $"{known.Explanation} The drive is near the end of its rated life, so plan to replace it.", AttributeStanding.Watch)
-            : ($"{attribute.Value}% left", known.Explanation, AttributeStanding.Normal);
+    private static (string, string, AttributeStanding) RemainingLife(AtaAttribute attribute, AtaAttributeDefinition known)
+    {
+        var left = Percentage(attribute, known);
+
+        return left <= LifeLeftWarningPercent
+            ? ($"{left}% left", $"{known.Explanation} The drive is near the end of its rated life, so plan to replace it.", AttributeStanding.Watch)
+            : ($"{left}% left", known.Explanation, AttributeStanding.Normal);
+    }
+
+    /// <summary>The percentage a <see cref="SmartRawFormat.Percent"/> or <see cref="SmartRawFormat.PercentInLowByte"/> attribute reports.</summary>
+    private static int Percentage(AtaAttribute attribute, AtaAttributeDefinition known) =>
+        known.Format is SmartRawFormat.PercentInLowByte ? (int)(attribute.Raw & LowByte) : attribute.Value;
 
     private static string Temperature(AtaAttribute attribute, SmartRawFormat format)
     {
         if (format is not SmartRawFormat.CelsiusRange)
         {
-            var celsius = (int)(attribute.Raw & 0xFF);
+            var celsius = (int)(attribute.Raw & LowByte);
 
             return celsius == 0 ? "Not reported" : HealthText.Temperature(celsius);
         }
@@ -183,7 +194,7 @@ internal static class AtaAttributeRows
         SmartRawFormat.LogicalSectors => logicalSectorBytes is { } size
             ? HealthText.Size((UInt128)attribute.Raw * size)
             : $"{HealthText.Count(attribute.Raw)} sectors",
-        SmartRawFormat.Percent => HealthText.Percent(attribute.Value),
+        SmartRawFormat.Percent or SmartRawFormat.PercentInLowByte => HealthText.Percent(Percentage(attribute, known)),
         SmartRawFormat.Status => Code(attribute),
         _ => HealthText.Count(Figure(attribute, known)),
     };
