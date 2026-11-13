@@ -241,6 +241,20 @@ internal sealed class ExploreHighlight
     /// </summary>
     public void ShowHovered(IReadOnlyList<ExploreOutline> outlines, ICompositionSurface? surface, Vector2 canvas)
     {
+        // Asked again with what it already shows whenever a drawing settles or the tiles under a still
+        // pointer change round the same shape. The geometry, its path and the lift's mask are built from
+        // scratch each time, so the same shape, surface and canvas leave them as they are.
+        if (ReferenceEquals(surface, _hoveredSurface) && canvas == _hoveredCanvas && ExploreOutline.Same(outlines, _hoveredOutlines))
+        {
+            return;
+        }
+
+        Hover(outlines, surface, canvas);
+    }
+
+    /// <summary>Draw the outline round <paramref name="outlines"/> and lift them, whatever was drawn before. See <see cref="ShowHovered"/>.</summary>
+    private void Hover(IReadOnlyList<ExploreOutline> outlines, ICompositionSurface? surface, Vector2 canvas)
+    {
         _hoveredOutlines = outlines;
         _hoveredSurface = surface;
         _hoveredCanvas = canvas;
@@ -290,7 +304,8 @@ internal sealed class ExploreHighlight
         _dimming.ShowEffects(effects);
         _lit.Path = LitPath();
 
-        ShowHovered(_hoveredOutlines, _hoveredSurface, _hoveredCanvas);
+        // The same shape lifted, or no longer lifted, as the effects say: drawn again whatever it was.
+        Hover(_hoveredOutlines, _hoveredSurface, _hoveredCanvas);
     }
 
     /// <summary>
