@@ -11,17 +11,18 @@ internal static class YarnToolInputs
 {
     /// <summary>
     /// What decides which Yarn answers <c>yarn -v</c>: the program and the Node.js it runs on, Corepack,
-    /// and every rc file either Yarn reads a <c>yarn-path</c> or <c>yarnPath</c> from. Both rows share
-    /// the question, so this is the union of their configuration rather than either one's.
+    /// every rc file either Yarn reads a <c>yarn-path</c> or <c>yarnPath</c> from, and the script that
+    /// setting named, which answers in the program's place. Both rows share the question, so this is
+    /// the union of their configuration rather than either one's.
     /// </summary>
-    public static ToolInputs Version(IUserEnvironment environment, string yarn) =>
-        Program(environment, yarn).And(ClassicConfiguration(environment)).And(BerryConfiguration(environment));
+    public static ToolInputs Version(IUserEnvironment environment, string yarn, YarnScriptSetting script) =>
+        Program(environment, yarn).And(ClassicConfiguration(environment)).And(BerryConfiguration(environment)).And(Named(script));
 
-    /// <summary>What Yarn 1 reads to answer <c>yarn cache dir</c>, and the script it named.</summary>
+    /// <summary>What Yarn 1 reads to answer <c>yarn cache dir</c>, and the script its version answer named.</summary>
     public static ToolInputs Classic(IUserEnvironment environment, string yarn, YarnScriptSetting script) =>
         Program(environment, yarn).And(ClassicConfiguration(environment)).And(Named(script));
 
-    /// <summary>What Berry reads to answer <c>yarn config get</c>, and the script it named.</summary>
+    /// <summary>What Berry reads to answer <c>yarn config get</c>, and the script its version answer named.</summary>
     public static ToolInputs Berry(IUserEnvironment environment, string yarn, YarnScriptSetting script) =>
         Program(environment, yarn).And(BerryConfiguration(environment)).And(Named(script));
 
@@ -55,8 +56,7 @@ internal static class YarnToolInputs
 
         files.AddRange(ToolInputs.InEachFolderUp(ToolInputs.WorkingDirectory(environment), "package.json", ".corepack.env"));
 
-        var corepack = environment.GetToolEnvironmentVariable("COREPACK_HOME") is { } variable
-            && LongPath.Configured(variable) is { } home
+        var corepack = NamedBy(environment, "COREPACK_HOME") is { } home
             ? home
             : Path.Combine(environment.LocalAppData, "node", "corepack");
 
@@ -82,8 +82,7 @@ internal static class YarnToolInputs
             Path.Combine(environment.UserProfile, ".yarn", "config"),
         };
 
-        if (environment.GetToolEnvironmentVariable("YARN_CONFIG") is { } variable
-            && LongPath.Configured(variable) is { } configured)
+        if (NamedBy(environment, "YARN_CONFIG") is { } configured)
         {
             files.Add(configured);
         }
@@ -133,12 +132,19 @@ internal static class YarnToolInputs
             yield return nodeFolder;
         }
 
-        if (environment.GetToolEnvironmentVariable("PREFIX") is { } variable
-            && LongPath.Configured(variable) is { } prefix)
+        if (NamedBy(environment, "PREFIX") is { } prefix)
         {
             yield return prefix;
         }
     }
+
+    /// <summary>
+    /// The file or folder the variable <paramref name="name"/> names, where Yarn, Node.js or Corepack
+    /// opens it: a relative value from the folder they run in (<see cref="ToolInputs.Opened"/>). Null
+    /// where the variable is unset or empty, which each of them reads as unset.
+    /// </summary>
+    private static string? NamedBy(IUserEnvironment environment, string name) =>
+        environment.GetToolEnvironmentVariable(name) is { Length: > 0 } value ? ToolInputs.Opened(value, environment) : null;
 
     private static ToolInputs Named(YarnScriptSetting script) =>
         script.Script is { } file ? new ToolInputs { Files = [file] } : new ToolInputs();

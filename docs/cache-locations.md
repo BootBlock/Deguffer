@@ -1469,9 +1469,11 @@ up, where the Windows installer keeps it; Corepack's home (`%COREPACK_HOME%`, or
 runs; `.yarnrc`, `.yarnrc.yml` and `.npmrc` in each of those folders and in your profile;
 `C:\Users\<user>\.yarn\config`; whatever is in `C:\Users\<user>\.config\yarn` and in Yarn's own
 `Config` folder; the file `%YARN_CONFIG%` names; `etc\yarnrc` and `etc\npmrc` under Node.js and under
-`%PREFIX%`; the script a `yarn-path` setting hands Yarn to, which Deguffer asks for beside the cache;
-and every environment variable Yarn is started with, because Yarn expands any `${VAR}` its
-configuration names. Where Yarn would not say what its `yarn-path` is, the answer is used for that
+`%PREFIX%` (a relative variable here is read from the folder Yarn runs in); the script a `yarn-path` or
+`yarnPath` setting hands Yarn to, which Deguffer asks for beside the version, because that script
+answers in the program's place, so copying another release over it changes which Yarn runs; and
+every environment variable Yarn is started with, because Yarn expands any `${VAR}` its
+configuration names. Where Yarn would not say what that setting is, the answers are used for that
 scan and never remembered. See Yarn's [`.yarnrc`](https://classic.yarnpkg.com/en/docs/yarnrc)
 documentation and [Corepack](https://github.com/nodejs/corepack).
 
@@ -1549,10 +1551,11 @@ Deguffer remembers where Berry said its global folder is until one of these chan
 again: the `yarn` it runs and the Node.js and Corepack files Yarn 1's row lists; `.yarnrc.yml` (or
 the name `%YARN_RC_FILENAME%` gives) and `yarn.lock` in the folder Yarn runs in and in each folder
 above it; `C:\Users\<user>\.yarnrc.yml`; the script a `yarnPath` setting hands Yarn to, which
-Deguffer asks for beside the global folder; and every environment variable Yarn is started with.
-The remembered folder only answers what Explore and a duplicate search are told. A preview asks Yarn
-again every time, because this row removes the cache by path rather than through Yarn's own command.
-Which Yarn answered is remembered once for both rows. See Yarn's
+Deguffer asks for beside the version; and every environment variable Yarn is started with.
+The remembered answers only decide what Explore and a duplicate search are told. A preview asks Yarn
+which it is and where its global folder is again every time, because this row removes the cache by
+path rather than through Yarn's own command. Which Yarn answered is remembered once for both rows,
+for everything but this row's preview. See Yarn's
 [`.yarnrc.yml`](https://yarnpkg.com/configuration/yarnrc) documentation and
 [Corepack](https://github.com/nodejs/corepack).
 

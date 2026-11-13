@@ -29,6 +29,9 @@ public sealed class YarnBerryCacheProviderTests : IDisposable
 
     private string Yarn => _environment.FindExecutable("yarn")!;
 
+    /// <summary>What asking which Yarn runs starts, in name order: its version and the script it hands itself to.</summary>
+    private static readonly string[] WhichYarnQuestions = ["-v", "config get yarn-path", "config get yarnPath --json"];
+
     private string YarnFolder => Path.Combine(_environment.LocalAppData, "Yarn");
 
     private string GlobalFolder => Path.Combine(YarnFolder, "Berry");
@@ -56,6 +59,9 @@ public sealed class YarnBerryCacheProviderTests : IDisposable
                 ? new CommandOutcome(1, "Usage Error: Couldn't find a configuration settings named \"enableCacheClean\"\n", string.Empty)
                 : new CommandOutcome(0, cleanEnabled + "\n", string.Empty),
             "config get yarnPath --json" => new CommandOutcome(0, "null\n", string.Empty),
+            "config get yarn-path" => version.StartsWith("1.", StringComparison.Ordinal)
+                ? new CommandOutcome(0, "undefined\n", string.Empty)
+                : new CommandOutcome(1, "Usage Error: Couldn't find a configuration settings named \"yarn-path\"\n", string.Empty),
             _ => throw new Xunit.Sdk.XunitException($"Yarn was asked '{arguments}'."),
         });
     }
@@ -102,7 +108,7 @@ public sealed class YarnBerryCacheProviderTests : IDisposable
 
     /// <summary>
     /// The common Corepack machine: the yarn on the PATH is Yarn 1 outside any project, and projects run
-    /// Yarn 4. Berry's default cache is still found, and Yarn 1 is asked nothing past its version.
+    /// Yarn 4. Berry's default cache is still found, and Yarn 1 is asked nothing past which Yarn it is.
     /// </summary>
     [Fact]
     public async Task PlansTheDefaultCacheWholeWhereYarnOneIsOnThePath()
@@ -116,7 +122,7 @@ public sealed class YarnBerryCacheProviderTests : IDisposable
         Assert.Equal(Cache, step.Path);
         Assert.Equal(5120, step.EstimatedBytes);
         Assert.Equal(SafetyTier.RegenerableWithCost, plan.Tier);
-        Assert.Equal(["-v"], runner.Invocations.Select(call => call.Arguments));
+        Assert.Equal(WhichYarnQuestions, runner.Invocations.Select(call => call.Arguments).Order(StringComparer.Ordinal));
         Assert.Contains(plan.Notes, n => n.Message.Contains("Yarn 1.22.22", StringComparison.Ordinal));
     }
 
@@ -331,6 +337,7 @@ public sealed class YarnBerryCacheProviderTests : IDisposable
                 case "cache dir":
                     return new CommandOutcome(0, Path.Combine(classicRoot, "v6") + "\n", string.Empty);
                 case "config get yarn-path":
+                case "config get yarnPath --json":
                     return new CommandOutcome(0, "undefined\n", string.Empty);
             }
 

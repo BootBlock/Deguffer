@@ -111,6 +111,18 @@ internal sealed class YarnToolFixture : IDisposable
         File.Move(replacement, Yarn, overwrite: true);
     }
 
+    /// <summary>
+    /// Copy another release over the script <c>yarn-path</c> or <c>yarnPath</c> names, every rc file
+    /// left as it was, and have it answer <c>yarn -v</c> as <paramref name="version"/>.
+    /// </summary>
+    public void ReplaceScript(string version)
+    {
+        var replacement = Path.Combine(_temp.Path, "yarn.cjs.new");
+        File.WriteAllText(replacement, $"// Yarn {version}");
+        File.Move(replacement, Script, overwrite: true);
+        Version = version;
+    }
+
     private CommandOutcome Reply(string arguments)
     {
         switch (arguments)
