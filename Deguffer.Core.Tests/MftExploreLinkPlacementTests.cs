@@ -165,7 +165,7 @@ public sealed class MftExploreLinkPlacementTests
         var tree = ExploreTree.Create(
             Root, 0, records.NameNumbers, names.Freeze(), records.Parents, records.Sizes, records.Lengths,
             records.Storage, records.Flags, records.Created, records.Modified, records.Visibility,
-            ExploreChildOrder.BySize, links: links);
+            ExploreChildOrder.BySize, new TreeAssemblyOptions(Links: links));
 
         Assert.Equal(4, tree.NodeCount);
         Assert.Equal(4096, tree.SizeOf(TreeNodes.At(tree, Root + "shared.dll")));

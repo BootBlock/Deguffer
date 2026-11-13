@@ -28,7 +28,13 @@ internal static class MftExploreRooting
     /// and a pick made in it would carry by path into the finished tree. A path typed in another
     /// case is drawn when the read ends instead.
     /// </param>
-    internal readonly record struct AssembledAs(ExploreChildOrder ChildOrder, bool LowerBound, bool MatchCaseOnly);
+    /// <param name="Snapshot">
+    /// For a snapshot, taken while the parse threads still write the read's columns: the copies of
+    /// their flags and parents it roots by, and what the tree reuses. Null for the finished read,
+    /// which roots by the read's own and hands them over.
+    /// </param>
+    internal readonly record struct AssembledAs(
+        ExploreChildOrder ChildOrder, bool LowerBound, bool MatchCaseOnly, MftSnapshotColumns? Snapshot);
 
     /// <summary>
     /// Root a tree at the folder <paramref name="components"/> name, or say why the table cannot
@@ -40,15 +46,9 @@ internal static class MftExploreRooting
     /// One slot for each further name of a hard-linked file, numbered after every record, or null
     /// where there are none. None is a folder, so the folder is found among the records alone.
     /// </param>
-    /// <param name="snapshot">
-    /// For a snapshot, taken while the parse threads still write <paramref name="columns"/>: the
-    /// copies of their flags and parents it roots by, and what the tree reuses. Null for the finished
-    /// read, which roots by the read's own and hands them over.
-    /// </param>
     public static (ExploreTree? Tree, FallbackReason Reason) Assemble(
         MftExploreColumns columns,
         MftExploreColumns? links,
-        MftSnapshotColumns? snapshot,
         NamePool.Frozen names,
         int rootName,
         string rootPath,
@@ -57,6 +57,7 @@ internal static class MftExploreRooting
         CancellationToken ct)
     {
         var volumeRoot = (int)MftRecord.RootRecordNumber;
+        var snapshot = assembled.Snapshot;
         var (flags, parents) = snapshot is null ? (columns.Flags, columns.Parents) : (snapshot.Flags, snapshot.Parents);
         var volumeRootRead = (flags[volumeRoot] & ExploreNodeFlags.Present) != 0;
 
@@ -93,11 +94,13 @@ internal static class MftExploreRooting
             rootPath, root, columns.NameNumbers, names, parents, columns.Sizes, columns.Lengths,
             columns.Storage, flags, columns.Created, columns.Modified, columns.Visibility,
             assembled.ChildOrder,
-            links: links,
-            snapshot: snapshot is not null,
-            drawnRoot: new DrawnRoot(rootName, Unread: root == volumeRoot && !volumeRootRead),
-            scratch: snapshot?.Scratch,
-            ct: ct);
+            new TreeAssemblyOptions(
+                Links: links,
+                Snapshot: snapshot is not null,
+                OrderBuffer: snapshot?.Order,
+                DrawnRoot: new DrawnRoot(rootName, Unread: root == volumeRoot && !volumeRootRead),
+                Scratch: snapshot?.Scratch),
+            ct);
 
         return (tree, FallbackReason.None);
     }

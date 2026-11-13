@@ -624,7 +624,7 @@ public class ExploreTreeTests
             ExploreTree.Create(
                 Root, 0, _nameNumbers, _names, _parents, _sizes, _lengths, _storage, _flags,
                 _created, _modified, _visibility, order,
-                nameRanks: order is ExploreChildOrder.ByName ? _nameRanks : null);
+                new TreeAssemblyOptions(NameRanks: order is ExploreChildOrder.ByName ? _nameRanks : null));
     }
 
     private static DateTime At(int year, int month, int day) => new(year, month, day, 0, 0, 0, DateTimeKind.Utc);

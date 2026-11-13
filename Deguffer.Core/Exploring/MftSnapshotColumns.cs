@@ -8,8 +8,8 @@ namespace Deguffer.Core.Exploring;
 /// they are the two columns read at slots a snapshot has not judged present: the inversion of the
 /// parent links reads every slot, and the snapshot's rooting writes both at the volume's root and
 /// the scan's. Every other column is read where the read writes it, and only at a slot the copy saw
-/// present, whose columns will not change again. A copy of all nine columns was 35 bytes a record on
-/// the large object heap at every snapshot.</para>
+/// present, whose columns will not change again. A copy of all nine would be 35 bytes a record on
+/// the large object heap at every snapshot, against five for these two.</para>
 ///
 /// <para>One assembling at a time, which <see cref="ScanSnapshots"/> guarantees, and each copy writes
 /// every slot, so nothing an earlier snapshot left is read.</para>
@@ -21,12 +21,16 @@ internal sealed class MftSnapshotColumns
     {
         Flags = new ExploreNodeFlags[count];
         Parents = new int[count];
+        Order = new int[count];
         Scratch = new SnapshotScratch(count);
     }
 
     public ExploreNodeFlags[] Flags { get; }
 
     public int[] Parents { get; }
+
+    /// <summary>Room for the top-down order of every slot.</summary>
+    public int[] Order { get; }
 
     /// <summary>What <see cref="ExploreTree.Create"/> reuses from one snapshot to the next.</summary>
     public SnapshotScratch Scratch { get; }

@@ -8,9 +8,9 @@ namespace Deguffer.Core.Exploring;
 /// <para>Given this, a tree is always compacted (<see cref="ReachedNodes"/>), whether or not its root
 /// reaches every slot, so the totals go into copies of the tree's own. That is also what makes the
 /// rest reusable: the child starts and child list built before compaction, and the renumbering's two
-/// maps, are each replaced by compaction and so are never kept by the tree. Without this, each of
-/// those was an array sized to the whole table, made again for every snapshot on the large object
-/// heap.</para>
+/// maps, are each replaced by compaction and so are never kept by the tree. Each is sized to the
+/// whole table, so made for every snapshot it would put that much on the large object heap each
+/// time.</para>
 ///
 /// <para>The names' sort keys are kept here too, numbered as the read's pool numbers the names. The
 /// pool numbers each name once and for good, so a key made for one snapshot holds for every later
@@ -32,7 +32,6 @@ internal sealed class SnapshotScratch
     {
         Start = new int[count + 1];
         Children = new int[count];
-        Order = new int[count];
         Kept = new int[count];
         Renumbered = new int[count];
         ReadNameNumbers = new int[count];
@@ -43,9 +42,6 @@ internal sealed class SnapshotScratch
 
     /// <summary>Room for every slot as a child, which is more than there are children.</summary>
     public int[] Children { get; }
-
-    /// <summary>Room for the top-down order of every slot.</summary>
-    public int[] Order { get; }
 
     /// <summary>Room for the slot each kept node was, in the order they are kept.</summary>
     public int[] Kept { get; }

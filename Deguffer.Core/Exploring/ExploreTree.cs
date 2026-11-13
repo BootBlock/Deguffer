@@ -413,43 +413,15 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
     /// <see cref="ExploreChildOrder"/> for why a tree still being filled in wants a different one
     /// from a finished tree.
     ///
-    /// <paramref name="listingRefused"/> names the folders the walk was refused a listing of, which
-    /// <see cref="ListingWasRefused"/> answers for. A set rather than a column, because a refusal is
-    /// rare against the millions of nodes a column would spend a slot on each.
-    ///
-    /// <paramref name="nameRanks"/> is each node's place by name among its siblings, which the walk
-    /// knows as soon as a folder's children arrive. Given it, a tree ordered
-    /// <see cref="ExploreChildOrder.ByName"/> places each child in name order as it is linked and is
-    /// not sorted at all — the sort that, done again on every snapshot of a walk in progress, was most
-    /// of its cost. The file table reads a folder's children in record order, scattered through the
-    /// table, so it has no ranks to give, and its snapshots are sorted by name here instead.
-    ///
-    /// <paramref name="links"/> are the file table's further names of its hard-linked files, each a
-    /// node numbered after every slot of the other columns, in columns of their own so the reader
-    /// never grows those to make room. The nodes kept are copied from both at once. The walk lists a
-    /// file under each of its names as it meets them, so it has none, and nor has a reader that ranks
-    /// its names.
-    ///
-    /// <paramref name="snapshot"/> says the tree is of a scan still running (<see cref="IsSnapshot"/>).
+    /// <paramref name="options"/> holds what only one route has, and what a caller assembling one tree
+    /// after another reuses: see <see cref="TreeAssemblyOptions"/>.
     ///
     /// <para><b>The node count is the length of <paramref name="sizes"/>.</b> The columns nothing
     /// totals into (<paramref name="nameNumbers"/>, <paramref name="parents"/>,
-    /// <paramref name="created"/>, <paramref name="visibility"/> and <paramref name="nameRanks"/>) may
-    /// be longer, because a walk's snapshots share them, and only their first slots are read: see
+    /// <paramref name="created"/>, <paramref name="visibility"/> and the name ranks) may be longer,
+    /// because a walk's snapshots share them, and only their first slots are read: see
     /// <see cref="SnapshotColumns"/>. Nothing here or in the tree reads past the count, because a later
     /// snapshot may be writing there.</para>
-    ///
-    /// <paramref name="orderBuffer"/> is room for the top-down order of every node, reused by a caller
-    /// that assembles one tree after another. The tree does not keep it.
-    ///
-    /// <paramref name="drawnRoot"/> is what the root is drawn by in place of what its slot holds,
-    /// written after compaction, so it reaches only the columns the tree keeps.
-    ///
-    /// <para><paramref name="scratch"/> says the columns are a reader's that it is still writing,
-    /// beside the flags and parents, which are the caller's own. They are then always compacted, so
-    /// nothing is totalled into them, and read only at the slots the root reaches, which the flags
-    /// mark present. See <see cref="SnapshotScratch"/>, whose buffers take the place of the arrays
-    /// compaction replaces, and of <paramref name="orderBuffer"/>.</para>
     ///
     /// <paramref name="ct"/> is asked between the passes and by the sort, so a snapshot of a walk that
     /// has ended, or a table read whose scan was cancelled, stops within one pass rather than holding
@@ -469,18 +441,14 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
         ExploreTimestamp[] modified,
         FileVisibility[] visibility,
         ExploreChildOrder childOrder,
-        IReadOnlyCollection<int>? listingRefused = null,
-        int[]? nameRanks = null,
-        MftExploreColumns? links = null,
-        bool snapshot = false,
-        int[]? orderBuffer = null,
-        DrawnRoot? drawnRoot = null,
-        SnapshotScratch? scratch = null,
+        TreeAssemblyOptions options = default,
         CancellationToken ct = default)
     {
+        var (listingRefused, nameRanks, links, snapshot, orderBuffer, drawnRoot, scratch) = options;
+
         if (links is not null && nameRanks is not null)
         {
-            throw new ArgumentException("Names ranked by the reader leave no place for a file's further names.", nameof(links));
+            throw new ArgumentException("Names ranked by the reader leave no place for a file's further names.", nameof(options));
         }
 
         var count = sizes.Length;
@@ -489,7 +457,7 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
         var (childStart, children) = ExploreTreeAssembly.InvertParentLinks(count, parents, flags, after, nameRanks, scratch);
         ct.ThrowIfCancellationRequested();
 
-        var order = ExploreTreeAssembly.TopDownOrder(childStart, children, rootNode, scratch?.Order ?? orderBuffer);
+        var order = ExploreTreeAssembly.TopDownOrder(childStart, children, rootNode, orderBuffer);
         ct.ThrowIfCancellationRequested();
 
         // Wherever there are links, even with every node reached, because only this joins their

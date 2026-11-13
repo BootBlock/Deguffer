@@ -19,9 +19,10 @@ public sealed class MftSnapshotReuseTests
 
     /// <summary>
     /// After the first, which makes what the snapshots draw from, no snapshot allocates anything sized
-    /// to the table: only what its tree keeps. Each used to copy all nine columns of every slot, 35
-    /// bytes a slot, and make child starts, an order and a renumbering four bytes a slot each, so the
-    /// bound here, a quarter of a byte a slot, is a sixth of a percent of what one cost.
+    /// to the table: only what its tree keeps. A copy of all nine columns of every slot is 35 bytes a
+    /// slot, and child starts, an order and a renumbering made afresh are four bytes a slot each, so
+    /// the bound here, a quarter of a byte a slot, is about half a percent of what a snapshot making
+    /// those would allocate.
     ///
     /// <para>Measured on the thread that assembles each snapshot, which is the thread that reports,
     /// because the snapshots are assembled on the spot.</para>
@@ -134,8 +135,8 @@ public sealed class MftSnapshotReuseTests
 
     /// <summary>
     /// A run of snapshots drawn from one set of reused room, as the read keeps it, draws each tree as
-    /// one drawn from a whole copy of the columns with nothing reused, as every snapshot was before:
-    /// the same nodes, names, totals, dates and order of children, by name and by size. Between them, records arrive under the scan's folder and
+    /// one drawn from a whole copy of the columns with nothing reused: the same nodes, names, totals,
+    /// dates and order of children, by name and by size. Between them, records arrive under the scan's folder and
     /// outside it, with names never met before, and a scan of one folder keeps only its own names, so
     /// the names are numbered again in each tree while the sort keys kept between snapshots are
     /// numbered as the read numbers them.
@@ -226,12 +227,11 @@ public sealed class MftSnapshotReuseTests
         return MftExploreRooting.Assemble(
             columns,
             links: null,
-            own,
             names.Freeze(),
             rootName,
             rootPath,
             components,
-            new MftExploreRooting.AssembledAs(order, LowerBound: true, MatchCaseOnly: true),
+            new MftExploreRooting.AssembledAs(order, LowerBound: true, MatchCaseOnly: true, Snapshot: own),
             CancellationToken.None).Tree ?? throw new Xunit.Sdk.XunitException("The snapshot found no root.");
     }
 

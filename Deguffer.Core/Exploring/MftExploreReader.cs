@@ -265,12 +265,11 @@ internal static class MftExploreReader
         var (tree, reason) = MftExploreRooting.Assemble(
             columns,
             linkColumns,
-            snapshot: null,
             names.Freeze(),
             rootName,
             rootPath,
             components,
-            new MftExploreRooting.AssembledAs(ExploreChildOrder.BySize, LowerBound: couldNotReadWholeTable || sawUnreadableRecord, MatchCaseOnly: false),
+            new MftExploreRooting.AssembledAs(ExploreChildOrder.BySize, LowerBound: couldNotReadWholeTable || sawUnreadableRecord, MatchCaseOnly: false, Snapshot: null),
             ct);
         timings?.End(MftBuildStage.TreeAssembly);
 
@@ -312,7 +311,8 @@ internal static class MftExploreReader
         columns.CopyPresent(own, stopped);
 
         // Frozen after the copy, not before. A slot's name was numbered before its flags were
-        // released, so every number the copy holds is in a pool frozen once the copy has ended.
+        // released, so every number at a slot the copy saw present is in a pool frozen once the copy
+        // has ended.
         // The root's name is numbered first for the same reason.
         var rootName = names.Intern(rootPath);
         var frozen = names.Freeze();
@@ -320,12 +320,11 @@ internal static class MftExploreReader
         return MftExploreRooting.Assemble(
             columns,
             links: null,
-            own,
             frozen,
             rootName,
             rootPath,
             components,
-            new MftExploreRooting.AssembledAs(order, LowerBound: true, MatchCaseOnly: true),
+            new MftExploreRooting.AssembledAs(order, LowerBound: true, MatchCaseOnly: true, Snapshot: own),
             stopped).Tree;
     }
 }
