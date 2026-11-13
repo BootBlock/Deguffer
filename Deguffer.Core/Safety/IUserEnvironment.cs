@@ -1,7 +1,6 @@
 using System.Collections;
 using System.Runtime.InteropServices;
 using System.Security;
-using System.Security.Principal;
 using Deguffer.Core.Scanning.Mft;
 using Microsoft.Win32;
 
@@ -134,6 +133,13 @@ public interface IUserEnvironment
     /// account at once, so starting it early for one is a process launch for a known refusal.</para>
     /// </summary>
     bool IsAdministrator { get; }
+
+    /// <summary>
+    /// Whether Hyper-V answers this process, which runs elevated or in Hyper-V Administrators. Read from the
+    /// token every tool started inherits, for the reason <see cref="IsAdministrator"/> is: Hyper-V refuses
+    /// anyone else, so starting Windows PowerShell to ask it is a process launch for a known refusal.
+    /// </summary>
+    bool IsHyperVAdministrator { get; }
 
     /// <summary>
     /// Opens this machine's volume file tables, for §5.5's fast route, where the process is allowed to.
@@ -411,17 +417,7 @@ public sealed partial class UserEnvironment : IUserEnvironment
         ?? LongPath.Configured(Block.Value("TEMP"))
         ?? Path.GetTempPath();
 
-    // Read once rather than through Invalidate: a process cannot change the account it runs as,
-    // and relaunching elevated makes a new process with the same identity.
-    public string? UserSecurityIdentifier { get; } = WindowsIdentity.GetCurrent().User?.Value;
-
-    public string UserName { get; } = Environment.UserName;
-
     public string MachineName { get; } = Environment.MachineName;
-
-    public string DomainName { get; } = Environment.UserDomainName;
-
-    public bool IsAdministrator => Environment.IsPrivilegedProcess;
 
     public IMftSourceFactory VolumeTables => VolumeMftSourceFactory.Default;
 
