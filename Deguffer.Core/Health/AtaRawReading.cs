@@ -1,4 +1,5 @@
 using Deguffer.Core.Health.Parsing;
+using Deguffer.Core.Text;
 
 namespace Deguffer.Core.Health;
 
@@ -11,7 +12,10 @@ internal static class AtaRawReading
     private const ulong LowDoubleWord = 0xFFFF_FFFF;
     private const int BitsPerByte = 8;
 
-    /// <summary>The value Intel 328860 section 5.4.2 holds E2h and E3h at until the workload timer reaches 60 minutes.</summary>
+    /// <summary>
+    /// The value Intel 328860 section 5.4.2 resets E2h, E3h and E4h to, and holds E2h and E3h at until the
+    /// workload timer reaches 60 minutes.
+    /// </summary>
     private const ulong NotYetMeasured = 0xFFFF;
 
     /// <summary>What a two-byte field of the capacitor test holds at once it can count no higher (328860 table 18, AFh).</summary>
@@ -43,7 +47,7 @@ internal static class AtaRawReading
     internal static string Decoded(AtaAttribute attribute, AtaAttributeDefinition known, uint? logicalSectorBytes) => known.Format switch
     {
         SmartRawFormat.Hours => HealthText.Hours(Figure(attribute, known)),
-        SmartRawFormat.Minutes => HealthText.Minutes(Figure(attribute, known)),
+        SmartRawFormat.Minutes => Measured(Figure(attribute, known), minutes => HealthText.Minutes(minutes)),
         SmartRawFormat.Bytes512 => HealthText.Size((UInt128)attribute.Raw * DriveRequests.SectorBytes),
         SmartRawFormat.LogicalSectors => logicalSectorBytes is { } size
             ? HealthText.Size((UInt128)attribute.Raw * size)
@@ -71,7 +75,7 @@ internal static class AtaRawReading
         }
 
         var range = highest == 0 ? null : $"lowest {HealthText.Temperature((int)lowest)}, highest {HealthText.Temperature((int)highest)}";
-        var hot = overheats == 0 ? null : $"over its rated limit {HealthText.Counted(overheats, "time")}";
+        var hot = overheats == 0 ? null : $"over its rated limit {Counted.Of(overheats, "time", "times")}";
         var detail = range is null ? hot : hot is null ? range : $"{range}, {hot}";
 
         return detail is null ? HealthText.Temperature((int)current) : $"{HealthText.Temperature((int)current)} ({detail})";
@@ -100,7 +104,7 @@ internal static class AtaRawReading
             ? $"Last test failed with code {result}"
             : $"Last test {AtLeast(result, $"{HealthText.Count(result)} µs")}";
 
-        return $"{outcome}, {AtLeast(minutes, HealthText.Minutes(minutes))} ago, {AtLeast(tests, HealthText.Counted(tests, "test"))} in all";
+        return $"{outcome}, {AtLeast(minutes, HealthText.Minutes(minutes))} ago, {AtLeast(tests, Counted.Of(tests, "test", "tests"))} in all";
     }
 
     private static string AtLeast(ulong field, string text) => field == Saturated ? $"{text} or more" : text;
@@ -112,8 +116,8 @@ internal static class AtaRawReading
         return (percent, events) switch
         {
             (0, 0) => "Never throttled",
-            (0, _) => $"Not throttling, {HealthText.Counted(events, "time")} in all",
-            _ => $"Throttling {percent}%, {HealthText.Counted(events, "time")} in all",
+            (0, _) => $"Not throttling, {Counted.Of(events, "time", "times")} in all",
+            _ => $"Throttling {percent}%, {Counted.Of(events, "time", "times")} in all",
         };
     }
 }

@@ -32,7 +32,6 @@ public sealed class IntelDcS3500Tests
     [InlineData(183, "SATA speed drops")]
     [InlineData(190, "Case temperature")]
     [InlineData(192, "Unsafe shutdowns")]
-    [InlineData(194, "Temperature")]
     [InlineData(225, "Data written by the computer")]
     [InlineData(226, "Wear in the timed workload")]
     [InlineData(227, "Reads in the timed workload")]
@@ -108,6 +107,7 @@ public sealed class IntelDcS3500Tests
     [InlineData(90UL, "90 minutes (1 hour)")]
     [InlineData(3_000UL, "3,000 minutes (2 days)")]
     [InlineData(0x1_0000_0005UL, "5 minutes")]
+    [InlineData(0xFFFFUL, "Not measured yet")]
     public void TheWorkloadTimerIsInMinutesInTheLowFourBytes(ulong raw, string expected) =>
         Assert.Equal(expected, Reading(228, raw));
 
@@ -121,6 +121,7 @@ public sealed class IntelDcS3500Tests
         Assert.Equal(AttributeStanding.Normal, Row(190, Raw(35, 0, 20, 45, 2, 0)).Standing);
     }
 
+    /// <summary>The catalogue's reading of C2h is the table's, so the family needs no entry of its own.</summary>
     [Fact]
     public void InternalTemperatureIsTheLowByte() =>
         Assert.Equal("41 °C", Reading(194, Raw(41, 0, 13, 0, 50, 0)));

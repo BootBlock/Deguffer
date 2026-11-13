@@ -23,7 +23,6 @@
 2 Deguffer.Core/Exploring/Acting/ExploreRemover.cs
 1 Deguffer.Core/Exploring/History/ForecastText.cs
 2 Deguffer.Core/Health/DriveOverview.cs
-1 Deguffer.Core/Health/HealthText.cs
 1 Deguffer.Core/InstalledApps/BundleRule.cs
 1 Deguffer.Core/InstalledApps/EntryRemover.cs
 1 Deguffer.Core/InstalledApps/InstalledAppsLists.cs

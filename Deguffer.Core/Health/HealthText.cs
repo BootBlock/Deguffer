@@ -1,4 +1,5 @@
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Text;
 
 namespace Deguffer.Core.Health;
 
@@ -28,13 +29,10 @@ internal static class HealthText
     internal static string Minutes(UInt128 minutes)
     {
         var hours = minutes / MinutesPerHour;
-        var span = Days(hours) ?? (hours > 0 ? Counted(hours, "hour") : null);
+        var span = Days(hours) ?? (hours > 0 ? Counted.Of(hours, "hour", "hours") : null);
 
-        return span is null ? Counted(minutes, "minute") : $"{Count(minutes)} minutes ({span})";
+        return span is null ? Counted.Of(minutes, "minute", "minutes") : $"{Count(minutes)} minutes ({span})";
     }
-
-    /// <summary>A count with its unit, singular for one.</summary>
-    internal static string Counted(UInt128 count, string unit) => count == 1 ? $"1 {unit}" : $"{Count(count)} {unit}s";
 
     /// <summary>The days and years a run of hours comes to, or null where it is less than a day.</summary>
     private static string? Days(UInt128 hours)
@@ -50,7 +48,7 @@ internal static class HealthText
         var years = days / DaysPerYear;
 
         return years > 0
-            ? $"{Counted((UInt128)years, "year")} {Counted((UInt128)(days % DaysPerYear), "day")}"
-            : Counted((UInt128)days, "day");
+            ? $"{Counted.Of((UInt128)years, "year", "years")} {Counted.Of((UInt128)(days % DaysPerYear), "day", "days")}"
+            : Counted.Of((UInt128)days, "day", "days");
     }
 }

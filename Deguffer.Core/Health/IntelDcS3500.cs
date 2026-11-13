@@ -7,7 +7,7 @@ namespace Deguffer.Core.Health;
 /// <summary>
 /// Intel SSD DC S3500 Series product specification 328860-008US (January 2015), table 18 and section
 /// 5.4.2: the family it covers, and what each attribute means on it where the catalogue cannot say.
-/// The IDs the catalogue already reads as the table states (05h, 09h, 0Ch, AEh, B8h, BBh, C5h, C7h)
+/// The IDs the catalogue already reads as the table states (05h, 09h, 0Ch, AEh, B8h, BBh, C2h, C5h, C7h)
 /// are left to it. Solidigm KA-00033 names the same IDs for later Intel and Solidigm SATA drives
 /// without stating every unit, and no document covers Intel's client drives, so neither is covered.
 /// </summary>
@@ -39,7 +39,6 @@ internal static partial class IntelDcS3500
             SmartRawFormat.CelsiusWithOverheats,
             AttributeRole.Temperature),
         [192] = new("Unsafe shutdowns", "Times the drive was switched off without being told to stop first.", SmartRawFormat.Count, AttributeRole.Usage),
-        [194] = new("Temperature", "The temperature inside the drive, read straight from the sensor on its circuit board.", SmartRawFormat.Celsius, AttributeRole.Temperature),
         [225] = new("Data written by the computer", "How much the computer has written to the drive over its life.", SmartRawFormat.Units32MiB, AttributeRole.Usage, Whole),
 
         // E2h to E4h measure from when the workload timer was last started, which SMART EXECUTE OFF-LINE

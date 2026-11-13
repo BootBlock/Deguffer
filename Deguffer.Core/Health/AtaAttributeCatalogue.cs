@@ -47,7 +47,7 @@ internal enum SmartRawFormat
     /// <summary>A count of 32 MiB units, each 65,536 sectors of 512 bytes, as wide as the definition's <see cref="RawWidth"/>.</summary>
     Units32MiB,
 
-    /// <summary>Minutes, as wide as the definition's <see cref="RawWidth"/>.</summary>
+    /// <summary>Minutes, as wide as the definition's <see cref="RawWidth"/>. FFFFh means the drive has not measured it yet.</summary>
     Minutes,
 
     /// <summary>The raw value divided by 1024 is a percentage. FFFFh means the drive has not measured it yet.</summary>
