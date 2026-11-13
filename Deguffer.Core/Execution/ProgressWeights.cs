@@ -35,13 +35,43 @@ internal static class ProgressWeights
     /// leftover of empty folders (<see cref="DeleteStep.IsLeftover"/>), and a share of nothing is right
     /// for it: removing an empty folder takes no time the bar could show. A run of nothing else falls
     /// back to the count above. The one plan a caller may hand the planner with no estimate by design is
-    /// one run only to be verified, and <see cref="CleanupPlanner"/> weighs those apart rather than
-    /// handing them here.</para>
+    /// one run only to be verified, and <see cref="ForRun"/> weighs those apart rather than handing
+    /// them here.</para>
     /// </summary>
     public static IReadOnlyList<double> For(IEnumerable<long> estimates)
     {
         var weights = estimates.Select(e => (double)Math.Max(0, e)).ToList();
 
         return weights.Sum() > 0 ? weights : [.. weights.Select(_ => 1.0)];
+    }
+
+    /// <summary>
+    /// Each plan's share of a clean's bar, in the order given: a plan that deletes is weighted by what
+    /// it frees, and a plan run only to be verified gets nothing, because the part of a run that takes
+    /// any time is the deleting.
+    ///
+    /// <para>Weighed apart rather than handed to <see cref="For"/> as a zero. That rule shares the bar
+    /// equally where nothing carries a figure, so beside a command step whose tool reports none the
+    /// verification would take half, and the bar would sit there while the command ran. Only a run
+    /// holding nothing but verification shares the bar between those plans.</para>
+    /// </summary>
+    public static IReadOnlyList<double> ForRun(IReadOnlyList<CleanupPlan> plans)
+    {
+        var deleting = For(plans.Where(p => !p.IsEmpty).Select(p => p.EstimatedBytes));
+
+        if (deleting.Count == 0)
+        {
+            return For(plans.Select(_ => 0L));
+        }
+
+        var weights = new List<double>(plans.Count);
+        var next = 0;
+
+        foreach (var plan in plans)
+        {
+            weights.Add(plan.IsEmpty ? 0 : deleting[next++]);
+        }
+
+        return weights;
     }
 }

@@ -45,6 +45,7 @@ internal static class AtaRawReading
     internal static string Temperature(AtaAttribute attribute, SmartRawFormat format) => format switch
     {
         SmartRawFormat.CelsiusRange => Celsius(Field(attribute, 0, 2), Field(attribute, 2, 2), Field(attribute, 4, 2), overheats: 0),
+        SmartRawFormat.CelsiusRangeHighestFirst => Celsius(Field(attribute, 0, 2), Field(attribute, 4, 2), Field(attribute, 2, 2), overheats: 0),
         SmartRawFormat.CelsiusWithOverheats => Celsius(Field(attribute, 0, 2), Field(attribute, 2, 1), Field(attribute, 3, 1), Field(attribute, 4, 2)),
         _ => Field(attribute, 0, 1) is var celsius and not 0 ? HealthText.Temperature((int)celsius) : NotReported,
     };

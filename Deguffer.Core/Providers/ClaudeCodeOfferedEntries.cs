@@ -18,11 +18,11 @@ internal sealed class ClaudeCodeOfferedEntries
         new(StringComparer.OrdinalIgnoreCase);
 
     private readonly ConcurrentDictionary<string, bool> _titled = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ClaudeCodeTranscriptReader _reader;
+    private readonly ClaudeCodeTranscriptAnswers _transcripts;
 
-    public ClaudeCodeOfferedEntries(IEnumerable<ClaudeCodeConversationOffer> offers, ClaudeCodeTranscriptReader reader)
+    public ClaudeCodeOfferedEntries(IEnumerable<ClaudeCodeConversationOffer> offers, ClaudeCodeTranscriptAnswers transcripts)
     {
-        _reader = reader;
+        _transcripts = transcripts;
 
         foreach (var offer in offers)
         {
@@ -44,5 +44,5 @@ internal sealed class ClaudeCodeOfferedEntries
     private bool CanBeTitled(ClaudeCodeConversationOffer offer) =>
         _titled.GetOrAdd(
             offer.Transcript.Path,
-            path => _reader.Describe(path, offer.Placement, CancellationToken.None) is not null);
+            _ => _transcripts.Describe(offer.Transcript, offer.Placement, CancellationToken.None) is not null);
 }

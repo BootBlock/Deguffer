@@ -2,7 +2,8 @@ namespace Deguffer.Core.Providers;
 
 /// <summary>
 /// The folder each session's conversation says it started in, read once for the life of a preview and
-/// the clean that follows it (G4).
+/// the clean that follows it (G4), or not at all where an earlier pass read it
+/// (<see cref="ClaudeCodeTranscriptAnswers"/>).
 ///
 /// <para>A conversation's start is on its first lines, and a conversation only ever grows, so the answer
 /// for a session cannot change while the operation lasts. The clean asks it again for every step it
@@ -11,17 +12,17 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 internal sealed class ClaudeCodeSessionStarts
 {
-    private readonly ILookup<string, string> _transcripts;
-    private readonly ClaudeCodeTranscriptReader _reader;
+    private readonly ILookup<string, ClaudeCodeTranscript> _transcripts;
+    private readonly ClaudeCodeTranscriptAnswers _answers;
     private readonly Dictionary<string, IReadOnlyList<string?>> _read = new(StringComparer.OrdinalIgnoreCase);
     private readonly Lock _gate = new();
 
-    /// <param name="transcripts">Every conversation's path, by its session's id, as the preview found them.</param>
-    /// <param name="reader">Where each conversation's first lines are read.</param>
-    public ClaudeCodeSessionStarts(ILookup<string, string> transcripts, ClaudeCodeTranscriptReader reader)
+    /// <param name="transcripts">Every conversation, by its session's id, as the preview found them.</param>
+    /// <param name="answers">Where each conversation's first lines are read.</param>
+    public ClaudeCodeSessionStarts(ILookup<string, ClaudeCodeTranscript> transcripts, ClaudeCodeTranscriptAnswers answers)
     {
         _transcripts = transcripts;
-        _reader = reader;
+        _answers = answers;
     }
 
     /// <summary>
@@ -37,7 +38,7 @@ internal sealed class ClaudeCodeSessionStarts
             {
                 _read[sessionId] = starts =
                 [
-                    .. _transcripts[sessionId].Select(path => _reader.Place(path, ct)?.Project),
+                    .. _transcripts[sessionId].Select(transcript => _answers.Place(transcript, ct)?.Project),
                 ];
             }
 
