@@ -134,8 +134,8 @@ public sealed class MftSnapshotReuseTests
 
     /// <summary>
     /// A run of snapshots drawn from one set of reused room, as the read keeps it, draws each tree as
-    /// a snapshot drawn from new room would: the same nodes, names, totals, dates and order of
-    /// children, by name and by size. Between them, records arrive under the scan's folder and
+    /// one drawn from a whole copy of the columns with nothing reused, as every snapshot was before:
+    /// the same nodes, names, totals, dates and order of children, by name and by size. Between them, records arrive under the scan's folder and
     /// outside it, with names never met before, and a scan of one folder keeps only its own names, so
     /// the names are numbered again in each tree while the sort keys kept between snapshots are
     /// numbered as the read numbers them.
@@ -177,25 +177,50 @@ public sealed class MftSnapshotReuseTests
             }
 
             var fromReused = Snapshot(columns, names, reused, order, ["Users"]);
-            var afresh = Snapshot(columns, names, new MftSnapshotColumns(count), order, ["Users"]);
+            var fromCopy = Snapshot(WholeCopy(columns), names, own: null, order, ["Users"]);
 
-            Assert.Equal(Drawn(afresh), Drawn(fromReused));
+            Assert.Equal(Drawn(fromCopy), Drawn(fromReused));
         }
+    }
+
+    private static MftExploreColumns WholeCopy(MftExploreColumns columns)
+    {
+        var copy = new MftExploreColumns(columns.Count);
+
+        columns.NameNumbers.CopyTo(copy.NameNumbers, 0);
+        columns.Parents.CopyTo(copy.Parents, 0);
+        columns.Sizes.CopyTo(copy.Sizes, 0);
+        columns.Lengths.CopyTo(copy.Lengths, 0);
+        columns.Storage.CopyTo(copy.Storage, 0);
+        columns.Flags.CopyTo(copy.Flags, 0);
+        columns.Created.CopyTo(copy.Created, 0);
+        columns.Modified.CopyTo(copy.Modified, 0);
+        columns.Visibility.CopyTo(copy.Visibility, 0);
+
+        return copy;
     }
 
     private static (MftExploreColumns Columns, NamePool Names) Table(int count) => (new MftExploreColumns(count), new NamePool());
 
+    /// <param name="own">
+    /// What the snapshot draws from beside <paramref name="columns"/>, or null to hand over
+    /// <paramref name="columns"/> themselves, as the finished read does.
+    /// </param>
     private static ExploreTree Snapshot(
         MftExploreColumns columns,
         NamePool names,
-        MftSnapshotColumns own,
+        MftSnapshotColumns? own,
         ExploreChildOrder order = ExploreChildOrder.ByName,
         string[]? components = null)
     {
         components ??= [];
         var rootPath = Path.Combine([Root, .. components]);
 
-        columns.CopyPresent(own, CancellationToken.None);
+        if (own is not null)
+        {
+            columns.CopyPresent(own, CancellationToken.None);
+        }
+
         var rootName = names.Intern(rootPath);
 
         return MftExploreRooting.Assemble(
