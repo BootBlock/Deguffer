@@ -7,9 +7,11 @@ namespace Deguffer.Core.Diagnostics;
 ///
 /// <para><b>Scoped to the asynchronous flow that opened it</b>, through <see cref="CountIn"/>, rather
 /// than kept in a static count. The planner runs providers in parallel and the tests run passes side
-/// by side, so a shared count would add one pass's calls to another's. Every task, parallel slot and
-/// worker thread a pass starts runs in that flow, so its calls are counted wherever it makes them.
-/// Work that started before the tally opened, or outside the caller's flow, is not counted.</para>
+/// by side, so a shared count would add one pass's calls to another's. Every task and parallel slot
+/// a pass starts runs in that flow. A crew's helper threads carry no caller's context, so a crew
+/// hands them the tally it was made under (<see cref="Carried"/>). Either way a pass's calls are
+/// counted wherever it makes them. Work that started before the tally opened, or for another flow,
+/// is not counted: a remembered answer another pass read first costs this one nothing.</para>
 ///
 /// <para><b>Counted where Core hands the question to the machine</b>: the delegate or seam each
 /// primitive is reached through, so a test standing in for Windows is counted as Windows would be.
@@ -18,7 +20,7 @@ namespace Deguffer.Core.Diagnostics;
 /// <para>Not a user setting and never on in the app: nothing opens a tally but the benchmark and the
 /// tests, and with none open, timing a call costs one read of the flow's value.</para>
 /// </summary>
-public sealed class MachineCallTally
+internal sealed class MachineCallTally
 {
     private static readonly AsyncLocal<MachineCallTally?> Counting = new();
 
@@ -56,6 +58,25 @@ public sealed class MachineCallTally
     /// </summary>
     internal static MachineCallTiming Time(MachineCall call) =>
         Counting.Value is { } tally ? new MachineCallTiming(tally, call, tally._time.GetTimestamp()) : default;
+
+    /// <summary>
+    /// <paramref name="work"/>, made to count in the tally counting the current flow wherever it runs,
+    /// for work handed to a thread that carries no caller's context: a crew's helpers
+    /// (<see cref="Scanning.WorkerThreads"/>). <paramref name="work"/> itself where no tally counts.
+    /// </summary>
+    internal static Action Carried(Action work)
+    {
+        if (Counting.Value is not { } tally)
+        {
+            return work;
+        }
+
+        return () =>
+        {
+            using var scope = tally.CountIn();
+            work();
+        };
+    }
 
     /// <summary>Put the flow back in the hands of <paramref name="tally"/>, for <see cref="MachineCallScope"/>.</summary>
     internal static void Restore(MachineCallTally? tally) => Counting.Value = tally;

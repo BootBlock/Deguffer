@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Deguffer.Core.Diagnostics;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Scanning.Media;
@@ -37,11 +38,22 @@ public sealed class StorageQueries : IStorageQueries
     {
     }
 
+    /// <summary>
+    /// The name of the volume mounted at <paramref name="mountPoint"/>, timed for whatever tally counts
+    /// the caller: a planning pass classifies each volume it measures on, through this.
+    /// </summary>
+    private static string? VolumeNameOf(string mountPoint, out int error)
+    {
+        using var timing = MachineCallTally.Time(MachineCall.VolumeNameOfMountPoint);
+
+        return VolumeCalls.VolumeNameOf(mountPoint, out error);
+    }
+
     public StorageAnswer DiskExtents(string mountPoint)
     {
         // The volume's own name rather than \\.\X:, because a volume mounted at a folder has no
         // letter, and this is the name that opens a volume wherever it is mounted.
-        if (VolumeCalls.VolumeNameOf(mountPoint, out var error) is not { } volumeName)
+        if (VolumeNameOf(mountPoint, out var error) is not { } volumeName)
         {
             return StorageAnswer.Failed(error);
         }

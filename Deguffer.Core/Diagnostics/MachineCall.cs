@@ -5,7 +5,7 @@ namespace Deguffer.Core.Diagnostics;
 /// <see cref="MachineCallTally"/> so a planning pass can say where its time went rather than leave it
 /// estimated from the code (#516).
 /// </summary>
-public enum MachineCall
+internal enum MachineCall
 {
     /// <summary>
     /// <c>GetVolumePathNameW</c>: where the volume holding a path is mounted, asked where the path's

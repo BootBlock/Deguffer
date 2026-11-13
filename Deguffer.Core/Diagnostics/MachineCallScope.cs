@@ -4,7 +4,7 @@ namespace Deguffer.Core.Diagnostics;
 /// The span a <see cref="MachineCallTally"/> counts a flow for, from <see cref="MachineCallTally.CountIn"/>
 /// to <see cref="Dispose"/>. A value, so opening one allocates nothing.
 /// </summary>
-public readonly struct MachineCallScope : IDisposable
+internal readonly struct MachineCallScope : IDisposable
 {
     private readonly MachineCallTally? _outer;
 

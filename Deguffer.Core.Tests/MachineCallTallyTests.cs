@@ -2,6 +2,8 @@ using Deguffer.Core.Diagnostics;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
+using Deguffer.Core.Scanning.Media;
 using Deguffer.Testing;
 using Microsoft.Win32.SafeHandles;
 
@@ -204,32 +206,88 @@ public sealed class MachineCallTallyTests
         Assert.Equal(new MachineCallCount(3, CallTakes * 3), tally.Of(MachineCall.MountPointsOfVolume));
     }
 
-    /// <summary>Every read of where a handle is open on is counted, the one behind a description included.</summary>
+    /// <summary>
+    /// Every read of where a handle is open on is counted: a path followed to its end, and the one
+    /// behind a description of a file.
+    /// </summary>
     [Fact]
     public void EveryFinalPathReadIsCounted()
     {
-        using var handle = new SafeFileHandle(1, ownsHandle: false);
+        using var temp = new TempDirectory();
+        var file = temp.CreateFile(4, "file.bin");
         var files = new FileInformation(
-            (_, _) => handle,
-            (SafeFileHandle _, IdentityRoute _, out FileIdentity identity) =>
-            {
-                identity = default;
-                return false;
-            },
-            finalPath: _ =>
+            FileInformation.Open,
+            FileInformation.ReadIdentity,
+            finalPath: handle =>
             {
                 _clock.Advance(CallTakes);
-                return @"\\?\C:\Users\testuser\file.txt";
+                return FileInformation.FinalPathOf(handle);
             });
         var tally = new MachineCallTally(_clock);
 
         using (tally.CountIn())
         {
-            files.FinalPath(@"C:\Users\testuser\file.txt");
-            files.FinalPath(@"C:\Users\testuser\other.txt");
+            Assert.NotNull(files.FinalPath(file));
+            Assert.Equal(new MachineCallCount(1, CallTakes), tally.Of(MachineCall.FinalPathName));
+
+            Assert.Equal(FileReadingResult.Identified, files.Describe(file, IdentityRoute.FileId).Result);
         }
 
         Assert.Equal(new MachineCallCount(2, CallTakes * 2), tally.Of(MachineCall.FinalPathName));
+    }
+
+    /// <summary>
+    /// A crew's helper runs on a thread that carries no caller's context, and still counts in the
+    /// tally of the flow that made the crew: a planning pass runs its per-item work on such helpers.
+    /// </summary>
+    [Fact]
+    public async Task ACallACrewHelperMakesCountsInTheTallyOfTheFlowThatMadeTheCrew()
+    {
+        var windows = UnprovableMountPoints();
+        var tally = new MachineCallTally(_clock);
+        var helped = 0;
+        int? helperThread = null;
+
+        using (tally.CountIn())
+        {
+            await Task.Run(() =>
+            {
+                var crew = new WorkerCrew(
+                    threads: 2,
+                    newHelper: () => () =>
+                    {
+                        helperThread = Environment.CurrentManagedThreadId;
+                        Follow(windows, "helper", paths: 2);
+                        Interlocked.Exchange(ref helped, 1);
+                    },
+                    hasWork: () => Volatile.Read(ref helped) == 0);
+
+                Assert.True(crew.TryStartHelper());
+                crew.Finish();
+            }).WaitAsync(Deadline);
+        }
+
+        Assert.NotNull(helperThread);
+        Assert.Equal(2, tally.Of(MachineCall.VolumePathName).Calls);
+    }
+
+    /// <summary>
+    /// The media classifier names each volume a planning pass measures on with
+    /// <c>GetVolumeNameForVolumeMountPointW</c>, and that call is counted too. Asked of a folder that
+    /// is no mount point, which Windows refuses without opening any device.
+    /// </summary>
+    [Fact]
+    public void TheMediaClassifiersVolumeNameCallIsCounted()
+    {
+        using var temp = new TempDirectory();
+        var tally = new MachineCallTally();
+
+        using (tally.CountIn())
+        {
+            Assert.Null(StorageQueries.Machine.DiskExtents(temp.CreateDirectory("not-a-mount") + Path.DirectorySeparatorChar).Bytes);
+        }
+
+        Assert.Equal(1, tally.Of(MachineCall.VolumeNameOfMountPoint).Calls);
     }
 
     private static CleanupPlanner Planner(params ICleanupProvider[] providers) =>
