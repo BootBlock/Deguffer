@@ -59,8 +59,8 @@ performance rules*.
 
 - Never materialise a tree to count it. Bound parallelism (`DiskBoundWork`,
   `MaxDegreeOfParallelism`), never with unbounded `Task.Run`.
-- Ask the disk once. Carry what a listing or measurement read (`ListedEntries` to `ProtectAsync`),
-  and cache a subprocess or filesystem answer for the operation's life.
+- Ask the disk once. Carry what a listing or measurement read (`ListedEntries` to `ProtectAsync`).
+  Keep a tool's location in `ToolAnswerMemory`, others for the operation's life.
 - Start independent disk and tool queries together. Await each where it is used.
 - Pass a `CancellationToken` down every async path. Use `IReadOnlyList<T>` for anything read twice.
 - The UI thread does no I/O, reports progress by time, and builds nothing nobody sees. A bound list

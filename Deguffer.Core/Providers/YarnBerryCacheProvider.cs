@@ -48,15 +48,39 @@ public sealed class YarnBerryCacheProvider : CleanupProviderBase
         "Kept by Yarn beside its cache. Deguffer does not recognise it as cache.";
 
     private readonly ISystemDirectories _system;
-    private readonly PassMemo<Task<YarnBerryCache?>> _answer = new();
 
+    /// <summary>Berry's answer through the memory, for what this row declares to Explore and to a duplicate search.</summary>
+    private readonly PassMemo<Task<YarnBerryCache?>> _remembered = new();
+
+    /// <summary>
+    /// Which Yarn runs and Berry's settings, asked afresh, for the plan alone. A memo of its own,
+    /// because a declaration read first in the pass would otherwise hand the plan a remembered version
+    /// or global folder, and this row deletes by path under it (§5.2), where a missed input would move
+    /// a deletion rather than misstate a figure.
+    /// </summary>
+    private readonly PassMemo<Task<YarnBerryCache?>> _planned = new();
+
+    private readonly ToolAnswerMemory _memory;
+
+    /// <param name="environment">The profile, the executables and the variables Yarn is started with.</param>
+    /// <param name="runner">Starts Yarn.</param>
+    /// <param name="inspector">Tells whether Yarn or Node.js is running.</param>
+    /// <param name="scanner">Measures the cache.</param>
+    /// <param name="system">Windows' own folders, which a configured global folder must not be.</param>
+    /// <param name="volumes">The volumes, which a configured global folder must not be the root of.</param>
+    /// <param name="memory">
+    /// Where Yarn's answers about which Yarn it is and where its global folder is are kept while
+    /// nothing Yarn read has changed: the memory for <paramref name="runner"/> when null, which is the
+    /// process-wide one for the real runner. The plan asks Yarn afresh whatever it holds.
+    /// </param>
     public YarnBerryCacheProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
         ISystemDirectories? system = null,
-        IVolumeInventory? volumes = null)
+        IVolumeInventory? volumes = null,
+        ToolAnswerMemory? memory = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
@@ -65,6 +89,7 @@ public sealed class YarnBerryCacheProvider : CleanupProviderBase
             volumes: volumes)
     {
         _system = system ?? SystemDirectories.Current;
+        _memory = memory ?? ToolAnswerMemory.For(runner);
     }
 
     public override string Id => "yarn-berry";
@@ -105,45 +130,52 @@ public sealed class YarnBerryCacheProvider : CleanupProviderBase
 
     /// <summary>The global folder Berry reports, where it is not the default.</summary>
     public override async Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>
-        await ReportedFolderAsync(ct).ConfigureAwait(false) is { Accepted: { } folder } ? RootsOf(folder) : [];
+        ReportedFolder(await RememberedAsync(ct).ConfigureAwait(false)) is { Accepted: { } folder } ? RootsOf(folder) : [];
 
     /// <summary>
     /// The default cache and the one Berry reports, because a setting can move the global folder back
     /// after a duplicate search has asked. Each whole: the row removes the cache whole.
     /// </summary>
     public override async Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
-        [.. (await GlobalFoldersAsync(ct).ConfigureAwait(false)).Select(YarnBerryCache.CacheIn).Select(CleanedPlace.Whole)];
+        [.. GlobalFolders(ReportedFolder(await RememberedAsync(ct).ConfigureAwait(false))).Select(YarnBerryCache.CacheIn).Select(CleanedPlace.Whole)];
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(
             Environment.FindExecutable("yarn") is not null
             || LongPath.DirectoryMayExist(YarnBerryCache.CacheIn(DefaultGlobalFolder)));
 
-    /// <summary>Which Yarn runs, and where it keeps its global folder, are configuration that can change between scans.</summary>
+    /// <summary>
+    /// Which Yarn runs, and where it keeps its global folder, are configuration that can change between
+    /// scans. The pass's answers are forgotten here, and the memory keeps Yarn's answers only while
+    /// everything <see cref="YarnToolInputs"/> declares, and the environment Yarn is started with, read
+    /// the same. The plan asks Yarn afresh in any case.
+    /// </summary>
     public override void InvalidateCaches()
     {
-        _answer.Forget();
+        _remembered.Forget();
+        _planned.Forget();
         base.InvalidateCaches();
     }
 
     /// <summary>
     /// Which Yarn the <c>yarn</c> on the PATH runs and, for Yarn 2 and later, its global folder and
     /// whether its clean is turned off, asked as the pass begins: Yarn is a Node.js script asked three
-    /// times in turn, and those starts are most of this row's wait.
+    /// times in turn, and those starts are most of this row's wait. Asked afresh, as the plan that awaits
+    /// them asks.
     /// </summary>
     public override Task BeginPass(PassStart start) =>
-        start.Ask(ct => Environment.FindExecutable("yarn") is { } yarn ? AskAsync(yarn, ct) : Task.CompletedTask);
+        start.Ask(ct => Environment.FindExecutable("yarn") is { } yarn ? _planned.Get(() => FreshAnswerAsync(yarn, ct)) : Task.CompletedTask);
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var notes = new List<PlanNote>();
         var yarn = Environment.FindExecutable("yarn");
-        var answer = yarn is null ? null : await AskAsync(yarn, ct).ConfigureAwait(false);
+        var answer = yarn is null ? null : await _planned.Get(() => FreshAnswerAsync(yarn, ct)).ConfigureAwait(false);
 
-        if (answer is { CleanDisabled: true })
+        if (answer is { Settings.CleanDisabled: true })
         {
             return EmptyPlan(
-                $"Yarn {answer.Version} is set not to clean its cache (enableCacheClean is false), so Deguffer "
+                $"Yarn {answer.Version.Text} is set not to clean its cache (enableCacheClean is false), so Deguffer "
                 + "leaves the cache alone as well.");
         }
 
@@ -152,23 +184,23 @@ public sealed class YarnBerryCacheProvider : CleanupProviderBase
             notes.Add(new PlanNote(PlanNoteSeverity.Information,
                 "Yarn did not say which version it is, so Deguffer looked only in the default folder of Yarn 2 and later."));
         }
-        else if (answer is { IsBerry: false })
+        else if (answer is { Version.IsBerry: false })
         {
             // The usual Corepack machine: Yarn 1 outside any project, Yarn 4 inside them. Only Berry can
             // say where its global folder was moved to.
             notes.Add(new PlanNote(PlanNoteSeverity.Information,
-                $"The yarn on your PATH runs Yarn {answer.Version}, which cannot say where Yarn 2 and later keep "
+                $"The yarn on your PATH runs Yarn {answer.Version.Text}, which cannot say where Yarn 2 and later keep "
                 + "their global folder, so Deguffer looked only in the default one."));
         }
 
-        var reported = await ReportedFolderAsync(ct).ConfigureAwait(false);
+        var reported = ReportedFolder(answer);
 
         if (reported is { Declined: { } declined })
         {
             notes.Add(new PlanNote(PlanNoteSeverity.Information, declined));
         }
 
-        var found = (await GlobalFoldersAsync(ct).ConfigureAwait(false)).Select(YarnBerryFolder.Read).ToList();
+        var found = GlobalFolders(reported).Select(YarnBerryFolder.Read).ToList();
 
         if (found.All(folder => folder.State is YarnBerryCacheState.Absent))
         {
@@ -253,20 +285,17 @@ public sealed class YarnBerryCacheProvider : CleanupProviderBase
     ];
 
     /// <summary>The default global folder, and the one Berry reports where this row accepts it.</summary>
-    private async Task<IReadOnlyList<string>> GlobalFoldersAsync(CancellationToken ct) =>
-        await ReportedFolderAsync(ct).ConfigureAwait(false) is { Accepted: { } reported }
-            ? [DefaultGlobalFolder, reported]
-            : [DefaultGlobalFolder];
+    private IReadOnlyList<string> GlobalFolders((string? Accepted, string? Declined)? reported) =>
+        reported is { Accepted: { } folder } ? [DefaultGlobalFolder, folder] : [DefaultGlobalFolder];
 
     /// <summary>
-    /// The global folder Berry reports where it is not the default: accepted, or declined with the
-    /// sentence that says why. Null where Berry was not asked or named the default.
+    /// The global folder Berry reported in <paramref name="answer"/> where it is not the default:
+    /// accepted, or declined with the sentence that says why. Null where Berry was not asked or named
+    /// the default.
     /// </summary>
-    private async Task<(string? Accepted, string? Declined)?> ReportedFolderAsync(CancellationToken ct)
+    private (string? Accepted, string? Declined)? ReportedFolder(YarnBerryCache? answer)
     {
-        if (Environment.FindExecutable("yarn") is not { } yarn
-            || await AskAsync(yarn, ct).ConfigureAwait(false) is not { GlobalFolder: { } reported }
-            || Reach(reported).IsSameAs(Reach(DefaultGlobalFolder)))
+        if (answer is not { Settings.GlobalFolder: { } reported } || Reach(reported).IsSameAs(Reach(DefaultGlobalFolder)))
         {
             return null;
         }
@@ -278,6 +307,48 @@ public sealed class YarnBerryCacheProvider : CleanupProviderBase
             : (reported, null);
     }
 
-    private Task<YarnBerryCache?> AskAsync(string yarn, CancellationToken ct) =>
-        _answer.Get(() => YarnBerryCache.AskAsync(Runner, yarn, ct));
+    /// <summary>Berry's answer through the memory, once per pass, for the declarations. Null where there is no yarn.</summary>
+    private Task<YarnBerryCache?> RememberedAsync(CancellationToken ct) =>
+        Environment.FindExecutable("yarn") is { } yarn
+            ? _remembered.Get(() => RememberedAnswerAsync(yarn, ct))
+            : Task.FromResult<YarnBerryCache?>(null);
+
+    /// <summary>
+    /// Which Yarn runs and, for Berry, its settings, each from the memory while nothing Yarn read has
+    /// changed. Null where Yarn would not say which it is.
+    /// </summary>
+    private async Task<YarnBerryCache?> RememberedAnswerAsync(string yarn, CancellationToken ct)
+    {
+        var which = await YarnVersionAnswer.AskAsync(_memory, Environment, Runner, yarn, ct).ConfigureAwait(false);
+
+        return which.Version is not { } version ? null
+            : !version.IsBerry ? new YarnBerryCache(version, Settings: null)
+            : new YarnBerryCache(version, await _memory.AskAsync(SettingsQuestion(yarn, which), ct).ConfigureAwait(false));
+    }
+
+    /// <summary>
+    /// Which Yarn runs and, for Berry, its settings, each from Yarn now whatever the memory holds: the
+    /// plan deletes by path under the global folder (§5.2), and a remembered version could skip the
+    /// settings that move the folder or turn the clean off. Null where Yarn would not say which it is.
+    /// </summary>
+    private async Task<YarnBerryCache?> FreshAnswerAsync(string yarn, CancellationToken ct)
+    {
+        var which = await YarnVersionAnswer.AskAfreshAsync(_memory, Environment, Runner, yarn, ct).ConfigureAwait(false);
+
+        return which.Version is not { } version ? null
+            : !version.IsBerry ? new YarnBerryCache(version, Settings: null)
+            : new YarnBerryCache(version, await _memory.AskAfreshAsync(SettingsQuestion(yarn, which), ct).ConfigureAwait(false));
+    }
+
+    /// <summary>
+    /// Berry's settings, which depend on the script <paramref name="which"/> named, so they are declared
+    /// with that script and kept only where Yarn said which script it runs.
+    /// </summary>
+    private ToolQuestion<YarnBerrySettings> SettingsQuestion(string yarn, YarnVersionAnswer which) =>
+        new(
+            $"config get globalFolder enableCacheClean --json|{yarn}",
+            Environment.ToolEnvironment,
+            _ => YarnToolInputs.Berry(Environment, yarn, which.Script),
+            answer => answer.Answered && which.IsAnswer,
+            askCt => YarnBerrySettings.AskAsync(Runner, yarn, askCt));
 }

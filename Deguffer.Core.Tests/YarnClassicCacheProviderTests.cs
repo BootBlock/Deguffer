@@ -27,6 +27,9 @@ public sealed class YarnClassicCacheProviderTests : IDisposable
 
     private string Yarn => _environment.FindExecutable("yarn")!;
 
+    /// <summary>What asking which Yarn runs starts, in name order: its version and the script it hands itself to.</summary>
+    private static readonly string[] WhichYarnQuestions = ["-v", "config get yarn-path", "config get yarnPath --json"];
+
     private string YarnFolder => Path.Combine(_environment.LocalAppData, "Yarn");
 
     private string Root => Path.Combine(YarnFolder, "Cache");
@@ -51,6 +54,9 @@ public sealed class YarnClassicCacheProviderTests : IDisposable
                     return new CommandOutcome(0, version + "\n", string.Empty);
                 case "cache dir":
                     return new CommandOutcome(0, (reported ?? Path.Combine(root, "v6")) + "\n", string.Empty);
+                case "config get yarn-path":
+                case "config get yarnPath --json":
+                    return new CommandOutcome(0, "undefined\n", string.Empty);
             }
 
             Assert.Equal($"cache clean --cache-folder \"{root}\" --non-interactive", arguments);
@@ -124,7 +130,7 @@ public sealed class YarnClassicCacheProviderTests : IDisposable
 
     /// <summary>
     /// Yarn 2 and later answer to the same name, and their clean deletes the cache Plug'n'Play projects
-    /// run from. A Yarn that is not 1 is never asked anything further.
+    /// run from. A Yarn that is not 1 is asked nothing past which Yarn it is.
     /// </summary>
     [Theory]
     [InlineData("4.5.0")]
@@ -139,7 +145,7 @@ public sealed class YarnClassicCacheProviderTests : IDisposable
         var plan = await CreateProvider(runner).PlanAsync();
 
         Assert.Empty(plan.Steps);
-        Assert.Equal(["-v"], runner.Invocations.Select(call => call.Arguments));
+        Assert.Equal(WhichYarnQuestions, runner.Invocations.Select(call => call.Arguments).Order(StringComparer.Ordinal));
     }
 
     [Fact]

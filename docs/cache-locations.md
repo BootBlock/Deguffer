@@ -147,6 +147,15 @@ It asks `pip cache dir` where the cache is rather than assuming, because `PIP_CA
 `--cache-dir` and the `cache-dir` key in `pip.ini` can all move it. It then runs `pip cache purge`.
 Deguffer never deletes the path itself.
 
+Deguffer remembers where pip said its cache is until one of these changes, and then asks again:
+the `pip.exe` it runs, the Python interpreter that launcher names, that interpreter's
+`pyvenv.cfg`, `pip.ini` and `Lib\site-packages` (an upgrade of pip renames its folder there), your
+user site under `%APPDATA%\Python`, the configuration files pip reads
+(`C:\ProgramData\pip\pip.ini`, `C:\Users\<user>\pip\pip.ini`, `%APPDATA%\pip\pip.ini` and the
+file `PIP_CONFIG_FILE` names), and any environment variable. These are the sources pip's
+[configuration guide](https://pip.pypa.io/en/stable/topics/configuration/) lists. A `pip` that is
+not a launcher naming its interpreter, such as a `pip.bat`, is asked every time.
+
 pip's purge follows a junction it finds inside the cache, and deletes the files
 on the far side. So Deguffer looks through the cache again immediately before the command, and does
 not run it while anything inside is a link. That holds for every tool's own command, not only pip's.
@@ -211,6 +220,18 @@ caches by different routes, because Poetry only ships a command for one of them:
   hand.
 
 The `Cache` folder itself is never removed, and neither is `virtualenvs`.
+
+Deguffer remembers where Poetry said its two folders are until one of these changes: the
+`poetry.exe` it asked; any variable Deguffer starts Poetry with, which covers every `POETRY_<KEY>`
+[setting override](https://python-poetry.org/docs/configuration/#using-environment-variables) and
+`POETRY_CONFIG_DIR`; `config.toml` or `auth.toml` in Poetry's
+[configuration folder](https://python-poetry.org/docs/configuration/#config-directory)
+(`%POETRY_CONFIG_DIR%`, or `C:\Users\<user>\AppData\Roaming\pypoetry`); or a `pyproject.toml` or
+[`poetry.toml`](https://python-poetry.org/docs/configuration/#local-configuration) in the folder
+Deguffer runs its tools in or any folder above it. The plan still asks Poetry afresh every time,
+because it removes `artifacts` itself and a missed change must never move that deletion. Only
+Explore and the duplicate search read the remembered answer. `poetry cache list` is asked again
+every time, because what is cached changes whenever Poetry is used.
 
 ### What is protected
 
@@ -1249,10 +1270,21 @@ ran, and **`_logs`**, npm's own logs.
 
 ### What Deguffer does
 
-It asks `npm config get cache` where the cache folder is, because `npm config set cache` and the
-`npm_config_cache` environment variable can move it. It then runs `npm cache clean --force`. Where npm
-gives no answer, Deguffer measures the default location, and npm's own command still clears wherever
-its cache really is.
+It asks `npm config get cache userconfig globalconfig prefix` where the cache folder is, because
+`npm config set cache` and the `npm_config_cache` environment variable can move it. It then runs
+`npm cache clean --force`. Where npm gives no answer, Deguffer measures the default location, and npm's
+own command still clears wherever its cache really is.
+
+Deguffer remembers where npm said its cache is until one of these changes, and then asks again: the
+npm it runs (usually `npm.cmd`), `node.exe` beside it and the `node` on your `PATH`; the npm bundled
+beside it and the one installed under npm's `prefix`, each by its `package.json` and its built-in
+`npmrc`; the user and global configuration files npm named (`userconfig`, such as
+`C:\Users\<user>\.npmrc`, and `globalconfig`); `.npmrc`, `package.json` and `node_modules` in the folder
+npm runs in and in each folder above it, because those decide which `.npmrc` is the project's; and
+every environment variable npm is started with, because npm expands any `${VAR}` its configuration
+names. An answer that left out any of the three paths is used for that scan and never remembered. See
+npm's [`npmrc`](https://docs.npmjs.com/cli/v10/configuring-npm/npmrc) and
+[`config`](https://docs.npmjs.com/cli/v10/using-npm/config) documentation.
 
 `--force` does not override a safety check. npm refuses to clean its cache without it, and suggests
 `npm cache verify` instead, because the cache checks itself. Deguffer is asked to free the space, so
@@ -1313,6 +1345,21 @@ version stays in the store, in case something still wants it.
 It asks pnpm where the store is, because a `store-dir` setting moves it, and pnpm keeps a separate
 store per drive. It then runs `pnpm store prune`, which removes exactly the packages that **no
 project on your machine still references**. Deguffer deletes no path here at all.
+
+Deguffer remembers where pnpm said its store is until one of the things pnpm reads to answer
+changes, so a rescan does not start pnpm again for nothing. Those are: the `pnpm` program itself,
+the `node.exe` beside it and the one on `PATH`, and `node_modules\pnpm\package.json` beside it;
+Corepack's folder (`%COREPACK_HOME%`, or `%LOCALAPPDATA%\node\corepack`) and pnpm's home
+(`%PNPM_HOME%`, or `%LOCALAPPDATA%\pnpm`), where the pnpm versions they switch between are kept;
+`rc`, `config.yaml` and `auth.ini` in `%LOCALAPPDATA%\pnpm\config` and, when it is set, in
+`%XDG_CONFIG_HOME%\pnpm`; `C:\Users\<user>\.npmrc` and the file `%npm_config_userconfig%` names;
+the npm global configuration file pnpm reports (`pnpm config get globalconfig`, asked alongside the
+store); and `.npmrc`, `pnpm-workspace.yaml` and `package.json` in the folder Deguffer runs tools in
+and every folder above it. Any change to the environment Deguffer starts pnpm with counts too,
+because pnpm expands variables written in its settings. pnpm documents these sources in its
+[`.npmrc` page](https://pnpm.io/npmrc), its [settings page](https://pnpm.io/settings) and its
+[`pnpm store` page](https://pnpm.io/cli/store). The plan only runs pnpm's own command, so an answer
+remembered past a change nobody could see would misstate the figure, never move what is removed.
 
 That selectivity is why this is a better eviction than npm's. `npm cache clean` empties the lot;
 `pnpm store prune` keeps everything in use and takes only the rest.
@@ -1413,6 +1460,23 @@ A clean that you cancel while this command runs is left to finish. It is one del
 root, and Yarn 1 reads a package as cached by a file inside its folder, so a folder cut off part-way
 could be read as whole.
 
+Deguffer remembers which Yarn answered and where Yarn 1 said its cache is until one of these
+changes, and then asks again: the `yarn` it runs (usually `yarn.cmd`), `node.exe` beside it and the
+`node` on your `PATH`; `node_modules\yarn\package.json` beside it, and the `package.json` one folder
+up, where the Windows installer keeps it; Corepack's home (`%COREPACK_HOME%`, or
+`C:\Users\<user>\AppData\Local\node\corepack`) and the releases in it; `package.json` and
+`.corepack.env` in the folder Yarn runs in and in each folder above it, which decide what Corepack
+runs; `.yarnrc`, `.yarnrc.yml` and `.npmrc` in each of those folders and in your profile;
+`C:\Users\<user>\.yarn\config`; whatever is in `C:\Users\<user>\.config\yarn` and in Yarn's own
+`Config` folder; the file `%YARN_CONFIG%` names; `etc\yarnrc` and `etc\npmrc` under Node.js and under
+`%PREFIX%` (a relative variable here is read from the folder Yarn runs in); the script a `yarn-path` or
+`yarnPath` setting hands Yarn to, which Deguffer asks for beside the version, because that script
+answers in the program's place, so copying another release over it changes which Yarn runs; and
+every environment variable Yarn is started with, because Yarn expands any `${VAR}` its
+configuration names. Where Yarn would not say what that setting is, the answers are used for that
+scan and never remembered. See Yarn's [`.yarnrc`](https://classic.yarnpkg.com/en/docs/yarnrc)
+documentation and [Corepack](https://github.com/nodejs/corepack).
+
 ### What is protected
 
 Yarn's **`Data`** and **`Berry`** folders, and **`.yarnrc`** and **`.yarnrc.yml`** in your profile,
@@ -1482,6 +1546,20 @@ deletes whatever folder its settings name. And a `yarnPath` setting or a Corepac
 Yarn 1 behind the same `yarn` between the preview and the clean: Yarn 1 ignores options it does not
 know, so it would clear its own cache instead. Deguffer's removal does what Yarn's command does to
 the folder, and cannot reach anything else.
+
+Deguffer remembers where Berry said its global folder is until one of these changes, and then asks
+again: the `yarn` it runs and the Node.js and Corepack files Yarn 1's row lists; `.yarnrc.yml` (or
+the name `%YARN_RC_FILENAME%` gives) and `yarn.lock` in the folder Yarn runs in and in each folder
+above it; `C:\Users\<user>\.yarnrc.yml`; the script a `yarnPath` setting hands Yarn to, which
+Deguffer asks for beside the version; and every environment variable Yarn is started with.
+The remembered answers only decide what Explore and a duplicate search are told. A preview asks Yarn
+which it is and where its global folder is again every time, because this row removes the cache by
+path rather than through Yarn's own command. Which Yarn answered is remembered once for both rows,
+for everything but this row's preview. While a Yarn 1 `.yarnrc` (or `.yarn\config`, `%YARN_CONFIG%`
+or a Yarn 1 config folder) is there, a Berry answer is not remembered at all: Yarn 1 can hand itself
+to a Berry script named there, and Berry does not report it, so nothing would notice it replaced. See Yarn's
+[`.yarnrc.yml`](https://yarnpkg.com/configuration/yarnrc) documentation and
+[Corepack](https://github.com/nodejs/corepack).
 
 ### What is protected
 
@@ -2104,6 +2182,16 @@ shows you that figure. It deletes no path itself.
 Conda is not on your `PATH` by default, so Deguffer looks for it in three places: your `PATH`, the
 `CONDA_EXE` variable conda's own shell integration sets, and the documented install locations for
 Anaconda, Miniconda and Miniforge.
+
+Deguffer remembers where conda said its caches are until one of these changes: the `conda.exe` it
+asked; the `conda-meta` folder of the installation, which changes whenever conda or a package in the
+base environment is updated; any variable Deguffer starts conda with; or any file on conda's
+[configuration search path](https://docs.conda.io/projects/conda/en/latest/user-guide/configuration/use-condarc.html#searching-for-condarc).
+That path is a `.condarc`, a `condarc` and a `condarc.d` folder in each of `C:\ProgramData\conda`,
+`%CONDA_ROOT%`, `%XDG_CONFIG_HOME%\conda`, `C:\Users\<user>\.config\conda`,
+`C:\Users\<user>\.conda`, the installation itself and `%CONDA_PREFIX%`, then
+`C:\Users\<user>\.condarc` and whatever `%CONDARC%` names. The dry run is asked again every time,
+because what is unused changes whenever an environment does.
 
 Two categories are deliberately left out of the command:
 

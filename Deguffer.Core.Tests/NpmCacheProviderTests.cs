@@ -79,12 +79,13 @@ public sealed class NpmCacheProviderTests : IDisposable
         _temp.CreateFile(2048, "elsewhere", "npm-cache", "_cacache", "content", "blob");
 
         _environment.WithExecutable("npm");
-        var runner = new FakeProcessRunner().Responding(Npm, "config get cache", relocated);
+        var runner = new FakeProcessRunner().Responding(Npm, "config get cache", NpmConfig(relocated));
         var provider = new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
 
         var plan = await provider.PlanAsync();
         var command = Assert.IsType<RunCommandStep>(Assert.Single(plan.Steps));
 
+        Assert.Equal("config get cache userconfig globalconfig prefix", Assert.Single(runner.Invocations, i => i.Arguments.StartsWith("config", StringComparison.Ordinal)).Arguments);
         Assert.Equal(Npm, command.FileName);
         Assert.Equal([Path.Combine(relocated, "_cacache")], command.MeasuredPaths);
         Assert.True(command.EstimatedBytes >= 2048);
@@ -150,7 +151,7 @@ public sealed class NpmCacheProviderTests : IDisposable
 
         _environment.WithExecutable("npm");
         var runner = new FakeProcessRunner()
-            .Responding(Npm, "config get cache", cache)
+            .Responding(Npm, "config get cache", NpmConfig(cache))
             .Replying(Npm, arguments =>
             {
                 if (arguments != "cache clean --force")
@@ -253,6 +254,10 @@ public sealed class NpmCacheProviderTests : IDisposable
         Assert.Equal(FallbackReason.NotNtfsVolume, plan.Fallback);
     }
 
+    /// <summary>
+    /// npm's answer is kept while what npm read is unchanged, so the cache moves here as it does on a
+    /// machine: by a setting written to the user configuration npm named.
+    /// </summary>
     [Fact]
     public async Task ReResolvesTheCacheDirectoryAfterInvalidationBecauseItCanMove()
     {
@@ -264,15 +269,19 @@ public sealed class NpmCacheProviderTests : IDisposable
         var moved = _temp.CreateDirectory("elsewhere", "npm-cache");
         _temp.CreateFile(2048, "elsewhere", "npm-cache", "_cacache", "payload.bin");
 
+        var clock = new ManualTimeProvider();
+        clock.Advance(DateTimeOffset.UtcNow - clock.GetUtcNow() + TimeSpan.FromMinutes(1));
+
         _environment.WithExecutable("npm");
-        var runner = new FakeProcessRunner().Responding(Npm, "config get cache", first);
-        var provider = new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
+        var runner = new FakeProcessRunner().Responding(Npm, "config get cache", NpmConfig(first));
+        var provider = new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, null, new ToolAnswerMemory(clock));
 
         var before = await provider.PlanAsync();
         Assert.Contains(before.Steps.OfType<RunCommandStep>(), s => s.MeasuredPaths.Contains(Path.Combine(first, "_cacache")));
 
         // npm's cache config moved between scans; the planner invalidates before replanning.
-        runner.Responding(Npm, "config get cache", moved);
+        File.WriteAllText(Path.Combine(_environment.UserProfile, ".npmrc"), $"cache={moved}");
+        runner.Responding(Npm, "config get cache", NpmConfig(moved));
         provider.InvalidateCaches();
 
         var after = await provider.PlanAsync();
@@ -310,7 +319,7 @@ public sealed class NpmCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A failed <c>config get cache</c> is no answer, whatever it printed. The reply here fails and
+    /// A failed <c>config get</c> is no answer, whatever it printed. The reply here fails and
     /// still names a populated folder that is not the default, so a provider that read the output
     /// without the exit code would measure that folder and say npm reported it.
     /// </summary>
@@ -323,7 +332,7 @@ public sealed class NpmCacheProviderTests : IDisposable
         WriteFile(2048, printed, "_cacache", "content-v2", "blob");
 
         _environment.WithExecutable("npm");
-        var runner = new FakeProcessRunner().Responding(Npm, "config get cache", printed, exitCode: 1);
+        var runner = new FakeProcessRunner().Responding(Npm, "config get cache", NpmConfig(printed), exitCode: 1);
         var plan = await new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning).PlanAsync();
 
         var command = Assert.IsType<RunCommandStep>(Assert.Single(plan.Steps));
@@ -341,7 +350,7 @@ public sealed class NpmCacheProviderTests : IDisposable
         WriteFile(2048, relocated, "_cacache", "content-v2", "blob");
 
         _environment.WithExecutable("npm");
-        var runner = new FakeProcessRunner().Responding(Npm, "config get cache", relocated);
+        var runner = new FakeProcessRunner().Responding(Npm, "config get cache", NpmConfig(relocated));
         var plan = await new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning).PlanAsync();
 
         Assert.Contains(plan.Notes, n =>
@@ -362,6 +371,13 @@ public sealed class NpmCacheProviderTests : IDisposable
         Assert.StartsWith("npm did not say where its cache directory is, and the documented default", note.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>What npm prints for the query, naming <paramref name="cache"/> and the profile's configuration.</summary>
+    private string NpmConfig(string cache) =>
+        $"cache={cache}\n"
+        + $"userconfig={Path.Combine(_environment.UserProfile, ".npmrc")}\n"
+        + $"globalconfig={Path.Combine(_environment.RoamingAppData, "npm", "etc", "npmrc")}\n"
+        + $"prefix={Path.Combine(_environment.RoamingAppData, "npm")}\n";
+
     private static string WriteFile(int bytes, string folder, params string[] segments)
     {
         var path = Path.Combine([folder, .. segments]);
@@ -379,7 +395,7 @@ public sealed class NpmCacheProviderTests : IDisposable
         File.WriteAllBytes(Path.Combine(cache, "_cacache", "content-v2", "blob"), new byte[4096]);
 
         _environment.WithExecutable("npm");
-        var runner = new FakeProcessRunner().Responding(Npm, "config get cache", cache, cacheQueryExitCode);
+        var runner = new FakeProcessRunner().Responding(Npm, "config get cache", NpmConfig(cache), cacheQueryExitCode);
 
         return await new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, scanner)
             .PlanAsync();

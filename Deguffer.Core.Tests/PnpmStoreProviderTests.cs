@@ -29,11 +29,15 @@ public sealed class PnpmStoreProviderTests : IDisposable
     /// <summary>The pnpm the fake environment resolves, so a test names the program a step must run.</summary>
     private string Pnpm => _environment.FindExecutable("pnpm")!;
 
-    private FakeProcessRunner Reporting(string store) =>
-        new FakeProcessRunner().Responding(Pnpm, "store path", store + "\r\n");
+    private string GlobalConfig => Path.Combine(_environment.RoamingAppData, "npm", "etc", "npmrc");
 
-    private PnpmStoreProvider CreateProvider(FakeProcessRunner? runner = null) =>
-        new(_environment, runner ?? Reporting(Store), FakeProcessInspector.NothingRunning);
+    private FakeProcessRunner Reporting(string store) =>
+        new FakeProcessRunner()
+            .Responding(Pnpm, "store path", store + "\r\n")
+            .Responding(Pnpm, "config get globalconfig", GlobalConfig + "\r\n");
+
+    private PnpmStoreProvider CreateProvider(FakeProcessRunner? runner = null, ToolAnswerMemory? memory = null) =>
+        new(_environment, runner ?? Reporting(Store), FakeProcessInspector.NothingRunning, memory: memory);
 
     private string Populate(string directory, int bytes = 4096)
     {
@@ -281,26 +285,32 @@ public sealed class PnpmStoreProviderTests : IDisposable
         await provider.PlanAsync();
         await provider.PlanAsync();
 
-        Assert.Single(runner.Invocations);
-        Assert.Equal("store path", runner.Invocations[0].Arguments);
+        // The store and the global configuration it depends on, asked together and once each.
+        Assert.Equal(
+            ["config get globalconfig", "store path"],
+            runner.Invocations.Select(i => i.Arguments).Order(StringComparer.Ordinal));
     }
 
     /// <summary>
-    /// <c>store-dir</c> configuration moves the store between scans, so a rescan has to ask again
-    /// rather than measure a store pnpm has stopped using.
+    /// <c>store-dir</c> configuration moves the store between scans, so a rescan after a settings
+    /// file changed has to ask again rather than measure a store pnpm has stopped using. With
+    /// nothing changed it is answered from memory (<see cref="PnpmStoreProviderMemoryTests"/>).
     /// </summary>
     [Fact]
-    public async Task AsksAgainAfterAnInvalidation()
+    public async Task AsksAgainAfterAnInvalidationOnceASettingsFileChanged()
     {
         Populate(Store);
+        var clock = new ManualTimeProvider();
+        clock.Advance(DateTimeOffset.UtcNow - clock.GetUtcNow() + TimeSpan.FromHours(1));
         var runner = Reporting(Store);
-        var provider = CreateProvider(runner);
+        var provider = CreateProvider(runner, new ToolAnswerMemory(clock));
 
         await provider.PlanAsync();
+        File.WriteAllText(Path.Combine(_environment.UserProfile, ".npmrc"), @"store-dir=D:\pnpm-store");
         provider.InvalidateCaches();
         await provider.PlanAsync();
 
-        Assert.Equal(2, runner.Invocations.Count);
+        Assert.Equal(2, runner.Invocations.Count(i => i.Arguments == "store path"));
     }
 
     [Fact]

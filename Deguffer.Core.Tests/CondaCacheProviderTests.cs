@@ -549,16 +549,18 @@ public sealed class CondaCacheProviderTests : IDisposable
 
     /// <summary>
     /// A <c>.condarc</c> edit moves the package caches between scans, so a rescan asks again
-    /// rather than measuring a directory conda has stopped using.
+    /// rather than measuring a directory conda has stopped using. With nothing changed, the rescan
+    /// is answered from memory instead (<see cref="CondaLocationMemoryTests"/>).
     /// </summary>
     [Fact]
-    public async Task AsksAgainAfterAnInvalidation()
+    public async Task AsksAgainAfterAnInvalidationOnceTheConfigurationChanged()
     {
         Populate(PackageCache);
         var runner = Reporting();
         var provider = CreateProvider(runner);
 
         await provider.PlanAsync();
+        File.WriteAllText(Path.Combine(_environment.UserProfile, ".condarc"), @"pkgs_dirs: [D:\pkgs]");
         provider.InvalidateCaches();
         await provider.PlanAsync();
 

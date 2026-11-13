@@ -11,7 +11,21 @@ namespace Deguffer.Core.Providers;
 internal sealed record CondaInstallation(
     string? RootPrefix,
     IReadOnlyList<string> PackageCacheDirs,
-    IReadOnlyList<string> EnvironmentDirs);
+    IReadOnlyList<string> EnvironmentDirs)
+{
+    /// <summary>
+    /// Whether conda reported the same installation: the same root and the same folders in the same
+    /// order. By value rather than by the lists' references, because a remembered answer is trusted
+    /// only once conda gives it again (<see cref="ToolAnswerMemory"/>).
+    /// </summary>
+    public bool Equals(CondaInstallation? other) =>
+        other is not null
+        && string.Equals(RootPrefix, other.RootPrefix, StringComparison.Ordinal)
+        && PackageCacheDirs.SequenceEqual(other.PackageCacheDirs, StringComparer.Ordinal)
+        && EnvironmentDirs.SequenceEqual(other.EnvironmentDirs, StringComparer.Ordinal);
+
+    public override int GetHashCode() => HashCode.Combine(RootPrefix, PackageCacheDirs.Count, EnvironmentDirs.Count);
+}
 
 /// <summary>
 /// What conda's own dry run says its clean would free, in bytes. Only the tarball and package

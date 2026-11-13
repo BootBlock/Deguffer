@@ -90,13 +90,18 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     /// What every row in the planner offers, so a child another row removes from a folder this row
     /// walks is not asserted here. See <see cref="RowDeclarations"/>.
     /// </param>
+    /// <param name="memory">
+    /// Where Poetry's two location answers are remembered between passes; by default the memory for
+    /// <paramref name="runner"/>, which is the process-wide one for the real runner.
+    /// </param>
     public PoetryCacheProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
         RowDeclarations? declarations = null,
-        IVolumeInventory? volumes = null)
+        IVolumeInventory? volumes = null,
+        ToolAnswerMemory? memory = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
@@ -104,7 +109,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
             scanner,
             volumes: volumes)
     {
-        _discovery = new PoetryDiscovery(Runner);
+        _discovery = new PoetryDiscovery(Runner, Environment, memory ?? ToolAnswerMemory.For(runner));
         _declarations = declarations ?? new RowDeclarations();
     }
 
@@ -251,6 +256,10 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(Environment.FindExecutable("poetry") is not null);
 
+    /// <summary>
+    /// Both settings are configuration. The pass's answers are forgotten; the memory keeps each only
+    /// while what Poetry read to give it is unchanged, and the plan asks Poetry afresh regardless.
+    /// </summary>
     public override void InvalidateCaches()
     {
         _discovery.Invalidate();
@@ -260,10 +269,11 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     /// <summary>
     /// Poetry's answers for where its cache and its virtual environments are, asked as the pass begins:
     /// Poetry is a Python program asked twice in turn, and those two starts are most of this row's wait.
+    /// Asked afresh, as the plan that awaits them asks.
     /// </summary>
     public override Task BeginPass(PassStart start) =>
         start.Ask(ct => Environment.FindExecutable("poetry") is { } poetry
-            ? _discovery.DiscoverAsync(poetry, DefaultCacheRoot, ct)
+            ? _discovery.DiscoverAfreshAsync(poetry, DefaultCacheRoot, ct)
             : Task.CompletedTask);
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
@@ -273,7 +283,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
             return EmptyPlan("Poetry is not installed on this machine.");
         }
 
-        var located = await _discovery.DiscoverAsync(poetry, DefaultCacheRoot, ct).ConfigureAwait(false);
+        var located = await _discovery.DiscoverAfreshAsync(poetry, DefaultCacheRoot, ct).ConfigureAwait(false);
         var (cacheRoot, environments) = (located.CacheRoot.Path, located.Environments.Path);
 
         if (NothingToPlanFor(cacheRoot, located.CacheRoot.DescribeAbsent("Poetry", "cache directory"), out var cacheRootIsLink) is { } nothing)
@@ -538,7 +548,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
         var named = await _discovery.ListCachesAsync(poetry, ct).ConfigureAwait(false);
 
         var resolved = named
-            .Select(name => (Name: name, Path: Resolve(repositories, name)))
+            .Select(name => (Name: name, Path: PoetryNamedCache.Resolve(repositories, name)))
             .Where(cache => cache.Path is not null)
             .Select(cache => (cache.Name, Path: cache.Path!))
             .ToList();
@@ -595,35 +605,5 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
         ];
 
         return (steps, measured, false, found.CouldNotBeReached);
-    }
-
-    /// <summary>
-    /// Where a cache Poetry named sits, or null when the name does not resolve to a directory
-    /// directly inside the repository cache.
-    ///
-    /// <para>§5.2, and a different question from the one the name itself answers.
-    /// <see cref="PoetryDiscovery"/> checks that a name is safe to put in a command line;
-    /// this checks that it is safe to put in a path, and the two do not overlap. <c>.</c> and
-    /// <c>..</c> are perfectly ordinary command-line tokens, and both walk out of the directory the
-    /// step claims to be about: <c>..</c> resolves to <c>{cache-dir}\cache</c>, which this
-    /// provider's own §5.6 list says must survive, and Poetry's <c>clear</c> removes the directory
-    /// it is handed rather than emptying it. Poetry's own containment check does not catch that
-    /// either, because it compares the paths without resolving them.</para>
-    ///
-    /// <para>Asked as "is the parent exactly the repository cache" rather than as a containment
-    /// test, because <see cref="LongPath.Contains"/> counts a directory as containing itself, and
-    /// the bare <c>.</c> is precisely the case that would slip through.</para>
-    /// </summary>
-    private static string? Resolve(string repositories, string name)
-    {
-        if (LongPath.Configured(Path.Combine(repositories, name)) is not { } path)
-        {
-            return null;
-        }
-
-        return Path.GetDirectoryName(path) is { } container
-            && container.Equals(repositories, StringComparison.OrdinalIgnoreCase)
-                ? path
-                : null;
     }
 }

@@ -233,8 +233,9 @@ public sealed class PipCacheProviderTests : IDisposable
         Assert.True(CreateProvider().Tier.IsPreSelectedByDefault());
     }
 
-    // PIP_CACHE_DIR can move the cache between one scan and the next, so the memoised location must
-    // not survive an invalidation. That invariant is not asserted here: ProviderInvalidationTests
+    // PIP_CACHE_DIR can move the cache between one scan and the next, so the pass's memoised location
+    // must not survive an invalidation; what outlives it, while pip's inputs read the same, is held by
+    // PipCacheLocationMemoryTests. The pass's invariant is not asserted here: ProviderInvalidationTests
     // holds it reflectively over every provider in the assembly, which is the stronger test — a
     // hand-written version here has to resolve a location, invalidate, and resolve again on the same
     // instance, and the obvious way of writing it constructs a second provider whose field is null
