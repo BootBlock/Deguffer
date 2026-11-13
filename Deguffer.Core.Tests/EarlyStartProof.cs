@@ -66,6 +66,33 @@ internal static class EarlyStartProof
         Assert.Empty(runner.Invocations);
     }
 
+    /// <summary>
+    /// Begins a pass for <paramref name="provider"/> alone and asserts that it ran each of
+    /// <paramref name="queries"/> once and nothing else: a provider whose plan asks one tool question and
+    /// then makes a check before the next, where that check refuses, so the chain stops where the plan's does.
+    /// </summary>
+    /// <param name="queries">Text the arguments of each query the chain asks before its check contain.</param>
+    public static async Task StartsOnlyAsync(ICleanupProvider provider, FakeProcessRunner runner, params string[] queries)
+    {
+        Assert.NotEmpty(queries);
+
+        provider.InvalidateCaches();
+        using var hold = provider.HoldCaches();
+
+        await BeginAsync(provider);
+
+        Assert.All(runner.Invocations, run => Assert.True(
+            queries.Any(query => run.Arguments.Contains(query, StringComparison.Ordinal)),
+            $"'{run.Arguments}' ran when {provider.Id}'s pass began, past the check its plan makes before asking it."));
+
+        foreach (var query in queries)
+        {
+            Assert.True(
+                RunsOf(runner, query) == 1,
+                $"'{query}' ran {RunsOf(runner, query)} times when {provider.Id}'s pass began, where it should run once.");
+        }
+    }
+
     private static async Task BeginAsync(ICleanupProvider provider)
     {
         using var start = new PassStart(1, CancellationToken.None);
