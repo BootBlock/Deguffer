@@ -235,8 +235,9 @@ public sealed class NpmCacheProviderMemoryTests : IDisposable
     }
 
     /// <summary>
-    /// The failure comes after a trusted answer, from an ask an input change forced, so a failure kept
-    /// as an answer would read the same inputs before and after and be served to the next pass.
+    /// The failure drops the trusted answer an input change made the pass ask past, and is asked again
+    /// on every pass. It declares other inputs than the answer it replaced, so it is three passes that
+    /// show it is not kept: a kept failure would be confirmed by the second and served to the third.
     /// </summary>
     [Fact]
     public async Task AFailedQueryIsNotKept()
@@ -246,13 +247,15 @@ public sealed class NpmCacheProviderMemoryTests : IDisposable
 
         File.AppendAllText(Path.Combine(_environment.UserProfile, ".npmrc"), "changed");
         _runner.Responding(_npm, "config get", NpmConfig(_cache), exitCode: 1);
-        provider.InvalidateCaches();
-        await provider.PlanAsync();
-        Assert.False(_memory.Holds(Key));
-        provider.InvalidateCaches();
-        await provider.PlanAsync();
 
-        Assert.Equal(2, Asked);
+        for (var pass = 0; pass < 3; pass++)
+        {
+            provider.InvalidateCaches();
+            await provider.PlanAsync();
+            Assert.False(_memory.Holds(Key));
+        }
+
+        Assert.Equal(3, Asked);
     }
 
     /// <summary>

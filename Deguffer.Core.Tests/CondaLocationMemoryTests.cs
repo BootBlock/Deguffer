@@ -341,8 +341,9 @@ public sealed class CondaLocationMemoryTests : IDisposable
     }
 
     /// <summary>
-    /// The failure comes after a trusted answer, from an ask an input change forced, so a failure kept
-    /// as an answer would read the same inputs before and after and be served to the next pass.
+    /// The failure drops the trusted answer an input change made the pass ask past, and is asked again
+    /// on every pass. It declares other inputs than the answer it replaced, so it is three passes that
+    /// show it is not kept: a kept failure would be confirmed by the second and served to the third.
     /// </summary>
     [Fact]
     public async Task AFailedQueryIsNotKept()
@@ -352,15 +353,19 @@ public sealed class CondaLocationMemoryTests : IDisposable
 
         Write(Path.Combine(_environment.UserProfile, ".condarc"), "channels: [defaults]");
         _runner.Responding(_conda, Info, "{}", exitCode: 1);
-        provider.InvalidateCaches();
-        Assert.Contains((await provider.PlanAsync()).Notes, n => n.Message.Contains("conda did not describe", StringComparison.Ordinal));
-        Assert.False(_memory.Holds(Key));
+
+        for (var pass = 0; pass < 3; pass++)
+        {
+            provider.InvalidateCaches();
+            Assert.Contains((await provider.PlanAsync()).Notes, n => n.Message.Contains("conda did not describe", StringComparison.Ordinal));
+            Assert.False(_memory.Holds(Key));
+        }
 
         Answering(Miniconda);
         provider.InvalidateCaches();
         var plan = await provider.PlanAsync();
 
-        Assert.Equal(2, Asked);
+        Assert.Equal(4, Asked);
         Assert.Equal([PackageCache(Miniconda)], Assert.Single(plan.Steps.OfType<RunCommandStep>()).MeasuredPaths);
     }
 }

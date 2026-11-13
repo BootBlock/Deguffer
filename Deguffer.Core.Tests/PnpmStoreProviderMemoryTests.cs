@@ -312,8 +312,9 @@ public sealed class PnpmStoreProviderMemoryTests : IDisposable
 
     /// <summary>
     /// Without the global configuration's path an edit to that file would go unnoticed, so the store
-    /// serves the pass that asked and the next pass asks again. The answer comes after a trusted one,
-    /// from an ask an input change forced, so only the missing path can refuse it.
+    /// serves the pass that asked and every pass asks again. The answer replaces a trusted one an input
+    /// change made the pass ask past, and declares other inputs than it did, so it is three passes that
+    /// show it is not kept: a kept answer would be confirmed by the second and served to the third.
     /// </summary>
     [Theory]
     [InlineData("", 0)]
@@ -329,14 +330,17 @@ public sealed class PnpmStoreProviderMemoryTests : IDisposable
 
         Write(".npmrc", "registry=https://registry.example.test/");
         _runner.Responding(_pnpm, "config get globalconfig", printed ?? GlobalConfig, exitCode);
-        provider.InvalidateCaches();
-        var plan = await provider.PlanAsync();
-        Assert.False(_memory.Holds(Key));
-        provider.InvalidateCaches();
-        await provider.PlanAsync();
 
-        Assert.Equal([Store], Assert.Single(plan.Steps.OfType<RunCommandStep>()).MeasuredPaths);
-        Assert.Equal(2, StoreAsks);
+        for (var pass = 0; pass < 3; pass++)
+        {
+            provider.InvalidateCaches();
+            var plan = await provider.PlanAsync();
+
+            Assert.Equal([Store], Assert.Single(plan.Steps.OfType<RunCommandStep>()).MeasuredPaths);
+            Assert.False(_memory.Holds(Key));
+        }
+
+        Assert.Equal(3, StoreAsks);
     }
 
     private static TheoryData<string, Change> Cases(IReadOnlyList<Change> changes, params string[] paths)
