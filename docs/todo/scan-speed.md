@@ -469,7 +469,7 @@ issue says which. No change was measured inside Deguffer.
 
 **The per-entry walk is lean; the costs left are questions asked again and safety checks run one at
 a time.** Every planning pass waits for the registered-disk readers before any row starts, and the
-Hyper-V reader starts PowerShell even for an account it will refuse (#1014, #1038). After a clean,
+Hyper-V reader starts PowerShell even for an account it will refuse (#1014, done; #1038, done). After a clean,
 the §5.6 verification follows every surviving protected path to its mount point when nothing was
 left standing (#1016), and the checks before and after a clean probe paths one at a time (#1017,
 #1018). Most rows probe again for §5.6 the paths their own listing returned (#1039). A file-table
@@ -484,7 +484,7 @@ scan copied its whole table at every snapshot (#1015, done), every walk boxed an
 | Issue | Note |
 | --- | --- |
 | #1016 | §5.6 verification follows every survivor to its mount point when nothing was left standing. `safety`. The largest gain for a clean: 1.4-2.0 s estimated for 10,918 paths, from measured per-path costs. |
-| #1014, #1038 | Planning waits on every registered-disk reader in turn, and the Hyper-V reader starts PowerShell to learn the account will be refused (226-298 ms measured for the role check alone). |
+| #1014, #1038 | Planning waits on every registered-disk reader in turn, and the Hyper-V reader starts PowerShell to learn the account will be refused (226-298 ms measured for the role check alone). Done: the reading starts beside the rows as the pass begins, asks every registering row at once, and a row waits for the set only once its own plan has ended, out of its slot (#1014). The Hyper-V role comes from the process's token before PowerShell starts (#1038). |
 | #1015 | File-table snapshots copied all nine columns: 26-41 ms and 100 MiB per 3 million slots against 4.7-5.4 ms and 14 MiB for flags and parents only, measured on stand-in arrays. Done: a snapshot copies only the flags and parents, into room the read makes at its first snapshot, reads every other column of a present slot where the parse threads write it, and is always compacted. The child starts, child list, order, renumbering and the names' sort keys are reused from one snapshot to the next, so a snapshot after the first allocates only what its tree keeps. |
 | #1017, #1018, #1019 | §5.6 checks and the Clean press's narrowing probe paths one at a time, the last on the UI thread; registered storage follows every step live. `safety`. |
 | #1039 | `ProtectAsync`'s default takes no listing, so most rows probe again what they listed. The seam fix for #755's leftovers. `safety`. |
