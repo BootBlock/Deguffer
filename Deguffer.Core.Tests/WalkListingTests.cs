@@ -24,7 +24,7 @@ public sealed class WalkListingTests
         var contents = listing.Read(Folder, followsLink: true);
 
         Assert.False(contents.WasRefused);
-        Assert.Equal(["a.bin", "b.bin", "c.bin"], contents.Entries.Select(e => e.Name));
+        Assert.Equal(["a.bin", "b.bin", "c.bin"], contents.Entries.ToArray().Select(e => e.Name));
         Assert.Equal([Large, WalkTuning.MinimumListingBuffer], server.BuffersAskedFor);
     }
 
@@ -135,9 +135,9 @@ public sealed class WalkListingTests
         using var listing = new WalkListing(new ListingBuffer(WalkTuning.MinimumListingBuffer), server.List, FileNames.All);
         var contents = listing.Read(Folder, followsLink: true);
 
-        Assert.Equal(["first.bin", "folder", "last.bin"], contents.Entries.Select(e => e.Name));
-        Assert.Equal(["link"], contents.Links.Select(e => e.Name));
-        Assert.Equal(["placeholder.bin"], contents.ReparseFiles.Select(e => e.Name));
+        Assert.Equal(["first.bin", "folder", "last.bin"], contents.Entries.ToArray().Select(e => e.Name));
+        Assert.Equal(["link"], contents.Links.ToArray().Select(e => e.Name));
+        Assert.Equal(["placeholder.bin"], contents.ReparseFiles.ToArray().Select(e => e.Name));
     }
 
     private static WalkEntry Entry(string name, FileAttributes attributes) =>

@@ -488,7 +488,7 @@ scan copies its whole table at every snapshot (#1015), every walk boxes an enume
 | #1015 | File-table snapshots copy all nine columns: 26-41 ms and 100 MiB per 3 million slots against 4.7-5.4 ms and 14 MiB for flags and parents only, measured on stand-in arrays. |
 | #1017, #1018, #1019 | §5.6 checks and the Clean press's narrowing probe paths one at a time, the last on the UI thread; registered storage follows every step live. `safety`. |
 | #1039 | `ProtectAsync`'s default takes no listing, so most rows probe again what they listed. The seam fix for #755's leftovers. `safety`. |
-| #1021, #1020, #1022, #1032 | Per-directory and per-file costs in the walk, the removal walk, Explore's occupancy probe and file targets. #1020 and #1032 are `safety`. |
+| #1021, #1020, #1022, #1032 | Per-directory and per-file costs in the walk, the removal walk, Explore's occupancy probe and file targets. #1020 and #1032 are `safety`. #1021 done: a listing is handed to its callback as spans in a `ref struct`, so no walk boxes an enumerator for it, and the compiler keeps it inside the callback. The benchmark's `walk` of 145,005 entries allocated 33.9 MiB against 36.9 MiB, and its `measure` 39.2 MiB against 45.0 MiB. |
 | #1026, #1027, #1028 | Per-drawing facts rebuilt on the UI thread, layouts copying unsized lists, and the overview's second upload. |
 | #1033, #1034, #1035, #1023 | The duplicate search: judging inside the shared lock, the checksum store's load, stream listings per copy, and linear place lists per folder. |
 | #1029, #1030, #1031 | UI-thread churn: progress by count, Duplicates page state per group, a bound list cleared and refilled. |

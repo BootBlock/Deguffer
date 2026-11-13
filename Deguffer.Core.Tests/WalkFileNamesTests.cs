@@ -104,7 +104,7 @@ public sealed class WalkFileNamesTests : IDisposable
         var contents = listing.Read(folder, followsLink: true);
 
         Assert.Same(folder, contents.Directory);
-        Assert.All(contents.Entries, entry => Assert.Same(folder, entry.Directory));
+        Assert.All(contents.Entries.ToArray(), entry => Assert.Same(folder, entry.Directory));
     }
 
     /// <summary>
@@ -131,7 +131,7 @@ public sealed class WalkFileNamesTests : IDisposable
             (_, _, contents, leftOut) =>
             {
                 var folder = Path.GetFileName(contents.Directory);
-                named[folder] = [.. contents.Entries.Where(e => !e.IsDirectory && e.HasName).Select(e => e.Name).Order()];
+                named[folder] = [.. contents.Entries.ToArray().Where(e => !e.IsDirectory && e.HasName).Select(e => e.Name).Order()];
                 left[folder] = [.. leftOut ?? new HashSet<string>()];
                 return folder;
             },
