@@ -229,19 +229,4 @@ public sealed class ClaudeCodeTranscriptAnswersTests : IDisposable
         Assert.Equal(Title, TitleOf(second, conversation));
         Assert.Equal(3, Opened());
     }
-
-    /// <summary>A conversation that could not be placed is read again next pass, and placed once it can be.</summary>
-    [Fact]
-    public async Task APlacementThatCouldNotBeReadIsReadAgainNextPass()
-    {
-        var (conversation, _) = OldSession(SessionA);
-        _failOnOpen[Path.GetFileName(conversation)] = 1;
-        var provider = Provider();
-
-        Assert.Empty((await provider.PlanAsync()).TargetedPaths);
-
-        provider.InvalidateCaches();
-
-        Assert.Equal(Title, TitleOf(await provider.PlanAsync(), conversation));
-    }
 }

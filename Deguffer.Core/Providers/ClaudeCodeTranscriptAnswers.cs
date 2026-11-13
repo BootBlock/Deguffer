@@ -18,16 +18,18 @@ namespace Deguffer.Core.Providers;
 /// <para><b>For the life of the app.</b> Every planning pass and every Explore policy builds its
 /// providers again, so the answers are kept here rather than on a provider (<see cref="Shared"/>).</para>
 ///
-/// <para><b>It decides nothing.</b> An answer only names and places a conversation. Which conversations
-/// are recent, running or occupied is still decided from the live listing and the live list of running
-/// sessions, and §5.6 asserts what is left alone as before.</para>
+/// <para><b>The same answer a read would give.</b> A placement decides which project a conversation is
+/// in, and so whether a running session occupies it, but a kept placement is served only for a file
+/// unchanged since it was read. Which conversations are recent, running or occupied is still decided
+/// each pass, from the live listing and the live list of running sessions, and §5.6 asserts what is
+/// left alone as before.</para>
 ///
 /// <para><b>Only an answer is kept.</b> A read that failed, or found nothing it could use, is read again
 /// next time: a locked file is not locked for good, and a conversation that cannot be placed is not
 /// offered either way.</para>
 ///
 /// <para><b>Bounded by the listing.</b> <see cref="Retain"/> drops every transcript a listing no longer
-/// holds, so what is kept never outgrows the transcripts on the disk.</para>
+/// holds, so what is kept never outgrows the transcripts the last listing found.</para>
 /// </summary>
 /// <param name="reader">Where a transcript is read when nothing is kept for it as it is now.</param>
 public sealed class ClaudeCodeTranscriptAnswers(ClaudeCodeTranscriptReader reader)
