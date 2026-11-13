@@ -15,7 +15,10 @@ internal static class HealthText
 
     internal static string Count(UInt128 count) => count.ToString("N0", null);
 
-    internal static string Percent(int percent) => $"{percent}%";
+    /// <remarks>A <see langword="long"/>, so that a raw value read from up to six bytes is stated whole.</remarks>
+    internal static string Percent(long percent) => $"{percent}%";
+
+    internal static string Gigabytes(UInt128 gigabytes) => $"{Count(gigabytes)} GB";
 
     /// <summary>A size, held at the largest the shared formatter can state rather than wrapped into nonsense.</summary>
     internal static string Size(UInt128 bytes) => FreeSpace.Format(bytes > long.MaxValue ? long.MaxValue : (long)bytes);

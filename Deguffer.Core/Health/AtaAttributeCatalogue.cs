@@ -35,14 +35,26 @@ internal enum SmartRawFormat
     /// <summary>Degrees in bytes 0-1, the lowest seen in bytes 2-3 and the highest seen in bytes 4-5.</summary>
     CelsiusRange,
 
+    /// <summary>Degrees in bytes 0-1, the highest seen in bytes 2-3 and the lowest seen in bytes 4-5.</summary>
+    CelsiusRangeHighestFirst,
+
     /// <summary>The raw value is not used. The normalised value is a percentage.</summary>
     Percent,
+
+    /// <summary>A percentage in the raw value, as wide as the definition's <see cref="RawWidth"/>.</summary>
+    RawPercent,
 
     /// <summary>A count of 512-byte sectors.</summary>
     Bytes512,
 
     /// <summary>A count of the drive's logical sectors, whose size Windows reports.</summary>
     LogicalSectors,
+
+    /// <summary>
+    /// A count of gigabytes, as wide as the definition's <see cref="RawWidth"/>. It is shown in that unit,
+    /// not converted, because no document that uses it says how many bytes its gigabyte is.
+    /// </summary>
+    Gigabytes,
 
     /// <summary>Manufacturers use these bytes differently, so they are shown as they are and judged by nothing.</summary>
     Opaque,
@@ -51,7 +63,7 @@ internal enum SmartRawFormat
     Status,
 }
 
-/// <summary>How much of the six raw bytes a count or a number of hours fills.</summary>
+/// <summary>How much of the six raw bytes a count, a number of hours, a raw percentage or a number of gigabytes fills.</summary>
 internal enum RawWidth
 {
     /// <summary>The low 32 bits, because many drives pack other figures above them.</summary>
@@ -59,6 +71,9 @@ internal enum RawWidth
 
     /// <summary>All six bytes, where the manufacturer's document says the figure fills them.</summary>
     AllSixBytes,
+
+    /// <summary>Byte 0 alone, where the manufacturer's document defines no more.</summary>
+    LowByte,
 }
 
 /// <summary>What the page knows about one attribute.</summary>

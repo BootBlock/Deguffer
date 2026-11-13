@@ -13,6 +13,7 @@ internal static class AtaAttributeRows
     private const string WriteAmplificationKey = "write-amplification";
 
     private const uint LowDoubleWord = 0xFFFF_FFFF;
+    private const ulong LowByte = 0xFF;
     private const ulong Word = 0xFFFF;
     private const int BitsPerWord = 16;
     private const int LifeLeftWarningPercent = 10;
@@ -136,9 +137,13 @@ internal static class AtaAttributeRows
             ? (code.Reading, $"{status.Explanation} {code.Meaning}", code.Standing)
             : (Code(attribute), $"{status.Explanation} The manufacturer's document does not list this code, so Deguffer shows it as reported.", AttributeStanding.Normal);
 
-    /// <summary>The count or hours in the raw value, as wide as the definition says the figure is.</summary>
-    private static ulong Figure(AtaAttribute attribute, AtaAttributeDefinition known) =>
-        known.Width is RawWidth.AllSixBytes ? attribute.Raw : attribute.Raw & LowDoubleWord;
+    /// <summary>The figure in the raw value, as wide as the definition says it is.</summary>
+    private static ulong Figure(AtaAttribute attribute, AtaAttributeDefinition known) => known.Width switch
+    {
+        RawWidth.AllSixBytes => attribute.Raw,
+        RawWidth.LowByte => attribute.Raw & LowByte,
+        _ => attribute.Raw & LowDoubleWord,
+    };
 
     private static (string, string, AttributeStanding) FailureCount(AtaAttribute attribute, AtaAttributeDefinition known)
     {
@@ -149,14 +154,20 @@ internal static class AtaAttributeRows
             : (HealthText.Count(count), $"{known.Explanation} {BackUpAdvice}", AttributeStanding.Watch);
     }
 
-    private static (string, string, AttributeStanding) RemainingLife(AtaAttribute attribute, AtaAttributeDefinition known) =>
-        attribute.Value <= LifeLeftWarningPercent
-            ? ($"{attribute.Value}% left", $"{known.Explanation} The drive is near the end of its rated life, so plan to replace it.", AttributeStanding.Watch)
-            : ($"{attribute.Value}% left", known.Explanation, AttributeStanding.Normal);
+    private static (string, string, AttributeStanding) RemainingLife(AtaAttribute attribute, AtaAttributeDefinition known)
+    {
+        // A raw figure is at most six bytes wide, so it fits a long.
+        var percent = known.Format is SmartRawFormat.RawPercent ? (long)Figure(attribute, known) : attribute.Value;
+        var reading = $"{HealthText.Percent(percent)} left";
+
+        return percent <= LifeLeftWarningPercent
+            ? (reading, $"{known.Explanation} The drive is near the end of its rated life, so plan to replace it.", AttributeStanding.Watch)
+            : (reading, known.Explanation, AttributeStanding.Normal);
+    }
 
     private static string Temperature(AtaAttribute attribute, SmartRawFormat format)
     {
-        if (format is not SmartRawFormat.CelsiusRange)
+        if (format is not (SmartRawFormat.CelsiusRange or SmartRawFormat.CelsiusRangeHighestFirst))
         {
             var celsius = (int)(attribute.Raw & 0xFF);
 
@@ -164,8 +175,9 @@ internal static class AtaAttributeRows
         }
 
         var current = (int)(attribute.Raw & Word);
-        var lowest = (int)((attribute.Raw >> BitsPerWord) & Word);
-        var highest = (int)((attribute.Raw >> (2 * BitsPerWord)) & Word);
+        var second = (int)((attribute.Raw >> BitsPerWord) & Word);
+        var third = (int)((attribute.Raw >> (2 * BitsPerWord)) & Word);
+        var (lowest, highest) = format is SmartRawFormat.CelsiusRangeHighestFirst ? (third, second) : (second, third);
 
         // A drive that has recorded no highest has recorded no range either.
         return (current, highest) switch
@@ -184,6 +196,8 @@ internal static class AtaAttributeRows
             ? HealthText.Size((UInt128)attribute.Raw * size)
             : $"{HealthText.Count(attribute.Raw)} sectors",
         SmartRawFormat.Percent => HealthText.Percent(attribute.Value),
+        SmartRawFormat.RawPercent => HealthText.Percent((long)Figure(attribute, known)),
+        SmartRawFormat.Gigabytes => HealthText.Gigabytes(Figure(attribute, known)),
         SmartRawFormat.Status => Code(attribute),
         _ => HealthText.Count(Figure(attribute, known)),
     };

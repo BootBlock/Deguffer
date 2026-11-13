@@ -16,7 +16,7 @@ internal static partial class AtaVendorOverlay
     /// <summary>The threshold code TN-FD-22 table 7 defines as always failing.</summary>
     private const byte AlwaysFailingThreshold = 0xFF;
 
-    private static readonly AtaAttributeDefinition RemainingLife = new(
+    internal static readonly AtaAttributeDefinition RemainingLife = new(
         "Remaining life", "How much of the drive's rated write life is left.", SmartRawFormat.Percent, AttributeRole.RemainingLife);
 
     private static readonly AtaAttributeDefinition MediaWearout = new(
@@ -79,7 +79,7 @@ internal static partial class AtaVendorOverlay
         MicronClientSata.Covers(drive) ? MicronClientSata.Of(id)
         : SamsungPm863OrSm863().IsMatch(drive.Model) ? SamsungPm863OrSm863Of(id)
         : Samsung845Dc().IsMatch(drive.Model) ? Samsung845DcOf(id)
-        : id switch
+        : KingstonSata.Of(id, drive) ?? id switch
         {
             // Intel DC S3500 product specification 328860-008US, table 18: the normalised value declines
             // from 100 to 1 with wear. Solidigm KA-00033 names 233 for later drives but states no scale.
