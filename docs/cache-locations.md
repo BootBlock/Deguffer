@@ -2105,6 +2105,16 @@ Conda is not on your `PATH` by default, so Deguffer looks for it in three places
 `CONDA_EXE` variable conda's own shell integration sets, and the documented install locations for
 Anaconda, Miniconda and Miniforge.
 
+Deguffer remembers where conda said its caches are until one of these changes: the `conda.exe` it
+asked; the `conda-meta` folder of the installation, which changes whenever conda or a package in the
+base environment is updated; any variable Deguffer starts conda with; or any file on conda's
+[configuration search path](https://docs.conda.io/projects/conda/en/latest/user-guide/configuration/use-condarc.html#searching-for-condarc).
+That path is a `.condarc`, a `condarc` and a `condarc.d` folder in each of `C:\ProgramData\conda`,
+`%CONDA_ROOT%`, `%XDG_CONFIG_HOME%\conda`, `C:\Users\<user>\.config\conda`,
+`C:\Users\<user>\.conda`, the installation itself and `%CONDA_PREFIX%`, then
+`C:\Users\<user>\.condarc` and whatever `%CONDARC%` names. The dry run is asked again every time,
+because what is unused changes whenever an environment does.
+
 Two categories are deliberately left out of the command:
 
 - **`--all` is not used**, because it also removes conda's log files. A log is a record of something
