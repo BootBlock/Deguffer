@@ -65,6 +65,14 @@ internal enum Route
     Folders,
 
     /// <summary>
+    /// Search several folders for files with the same content, as the Duplicates page does, through
+    /// <c>DuplicateSearcher</c> with the real content reader, and time each stage: the scan, the walk,
+    /// identification, and the first-and-last-blocks and full-content stages with each disk's lane.
+    /// It reads files and removes nothing, and keeps its checksums in a folder of its own.
+    /// </summary>
+    Duplicates,
+
+    /// <summary>
     /// Build a tree in a new folder and remove it through <c>DirectoryRemover</c>, as a clean removes
     /// a cache or a build folder: the walk, the file pass and the folder pass, timed apart. The first of
     /// the two routes that write, and they write only inside the folder they create.
@@ -110,8 +118,11 @@ internal static class RouteFacts
 {
     /// <summary>Whether the route reads a volume's file table, which needs administrator rights.</summary>
     public static bool ReadsTable(this Route route) =>
-        route is not (Route.Walk or Route.Measure or Route.ExploreWalk or Route.Sources or Route.Links or Route.Folders or Route.Plan)
+        route is not (Route.Walk or Route.Measure or Route.ExploreWalk or Route.Sources or Route.Links or Route.Folders or Route.Duplicates or Route.Plan)
             && !route.Builds();
+
+    /// <summary>Whether the route takes several folders, where every other route takes one target.</summary>
+    public static bool TakesFolders(this Route route) => route is Route.Folders or Route.Duplicates;
 
     /// <summary>Whether the route builds what it removes in a folder it creates.</summary>
     public static bool Removes(this Route route) => route is Route.Remove or Route.Clean;
@@ -157,7 +168,7 @@ internal static class RouteFacts
     /// <summary>What one counted item is, in the plural, as the report names it.</summary>
     public static string ItemName(this Route route) => route switch
     {
-        Route.Walk or Route.Measure or Route.ExploreWalk or Route.Folders or Route.Remove or Route.Scan => "entries",
+        Route.Walk or Route.Measure or Route.ExploreWalk or Route.Folders or Route.Duplicates or Route.Remove or Route.Scan => "entries",
         Route.Clean => "steps",
         Route.Sources => "candidates",
         Route.Links => "files",

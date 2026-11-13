@@ -54,6 +54,7 @@ Deguffer.Benchmark explore C
 Deguffer.Benchmark explorefolder C:\Users\<user>\Downloads
 Deguffer.Benchmark explorewalk C:\Users\<user>\source --snapshots off
 Deguffer.Benchmark folders C:\Users\<user>\Pictures D:\Photos
+Deguffer.Benchmark duplicates C:\Users\<user>\Pictures D:\Photos --cache warm
 Deguffer.Benchmark remove D:\benchmark --files 100000 --depth 15 --fanout 2 --read-only
 Deguffer.Benchmark clean D:\benchmark --trees 500 --files-per-tree 100
 Deguffer.Benchmark protect D:\benchmark --folders 5000
@@ -82,6 +83,21 @@ Deguffer.Benchmark plan --runs 6 > %TEMP%\deguffer-plan.txt
   at the same time. It reads the tables only from an elevated prompt. Time it beside each folder
   alone: the folders' own times add up to what the scan cost when it took the volumes one after
   another.
+- `duplicates <folder> [<folder>...]` searches several folders for files with the same content, as
+  the Duplicates page does, and reports each stage apart: the scan, the walk that keeps the files
+  that may match, identification, and the comparison. For the comparison it reports the first and
+  last blocks and the whole files apart, each with how many files it read, how many a kept
+  checksum stood in for, how many it left out, the bytes it read and how long it took from its first
+  read to its last. The two stages run beside each other, so their times can add up to more than
+  the comparison's. Then it reports each lane, one a disk, with its readers and its time, and the
+  groups it confirmed. It reads files and removes nothing. Its checksums go in a new folder in the
+  temporary folder, never in the app's store, and the folder is removed when it finishes.
+  `--cache cold|warm` sets whether each run starts with no checksums kept, as a first search does
+  (the default), or with those an untimed search over the same folders kept, loaded from their store
+  as the first search after the app starts again loads them. Timed both ways, the difference is what
+  a second search saves. `--checksum name` sets the checksum the content is compared by, as other
+  tools print its name, such as `sha-256`. The default is `xxh128`, as a search's is. It reads the
+  tables only from an elevated prompt, as `folders` does.
 - `table`, `index`, `explore` and `explorefolder` read a volume's file table, which needs an
   elevated prompt. `table` reads and parses every record and keeps nothing. `index` builds what the
   clean measures locations from. `explore` builds the Explore tree for the whole volume, and

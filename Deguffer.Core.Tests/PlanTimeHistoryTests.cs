@@ -70,8 +70,10 @@ public sealed class PlanTimeHistoryTests : IDisposable
     public async Task ACancelledPassWritesNoHistory()
     {
         using var cancel = new CancellationTokenSource();
+        // Every other provider holds its slot until the pass is cancelled, so the slots cannot work
+        // through the whole list before the first provider cancels, however the threads are scheduled.
         var providers = Enumerable.Range(0, CleanupPlanner.ProvidersAtOnce * 4)
-            .Select(index => new FakeCleanupProvider($"p{index}"))
+            .Select(index => new FakeCleanupProvider($"p{index}") { WhilePlanning = () => cancel.Token.WaitHandle.WaitOne(Deadline) })
             .ToList();
         providers[0].WhilePlanning = cancel.Cancel;
         var planner = new CleanupPlanner(providers);

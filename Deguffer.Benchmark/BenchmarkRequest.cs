@@ -1,5 +1,6 @@
 using System.Globalization;
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Duplicates;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Media;
 using Deguffer.Core.Scanning.Mft;
@@ -12,8 +13,8 @@ namespace Deguffer.Benchmark;
 /// <param name="Path">
 /// For a route that reads the table, the root of the volume, such as <c>C:\</c>, or for
 /// <see cref="Route.ExploreFolder"/> the folder. For a route that walks, the folder. A folder is
-/// fully qualified. For <see cref="Route.Folders"/>, the first of <paramref name="Folders"/>. Empty for
-/// <see cref="Route.Plan"/>, which plans wherever each provider looks. Never printed: see
+/// fully qualified. For a route that takes several folders, the first of <paramref name="Folders"/>.
+/// Empty for <see cref="Route.Plan"/>, which plans wherever each provider looks. Never printed: see
 /// <see cref="MeasuredPlace"/>.
 /// </param>
 /// <param name="Runs">How many times to run the route. The first is reported apart from the rest.</param>
@@ -25,8 +26,8 @@ namespace Deguffer.Benchmark;
 /// </param>
 /// <param name="ReadBy">How the links route reads each file. No other route reads any.</param>
 /// <param name="Folders">
-/// Every folder the folders route scans, fully qualified, in the order given. None for the plan route.
-/// For any other route, <paramref name="Path"/> alone.
+/// Every folder the folders route scans or the duplicates route searches, fully qualified, in the
+/// order given. None for the plan route. For any other route, <paramref name="Path"/> alone.
 /// </param>
 /// <param name="Tree">
 /// For <see cref="Route.Remove"/>, the tree it builds and removes. For <see cref="Route.Clean"/>, each
@@ -61,6 +62,14 @@ namespace Deguffer.Benchmark;
 /// holds them, as a row that listed them while it planned records them, rather than each asked of the
 /// disk. Timed both ways, the difference is what reusing the listing saves. No other route reads it.
 /// </param>
+/// <param name="Checksum">
+/// For <see cref="Route.Duplicates"/>, the checksum the content is compared by, one this machine
+/// offers. No other route reads it.
+/// </param>
+/// <param name="Cache">
+/// For <see cref="Route.Duplicates"/>, what the checksum cache holds as each run starts. Timed both
+/// ways, the difference is what a second search saves. No other route reads it.
+/// </param>
 internal sealed record BenchmarkRequest(
     Route Route,
     string Path,
@@ -76,7 +85,9 @@ internal sealed record BenchmarkRequest(
     Route Racer,
     string? BeforePart,
     bool BuildYields,
-    bool Listed)
+    bool Listed,
+    ChecksumAlgorithm Checksum,
+    CacheStart Cache)
 {
     public const int DefaultRuns = 5;
 
@@ -136,7 +147,7 @@ internal sealed record BenchmarkRequest(
 
         if (named is not { } route)
         {
-            error = "The route must be table, index, explore, explorefolder, walk, measure, explorewalk, sources, links, folders, remove, clean, protect, race, scan or plan.";
+            error = "The route must be table, index, explore, explorefolder, walk, measure, explorewalk, sources, links, folders, duplicates, remove, clean, protect, race, scan or plan.";
             return null;
         }
 
@@ -172,6 +183,8 @@ internal sealed record BenchmarkRequest(
         string? beforePart = null;
         var buildYields = true;
         var listed = false;
+        var checksum = ChecksumAlgorithm.XxHash128;
+        var cache = CacheStart.Cold;
 
         // Before the options, because the race's defaults depend on the drives it walks and builds
         // on, and a value an option sets has to win over them.
@@ -180,12 +193,12 @@ internal sealed record BenchmarkRequest(
             (threads, bufferKiB, readKiB, readsInFlight, parseThreads, listReadsInFlight) = race;
         }
 
-        // Only the folders route takes more than one target, so for it the options start at the
-        // first argument that is one.
+        // Only the routes that take several folders take more than one target, so for them the
+        // options start at the first argument that is one. The plan route takes no target at all.
         var options = route switch
         {
-            Route.Folders => FirstOption(args),
             Route.Plan => 1,
+            _ when route.TakesFolders() => FirstOption(args),
             _ => 2,
         };
 
@@ -229,6 +242,8 @@ internal sealed record BenchmarkRequest(
                 "--racer" when route is Route.Race => TryRacer(value, out racer),
                 "--before-part" when route is Route.Race => TryCommand(value, out beforePart),
                 "--build-priority" when route is Route.Race => TryYield(value, out buildYields),
+                "--checksum" when route is Route.Duplicates => TryChecksum(value, out checksum),
+                "--cache" when route is Route.Duplicates => TryCache(value, out cache),
                 _ => false,
             };
 
@@ -251,6 +266,7 @@ internal sealed record BenchmarkRequest(
                     $"For protect, --folders takes a number from 1 to {MaximumTrees} and --listed takes on or off. " +
                     "For race, --build takes a drive letter, --racer takes sources or walk, --before-part a command, " +
                     "and --build-priority yield or normal. " +
+                    $"For duplicates, --checksum takes {string.Join(", ", ChecksumAlgorithms.Offered.Select(Token))} and --cache cold or warm. " +
                     "Nothing else is accepted after the target.";
                 return null;
             }
@@ -282,8 +298,8 @@ internal sealed record BenchmarkRequest(
         };
         string?[] folders = route switch
         {
-            Route.Folders => [.. args.Take(options).Skip(1).Select(Folder)],
             Route.Plan => [],
+            _ when route.TakesFolders() => [.. args.Take(options).Skip(1).Select(Folder)],
             _ => [path],
         };
         if (path is null || folders.Contains(null) || (route.ReadsTable() && !VolumePath.TryParse(path, out _)))
@@ -309,7 +325,9 @@ internal sealed record BenchmarkRequest(
             racer,
             beforePart,
             buildYields,
-            listed);
+            listed,
+            checksum,
+            cache);
     }
 
     /// <summary>
@@ -398,6 +416,34 @@ internal sealed record BenchmarkRequest(
         long.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out number)
         && number >= minimum
         && number <= maximum;
+
+    /// <summary>
+    /// A checksum this machine offers, by the name other tools print it under, in any case and with or
+    /// without its hyphen: <c>sha256</c>, <c>SHA-256</c> and <c>sha-256</c> are one.
+    /// </summary>
+    private static bool TryChecksum(string? text, out ChecksumAlgorithm algorithm)
+    {
+        var named = text is null
+            ? null
+            : ChecksumAlgorithms.Offered
+                .Where(offered => string.Equals(Unhyphenated(offered.Name()), Unhyphenated(text), StringComparison.OrdinalIgnoreCase))
+                .Cast<ChecksumAlgorithm?>()
+                .SingleOrDefault();
+
+        algorithm = named ?? ChecksumAlgorithm.XxHash128;
+        return named is not null;
+    }
+
+    /// <summary>The name a checksum is given on the command line, as other tools print it, in lower case.</summary>
+    private static string Token(ChecksumAlgorithm algorithm) => algorithm.Name().ToLowerInvariant();
+
+    private static string Unhyphenated(string name) => name.Replace("-", string.Empty, StringComparison.Ordinal);
+
+    private static bool TryCache(string? text, out CacheStart cache)
+    {
+        cache = text is "warm" ? CacheStart.Warm : CacheStart.Cold;
+        return text is "cold" or "warm";
+    }
 
     private static bool TryReadBy(string? text, out LinkRead readBy)
     {

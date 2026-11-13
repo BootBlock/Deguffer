@@ -22,9 +22,9 @@ public sealed class AutoScanRouteTests : IDisposable
         var volumes = FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated);
         var route = AutoScanRoute.On(volumes, root, ScanTuner.Shipped);
 
-        route.Before!(CancellationToken.None);
+        await route.Before!(CancellationToken.None);
         var first = await route.Run(CancellationToken.None);
-        route.Before(CancellationToken.None);
+        await route.Before(CancellationToken.None);
         var second = await route.Run(CancellationToken.None);
 
         // The folder itself, as a removal takes it, then a, one.bin in it, and two.bin.

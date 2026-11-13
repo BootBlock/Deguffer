@@ -1,4 +1,5 @@
 using System.Globalization;
+using Deguffer.Core.Duplicates;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Mft;
@@ -85,6 +86,16 @@ internal static class Tuning
             ? listing + (snapshots ? ", snapshots on" : ", snapshots off")
             : listing;
     }
+
+    /// <summary>
+    /// The duplicates route's values: the checksum, which sets how long hashing a whole file takes,
+    /// and what the cache holds, which sets whether a file is read at all.
+    /// </summary>
+    public static string DescribeDuplicates(ChecksumAlgorithm checksum, CacheStart cache) =>
+        $"the values a search uses for each drive's kind, under the shipped settings, content compared by {checksum.Name()}, "
+        + (cache is CacheStart.Warm
+            ? "each run starting with the checksums an untimed search kept, loaded from their store"
+            : "each run starting with no checksums kept");
 
     /// <summary>
     /// The race's values: how the folder was walked, which volume's index was built beside it and

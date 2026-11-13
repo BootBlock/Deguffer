@@ -1,16 +1,13 @@
 namespace Deguffer.Benchmark;
 
-/// <summary>
-/// What the command line accepts, as it is printed beside a request that could not be read. Apart
-/// from <see cref="BenchmarkRequest"/>, which reads the command line, so each route's help is found
-/// in one place however the reading of it changes.
-/// </summary>
-internal static class BenchmarkUsage
+/// <summary>What the benchmark takes, printed with a request it could not read.</summary>
+internal static class Usage
 {
     public const string Text =
         """
         Usage: Deguffer.Benchmark <route> <target> [--runs N] [options]
                Deguffer.Benchmark folders <folder> [<folder>...] [--runs N]
+               Deguffer.Benchmark duplicates <folder> [<folder>...] [--runs N] [options]
                Deguffer.Benchmark remove|clean|protect <new folder> [--runs N] [options]
                Deguffer.Benchmark race <folder> [--build <drive>] [--runs N] [options]
                Deguffer.Benchmark plan [--runs N]
@@ -37,6 +34,12 @@ internal static class BenchmarkUsage
                             table read once where it can be, the walk where it cannot, and
                             the volumes on separate disks at the same time. Timed against
                             each folder alone, the difference is what that saves.
+          duplicates <folder> [<folder>...]
+                            Search the folders for files with the same content, as the
+                            Duplicates page does, and time each stage: the scan, the walk,
+                            identifying the files, and reading their first and last blocks
+                            and their whole content, with each disk's lane. Reads files and
+                            removes nothing. Keeps its checksums in a folder of its own.
           remove <new folder>
                             Create the folder, build a tree in it before each run, and
                             remove the tree as a clean does: the walk, the file pass and
@@ -58,10 +61,10 @@ internal static class BenchmarkUsage
                             walk against the build, after an untimed walk. Elevated.
           plan              Plan every provider as a Storage scan does, and time the whole
                             pass, when each provider took a slot and ended, and the costly
-                            questions it asked Windows. The first run
-                            is a fresh process, the later runs warm. It only plans: nothing
-                            is cleaned. Run it elevated and not to compare the two. Write
-                            its output outside the source tree, as every report.
+                            questions it asked Windows. The first run is a fresh process,
+                            the later runs warm. It only plans: nothing is cleaned. Run it
+                            elevated and not to compare the two. Write its output outside
+                            the source tree, as every report.
 
         --runs N               How many times to run the route, 1 to 1000. The default is 5. The
                                first run is reported apart from the others.
@@ -114,6 +117,14 @@ internal static class BenchmarkUsage
                                Race only. Whether the build reads at low priority while the
                                walk runs, as Auto's does where the two share a disk, or at
                                normal priority throughout. The default is yield.
+        --checksum name        Duplicates only. The checksum the content is compared by: xxh128,
+                               sha-256, sha-512, sha-1, md5, crc-32, or sha3-256 where Windows
+                               has it, with or without the hyphen. The default is xxh128, as a
+                               search's is.
+        --cache cold|warm      Duplicates only. Whether each run starts with no checksums kept,
+                               as a first search does, or with those an untimed search over the
+                               same folders kept, loaded from their store as a search after the
+                               app starts again loads them. The default is cold.
 
         A table route's defaults are what a scan uses on a drive of unknown kind, except the
         race's: it walks and builds with what a scan uses for each drive's kind, under the
@@ -121,9 +132,10 @@ internal static class BenchmarkUsage
         the finished tree keeps on the managed heap.
 
         Every route but remove, clean, protect and plan only reads: nothing on the drive is
-        written, moved or deleted. Remove, clean and protect refuse a folder that already
-        exists, create it, write and delete only inside it, and remove it when they finish.
-        Plan deletes nothing, and writes only the figures a scan keeps for its first paint,
-        as a scan does.
+        written, moved or deleted, but the checksums the duplicates route keeps in a new folder
+        of its own in the temporary folder, never the app's, and removes when it finishes.
+        Remove, clean and protect refuse a folder that already exists, create it, write and
+        delete only inside it, and remove it when they finish. Plan deletes nothing, and writes
+        only the figures a scan keeps for its first paint, as a scan does.
         """;
 }

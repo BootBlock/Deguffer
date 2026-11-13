@@ -25,9 +25,9 @@ public sealed class CleanRouteTests : IDisposable
 
         for (var run = 0; run < 2; run++)
         {
-            route.Before!(CancellationToken.None);
+            await route.Before!(CancellationToken.None);
             var tally = await route.Run(CancellationToken.None);
-            route.After!();
+            await route.After!();
 
             for (var i = 0; i < Trees; i++)
             {
@@ -54,7 +54,7 @@ public sealed class CleanRouteTests : IDisposable
         var site = RemovalSite.Create(Path.Combine(_temp.Path, "site"), out _)!;
         var route = Timed(site);
 
-        route.Before!(CancellationToken.None);
+        await route.Before!(CancellationToken.None);
         var tally = await route.Run(CancellationToken.None);
 
         var steps = tally.Steps!;
@@ -76,11 +76,12 @@ public sealed class CleanRouteTests : IDisposable
         var site = RemovalSite.Create(Path.Combine(_temp.Path, "site"), out _)!;
         var route = Timed(site);
 
-        route.Before!(CancellationToken.None);
+        await route.Before!(CancellationToken.None);
         await route.Run(CancellationToken.None);
         File.Delete(Path.Combine(site.Place("p1"), "p1.csproj"));
 
-        Assert.Contains("§5.6", Assert.Throws<InvalidOperationException>(route.After!).Message, StringComparison.Ordinal);
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(async () => await route.After!());
+        Assert.Contains("§5.6", thrown.Message, StringComparison.Ordinal);
     }
 
     private RouteRun Timed(RemovalSite site) => new CleanRoute(

@@ -1,8 +1,7 @@
 using System.Globalization;
 using System.Text;
-using Deguffer.Core.Diagnostics;
+using Deguffer.Core.Duplicates;
 using Deguffer.Core.Execution;
-using Deguffer.Core.Execution.Timing;
 using Deguffer.Core.Scanning.Mft;
 
 namespace Deguffer.Benchmark;
@@ -114,6 +113,11 @@ internal static class Report
         {
             RemovalRows(text, first, later);
         }
+        else if (route is Route.Duplicates)
+        {
+            Row(text, "MiB/s read", Rate(first.MegabytesPerSecond), Over(later, r => r.MegabytesPerSecond, Rate));
+            SearchRows(text, first, later);
+        }
         else if (!route.ReadsTable() && route is not Route.Plan)
         {
             Row(text, "folders at once", Count(first.Tally.PeakListings), Over(later, r => r.Tally.PeakListings, Count));
@@ -139,112 +143,10 @@ internal static class Report
 
         if (route is Route.Plan)
         {
-            CallRows(text, first, later);
-            PlanRows(text, first, later);
+            PlanReport.Rows(text, first, later);
         }
 
         return text.ToString();
-    }
-
-    /// <summary>
-    /// When each provider of a planning pass took a slot, when it ended and how long it took, from the
-    /// start of the pass, in the order the first run started them, which is the order the pass handed
-    /// out its slots. Named by id, which is a fixed word and never a place. The later runs' columns are
-    /// each the median of that column alone, so a row's start, end and time need not add up there.
-    /// </summary>
-    private static void PlanRows(StringBuilder text, RunSample first, RunSample[] later)
-    {
-        var times = PlanOf(first).Times
-            .OrderBy(time => time.Began)
-            .ThenBy(time => time.Provider.Id, StringComparer.Ordinal)
-            .ToArray();
-        var idWidth = Math.Max("provider".Length, times.Length == 0 ? 0 : times.Max(time => time.Provider.Id.Length)) + 2;
-
-        Line(text);
-        PlanRow(text, idWidth, string.Empty, ["first run", string.Empty, string.Empty, later.Length > 0 ? "later runs: median" : string.Empty]);
-        PlanRow(text, idWidth, "provider", ["start", "end", "took", .. later.Length > 0 ? new[] { "start", "end", "took" } : []]);
-
-        foreach (var time in times)
-        {
-            var id = time.Provider.Id;
-            string[] columns =
-            [
-                Duration(time.Began.TotalSeconds),
-                Duration(time.Ended.TotalSeconds),
-                Duration(time.Elapsed.TotalSeconds),
-                .. later.Length > 0
-                    ? new[]
-                    {
-                        Duration(Median(later, r => TimeOf(r, id).Began)),
-                        Duration(Median(later, r => TimeOf(r, id).Ended)),
-                        Duration(Median(later, r => TimeOf(r, id).Elapsed)),
-                    }
-                    : [],
-            ];
-
-            PlanRow(text, idWidth, id, columns);
-        }
-    }
-
-    /// <summary>
-    /// How many of each costly question to Windows a planning pass asked, and the time they took summed,
-    /// so calls made side by side each count their own (#516). Counts and times only, never a place.
-    /// </summary>
-    private static void CallRows(StringBuilder text, RunSample first, RunSample[] later)
-    {
-        var calls = Enum.GetValues<MachineCall>();
-        var width = calls.Max(call => call.ToString().Length) + 2;
-
-        Line(text);
-        PlanRow(text, width, string.Empty, ["first run", string.Empty, later.Length > 0 ? "later runs: median" : string.Empty]);
-        PlanRow(text, width, "machine call", ["calls", "took", .. later.Length > 0 ? new[] { "calls", "took" } : []]);
-
-        foreach (var call in calls)
-        {
-            var counted = PlanOf(first).Of(call);
-            string[] columns =
-            [
-                Count(counted.Calls),
-                Duration(counted.Elapsed.TotalSeconds),
-                .. later.Length > 0
-                    ? new[]
-                    {
-                        Count(Spread.Of([.. later.Select(r => (double)PlanOf(r).Of(call).Calls)]).Median),
-                        Duration(Median(later, r => PlanOf(r).Of(call).Elapsed)),
-                    }
-                    : [],
-            ];
-
-            PlanRow(text, width, call.ToString(), columns);
-        }
-    }
-
-    private static double Median(RunSample[] runs, Func<RunSample, TimeSpan> measure) =>
-        Spread.Of([.. runs.Select(run => measure(run).TotalSeconds)]).Median;
-
-    /// <summary>
-    /// A run's pass. Every run of the plan route records one, so a run without it was not measured as
-    /// the others were, and no median of them holds.
-    /// </summary>
-    private static PlanRun PlanOf(RunSample run) =>
-        run.Tally.Planning ?? throw new InvalidOperationException("Every run of the plan route carries its providers' times.");
-
-    /// <summary>A later run's time for one provider. Every pass plans every provider, so one missing was a different pass.</summary>
-    private static ProviderPlanTime TimeOf(RunSample run, string id) =>
-        PlanOf(run).Of(id) ?? throw new InvalidOperationException("Every run of the plan route plans the same providers.");
-
-    private const int PlanColumnWidth = 11;
-
-    private static void PlanRow(StringBuilder text, int idWidth, string id, IReadOnlyList<string> columns)
-    {
-        var line = new StringBuilder(id.PadRight(idWidth));
-
-        foreach (var column in columns)
-        {
-            line.Append(column.PadRight(PlanColumnWidth));
-        }
-
-        Line(text, line.ToString().TrimEnd());
     }
 
     /// <summary>
@@ -386,6 +288,83 @@ internal static class Report
     };
 
     /// <summary>
+    /// Where a duplicate search's time went: each part in the order it runs, and what none covers, so
+    /// the rows add up to the elapsed time. Then what each part kept, asked about and read, each stage
+    /// of the comparison and each lane of it. The two stages overlap, so their times can add up to more
+    /// than the comparison's. A part or stage a run never reached reads as zero.
+    /// </summary>
+    private static void SearchRows(StringBuilder text, RunSample first, RunSample[] later)
+    {
+        var search = SearchOf(first);
+
+        foreach (var part in Enum.GetValues<DuplicateSearchPart>())
+        {
+            Row(text, PartName(part), Duration(search.Stages.Of(part).TotalSeconds), Over(later, r => SearchOf(r).Stages.Of(part).TotalSeconds, Duration));
+        }
+
+        Row(text, "  the rest", Duration(SearchRest(first)), Over(later, SearchRest, Duration));
+        Row(text, "files kept", Count(search.Stages.Kept), Over(later, r => SearchOf(r).Stages.Kept, Count));
+        Row(text, "files identified", Count(search.Stages.Identified), Over(later, r => SearchOf(r).Stages.Identified, Count));
+        Row(text, "files named", Count(search.Stages.Named), Over(later, r => SearchOf(r).Stages.Named, Count));
+        ReadRows(text, "first and last blocks", first, later, static stages => stages.Ends);
+        ReadRows(text, "whole files", first, later, static stages => stages.Whole);
+
+        for (var lane = 0; lane < search.Stages.Lanes.Count; lane++)
+        {
+            var index = lane;
+
+            Line(text, string.Create(Invariant, $"lane {index + 1}"));
+            Row(text, "  readers", Count(search.Stages.Lanes[index].Readers), Over(later, r => LaneOf(r, index).Readers, Count));
+            Row(text, "  took", Duration(search.Stages.Lanes[index].Elapsed.TotalSeconds), Over(later, r => LaneOf(r, index).Elapsed.TotalSeconds, Duration));
+            Row(text, "  blocks read", Count(search.Stages.Lanes[index].Ends.Files), Over(later, r => LaneOf(r, index).Ends.Files, Count));
+            Row(text, "  whole read", Count(search.Stages.Lanes[index].Whole.Files), Over(later, r => LaneOf(r, index).Whole.Files, Count));
+            Row(text, "  read", Bytes(LaneBytes(first, index)), Over(later, r => LaneBytes(r, index), Bytes));
+        }
+
+        Row(text, "groups", Count(search.Groups), Over(later, r => SearchOf(r).Groups, Count));
+    }
+
+    /// <summary>One stage of the comparison: the reads it made, what became of them, the bytes it read and how long it took.</summary>
+    private static void ReadRows(
+        StringBuilder text, string stage, RunSample first, RunSample[] later, Func<DuplicateSearchTimings, ContentReadTally> tally)
+    {
+        var read = tally(SearchOf(first).Stages);
+
+        Line(text, stage);
+        Row(text, "  files", Count(read.Files), Over(later, r => tally(SearchOf(r).Stages).Files, Count));
+        Row(text, "  remembered", Count(read.Remembered), Over(later, r => tally(SearchOf(r).Stages).Remembered, Count));
+        Row(text, "  left out", Count(read.LeftOut), Over(later, r => tally(SearchOf(r).Stages).LeftOut, Count));
+        Row(text, "  read", Bytes(read.Bytes), Over(later, r => tally(SearchOf(r).Stages).Bytes, Bytes));
+        Row(text, "  took", Duration(read.Elapsed.TotalSeconds), Over(later, r => tally(SearchOf(r).Stages).Elapsed.TotalSeconds, Duration));
+    }
+
+    /// <summary>
+    /// A run's search. Every run of the duplicates route is timed stage by stage, so a run without its
+    /// stages was not measured as the others were, and no median of them holds.
+    /// </summary>
+    private static SearchTimes SearchOf(RunSample run) =>
+        run.Tally.Search ?? throw new InvalidOperationException("Every run of the duplicates route carries its stage timings.");
+
+    /// <summary>A run's lane at <paramref name="index"/>, or an empty one where the run made fewer lanes.</summary>
+    private static ContentLaneTimes LaneOf(RunSample run, int index) =>
+        index < SearchOf(run).Stages.Lanes.Count ? SearchOf(run).Stages.Lanes[index] : new ContentLaneTimes(0, default, default, TimeSpan.Zero);
+
+    private static double LaneBytes(RunSample run, int index) => LaneOf(run, index).Ends.Bytes + LaneOf(run, index).Whole.Bytes;
+
+    /// <summary>The run's time outside the parts: resolving the locations and reading the program folders before the scan, and what comes after the last part.</summary>
+    private static double SearchRest(RunSample run) =>
+        (run.Elapsed - Enum.GetValues<DuplicateSearchPart>().Aggregate(TimeSpan.Zero, (sum, part) => sum + SearchOf(run).Stages.Of(part))).TotalSeconds;
+
+    private static string PartName(DuplicateSearchPart part) => part switch
+    {
+        DuplicateSearchPart.Scan => "  scan",
+        DuplicateSearchPart.Walk => "  walk",
+        DuplicateSearchPart.Identification => "  identification",
+        DuplicateSearchPart.Comparison => "  comparison",
+        _ => throw new ArgumentOutOfRangeException(nameof(part), part, "Not a part of a duplicate search."),
+    };
+
+    /// <summary>
     /// Where a removal route's time went: the clean route's steps around their removals where it ran
     /// any, then the removals' three passes, each summed over every removal of the run. A removal runs
     /// its passes beside each other, so they add to more than its time.
@@ -435,11 +414,11 @@ internal static class Report
         return $"{format(spread.Median)} ({format(spread.Minimum)} to {format(spread.Maximum)})";
     }
 
-    private static string Duration(double seconds) => seconds < 1
+    internal static string Duration(double seconds) => seconds < 1
         ? string.Create(Invariant, $"{seconds * 1000:N1} ms")
         : string.Create(Invariant, $"{seconds:N3} s");
 
-    private static string Count(double value) => string.Create(Invariant, $"{value:N0}");
+    internal static string Count(double value) => string.Create(Invariant, $"{value:N0}");
 
     private static string Times(double ratio) => string.Create(Invariant, $"{ratio:N2}x");
 
@@ -457,5 +436,5 @@ internal static class Report
     private static void Row(StringBuilder text, string label, string first, string later) =>
         Line(text, (label.PadRight(LabelWidth) + first.PadRight(FirstWidth) + later).TrimEnd());
 
-    private static void Line(StringBuilder text, string line = "") => text.Append(line).Append('\n');
+    internal static void Line(StringBuilder text, string line = "") => text.Append(line).Append('\n');
 }

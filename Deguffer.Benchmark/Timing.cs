@@ -7,7 +7,7 @@ namespace Deguffer.Benchmark;
 /// </summary>
 internal static class Timing
 {
-    public static async Task<RunSample> MeasureAsync(Func<CancellationToken, ValueTask<RunTally>> run, CancellationToken ct)
+    public static async ValueTask<RunSample> MeasureAsync(Func<CancellationToken, ValueTask<RunTally>> run, CancellationToken ct)
     {
         // What the previous run left behind is collected before the clock starts, so one run's
         // garbage is not collected inside the next run's time.

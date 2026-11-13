@@ -25,7 +25,8 @@ public sealed class TimingTests
     [Fact]
     public async Task MeasuresWhatTheResultKeepsAndLetsItGo()
     {
-        var sample = await Timing.MeasureAsync(_ => ValueTask.FromResult(new RunTally(1, 0, Complete: true, Kept: new KeptResult(new byte[Held]))), CancellationToken.None);
+        var sample = await Timing.MeasureAsync(
+            _ => ValueTask.FromResult(new RunTally(1, 0, Complete: true, Kept: new KeptResult(new byte[Held]))), CancellationToken.None);
 
         Assert.InRange(sample.KeptBytes, Held - Tolerance, Held + Tolerance);
         Assert.Null(sample.Tally.Kept);

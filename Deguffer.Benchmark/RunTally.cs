@@ -7,7 +7,10 @@ namespace Deguffer.Benchmark;
 /// What one run of a route produced, before anything is timed around it.
 /// </summary>
 /// <param name="Items">Records read from the table, or entries the walk listed.</param>
-/// <param name="BytesRead">Bytes read from the volume. Zero for the walk, which cannot see them.</param>
+/// <param name="BytesRead">
+/// Bytes read from the volume. Zero for the walk, which cannot see them. For the duplicates route, the
+/// files' content read from the disk, and nothing for a checksum the cache stood in for.
+/// </param>
 /// <param name="Complete">
 /// Whether the route answered for everything. The table was read to its end and, for the index, the
 /// build did not abandon the volume; or the walk was refused no folder. A run that gave up early is
@@ -54,6 +57,7 @@ namespace Deguffer.Benchmark;
 /// it (<see cref="RunSample.KeptBytes"/>), or null for a route that keeps nothing.
 /// </param>
 /// <param name="Race">What each part of a round of the race route took. Null for every other route.</param>
+/// <param name="Search">What each stage of the duplicates route's search took. Null for every other route.</param>
 /// <param name="Planning">When each provider of the plan route's pass ran. Null for every other route.</param>
 internal readonly record struct RunTally(
     long Items,
@@ -72,4 +76,5 @@ internal readonly record struct RunTally(
     TimeSpan OpenTime = default,
     RaceTimes? Race = null,
     MftOpenTimings? Open = null,
+    SearchTimes? Search = null,
     PlanRun? Planning = null);
