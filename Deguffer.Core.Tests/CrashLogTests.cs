@@ -203,6 +203,8 @@ public class CrashLogTests
 
         public bool IsAdministrator => false;
 
+        public bool IsHyperVAdministrator => false;
+
         public IMftSourceFactory VolumeTables { get; } = FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated);
 
         public string? FindExecutable(string command) => null;
