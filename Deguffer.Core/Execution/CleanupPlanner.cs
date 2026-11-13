@@ -549,13 +549,14 @@ public sealed class CleanupPlanner
                 started.Add(provider.BeginPass(pass.Token));
             }
 
-            // Before any row plans, so every plan in the pass is held to the same set.
-            var registered = await RegisteredStorage.ReadAsync(registrars, _volumes, ct).ConfigureAwait(false);
+            // Before any row plans, so every plan in the pass is held to the same set. The account's
+            // folders are followed to their mounts once for the pass.
+            var terms = new PassTerms(
+                await RegisteredStorage.ReadAsync(registrars, _volumes, ct).ConfigureAwait(false),
+                AnotherAccountPlan.For(_account, _volumes),
+                keep);
 
-            // Once for the pass, so each of the account's folders is followed to its mounts once.
-            var anotherAccount = AnotherAccountPlan.For(_account, _volumes);
-
-            return await PlanHeldAsync(providers, registered, anotherAccount, _volumes, keep, status, found, timed, clock, pass, ct).ConfigureAwait(false);
+            return await PlanHeldAsync(providers, terms, status, found, timed, clock, pass, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -575,12 +576,12 @@ public sealed class CleanupPlanner
         }
     }
 
-    private static async Task<IReadOnlyList<Finding>> PlanHeldAsync(
+    /// <summary>What every plan of one pass is held to: the registered storage, the other account's folders, and the age guard.</summary>
+    private readonly record struct PassTerms(RegisteredStorage Registered, AnotherAccountPlan? AnotherAccount, MinimumAge Keep);
+
+    private async Task<IReadOnlyList<Finding>> PlanHeldAsync(
         IReadOnlyList<ICleanupProvider> providers,
-        RegisteredStorage registered,
-        AnotherAccountPlan? anotherAccount,
-        IVolumeInventory volumes,
-        MinimumAge keep,
+        PassTerms terms,
         IProgress<string>? status,
         IProgress<Finding>? found,
         IProgress<ProviderPlanTime>? timed,
@@ -607,7 +608,7 @@ public sealed class CleanupPlanner
 
             try
             {
-                finding = await PlanOneAsync(provider, registered, anotherAccount, volumes, keep, checking.Counted(provider), token).ConfigureAwait(false);
+                finding = await PlanOneAsync(provider, terms, checking.Counted(provider), token).ConfigureAwait(false);
                 planned = true;
             }
             finally
@@ -641,12 +642,9 @@ public sealed class CleanupPlanner
         return [.. findings.OrderByDescending(finding => finding.EstimatedBytes)];
     }
 
-    private static async Task<Finding> PlanOneAsync(
+    private async Task<Finding> PlanOneAsync(
         ICleanupProvider provider,
-        RegisteredStorage registered,
-        AnotherAccountPlan? anotherAccount,
-        IVolumeInventory volumes,
-        MinimumAge keep,
+        PassTerms terms,
         IProgress<ScanSize> counted,
         CancellationToken ct)
     {
@@ -664,11 +662,11 @@ public sealed class CleanupPlanner
 
         // Applied here rather than inside the provider: the set is the pass's, gathered from every row
         // that registers storage, and no row can see another's records. See VirtualMachineStoragePlan.
-        var plan = VirtualMachineStoragePlan.Apply(await provider.PlanAsync(keep, counted, ct).ConfigureAwait(false), registered, volumes);
+        var plan = VirtualMachineStoragePlan.Apply(await provider.PlanAsync(terms.Keep, counted, ct).ConfigureAwait(false), terms.Registered, _volumes);
 
         // Applied here for the same reason: whose account this process runs as is the run's, and no row
         // should have to remember to ask. See AnotherAccountPlan.
-        if (anotherAccount is not null)
+        if (terms.AnotherAccount is { } anotherAccount)
         {
             plan = anotherAccount.Apply(plan);
         }

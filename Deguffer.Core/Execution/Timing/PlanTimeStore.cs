@@ -1,6 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Text.Json;
-using Deguffer.Core.Execution.Sizes;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Execution.Timing;
@@ -15,8 +13,8 @@ namespace Deguffer.Core.Execution.Timing;
 /// format change to either would cost the other its history, and a re-measure of an emptied folder
 /// would sit beside the passes it is no part of.</para>
 ///
-/// <para><b>A file that cannot be read is ignored whole</b>, as <see cref="ProviderSizeStore"/> ignores
-/// one: a torn write, a hand edit and a format this build does not know all read as no history.</para>
+/// <para><b>A file that cannot be read is ignored whole</b>, and nothing but a provider's id names an
+/// entry, as for every <see cref="ProviderPointFile{TStored}"/>.</para>
 /// </summary>
 public sealed class PlanTimeStore
 {
@@ -29,10 +27,10 @@ public sealed class PlanTimeStore
     private static readonly IReadOnlyDictionary<string, IReadOnlyList<PlanTimePoint>> None =
         ReadOnlyDictionary<string, IReadOnlyList<PlanTimePoint>>.Empty;
 
-    private readonly string _file;
+    private readonly ProviderPointFile<StoredTime> _file;
 
     public PlanTimeStore(IUserEnvironment environment) =>
-        _file = OwnDataFolder.FileFor(environment, "planning-times.json");
+        _file = new(OwnDataFolder.FileFor(environment, "planning-times.json"), Format, StrictStoreJson.Default.PlanningTimes);
 
     /// <summary>
     /// Each provider's times, oldest first, or none where the file is missing, cannot be read, or is
@@ -40,30 +38,16 @@ public sealed class PlanTimeStore
     /// </summary>
     public IReadOnlyDictionary<string, IReadOnlyList<PlanTimePoint>> Load()
     {
-        Stored? stored;
-
-        try
-        {
-            stored = JsonSerializer.Deserialize(StoreFile.Read(_file), StrictStoreJson.Default.PlanningTimes);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        {
-            // Missing before the first full pass, refused, torn, or not this format at all.
-            return None;
-        }
-
-        // The annotations are not enforced on what a dictionary or an array holds, so a null there is
-        // refused here, as the rest of a file this store would not write is, and so is a figure no
-        // duration can hold.
-        if (stored is not { Format: Format }
-            || stored.Providers.Values.Any(points => points is null || points.Any(point => point is not { Microseconds: >= 0 and <= LongestMicroseconds })))
+        // A figure no duration can hold is refused before it is made into one, which would throw.
+        if (_file.Read() is not { } stored
+            || stored.Values.Any(times => times.Any(time => time.Microseconds is < 0 or > LongestMicroseconds)))
         {
             return None;
         }
 
-        var providers = stored.Providers.ToDictionary(
+        var providers = stored.ToDictionary(
             entry => entry.Key,
-            entry => entry.Value.Select(point => point.ToPoint()).ToArray(),
+            entry => entry.Value.Select(time => time.ToPoint()).ToArray(),
             StringComparer.Ordinal);
 
         return Usable(providers)
@@ -84,46 +68,15 @@ public sealed class PlanTimeStore
             throw new ArgumentException("Every entry must be a provider's id with times oldest first.", nameof(history));
         }
 
-        try
-        {
-            var stored = new Stored(
-                Format,
-                providers.ToDictionary(entry => entry.Key, entry => entry.Value.Select(StoredTime.Of).ToArray(), StringComparer.Ordinal));
-
-            StoreFile.Replace(_file, JsonSerializer.Serialize(stored, StrictStoreJson.Default.PlanningTimes));
-
-            return true;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return false;
-        }
+        return _file.Write(providers.ToDictionary(
+            entry => entry.Key,
+            entry => entry.Value.Select(StoredTime.Of).ToArray(),
+            StringComparer.Ordinal));
     }
 
-    /// <summary>
-    /// Whether every entry is one this store writes: a provider's id, and its times in order, each a UTC
-    /// instant with a duration no shorter than zero.
-    /// </summary>
+    /// <summary>Whether every time is no shorter than zero, in order of when it was kept.</summary>
     private static bool Usable(IReadOnlyDictionary<string, PlanTimePoint[]> providers) =>
-        providers.All(entry => ProviderSizeStore.IsProviderId(entry.Key) && Ordered(entry.Value));
-
-    private static bool Ordered(PlanTimePoint[] points)
-    {
-        for (var at = 0; at < points.Length; at++)
-        {
-            if (points[at].Elapsed < TimeSpan.Zero
-                || points[at].TakenUtc.Kind is not DateTimeKind.Utc
-                || (at > 0 && points[at].TakenUtc <= points[at - 1].TakenUtc))
-            {
-                return false;
-            }
-        }
-
-        return points.Length > 0;
-    }
-
-    /// <summary>The file as it is written.</summary>
-    internal sealed record Stored(int Format, Dictionary<string, StoredTime[]> Providers);
+        ProviderPointFile.AreUsable(providers, point => point.TakenUtc, point => point.Elapsed >= TimeSpan.Zero);
 
     /// <summary>
     /// One time as it is written: every member a constructor parameter, so a time missing any of them

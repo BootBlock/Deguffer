@@ -121,7 +121,8 @@ public sealed class PlanRouteTests
             [],
             Machine,
             [
-                Pass(7, (conda, 0.002, 5.232), (npm, 0.010, 0.130)),
+                // npm starts first, though conda is listed first and sorts first by name.
+                Pass(7, (conda, 0.010, 5.232), (npm, 0.002, 0.130)),
                 Pass(5, (npm, 0.001, 0.101), (conda, 0.001, 4.001)),
                 Pass(6, (npm, 0.003, 0.203), (conda, 0.003, 4.503)),
             ]);
@@ -134,10 +135,10 @@ public sealed class PlanRouteTests
 
         var conda0 = Array.FindIndex(lines, line => line.StartsWith("conda ", StringComparison.Ordinal));
         var npm0 = Array.FindIndex(lines, line => line.StartsWith("npm ", StringComparison.Ordinal));
-        Assert.True(conda0 > 0 && npm0 == conda0 + 1, "The providers are listed in the order the first run started them.");
+        Assert.True(npm0 > 0 && conda0 == npm0 + 1, "The providers are listed in the order the first run started them.");
 
-        Assert.Equal(["conda", "2.0 ms", "5.232 s", "5.230 s", "2.0 ms", "4.252 s", "4.250 s"], Columns(lines[conda0]));
-        Assert.Equal(["npm", "10.0 ms", "130.0 ms", "120.0 ms", "2.0 ms", "152.0 ms", "150.0 ms"], Columns(lines[npm0]));
+        Assert.Equal(["npm", "2.0 ms", "130.0 ms", "128.0 ms", "2.0 ms", "152.0 ms", "150.0 ms"], Columns(lines[npm0]));
+        Assert.Equal(["conda", "10.0 ms", "5.232 s", "5.222 s", "2.0 ms", "4.252 s", "4.250 s"], Columns(lines[conda0]));
 
         // Every kind of machine call has its row, the first run's figure and the later runs' median.
         Assert.All(Enum.GetValues<MachineCall>(), call => Assert.Single(lines, line => line.StartsWith(call + " ", StringComparison.Ordinal)));

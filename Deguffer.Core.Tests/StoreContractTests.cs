@@ -72,7 +72,7 @@ public class StoreContractTests
         {
             [@"C:\Users\testuser\.nuget\packages"] = new(4096, 4000, IsApproximate: true, new DateTimeOffset(TakenUtc), Entries: 12),
         }),
-        new(StrictStoreJson.Default.ProviderSizes, new ProviderSizeStore.Stored(1, new Dictionary<string, ProviderSizeStore.StoredPoint[]>
+        new(StrictStoreJson.Default.ProviderSizes, new ProviderPoints<ProviderSizeStore.StoredPoint>(1, new Dictionary<string, ProviderSizeStore.StoredPoint[]>
         {
             ["npm"] = [new(TakenUtc, Bytes: 2048, Entries: 3, Approximate: true, Ceiling: true, Elevated: true)],
         })),
@@ -80,7 +80,7 @@ public class StoreContractTests
         {
             ["10.0.26100.1"] = new(ExplorerSize: 9, ActualSize: 8, SharedWithWindows: 7, BackupsAndDisabledFeatures: 6, CacheAndTemporaryData: 5, ReclaimablePackages: 4),
         })),
-        new(StrictStoreJson.Default.PlanningTimes, new PlanTimeStore.Stored(1, new Dictionary<string, PlanTimeStore.StoredTime[]>
+        new(StrictStoreJson.Default.PlanningTimes, new ProviderPoints<PlanTimeStore.StoredTime>(1, new Dictionary<string, PlanTimeStore.StoredTime[]>
         {
             ["conda"] = [new(TakenUtc, Microseconds: 5_232_000, Elevated: true)],
         })),

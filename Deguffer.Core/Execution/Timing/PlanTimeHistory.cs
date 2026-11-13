@@ -16,8 +16,8 @@ namespace Deguffer.Core.Execution.Timing;
 /// tool updating itself or a cold disk, then moves nothing, and a pass with administrator rights,
 /// which asks questions one without them never does, is never averaged with one without.</para>
 ///
-/// <para>Shared by every caller, as one instance, for the reason <see cref="Sizes.ProviderSizeHistory"/>
-/// is. The file is read at the first question and held from then on.</para>
+/// <para>One instance for the file: the Storage page builds the only one, and its page is kept for the
+/// app's life. The file is read at the first question and held from then on.</para>
 /// </summary>
 /// <param name="time">The clock a kept pass is dated by. The system's by default.</param>
 public sealed class PlanTimeHistory(PlanTimeStore store, TimeProvider? time = null)
@@ -54,7 +54,8 @@ public sealed class PlanTimeHistory(PlanTimeStore store, TimeProvider? time = nu
         {
             0 => null,
             var count when count % 2 == 1 => times[count / 2],
-            var count => (times[(count / 2) - 1] + times[count / 2]) / 2,
+            // Halfway from the lower to the higher, which cannot overflow as their sum could.
+            var count => times[(count / 2) - 1] + ((times[count / 2] - times[(count / 2) - 1]) / 2),
         };
     }
 

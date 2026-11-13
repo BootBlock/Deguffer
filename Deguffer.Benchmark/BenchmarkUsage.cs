@@ -120,8 +120,10 @@ internal static class BenchmarkUsage
         shipped settings, as the race it reproduces does. The Explore routes also report what
         the finished tree keeps on the managed heap.
 
-        Every route but remove, clean and protect only reads: nothing on the drive is written,
-        moved or deleted. Those three refuse a folder that already exists, create it, write and
-        delete only inside it, and remove it when they finish.
+        Every route but remove, clean, protect and plan only reads: nothing on the drive is
+        written, moved or deleted. Remove, clean and protect refuse a folder that already
+        exists, create it, write and delete only inside it, and remove it when they finish.
+        Plan deletes nothing, and writes only the figures a scan keeps for its first paint,
+        as a scan does.
         """;
 }

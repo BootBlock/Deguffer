@@ -7,7 +7,7 @@
 507 Deguffer.App/Views/CleanPage.xaml.cs
 773 Deguffer.App/Views/ExplorePage.xaml.cs
 550 Deguffer.Core/Execution/CleanupPlan.cs
-880 Deguffer.Core/Execution/CleanupPlanner.cs
+878 Deguffer.Core/Execution/CleanupPlanner.cs
 707 Deguffer.Core/Execution/CleanupStep.cs
 1082 Deguffer.Core/Execution/PlanExecutor.cs
 559 Deguffer.Core/Exploring/Acting/ExploreActionPolicy.cs
