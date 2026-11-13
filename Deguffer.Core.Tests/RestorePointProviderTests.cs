@@ -656,7 +656,7 @@ public sealed class RestorePointProviderTests : IDisposable
         ThreePoints();
 
         var provider = Provider();
-        var result = await provider.ExecuteAsync((await provider.PlanAsync()).NarrowedTo([]));
+        var result = await provider.ExecuteAsync(await (await provider.PlanAsync()).NarrowedToAsync([]));
 
         Assert.Empty(_protection.Removed);
         Assert.Empty(result.Verification!.Checks);

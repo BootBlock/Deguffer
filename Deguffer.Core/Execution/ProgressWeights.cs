@@ -31,7 +31,7 @@ internal static class ProgressWeights
     ///
     /// <para>Deguffer's own callers nearly do. A step is untickable unless it removes something, and a
     /// plan is narrowed to its ticked steps before it executes — see <c>StepViewModel.CanBeSelected</c>
-    /// and <see cref="CleanupPlan.NarrowedTo"/>. The one ticked step that carries no byte estimate is a
+    /// and <see cref="ChosenSteps"/>. The one ticked step that carries no byte estimate is a
     /// leftover of empty folders (<see cref="DeleteStep.IsLeftover"/>), and a share of nothing is right
     /// for it: removing an empty folder takes no time the bar could show. A run of nothing else falls
     /// back to the count above. The one plan a caller may hand the planner with no estimate by design is

@@ -225,7 +225,7 @@ public sealed class KeepListPlanTests : IDisposable
     /// cannot be kept by anything its path says.
     /// </summary>
     [Fact]
-    public void NothingOnTheKeepListCanPutAnythingIntoARunAtAnyTier()
+    public async Task NothingOnTheKeepListCanPutAnythingIntoARunAtAnyTier()
     {
         const string KeptPath = @"C:\Users\testuser\AppData\Local\example\kept";
         const string OfferedPath = @"C:\Users\testuser\AppData\Local\example\offered";
@@ -264,7 +264,7 @@ public sealed class KeepListPlanTests : IDisposable
             Assert.All(plan.ProtectedPaths, protection => Assert.Contains(protection, kept.ProtectedPaths));
 
             Assert.Equal([OfferedPath, AnonymousPath], kept.TargetedPaths);
-            Assert.DoesNotContain(KeptPath, kept.NarrowedTo(plan.Steps).TargetedPaths);
+            Assert.DoesNotContain(KeptPath, (await kept.NarrowedToAsync(plan.Steps)).TargetedPaths);
             Assert.Empty(kept.ProofOnly().Steps);
         }
     }

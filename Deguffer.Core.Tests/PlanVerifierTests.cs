@@ -367,7 +367,7 @@ public sealed class PlanVerifierTests : IDisposable
         var target = _temp.CreateDirectory("project", "obj2");
         var deselected = _temp.CreateDirectory("project", "obj");
 
-        // The shape CleanupPlan.NarrowedTo produces: the sibling the user unticked is protected, and
+        // The shape ChosenSteps produces: the sibling the user unticked is protected, and
         // the one they left ticked is the step.
         var plan = Plan([new DeleteDirectoryStep(target, "Output")], Protect(deselected));
 

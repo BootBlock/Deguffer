@@ -165,7 +165,7 @@ public static class MailStorePlan
                 store,
                 Reason,
                 // Measured during planning, so it was there when the plan was made — the claim
-                // CleanupPlan.NarrowedTo makes, for the reason it gives.
+                // ChosenSteps makes, for the reason it gives.
                 PresenceBefore: PathPresence.Present,
                 HeldContentBefore: false,
                 Withheld: Withholding.MailStore));

@@ -385,75 +385,6 @@ public sealed record CleanupPlan
     public IReadOnlyList<string> TargetedPaths => [.. Steps.OfType<DeleteStep>().SelectMany(s => s.Destroys)];
 
     /// <summary>
-    /// This plan narrowed to the steps the user actually chose.
-    ///
-    /// Narrowing lives here rather than in the shell because of what it has to do besides drop
-    /// steps: every deletion the user declined becomes a protected path. §5.6's negative is the
-    /// promise that a step which did not run left its subject standing, and after per-item
-    /// selection the deselected directory is a sibling of the selected one — same parent, same
-    /// shape — which is exactly when an over-broad rule takes both. A shell that narrowed a plan by
-    /// filtering <see cref="Steps"/> itself would silently drop that guarantee, so the only
-    /// narrowing available adds it.
-    ///
-    /// A dropped <see cref="RunCommandStep"/> contributes no protection unless it names the one item it
-    /// removes: its <see cref="RunCommandStep.MeasuredPaths"/> are a probe rather than a target (§5.1),
-    /// and asserting the tool left them alone would be asserting something this plan never
-    /// controlled. See <see cref="CleanupStep.Subjects"/>.
-    /// </summary>
-    public CleanupPlan NarrowedTo(IReadOnlyCollection<CleanupStep> chosen)
-    {
-        ArgumentNullException.ThrowIfNull(chosen);
-
-        // Named for the user's choice rather than for what is kept, because "keep" already means the
-        // guard on recently changed files and the keep list elsewhere in this project, and each of
-        // those decides something different about the same plan.
-        //
-        // Asked of a set built here, because the shell passes a list and this runs on the UI thread
-        // when Clean is pressed: a list's Contains is a linear search of record equality, which on a
-        // row of thousands of steps is millions of comparisons. Built with the default comparer even
-        // when the caller passes a set, so a set comparing some other way cannot change which steps
-        // are kept and which are declined.
-        var chosenSet = new HashSet<CleanupStep>(chosen);
-        var selected = Steps.Where(chosenSet.Contains).ToList();
-
-        if (selected.Count == Steps.Count)
-        {
-            return this;
-        }
-
-        var declined = Steps
-            .Except(selected)
-            .SelectMany(s => s.Subjects.Select(path => (Path: path, Marker: MarkerOf(s))))
-            .Select(subject => new ProtectedPath(
-                subject.Path,
-                "Left alone because it was not selected for this run.",
-                // It was measured during planning, so it was there when the plan was made. That is
-                // the only claim PresenceBefore makes, and re-probing the disk here would let a
-                // directory deleted between planning and execution excuse itself.
-                PresenceBefore: PathPresence.Present,
-
-                // Content is asked of the disk rather than assumed, which is the opposite of the
-                // line above and for a reason the two do not share. Assuming it would report every
-                // declined directory that was *already* empty as having been emptied by the run —
-                // an alarm about an untouched folder, on a machine where an unused drive's bin is
-                // ordinary. The excuse the probe allows is harmless in the other direction: a
-                // directory something else emptied in the gap has nothing left for an over-broad
-                // rule to destroy.
-                //
-                // This is the site the declined Recycle Bin depends on. A bin the user unticked is
-                // still standing after a call that emptied it anyway, so existence proves nothing
-                // and this is the whole of what §5.6 has left to compare.
-                DirectoryContent.IsPresent(subject.Path),
-                Marker: subject.Marker));
-
-        return this with
-        {
-            Steps = selected,
-            ProtectedPaths = [.. ProtectedPaths, .. declined],
-        };
-    }
-
-    /// <summary>
     /// This plan with every item on the keep list taken out of it, and each of those protected instead.
     ///
     /// <para><b>Matched on <see cref="CleanupStep.Identity"/>, never on the path.</b> A path changes
@@ -470,7 +401,7 @@ public sealed record CleanupPlan
     /// alarm that cries wolf is worth less than no alarm. What an over-broad rule does to a kept item
     /// is delete it, and existence still catches that.</para>
     ///
-    /// <para><b>Applied before <see cref="NarrowedTo"/>.</b> A kept item is no longer a step, so a
+    /// <para><b>Applied before <see cref="ChosenSteps"/>.</b> A kept item is no longer a step, so a
     /// shell that chose every step it was shown still cannot run one. Applying this to a plan that
     /// already had it applied changes nothing.</para>
     /// </summary>
@@ -501,7 +432,7 @@ public sealed record CleanupPlan
                     subject.Path,
                     "On your keep list, so Deguffer left it alone.",
                     // Measured during planning, so it was there when the plan was made: the claim
-                    // NarrowedTo makes, for the reason it gives.
+                    // ChosenSteps makes, for the reason it gives.
                     PresenceBefore: PathPresence.Present,
                     HeldContentBefore: false,
                     Withheld: Withholding.OnKeepList,
@@ -526,7 +457,7 @@ public sealed record CleanupPlan
     /// alone is proved unmarked as well as standing. An item offered was not marked when the plan was
     /// made, because a provider does not offer what its tool has already scheduled.
     /// </summary>
-    private static string? MarkerOf(CleanupStep step) => (step as RunCommandStep)?.Scheduled?.Marker;
+    internal static string? MarkerOf(CleanupStep step) => (step as RunCommandStep)?.Scheduled?.Marker;
 
     /// <summary>
     /// This plan reduced to what a run owes it when it does not run: nothing to do, and what it leaves

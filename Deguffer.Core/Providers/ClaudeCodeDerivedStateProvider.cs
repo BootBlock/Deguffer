@@ -331,7 +331,7 @@ public sealed class ClaudeCodeDerivedStateProvider : CleanupProviderBase
                 .. await ProtectAsync([.. Survivors(survey, spared)], survey.Listed(), ct).ConfigureAwait(false),
 
                 // Measured during planning, so each was there when the plan was made: the claim
-                // CleanupPlan.NarrowedTo makes for a step the user declined.
+                // ChosenSteps makes for a step the user declined.
                 .. recent.Select(item => new ProtectedPath(
                     item.Path, item.Reason, PresenceBefore: PathPresence.Present, Withheld: Withholding.TooRecent)),
             ],

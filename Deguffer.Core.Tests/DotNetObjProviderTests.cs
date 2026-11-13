@@ -767,7 +767,7 @@ public sealed class DotNetObjProviderTests : IDisposable
             .Where(s => s.Path.Equals(chosen, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        var result = await provider.ExecuteAsync(plan.NarrowedTo(keep));
+        var result = await provider.ExecuteAsync(await plan.NarrowedToAsync(keep));
 
         Assert.True(result.Succeeded);
         Assert.False(Directory.Exists(chosen));

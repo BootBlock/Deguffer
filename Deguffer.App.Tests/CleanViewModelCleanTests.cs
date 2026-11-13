@@ -378,8 +378,8 @@ public class CleanViewModelCleanTests
     }
 
     /// <summary>
-    /// Declining the blanket confirmation leaves the screen exactly as it was: nothing runs, the page
-    /// never goes busy, and the previous run's figures are not cleared.
+    /// Declining the blanket confirmation leaves the screen exactly as it was: nothing runs, the page is
+    /// idle while the dialog is open and afterwards, and the status is not replaced.
     /// </summary>
     [Fact]
     public void DecliningTheBlanketConfirmationLeavesTheScreenAsItWas()
@@ -390,19 +390,65 @@ public class CleanViewModelCleanTests
         page.Scan();
         var status = page.ViewModel.Status;
         var asked = new List<CleanConfirmation>();
+        var busyWhileAsked = new List<bool>();
         page.ViewModel.ConfirmCleanAsync = confirmation =>
         {
             asked.Add(confirmation);
+            busyWhileAsked.Add(page.ViewModel.IsBusy);
             return Task.FromResult(false);
         };
-        var raised = page.ViewModel.Notifications();
 
         page.Clean();
 
         Assert.Single(asked);
+        Assert.Equal([false], busyWhileAsked);
         Assert.Empty(cache.Executed);
         Assert.Equal(status, page.ViewModel.Status);
-        Assert.DoesNotContain(nameof(CleanViewModel.IsBusy), raised);
+        Assert.False(page.ViewModel.IsBusy);
+    }
+
+    /// <summary>
+    /// Clean asks the narrowing for the ticked rows, off the window's thread and with the page busy, so
+    /// no scan or keep can change the rows under it, then confirms and runs the plans it returned. The
+    /// narrowing here answers that the unticked folder held nothing, which the disk would contradict,
+    /// so a plan narrowed anywhere else would say it held content.
+    /// </summary>
+    [Fact]
+    public void ACleanConfirmsAndRunsThePlansTheNarrowingReturnedAndNarrowsOffTheWindowsThread()
+    {
+        var walkedOn = new ConcurrentBag<int>();
+        var scanAllowedWhileWalking = new ConcurrentBag<bool>();
+        StoragePage? shown = null;
+        var cache = new FakeCleanupProvider("cache");
+        using var page = new StoragePage([cache], narrowing: PlanNarrowings.Asking(path =>
+        {
+            walkedOn.Add(Environment.CurrentManagedThreadId);
+            scanAllowedWhileWalking.Add(shown!.ViewModel.PreviewCommand.CanExecute(null));
+            return false;
+        }));
+        shown = page;
+        var unticked = page.Cache("unticked", 2048);
+        cache.Steps = [page.Cache("taken", 1024), unticked];
+        page.Scan();
+        page.Row("cache").Steps[1].IsSelected = false;
+        var confirmedOn = new List<int>();
+        page.ViewModel.ConfirmCleanAsync = _ =>
+        {
+            confirmedOn.Add(Environment.CurrentManagedThreadId);
+            return Task.FromResult(true);
+        };
+
+        page.Clean();
+
+        var window = Assert.Single(confirmedOn);
+        Assert.NotEmpty(walkedOn);
+        Assert.DoesNotContain(window, walkedOn);
+        Assert.Equal([false], scanAllowedWhileWalking);
+
+        var declined = Assert.Single(Assert.Single(cache.Executed).ProtectedPaths, path => path.Path == unticked.Path);
+        Assert.Equal(PathPresence.Present, declined.PresenceBefore);
+        Assert.False(declined.HeldContentBefore);
+        Assert.True(Directory.Exists(unticked.Path));
     }
 
     /// <summary>
@@ -529,13 +575,16 @@ public class CleanViewModelCleanTests
 
         var counted = new List<string>();
         var free = new List<long?>();
+        page.ViewModel.CleanProgress.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(CleanProgressViewModel.RemovedSoFarLabel))
+            {
+                counted.Add(page.ViewModel.CleanProgress.RemovedSoFarLabel);
+            }
+        };
         page.ViewModel.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(page.ViewModel.RemovedSoFarLabel))
-            {
-                counted.Add(page.ViewModel.RemovedSoFarLabel);
-            }
-            else if (e.PropertyName == nameof(page.ViewModel.FreeSpaceNow) && page.ViewModel.IsCleaning)
+            if (e.PropertyName == nameof(page.ViewModel.FreeSpaceNow) && page.ViewModel.IsCleaning)
             {
                 free.Add(page.ViewModel.FreeSpaceNow);
             }
@@ -590,11 +639,11 @@ public class CleanViewModelCleanTests
         cache.Fractions = [0.001, 0.002, 0.5, 0.501, 0.504];
         page.Scan();
         var seen = new List<double>();
-        page.ViewModel.PropertyChanged += (_, e) =>
+        page.ViewModel.CleanProgress.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(CleanViewModel.CleanPercent))
+            if (e.PropertyName == nameof(CleanProgressViewModel.Percent))
             {
-                seen.Add(page.ViewModel.CleanPercent);
+                seen.Add(page.ViewModel.CleanProgress.Percent);
             }
         };
 

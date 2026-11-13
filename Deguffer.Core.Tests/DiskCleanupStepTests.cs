@@ -65,9 +65,9 @@ public sealed class DiskCleanupStepTests : IDisposable
     /// be told so about each of them, not only the one the row is named after.
     /// </summary>
     [Fact]
-    public void DecliningTheStepProtectsEveryDirectoryItWouldHaveCleared()
+    public async Task DecliningTheStepProtectsEveryDirectoryItWouldHaveCleared()
     {
-        var narrowed = Planning(Installation()).NarrowedTo([]);
+        var narrowed = await Planning(Installation()).NarrowedToAsync([]);
 
         Assert.Empty(narrowed.Steps);
         Assert.Equal(

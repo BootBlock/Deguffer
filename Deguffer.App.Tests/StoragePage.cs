@@ -32,13 +32,15 @@ internal sealed class StoragePage : IDisposable
     /// The <c>\\?\Volume{GUID}\</c> name of the page's one volume, or null for none. A retrim is offered
     /// only on a volume Windows names.
     /// </param>
+    /// <param name="narrowing">How Clean narrows the ticked rows, or null to ask the disk as the app does.</param>
     public StoragePage(
         IReadOnlyList<FakeCleanupProvider> providers,
         bool isElevated = false,
         long freeBytes = 400_000,
         string? storedKeepList = null,
         Func<FakeUserEnvironment, ISelectionStore>? selectionStore = null,
-        string? volumeName = null)
+        string? volumeName = null,
+        PlanNarrowing? narrowing = null)
     {
         Environment = new FakeUserEnvironment(_temp.Path);
         VolumeRoot = Path.TrimEndingDirectorySeparator(_temp.Path) + Path.DirectorySeparatorChar;
@@ -58,6 +60,7 @@ internal sealed class StoragePage : IDisposable
         var planner = new CleanupPlanner(providers);
         ViewModel = new CleanViewModel(
             planner,
+            narrowing ?? new PlanNarrowing(ScanTuner.Shipped),
             Environment,
             Volumes,
             isElevated,

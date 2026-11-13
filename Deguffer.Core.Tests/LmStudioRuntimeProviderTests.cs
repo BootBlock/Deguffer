@@ -694,7 +694,7 @@ public sealed class LmStudioRuntimeProviderTests : IDisposable
         var plan = await provider.PlanAsync();
         var chosen = plan.Steps.Single(step => step.Subjects.Contains(Folder($"{Cuda12}@2.44.0")));
 
-        var result = await provider.ExecuteAsync(plan.NarrowedTo([chosen]));
+        var result = await provider.ExecuteAsync(await plan.NarrowedToAsync([chosen]));
 
         Assert.NotNull(result.Verification);
         Assert.Contains(result.Verification.Failures, check =>
@@ -777,7 +777,7 @@ public sealed class LmStudioRuntimeProviderTests : IDisposable
         var plan = await CreateProvider().PlanAsync();
         var chosen = plan.Steps.Single(step => step.Subjects.Contains(Folder($"{Cuda12}@2.44.0")));
 
-        var narrowed = plan.NarrowedTo([chosen]);
+        var narrowed = await plan.NarrowedToAsync([chosen]);
 
         Assert.Contains(narrowed.ProtectedPaths, p => p.Path == Folder($"{Cuda12}@2.45.0"));
         Assert.DoesNotContain(narrowed.ProtectedPaths, p => p.Path == Folder($"{Cuda12}@2.44.0"));

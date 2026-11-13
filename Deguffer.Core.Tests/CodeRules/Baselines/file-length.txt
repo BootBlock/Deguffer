@@ -2,11 +2,9 @@
 # its line is lowered when it does; it never grows. Never add a line: split the file instead.
 590 Deguffer.App/Controls/ExploreLayers.cs
 802 Deguffer.App/Controls/ExploreZoom.cs
-1474 Deguffer.App/ViewModels/CleanViewModel.cs
+1456 Deguffer.App/ViewModels/CleanViewModel.cs
 933 Deguffer.App/ViewModels/ExploreViewModel.cs
-507 Deguffer.App/Views/CleanPage.xaml.cs
 773 Deguffer.App/Views/ExplorePage.xaml.cs
-550 Deguffer.Core/Execution/CleanupPlan.cs
 771 Deguffer.Core/Execution/CleanupPlanner.cs
 707 Deguffer.Core/Execution/CleanupStep.cs
 1082 Deguffer.Core/Execution/PlanExecutor.cs

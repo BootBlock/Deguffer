@@ -12,7 +12,7 @@ namespace Deguffer.Core.Execution;
 /// as an item at all.</para>
 ///
 /// <para><b>It decides what the shell offers, never what is deleted.</b> Whatever the grain, a run is
-/// the plan narrowed through <see cref="CleanupPlan.NarrowedTo"/>, so every step the user leaves out is
+/// the plan narrowed through <see cref="ChosenSteps"/>, so every step the user leaves out is
 /// protected and checked afterwards (§5.6).</para>
 /// </summary>
 public enum StepGrain

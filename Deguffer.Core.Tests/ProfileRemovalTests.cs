@@ -133,7 +133,7 @@ public sealed class ProfileRemovalTests : IDisposable
 
         var provider = Provider();
         var plan = await provider.PlanAsync();
-        var narrowed = plan.NarrowedTo([.. plan.Steps.OfType<RemoveProfileStep>().Where(step => step.Profile.Sid == chosen.Sid)]);
+        var narrowed = await plan.NarrowedToAsync([.. plan.Steps.OfType<RemoveProfileStep>().Where(step => step.Profile.Sid == chosen.Sid)]);
         var result = await provider.ExecuteAsync(narrowed);
 
         Assert.Equal([chosen.Sid], _profiles.Removed);

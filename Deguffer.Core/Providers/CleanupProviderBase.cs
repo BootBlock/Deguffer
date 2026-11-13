@@ -947,7 +947,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
                         withheld.Path,
                         withheld.Reason,
                         // Measured during planning, so it was there when the plan was made — the same
-                        // claim, and the same reasoning, as CleanupPlan.NarrowedTo makes for a step the
+                        // claim, and the same reasoning, as ChosenSteps makes for a step the
                         // user declined.
                         PresenceBefore: PathPresence.Present,
 

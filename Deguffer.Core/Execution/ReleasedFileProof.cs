@@ -66,7 +66,7 @@ internal static class ReleasedFileProof
                 path, reason, VerificationOutcome.Survived,
                 $"Still present. {syncApp} has turned it back into an ordinary file, so all of it is on this PC."),
 
-        // Measured while the plan was made, so it was there then: the claim NarrowedTo makes about a
+        // Measured while the plan was made, so it was there then: the claim ChosenSteps makes about a
         // declined step, for the reason it gives.
         _ => missing(new ProtectedPath(path, reason, PathPresence.Present)),
     };

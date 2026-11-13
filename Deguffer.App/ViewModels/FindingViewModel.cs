@@ -283,16 +283,15 @@ public sealed partial class FindingViewModel : ObservableObject
     public IReadOnlyList<StepViewModel> Steps { get; private set; }
 
     /// <summary>
-    /// This finding narrowed to the steps still selected, which is what actually gets executed.
-    ///
-    /// Narrowing goes through <see cref="CleanupPlan.NarrowedTo"/> rather than being done here,
-    /// because that is what turns each deselected deletion into a protected path — §5.6's negative
-    /// is the promise that a step the user unticked left its subject standing, and a shell that
-    /// filtered the step list itself would drop that guarantee silently.
+    /// The steps still ticked, read here because only the UI thread may read the ticks, and narrowed
+    /// in Core (<see cref="PlanNarrowing"/>), which turns each deselected deletion into a protected
+    /// path — §5.6's negative is the promise that a step the user unticked left its subject standing,
+    /// and a shell that filtered the step list itself would drop that guarantee silently. Null for a
+    /// row with no plan, which has no step to tick.
     /// </summary>
-    public Finding SelectedFinding => Finding.Plan is { } plan
-        ? Finding with { Plan = plan.NarrowedTo([.. SelectedSteps.Select(s => s.Step)]) }
-        : Finding;
+    public ChosenSteps? ChosenSteps => Finding.Plan is { } plan
+        ? new ChosenSteps(plan, [.. SelectedSteps.Select(s => s.Step)])
+        : null;
 
     public IReadOnlyList<StepViewModel> SelectedSteps => [.. Steps.Where(s => s.IsSelected)];
 

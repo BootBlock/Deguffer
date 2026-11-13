@@ -8,7 +8,7 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// The list of items is a new way to choose what a run takes, and choosing must still go through
-/// <see cref="CleanupPlan.NarrowedTo"/> and nothing else. The case that matters is a sibling hidden by
+/// <see cref="ChosenSteps"/> and nothing else. The case that matters is a sibling hidden by
 /// a search inside the very group whose heading was ticked: same parent, same shape, and not on
 /// screen, which is exactly when an over-broad choice takes both.
 /// </summary>
@@ -50,7 +50,7 @@ public sealed class ItemChoiceNarrowingTests : IDisposable
         var state = ItemSelection.StateOf(chromium.Items.Select(step => (false, step.RemovesSomething)));
         var written = ItemSelection.ValueForClick(state);
 
-        var narrowed = plan.NarrowedTo([.. chromium.Items.Where(step => written && step.RemovesSomething)]);
+        var narrowed = await plan.NarrowedToAsync([.. chromium.Items.Where(step => written && step.RemovesSomething)]);
 
         var taken = Path.Combine(root, "chromium-1300");
         Assert.Equal([taken], narrowed.TargetedPaths);

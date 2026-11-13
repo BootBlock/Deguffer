@@ -92,7 +92,7 @@ internal static class RecordedRefusals
                     path,
                     "Left alone because Windows still refuses part of the index it goes with.",
                     // Measured during planning, so it was there when the plan was made: the claim
-                    // CleanupPlan.NarrowedTo makes for a step the user declined.
+                    // ChosenSteps makes for a step the user declined.
                     PresenceBefore: PathPresence.Present)),
             ],
         };
