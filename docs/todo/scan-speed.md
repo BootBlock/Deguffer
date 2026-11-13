@@ -54,7 +54,7 @@ each of them for.
 | --- | --- |
 | #441 | Start DISM's component-store analysis when an elevated pass starts. The largest single gain. |
 | #442 | Hand out planning slots longest first, by remembered cost from #443. |
-| #450 | Let a provider start the tool query its plan will wait on when the pass begins. |
+| #450 | Let a provider start the tool query its plan will wait on when the pass begins. Done: `BeginPass` takes a `PassStart`, which holds the pass's token, bounds the package managers' queries to half the logical processors (`Ask`), and starts a service's or a native tool's long answer without a place (`AskAtOnce`). Every tool row whose plan awaits a query it can ask before its own disk work adopts it, and `EarlyStartProof` holds each to asking once per pass. |
 | #451 | Show each location's check time. Built on #443. |
 
 ### 3. Tool queries that wait on each other
@@ -469,12 +469,12 @@ issue says which. No change was measured inside Deguffer.
 
 **The per-entry walk is lean; the costs left are questions asked again and safety checks run one at
 a time.** Every planning pass waits for the registered-disk readers before any row starts, and the
-Hyper-V reader starts PowerShell even for an account it will refuse (#1014, #1038). After a clean,
+Hyper-V reader starts PowerShell even for an account it will refuse (#1014, done; #1038, done). After a clean,
 the §5.6 verification follows every surviving protected path to its mount point when nothing was
 left standing (#1016), and the checks before and after a clean probe paths one at a time (#1017,
 #1018). Most rows probe again for §5.6 the paths their own listing returned (#1039). A file-table
 scan copied its whole table at every snapshot (#1015, done), every walk boxed an enumerator per directory
-(#1021, done), and the map rebuilds per-drawing facts on the UI thread (#1026). These classes recur, so
+(#1021, done), and the map rebuilt per-drawing facts on the UI thread (#1026, done). These classes recur, so
 `CLAUDE.md` G4 now states them, and the source sweep holds the mechanical ones.
 
 ### Order of work
@@ -484,12 +484,12 @@ scan copied its whole table at every snapshot (#1015, done), every walk boxed an
 | Issue | Note |
 | --- | --- |
 | #1016 | §5.6 verification follows every survivor to its mount point when nothing was left standing. `safety`. The largest gain for a clean: 1.4-2.0 s estimated for 10,918 paths, from measured per-path costs. |
-| #1014, #1038 | Planning waits on every registered-disk reader in turn, and the Hyper-V reader starts PowerShell to learn the account will be refused (226-298 ms measured for the role check alone). |
+| #1014, #1038 | Planning waits on every registered-disk reader in turn, and the Hyper-V reader starts PowerShell to learn the account will be refused (226-298 ms measured for the role check alone). Done: the reading starts beside the rows as the pass begins, asks every registering row at once, and a row waits for the set only once its own plan has ended, out of its slot (#1014). The Hyper-V role comes from the process's token before PowerShell starts (#1038). |
 | #1015 | File-table snapshots copied all nine columns: 26-41 ms and 100 MiB per 3 million slots against 4.7-5.4 ms and 14 MiB for flags and parents only, measured on stand-in arrays. Done: a snapshot copies only the flags and parents, into room the read makes at its first snapshot, reads every other column of a present slot where the parse threads write it, and is always compacted. The child starts, child list, order, renumbering and the names' sort keys are reused from one snapshot to the next, so a snapshot after the first allocates only what its tree keeps. |
 | #1017, #1018, #1019 | §5.6 checks and the Clean press's narrowing probe paths one at a time, the last on the UI thread; registered storage follows every step live. `safety`. |
 | #1039 | `ProtectAsync`'s default takes no listing, so most rows probe again what they listed. The seam fix for #755's leftovers. `safety`. |
 | #1021, #1020, #1022, #1032 | Per-directory and per-file costs in the walk, the removal walk, Explore's occupancy probe and file targets. #1020 and #1032 are `safety`. #1021 done: a listing is handed to its callback as spans in a `ref struct`, so no walk boxes an enumerator for it, and the compiler keeps it inside the callback. The benchmark's `walk` of 145,005 entries allocated 33.9 MiB against 36.9 MiB, and its `measure` 39.2 MiB against 45.0 MiB. |
-| #1026, #1027, #1028 | Per-drawing facts rebuilt on the UI thread, layouts copying unsized lists, and the overview's second upload. |
+| #1026, #1027, #1028 | Per-drawing facts rebuilt on the UI thread, layouts copying unsized lists, and the overview's second upload. #1026 done: a drawing of rectangles keeps which shapes move on their own and which folders are covered, made once, and the worker that lays out a drawing works out what the map will ask of it as it arrives (the cut of a shift and of the drawing it travels from, and the covered folders a kind light reads), so the UI thread only reads them. |
 | #1033, #1034, #1035, #1023 | The duplicate search: judging inside the shared lock, the checksum store's load, stream listings per copy, and linear place lists per folder. |
 | #1029, #1030, #1031 | UI-thread churn: progress by count, Duplicates page state per group, a bound list cleared and refilled. |
 | #1036 | Files other programs wrote, read in full with no bound. `safety`. |

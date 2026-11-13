@@ -165,6 +165,14 @@ public sealed class YarnClassicCacheProvider : CleanupProviderBase
         base.InvalidateCaches();
     }
 
+    /// <summary>
+    /// Which Yarn the <c>yarn</c> on the PATH runs, and where a Yarn 1 keeps its cache, asked as the pass
+    /// begins: Yarn is a Node.js script, often behind a Corepack shim, asked twice in turn, and those
+    /// starts are most of this row's wait.
+    /// </summary>
+    public override Task BeginPass(PassStart start) =>
+        start.Ask(ct => Environment.FindExecutable("yarn") is { } yarn ? ResolveAsync(yarn, ct) : Task.CompletedTask);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         if (Environment.FindExecutable("yarn") is not { } yarn)

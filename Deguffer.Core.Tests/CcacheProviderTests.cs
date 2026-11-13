@@ -75,6 +75,23 @@ public sealed class CcacheProviderTests : IDisposable
         Assert.True((await provider.PlanAsync()).IsEmpty);
     }
 
+    /// <summary>#450: ccache is asked where its cache is as the pass begins, and the plan awaits that answer.</summary>
+    [Fact]
+    public async Task AsksCcacheWhereItsCacheIsAsThePassBegins()
+    {
+        var runner = CcacheReporting(CreateCache(DefaultRoot));
+
+        await EarlyStartProof.StartsBeforeItPlansAsync(CreateProvider(runner), runner, "--get-config cache_dir");
+    }
+
+    [Fact]
+    public async Task StartsNothingAsThePassBeginsWhenCcacheIsNotInstalled()
+    {
+        var runner = new FakeProcessRunner();
+
+        await EarlyStartProof.StartsNothingAsync(CreateProvider(runner), runner);
+    }
+
     [Fact]
     public async Task ClearsWithCcachesOwnCommandRatherThanDeletingThePath()
     {

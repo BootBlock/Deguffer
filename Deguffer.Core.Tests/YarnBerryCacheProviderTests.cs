@@ -106,6 +106,26 @@ public sealed class YarnBerryCacheProviderTests : IDisposable
         Assert.True((await provider.PlanAsync()).IsEmpty);
     }
 
+    /// <summary>#450: Yarn is asked which it is and about its global folder as the pass begins, and the plan awaits those answers.</summary>
+    [Fact]
+    public async Task AsksYarnAboutItsGlobalFolderAsThePassBegins()
+    {
+        PopulateCache();
+        var runner = YarnAnswering();
+
+        await EarlyStartProof.StartsBeforeItPlansAsync(
+            CreateProvider(runner), runner, "-v", "config get globalFolder", "config get enableCacheClean");
+    }
+
+    [Fact]
+    public async Task StartsNothingAsThePassBeginsWhenYarnIsNotInstalled()
+    {
+        PopulateCache();
+        var runner = new FakeProcessRunner();
+
+        await EarlyStartProof.StartsNothingAsync(CreateProvider(runner), runner);
+    }
+
     /// <summary>
     /// The common Corepack machine: the yarn on the PATH is Yarn 1 outside any project, and projects run
     /// Yarn 4. Berry's default cache is still found, and Yarn 1 is asked nothing past which Yarn it is.

@@ -89,6 +89,16 @@ public sealed class OtherAccountProfilesProvider : CleanupProviderBase
     }
 
     /// <summary>
+    /// The survey taken as the pass begins: it asks Windows about the account behind each profile, and a
+    /// lookup of a domain account waits on a domain controller, which on a laptop away from its domain
+    /// answers only once the lookup gives up.
+    ///
+    /// <para><b>It takes no place under the pass's bound on tool queries.</b> It starts no process, and its
+    /// wait is on Windows' account lookups rather than on the processor.</para>
+    /// </summary>
+    public override Task BeginPass(PassStart start) => start.AskAtOnce(SurveyAsync);
+
+    /// <summary>
     /// Another account's profile, or a list Windows would not give: a refusal is no evidence that there is
     /// none, so the row appears and its plan says what Windows answered.
     /// </summary>

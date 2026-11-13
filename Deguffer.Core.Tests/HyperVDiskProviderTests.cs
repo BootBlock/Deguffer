@@ -14,7 +14,8 @@ namespace Deguffer.Core.Tests;
 ///
 /// <para>Windows PowerShell is a <see cref="FakeProcessRunner"/> that replies as the query's JSON does,
 /// and throws for any other program, so a test with no reply also proves nothing was run. Every disk is a
-/// file in the test's own folder.</para>
+/// file in the test's own folder, and the account is a member of Hyper-V Administrators unless a test says
+/// otherwise.</para>
 /// </summary>
 public sealed class HyperVDiskProviderTests : IDisposable
 {
@@ -25,15 +26,15 @@ public sealed class HyperVDiskProviderTests : IDisposable
 
     public HyperVDiskProviderTests()
     {
-        _environment = new FakeUserEnvironment(_temp.Path);
+        _environment = new FakeUserEnvironment(_temp.Path).AsHyperVAdministrator();
         _system = new FakeSystemDirectories(_temp.Path);
-        _machines = new HyperVMachines(_system, new FakeProcessRunner());
+        _machines = new HyperVMachines(_system, _environment, new FakeProcessRunner());
     }
 
     public void Dispose() => _temp.Dispose();
 
-    private HyperVDiskProvider Provider(FakeProcessRunner runner) =>
-        new(_system, _environment, runner, FakeProcessInspector.NothingRunning);
+    private HyperVDiskProvider Provider(FakeProcessRunner runner, IUserEnvironment? environment = null) =>
+        new(_system, environment ?? _environment, runner, FakeProcessInspector.NothingRunning);
 
     private void InstallModule() => Directory.CreateDirectory(Path.Combine(_machines.Module, "2.0.0.0"));
 
@@ -64,14 +65,16 @@ public sealed class HyperVDiskProviderTests : IDisposable
 
     /// <summary>
     /// <c>Get-VM</c> has been reported (by Altaro) to list nothing, rather than fail, for an account Hyper-V does not
-    /// trust, so the query asks whether this account is trusted, and one that is not is told whether it has
-    /// machines is not known. Mutation: reading <c>allowed: false</c> as an empty machine list leaves no row.
+    /// trust, so an account that is neither elevated nor a member of Hyper-V Administrators is told whether it
+    /// has machines is not known, and Windows PowerShell is never started to learn what the token already says.
+    /// Mutation: dropping the role check runs the query, and taking the refusal for no machines leaves no row.
     /// </summary>
     [Fact]
-    public async Task AnAccountHyperVWillNotAnswerIsToldItIsNotKnownNeverThatThereAreNone()
+    public async Task AnAccountHyperVWillNotAnswerIsToldItIsNotKnownWithNothingStarted()
     {
         InstallModule();
-        var provider = Provider(Answering("""{"allowed":false}"""));
+        var runner = new FakeProcessRunner();
+        var provider = Provider(runner, new FakeUserEnvironment(_temp.Path));
 
         Assert.True(await provider.IsPresentAsync());
 
@@ -82,12 +85,34 @@ public sealed class HyperVDiskProviderTests : IDisposable
         Assert.Contains("is not known", refusal.Message, StringComparison.Ordinal);
         Assert.Empty(plan.Steps);
         Assert.Empty(await provider.RegisteredStorageAsync());
+        Assert.Empty(runner.Invocations);
+    }
+
+    /// <summary>
+    /// The two accounts Hyper-V answers are asked, an elevated one and an unelevated member of Hyper-V
+    /// Administrators. Mutation: checking only <see cref="IUserEnvironment.IsAdministrator"/> refuses the member.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AnElevatedAccountOrAMemberOfHyperVAdministratorsIsAsked(bool elevated)
+    {
+        InstallModule();
+        var account = new FakeUserEnvironment(_temp.Path);
+        var environment = elevated ? account.AsAdministrator() : account.AsHyperVAdministrator();
+        var disk = Disk("Dev.vhdx");
+        var runner = Answering(Json(
+            $$"""{"machines":[{"name":"Dev","state":"Off","checkpoints":0,"attached":["{{disk}}"],"kept":[],"unfollowed":[]}]}"""));
+
+        Assert.Equal(disk, Assert.Single(await Provider(runner, environment).RegisteredStorageAsync()).Path);
+        Assert.Single(runner.Invocations);
     }
 
     [Theory]
-    [InlineData("""{"allowed":true,"error":"Hyper-V was unable to find a virtual machine management service."}""", 0, "unable to find a virtual machine management service")]
+    [InlineData("""{"error":"Hyper-V was unable to find a virtual machine management service."}""", 0, "unable to find a virtual machine management service")]
     [InlineData("not json", 0, "could not be read")]
-    [InlineData("""{"machines":[]}""", 0, "could not be read")]
+    [InlineData("[]", 0, "could not be read")]
+    [InlineData("""{"machines":3}""", 0, "could not be read")]
     [InlineData("", 1, "could not ask Hyper-V")]
     public async Task AHyperVThatDoesNotAnswerIsSaidAndNeverTakenForNoMachines(string answer, int exitCode, string said)
     {
@@ -104,7 +129,7 @@ public sealed class HyperVDiskProviderTests : IDisposable
     {
         InstallModule();
         using var denied = new DeniedDirectory(Path.GetDirectoryName(_machines.Module)!);
-        var runner = Answering("""{"allowed":true,"machines":[]}""");
+        var runner = Answering("""{"machines":[]}""");
 
         await Provider(runner).IsPresentAsync();
 
@@ -116,7 +141,7 @@ public sealed class HyperVDiskProviderTests : IDisposable
     {
         InstallModule();
 
-        Assert.False(await Provider(Answering("""{"allowed":true,"machines":[]}""")).IsPresentAsync());
+        Assert.False(await Provider(Answering("""{"machines":[]}""")).IsPresentAsync());
     }
 
     /// <summary>
@@ -130,7 +155,7 @@ public sealed class HyperVDiskProviderTests : IDisposable
         var current = Disk("Dev_7F3A.avhdx", 8192);
         var base_ = Disk("Dev.vhdx", 4096);
         var provider = Provider(Answering(Json(
-            $$"""{"allowed":true,"machines":[{"name":"Dev","state":"Saved","checkpoints":2,"attached":["{{current}}"],"kept":["{{base_}}","{{current}}"],"unfollowed":[]}]}""")));
+            $$"""{"machines":[{"name":"Dev","state":"Saved","checkpoints":2,"attached":["{{current}}"],"kept":["{{base_}}","{{current}}"],"unfollowed":[]}]}""")));
 
         var plan = await provider.PlanAsync();
         var text = Text(plan);
@@ -161,7 +186,7 @@ public sealed class HyperVDiskProviderTests : IDisposable
         var plain = Path.Combine(_temp.Path, "Hyper-V", "Dev", "Dev.vhdx");
 
         var inventory = HyperVMachines.Parse(Json(
-            $$"""{"allowed":true,"machines":[{"name":"Dev","state":"Off","checkpoints":0,"attached":["\\?\{{plain}}"],"kept":["{{plain}}"],"unfollowed":[]}]}"""));
+            $$"""{"machines":[{"name":"Dev","state":"Off","checkpoints":0,"attached":["\\?\{{plain}}"],"kept":["{{plain}}"],"unfollowed":[]}]}"""));
 
         var disk = Assert.Single(inventory.Disks);
         Assert.Equal(plain, disk.Path);
@@ -181,7 +206,7 @@ public sealed class HyperVDiskProviderTests : IDisposable
         var runner = Answering(Json(
             $$"""
             WARNING: The names of some imported commands from the module 'Hyper-V' include unapproved verbs.
-            {"allowed":true,"machines":[{"name":"Dev","state":"Off","checkpoints":0,"attached":["{{disk}}"],"kept":[],"unfollowed":[]}]}
+            {"machines":[{"name":"Dev","state":"Off","checkpoints":0,"attached":["{{disk}}"],"kept":[],"unfollowed":[]}]}
             """));
 
         Assert.Equal(disk, Assert.Single(await Provider(runner).RegisteredStorageAsync()).Path);
@@ -193,7 +218,7 @@ public sealed class HyperVDiskProviderTests : IDisposable
         var disk = Path.Combine(_temp.Path, "Dev.avhdx");
 
         var inventory = HyperVMachines.Parse(Json(
-            $$"""{"allowed":true,"machines":[{"name":"Dev","state":"Off","checkpoints":1,"attached":["{{disk}}"],"kept":[],"unfollowed":["{{disk}}"]}]}"""));
+            $$"""{"machines":[{"name":"Dev","state":"Off","checkpoints":1,"attached":["{{disk}}"],"kept":[],"unfollowed":["{{disk}}"]}]}"""));
 
         Assert.Contains(disk, Assert.Single(inventory.Problems), StringComparison.Ordinal);
     }
@@ -203,7 +228,7 @@ public sealed class HyperVDiskProviderTests : IDisposable
     public async Task TheQueryRunsWindowsPowerShellAndChangesNothing()
     {
         InstallModule();
-        var runner = Answering("""{"allowed":true,"machines":[]}""");
+        var runner = Answering("""{"machines":[]}""");
 
         await Provider(runner).IsPresentAsync();
 
@@ -244,7 +269,7 @@ public sealed class HyperVDiskProviderTests : IDisposable
         Assert.Contains((await gradle.PlanAsync()).TargetedPaths, path => LongPath.Contains(path, disk));
 
         var report = Provider(Answering(Json(
-            $$"""{"allowed":true,"machines":[{"name":"Dev","state":"Off","checkpoints":0,"attached":["{{disk}}"],"kept":[],"unfollowed":[]}]}""")));
+            $$"""{"machines":[{"name":"Dev","state":"Off","checkpoints":0,"attached":["{{disk}}"],"kept":[],"unfollowed":[]}]}""")));
         var planner = new CleanupPlanner([gradle, report], volumes: new FakeVolumeInventory());
         var cache = Assert.Single(await planner.PlanAsync([gradle]));
 

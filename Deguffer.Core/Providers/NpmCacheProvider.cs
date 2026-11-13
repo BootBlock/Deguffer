@@ -142,6 +142,13 @@ public sealed class NpmCacheProvider : CleanupProviderBase
         base.InvalidateCaches();
     }
 
+    /// <summary>
+    /// npm's answer for where its cache is, asked as the pass begins: npm is a Node.js script, and its
+    /// start is most of this row's wait.
+    /// </summary>
+    public override Task BeginPass(PassStart start) =>
+        start.Ask(ct => Environment.FindExecutable("npm") is { } npm ? ResolveCacheDirectoryAsync(npm, ct) : Task.CompletedTask);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var npm = Environment.FindExecutable("npm");

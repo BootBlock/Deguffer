@@ -96,6 +96,40 @@ public sealed class CondaCacheProviderTests : IDisposable
     }
 
     /// <summary>
+    /// #450: conda is asked where its caches are and then what its clean would remove as the pass begins,
+    /// and the plan awaits both answers.
+    /// </summary>
+    [Fact]
+    public async Task AsksCondaWhereItsCachesAreAndWhatItsCleanWouldRemoveAsThePassBegins()
+    {
+        Populate(PackageCache);
+        var runner = Reporting();
+
+        var plan = await EarlyStartProof.StartsBeforeItPlansAsync(CreateProvider(runner), runner, "info --json", "--dry-run");
+
+        Assert.Equal(10_000, plan.EstimatedBytes);
+    }
+
+    [Fact]
+    public async Task StartsNothingAsThePassBeginsWhenCondaIsNotInstalled()
+    {
+        var runner = new FakeProcessRunner();
+        var provider = new CondaCacheProvider(
+            new FakeUserEnvironment(_temp.Path), runner, FakeProcessInspector.NothingRunning, systemDirectories: _system);
+
+        await EarlyStartProof.StartsNothingAsync(provider, runner);
+    }
+
+    /// <summary>The dry run waits, as in the plan, on a package cache conda named being there.</summary>
+    [Fact]
+    public async Task StopsAfterWhereItsCachesAreAsThePassBeginsWhenCondaHasCachedNothing()
+    {
+        var runner = Reporting();
+
+        await EarlyStartProof.StartsOnlyAsync(CreateProvider(runner), runner, "info --json");
+    }
+
+    /// <summary>
     /// §5.1, and the two flags this provider will not pass. <c>--all</c> would take conda's log
     /// files, which §3 places in Tier 3 rather than in this Tier 2 plan, and
     /// <c>--force-pkgs-dirs</c> removes every writable cache whole — conda's own help says it
@@ -534,18 +568,19 @@ public sealed class CondaCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// The dry run is asked again on every plan, unlike the locations: what is unused changes
-    /// whenever an environment does, so remembering the figure would show a number describing a
-    /// machine that has moved on.
+    /// The dry run is asked again on every pass: what is unused changes whenever an environment does,
+    /// so a figure kept past its pass would describe a machine that has moved on. Within a pass it is
+    /// asked once, because the start of the pass and the plan await the one answer (#450).
     /// </summary>
     [Fact]
-    public async Task AsksForTheDryRunOnEveryPlanBecauseTheFigureMoves()
+    public async Task AsksForTheDryRunAgainOnEveryPassBecauseTheFigureMoves()
     {
         Populate(PackageCache);
         var runner = Reporting();
         var provider = CreateProvider(runner);
 
         await provider.PlanAsync();
+        provider.InvalidateCaches();
         await provider.PlanAsync();
 
         Assert.Equal(2, runner.Invocations.Count(i => i.Arguments.Contains("--dry-run", StringComparison.Ordinal)));

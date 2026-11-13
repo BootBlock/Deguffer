@@ -67,6 +67,9 @@ internal sealed class ExploreMarking(ExploreHighlight highlight)
         ShowMarked(drawing, scale);
     }
 
+    /// <summary>What a card beside the map lights on it, or null. See <see cref="Light"/>.</summary>
+    public MapLight? Lit => _light;
+
     /// <summary>
     /// Light what a card beside the map points at on <paramref name="drawing"/>, or nothing where
     /// <paramref name="light"/> is null. Kept and lit again on every new drawing (see <see cref="Remark"/>).

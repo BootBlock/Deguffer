@@ -43,28 +43,16 @@ public sealed class DriverStoreProvider : CleanupProviderBase
     /// </summary>
     private const DiskCleanupQuestion Question = DiskCleanupQuestion.Measures;
 
-    /// <summary>
-    /// Asked whether Windows' own cleanup has anything to clear, and given to the executor that runs it,
-    /// so the plan and the clean ask the same instance. See <see cref="CleanupProviderBase"/>'s
-    /// <c>handlers</c>.
-    /// </summary>
-    private readonly IDiskCleanupHandlers _handlers;
-
     private readonly ISystemDirectories _system;
     private readonly IDriverStore _store;
     private readonly string _repository;
 
     /// <summary>
-    /// The listing presence and planning both read, taken once per planning pass (G4): it is a
-    /// subprocess, a read of every device and a SetupAPI call per package.
+    /// The listing presence and planning both read, and Windows' cleanup asked beside it. It asks the
+    /// handlers given to the executor that runs the cleanup, so the plan and the clean ask the same
+    /// instance. See <see cref="CleanupProviderBase"/>'s <c>handlers</c>.
     /// </summary>
-    private readonly PassMemo<Task<DriverStoreListing>> _listing = new();
-
-    /// <summary>
-    /// Windows' cleanup asked what it would clear, started with the listing and handed to the plan,
-    /// which takes it or discards it. See <see cref="ListingAsync"/>.
-    /// </summary>
-    private EarlyDiskCleanupSurvey? _early;
+    private readonly DriverStoreReading _reading;
 
     /// <summary>The system volume, in the display form the handler answers for.</summary>
     private readonly string _volume;
@@ -86,11 +74,12 @@ public sealed class DriverStoreProvider : CleanupProviderBase
             handlers: handlers,
             servicing: servicing)
     {
-        _handlers = handlers;
         _system = system ?? SystemDirectories.Current;
         _store = store ?? new DriverStore(Runner, _system, DeviceDriverReader.Default, DriverPackageFolders.Default);
         _repository = Path.Combine(_system.WindowsDirectory, "System32", "DriverStore", "FileRepository");
         _volume = LongPath.Display(_system.SystemDrive);
+        _reading = new DriverStoreReading(
+            _store, handlers, Handler, _volume, Question, () => UnfinishedUpdate.HoldsEverything(ServicingThisPass) is null);
     }
 
     public override string Id => "driver-store";
@@ -125,10 +114,34 @@ public sealed class DriverStoreProvider : CleanupProviderBase
 
     public override void InvalidateCaches()
     {
-        _listing.Forget();
-        Interlocked.Exchange(ref _early, null)?.Abandon();
+        _reading.Invalidate();
         base.InvalidateCaches();
     }
+
+    /// <summary>
+    /// The pass's listing, and with it Windows' cleanup asked what it would clear
+    /// (<see cref="DriverStoreReading"/>), started as the pass begins: the listing and the survey each take
+    /// seconds, and this row stands far enough down the planner's list that its slot comes seconds into
+    /// the pass.
+    ///
+    /// <para><b>The servicing reading is taken before DISM starts.</b> The listing asks the pass's one
+    /// reading (<see cref="PlanningServicing"/>) before it starts the survey. Whichever of this and the
+    /// component store's start asks first takes the reading, and the
+    /// other waits for it, so the component store starts DISM only once it has been taken.</para>
+    ///
+    /// <para><b>It takes no place under the pass's bound on tool queries.</b> <c>pnputil</c> is a native
+    /// program, and the wait is Windows reading its driver store and the handler measuring, not an
+    /// interpreter loading. Queued behind every package manager's query, the survey, an elevated pass's
+    /// longest wait after DISM's, would start only once they had all ended.</para>
+    ///
+    /// <para>The store's folder is asked about first, as presence and the plan ask again in their turn,
+    /// because a Windows that keeps none has nothing to list, and the planner has not asked presence by
+    /// the time the pass begins. One attribute read. The work ends only once the survey has returned, so
+    /// a pass that ends before this row plans does not leave the handler measuring beside the next
+    /// pass's.</para>
+    /// </summary>
+    public override Task BeginPass(PassStart start) =>
+        start.AskAtOnce(ct => LongPath.DirectoryMayExist(_repository) ? _reading.BeginAsync(ct) : Task.CompletedTask);
 
     /// <summary>
     /// A store holding an older version of some driver. A listing that failed is no evidence that
@@ -141,11 +154,11 @@ public sealed class DriverStoreProvider : CleanupProviderBase
             return false;
         }
 
-        var listing = await ListingAsync(ct).ConfigureAwait(false);
+        var listing = await _reading.ListingAsync(ct).ConfigureAwait(false);
         var present = listing.Failure is not null || SupersededDrivers.Of(listing.Packages, _repository).Newest.Count > 0;
 
         // The planner plans only a row that is present, so nothing else would take the answer.
-        if (!present && TakeEarlySurvey() is { } unneeded)
+        if (!present && _reading.TakeEarlySurvey() is { } unneeded)
         {
             await unneeded.DiscardAsync().ConfigureAwait(false);
         }
@@ -172,8 +185,8 @@ public sealed class DriverStoreProvider : CleanupProviderBase
             return nothing;
         }
 
-        var listing = await ListingAsync(ct).ConfigureAwait(false);
-        var early = TakeEarlySurvey();
+        var listing = await _reading.ListingAsync(ct).ConfigureAwait(false);
+        var early = _reading.TakeEarlySurvey();
 
         try
         {
@@ -243,7 +256,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         }
 
         // Read last: every gate above decides over the answer's use, never over whether it was asked.
-        var survey = await (early ?? new EarlyDiskCleanupSurvey(_handlers, Handler, _volume, Question, ct)).TakeAsync().ConfigureAwait(false);
+        var survey = await (early ?? _reading.Survey(ct)).TakeAsync().ConfigureAwait(false);
 
         return survey.Answer switch
         {
@@ -464,34 +477,4 @@ public sealed class DriverStoreProvider : CleanupProviderBase
     {
         return dates.Any(d => d is null) ? null : dates.Max();
     }
-
-    /// <summary>
-    /// The pass's listing, and with it Windows' cleanup asked what it would clear, so the handler's
-    /// measurement runs beside pnputil's listing rather than after it.
-    ///
-    /// <para><b>Asked before the plan knows it needs the answer.</b> Elevated on Windows 11 24H2, the
-    /// listing took 1.2 to 2.1 s and the survey 3.5 to 4.1 s, and the two together took as long as
-    /// the survey alone. Where the listing shows nothing superseded, the survey is stopped, which the
-    /// handler obeyed within 110 ms. Unelevated, <see cref="DiskCleanupHandlers.Survey"/> answers
-    /// before it loads the handler, so the early start costs a registry read.</para>
-    ///
-    /// <para><b>Not asked while the pass's reading shows an update unfinished</b>, which holds every
-    /// package back in any case: Windows Update installs drivers, and nothing documents what the
-    /// handler's measurement does beside it. The plan asks the same reading before it reads the
-    /// answer, and the clean asks the machine itself before it runs.</para>
-    /// </summary>
-    private Task<DriverStoreListing> ListingAsync(CancellationToken ct) => _listing.Get(() =>
-    {
-        var survey = UnfinishedUpdate.HoldsEverything(ServicingThisPass) is null
-            ? new EarlyDiskCleanupSurvey(_handlers, Handler, _volume, Question, ct)
-            : null;
-
-        // A listing that failed is asked again, and the survey started with it is replaced.
-        Interlocked.Exchange(ref _early, survey)?.Abandon();
-
-        return _store.ListAsync(ct);
-    });
-
-    /// <summary>The survey started with the listing, handed to exactly one caller.</summary>
-    private EarlyDiskCleanupSurvey? TakeEarlySurvey() => Interlocked.Exchange(ref _early, null);
 }

@@ -25,6 +25,12 @@ public sealed class TiledSurface : ExploreSurface
     private readonly TileHitTest _hits;
     private readonly NodeShapes<ExploreTile> _byNode;
 
+    /// <summary>See <see cref="Cut"/>.</summary>
+    private readonly Lazy<ShapeCut> _cut;
+
+    /// <summary>See <see cref="Covered"/>.</summary>
+    private readonly Lazy<HashSet<int>> _covered;
+
     /// <summary>The volume a treemap of the whole of it draws beside its root, which each of its tiles lays out too.</summary>
     private readonly VolumeSpace _beside;
 
@@ -52,6 +58,8 @@ public sealed class TiledSurface : ExploreSurface
         _tiles = tiles;
         _hits = new TileHitTest(tiles, width, height);
         _byNode = new NodeShapes<ExploreTile>(tiles, static tile => tile.IsNode, static tile => tile.Node, static tile => tile.Depth);
+        _cut = new Lazy<ShapeCut>(() => ShapeCut.Of(this));
+        _covered = new Lazy<HashSet<int>>(FindCovered);
         _beside = beside;
         HasVolumeBeside = TreemapLayout.DrawsBeside(tree.SizeOf(root), beside, width, height, limits);
 
@@ -67,6 +75,22 @@ public sealed class TiledSurface : ExploreSurface
 
     /// <summary>Every rectangle drawn, a folder before what is drawn of it, in pixels of the drawing.</summary>
     public IReadOnlyList<ExploreTile> Tiles => _tiles;
+
+    /// <summary>
+    /// This drawing as a move between two layouts reads it (<see cref="ShapeChanges"/>), made the first
+    /// time it is asked for and kept: on the worker that makes the drawing, where a move is owed
+    /// (<see cref="DrawingArrival"/>), so the UI thread only reads it.
+    /// </summary>
+    internal ShapeCut Cut => _cut.Value;
+
+    /// <summary>
+    /// The folders with a shape drawn inside their own, which <see cref="Uncovered"/> never outlines.
+    /// Fixed for the drawing whatever is asked of it, so made the first time it is asked for and kept.
+    /// </summary>
+    internal IReadOnlySet<int> Covered => _covered.Value;
+
+    /// <summary>The index of <paramref name="node"/>'s first shape, or null where it has none.</summary>
+    internal int? FirstOf(int node) => _byNode.FirstOf(node);
 
     public override CanvasPainter Painter(TileColour background) => new TileRasteriser(Quads(), background);
 
@@ -203,7 +227,28 @@ public sealed class TiledSurface : ExploreSurface
     {
         ArgumentNullException.ThrowIfNull(nodes);
 
-        // The layouts emit a folder before what it holds, so its shape is known by the time they are.
+        var covered = _covered.Value;
+        var outlines = new List<ExploreOutline>();
+
+        for (var i = 0; i < _tiles.Count; i++)
+        {
+            var tile = _tiles[i];
+
+            if (tile.IsNode && !covered.Contains(tile.Node) && nodes(tile.Node))
+            {
+                outlines.Add(OutlineOf(tile));
+            }
+        }
+
+        return outlines;
+    }
+
+    /// <summary>
+    /// See <see cref="Covered"/>. A folder is asked about by its last shape drawn before the shape in
+    /// it, as the layouts emit a folder before what it holds.
+    /// </summary>
+    private HashSet<int> FindCovered()
+    {
         var shapes = new Dictionary<int, int>();
         var covered = new HashSet<int>();
 
@@ -224,19 +269,7 @@ public sealed class TiledSurface : ExploreSurface
             }
         }
 
-        var outlines = new List<ExploreOutline>();
-
-        for (var i = 0; i < _tiles.Count; i++)
-        {
-            var tile = _tiles[i];
-
-            if (tile.IsNode && !covered.Contains(tile.Node) && nodes(tile.Node))
-            {
-                outlines.Add(OutlineOf(tile));
-            }
-        }
-
-        return outlines;
+        return covered;
     }
 
     /// <summary>

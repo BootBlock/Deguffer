@@ -29,6 +29,25 @@ public sealed class NpmCacheProviderTests : IDisposable
         Assert.True((await provider.PlanAsync()).IsEmpty);
     }
 
+    /// <summary>#450: npm is asked where its cache is as the pass begins, and the plan awaits that answer.</summary>
+    [Fact]
+    public async Task AsksNpmWhereItsCacheIsAsThePassBegins()
+    {
+        _environment.WithExecutable("npm");
+        var runner = new FakeProcessRunner().Responding(Npm, "config get cache", string.Empty);
+        var provider = new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning);
+
+        await EarlyStartProof.StartsBeforeItPlansAsync(provider, runner, "config get cache");
+    }
+
+    [Fact]
+    public async Task StartsNothingAsThePassBeginsWhenNpmIsNotInstalled()
+    {
+        var runner = new FakeProcessRunner();
+
+        await EarlyStartProof.StartsNothingAsync(new NpmCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning), runner);
+    }
+
     [Fact]
     public async Task ReportsNothingToDoWhenTheCacheDirectoryHasNotBeenCreatedYet()
     {

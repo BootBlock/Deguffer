@@ -157,6 +157,15 @@ public sealed class YarnBerryCacheProvider : CleanupProviderBase
         base.InvalidateCaches();
     }
 
+    /// <summary>
+    /// Which Yarn the <c>yarn</c> on the PATH runs and, for Yarn 2 and later, its global folder and
+    /// whether its clean is turned off, asked as the pass begins: Yarn is a Node.js script asked three
+    /// times in turn, and those starts are most of this row's wait. Asked afresh, as the plan that awaits
+    /// them asks.
+    /// </summary>
+    public override Task BeginPass(PassStart start) =>
+        start.Ask(ct => Environment.FindExecutable("yarn") is { } yarn ? _planned.Get(() => FreshAnswerAsync(yarn, ct)) : Task.CompletedTask);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var notes = new List<PlanNote>();

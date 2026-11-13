@@ -135,6 +135,17 @@ public sealed class FakeUserEnvironment : IUserEnvironment
     public FakeUserEnvironment AsAdministrator()
     {
         IsAdministrator = true;
+        IsHyperVAdministrator = true;
+        return this;
+    }
+
+    /// <summary>Not one Hyper-V answers unless a test says so, for the reason <see cref="IsAdministrator"/> gives.</summary>
+    public bool IsHyperVAdministrator { get; private set; }
+
+    /// <summary>Pretend the process runs unelevated as a member of Hyper-V Administrators.</summary>
+    public FakeUserEnvironment AsHyperVAdministrator()
+    {
+        IsHyperVAdministrator = true;
         return this;
     }
 

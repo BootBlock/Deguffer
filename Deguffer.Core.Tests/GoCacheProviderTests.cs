@@ -57,6 +57,25 @@ public sealed class GoCacheProviderTests : IDisposable
         Assert.True(plan.IsEmpty);
     }
 
+    /// <summary>#450: Go is asked where its caches are as the pass begins, and the plan awaits that answer.</summary>
+    [Fact]
+    public async Task AsksGoWhereItsCachesAreAsThePassBegins()
+    {
+        Populate(BuildCache);
+        var runner = Reporting(BuildCache, ModuleCache, GoPath);
+
+        await EarlyStartProof.StartsBeforeItPlansAsync(CreateProvider(runner), runner, "env GOCACHE");
+    }
+
+    [Fact]
+    public async Task StartsNothingAsThePassBeginsWhenGoIsNotInstalled()
+    {
+        var runner = new FakeProcessRunner();
+        var provider = new GoCacheProvider(new FakeUserEnvironment(_temp.Path), runner, FakeProcessInspector.NothingRunning);
+
+        await EarlyStartProof.StartsNothingAsync(provider, runner);
+    }
+
     [Fact]
     public async Task PlansGosOwnCommandForEachLocationItReports()
     {

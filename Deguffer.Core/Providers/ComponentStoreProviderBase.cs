@@ -102,13 +102,18 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
     /// <see cref="RestartKey.ServicingRebootPending"/> present. Asking reads the pass's one reading of
     /// both, <see cref="PlanningServicing"/>, so it is read before DISM starts, and every row the hold
     /// governs is planned against the machine as it was before the analysis began.</para>
+    ///
+    /// <para><b>It takes no place under the pass's bound on tool queries.</b> DISM is one native process,
+    /// whose minutes are spent waiting on the servicing stack rather than loading, and it is an elevated
+    /// pass's longest chain, so queued behind every package manager's query it would lengthen the pass
+    /// by however long they took.</para>
     /// </summary>
-    public override Task BeginPass(CancellationToken ct) =>
+    public override Task BeginPass(PassStart start) => start.AskAtOnce(ct =>
         !Environment.IsAdministrator
         || !LongPath.DirectoryMayExist(_store)
         || UnfinishedUpdate.HoldsEverything(ServicingThisPass, _servicingCalls) is not null
             ? Task.CompletedTask
-            : _analysis.ReadingAsync(ct);
+            : _analysis.ReadingAsync(ct));
 
     /// <summary>The store's folder. DISM is part of every Windows that has one.</summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>

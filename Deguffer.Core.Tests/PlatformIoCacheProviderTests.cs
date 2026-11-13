@@ -154,6 +154,30 @@ public sealed class PlatformIoCacheProviderTests : IDisposable
         Assert.Equal(0, plan.EstimatedBytes);
     }
 
+    /// <summary>
+    /// #450: PlatformIO is asked what its prune would remove and where it keeps things as the pass begins,
+    /// and the plan awaits both answers.
+    /// </summary>
+    [Fact]
+    public async Task AsksPlatformIoItsPruneAndItsLocationsAsThePassBegins()
+    {
+        _environment.WithExecutable("pio");
+        CreateCache();
+        var runner = Reporting(ASupersededToolchain).Responding(Pio, "system info", string.Empty);
+
+        var plan = await EarlyStartProof.StartsBeforeItPlansAsync(CreateProvider(runner), runner, "system info", "--dry-run");
+
+        Assert.Equal(SupersededToolchainBytes, StepContaining(plan, "--core-packages").EstimatedBytes);
+    }
+
+    [Fact]
+    public async Task StartsNothingAsThePassBeginsWhenPlatformIoIsNotInstalled()
+    {
+        var runner = new FakeProcessRunner();
+
+        await EarlyStartProof.StartsNothingAsync(CreateProvider(runner), runner);
+    }
+
     /// <summary>The tier is the product (§3), and §7 derives the confirmation from it.</summary>
     [Fact]
     public async Task IsTier2AndCarriesThatIntoThePlanAndItsConfirmation()

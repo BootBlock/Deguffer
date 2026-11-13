@@ -505,8 +505,8 @@ public sealed class CleanupPlanner
     {
         ArgumentNullException.ThrowIfNull(providers);
 
-        // Every offset is from here, so the reading of the registered storage before the first slot is
-        // part of what the first provider's start says it waited for.
+        // Every offset is from here, so what the pass does before the first slot is part of what the first
+        // provider's start says it waited for.
         var clock = new PassClock(_time);
 
         // Every row that registers a virtual machine's storage is read for every pass, a re-plan of a
@@ -530,10 +530,10 @@ public sealed class CleanupPlanner
         // the next pass drops it before it plans, so keeping it while the app sits idle buys nothing.
         var holds = new List<PassHold>(providers.Count);
 
-        // What a provider starts at the top of the pass ends with it, however it ends: a pass that
-        // fails or is cancelled must not leave a tool running beside the next pass's own.
-        using var pass = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var started = new List<Task>(providers.Count);
+        // What a provider starts at the top of the pass, and the reading of the registered storage, end
+        // with it, however it ends: a pass that fails or is cancelled must not leave a tool running beside
+        // the next pass's own.
+        using var start = new PassStart(PassStart.ToolsAtOnce, ct);
 
         try
         {
@@ -546,132 +546,25 @@ public sealed class CleanupPlanner
             // runs while the rows ahead of it plan, rather than starting only when its turn comes.
             foreach (var provider in providers)
             {
-                started.Add(provider.BeginPass(pass.Token));
+                start.Begin(provider);
             }
 
-            // Before any row plans, so every plan in the pass is held to the same set. The account's
-            // folders are followed to their mounts once for the pass.
-            var terms = new PassTerms(
-                await RegisteredStorage.ReadAsync(registrars, _volumes, ct).ConfigureAwait(false),
-                AnotherAccountPlan.For(_account, _volumes),
-                keep);
+            // The account's folders are followed to their mounts once for the pass.
+            var terms = new PassTerms(registrars, AnotherAccountPlan.For(_account, _volumes), keep);
 
-            return await PlanHeldAsync(providers, terms, status, found, timed, clock, pass, ct).ConfigureAwait(false);
+            using var pass = new PlanningPass(providers, terms, _volumes, clock, start, ct);
+            return await pass.RunAsync(status, found, timed).ConfigureAwait(false);
         }
         finally
         {
-            await pass.CancelAsync().ConfigureAwait(false);
-
-            // Until each has ended, not only been told to: a tool ends after its cancellation is asked
-            // for, and the next pass may start its own the moment this one returns. How each ended is
-            // not thrown here. A plan that awaited it reported it, a plan that asked after it failed
-            // asked again and reported its own answer, and a pass that ended before any plan asked
-            // reports why it ended, which is the answer its caller is owed.
-            await Task.WhenAll(started).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            // Before the holds end, because what was started may still be reading what they keep.
+            await start.EndAsync().ConfigureAwait(false);
 
             foreach (var hold in holds)
             {
                 hold.Dispose();
             }
         }
-    }
-
-    /// <summary>What every plan of one pass is held to: the registered storage, the other account's folders, and the age guard.</summary>
-    private readonly record struct PassTerms(RegisteredStorage Registered, AnotherAccountPlan? AnotherAccount, MinimumAge Keep);
-
-    private async Task<IReadOnlyList<Finding>> PlanHeldAsync(
-        IReadOnlyList<ICleanupProvider> providers,
-        PassTerms terms,
-        IProgress<string>? status,
-        IProgress<Finding>? found,
-        IProgress<ProviderPlanTime>? timed,
-        PassClock clock,
-        CancellationTokenSource pass,
-        CancellationToken ct)
-    {
-        // In the providers' order, whatever order they finish in, so the sort below breaks a tie the
-        // same way on every pass.
-        var findings = new Finding[providers.Count];
-        var checking = new PlanningStatus(status);
-        var reporting = new Lock();
-
-        var options = new ParallelOptions { MaxDegreeOfParallelism = ProvidersAtOnce, CancellationToken = ct };
-
-        await Parallel.ForEachAsync(Enumerable.Range(0, providers.Count), options, async (index, token) =>
-        {
-            var provider = providers[index];
-
-            Finding finding;
-            var planned = false;
-            var began = clock.Now;
-            checking.Started(provider);
-
-            try
-            {
-                finding = await PlanOneAsync(provider, terms, checking.Counted(provider), token).ConfigureAwait(false);
-                planned = true;
-            }
-            finally
-            {
-                // A provider that failed or was stopped is no longer being checked, and the line
-                // must not go on naming it while the rest of the pass ends.
-                checking.Ended(provider);
-
-                // A failure ends the whole pass at once, the work started at its top included. The
-                // slots' own token stops only the slots, and a plan waiting on that work would hold
-                // the pass open until the work answered.
-                if (!planned)
-                {
-                    await pass.CancelAsync().ConfigureAwait(false);
-                }
-            }
-
-            // Read before the lock, so a row's time does not include its wait for another row's report.
-            var time = new ProviderPlanTime(provider, began, clock.Now);
-            findings[index] = finding;
-
-            // One at a time, so a caller's progress handler never runs beside itself: the preview's
-            // inserts each row into a list that is not safe to change from two threads at once.
-            lock (reporting)
-            {
-                timed?.Report(time);
-                found?.Report(finding);
-            }
-        }).ConfigureAwait(false);
-
-        return [.. findings.OrderByDescending(finding => finding.EstimatedBytes)];
-    }
-
-    private async Task<Finding> PlanOneAsync(
-        ICleanupProvider provider,
-        PassTerms terms,
-        IProgress<ScanSize> counted,
-        CancellationToken ct)
-    {
-        var present = await provider.IsPresentAsync(ct).ConfigureAwait(false);
-        var awaitingFolders = provider.IsAwaitingSourceFolders;
-
-        // A provider with nowhere approved to look is still asked for its plan, because that plan is
-        // where it says which folder to add. Short-circuiting on presence alone left that sentence
-        // unreachable: the one provider whose absence the user can do something about was the one
-        // that never got to say so.
-        if (!present && !awaitingFolders)
-        {
-            return new Finding(provider, IsPresent: false, Plan: null);
-        }
-
-        // Applied here rather than inside the provider: the set is the pass's, gathered from every row
-        // that registers storage, and no row can see another's records. See VirtualMachineStoragePlan.
-        var plan = VirtualMachineStoragePlan.Apply(await provider.PlanAsync(terms.Keep, counted, ct).ConfigureAwait(false), terms.Registered, _volumes);
-
-        // Applied here for the same reason: whose account this process runs as is the run's, and no row
-        // should have to remember to ask. See AnotherAccountPlan.
-        if (terms.AnotherAccount is { } anotherAccount)
-        {
-            plan = anotherAccount.Apply(plan);
-        }
-
-        return new Finding(provider, present, plan, awaitingFolders);
     }
 
     /// <summary>

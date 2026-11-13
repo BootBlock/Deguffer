@@ -73,6 +73,65 @@ public sealed class RestorePointProviderTests : IDisposable
     }
 
     /// <summary>
+    /// #450: System Restore, the shadow copy service and the storage are asked as the pass begins, and
+    /// the plan reads those answers rather than asking again.
+    /// </summary>
+    [Fact]
+    public async Task AsksSystemRestoreAndTheShadowCopyServiceAsThePassBegins()
+    {
+        ThreePoints();
+        var provider = Provider();
+
+        await EarlyStartProof.BeginPassAsync(provider);
+
+        Assert.Equal((1, 1, 1), (_protection.Listings, _protection.CopyListings, _protection.StorageReadings));
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal((1, 1, 1), (_protection.Listings, _protection.CopyListings, _protection.StorageReadings));
+        Assert.Equal(2, Step(plan).Removes.Count);
+    }
+
+    /// <summary>The refused case: an account System Restore will not answer ends the chain at its first question.</summary>
+    [Fact]
+    public async Task AsksNothingFurtherAsThePassBeginsWhereSystemRestoreRefusesTheAccount()
+    {
+        ThreePoints();
+        _protection.PointsAnswer = ListingAnswer.NeedsElevation;
+
+        await EarlyStartProof.BeginPassAsync(Provider());
+
+        Assert.Equal((1, 0, 0), (_protection.Listings, _protection.CopyListings, _protection.StorageReadings));
+    }
+
+    /// <summary>
+    /// Point-in-time restore keeping snapshots stops the plan before it lists the shadow copies, and so
+    /// stops the pass's start there too.
+    /// </summary>
+    [Fact]
+    public async Task ListsNoShadowCopyAsThePassBeginsWherePointInTimeRestoreKeepsSnapshots()
+    {
+        ThreePoints();
+        _protection.PointInTimeRestore = PointInTimeRestore.Keeping;
+
+        await EarlyStartProof.BeginPassAsync(Provider());
+
+        Assert.Equal((1, 0, 0), (_protection.Listings, _protection.CopyListings, _protection.StorageReadings));
+    }
+
+    /// <summary>A shadow copy list the clean could not prove against stops the pass's start before the storage.</summary>
+    [Fact]
+    public async Task ReadsNoStorageAsThePassBeginsWhereTheShadowCopiesWereNotListed()
+    {
+        ThreePoints();
+        _protection.CopiesAnswer = ListingAnswer.Failed;
+
+        await EarlyStartProof.BeginPassAsync(Provider());
+
+        Assert.Equal((1, 1, 0), (_protection.Listings, _protection.CopyListings, _protection.StorageReadings));
+    }
+
+    /// <summary>
     /// The row names no cleaned place, which holds only while its plan deletes no file and sends no
     /// command anywhere a file could be.
     /// </summary>

@@ -1141,10 +1141,10 @@ public sealed class CleanupPlannerTests
         /// <summary>The token the planner started this provider's early work under, once it has.</summary>
         public CancellationToken? PassToken { get; private set; }
 
-        public Task BeginPass(CancellationToken ct)
+        public Task BeginPass(PassStart start)
         {
             Note($"begin:{id}");
-            PassToken = ct;
+            PassToken = start.Token;
             return Task.CompletedTask;
         }
 

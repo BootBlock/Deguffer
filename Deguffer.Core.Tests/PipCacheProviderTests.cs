@@ -46,6 +46,24 @@ public sealed class PipCacheProviderTests : IDisposable
         Assert.Equal(0, plan.EstimatedBytes);
     }
 
+    /// <summary>#450: pip is asked where its cache is as the pass begins, and the plan awaits that answer.</summary>
+    [Fact]
+    public async Task AsksPipWhereItsCacheIsAsThePassBegins()
+    {
+        _environment.WithExecutable("pip");
+        var runner = new FakeProcessRunner().Responding(Pip, "cache dir", string.Empty);
+
+        await EarlyStartProof.StartsBeforeItPlansAsync(CreateProvider(runner), runner, "cache dir");
+    }
+
+    [Fact]
+    public async Task StartsNothingAsThePassBeginsWhenPipIsNotInstalled()
+    {
+        var runner = new FakeProcessRunner();
+
+        await EarlyStartProof.StartsNothingAsync(CreateProvider(runner), runner);
+    }
+
     /// <summary>pip is installed as pip3 on plenty of machines, and that is still pip.</summary>
     [Fact]
     public async Task FindsPipUnderItsPip3Spelling()
