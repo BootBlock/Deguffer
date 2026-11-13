@@ -25,9 +25,11 @@ internal sealed class ReachedNodes
 {
     private const int NotReached = -1;
 
-    // The number each kept node had, in the order they are kept, and the reverse.
+    // The number each kept node had, in the order they are kept, and the reverse. Either can be
+    // longer than it needs to be, where it is a snapshot's scratch: see SnapshotScratch.
     private readonly int[] _kept;
     private readonly int[] _renumbered;
+    private readonly int _keptCount;
 
     // How many slots the first columns have, and how many of the kept nodes are among them. Every
     // kept node from there on is in the columns after them, because the nodes are kept in order.
@@ -37,12 +39,13 @@ internal sealed class ReachedNodes
     /// <param name="order">Every node the root reaches, once each, in any order.</param>
     /// <param name="first">How many nodes the reader numbered in its first columns.</param>
     /// <param name="after">How many it numbered after those, in columns of their own.</param>
-    public ReachedNodes(ReadOnlySpan<int> order, int first, int after)
+    /// <param name="scratch">Where the two maps are kept from one tree to the next, or null for arrays of their own.</param>
+    public ReachedNodes(ReadOnlySpan<int> order, int first, int after, SnapshotScratch? scratch)
     {
         var count = first + after;
         _first = first;
-        _renumbered = new int[count];
-        Array.Fill(_renumbered, NotReached);
+        _renumbered = scratch?.Renumbered ?? new int[count];
+        Array.Fill(_renumbered, NotReached, 0, count);
 
         foreach (var node in order)
         {
@@ -54,7 +57,8 @@ internal sealed class ReachedNodes
             }
         }
 
-        _kept = new int[order.Length];
+        _kept = scratch?.Kept ?? new int[order.Length];
+        _keptCount = order.Length;
         var next = 0;
 
         for (var node = 0; node < count; node++)
@@ -76,14 +80,14 @@ internal sealed class ReachedNodes
     /// </summary>
     public T[] Keep<T>(T[] column, T[] after)
     {
-        var kept = new T[_kept.Length];
+        var kept = new T[_keptCount];
 
         for (var node = 0; node < _keptFromFirst; node++)
         {
             kept[node] = column[_kept[node]];
         }
 
-        for (var node = _keptFromFirst; node < kept.Length; node++)
+        for (var node = _keptFromFirst; node < _keptCount; node++)
         {
             kept[node] = after[_kept[node] - _first];
         }
@@ -97,14 +101,14 @@ internal sealed class ReachedNodes
     /// </summary>
     public int[] Parents(int[] parents, int[] after)
     {
-        var kept = new int[_kept.Length];
+        var kept = new int[_keptCount];
 
         for (var node = 0; node < _keptFromFirst; node++)
         {
             kept[node] = _renumbered[parents[_kept[node]]];
         }
 
-        for (var node = _keptFromFirst; node < kept.Length; node++)
+        for (var node = _keptFromFirst; node < _keptCount; node++)
         {
             kept[node] = _renumbered[after[_kept[node] - _first]];
         }
@@ -118,17 +122,17 @@ internal sealed class ReachedNodes
     /// </summary>
     public (int[] Start, int[] Children) Links(int[] childStart, int[] children)
     {
-        var start = new int[_kept.Length + 1];
+        var start = new int[_keptCount + 1];
 
-        for (var node = 0; node < _kept.Length; node++)
+        for (var node = 0; node < _keptCount; node++)
         {
             var was = _kept[node];
             start[node + 1] = start[node] + (childStart[was + 1] - childStart[was]);
         }
 
-        var kept = new int[start[_kept.Length]];
+        var kept = new int[start[_keptCount]];
 
-        for (var node = 0; node < _kept.Length; node++)
+        for (var node = 0; node < _keptCount; node++)
         {
             var from = childStart[_kept[node]];
 

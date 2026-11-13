@@ -130,11 +130,12 @@ internal sealed class ExploreTreeCapture
             modified,
             shared.Visibility,
             childOrder,
-            _listingRefused,
-            shared.NameRanks,
-            snapshot: snapshot,
-            orderBuffer: shared.Order,
-            ct: ct);
+            new TreeAssemblyOptions(
+                ListingRefused: _listingRefused,
+                NameRanks: shared.NameRanks,
+                Snapshot: snapshot,
+                OrderBuffer: shared.Order),
+            ct);
     }
 
     /// <summary>

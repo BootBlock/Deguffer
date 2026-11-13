@@ -9,8 +9,9 @@ namespace Deguffer.Core.Exploring;
 /// (<see cref="Locate"/>).
 ///
 /// <para>Apart from <see cref="MftExploreReader"/>, which reads the table, because the read builds
-/// a tree from these columns twice over: a snapshot while the parse threads still go, from a copy,
-/// and the finished tree once they have stopped. Both are rooted by the same rules here.</para>
+/// a tree from these columns twice over: a snapshot while the parse threads still go, from copies of
+/// the flags and parents (<see cref="MftSnapshotColumns"/>), and the finished tree once they have
+/// stopped. Both are rooted by the same rules here.</para>
 /// </summary>
 internal static class MftExploreRooting
 {
@@ -27,13 +28,18 @@ internal static class MftExploreRooting
     /// and a pick made in it would carry by path into the finished tree. A path typed in another
     /// case is drawn when the read ends instead.
     /// </param>
-    /// <param name="Snapshot">Whether the tree is of a read still running (<see cref="ExploreTree.IsSnapshot"/>).</param>
-    internal readonly record struct AssembledAs(ExploreChildOrder ChildOrder, bool LowerBound, bool MatchCaseOnly, bool Snapshot);
+    /// <param name="Snapshot">
+    /// For a snapshot, taken while the parse threads still write the read's columns: the copies of
+    /// their flags and parents it roots by, and what the tree reuses. Null for the finished read,
+    /// which roots by the read's own and hands them over.
+    /// </param>
+    internal readonly record struct AssembledAs(
+        ExploreChildOrder ChildOrder, bool LowerBound, bool MatchCaseOnly, MftSnapshotColumns? Snapshot);
 
     /// <summary>
     /// Root a tree at the folder <paramref name="components"/> name, or say why the table cannot
-    /// answer for it. Writes to <paramref name="columns"/>, which <see cref="ExploreTree.Create"/>
-    /// then takes with <paramref name="links"/>.
+    /// answer for it. Writes to the flags and parents it roots by, which <see cref="ExploreTree.Create"/>
+    /// then takes with <paramref name="columns"/> and <paramref name="links"/>.
     /// </summary>
     /// <param name="columns">One slot a record.</param>
     /// <param name="links">
@@ -51,15 +57,18 @@ internal static class MftExploreRooting
         CancellationToken ct)
     {
         var volumeRoot = (int)MftRecord.RootRecordNumber;
+        var snapshot = assembled.Snapshot;
+        var (flags, parents) = snapshot is null ? (columns.Flags, columns.Parents) : (snapshot.Flags, snapshot.Parents);
+        var volumeRootRead = (flags[volumeRoot] & ExploreNodeFlags.Present) != 0;
 
         // The volume's root is forced present whether or not record 5 parsed. Resolution starts
         // here and every directory on the volume hangs off it, so a table whose root record declined
         // would otherwise leave the whole disk unreachable — a full drive drawn as empty, from one
         // record.
-        columns.Parents[volumeRoot] = volumeRoot;
-        columns.Flags[volumeRoot] |= ExploreNodeFlags.Directory | ExploreNodeFlags.Present;
+        parents[volumeRoot] = volumeRoot;
+        flags[volumeRoot] |= ExploreNodeFlags.Directory | ExploreNodeFlags.Present;
 
-        var resolved = Resolve(components, columns, names, assembled.MatchCaseOnly);
+        var resolved = Resolve(components, columns.NameNumbers, flags, parents, names, assembled.MatchCaseOnly);
         if (resolved.Node is not { } root)
         {
             return (null, resolved.Reason);
@@ -72,19 +81,26 @@ internal static class MftExploreRooting
         // Its dates are deliberately not forced along with them. The record holding this folder
         // carries them like any other, and where it did not parse there is nothing to put here but
         // the unknown the column already holds — a date for a folder nothing could read is not one
-        // to invent.
-        columns.NameNumbers[root] = rootName;
-        columns.Parents[root] = root;
+        // to invent. Nor are its size and the rest where record 5 is forced present without having
+        // been read: the slot holds nothing, or, in a snapshot, whatever a parse thread is writing.
+        parents[root] = root;
 
         if (assembled.LowerBound)
         {
-            columns.Flags[root] |= ExploreNodeFlags.SizeUnknown;
+            flags[root] |= ExploreNodeFlags.SizeUnknown;
         }
 
         var tree = ExploreTree.Create(
-            rootPath, root, columns.NameNumbers, names, columns.Parents, columns.Sizes, columns.Lengths,
-            columns.Storage, columns.Flags, columns.Created, columns.Modified, columns.Visibility,
-            assembled.ChildOrder, links: links, snapshot: assembled.Snapshot, ct: ct);
+            rootPath, root, columns.NameNumbers, names, parents, columns.Sizes, columns.Lengths,
+            columns.Storage, flags, columns.Created, columns.Modified, columns.Visibility,
+            assembled.ChildOrder,
+            new TreeAssemblyOptions(
+                Links: links,
+                Snapshot: snapshot is not null,
+                OrderBuffer: snapshot?.Order,
+                DrawnRoot: new DrawnRoot(rootName, Unread: root == volumeRoot && !volumeRootRead),
+                Scratch: snapshot?.Scratch),
+            ct);
 
         return (tree, FallbackReason.None);
     }
@@ -102,15 +118,17 @@ internal static class MftExploreRooting
     /// </summary>
     private static (int? Node, FallbackReason Reason) Resolve(
         IReadOnlyList<string> components,
-        MftExploreColumns columns,
+        int[] nameNumbers,
+        ExploreNodeFlags[] flags,
+        int[] parents,
         NamePool.Frozen names,
         bool matchCaseOnly) =>
         Descend(
             components,
             (int)MftRecord.RootRecordNumber,
-            node => (columns.Flags[node] & ExploreNodeFlags.Link) != 0,
-            node => (columns.Flags[node] & ExploreNodeFlags.Directory) != 0,
-            (directory, name) => FindChild(directory, name, columns, names, matchCaseOnly));
+            node => (flags[node] & ExploreNodeFlags.Link) != 0,
+            node => (flags[node] & ExploreNodeFlags.Directory) != 0,
+            (directory, name) => FindChild(directory, name, nameNumbers, flags, parents, names, matchCaseOnly));
 
     /// <summary>
     /// The node of <paramref name="tree"/>, a tree rooted at its volume's top, that holds the folder
@@ -214,12 +232,17 @@ internal static class MftExploreRooting
     /// a node the tree then declines to link.</para>
     /// </summary>
     private static int? FindChild(
-        int directory, string name, MftExploreColumns columns, NamePool.Frozen names, bool matchCaseOnly)
+        int directory,
+        string name,
+        int[] nameNumbers,
+        ExploreNodeFlags[] flags,
+        int[] parents,
+        NamePool.Frozen names,
+        bool matchCaseOnly)
     {
-        var (nameNumbers, parents, flags) = (columns.NameNumbers, columns.Parents, columns.Flags);
         int? differingInCase = null;
 
-        for (var i = 0; i < columns.Count; i++)
+        for (var i = 0; i < parents.Length; i++)
         {
             if ((flags[i] & ExploreNodeFlags.Present) == 0 || parents[i] != directory || i == directory)
             {

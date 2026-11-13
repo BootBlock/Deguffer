@@ -119,10 +119,15 @@ internal static class MftExploreReader
         var linksMet = new ConcurrentQueue<(int Record, MftRecord Described, uint Parent, int Name)>();
 
         // Nothing is taken on the reporting thread, which is a parse thread holding its slot: the
-        // copy of the columns is the assembling's, away from the read.
+        // copy of the flags and parents is the assembling's, away from the read. What the snapshots
+        // draw from is made by the first, so a read that takes none makes none, and kept for the
+        // rest: one is assembled at a time, after the last has ended.
+        MftSnapshotColumns? snapshotColumns = null;
+
         var snapshots = progress is not null && snapshotAssembly is not null
             ? new ScanSnapshots(
-                order => stopped => Snapshot(columns, names, rootPath, components, order, stopped),
+                order => stopped => Snapshot(
+                    columns, snapshotColumns ??= new MftSnapshotColumns(count), names, rootPath, components, order, stopped),
                 clock ?? TimeProvider.System,
                 snapshotAssembly)
             : null;
@@ -207,7 +212,7 @@ internal static class MftExploreReader
         }
         finally
         {
-            // Before anything below writes to the columns. A snapshot copies them beside the parse
+            // Before anything below writes to the columns. A snapshot reads them beside the parse
             // threads by the rule MftExploreColumns states, and nothing after this keeps that rule.
             snapshots?.Stop();
         }
@@ -264,7 +269,7 @@ internal static class MftExploreReader
             rootName,
             rootPath,
             components,
-            new MftExploreRooting.AssembledAs(ExploreChildOrder.BySize, LowerBound: couldNotReadWholeTable || sawUnreadableRecord, MatchCaseOnly: false, Snapshot: false),
+            new MftExploreRooting.AssembledAs(ExploreChildOrder.BySize, LowerBound: couldNotReadWholeTable || sawUnreadableRecord, MatchCaseOnly: false, Snapshot: null),
             ct);
         timings?.End(MftBuildStage.TreeAssembly);
 
@@ -272,9 +277,9 @@ internal static class MftExploreReader
     }
 
     /// <summary>
-    /// The tree as the read stands, while the parse threads go on: a copy of every slot described so
-    /// far (<see cref="MftExploreColumns.CopyPresent"/>), assembled as the finished read is, or null
-    /// where the read has not yet reached the folder the scan is rooted at.
+    /// The tree as the read stands, while the parse threads go on: every slot described so far, by a
+    /// copy of its flags and parents (<see cref="MftExploreColumns.CopyPresent"/>), assembled as the
+    /// finished read is, or null where the read has not yet reached the folder the scan is rooted at.
     ///
     /// <para><b>Only what is reachable.</b> A record whose chain of parents has not all been read
     /// hangs from nothing yet and is left out, as the finished tree leaves out a record no folder
@@ -296,28 +301,30 @@ internal static class MftExploreReader
     /// </summary>
     private static ExploreTree? Snapshot(
         MftExploreColumns columns,
+        MftSnapshotColumns own,
         NamePool names,
         string rootPath,
         IReadOnlyList<string> components,
         ExploreChildOrder order,
         CancellationToken stopped)
     {
-        var copy = columns.CopyPresent(stopped);
+        columns.CopyPresent(own, stopped);
 
         // Frozen after the copy, not before. A slot's name was numbered before its flags were
-        // released, so every number the copy holds is in a pool frozen once the copy has ended.
+        // released, so every number at a slot the copy saw present is in a pool frozen once the copy
+        // has ended.
         // The root's name is numbered first for the same reason.
         var rootName = names.Intern(rootPath);
         var frozen = names.Freeze();
 
         return MftExploreRooting.Assemble(
-            copy,
+            columns,
             links: null,
             frozen,
             rootName,
             rootPath,
             components,
-            new MftExploreRooting.AssembledAs(order, LowerBound: true, MatchCaseOnly: true, Snapshot: true),
+            new MftExploreRooting.AssembledAs(order, LowerBound: true, MatchCaseOnly: true, Snapshot: own),
             stopped).Tree;
     }
 }

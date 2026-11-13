@@ -6,16 +6,23 @@ namespace Deguffer.Core.Exploring;
 
 /// <summary>
 /// The columns a read of the file table fills, which <see cref="ExploreTree.Create"/> is handed once
-/// the read ends, and the copy of them a snapshot is drawn from while the read goes on. One set has a
-/// slot for each record, and where the table has hard links, a second has a slot for each further
-/// name of a hard-linked file.
+/// the read ends, and which a snapshot is drawn from while the read goes on. One set has a slot for
+/// each record, and where the table has hard links, a second has a slot for each further name of a
+/// hard-linked file.
 ///
 /// <para>Apart from <see cref="MftExploreReader"/> because two threads meet here: the parse threads
 /// write a record's slot, and a snapshot reads every slot beside them. What makes that safe is one
-/// rule, kept in the two methods below and nowhere else. <see cref="Describe"/> writes a slot's
-/// flags last, with a release store, and <see cref="CopyPresent"/> reads them first, with an acquire
-/// load, so a slot a copy sees marked <see cref="ExploreNodeFlags.Present"/> has every other column
-/// written. A slot still being described reads as absent, and is drawn by a later snapshot.</para>
+/// rule, kept in the two methods below. <see cref="Describe"/> writes a slot's flags last, with a
+/// release store, and <see cref="CopyPresent"/> reads them first, with an acquire load, so a slot a
+/// copy sees marked <see cref="ExploreNodeFlags.Present"/> has every other column written, and
+/// never written again. A slot still being described reads as absent, and is drawn by a later
+/// snapshot.</para>
+///
+/// <para>So a snapshot reads a slot's other columns here, where they are written, only after the
+/// copy and on the same thread, and only at a slot the copy saw present: the rooting's search for
+/// the scan's folder, and the compaction of <see cref="ExploreTree.Create"/>, which copies the slots
+/// the root reaches into the tree's own columns (<see cref="SnapshotScratch"/>). Nothing writes to
+/// these while the read runs but <see cref="Describe"/>.</para>
 /// </summary>
 internal sealed class MftExploreColumns
 {
@@ -112,45 +119,32 @@ internal sealed class MftExploreColumns
     }
 
     /// <summary>
-    /// The slots described so far, copied into columns of their own while the parse threads go on
-    /// writing these. A slot not yet marked <see cref="ExploreNodeFlags.Present"/> is left empty in
-    /// the copy, and so is drawn as a record the read has not reached.
+    /// The flags and parents of the slots described so far, copied into <paramref name="into"/> while
+    /// the parse threads go on writing these. A slot not yet marked
+    /// <see cref="ExploreNodeFlags.Present"/> is left empty in the copy, and so is drawn as a record the
+    /// read has not reached. Every slot is written, so nothing a copy before this one left is read.
     ///
-    /// <para>The copy is what a snapshot hands to <see cref="ExploreTree.Create"/>, which totals and
-    /// renumbers into what it is given, so these columns are never handed over while the read
-    /// runs.</para>
+    /// <para>Only these two, because the snapshot writes to them and reads them at every slot: see
+    /// <see cref="MftSnapshotColumns"/>.</para>
     /// </summary>
     /// <param name="ct">Asked every so many slots, so a snapshot the scan has finished with stops.</param>
-    public MftExploreColumns CopyPresent(CancellationToken ct)
+    public void CopyPresent(MftSnapshotColumns into, CancellationToken ct)
     {
-        var count = Count;
-        var copy = new MftExploreColumns(count);
+        var (flags, parents) = (into.Flags, into.Parents);
 
-        for (var i = 0; i < count; i++)
+        for (var i = 0; i < flags.Length; i++)
         {
             if ((i & CancellationMask) == 0)
             {
                 ct.ThrowIfCancellationRequested();
             }
 
-            var flags = (ExploreNodeFlags)Volatile.Read(ref FlagsByte(Flags, i));
-            if ((flags & ExploreNodeFlags.Present) == 0)
-            {
-                continue;
-            }
+            // A slot's flags are none until Describe writes them whole, Present among them.
+            var described = (ExploreNodeFlags)Volatile.Read(ref FlagsByte(Flags, i));
 
-            copy.Flags[i] = flags;
-            copy.NameNumbers[i] = NameNumbers[i];
-            copy.Parents[i] = Parents[i];
-            copy.Sizes[i] = Sizes[i];
-            copy.Lengths[i] = Lengths[i];
-            copy.Storage[i] = Storage[i];
-            copy.Created[i] = Created[i];
-            copy.Modified[i] = Modified[i];
-            copy.Visibility[i] = Visibility[i];
+            flags[i] = described;
+            parents[i] = (described & ExploreNodeFlags.Present) != 0 ? Parents[i] : 0;
         }
-
-        return copy;
     }
 
     // Volatile has no overload for an enum, and the flags are one byte each.
