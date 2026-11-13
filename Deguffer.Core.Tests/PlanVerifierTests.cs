@@ -437,6 +437,43 @@ public sealed class PlanVerifierTests : IDisposable
     }
 
     /// <summary>
+    /// A verification whose removals left nothing standing asks the machine nothing about where a
+    /// surviving protected path is mounted, or one Windows will not describe: no removal's root can
+    /// name either, so the answer is already that none went inside it (#1016). The same plan with a
+    /// removal that did leave something standing, elsewhere in its root, asks, and reaches the same
+    /// verdicts.
+    /// </summary>
+    [Fact]
+    public void ARunWhoseRemovalsLeftNothingStandingFollowsNoSurvivorToItsMountPoint()
+    {
+        var scratch = _temp.CreateDirectory("scratch");
+        var kept = _temp.CreateDirectory("kept");
+        var undescribed = _temp.CreateDirectory("undescribed");
+        var plan = Plan([new ClearDirectoryStep(scratch, "Scratch files")], Protect(kept), Protect(undescribed));
+
+        using var denied = DeniedDirectory.WithUnreadableAttributes(undescribed);
+
+        var clean = new RunResidue();
+        clean.Record(scratch, []);
+        clean.RecordLeftAlone(scratch, []);
+
+        var standing = new RunResidue();
+        standing.Record(scratch, [_temp.CreateDirectory("scratch", "busy", "work")]);
+
+        var unasked = new FakeVolumeInventory();
+        var asked = new FakeVolumeInventory();
+
+        var verdicts = Verify(plan, runReach: null, clean, unasked).Checks.Select(c => (c.Subject, c.Outcome)).ToList();
+
+        Assert.Equal([(kept, VerificationOutcome.Survived), (undescribed, VerificationOutcome.Unverified)], verdicts);
+        Assert.Empty(unasked.MountPointQueries);
+        Assert.Empty(unasked.MountPointsQueries);
+
+        Assert.Equal(verdicts, Verify(plan, runReach: null, standing, asked).Checks.Select(c => (c.Subject, c.Outcome)));
+        Assert.Contains(asked.MountPointQueries, path => Path.GetFileName(Path.TrimEndingDirectorySeparator(path)) == "kept");
+    }
+
+    /// <summary>
     /// §5.1 leaves an eviction command deciding what it removes, and a run holds many plans, so one
     /// provider's command makes the whole run's reach unbounded — including for the delete-only
     /// providers beside it, which is where the suppressed alarm would otherwise land.
