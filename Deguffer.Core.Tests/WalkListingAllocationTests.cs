@@ -8,8 +8,8 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// A walk reads hundreds of thousands of directories, so what it allocates to read one listing is
-/// garbage made hundreds of thousands of times on the walk's workers (G4). Enumerating the listing
-/// through an interface boxed an enumerator for each list enumerated.
+/// garbage made hundreds of thousands of times on the walk's workers (G4). A listing enumerated
+/// through an interface boxes an enumerator for each list, and one enumerated as a span boxes none.
 /// </summary>
 public sealed class WalkListingAllocationTests
 {
@@ -22,7 +22,8 @@ public sealed class WalkListingAllocationTests
     /// <summary>
     /// A measurement of 1,000 directories reads each listing without boxing an enumerator for it. What
     /// is counted is the worker's own allocation from the end of one listing to the start of its next:
-    /// the measurement's reading of the listing, and the child paths it descends into, which it keeps.
+    /// the measurement's reading of the listing, the child paths it descends into, which it keeps, and
+    /// the walk's own work for each directory.
     /// The fake listing's own work is left out, and so is every other test running at the same time,
     /// which a process-wide count would take in.
     /// </summary>
@@ -56,9 +57,10 @@ public sealed class WalkListingAllocationTests
             perFolder = Math.Min(perFolder, bytes / intervals);
         }
 
-        // Measured at 249 bytes a directory, and at 425 while each listing was enumerated through
-        // IReadOnlyList<WalkEntry>, which boxed an enumerator.
-        Assert.True(perFolder < 340, $"The walk allocated {perFolder:N0} bytes a directory between listings.");
+        // Measured at 249 bytes a directory. Each enumerator boxed for a listing adds about 88 more, and
+        // a measurement enumerates each listing twice, once in the walk and once to total it, so the
+        // bound sits below one box.
+        Assert.True(perFolder < 300, $"The walk allocated {perFolder:N0} bytes a directory between listings.");
     }
 
     /// <summary>

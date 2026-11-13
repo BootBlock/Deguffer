@@ -473,8 +473,8 @@ Hyper-V reader starts PowerShell even for an account it will refuse (#1014, #103
 the §5.6 verification follows every surviving protected path to its mount point when nothing was
 left standing (#1016), and the checks before and after a clean probe paths one at a time (#1017,
 #1018). Most rows probe again for §5.6 the paths their own listing returned (#1039). A file-table
-scan copies its whole table at every snapshot (#1015), every walk boxes an enumerator per directory
-(#1021), and the map rebuilds per-drawing facts on the UI thread (#1026). These classes recur, so
+scan copies its whole table at every snapshot (#1015), every walk boxed an enumerator per directory
+(#1021, done), and the map rebuilds per-drawing facts on the UI thread (#1026). These classes recur, so
 `CLAUDE.md` G4 now states them, and the source sweep holds the mechanical ones.
 
 ### Order of work

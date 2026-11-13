@@ -265,7 +265,6 @@ internal static class WalkExploreReader
 
         foreach (var link in contents.Links)
         {
-
             // Shown, and empty. Its target holds its own place in this tree, so counting anything
             // here would count those bytes twice — and hiding it altogether makes a directory the
             // user can plainly see in Explorer vanish from the picture.
