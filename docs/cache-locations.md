@@ -147,6 +147,15 @@ It asks `pip cache dir` where the cache is rather than assuming, because `PIP_CA
 `--cache-dir` and the `cache-dir` key in `pip.ini` can all move it. It then runs `pip cache purge`.
 Deguffer never deletes the path itself.
 
+Deguffer remembers where pip said its cache is until one of these changes, and then asks again:
+the `pip.exe` it runs, the Python interpreter that launcher names, that interpreter's
+`pyvenv.cfg`, `pip.ini` and `Lib\site-packages` (an upgrade of pip renames its folder there), your
+user site under `%APPDATA%\Python`, the configuration files pip reads
+(`C:\ProgramData\pip\pip.ini`, `C:\Users\<user>\pip\pip.ini`, `%APPDATA%\pip\pip.ini` and the
+file `PIP_CONFIG_FILE` names), and any environment variable. These are the sources pip's
+[configuration guide](https://pip.pypa.io/en/stable/topics/configuration/) lists. A `pip` that is
+not a launcher naming its interpreter, such as a `pip.bat`, is asked every time.
+
 pip's purge follows a junction it finds inside the cache, and deletes the files
 on the far side. So Deguffer looks through the cache again immediately before the command, and does
 not run it while anything inside is a link. That holds for every tool's own command, not only pip's.
@@ -211,6 +220,18 @@ caches by different routes, because Poetry only ships a command for one of them:
   hand.
 
 The `Cache` folder itself is never removed, and neither is `virtualenvs`.
+
+Deguffer remembers where Poetry said its two folders are until one of these changes: the
+`poetry.exe` it asked; any variable Deguffer starts Poetry with, which covers every `POETRY_<KEY>`
+[setting override](https://python-poetry.org/docs/configuration/#using-environment-variables) and
+`POETRY_CONFIG_DIR`; `config.toml` or `auth.toml` in Poetry's
+[configuration folder](https://python-poetry.org/docs/configuration/#config-directory)
+(`%POETRY_CONFIG_DIR%`, or `C:\Users\<user>\AppData\Roaming\pypoetry`); or a `pyproject.toml` or
+[`poetry.toml`](https://python-poetry.org/docs/configuration/#local-configuration) in the folder
+Deguffer runs its tools in or any folder above it. The plan still asks Poetry afresh every time,
+because it removes `artifacts` itself and a missed change must never move that deletion. Only
+Explore and the duplicate search read the remembered answer. `poetry cache list` is asked again
+every time, because what is cached changes whenever Poetry is used.
 
 ### What is protected
 
@@ -1249,10 +1270,21 @@ ran, and **`_logs`**, npm's own logs.
 
 ### What Deguffer does
 
-It asks `npm config get cache` where the cache folder is, because `npm config set cache` and the
-`npm_config_cache` environment variable can move it. It then runs `npm cache clean --force`. Where npm
-gives no answer, Deguffer measures the default location, and npm's own command still clears wherever
-its cache really is.
+It asks `npm config get cache userconfig globalconfig prefix` where the cache folder is, because
+`npm config set cache` and the `npm_config_cache` environment variable can move it. It then runs
+`npm cache clean --force`. Where npm gives no answer, Deguffer measures the default location, and npm's
+own command still clears wherever its cache really is.
+
+Deguffer remembers where npm said its cache is until one of these changes, and then asks again: the
+npm it runs (usually `npm.cmd`), `node.exe` beside it and the `node` on your `PATH`; the npm bundled
+beside it and the one installed under npm's `prefix`, each by its `package.json` and its built-in
+`npmrc`; the user and global configuration files npm named (`userconfig`, such as
+`C:\Users\<user>\.npmrc`, and `globalconfig`); `.npmrc`, `package.json` and `node_modules` in the folder
+npm runs in and in each folder above it, because those decide which `.npmrc` is the project's; and
+every environment variable npm is started with, because npm expands any `${VAR}` its configuration
+names. An answer that left out any of the three paths is used for that scan and never remembered. See
+npm's [`npmrc`](https://docs.npmjs.com/cli/v10/configuring-npm/npmrc) and
+[`config`](https://docs.npmjs.com/cli/v10/using-npm/config) documentation.
 
 `--force` does not override a safety check. npm refuses to clean its cache without it, and suggests
 `npm cache verify` instead, because the cache checks itself. Deguffer is asked to free the space, so
@@ -2119,6 +2151,16 @@ shows you that figure. It deletes no path itself.
 Conda is not on your `PATH` by default, so Deguffer looks for it in three places: your `PATH`, the
 `CONDA_EXE` variable conda's own shell integration sets, and the documented install locations for
 Anaconda, Miniconda and Miniforge.
+
+Deguffer remembers where conda said its caches are until one of these changes: the `conda.exe` it
+asked; the `conda-meta` folder of the installation, which changes whenever conda or a package in the
+base environment is updated; any variable Deguffer starts conda with; or any file on conda's
+[configuration search path](https://docs.conda.io/projects/conda/en/latest/user-guide/configuration/use-condarc.html#searching-for-condarc).
+That path is a `.condarc`, a `condarc` and a `condarc.d` folder in each of `C:\ProgramData\conda`,
+`%CONDA_ROOT%`, `%XDG_CONFIG_HOME%\conda`, `C:\Users\<user>\.config\conda`,
+`C:\Users\<user>\.conda`, the installation itself and `%CONDA_PREFIX%`, then
+`C:\Users\<user>\.condarc` and whatever `%CONDARC%` names. The dry run is asked again every time,
+because what is unused changes whenever an environment does.
 
 Two categories are deliberately left out of the command:
 
