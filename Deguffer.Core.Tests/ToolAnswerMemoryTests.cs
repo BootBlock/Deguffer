@@ -5,8 +5,12 @@ using Deguffer.Testing;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// A tool's answer about where it keeps something is kept for as long as everything it read to give
-/// it reads the same, and asked again the moment any of it does not (#447).
+/// A tool's answer about where it keeps something is served for as long as everything it read to give
+/// it reads the same, once a reading from before an ask has confirmed it, and asked again the moment
+/// any of it does not (#447).
+///
+/// <para>Each "asks again" case starts from a trusted answer (<see cref="TrustAsync(ToolInputs)"/>),
+/// and each "is not trusted" case from a held one, so only the rule it names can decide it.</para>
 ///
 /// <para>The stamps are sizes, times and presence, so §6.3 cannot be asserted through them by the
 /// form of a path: <see cref="InputStamp"/> reads through <see cref="LongPath.Extended"/> like every
@@ -43,43 +47,53 @@ public sealed class ToolAnswerMemoryTests : IDisposable
     public void Dispose() => _temp.Dispose();
 
     [Fact]
-    public async Task ASecondAskWithNothingChangedIsAnsweredFromMemory()
+    public async Task TheFirstAnswerIsHeldUntrustedAndTheNextAskConfirmsIt()
     {
-        Assert.Equal(@"C:\cache\one", await AskAsync());
+        await AskAsync();
+        Assert.False(_memory.Holds(Key));
 
+        await AskAsync();
+        Assert.True(_memory.Holds(Key));
+        Assert.Equal(2, _asked);
+    }
+
+    [Fact]
+    public async Task AConfirmedAnswerIsServedWithoutAskingAgain()
+    {
+        await TrustAsync();
         _answer = @"C:\cache\two";
 
         Assert.Equal(@"C:\cache\one", await AskAsync());
-        Assert.Equal(1, _asked);
+        Assert.Equal(0, _asked);
     }
 
     [Fact]
     public async Task AsksAgainWhenADeclaredFileIsWritten()
     {
-        await AskAsync();
+        await TrustAsync();
         File.WriteAllText(_config, "cache=two, which is longer");
         _answer = @"C:\cache\two";
 
         Assert.Equal(@"C:\cache\two", await AskAsync());
-        Assert.Equal(2, _asked);
+        Assert.Equal(1, _asked);
     }
 
     [Fact]
     public async Task AsksAgainWhenADeclaredFileIsWrittenAtTheSameSize()
     {
-        await AskAsync();
+        await TrustAsync();
         File.WriteAllText(_config, "cache=two");
         File.SetLastWriteTimeUtc(_config, DateTime.UtcNow.AddSeconds(5));
 
         await AskAsync();
 
-        Assert.Equal(2, _asked);
+        Assert.Equal(1, _asked);
     }
 
     [Fact]
     public async Task AsksAgainWhenADeclaredFileIsReplacedByACopyKeepingItsSizeAndWriteTime()
     {
-        await AskAsync();
+        await TrustAsync();
         var written = File.GetLastWriteTimeUtc(_config);
         var copy = Path.Combine(_temp.Path, "copy.ini");
         File.WriteAllText(copy, "cache=two");
@@ -89,51 +103,62 @@ public sealed class ToolAnswerMemoryTests : IDisposable
 
         await AskAsync();
 
-        Assert.Equal(2, _asked);
+        Assert.Equal(1, _asked);
     }
 
     [Fact]
     public async Task AsksAgainWhenAFileDeclaredAbsentIsCreated()
     {
-        await AskAsync();
+        await TrustAsync();
         File.WriteAllText(_absent, "cache=two");
 
         await AskAsync();
 
-        Assert.Equal(2, _asked);
+        Assert.Equal(1, _asked);
     }
 
     [Fact]
     public async Task AsksAgainWhenADeclaredFileIsDeleted()
     {
-        await AskAsync();
+        await TrustAsync();
         File.Delete(_config);
 
         await AskAsync();
 
-        Assert.Equal(2, _asked);
+        Assert.Equal(1, _asked);
     }
 
     [Fact]
     public async Task AsksAgainWhenAListedFolderGainsAnEntry()
     {
-        await AskAsync();
+        await TrustAsync();
         File.WriteAllText(Path.Combine(_folder, "b.yml"), "b");
 
         await AskAsync();
 
-        Assert.Equal(2, _asked);
+        Assert.Equal(1, _asked);
     }
 
     [Fact]
     public async Task AsksAgainWhenAnEntryOfAListedFolderIsRewritten()
     {
-        await AskAsync();
+        await TrustAsync();
         File.WriteAllText(Path.Combine(_folder, "a.yml"), "a, rewritten");
 
         await AskAsync();
 
-        Assert.Equal(2, _asked);
+        Assert.Equal(1, _asked);
+    }
+
+    [Fact]
+    public async Task AsksAgainWhenAListedFolderIsDeleted()
+    {
+        await TrustAsync();
+        Directory.Delete(_folder, recursive: true);
+
+        await AskAsync();
+
+        Assert.Equal(1, _asked);
     }
 
     [Fact]
@@ -141,9 +166,7 @@ public sealed class ToolAnswerMemoryTests : IDisposable
     {
         var inner = Directory.CreateDirectory(Path.Combine(_folder, "inner")).FullName;
         TempDirectory.Age(inner, TimeSpan.FromHours(1));
-        TempDirectory.Age(_folder, TimeSpan.FromHours(1));
-
-        await AskAsync();
+        await TrustAsync();
 
         // NTFS brings the folder's entry in its parent's index up to date some time after the folder
         // changes, so only a read of the folder itself sees the new time at once.
@@ -151,7 +174,7 @@ public sealed class ToolAnswerMemoryTests : IDisposable
 
         await AskAsync();
 
-        Assert.Equal(2, _asked);
+        Assert.Equal(1, _asked);
     }
 
     [Fact]
@@ -163,33 +186,69 @@ public sealed class ToolAnswerMemoryTests : IDisposable
         _clock.Advance(TimeSpan.FromMinutes(1));
         var inputs = new ToolInputs { Folders = [new ListedFolder(_folder, Depth: 2)] };
 
-        await AskAsync(inputs);
+        await TrustAsync(inputs);
         File.WriteAllText(deep, "deep, rewritten");
         await AskAsync(inputs);
 
-        Assert.Equal(2, _asked);
+        Assert.Equal(1, _asked);
+    }
+
+    [Fact]
+    public async Task AFileAtAListedPathKeepsItsTimes()
+    {
+        var file = Path.Combine(_temp.Path, "listed-as-folder");
+        File.WriteAllText(file, "one");
+        _clock.Advance(TimeSpan.FromMinutes(1));
+        var inputs = new ToolInputs { Folders = [new ListedFolder(file)] };
+
+        await TrustAsync(inputs);
+        File.WriteAllText(file, "two");
+        await AskAsync(inputs);
+
+        Assert.Equal(1, _asked);
+    }
+
+    /// <summary>
+    /// A tool can leave an entry in a folder it reads and remove it again as it answers, as pnpm does in
+    /// its home folder, which moves the folder's own last-write time and nothing else.
+    /// </summary>
+    [Fact]
+    public async Task AListedFolderWhoseOwnTimeMovedWhileItsEntriesStayedTheSameIsStillTrusted()
+    {
+        await AskAsync();
+
+        var question = Question(Inputs(), isAnswer: true, during: () =>
+        {
+            var transient = Path.Combine(_folder, "probe.tmp");
+            File.WriteAllText(transient, "probe");
+            File.Delete(transient);
+        });
+
+        await _memory.AskAsync(question, CancellationToken.None);
+
+        Assert.True(_memory.Holds(Key));
     }
 
     [Fact]
     public async Task AsksAgainWhenAVariableTheToolIsGivenIsSet()
     {
-        await AskAsync();
+        await TrustAsync();
         _environment["npm_config_cache"] = @"D:\elsewhere";
 
         await AskAsync();
 
-        Assert.Equal(2, _asked);
+        Assert.Equal(1, _asked);
     }
 
     [Fact]
     public async Task AsksAgainWhenAVariableChangesOnlyInValue()
     {
-        await AskAsync();
+        await TrustAsync();
         _environment["PATH"] = @"C:\other";
 
         await AskAsync();
 
-        Assert.Equal(2, _asked);
+        Assert.Equal(1, _asked);
     }
 
     [Fact]
@@ -200,14 +259,40 @@ public sealed class ToolAnswerMemoryTests : IDisposable
         _answer = named;
 
         await AskAsync(static answer => new ToolInputs { Files = [answer] });
+        await AskAsync(static answer => new ToolInputs { Files = [answer] });
+        Assert.True(_memory.Holds(Key));
+
         File.WriteAllText(named, "prefix=two, which is longer");
         await AskAsync(static answer => new ToolInputs { Files = [answer] });
 
-        Assert.Equal(2, _asked);
+        Assert.Equal(3, _asked);
+    }
+
+    /// <summary>
+    /// An answer naming other files than the last one did cannot be compared with a reading taken
+    /// before the tool started, so it is held untrusted until the next ask confirms it.
+    /// </summary>
+    [Fact]
+    public async Task AnAnswerNamingOtherFilesThanTheLastIsNotTrustedUntilConfirmed()
+    {
+        var first = Path.Combine(_temp.Path, "first.ini");
+        var second = Path.Combine(_temp.Path, "second.ini");
+        File.WriteAllText(first, "one");
+        File.WriteAllText(second, "two");
+        _clock.Advance(TimeSpan.FromMinutes(1));
+        _answer = first;
+
+        await AskAsync(static answer => new ToolInputs { Files = [answer] });
+        await AskAsync(static answer => new ToolInputs { Files = [answer] });
+        _answer = second;
+        File.WriteAllText(first, "one, rewritten");
+        await AskAsync(static answer => new ToolInputs { Files = [answer] });
+
+        Assert.False(_memory.Holds(Key));
     }
 
     [Fact]
-    public async Task DoesNotKeepAnAnswerTheToolDidNotGive()
+    public async Task DoesNotTrustAnAnswerTheToolDidNotGive()
     {
         await AskAsync(isAnswer: false);
         await AskAsync(isAnswer: false);
@@ -217,13 +302,11 @@ public sealed class ToolAnswerMemoryTests : IDisposable
     }
 
     [Fact]
-    public async Task DoesNotKeepAnAnswerWhoseInputWasWrittenWhileTheToolRan()
+    public async Task DoesNotTrustAnAnswerWhoseInputWasWrittenWhileTheToolRan()
     {
-        var question = Question(Inputs(), isAnswer: true, during: () =>
-        {
-            File.WriteAllText(_config, "cache=two");
-            File.SetLastWriteTimeUtc(_config, _clock.GetUtcNow().UtcDateTime);
-        });
+        await AskAsync();
+
+        var question = Question(Inputs(), isAnswer: true, during: () => File.WriteAllText(_config, "cache=two"));
 
         await _memory.AskAsync(question, CancellationToken.None);
 
@@ -231,97 +314,76 @@ public sealed class ToolAnswerMemoryTests : IDisposable
     }
 
     [Fact]
-    public async Task DoesNotKeepAnAnswerWhoseInputWasDeletedWhileTheToolRan()
+    public async Task DoesNotTrustAnAnswerWhoseInputWasDeletedWhileTheToolRan()
     {
-        var memory = OnTheRealClock();
+        await AskAsync();
 
-        // A deleted file has no times left to compare, so only its folder says it changed.
-        await memory.AskAsync(Question(Inputs(), isAnswer: true, during: () => File.Delete(_config)), CancellationToken.None);
-
-        Assert.False(memory.Holds(Key));
-    }
-
-    [Fact]
-    public async Task DoesNotKeepAnAnswerWhoseInputWasRenamedIntoPlaceWhileTheToolRan()
-    {
-        var staged = Path.Combine(_temp.CreateDirectory("staging"), "absent.ini");
-        File.WriteAllText(staged, "cache=two");
-        var memory = OnTheRealClock();
-
-        // A rename keeps the file's own old times, so only the folder it arrived in says it changed.
-        await memory.AskAsync(Question(Inputs(), isAnswer: true, during: () => File.Move(staged, _absent)), CancellationToken.None);
-
-        Assert.True(InputStamp.Of(_absent).Newest < DateTimeOffset.UtcNow.AddMinutes(-30).ToFileTime());
-        Assert.False(memory.Holds(Key));
-    }
-
-    [Fact]
-    public async Task DoesNotKeepAnAnswerWhenAFolderHoldingAnInputCannotBeDescribed()
-    {
-        var folder = _temp.CreateDirectory("refused");
-        var file = Path.Combine(folder, "tool.ini");
-        File.WriteAllText(file, "cache=one");
-        _clock.Advance(TimeSpan.FromMinutes(1));
-        using var denied = DeniedDirectory.WithUnreadableAttributes(folder);
-        Assert.Equal(PathPresence.Present, InputStamp.Of(file).Presence);
-        Assert.Equal(PathPresence.Refused, InputStamp.Of(folder).Presence);
-
-        await AskAsync(new ToolInputs { Files = [file] });
+        // A deleted file leaves no time to compare, so only the reading from before the start shows it.
+        await _memory.AskAsync(Question(Inputs(), isAnswer: true, during: () => File.Delete(_config)), CancellationToken.None);
 
         Assert.False(_memory.Holds(Key));
     }
 
     [Fact]
-    public async Task DoesNotKeepAnAnswerWhoseInputsFolderWasDeletedWholeWhileTheToolRan()
+    public async Task DoesNotTrustAnAnswerWhoseInputWasRenamedIntoPlaceWhileTheToolRan()
+    {
+        var staged = Path.Combine(_temp.CreateDirectory("staging"), "absent.ini");
+        File.WriteAllText(staged, "cache=two");
+        _clock.Advance(TimeSpan.FromMinutes(1));
+        await AskAsync();
+
+        // A rename keeps the file's own old times, so only the reading from before the start shows it.
+        await _memory.AskAsync(Question(Inputs(), isAnswer: true, during: () => File.Move(staged, _absent)), CancellationToken.None);
+
+        Assert.True(InputStamp.Of(_absent).Newest < _clock.GetUtcNow().ToFileTime());
+        Assert.False(_memory.Holds(Key));
+    }
+
+    [Fact]
+    public async Task DoesNotTrustAnAnswerWhoseInputsFolderWasDeletedWholeWhileTheToolRan()
     {
         var folder = _temp.CreateDirectory("config");
         var file = Path.Combine(folder, "tool.ini");
         File.WriteAllText(file, "cache=two");
-        var memory = OnTheRealClock();
+        _clock.Advance(TimeSpan.FromMinutes(1));
+        var inputs = new ToolInputs { Files = [file] };
+        await AskAsync(inputs);
 
-        // Both the file and the folder holding it read as absent afterwards, with no times at all, so
-        // only the folder above them says anything changed.
-        await memory.AskAsync(
-            Question(new ToolInputs { Files = [file] }, isAnswer: true, during: () => Directory.Delete(folder, recursive: true)),
+        await _memory.AskAsync(
+            Question(inputs, isAnswer: true, during: () => Directory.Delete(folder, recursive: true)),
             CancellationToken.None);
 
-        Assert.False(memory.Holds(Key));
+        Assert.False(_memory.Holds(Key));
     }
 
     [Fact]
-    public async Task DoesNotKeepAnAnswerWhoseInputsFolderWasMovedInWithItsOldTimesWhileTheToolRan()
+    public async Task DoesNotTrustAnAnswerWhoseInputsFolderWasMovedInWithItsOldTimesWhileTheToolRan()
     {
         var staged = _temp.CreateDirectory("staging", "config");
         File.WriteAllText(Path.Combine(staged, "tool.ini"), "cache=two");
         var file = Path.Combine(_temp.Path, "config", "tool.ini");
-        var memory = OnTheRealClock();
+        _clock.Advance(TimeSpan.FromMinutes(1));
+        var inputs = new ToolInputs { Files = [file] };
+        await AskAsync(inputs);
 
-        // A move keeps the folder's times and the file's, so only the folder it arrived in says so.
-        await memory.AskAsync(
-            Question(new ToolInputs { Files = [file] }, isAnswer: true, during: () => Directory.Move(staged, Path.GetDirectoryName(file)!)),
+        // A move keeps the folder's times and the file's.
+        await _memory.AskAsync(
+            Question(inputs, isAnswer: true, during: () => Directory.Move(staged, Path.GetDirectoryName(file)!)),
             CancellationToken.None);
 
-        Assert.True(InputStamp.Of(file).Newest < DateTimeOffset.UtcNow.AddMinutes(-30).ToFileTime());
-        Assert.True(InputStamp.Of(Path.GetDirectoryName(file)!).Newest < DateTimeOffset.UtcNow.AddMinutes(-30).ToFileTime());
-        Assert.False(memory.Holds(Key));
+        Assert.True(InputStamp.Of(file).Newest < _clock.GetUtcNow().ToFileTime());
+        Assert.False(_memory.Holds(Key));
     }
 
     /// <summary>
-    /// The folders above the fixture include the scratch root other tests create folders in all the
-    /// time, so this runs on the clock that is ahead of them: what it proves is that the check passes
-    /// an answer whose folders were all last written before the tool started.
+    /// A file system that keeps coarse times can give a write made as the tool starts a time from just
+    /// before it, with the size unchanged, so the two readings would agree: an input that recent is not
+    /// trusted however they compare.
     /// </summary>
     [Fact]
-    public async Task KeepsAnAnswerWhenNoFolderAboveItsInputsChangedAfterTheToolStarted()
+    public async Task DoesNotTrustAnAnswerWhoseInputWasWrittenJustBeforeTheToolStartedOnACoarseClock()
     {
         await AskAsync();
-
-        Assert.True(_memory.Holds(Key));
-    }
-
-    [Fact]
-    public async Task DoesNotKeepAnAnswerWhoseInputWasWrittenJustBeforeTheToolStartedOnACoarseClock()
-    {
         File.SetLastWriteTimeUtc(_config, _clock.GetUtcNow().UtcDateTime - TimeSpan.FromSeconds(1));
 
         await AskAsync();
@@ -330,29 +392,35 @@ public sealed class ToolAnswerMemoryTests : IDisposable
     }
 
     [Fact]
-    public async Task DoesNotKeepAnAnswerWhoseInputCouldNotBeRead()
+    public async Task DoesNotTrustAnAnswerWhoseInputCouldNotBeRead()
     {
         using var denied = DeniedDirectory.WithUnreadableFile(_config);
         Assert.Equal(PathPresence.Refused, InputStamp.Of(_config).Presence);
 
         await AskAsync();
         await AskAsync();
+        await AskAsync();
 
-        Assert.Equal(2, _asked);
+        Assert.Equal(3, _asked);
+        Assert.False(_memory.Holds(Key));
     }
 
     [Fact]
-    public async Task DoesNotKeepAnAnswerWhoseInputIsNamedRelatively()
+    public async Task DoesNotTrustAnAnswerWhoseInputIsNamedRelatively()
     {
         await AskAsync(new ToolInputs { Files = ["tool.ini"] });
         await AskAsync(new ToolInputs { Files = ["tool.ini"] });
+        await AskAsync(new ToolInputs { Files = ["tool.ini"] });
 
-        Assert.Equal(2, _asked);
+        Assert.Equal(3, _asked);
+        Assert.False(_memory.Holds(Key));
     }
 
     [Fact]
     public async Task AFailedAskIsNotKeptAndTheNextAsksAgain()
     {
+        await TrustAsync();
+        File.WriteAllText(_config, "cache=two, which is longer");
         var failing = Question(Inputs(), isAnswer: true, during: () =>
         {
             _asked++;
@@ -368,7 +436,7 @@ public sealed class ToolAnswerMemoryTests : IDisposable
     [Fact]
     public async Task AnAnswerNoLongerGivenIsDroppedRatherThanKeptBesideTheFailure()
     {
-        await AskAsync();
+        await TrustAsync();
         File.WriteAllText(_config, "cache=two, which is longer");
 
         await AskAsync(isAnswer: false);
@@ -377,24 +445,24 @@ public sealed class ToolAnswerMemoryTests : IDisposable
     }
 
     [Fact]
-    public async Task AskingAfreshStartsTheToolWhateverIsRememberedAndKeepsTheNewAnswer()
+    public async Task AskingAfreshStartsTheToolWhateverIsTrustedAndKeepsTheNewAnswer()
     {
-        await AskAsync();
+        await TrustAsync();
         _answer = @"C:\cache\two";
 
         Assert.Equal(@"C:\cache\two", await _memory.AskAfreshAsync(Question(Inputs()), CancellationToken.None));
         Assert.Equal(@"C:\cache\two", await AskAsync());
-        Assert.Equal(2, _asked);
+        Assert.Equal(1, _asked);
     }
 
     [Fact]
     public async Task AnotherKeyIsAnotherQuestion()
     {
-        await AskAsync();
+        await TrustAsync();
 
         await _memory.AskAsync(Question(Inputs()) with { Key = "tool where|D:\\tools\\tool.exe" }, CancellationToken.None);
 
-        Assert.Equal(2, _asked);
+        Assert.Equal(1, _asked);
     }
 
     [Fact]
@@ -408,25 +476,22 @@ public sealed class ToolAnswerMemoryTests : IDisposable
         Assert.NotSame(ToolAnswerMemory.For(fake), ToolAnswerMemory.For(fake));
     }
 
-    /// <summary>
-    /// A memory on the real clock, with every path of the fixture an hour old, for a change made while
-    /// the tool runs that Windows times itself: a folder's last-write time after a delete or a rename.
-    /// </summary>
-    private ToolAnswerMemory OnTheRealClock()
-    {
-        foreach (var entry in Directory.EnumerateFileSystemEntries(_temp.Path, "*", SearchOption.AllDirectories).Append(_temp.Path))
-        {
-            TempDirectory.Age(entry, TimeSpan.FromHours(1));
-        }
-
-        return new ToolAnswerMemory(TimeProvider.System);
-    }
-
     private ToolInputs Inputs() => new()
     {
         Files = [_config, _absent],
         Folders = [new ListedFolder(_folder)],
     };
+
+    /// <summary>Asks until the answer is trusted, asserts that it is, and starts the count again.</summary>
+    private Task TrustAsync() => TrustAsync(Inputs());
+
+    private async Task TrustAsync(ToolInputs inputs)
+    {
+        await AskAsync(inputs);
+        await AskAsync(inputs);
+        Assert.True(_memory.Holds(Key));
+        _asked = 0;
+    }
 
     private Task<string> AskAsync(bool isAnswer = true) => AskAsync(Inputs(), isAnswer);
 

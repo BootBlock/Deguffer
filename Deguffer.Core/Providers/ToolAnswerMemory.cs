@@ -16,13 +16,19 @@ namespace Deguffer.Core.Providers;
 /// changes whenever the tool is used, and nothing here could notice. Those stay in the provider's
 /// <see cref="PassMemo{T}"/>.</para>
 ///
-/// <para><b>What is never kept.</b> A failed or cancelled ask; an answer the tool did not give
+/// <para><b>An answer is trusted only once its inputs read the same before the tool started and after
+/// it answered.</b> A file the tool read can be edited, deleted, or moved in or away while it runs,
+/// and only a reading from before the start can show that: a deleted file leaves no time to compare,
+/// and a moved one keeps its old times. Nor do the folders above the inputs say it reliably, because
+/// tools write in them as they answer (pnpm leaves an entry in its home folder and in the folder it
+/// runs in). The inputs to read beforehand are those the last answer named, so the first answer to a
+/// question is held untrusted and the next ask confirms it.</para>
+///
+/// <para><b>What is never trusted.</b> A failed or cancelled ask; an answer the tool did not give
 /// (<see cref="ToolQuestion{T}.IsAnswer"/>); an answer whose inputs could not all be read; and an
-/// answer whose inputs, or the folders holding them, were written at or after the moment the tool
-/// was started, less <see cref="CoarseTimes"/>, because the tool may have read them before the
-/// change. A file deleted, created by a rename or renamed away keeps no time of its own that says
-/// so, and its folder's does. The next ask then reads them again, unchanged, and keeps that
-/// answer.</para>
+/// answer whose inputs were written at or after the moment the tool was started, less
+/// <see cref="CoarseTimes"/>, because a file system that keeps coarse times can give a write during
+/// the ask the time it had before.</para>
 ///
 /// <para><b>Public only so a public provider can take one</b> (a test hands two providers the same
 /// memory, as two Explore builds share <see cref="Shared"/>). Asking stays inside Core.</para>
@@ -61,12 +67,13 @@ public sealed class ToolAnswerMemory
         runner is null || ReferenceEquals(runner, ProcessRunner.Default) ? Shared : new(TimeProvider.System);
 
     /// <summary>
-    /// The remembered answer where the tool's inputs read as they did when it gave it, or the tool's
-    /// answer now, which is then remembered.
+    /// The trusted answer where the tool's inputs read as they did when it gave it, or the tool's answer
+    /// now, which is then held (<see cref="AskAfreshAsync{T}"/>).
     /// </summary>
     internal async Task<T> AskAsync<T>(ToolQuestion<T> question, CancellationToken ct)
     {
         if (_answers.TryGetValue(question.Key, out var held)
+            && held.Trusted
             && held.Answer is T answer
             && question.InputsOf(answer).Read(question.Environment).Matches(held.Fingerprint))
         {
@@ -77,22 +84,24 @@ public sealed class ToolAnswerMemory
     }
 
     /// <summary>
-    /// The tool's answer now, whatever is remembered, and then remembered: for a row that deletes paths
-    /// under the location it plans from, where a missed input would move a deletion (§5.2) rather
-    /// than misstate a figure.
+    /// The tool's answer now, whatever is held, and then held: trusted where the inputs the last answer
+    /// named read the same before the tool started as after it answered. For a row that deletes paths
+    /// under the location it plans from, where a missed input would move a deletion (§5.2) rather than
+    /// misstate a figure.
     /// </summary>
     internal async Task<T> AskAfreshAsync<T>(ToolQuestion<T> question, CancellationToken ct)
     {
+        var before = _answers.TryGetValue(question.Key, out var held) && held.Answer is T last
+            ? question.InputsOf(last).Read(question.Environment)
+            : null;
+
         var started = (_time.GetUtcNow() - CoarseTimes).ToFileTime();
         var answer = await question.Ask(ct).ConfigureAwait(false);
 
-        if (question.IsAnswer(answer)
-            && question.InputsOf(answer) is var inputs
-            && inputs.Read(question.Environment) is { IsComplete: true } read
-            && read.Newest < started
-            && !inputs.FoldersChangedSince(started))
+        if (question.IsAnswer(answer) && question.InputsOf(answer).Read(question.Environment) is { IsComplete: true } after)
         {
-            _answers[question.Key] = new Remembered(answer, read);
+            var trusted = before is not null && before.Matches(after) && after.Newest < started;
+            _answers[question.Key] = new Remembered(answer, after, trusted);
         }
         else
         {
@@ -102,8 +111,14 @@ public sealed class ToolAnswerMemory
         return answer;
     }
 
-    /// <summary>Whether an answer to <paramref name="key"/> is held, for the tests of what is kept.</summary>
-    internal bool Holds(string key) => _answers.ContainsKey(key);
+    /// <summary>Whether a trusted answer to <paramref name="key"/> is held, for the tests of what is kept.</summary>
+    internal bool Holds(string key) => _answers.TryGetValue(key, out var held) && held.Trusted;
 
-    private sealed record Remembered(object? Answer, ToolFingerprint Fingerprint);
+    /// <param name="Answer">The tool's answer.</param>
+    /// <param name="Fingerprint">What its inputs read once it answered.</param>
+    /// <param name="Trusted">
+    /// Whether the inputs read the same before the tool started, so the answer may be served. An answer
+    /// held untrusted names the inputs the next ask reads before it starts the tool.
+    /// </param>
+    private sealed record Remembered(object? Answer, ToolFingerprint Fingerprint, bool Trusted);
 }

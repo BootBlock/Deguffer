@@ -97,8 +97,11 @@ internal sealed record ToolInputs
 
         foreach (var folder in Folders)
         {
+            // A folder is stamped as there, without its times: its entries are read in full below, so its
+            // own last-write time says nothing more, and moves whenever a tool leaves and removes an
+            // entry in it as it answers. A file at the path keeps its times, as nothing else reads it.
             var self = InputStamp.Of(folder.Path);
-            stamps.Add(self);
+            stamps.Add(self.IsDirectory ? self with { Created = 0, Written = 0 } : self);
 
             if (self is { Presence: PathPresence.Present, IsDirectory: true })
             {
@@ -107,38 +110,6 @@ internal sealed record ToolInputs
         }
 
         return new ToolFingerprint(stamps, environment);
-    }
-
-    /// <summary>
-    /// Whether a folder above a declared input, up to the drive root, was written at or after
-    /// <paramref name="fileTime"/>, or could not be read: what a file or a folder deleted, created by a
-    /// rename or renamed away leaves behind, since what moved keeps no time of its own that says so. A
-    /// folder holding a configuration file can be deleted whole, or moved in from elsewhere with its old
-    /// times, and only the first folder above it that stayed put records the change.
-    ///
-    /// <para><b>Asked only when an answer is to be kept, and not part of the fingerprint.</b> The
-    /// folders above the tools' working folder include the profile, where programs create and remove
-    /// files all day, so comparing them on every pass would ask the tool again for nothing.</para>
-    /// </summary>
-    /// <param name="fileTime">The moment the tool was started, as a FILETIME.</param>
-    public bool FoldersChangedSince(long fileTime)
-    {
-        var above = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var path in Files.Concat(Folders.Select(static folder => folder.Path)))
-        {
-            for (var folder = Path.GetDirectoryName(path); folder is not null && above.Add(folder); folder = Path.GetDirectoryName(folder))
-            {
-                var stamp = InputStamp.Of(folder);
-
-                if (stamp.Presence is PathPresence.Refused || stamp.Newest >= fileTime)
-                {
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
 
     /// <summary>
