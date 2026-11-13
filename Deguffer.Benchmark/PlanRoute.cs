@@ -10,8 +10,9 @@ namespace Deguffer.Benchmark;
 ///
 /// <para>One planner for every run, as the Storage page keeps one for its life, so the first run is a
 /// pass from a fresh process and each later run a warm pass of the same process. Each pass drops the
-/// providers' caches at its start, as a scan does, so warm means the system's file cache and this
-/// process's compiled code, not a remembered answer.</para>
+/// providers' caches at its start, as a scan does, so warm means the system's file cache, this
+/// process's compiled code, and the tools' location answers <see cref="Core.Providers.ToolAnswerMemory"/>
+/// has confirmed, which the first two passes ask for and the later ones are served.</para>
 /// </summary>
 internal sealed class PlanRoute(CleanupPlanner planner)
 {

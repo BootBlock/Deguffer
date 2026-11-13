@@ -31,10 +31,16 @@ of these tools again (`scan-progress.md` §4: conda about 0.9-1.0 s, npm 0.4-0.6
   `IProcessRunner`, so the answers the real runner received are shared process-wide (every Explore
   build constructs fresh providers) and a test's fake runner never sees another's. A provider reads
   it inside its `PassMemo`, so the fingerprint is read once per pass.
-- **What is never remembered:** a failed or cancelled ask; an answer the tool did not give (the
-  documented default after a failed query, `AskedLocation.Answered` false); and an answer whose
-  inputs were written at or after the moment the tool was started, less two seconds for a file
-  system that keeps coarse times, because the tool may have read them before the change.
+- **An answer is trusted only once its inputs read the same before the tool started and after it
+  answered.** A file edited, deleted, or moved in or away while the tool runs shows as a difference
+  between the two readings, which nothing read afterwards can show: a deleted file leaves no time,
+  and a moved one keeps its old times. The inputs read beforehand are those the last answer named, so
+  the first answer to a question is held untrusted and the next ask confirms it.
+- **What is never trusted:** a failed or cancelled ask; an answer the tool did not give (the
+  documented default after a failed query, `AskedLocation.Answered` false); an answer whose inputs
+  could not all be read; and an answer whose inputs were written at or after the moment the tool was
+  started, less two seconds for a file system that keeps coarse times, where a write during the ask
+  can keep the time it had before.
 - **Rows that delete paths themselves** (Poetry's `artifacts`, Yarn Berry's `<globalFolder>\cache`)
   ask afresh when they plan, and store the fresh answer. Only their Explore declarations and their
   `CleanedPlacesAsync` read the memory. A missed input there cannot move a deletion (§5.2).
@@ -75,6 +81,12 @@ PlatformIO joins under #1053, once #591 has changed what its query reads.
 
 ## As built
 
+- The first draft checked the folders above each input for a change during the ask instead of
+  reading the inputs beforehand. On a real machine that refused nearly every answer, because tools
+  write in those folders as they answer: pnpm leaves and removes an entry in its home folder and in
+  the folder it runs in, and Deguffer writes its own estimates beside the tools' working folder
+  during a pass. Measured over three planning passes, only pip's answer was ever served. A listed
+  folder is now stamped as there without its own times, since its entries are read in full.
 - A folder listing gives only the names of its entries, and each entry is stamped by its own
   attribute read. The size and times a listing reports are NTFS's copy in the parent's index, which
   lags the entry: a folder that just gained an entry lists with its old time.
