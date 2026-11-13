@@ -88,6 +88,24 @@ public sealed class PoetryCacheProviderTests : IDisposable
         Assert.Equal(0, plan.EstimatedBytes);
     }
 
+    /// <summary>#450: Poetry is asked where its two folders are as the pass begins, and the plan awaits those answers.</summary>
+    [Fact]
+    public async Task AsksPoetryWhereItsFoldersAreAsThePassBegins()
+    {
+        CreateCache();
+        var runner = Poetry();
+
+        await EarlyStartProof.StartsBeforeItPlansAsync(CreateProvider(runner), runner, "config cache-dir", "config virtualenvs.path");
+    }
+
+    [Fact]
+    public async Task StartsNothingAsThePassBeginsWhenPoetryIsNotInstalled()
+    {
+        var runner = new FakeProcessRunner();
+
+        await EarlyStartProof.StartsNothingAsync(CreateProvider(runner), runner);
+    }
+
     [Fact]
     public async Task AsksPoetryWhereItsCacheIsRatherThanAssuming()
     {
