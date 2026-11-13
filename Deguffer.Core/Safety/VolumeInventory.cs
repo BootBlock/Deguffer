@@ -1,3 +1,5 @@
+using Deguffer.Core.Diagnostics;
+
 namespace Deguffer.Core.Safety;
 
 /// <inheritdoc />
@@ -50,15 +52,25 @@ public sealed class VolumeInventory : IVolumeInventory
         // separator, and a caller holding C:\Mount means the same directory.
         var named = Path.EndsInDirectorySeparator(mountPoint) ? mountPoint : mountPoint + Path.DirectorySeparatorChar;
 
-        return VolumeCalls.VolumeNameOf(named, out _);
+        using var timing = MachineCallTally.Time(MachineCall.VolumeNameOfMountPoint);
+
+        return _queries.VolumeNameOf(named);
     }
 
-    public IReadOnlyList<string> MountPointsOfVolume(string volumeName) => Ordered(VolumeCalls.MountPointsOf(volumeName));
+    public IReadOnlyList<string> MountPointsOfVolume(string volumeName) => Ordered(MountPointsOf(volumeName));
 
     public string? SubstituteOf(string driveRoot) => VolumeCalls.SubstituteOf(driveRoot);
 
     public (long Total, long Free)? SpaceOf(string path) =>
         MountPointLookup.Machine.MountPointOf(path) is { } mountPoint ? VolumeCalls.SpaceOf(mountPoint) : null;
+
+    /// <summary>Every place the volume named <paramref name="volumeName"/> is mounted, timed for whatever tally counts the caller.</summary>
+    private IReadOnlyList<string> MountPointsOf(string volumeName)
+    {
+        using var timing = MachineCallTally.Time(MachineCall.MountPointsOfVolume);
+
+        return _queries.MountPointsOf(volumeName);
+    }
 
     public void Invalidate()
     {
@@ -120,7 +132,7 @@ public sealed class VolumeInventory : IVolumeInventory
 
         foreach (var name in _queries.Names())
         {
-            var mountPoints = _queries.MountPointsOf(name);
+            var mountPoints = MountPointsOf(name);
 
             if (mountPoints.Count == 0)
             {

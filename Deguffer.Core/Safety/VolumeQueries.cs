@@ -12,6 +12,8 @@ internal sealed class VolumeQueries : IVolumeQueries
 
     public IEnumerable<string> Names() => VolumeCalls.Names();
 
+    public string? VolumeNameOf(string mountPoint) => VolumeCalls.VolumeNameOf(mountPoint, out _);
+
     public IReadOnlyList<string> MountPointsOf(string volumeName) => VolumeCalls.MountPointsOf(volumeName);
 
     public IReadOnlyList<string> Letters() => Environment.GetLogicalDrives();
