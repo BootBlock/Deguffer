@@ -40,7 +40,7 @@ public sealed class ExploreGoingTests
 
     /// <summary>
     /// Ctrl+A over a folder of twenty thousand, half of it refused, is matched with a comparison or so
-    /// per pick. A search of the list per pick makes a hundred million, on the page's thread, before
+    /// per pick. A search of the list per pick makes a hundred and fifty million, on the page's thread, before
     /// the dialog can appear.
     /// </summary>
     [Fact]

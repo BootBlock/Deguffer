@@ -13,8 +13,8 @@ public static class ExploreGoing
     /// <para><paramref name="items"/> names <paramref name="picked"/> position by position, and
     /// <paramref name="going"/> is part of <paramref name="items"/>, so all of it going means every
     /// pick does. Matched by the item's own equality through one set, because a Shift range or Ctrl+A
-    /// picks a whole folder, and this runs on the page's thread before the dialog can appear: a
-    /// search of the list for each pick froze the window for most of a second at twenty
+    /// picks a whole folder, and this runs on the page's thread before the dialog can appear, where
+    /// a search of the list for each pick holds the window still for most of a second at twenty
     /// thousand.</para>
     ///
     /// <para>Generic because it reads nothing of an item but its equality, which is what lets a test
