@@ -111,6 +111,12 @@ public sealed class DriveInterpretationTests
     public void HoursStateTheTimeTheyComeTo() =>
         Assert.Equal("9,000 hours (1 year 10 days)", HealthText.Hours(9000));
 
+    [Theory]
+    [InlineData(1UL, "1 minute")]
+    [InlineData(3_000UL, "3,000 minutes (2 days)")]
+    public void NvmeBusyTimeStatesTheTimeItComesTo(ulong minutes, string expected) =>
+        Assert.Equal(expected, Find(Nvme(DriveBytes.NvmeHealth(busyMinutes: minutes)), "busy").Reading);
+
     [Fact]
     public void AnyNvmeWarningOtherThanTemperatureFails()
     {

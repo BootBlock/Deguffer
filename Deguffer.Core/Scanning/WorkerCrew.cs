@@ -1,4 +1,5 @@
 using System.Runtime.ExceptionServices;
+using Deguffer.Core.Diagnostics;
 
 namespace Deguffer.Core.Scanning;
 
@@ -72,7 +73,9 @@ internal sealed class WorkerCrew
         _hasWork = hasWork;
         _run = run;
         _shared = shared;
-        _help = Help;
+        // A helper runs on a thread that carries no caller's context, so the tally counting the flow
+        // that made the crew goes with it, or a call a helper makes would count nowhere.
+        _help = MachineCallTally.Carried(Help);
 
         Made.Value?.Invoke(Thread.CurrentThread.IsThreadPoolThread);
     }

@@ -1,32 +1,10 @@
 using System.Buffers;
 using System.Runtime.InteropServices;
+using Deguffer.Core.Diagnostics;
 using Deguffer.Core.Scanning;
 using Microsoft.Win32.SafeHandles;
 
 namespace Deguffer.Core.Safety;
-
-/// <summary>What a handle opened on a path is for, which decides whether a link on it is followed.</summary>
-internal enum HandleUse
-{
-    /// <summary>Learning where a path really is, so every link on the way, its own name included, is followed.</summary>
-    Resolve,
-
-    /// <summary>Describing the entry the path names: a link is described as the link, never its target.</summary>
-    Describe,
-}
-
-/// <summary>What a file opened by <see cref="FileInformation.OpenHeld"/> is held for, which decides what every other program may do to it meanwhile.</summary>
-internal enum HeldFor
-{
-    /// <summary>Kept: every other program may read it, and none may write to it, rename it or delete it.</summary>
-    Keeping,
-
-    /// <summary>
-    /// Removed through this handle: every other program may read it, rename it or delete it, as the
-    /// shell does when it moves it into the Recycle Bin, and none may write to it.
-    /// </summary>
-    Removing,
-}
 
 /// <summary>Opens a handle for attributes alone on a path in the form it reaches Windows.</summary>
 internal delegate SafeFileHandle HandleOpener(string extendedPath, HandleUse use);
@@ -243,7 +221,15 @@ internal sealed unsafe partial class FileInformation
     {
         using var handle = _open(LongPath.Extended(path), HandleUse.Resolve);
 
-        return handle.IsInvalid ? null : _finalPath(handle);
+        return handle.IsInvalid ? null : FinalPathOfOpen(handle);
+    }
+
+    /// <summary>Where <paramref name="handle"/> is open on, as <see cref="_finalPath"/> reads it, timed for whatever tally counts the caller.</summary>
+    private string? FinalPathOfOpen(SafeFileHandle handle)
+    {
+        using var timing = MachineCallTally.Time(MachineCall.FinalPathName);
+
+        return _finalPath(handle);
     }
 
     /// <summary>
@@ -377,7 +363,7 @@ internal sealed unsafe partial class FileInformation
             return new FileReading(reading.Result, Description: null);
         }
 
-        return _finalPath(handle) is { } final
+        return FinalPathOfOpen(handle) is { } final
             ? new FileReading(FileReadingResult.Identified, new FileDescription(state, LongPath.Display(final)))
             : FileReading.Unreadable;
     }

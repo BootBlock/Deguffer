@@ -178,6 +178,8 @@ public sealed class VolumeListingTests
 
         public IEnumerable<string> Names() => [];
 
+        public string? VolumeNameOf(string mountPoint) => null;
+
         public IReadOnlyList<string> MountPointsOf(string volumeName) => [];
 
         public IReadOnlyList<string> Letters()
