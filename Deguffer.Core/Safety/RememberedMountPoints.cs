@@ -5,7 +5,7 @@ namespace Deguffer.Core.Safety;
 /// <summary>
 /// The volumes, with every place a volume is mounted asked of the machine once per volume for the
 /// life of its owner, which already keeps where each path it follows is reachable: a provider's pass,
-/// one reading of the process table, one §5.6 verification, one reading of the installed programs,
+/// one reading of the process table, one clean's §5.6 verifications, one reading of the installed programs,
 /// one comparison of a clean's locations, the building of one Explore policy, and one judgement of a
 /// duplicate search's copies. Every other question
 /// goes to the volumes it was built over, at the call.
@@ -35,7 +35,7 @@ namespace Deguffer.Core.Safety;
 /// judges them afresh. A comparison with a folder named as text alone, such as the
 /// account's own folders, has no second followed side, which is why the executor's last check before
 /// a removal asks the machine. A clean runs long after the pass that planned it, so its §5.6
-/// verification remembers for that verification alone, never from the pass.</para>
+/// verifications remember for that clean alone, never from the pass.</para>
 ///
 /// <para><b><see cref="IVolumeInventory.SubstituteOf"/> stays live.</b> It is one
 /// <c>QueryDosDevice</c> of about two microseconds, so remembering it would save almost nothing, and

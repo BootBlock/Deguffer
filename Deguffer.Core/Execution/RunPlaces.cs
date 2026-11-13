@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Execution;
@@ -12,16 +13,22 @@ namespace Deguffer.Core.Execution;
 /// text, nothing in the run held what went, so its loss read as something else on the machine removing
 /// it, which is the §5.6 alarm suppressed by Deguffer's own removal.</para>
 ///
-/// <para><b>Followed only where a question needs it, and once.</b> Following a path asks the machine
-/// where its volume is mounted, a run can target thousands of paths, and a plan whose protected paths
-/// all survive untouched asks nothing of the run's reach at all (G4). Where each drive is mounted is
-/// asked once for the verification too, since nearly every path shares a drive
+/// <para><b>Followed only where a question needs it, and once in the run.</b> Following a path asks
+/// the machine where its volume is mounted, a run can target thousands of paths, and a plan whose
+/// protected paths all survive untouched asks nothing of the run's reach at all (G4). One set serves
+/// every verification of the run (<see cref="RunReach.PlacesOn"/>), so a target the first plan's
+/// verification followed is not followed again for the next. Where each drive is mounted is asked
+/// once for the run too, since nearly every path shares a drive
 /// (<see cref="RememberedMountPoints"/>).</para>
+///
+/// <para><b>Safe to ask from more than one thread.</b> The planner verifies one plan after another,
+/// but the reach is handed to every provider, and nothing stops a caller verifying two at once. Two
+/// threads asking about one path at once may each follow it, and both answers are the same folder.</para>
 /// </summary>
 /// <param name="volumes">Asked every other path each folder is reachable at.</param>
 internal sealed class RunPlaces(RunReach reach, IVolumeInventory volumes)
 {
-    private readonly Dictionary<string, ReachedFolder> _folders = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, ReachedFolder> _folders = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly RememberedMountPoints _volumes = new(volumes);
     private IReadOnlyList<(string Path, ReachedFolder Folder)>? _targets;
@@ -38,14 +45,6 @@ internal sealed class RunPlaces(RunReach reach, IVolumeInventory volumes)
     public IReadOnlyList<ReachedFolder> Probed => _probed ??= [.. reach.ProbedPaths.Select(At)];
 
     /// <summary>The folder at <paramref name="path"/>, followed the first time it is asked about.</summary>
-    public ReachedFolder At(string path)
-    {
-        if (!_folders.TryGetValue(path, out var folder))
-        {
-            folder = ReachedFolder.At(path, _volumes);
-            _folders[path] = folder;
-        }
-
-        return folder;
-    }
+    public ReachedFolder At(string path) =>
+        _folders.TryGetValue(path, out var folder) ? folder : _folders.GetOrAdd(path, ReachedFolder.At(path, _volumes));
 }

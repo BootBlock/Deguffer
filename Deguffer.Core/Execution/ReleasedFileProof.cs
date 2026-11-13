@@ -19,10 +19,9 @@ namespace Deguffer.Core.Execution;
 ///
 /// <para><b>Only the readings go to other threads.</b> Each is an open and a describe that waits on
 /// the disk, and a large account names tens of thousands, so they are read up to
-/// <see cref="LocalCopyRelease.ReleasesAtOnce"/> at a time. Judging a missing file follows its
-/// folders through the verification's <see cref="RunPlaces"/>, which is not shared between threads,
-/// so the checks are made afterwards on the calling thread, in the step's order: a run reports the
-/// same list however the reads interleaved.</para>
+/// <see cref="LocalCopyRelease.ReleasesAtOnce"/> at a time. The checks are made afterwards on the
+/// calling thread, in the step's order: a run reports the same list however the reads
+/// interleaved.</para>
 /// </summary>
 internal static class ReleasedFileProof
 {

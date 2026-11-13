@@ -72,6 +72,21 @@ public sealed class RunChangesTests
         Assert.Equal(["temp", "app"], Ids(RunChanges.Stale([temp, app], [temp], new FakeVolumeInventory())));
     }
 
+    /// <summary>
+    /// The case above with the row naming the temporary folder through another mount of its volume:
+    /// the changed location is found below the row's folder at the place the row did not name.
+    /// </summary>
+    [Fact]
+    public void ARowHoldingAFolderTheRunDeletedThroughAnotherMountIsPlannedAgain()
+    {
+        var volumes = new FakeVolumeInventory().With(@"C:\", alsoMountedAt: [@"Q:\SysMount\"]);
+        var temp = Row("temp", Clears(@"Q:\SysMount\Users\testuser\AppData\Local\Temp"));
+        var app = Row("app", Deletes(Temp + @"\SomeApp\cache"));
+        var npm = Row("npm", Deletes(@"Q:\SysMount\Users\testuser\AppData\Local\npm-cache"));
+
+        Assert.Equal(["temp", "app"], Ids(RunChanges.Stale([temp, app, npm], [app], volumes)));
+    }
+
     /// <summary>A shared prefix is not a shared folder: <c>cache2</c> is not inside <c>cache</c>.</summary>
     [Fact]
     public void ASiblingWhoseNameStartsTheSameIsNotPlannedAgain()

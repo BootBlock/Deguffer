@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.Specialized;
 using Deguffer.App.ViewModels;
 using Deguffer.Core.Execution;
@@ -436,6 +437,45 @@ public class CleanViewModelCleanTests
         Assert.False(row.IsSelected);
         Assert.Equal("0 B", page.ViewModel.SelectedTotalLabel);
         Assert.True(page.ViewModel.HasPreview);
+    }
+
+    /// <summary>
+    /// Which rows the run changed is worked out off the window's thread: it asks the machine where every
+    /// location of every row on the page is, which on a large page froze the window (#499). The row it
+    /// finds is still planned again, and the one beside it is not.
+    ///
+    /// <para>The row that did not run is the witness: nothing but that work asks where its location is.
+    /// The page's free-space reading asks about the profile on the window's thread, which is one
+    /// question, and not this one.</para>
+    /// </summary>
+    [Fact]
+    public void WhichRowsARunChangedIsWorkedOutOffTheWindowsThread()
+    {
+        var cache = new FakeCleanupProvider("cache");
+        var other = new FakeCleanupProvider("other");
+        using var page = new StoragePage([cache, other]);
+        cache.Steps = [page.Cache("a", 1024)];
+        var elsewhere = Rows.Folder("elsewhere", 10);
+        other.Steps = [elsewhere];
+        page.Scan();
+        page.Row("other").IsSelected = false;
+        var window = Environment.CurrentManagedThreadId;
+        var askedFrom = new ConcurrentQueue<int>();
+        page.Volumes.Asked = path =>
+        {
+            if (path.Equals(elsewhere.Path, StringComparison.OrdinalIgnoreCase))
+            {
+                askedFrom.Enqueue(Environment.CurrentManagedThreadId);
+            }
+        };
+        var (cachePlans, otherPlans) = (cache.PlanCount, other.PlanCount);
+
+        page.Clean();
+
+        Assert.NotEmpty(askedFrom);
+        Assert.DoesNotContain(window, askedFrom);
+        Assert.Equal(cachePlans + 1, cache.PlanCount);
+        Assert.Equal(otherPlans, other.PlanCount);
     }
 
     /// <summary>
