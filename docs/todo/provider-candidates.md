@@ -237,7 +237,8 @@ Rancher are added.
 ### What the virtualisation reports need before any of them ships ✅ done
 
 Shipped: a report implements `IRegistersVirtualMachineStorage` and returns each disk or VM folder as
-a `VirtualMachineStorage`. The planner reads every registration before a pass (`RegisteredStorage`),
+a `VirtualMachineStorage`. The planner reads every registration as a pass begins (`RegisteredStorage`)
+and holds each row's plan to it before reporting the row,
 `VirtualMachineStoragePlan` withholds any step of any row that reaches one and protects it
 (`Withholding.VirtualMachineStorage`), every clean proves all of them standing through
 `VirtualMachineStoragePlan.ProofFor`, whichever rows were scanned, and Explore refuses each one from

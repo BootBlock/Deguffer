@@ -2209,8 +2209,12 @@ public sealed class ExploreMap : UserControl
     /// <summary>
     /// A tile has come in under a pointer that has not moved, or one it was over has gone: the pointer
     /// is over what the screen shows now (§7.1).
+    ///
+    /// <para>Followed rather than read again, so it is outlined only where the shape or the tile under it
+    /// changed. The drawing is the same, and tiles arrive, fade in and go up to twice each while the
+    /// camera moves, mostly under the same shape on the same tile or away from the pointer altogether.</para>
     /// </summary>
-    private void OnTileAnswersChanged(object? sender, EventArgs e) => _pointer.Reread();
+    private void OnTileAnswersChanged(object? sender, EventArgs e) => _pointer.Follow();
 
     /// <summary>
     /// Shapes have started to travel, to a new layout or into a new view: the names and the outlines,

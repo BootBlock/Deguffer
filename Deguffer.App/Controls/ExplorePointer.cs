@@ -54,7 +54,8 @@ internal sealed class ExplorePointer
 
     /// <summary>
     /// Say what is under the pointer, and mark it out, where that is not what was already under it: once
-    /// per move of the pointer or of the picture beneath it.
+    /// per move of the pointer or of the picture beneath it, and once per tile that comes in, or goes,
+    /// over the same drawing.
     ///
     /// <para>Only when it changed. A pointer moves at the display's refresh rate and lands on the same shape
     /// for most of that, so reporting every move would rebuild the same string sixty times a second. The
@@ -94,8 +95,8 @@ internal sealed class ExplorePointer
     ///
     /// <para>Asked again rather than dropped, because a page that redraws on its own leaves the pointer where
     /// it was: a scan publishing a snapshot, or a memory view refreshing every couple of seconds. Nothing is
-    /// reported while the answer has not changed, so a redraw that leaves the same shape under the pointer
-    /// costs nothing.</para>
+    /// reported while the answer has not changed. The outline is found again each time, so this is for a
+    /// new drawing only: tiles coming and going over the same one are <see cref="Follow"/>ed.</para>
     /// </summary>
     public void Reread()
     {
