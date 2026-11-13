@@ -39,6 +39,32 @@ public sealed class ExploreHighlightTests
     }
 
     /// <summary>
+    /// The same shape on another canvas, or lifted from another surface, is drawn again: the lift is cut
+    /// from that surface, in that canvas's pixels.
+    /// </summary>
+    [Fact]
+    public void TheSameShapeOnAnotherCanvasOrSurfaceIsDrawnAgain()
+    {
+        var (before, resized, lifted) = CompositionThread.Run(() =>
+        {
+            var highlight = Highlight();
+
+            highlight.ShowHovered([Square(1, 0)], null, Canvas);
+            var before = Paths(highlight);
+
+            highlight.ShowHovered([Square(1, 0)], null, Canvas * 2);
+            var resized = Paths(highlight);
+
+            highlight.ShowHovered([Square(1, 0)], CompositionThread.Compositor.CreateVisualSurface(), Canvas * 2);
+
+            return (before, resized, Paths(highlight));
+        });
+
+        Assert.NotEqual(before, resized, ReferenceEqualityComparer.Instance);
+        Assert.NotEqual(resized, lifted, ReferenceEqualityComparer.Instance);
+    }
+
+    /// <summary>
     /// The effects turned off draw the same shape again, because the lift goes with them, though nothing
     /// about the shape changed.
     /// </summary>
