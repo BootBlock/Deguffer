@@ -64,29 +64,58 @@ internal static class YarnToolInputs
     }
 
     /// <summary>
-    /// Whether any rc file Yarn 1 reads <c>yarn-path</c> from is there, or could not be read: the files
-    /// in which a Yarn 1 on the PATH can name a script Berry would not report
-    /// (<see cref="YarnVersionAnswer"/>). A folder Yarn 1 reads a config from counts when it holds
-    /// anything.
+    /// Whether any rc file a Yarn 1 on the PATH reads <c>yarn-path</c> from is there, or could not be
+    /// read: a file in which it can name a script Berry would not report (<see cref="YarnVersionAnswer"/>).
+    /// A config path Yarn 1 reads counts when it holds anything, file or folder. Yarn 1 also reads a
+    /// <c>yarnPath</c> from the <c>.yarnrc.yml</c> beside each <c>.yarnrc</c>, which Berry reports only
+    /// while <c>%YARN_RC_FILENAME%</c> leaves Berry reading that name too.
     /// </summary>
     public static bool MayHandYarnOnUnreported(IUserEnvironment environment)
     {
-        List<string> files =
-        [
-            .. ToolInputs.InEachFolderUp(ToolInputs.WorkingDirectory(environment), ".yarnrc"),
+        var sources = YarnPathSources(environment);
+        IEnumerable<string> files = sources.Files;
+
+        if (environment.GetToolEnvironmentVariable("YARN_RC_FILENAME") is { Length: > 0 } renamed
+            && !renamed.Equals(".yarnrc.yml", StringComparison.OrdinalIgnoreCase))
+        {
+            files = files
+                .Concat(ToolInputs.InEachFolderUp(ToolInputs.WorkingDirectory(environment), ".yarnrc.yml"))
+                .Append(Path.Combine(environment.UserProfile, ".yarnrc.yml"));
+        }
+
+        return files.Any(static file => InputStamp.Of(file).Presence is not PathPresence.Absent)
+            || sources.Folders.Any(static folder => FolderEntries.Of(folder.Path) is null or { Count: > 0 });
+    }
+
+    /// <summary>
+    /// The rc files Yarn 1 reads <c>yarn-path</c> from, apart from the <c>.yarnrc.yml</c> beside each
+    /// <c>.yarnrc</c> (<a href="https://github.com/yarnpkg/yarn/blob/v1.22.22/src/util/rc.js">rc.js</a>,
+    /// <c>getRcPaths</c>): a <c>.yarnrc</c> in each folder up and in the profile, <c>~\.yarn\config</c>,
+    /// <c>%YARN_CONFIG%</c>, and <c>~\.config\yarn</c> and Yarn's own <c>Config</c>, which it reads as
+    /// files and which are listed in case they are folders.
+    /// </summary>
+    private static ToolInputs YarnPathSources(IUserEnvironment environment)
+    {
+        var files = new List<string>(ToolInputs.InEachFolderUp(ToolInputs.WorkingDirectory(environment), ".yarnrc"))
+        {
             Path.Combine(environment.UserProfile, ".yarnrc"),
             Path.Combine(environment.UserProfile, ".yarn", "config"),
-        ];
+        };
 
         if (NamedBy(environment, "YARN_CONFIG") is { } configured)
         {
             files.Add(configured);
         }
 
-        string[] folders = [Path.Combine(environment.UserProfile, ".config", "yarn"), Path.Combine(environment.LocalAppData, "Yarn", "Config")];
-
-        return files.Any(static file => InputStamp.Of(file).Presence is not PathPresence.Absent)
-            || folders.Any(static folder => FolderEntries.Of(folder) is null or { Count: > 0 });
+        return new ToolInputs
+        {
+            Files = files,
+            Folders =
+            [
+                new ListedFolder(Path.Combine(environment.UserProfile, ".config", "yarn")),
+                new ListedFolder(Path.Combine(environment.LocalAppData, "Yarn", "Config")),
+            ],
+        };
     }
 
     /// <summary>
@@ -100,18 +129,11 @@ internal static class YarnToolInputs
     /// </summary>
     private static ToolInputs ClassicConfiguration(IUserEnvironment environment)
     {
-        var files = new List<string>(ToolInputs.InEachFolderUp(ToolInputs.WorkingDirectory(environment), ".yarnrc", ".npmrc", ".yarnrc.yml"))
+        var files = new List<string>(ToolInputs.InEachFolderUp(ToolInputs.WorkingDirectory(environment), ".npmrc", ".yarnrc.yml"))
         {
-            Path.Combine(environment.UserProfile, ".yarnrc"),
             Path.Combine(environment.UserProfile, ".yarnrc.yml"),
             Path.Combine(environment.UserProfile, ".npmrc"),
-            Path.Combine(environment.UserProfile, ".yarn", "config"),
         };
-
-        if (NamedBy(environment, "YARN_CONFIG") is { } configured)
-        {
-            files.Add(configured);
-        }
 
         foreach (var prefix in NodePrefixes(environment))
         {
@@ -119,15 +141,7 @@ internal static class YarnToolInputs
             files.Add(Path.Combine(prefix, "etc", "npmrc"));
         }
 
-        return new ToolInputs
-        {
-            Files = files,
-            Folders =
-            [
-                new ListedFolder(Path.Combine(environment.UserProfile, ".config", "yarn")),
-                new ListedFolder(Path.Combine(environment.LocalAppData, "Yarn", "Config")),
-            ],
-        };
+        return YarnPathSources(environment).And(new ToolInputs { Files = files });
     }
 
     /// <summary>

@@ -23,13 +23,19 @@ namespace Deguffer.Core.Providers;
 /// What the reported Yarn said its script setting is, or <see cref="YarnScriptSetting.Unasked"/> for
 /// a Yarn that is neither Yarn 1 nor Berry.
 /// </param>
-internal sealed record YarnVersionAnswer(YarnVersion? Version, YarnScriptSetting Script)
+/// <param name="MayHaveBeenHandedOn">
+/// Whether Berry answered while a Yarn 1 rc file was there that could have handed Yarn to it
+/// (<see cref="YarnToolInputs.MayHandYarnOnUnreported"/>), so the script that answered may be one
+/// nothing names.
+/// </param>
+internal sealed record YarnVersionAnswer(YarnVersion? Version, YarnScriptSetting Script, bool MayHaveBeenHandedOn)
 {
     /// <summary>
     /// Whether Yarn said which it is and which script it runs, so the answer and everything it depends
-    /// on are known. Anything less is used for the pass and never remembered.
+    /// on are known. Anything less is used for the pass and never remembered, and nor is any answer
+    /// that depends on it.
     /// </summary>
-    public bool IsAnswer => Version is not null && Script.Answered;
+    public bool IsAnswer => Version is not null && Script.Answered && !MayHaveBeenHandedOn;
 
     /// <summary>
     /// Which Yarn <paramref name="yarn"/> runs, from <paramref name="memory"/> while nothing it reads to
@@ -56,15 +62,15 @@ internal sealed record YarnVersionAnswer(YarnVersion? Version, YarnScriptSetting
             $"-v;config get yarn-path;config get yarnPath --json|{yarn}",
             environment.ToolEnvironment,
             answer => YarnToolInputs.Version(environment, yarn, answer.Script),
-            answer => answer.IsAnswer && !(answer.Version is { IsBerry: true } && YarnToolInputs.MayHandYarnOnUnreported(environment)),
-            askCt => RunAsync(runner, yarn, askCt));
+            static answer => answer.IsAnswer,
+            askCt => RunAsync(runner, environment, yarn, askCt));
 
     /// <summary>
     /// <c>yarn -v</c> and both script settings, started together so a miss costs one round of waiting.
     /// Yarn 1 prints <c>yarn-path</c> (<see cref="YarnScriptSetting.FromClassic"/>) and Berry fails it;
     /// Berry prints <c>yarnPath</c> (<see cref="YarnScriptSetting.FromBerry"/>).
     /// </summary>
-    private static async Task<YarnVersionAnswer> RunAsync(IProcessRunner runner, string yarn, CancellationToken ct)
+    private static async Task<YarnVersionAnswer> RunAsync(IProcessRunner runner, IUserEnvironment environment, string yarn, CancellationToken ct)
     {
         var printed = runner.RunAsync(yarn, "-v", ToolRun.Query, ct);
         var classic = runner.RunAsync(yarn, "config get yarn-path", ToolRun.Query, ct);
@@ -75,11 +81,14 @@ internal sealed record YarnVersionAnswer(YarnVersion? Version, YarnScriptSetting
 
         var version = (await printed.ConfigureAwait(false)).LastLine is { } text ? new YarnVersion(text) : null;
 
-        return new YarnVersionAnswer(version, version switch
+        var script = version switch
         {
             { IsClassic: true } => YarnScriptSetting.FromClassic(await classic.ConfigureAwait(false)),
             { IsBerry: true } => YarnScriptSetting.FromBerry(await berry.ConfigureAwait(false)),
             _ => YarnScriptSetting.Unasked,
-        });
+        };
+
+        // Decided once, as Yarn answers, so every question that depends on which Yarn ran reads the same.
+        return new YarnVersionAnswer(version, script, version is { IsBerry: true } && YarnToolInputs.MayHandYarnOnUnreported(environment));
     }
 }

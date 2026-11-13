@@ -67,13 +67,19 @@ internal sealed record ToolInputs
     /// <param name="value">The value as the tool reads it, after any expansion of its own such as a leading <c>~</c>.</param>
     public static string? Opened(string value, IUserEnvironment environment)
     {
+        // An empty value names no file, and the tool's own open of it fails.
+        if (value.Length == 0)
+        {
+            return null;
+        }
+
         try
         {
             return LongPath.Configured(Path.GetFullPath(value, WorkingDirectory(environment)));
         }
         catch (ArgumentException)
         {
-            // An empty value, or a NUL, which no path can hold, so the tool's own open of it fails too.
+            // A NUL, which no path can hold, so the tool's own open of it fails too.
             return null;
         }
     }
@@ -104,9 +110,11 @@ internal sealed record ToolInputs
     }
 
     /// <summary>
-    /// Whether a folder holding a declared input was written at or after <paramref name="fileTime"/>,
-    /// or could not be read: what a file deleted, created by a rename or renamed away leaves behind,
-    /// since the file itself then has no time to compare.
+    /// Whether a folder above a declared input, up to the drive root, was written at or after
+    /// <paramref name="fileTime"/>, or could not be read: what a file or a folder deleted, created by a
+    /// rename or renamed away leaves behind, since what moved keeps no time of its own that says so. A
+    /// folder holding a configuration file can be deleted whole, or moved in from elsewhere with its old
+    /// times, and only the first folder above it that stayed put records the change.
     ///
     /// <para><b>Asked only when an answer is to be kept, and not part of the fingerprint.</b> The
     /// folders above the tools' working folder include the profile, where programs create and remove
@@ -115,15 +123,18 @@ internal sealed record ToolInputs
     /// <param name="fileTime">The moment the tool was started, as a FILETIME.</param>
     public bool FoldersChangedSince(long fileTime)
     {
-        var holding = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var above = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var path in Files.Concat(Folders.Select(static folder => folder.Path)))
         {
-            if (Path.GetDirectoryName(path) is { } folder && holding.Add(folder)
-                && InputStamp.Of(folder) is var stamp
-                && (stamp.Presence is PathPresence.Refused || stamp.Newest >= fileTime))
+            for (var folder = Path.GetDirectoryName(path); folder is not null && above.Add(folder); folder = Path.GetDirectoryName(folder))
             {
-                return true;
+                var stamp = InputStamp.Of(folder);
+
+                if (stamp.Presence is PathPresence.Refused || stamp.Newest >= fileTime)
+                {
+                    return true;
+                }
             }
         }
 

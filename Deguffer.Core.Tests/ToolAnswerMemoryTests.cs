@@ -272,13 +272,51 @@ public sealed class ToolAnswerMemoryTests : IDisposable
     }
 
     [Fact]
-    public async Task KeepsAnAnswerOnTheRealClockWhenNothingHoldingItsInputsChangedWhileTheToolRan()
+    public async Task DoesNotKeepAnAnswerWhoseInputsFolderWasDeletedWholeWhileTheToolRan()
     {
+        var folder = _temp.CreateDirectory("config");
+        var file = Path.Combine(folder, "tool.ini");
+        File.WriteAllText(file, "cache=two");
         var memory = OnTheRealClock();
 
-        await memory.AskAsync(Question(Inputs()), CancellationToken.None);
+        // Both the file and the folder holding it read as absent afterwards, with no times at all, so
+        // only the folder above them says anything changed.
+        await memory.AskAsync(
+            Question(new ToolInputs { Files = [file] }, isAnswer: true, during: () => Directory.Delete(folder, recursive: true)),
+            CancellationToken.None);
 
-        Assert.True(memory.Holds(Key));
+        Assert.False(memory.Holds(Key));
+    }
+
+    [Fact]
+    public async Task DoesNotKeepAnAnswerWhoseInputsFolderWasMovedInWithItsOldTimesWhileTheToolRan()
+    {
+        var staged = _temp.CreateDirectory("staging", "config");
+        File.WriteAllText(Path.Combine(staged, "tool.ini"), "cache=two");
+        var file = Path.Combine(_temp.Path, "config", "tool.ini");
+        var memory = OnTheRealClock();
+
+        // A move keeps the folder's times and the file's, so only the folder it arrived in says so.
+        await memory.AskAsync(
+            Question(new ToolInputs { Files = [file] }, isAnswer: true, during: () => Directory.Move(staged, Path.GetDirectoryName(file)!)),
+            CancellationToken.None);
+
+        Assert.True(InputStamp.Of(file).Newest < DateTimeOffset.UtcNow.AddMinutes(-30).ToFileTime());
+        Assert.True(InputStamp.Of(Path.GetDirectoryName(file)!).Newest < DateTimeOffset.UtcNow.AddMinutes(-30).ToFileTime());
+        Assert.False(memory.Holds(Key));
+    }
+
+    /// <summary>
+    /// The folders above the fixture include the scratch root other tests create folders in all the
+    /// time, so this runs on the clock that is ahead of them: what it proves is that the check passes
+    /// an answer whose folders were all last written before the tool started.
+    /// </summary>
+    [Fact]
+    public async Task KeepsAnAnswerWhenNoFolderAboveItsInputsChangedAfterTheToolStarted()
+    {
+        await AskAsync();
+
+        Assert.True(_memory.Holds(Key));
     }
 
     [Fact]

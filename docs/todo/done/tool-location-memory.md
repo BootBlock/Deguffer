@@ -54,8 +54,8 @@ inherits Deguffer's own start-up environment, which the fingerprint compares who
 | pip | the launcher; its interpreter's prefix and `Lib\site-packages` listing; `pyvenv.cfg` | `C:\ProgramData\pip\pip.ini`; `~\pip\pip.ini`; `%APPDATA%\pip\pip.ini`; `<prefix>\pip.ini`; `%PIP_CONFIG_FILE%` | |
 | npm | the shim; `node.exe` beside it and on `PATH`; `node_modules\npm\package.json` and `npmrc` beside the shim and under the prefix | `.npmrc`, `package.json` and `node_modules` in each folder up | `userconfig`, `globalconfig`, `prefix` |
 | pnpm | the shim; `node.exe`; `node_modules\pnpm\package.json`; Corepack's home listing | `%LOCALAPPDATA%\pnpm\config\{rc, config.yaml, auth.ini}` (or under `%XDG_CONFIG_HOME%`); `~\.npmrc`; `.npmrc`, `pnpm-workspace.yaml` and `package.json` in each folder up | `globalconfig` (asked beside `store path` on a miss) |
-| Yarn 1 | the shim; `node.exe`; `node_modules\yarn\package.json`; Corepack's home listing | `.yarnrc`, `.npmrc` and `package.json` in each folder up; `~\.yarnrc`, `~\.npmrc`; `%LOCALAPPDATA%\Yarn\Config`; `~\.config\yarn`; `%YARN_CONFIG%` | `yarn-path` (asked beside `cache dir` on a miss) |
-| Yarn Berry | as Yarn 1 | `.yarnrc.yml` (or `%YARN_RC_FILENAME%`), `package.json` and `yarn.lock` in each folder up; `~\.yarnrc.yml` | `yarnPath` (asked beside the settings on a miss) |
+| Yarn 1 | the shim; `node.exe`; `node_modules\yarn\package.json`; Corepack's home listing | `.yarnrc`, `.npmrc` and `package.json` in each folder up; `~\.yarnrc`, `~\.npmrc`; `%LOCALAPPDATA%\Yarn\Config`; `~\.config\yarn`; `%YARN_CONFIG%` | `yarn-path` (asked beside `yarn -v`) |
+| Yarn Berry | as Yarn 1 | `.yarnrc.yml` (or `%YARN_RC_FILENAME%`), `package.json` and `yarn.lock` in each folder up; `~\.yarnrc.yml` | `yarnPath` (asked beside `yarn -v`) |
 
 PlatformIO joins under #1053, once #591 has changed what its query reads.
 

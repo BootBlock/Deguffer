@@ -69,11 +69,10 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
         Assert.Contains(roots, r => r.Path == _first);
     }
 
-    /// <summary>Both settings are asked together, so a miss costs one round of waiting.</summary>
     /// <summary>
     /// A Yarn 1 on the PATH reads <c>yarn-path</c> from <c>~\.yarnrc</c> and runs the script it names.
-    /// When that is a Berry, Berry reports no script, so nothing could notice the script replaced, and
-    /// the answer is asked again on each pass rather than kept.
+    /// When that is a Berry, Berry reports no script, so nothing could notice the script replaced: which
+    /// Yarn ran and Berry's settings, which depend on it, are both asked again on each pass.
     /// </summary>
     [Fact]
     public async Task ABerryAnswerIsNotKeptWhileAYarn1RcFileCouldHaveHandedYarnOn()
@@ -86,8 +85,28 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
         await provider.CleanedPlacesAsync();
 
         Assert.Equal(2, _yarn.Asked("-v"));
+        Assert.Equal(2, Asked);
     }
 
+    /// <summary>
+    /// Yarn 1 also reads <c>yarnPath</c> from a <c>.yarnrc.yml</c>. Where <c>YARN_RC_FILENAME</c> has
+    /// Berry read another name, Berry does not report that one either.
+    /// </summary>
+    [Fact]
+    public async Task ABerryAnswerIsNotKeptWhileAYarnrcYmlBerryDoesNotReadCouldHaveHandedYarnOn()
+    {
+        _yarn.Environment.WithEnvironmentVariable("YARN_RC_FILENAME", ".berryrc.yml");
+        _yarn.Write(".yarnrc.yml");
+        var provider = Provider();
+
+        await provider.CleanedPlacesAsync();
+        provider.InvalidateCaches();
+        await provider.CleanedPlacesAsync();
+
+        Assert.Equal(2, _yarn.Asked("-v"));
+    }
+
+    /// <summary>Both settings are asked together, so a miss costs one round of waiting.</summary>
     [Fact]
     public async Task AsksTheSettingsTogether()
     {

@@ -71,6 +71,22 @@ public sealed class PipCacheLocationMemoryTests : IDisposable
         await provider.PlanAsync();
     }
 
+    /// <summary>
+    /// A <c>PIP_CONFIG_FILE</c> no path can be made of names nothing pip could open, so it is no input,
+    /// and it does not stop the plan.
+    /// </summary>
+    [Fact]
+    public async Task AConfigFileVariableNoPathCanHoldDoesNotStopThePlan()
+    {
+        _environment.WithToolEnvironmentVariable("PIP_CONFIG_FILE", $"pip{(char)0}.ini");
+        var provider = CreateProvider();
+
+        var plan = await provider.PlanAsync();
+
+        Assert.NotEmpty(plan.Steps);
+        Assert.Equal(1, LocationQueries);
+    }
+
     [Fact]
     public async Task ASecondPassWithNothingChangedStartsNoLocationQuery()
     {
