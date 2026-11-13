@@ -19,9 +19,6 @@ internal static partial class AtaVendorOverlay
     private static readonly AtaAttributeDefinition RemainingLife = new(
         "Remaining life", "How much of the drive's rated write life is left.", SmartRawFormat.Percent, AttributeRole.RemainingLife);
 
-    private static readonly AtaAttributeDefinition MediaWearout = new(
-        "Media wear indicator", "How much of the flash memory's rated life is left.", SmartRawFormat.Percent, AttributeRole.RemainingLife);
-
     private static readonly AtaAttributeDefinition TotalWritten = new(
         "Total data written", "How much the computer has written to the drive over its life.", SmartRawFormat.Bytes512, AttributeRole.Usage);
 
@@ -77,16 +74,10 @@ internal static partial class AtaVendorOverlay
     /// <summary>The overlay's definition for <paramref name="id"/> on <paramref name="drive"/>, if a document covers it.</summary>
     internal static AtaAttributeDefinition? Of(byte id, DeviceDescriptor drive) =>
         MicronClientSata.Covers(drive) ? MicronClientSata.Of(id)
+        : IntelDcS3500.Covers(drive) ? IntelDcS3500.Of(id)
         : SamsungPm863OrSm863().IsMatch(drive.Model) ? SamsungPm863OrSm863Of(id)
         : Samsung845Dc().IsMatch(drive.Model) ? Samsung845DcOf(id)
-        : id switch
-        {
-            // Intel DC S3500 product specification 328860-008US, table 18: the normalised value declines
-            // from 100 to 1 with wear. Solidigm KA-00033 names 233 for later drives but states no scale.
-            233 when IntelDcS3500().IsMatch(drive.Model) => MediaWearout,
-
-            _ => null,
-        };
+        : null;
 
     /// <summary>
     /// Whether <paramref name="threshold"/> fails its attribute whatever the value. TN-FD-22 table 7 makes
@@ -157,11 +148,4 @@ internal static partial class AtaVendorOverlay
     /// </summary>
     [GeneratedRegex(@"\bSamsung SSD 845 ?DC (?:EVO|PRO)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex Samsung845Dc();
-
-    /// <summary>
-    /// The DC S3500 part numbers in Intel's discontinuance notices: SSDSC2BB (2.5-inch) or SSDSC1NB
-    /// (1.8-inch), three capacity digits, then G4 or T4. The S3510 and S3520 end G6/T6 and G7/T7.
-    /// </summary>
-    [GeneratedRegex(@"\bSSDSC(?:2BB|1NB)\d{3}[GT]4", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex IntelDcS3500();
 }

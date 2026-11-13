@@ -428,7 +428,9 @@ no warning, so keep backups whatever this page says.
 A reading whose meaning differs from one maker to another is shown as the drive reports it, unless
 the maker documents it for that model family. Micron and Crucial client SATA drives covered by Micron's
 technical note TN-FD-22 get every attribute the note defines, including the lowest and highest
-temperature recorded and the drive's write amplification.
+temperature recorded and the drive's write amplification. Intel DC S3500 drives get every attribute
+Intel's product specification defines, including the data written and read, the power-loss
+capacitor test and thermal throttling.
 
 The page reads nothing until you open it, and it reads again only when you press Refresh, because a
 read can wake a sleeping disk. Everything it sends a drive is a read: it never starts a self-test or
