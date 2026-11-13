@@ -255,9 +255,9 @@ public sealed class PoetryLocationMemoryTests : IDisposable
     }
 
     /// <summary>
-    /// §5.6 when the cache moved between two passes: a <c>config.toml</c> edit is what tells the memory
-    /// to ask again, and the plan then targets and protects the new cache, and nothing of the old one
-    /// is left in it as a target or as a survivor that would mask the new one.
+    /// §5.6 when the cache moved between two passes, as a <c>config.toml</c> edit moves it: the plan,
+    /// which asks Poetry afresh every time, targets and protects the new cache, and nothing of the old
+    /// one is left in it as a target or as a survivor that would mask the new one.
     /// </summary>
     [Fact]
     public async Task APlanAfterTheCacheMovedTargetsAndProtectsTheNewOne()

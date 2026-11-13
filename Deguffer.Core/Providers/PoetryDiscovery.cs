@@ -71,7 +71,7 @@ internal sealed partial class PoetryDiscovery(IProcessRunner runner, IUserEnviro
         string poetry,
         string defaultCacheRoot,
         CancellationToken ct) =>
-        _located.Get(() => AskBothAsync(poetry, defaultCacheRoot, afresh: false, ct));
+        _located.Get(() => AskBothAsync(poetry, defaultCacheRoot, memory.AskAsync, ct));
 
     /// <summary>
     /// Poetry's two directories asked of Poetry now, once a planning pass, and then remembered: for
@@ -85,9 +85,14 @@ internal sealed partial class PoetryDiscovery(IProcessRunner runner, IUserEnviro
         string poetry,
         string defaultCacheRoot,
         CancellationToken ct) =>
-        _asked.Get(() => AskBothAsync(poetry, defaultCacheRoot, afresh: true, ct));
+        _asked.Get(() => AskBothAsync(poetry, defaultCacheRoot, memory.AskAfreshAsync, ct));
 
-    private async Task<PoetryLocations> AskBothAsync(string poetry, string defaultCacheRoot, bool afresh, CancellationToken ct)
+    /// <param name="ask">How each setting is asked: the memory's answer where it still holds, or Poetry now.</param>
+    private async Task<PoetryLocations> AskBothAsync(
+        string poetry,
+        string defaultCacheRoot,
+        Func<ToolQuestion<string?>, CancellationToken, Task<string?>> ask,
+        CancellationToken ct)
     {
         // One reading for the block the answers are compared by and the variable naming Poetry's
         // configuration folder, so the two can never describe different moments.
@@ -113,7 +118,7 @@ internal sealed partial class PoetryDiscovery(IProcessRunner runner, IUserEnviro
                 static answer => answer is not null,
                 ct2 => AskAsync(poetry, key, ct2));
 
-            return afresh ? memory.AskAfreshAsync(question, ct) : memory.AskAsync(question, ct);
+            return ask(question, ct);
         }
     }
 

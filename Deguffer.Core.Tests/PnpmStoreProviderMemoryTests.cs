@@ -1,4 +1,5 @@
 using Deguffer.Core.Execution;
+using Deguffer.Core.Exploring.Acting;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Testing;
@@ -218,6 +219,23 @@ public sealed class PnpmStoreProviderMemoryTests : IDisposable
         Assert.Equal(1, StoreAsks);
         Assert.Contains(roots, r => r.Path.Equals(Store, StringComparison.OrdinalIgnoreCase));
         Assert.Contains(places, p => p.Path.Equals(Store, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// §7.1: each Explore policy build constructs its providers afresh, and the second build refuses
+    /// the store as the first did without starting pnpm again.
+    /// </summary>
+    [Fact]
+    public async Task ASecondExplorePolicyBuildAnswersFromMemoryWithoutAskingPnpm()
+    {
+        var system = new FakeSystemDirectories(_temp.CreateDirectory("machine"));
+
+        var first = await ExploreActionPolicy.ForAsync(system, _environment, new FakeVolumeInventory(), [CreateProvider()]);
+        var second = await ExploreActionPolicy.ForAsync(system, _environment, new FakeVolumeInventory(), [CreateProvider()]);
+
+        Assert.Equal(1, StoreAsks);
+        Assert.False(first.MayRemove(Store).IsAllowed);
+        Assert.False(second.MayRemove(Store).IsAllowed);
     }
 
     /// <summary>

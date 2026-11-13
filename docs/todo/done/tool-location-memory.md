@@ -45,7 +45,7 @@ of these tools again (`scan-progress.md` §4: conda about 0.9-1.0 s, npm 0.4-0.6
 
 Every query runs in `%LOCALAPPDATA%\Deguffer\tool-working-directory` (`ProcessRunner`), so "each
 folder up" below means that folder and every parent of it, up to the drive root. Every query
-inherits Deguffer's own start-up environment, which the whole-block hash covers.
+inherits Deguffer's own start-up environment, which the fingerprint compares whole.
 
 | Tool | Executable and code | Configuration | Named by the answer |
 | --- | --- | --- | --- |
@@ -66,8 +66,10 @@ PlatformIO joins under #1053, once #591 has changed what its query reads.
    set, the executable replaced) asks again; a refused input, an unanswered ask and an input written
    during the ask are not kept; a second set of providers on the same runner shares the answer.
 2. conda. 3. Poetry. 4. pip. 5. npm. 6. pnpm. 7. Yarn 1 and Yarn Berry. Each adopter has one test
-   per declared input kind, a test that a second Explore policy build asks nothing, and the §5.6
-   negative of its plan when the location moved between two passes.
+   per declared input kind, a test that a second set of providers on the same memory asks nothing,
+   and the §5.6 negative of its plan when the location moved between two passes. Each row that asks
+   its tool when Explore builds its policy (conda, Poetry, pnpm and both Yarn rows) has a test that a
+   second policy build asks nothing; npm's and pip's Explore declarations ask no tool.
 8. `CLAUDE.md` G4, `docs/cache-locations.md` (each adopter's inputs, citing the tool's
    documentation) and the comments that said the answer must not outlive a pass.
 

@@ -231,6 +231,41 @@ public sealed class ToolAnswerMemoryTests : IDisposable
     }
 
     [Fact]
+    public async Task DoesNotKeepAnAnswerWhoseInputWasDeletedWhileTheToolRan()
+    {
+        var memory = OnTheRealClock();
+
+        // A deleted file has no times left to compare, so only its folder says it changed.
+        await memory.AskAsync(Question(Inputs(), isAnswer: true, during: () => File.Delete(_config)), CancellationToken.None);
+
+        Assert.False(memory.Holds(Key));
+    }
+
+    [Fact]
+    public async Task DoesNotKeepAnAnswerWhoseInputWasRenamedIntoPlaceWhileTheToolRan()
+    {
+        var staged = Path.Combine(_temp.CreateDirectory("staging"), "absent.ini");
+        File.WriteAllText(staged, "cache=two");
+        var memory = OnTheRealClock();
+
+        // A rename keeps the file's own old times, so only the folder it arrived in says it changed.
+        await memory.AskAsync(Question(Inputs(), isAnswer: true, during: () => File.Move(staged, _absent)), CancellationToken.None);
+
+        Assert.True(InputStamp.Of(_absent).Newest < DateTimeOffset.UtcNow.AddMinutes(-30).ToFileTime());
+        Assert.False(memory.Holds(Key));
+    }
+
+    [Fact]
+    public async Task KeepsAnAnswerOnTheRealClockWhenNothingHoldingItsInputsChangedWhileTheToolRan()
+    {
+        var memory = OnTheRealClock();
+
+        await memory.AskAsync(Question(Inputs()), CancellationToken.None);
+
+        Assert.True(memory.Holds(Key));
+    }
+
+    [Fact]
     public async Task DoesNotKeepAnAnswerWhoseInputWasWrittenJustBeforeTheToolStartedOnACoarseClock()
     {
         File.SetLastWriteTimeUtc(_config, _clock.GetUtcNow().UtcDateTime - TimeSpan.FromSeconds(1));
@@ -317,6 +352,20 @@ public sealed class ToolAnswerMemoryTests : IDisposable
         Assert.Same(ToolAnswerMemory.Shared, ToolAnswerMemory.For(ProcessRunner.Default));
         Assert.NotSame(ToolAnswerMemory.Shared, ToolAnswerMemory.For(fake));
         Assert.NotSame(ToolAnswerMemory.For(fake), ToolAnswerMemory.For(fake));
+    }
+
+    /// <summary>
+    /// A memory on the real clock, with every path of the fixture an hour old, for a change made while
+    /// the tool runs that Windows times itself: a folder's last-write time after a delete or a rename.
+    /// </summary>
+    private ToolAnswerMemory OnTheRealClock()
+    {
+        foreach (var entry in Directory.EnumerateFileSystemEntries(_temp.Path, "*", SearchOption.AllDirectories).Append(_temp.Path))
+        {
+            TempDirectory.Age(entry, TimeSpan.FromHours(1));
+        }
+
+        return new ToolAnswerMemory(TimeProvider.System);
     }
 
     private ToolInputs Inputs() => new()

@@ -104,6 +104,33 @@ internal sealed record ToolInputs
     }
 
     /// <summary>
+    /// Whether a folder holding a declared input was written at or after <paramref name="fileTime"/>,
+    /// or could not be read: what a file deleted, created by a rename or renamed away leaves behind,
+    /// since the file itself then has no time to compare.
+    ///
+    /// <para><b>Asked only when an answer is to be kept, and not part of the fingerprint.</b> The
+    /// folders above the tools' working folder include the profile, where programs create and remove
+    /// files all day, so comparing them on every pass would ask the tool again for nothing.</para>
+    /// </summary>
+    /// <param name="fileTime">The moment the tool was started, as a FILETIME.</param>
+    public bool FoldersChangedSince(long fileTime)
+    {
+        var holding = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var path in Files.Concat(Folders.Select(static folder => folder.Path)))
+        {
+            if (Path.GetDirectoryName(path) is { } folder && holding.Add(folder)
+                && InputStamp.Of(folder) is var stamp
+                && (stamp.Presence is PathPresence.Refused || stamp.Newest >= fileTime))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// The entries of <paramref name="folder"/>, in name order so two readings of an unchanged folder
     /// compare equal, and those of each folder in it to <paramref name="depth"/> levels.
     ///

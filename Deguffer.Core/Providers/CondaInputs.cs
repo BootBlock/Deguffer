@@ -52,8 +52,9 @@ internal static class CondaInputs
         ];
 
         var entries = searched
-            .Where(folder => folder.Value is not null)
-            .SelectMany(_ => SearchedNames, (folder, name) => Entry(folder.Value!, Path.Join(folder.Under, name), environment))
+            .SelectMany(folder => folder.Value is { } value
+                ? SearchedNames.Select(name => Entry(value, Path.Join(folder.Under, name), environment))
+                : [])
             .Append(Path.Combine(profile, ".condarc"));
 
         if (Value(variables, "CONDARC") is { } named)

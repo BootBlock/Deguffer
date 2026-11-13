@@ -18,9 +18,11 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>What is never kept.</b> A failed or cancelled ask; an answer the tool did not give
 /// (<see cref="ToolQuestion{T}.IsAnswer"/>); an answer whose inputs could not all be read; and an
-/// answer whose inputs were written at or after the moment the tool was started, less
-/// <see cref="CoarseTimes"/>, because the tool may have read them before the change. The next ask
-/// then reads them again, unchanged, and keeps that answer.</para>
+/// answer whose inputs, or the folders holding them, were written at or after the moment the tool
+/// was started, less <see cref="CoarseTimes"/>, because the tool may have read them before the
+/// change. A file deleted, created by a rename or renamed away keeps no time of its own that says
+/// so, and its folder's does. The next ask then reads them again, unchanged, and keeps that
+/// answer.</para>
 ///
 /// <para><b>Public only so a public provider can take one</b> (a test hands two providers the same
 /// memory, as two Explore builds share <see cref="Shared"/>). Asking stays inside Core.</para>
@@ -81,14 +83,16 @@ public sealed class ToolAnswerMemory
     /// </summary>
     internal async Task<T> AskAfreshAsync<T>(ToolQuestion<T> question, CancellationToken ct)
     {
-        var started = _time.GetUtcNow() - CoarseTimes;
+        var started = (_time.GetUtcNow() - CoarseTimes).ToFileTime();
         var answer = await question.Ask(ct).ConfigureAwait(false);
 
         if (question.IsAnswer(answer)
-            && question.InputsOf(answer).Read(question.Environment) is { IsComplete: true } read
-            && read.Newest < started.ToFileTime())
+            && question.InputsOf(answer) is var inputs
+            && inputs.Read(question.Environment) is { IsComplete: true } read
+            && read.Newest < started
+            && !inputs.FoldersChangedSince(started))
         {
-            _answers[question.Key] = new Remembered(answer!, read);
+            _answers[question.Key] = new Remembered(answer, read);
         }
         else
         {
@@ -101,5 +105,5 @@ public sealed class ToolAnswerMemory
     /// <summary>Whether an answer to <paramref name="key"/> is held, for the tests of what is kept.</summary>
     internal bool Holds(string key) => _answers.ContainsKey(key);
 
-    private sealed record Remembered(object Answer, ToolFingerprint Fingerprint);
+    private sealed record Remembered(object? Answer, ToolFingerprint Fingerprint);
 }
