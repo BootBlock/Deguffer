@@ -6,9 +6,9 @@ namespace Deguffer.App.Shell;
 /// Where <see cref="RowGhosts"/> draws the ghosts of a change's leaving rows, in the three steps it
 /// takes them in: every ghost is added, the layer is laid out once, and only then is each one faded.
 ///
-/// <para>Laying the layer out lays out the whole window, not only the ghost, so a layout pass per
-/// ghost held a frame for a quarter of a second once a few dozen rows left at once. The order is
-/// <see cref="RowGhosts"/>' to keep, and this seam lets a test count the passes without a window.</para>
+/// <para>Laying the layer out lays out the whole window, not only the ghosts, so a change's ghosts
+/// share one pass. The order is <see cref="RowGhosts"/>' to keep, and this seam lets a test count
+/// the passes without a window.</para>
 /// </summary>
 /// <typeparam name="TGhost">What the layer draws one ghost as.</typeparam>
 internal interface IGhostLayer<TGhost>

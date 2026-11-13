@@ -6,8 +6,7 @@ namespace Deguffer.App.Tests;
 
 /// <summary>
 /// The rows a change takes off the screen are ghosted together. Laying the ghost layer out lays out
-/// the whole window, so a pass for each leaving row held one frame for as long as a quarter of a
-/// second once a few dozen rows left at once.
+/// the whole window, so the change's ghosts share one pass, however many rows leave.
 /// </summary>
 public sealed class RowGhostsTests
 {
