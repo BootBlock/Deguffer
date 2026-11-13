@@ -109,6 +109,27 @@ public sealed class BunInstallCacheProviderTests : IDisposable
         Assert.True((await provider.PlanAsync()).IsEmpty);
     }
 
+    /// <summary>
+    /// #450: Bun is asked its version and then where its cache is as the pass begins, and the plan awaits
+    /// those answers.
+    /// </summary>
+    [Fact]
+    public async Task AsksBunItsVersionAndCacheAsThePassBegins()
+    {
+        PopulateCache();
+        var runner = BunAnswering();
+
+        await EarlyStartProof.StartsBeforeItPlansAsync(CreateProvider(runner), runner, "--version", "pm cache");
+    }
+
+    [Fact]
+    public async Task StartsNothingAsThePassBeginsWhenBunIsNotInstalled()
+    {
+        var runner = new FakeProcessRunner();
+
+        await EarlyStartProof.StartsNothingAsync(CreateProvider(runner), runner);
+    }
+
     [Fact]
     public async Task PlansBunsPruneSentToTheCacheItMeasured()
     {

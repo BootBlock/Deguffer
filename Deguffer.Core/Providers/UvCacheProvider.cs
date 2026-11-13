@@ -156,6 +156,13 @@ public sealed class UvCacheProvider : CleanupProviderBase
         base.InvalidateCaches();
     }
 
+    /// <summary>
+    /// uv's answers for where its cache, tools and interpreters are, asked as the pass begins: the plan
+    /// cannot check the cache against the other two until all three uv processes have answered.
+    /// </summary>
+    public override Task BeginPass(PassStart start) =>
+        start.Ask(ct => Environment.FindExecutable("uv") is { } uv ? ResolveStorageAsync(uv, ct) : Task.CompletedTask);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var uv = Environment.FindExecutable("uv");

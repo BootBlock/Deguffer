@@ -30,6 +30,26 @@ public sealed class NuGetCacheProviderTests : IDisposable
         Assert.True((await provider.PlanAsync()).IsEmpty);
     }
 
+    /// <summary>#450: NuGet is asked where its caches are as the pass begins, and the plan awaits that answer.</summary>
+    [Fact]
+    public async Task AsksNuGetWhereItsCachesAreAsThePassBegins()
+    {
+        _environment.WithExecutable("dotnet");
+        var runner = new FakeProcessRunner().Responding(Dotnet, "locals all --list", string.Empty);
+        var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory());
+
+        await EarlyStartProof.StartsBeforeItPlansAsync(provider, runner, "locals all --list");
+    }
+
+    [Fact]
+    public async Task StartsNothingAsThePassBeginsWithoutTheDotnetSdk()
+    {
+        var runner = new FakeProcessRunner();
+        var provider = new NuGetCacheProvider(_environment, runner, FakeProcessInspector.NothingRunning, volumes: new FakeVolumeInventory());
+
+        await EarlyStartProof.StartsNothingAsync(provider, runner);
+    }
+
     [Fact]
     public async Task PlansTheEvictionCommandRatherThanDeletingAnyPath()
     {

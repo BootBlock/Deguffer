@@ -137,6 +137,14 @@ public sealed class BunInstallCacheProvider : CleanupProviderBase
         base.InvalidateCaches();
     }
 
+    /// <summary>
+    /// Bun's version, and then where its cache is, asked as the pass begins: the two run one after the
+    /// other, because only a Bun that can prune is asked the second, so this row waits on two process
+    /// starts in series before it can measure anything.
+    /// </summary>
+    public override Task BeginPass(PassStart start) =>
+        start.Ask(ct => Environment.FindExecutable("bun") is { } bun ? ResolveAsync(bun, ct) : Task.CompletedTask);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         if (Environment.FindExecutable("bun") is not { } bun)
