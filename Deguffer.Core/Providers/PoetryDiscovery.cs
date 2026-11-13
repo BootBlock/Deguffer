@@ -4,22 +4,6 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Providers;
 
 /// <summary>
-/// Where Poetry says its two directories are on this machine.
-/// </summary>
-/// <param name="CacheRoot">
-/// The cache directory, which is the folder Deguffer reaches into. Where Poetry cannot answer, this
-/// is the documented default, and the provider still checks it exists before acting.
-/// </param>
-/// <param name="Environments">
-/// Where Poetry keeps its virtual environments, and the reason this record has two fields rather
-/// than one: <c>virtualenvs.path</c> defaults to a child of <paramref name="CacheRoot"/> and can be
-/// pointed anywhere, so the two are separate answers that happen to overlap by default. A provider
-/// that derived this from the cache root would be asserting the default rather than describing the
-/// machine. Where Poetry cannot answer, this is that default.
-/// </param>
-internal sealed record PoetryLocations(AskedLocation CacheRoot, AskedLocation Environments);
-
-/// <summary>
 /// Asks Poetry about itself. Separate from the provider for the reason <see cref="VcpkgDiscovery"/>
 /// is: one type answers "where is this tool?" and the other answers "what inside it may go".
 ///
@@ -28,11 +12,15 @@ internal sealed record PoetryLocations(AskedLocation CacheRoot, AskedLocation En
 /// three lookups share a failure mode — Poetry may be an older version, may colourise, may print
 /// something that is not a path at all — and the handling of that belongs in one place.</para>
 ///
-/// <para>It takes no <see cref="IUserEnvironment"/>, and the fallback location is an argument
-/// instead. Where Poetry keeps its folders in a profile is what the provider's §5.2 declarations are
-/// written against, so that knowledge stays in one file rather than being stated in two.</para>
+/// <para>The fallback location is an argument. Where Poetry keeps its folders in a profile is what
+/// the provider's §5.2 declarations are written against, so that knowledge stays in one file rather
+/// than being stated in two. The environment it takes is for what Poetry reads to answer
+/// (<see cref="PoetryInputs"/>), which is what decides whether a remembered answer still stands.</para>
 /// </summary>
-internal sealed partial class PoetryDiscovery(IProcessRunner runner)
+/// <param name="runner">Starts Poetry.</param>
+/// <param name="environment">The account Poetry runs as, whose configuration it reads.</param>
+/// <param name="memory">Where the two location answers are kept between passes.</param>
+internal sealed partial class PoetryDiscovery(IProcessRunner runner, IUserEnvironment environment, ToolAnswerMemory memory)
 {
     /// <summary>
     /// What a cache name has to look like before it is pasted into a command line. A repository name
@@ -44,16 +32,29 @@ internal sealed partial class PoetryDiscovery(IProcessRunner runner)
     [GeneratedRegex(@"\A[A-Za-z0-9._-]+\z", RegexOptions.CultureInvariant)]
     private static partial Regex PlainCacheName();
 
+    /// <summary>The pair as the memory holds it, for the §5.2 declarations and the cleaned places.</summary>
     private readonly PassMemo<Task<PoetryLocations>> _located = new();
 
     /// <summary>
-    /// Both settings are configuration, and <c>poetry config</c> is how either is changed, so a
-    /// remembered pair would describe directories Poetry has stopped using.
+    /// The pair asked of Poetry in this pass whatever the memory holds, for the plan. A memo of its
+    /// own, so a declaration read first in the pass never hands the plan a remembered answer.
     /// </summary>
-    public void Invalidate() => _located.Forget();
+    private readonly PassMemo<Task<PoetryLocations>> _asked = new();
 
     /// <summary>
-    /// Poetry's two directories, asked once and remembered for the life of a planning pass.
+    /// Both settings are configuration, and <c>poetry config</c> is how either is changed. The pass's
+    /// answers are forgotten; the memory keeps each only while everything Poetry read to give it
+    /// (<see cref="PoetryInputs"/>) is unchanged, and asks again the moment any of it is not.
+    /// </summary>
+    public void Invalidate()
+    {
+        _located.Forget();
+        _asked.Forget();
+    }
+
+    /// <summary>
+    /// Poetry's two directories, asked once a planning pass, and answered from the memory while what
+    /// Poetry read to give them is unchanged.
     ///
     /// <para>Two lookups rather than one because Poetry offers no combined form: <c>config --list</c>
     /// prints the raw setting with the resolved value in a trailing comment, which is a parse of a
@@ -70,17 +71,50 @@ internal sealed partial class PoetryDiscovery(IProcessRunner runner)
         string poetry,
         string defaultCacheRoot,
         CancellationToken ct) =>
-        _located.Get(() => AskBothAsync(poetry, defaultCacheRoot, ct));
+        _located.Get(() => AskBothAsync(poetry, defaultCacheRoot, afresh: false, ct));
 
-    private async Task<PoetryLocations> AskBothAsync(string poetry, string defaultCacheRoot, CancellationToken ct)
+    /// <summary>
+    /// Poetry's two directories asked of Poetry now, once a planning pass, and then remembered: for
+    /// the plan, which deletes <c>artifacts</c> by path under the cache directory, where an input
+    /// the memory missed would move a deletion (§5.2) rather than misstate a figure.
+    /// </summary>
+    /// <param name="poetry">The Poetry executable, already resolved on <c>PATH</c>.</param>
+    /// <param name="defaultCacheRoot">Where Poetry keeps its cache when it has not been asked.</param>
+    /// <param name="ct">Cancellation for the two subprocess calls.</param>
+    public Task<PoetryLocations> DiscoverAfreshAsync(
+        string poetry,
+        string defaultCacheRoot,
+        CancellationToken ct) =>
+        _asked.Get(() => AskBothAsync(poetry, defaultCacheRoot, afresh: true, ct));
+
+    private async Task<PoetryLocations> AskBothAsync(string poetry, string defaultCacheRoot, bool afresh, CancellationToken ct)
     {
-        var cacheRoot = AskedLocation.Of(await AskAsync(poetry, "cache-dir", ct).ConfigureAwait(false), defaultCacheRoot);
+        // One reading for the block the answers are compared by and the variable naming Poetry's
+        // configuration folder, so the two can never describe different moments.
+        var variables = environment.ToolEnvironment;
+        var inputs = PoetryInputs.Of(poetry, environment, variables);
+
+        var cacheRoot = AskedLocation.Of(await SettingAsync("cache-dir").ConfigureAwait(false), defaultCacheRoot);
 
         var environments = AskedLocation.Of(
-            await AskAsync(poetry, "virtualenvs.path", ct).ConfigureAwait(false),
+            await SettingAsync("virtualenvs.path").ConfigureAwait(false),
             Path.Combine(cacheRoot.Path, "virtualenvs"));
 
         return new PoetryLocations(cacheRoot, environments);
+
+        // One question per setting, so a Poetry that answers one and not the other still has the
+        // one it gave kept. Null is no answer, and the default it falls back to is never kept.
+        Task<string?> SettingAsync(string key)
+        {
+            var question = new ToolQuestion<string?>(
+                $"config {key}|{poetry}",
+                variables,
+                _ => inputs,
+                static answer => answer is not null,
+                ct2 => AskAsync(poetry, key, ct2));
+
+            return afresh ? memory.AskAfreshAsync(question, ct) : memory.AskAsync(question, ct);
+        }
     }
 
     /// <summary>
