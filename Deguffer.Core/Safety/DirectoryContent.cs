@@ -26,11 +26,11 @@ namespace Deguffer.Core.Safety;
 /// <para><b>It stops at the first content it finds, and it walks depth first</b> (G4). A folder
 /// that holds anything usually holds it a level or two below its first subfolder, so entering each
 /// subfolder as it is listed answers inside the first branch. Breadth first, a wide folder whose top
-/// level holds only folders is listed almost whole before the first file: <c>C:\Windows\WinSxS</c>
-/// put about 15,000 folders ahead of it. The walk keeps one open listing per level on a stack of its
-/// own, so a deep tree cannot exhaust the thread's stack, and reads each entry in place, building a
-/// path only for a folder it enters. The expensive shape is a tree of nothing but empty folders,
-/// which is walked whole, because that is exactly the tree the answer has to be about.</para>
+/// level holds only folders, as <c>C:\Windows\WinSxS</c> does, is listed almost whole before the
+/// first file. The walk keeps one open listing per level on a stack of its own, so a deep tree
+/// cannot exhaust the thread's stack, and reads each entry in place, building a path only for a
+/// folder it enters. The expensive shape is a tree of nothing but empty folders, which is walked
+/// whole, because that is exactly the tree the answer has to be about.</para>
 ///
 /// <para>§6.3: the walk starts from the extended-length form, and .NET builds every child from the
 /// parent it was given. The answer is a boolean, so no test can observe that form; the test past

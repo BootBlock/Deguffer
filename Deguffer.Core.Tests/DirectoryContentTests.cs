@@ -162,7 +162,8 @@ public sealed class DirectoryContentTests : IDisposable
     /// <summary>
     /// G4: a wide folder whose top level holds only folders, each holding a file, is the shape of
     /// <c>C:\Windows\WinSxS</c>. Any file answers the question, so the cost must not grow with the
-    /// width. Listed breadth first with an object per entry, these 2,000 folders cost about 1 MB.
+    /// width: the bound allows a few listings and paths, far less than an entry each for 2,000
+    /// folders.
     /// </summary>
     [Fact]
     public void AWideFolderOfFoldersIsAnsweredWithoutListingItsWidth()
