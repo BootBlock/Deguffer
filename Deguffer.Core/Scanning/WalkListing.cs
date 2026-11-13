@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Scanning;
@@ -110,7 +111,13 @@ internal sealed class WalkListing(ListingBuffer buffer, ListDirectory list, File
         SetReparsePointsApart();
 
         // Expected on a live machine, and reported rather than thrown, since a volume holds hundreds.
-        return new DirectoryContents(directory, _entries, _links, _reparseFiles, end, _held?.Handle ?? 0);
+        return new DirectoryContents(
+            directory,
+            CollectionsMarshal.AsSpan(_entries),
+            CollectionsMarshal.AsSpan(_links),
+            CollectionsMarshal.AsSpan(_reparseFiles),
+            end,
+            _held?.Handle ?? 0);
     }
 
     /// <summary>Close the directory last listed, where it was held open. The walk calls this once its callback is over.</summary>

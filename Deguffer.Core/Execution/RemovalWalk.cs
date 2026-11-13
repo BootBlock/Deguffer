@@ -156,7 +156,7 @@ internal static class RemovalWalk
                 return;
             }
 
-            _listed = contents.Entries.Count + contents.ReparseFiles.Count;
+            _listed = contents.Entries.Length + contents.ReparseFiles.Length;
 
             foreach (var entry in contents.Entries)
             {

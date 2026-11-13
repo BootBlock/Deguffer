@@ -189,9 +189,11 @@ internal static class WalkExploreReader
                     // What is left unlisted in a listing is asked of its directory once.
                     LeavesFolderUnlisted? leaves = null;
 
-                    for (var i = 0; i < contents.Entries.Count; i++)
+                    var entries = contents.Entries;
+
+                    for (var i = 0; i < entries.Length; i++)
                     {
-                        var entry = contents.Entries[i];
+                        var entry = entries[i];
 
                         if (!entry.IsDirectory)
                         {
@@ -245,10 +247,8 @@ internal static class WalkExploreReader
         var next = 0;
         long bytes = 0;
 
-        // Indexed rather than enumerated, because an enumerator taken through the interface is boxed.
-        for (var i = 0; i < contents.Entries.Count; i++)
+        foreach (var entry in contents.Entries)
         {
-            var entry = contents.Entries[i];
             if (entry.IsDirectory)
             {
                 into[next++] = new ExploreChild(
@@ -263,10 +263,8 @@ internal static class WalkExploreReader
             }
         }
 
-        for (var i = 0; i < contents.Links.Count; i++)
+        foreach (var link in contents.Links)
         {
-            var link = contents.Links[i];
-
             // Shown, and empty. Its target holds its own place in this tree, so counting anything
             // here would count those bytes twice — and hiding it altogether makes a directory the
             // user can plainly see in Explorer vanish from the picture.
@@ -281,9 +279,9 @@ internal static class WalkExploreReader
 
         // Drawn like any other file, as the file table draws them. Leaving them out drew nothing for
         // a deduplicated file that holds its content, and only a symbolic link among them is a link.
-        for (var i = 0; i < contents.ReparseFiles.Count; i++)
+        foreach (var reparseFile in contents.ReparseFiles)
         {
-            var file = File(contents.ReparseFiles[i], probe);
+            var file = File(reparseFile, probe);
             into[next++] = file;
             bytes += file.Size;
         }

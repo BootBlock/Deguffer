@@ -520,9 +520,9 @@ public sealed class WalkExploreReaderTests : IDisposable
     /// <summary>A directory's listing sorted as the walk sorts it, reparse-point files apart.</summary>
     private static DirectoryContents Listing(params WalkEntry[] entries) => new(
         Listed,
-        [.. entries.Where(e => !e.IsReparsePoint)],
-        [],
-        [.. entries.Where(e => e.IsReparsePoint)],
+        entries.Where(e => !e.IsReparsePoint).ToArray(),
+        ReadOnlySpan<WalkEntry>.Empty,
+        entries.Where(e => e.IsReparsePoint).ToArray(),
         ListingEnd.Listed);
 
     /// <summary>
