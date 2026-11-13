@@ -169,11 +169,28 @@ public sealed class PnpmStoreProviderMemoryTests : IDisposable
     }
 
     /// <summary>
-    /// A variable naming a folder pnpm reads that is not a full path cannot be stamped, so the answer
-    /// is asked again every pass rather than remembered with an input nobody watches.
+    /// pnpm opens a relative folder from the folder it runs in, so that is the folder stamped: a
+    /// settings file written there asks again, and one with the same name beside Deguffer does not
+    /// matter.
     /// </summary>
     [Fact]
-    public async Task AConfigurationFolderThatIsNotAFullPathIsNeverRemembered()
+    public async Task AConfigurationFolderThatIsNotAFullPathIsReadFromTheToolsWorkingFolder()
+    {
+        _environment.WithEnvironmentVariable("XDG_CONFIG_HOME", "relative-config");
+        var provider = CreateProvider();
+
+        await provider.PlanAsync();
+        var rc = Path.Combine(ToolInputs.WorkingDirectory(_environment), "relative-config", "pnpm", "rc");
+        Directory.CreateDirectory(Path.GetDirectoryName(rc)!);
+        File.WriteAllText(rc, "store-dir=D:\elsewhere");
+        provider.InvalidateCaches();
+        await provider.PlanAsync();
+
+        Assert.Equal(2, StoreAsks);
+    }
+
+    [Fact]
+    public async Task AConfigurationFolderThatIsNotAFullPathIsRememberedWhileNothingInItChanges()
     {
         _environment.WithEnvironmentVariable("XDG_CONFIG_HOME", "relative-config");
         var provider = CreateProvider();
@@ -182,7 +199,7 @@ public sealed class PnpmStoreProviderMemoryTests : IDisposable
         provider.InvalidateCaches();
         await provider.PlanAsync();
 
-        Assert.Equal(2, StoreAsks);
+        Assert.Equal(1, StoreAsks);
     }
 
     /// <summary>

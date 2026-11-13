@@ -56,6 +56,28 @@ internal sealed record ToolInputs
     /// </summary>
     public static string WorkingDirectory(IUserEnvironment environment) => ProcessRunner.WorkingDirectoryFor(environment);
 
+    /// <summary>
+    /// The path a tool opens for <paramref name="value"/>, a setting or a variable naming a file or a
+    /// folder, or null where no path can be made of it, which the tool cannot open either.
+    ///
+    /// <para>A tool opens a relative value from the folder it runs in, as every process does, so that
+    /// is what a declaration stamps. Read against Deguffer's own folder, or dropped for a default, the
+    /// stamp would watch a path the tool never reads.</para>
+    /// </summary>
+    /// <param name="value">The value as the tool reads it, after any expansion of its own such as a leading <c>~</c>.</param>
+    public static string? Opened(string value, IUserEnvironment environment)
+    {
+        try
+        {
+            return LongPath.Configured(Path.GetFullPath(value, WorkingDirectory(environment)));
+        }
+        catch (ArgumentException)
+        {
+            // An empty value, or a NUL, which no path can hold, so the tool's own open of it fails too.
+            return null;
+        }
+    }
+
     /// <summary>What every declared input holds now, and what <paramref name="environment"/> holds.</summary>
     /// <param name="environment">Every variable the tool is started with.</param>
     public ToolFingerprint Read(IReadOnlyDictionary<string, string> environment)

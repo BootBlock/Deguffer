@@ -100,14 +100,6 @@ internal static class CondaInputs
             path = environment.UserProfile + path[1..];
         }
 
-        try
-        {
-            return LongPath.Configured(Path.GetFullPath(path.Length == 0 ? "." : path, ToolInputs.WorkingDirectory(environment)));
-        }
-        catch (ArgumentException)
-        {
-            // A NUL in the value, which no path can hold, so conda's open of it fails too.
-            return null;
-        }
+        return ToolInputs.Opened(path.Length == 0 ? "." : path, environment);
     }
 }

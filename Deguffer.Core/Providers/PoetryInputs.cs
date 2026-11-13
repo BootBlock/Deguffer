@@ -32,7 +32,7 @@ internal static class PoetryInputs
         var workingDirectory = ToolInputs.WorkingDirectory(environment);
         List<string> files = [poetry, .. ToolInputs.InEachFolderUp(workingDirectory, ProjectFiles)];
 
-        if (ConfigurationFolder(environment, variables, workingDirectory) is { } folder)
+        if (ConfigurationFolder(environment, variables) is { } folder)
         {
             files.Add(Path.Combine(folder, "config.toml"));
             files.Add(Path.Combine(folder, "auth.toml"));
@@ -49,24 +49,13 @@ internal static class PoetryInputs
     /// default</c>), with no <c>~</c> expanded, so a relative value is read from the folder it runs
     /// in.</para>
     /// </summary>
-    private static string? ConfigurationFolder(
-        IUserEnvironment environment,
-        IReadOnlyDictionary<string, string> variables,
-        string workingDirectory)
+    private static string? ConfigurationFolder(IUserEnvironment environment, IReadOnlyDictionary<string, string> variables)
     {
         if (!variables.TryGetValue("POETRY_CONFIG_DIR", out var named) || named.Length == 0)
         {
             return Path.Combine(environment.RoamingAppData, "pypoetry");
         }
 
-        try
-        {
-            return LongPath.Configured(Path.GetFullPath(named, workingDirectory));
-        }
-        catch (ArgumentException)
-        {
-            // A NUL in the value, which no path can hold, so Poetry's open of it fails too.
-            return null;
-        }
+        return ToolInputs.Opened(named, environment);
     }
 }

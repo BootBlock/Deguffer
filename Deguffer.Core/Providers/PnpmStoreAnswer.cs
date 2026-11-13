@@ -55,12 +55,12 @@ internal sealed record PnpmStoreAnswer(string? Store, string? GlobalConfig)
 
         AddConfigurationFolder(files, Path.Combine(environment.LocalAppData, "pnpm", "config"));
 
-        if (Declared(environment.GetToolEnvironmentVariable("XDG_CONFIG_HOME")) is { } xdg)
+        if (Declared(environment.GetToolEnvironmentVariable("XDG_CONFIG_HOME"), environment) is { } xdg)
         {
             AddConfigurationFolder(files, Path.Combine(xdg, "pnpm"));
         }
 
-        if (Declared(environment.GetToolEnvironmentVariable("npm_config_userconfig")) is { } userConfig)
+        if (Declared(environment.GetToolEnvironmentVariable("npm_config_userconfig"), environment) is { } userConfig)
         {
             files.Add(userConfig);
         }
@@ -81,13 +81,13 @@ internal sealed record PnpmStoreAnswer(string? Store, string? GlobalConfig)
                 // Corepack's home holds the pnpm versions it downloaded and the one it starts by
                 // default, a level below the folder for each tool.
                 new ListedFolder(
-                    Declared(environment.GetToolEnvironmentVariable("COREPACK_HOME"))
+                    Declared(environment.GetToolEnvironmentVariable("COREPACK_HOME"), environment)
                         ?? Path.Combine(environment.LocalAppData, "node", "corepack"),
                     Depth: 2),
 
                 // pnpm's home holds the versions `pnpm self-update` and `pnpm env` switched to.
                 new ListedFolder(
-                    Declared(environment.GetToolEnvironmentVariable("PNPM_HOME"))
+                    Declared(environment.GetToolEnvironmentVariable("PNPM_HOME"), environment)
                         ?? Path.Combine(environment.LocalAppData, "pnpm")),
             ],
         };
@@ -100,6 +100,7 @@ internal sealed record PnpmStoreAnswer(string? Store, string? GlobalConfig)
         files.Add(Path.Combine(folder, "auth.ini"));
     }
 
-    private static string? Declared(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? null : LongPath.Configured(value) ?? value;
+    /// <summary>The path pnpm opens for a variable's value, or null where it is unset or names nothing.</summary>
+    private static string? Declared(string? value, IUserEnvironment environment) =>
+        string.IsNullOrWhiteSpace(value) ? null : ToolInputs.Opened(value, environment);
 }

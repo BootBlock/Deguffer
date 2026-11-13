@@ -50,10 +50,11 @@ internal static class PipLocationInputs
 
         var folders = new List<ListedFolder> { new(Path.Combine(environment.RoamingAppData, "Python"), UserSiteDepth) };
 
-        if (environment.ToolEnvironment.TryGetValue("PIP_CONFIG_FILE", out var named) && named.Length > 0)
+        if (environment.ToolEnvironment.TryGetValue("PIP_CONFIG_FILE", out var named)
+            && named.Length > 0
+            && ToolInputs.Opened(named, environment) is { } configFile)
         {
-            // pip opens the file as named, so a relative one is read from the folder it runs in.
-            files.Add(Path.GetFullPath(named, ToolInputs.WorkingDirectory(environment)));
+            files.Add(configFile);
         }
 
         if (DistlibLauncher.InterpreterOf(pip) is { } interpreter && Path.GetDirectoryName(interpreter) is { } folder)
