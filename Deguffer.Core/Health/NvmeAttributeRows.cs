@@ -41,7 +41,7 @@ internal static class NvmeAttributeRows
         Count("error-entries", "Errors in the drive's log", log.ErrorLogEntries, "Errors the drive has logged over its life. Many are harmless, so the log alone is not a sign of failure."),
         Count("host-writes", "Write commands", log.HostWrites, "How many write commands the drive has completed."),
         Count("host-reads", "Read commands", log.HostReads, "How many read commands the drive has completed."),
-        new("busy", "Time busy", $"{HealthText.Count(log.BusyMinutes)} minutes", "How long the drive has spent working on commands.", AttributeStanding.Normal, $"{log.BusyMinutes}"),
+        new("busy", "Time busy", HealthText.Minutes(log.BusyMinutes), "How long the drive has spent working on commands.", AttributeStanding.Normal, $"{log.BusyMinutes}"),
         Count("hot-minutes", "Minutes above warning temperature", log.WarningTemperatureMinutes, "How long the drive has run hotter than its warning limit."),
         Count("critical-minutes", "Minutes above critical temperature", log.CriticalTemperatureMinutes, "How long the drive has run hotter than its critical limit."),
         .. log.SensorKelvin.Select((kelvin, index) => new HealthAttribute(

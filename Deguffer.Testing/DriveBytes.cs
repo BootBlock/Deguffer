@@ -93,13 +93,15 @@ public static class DriveBytes
         byte percentageUsed = 0,
         ulong powerOnHours = 0,
         ulong mediaErrors = 0,
-        int[]? sensors = null)
+        int[]? sensors = null,
+        ulong busyMinutes = 0)
     {
         var bytes = Protocol(512);
         BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(ProtocolHeaderBytes + 1), (ushort)kelvin);
         bytes[ProtocolHeaderBytes + 3] = spare;
         bytes[ProtocolHeaderBytes + 4] = spareThreshold;
         bytes[ProtocolHeaderBytes + 5] = percentageUsed;
+        BinaryPrimitives.WriteUInt64LittleEndian(bytes.AsSpan(ProtocolHeaderBytes + 96), busyMinutes);
         BinaryPrimitives.WriteUInt64LittleEndian(bytes.AsSpan(ProtocolHeaderBytes + 128), powerOnHours);
         BinaryPrimitives.WriteUInt64LittleEndian(bytes.AsSpan(ProtocolHeaderBytes + 160), mediaErrors);
 

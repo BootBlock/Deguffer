@@ -19,9 +19,9 @@ namespace Deguffer.Benchmark;
 /// </summary>
 internal static class AutoScanRoute
 {
-    public static RouteRun On(IMftSourceFactory volumes, string folder, ScanTuner tuner) => new(
+    public static RouteRun On(IMftSourceFactory volumes, string folder, ScanTuner tuner) => RouteRun.Blocking(
         ct => Run(volumes, folder, tuner, ct),
-        Before: ct => WalkRoute.Run(folder, tuner.ForVolume(folder[0]).Walk, ct));
+        before: ct => WalkRoute.Run(folder, tuner.ForVolume(folder[0]).Walk, ct));
 
     /// <returns>The entries the folder holds, complete where the folder was reached.</returns>
     public static RunTally Run(IMftSourceFactory volumes, string folder, ScanTuner tuner, CancellationToken ct)

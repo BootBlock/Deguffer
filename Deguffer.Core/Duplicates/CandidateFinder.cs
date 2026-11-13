@@ -145,12 +145,14 @@ public sealed class CandidateFinder
     /// Told how far the scan has got, as <see cref="DuplicateSearchStage.Finding"/>, and then how far
     /// identifying the files has, as <see cref="DuplicateSearchStage.Identifying"/>.
     /// </param>
+    /// <param name="timings">Given how long the scan, the walk and identification took, and what each kept or asked about, or null.</param>
     public async Task<CandidateFinding> FindAsync(
         DuplicateSearch search,
         ExploreActionPolicy policy,
         IProgress<DuplicateSearchProgress>? progress = null,
         CancellationToken ct = default,
-        SearchLocations? located = null)
+        SearchLocations? located = null,
+        DuplicateSearchTimings? timings = null)
     {
         ArgumentNullException.ThrowIfNull(search);
         ArgumentNullException.ThrowIfNull(policy);
@@ -211,16 +213,24 @@ public sealed class CandidateFinder
         PassedOverBelow[] passOver =
             [.. roots.Select(root => new PassedOverBelow(locations.UnresolvedReferences, passedOver?.Within(root.Folder)))];
 
+        timings?.Start(DuplicateSearchPart.Scan);
+
         var scans = await _scanner.ScanFoldersAsync(
             [.. roots.Select(root => root.Folder)],
             [.. passOver.Select(below => (LeavesUnlisted)((parent, parentIsRoot) => below.In(parent, parentIsRoot).PassesOver))],
             progress is null ? null : new ScanProgress(progress),
             ct).ConfigureAwait(false);
 
+        timings?.End(DuplicateSearchPart.Scan);
+        timings?.Start(DuplicateSearchPart.Walk);
+
         for (var i = 0; i < roots.Count; i++)
         {
             walk.Read(scans[i], roots[i], locations.Within(roots[i]), passOver[i], routes[i], ct);
         }
+
+        timings?.End(DuplicateSearchPart.Walk);
+        timings?.Kept = walk.Found.Count;
 
         // A reference at or inside a place the walk passed over or could not read was not searched
         // either, whether it is a root passed over or a folder inside one. Compared ignoring
@@ -241,8 +251,11 @@ public sealed class CandidateFinder
             }
         }
 
-        var identification = new CandidateIdentification(_files, search.Criteria, _media);
+        var identification = new CandidateIdentification(_files, search.Criteria, _media, timings);
+
+        timings?.Start(DuplicateSearchPart.Identification);
         var groups = await identification.GroupAsync(walk.Found, progress, ct).ConfigureAwait(false);
+        timings?.End(DuplicateSearchPart.Identification);
 
         return new CandidateFinding(
             groups,

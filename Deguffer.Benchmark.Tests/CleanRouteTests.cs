@@ -17,7 +17,7 @@ public sealed class CleanRouteTests : IDisposable
     public void Dispose() => _temp.Dispose();
 
     [Fact]
-    public void EveryBuildFolderGoesAndEveryProjectStays()
+    public async Task EveryBuildFolderGoesAndEveryProjectStays()
     {
         var outside = _temp.CreateFile(10, "outside", "kept.txt");
         var site = RemovalSite.Create(Path.Combine(_temp.Path, "site"), out _)!;
@@ -25,9 +25,9 @@ public sealed class CleanRouteTests : IDisposable
 
         for (var run = 0; run < 2; run++)
         {
-            route.Before!(CancellationToken.None);
-            var tally = route.Run(CancellationToken.None);
-            route.After!();
+            await route.Before!(CancellationToken.None);
+            var tally = await route.Run(CancellationToken.None);
+            await route.After!();
 
             for (var i = 0; i < Trees; i++)
             {
@@ -49,13 +49,13 @@ public sealed class CleanRouteTests : IDisposable
     /// beside each other, so it is each pass and not their sum that the steps' acting time bounds.
     /// </summary>
     [Fact]
-    public void EachStepsTimeAndEachRemovalsPassesAreReported()
+    public async Task EachStepsTimeAndEachRemovalsPassesAreReported()
     {
         var site = RemovalSite.Create(Path.Combine(_temp.Path, "site"), out _)!;
         var route = Timed(site);
 
-        route.Before!(CancellationToken.None);
-        var tally = route.Run(CancellationToken.None);
+        await route.Before!(CancellationToken.None);
+        var tally = await route.Run(CancellationToken.None);
 
         var steps = tally.Steps!;
         Assert.Equal(Trees, steps.Count);
@@ -71,16 +71,17 @@ public sealed class CleanRouteTests : IDisposable
 
     /// <summary>A project file gone after a run is a defect to stop on, even where the clean's own verification passed.</summary>
     [Fact]
-    public void AProjectFileThatIsGoneAfterARunStopsTheBenchmark()
+    public async Task AProjectFileThatIsGoneAfterARunStopsTheBenchmark()
     {
         var site = RemovalSite.Create(Path.Combine(_temp.Path, "site"), out _)!;
         var route = Timed(site);
 
-        route.Before!(CancellationToken.None);
-        route.Run(CancellationToken.None);
+        await route.Before!(CancellationToken.None);
+        await route.Run(CancellationToken.None);
         File.Delete(Path.Combine(site.Place("p1"), "p1.csproj"));
 
-        Assert.Contains("§5.6", Assert.Throws<InvalidOperationException>(route.After!).Message, StringComparison.Ordinal);
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(async () => await route.After!());
+        Assert.Contains("§5.6", thrown.Message, StringComparison.Ordinal);
     }
 
     private RouteRun Timed(RemovalSite site) => new CleanRoute(

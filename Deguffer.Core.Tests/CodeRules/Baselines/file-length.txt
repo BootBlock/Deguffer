@@ -6,7 +6,6 @@
 933 Deguffer.App/ViewModels/ExploreViewModel.cs
 507 Deguffer.App/Views/CleanPage.xaml.cs
 773 Deguffer.App/Views/ExplorePage.xaml.cs
-535 Deguffer.Benchmark/BenchmarkRequest.cs
 550 Deguffer.Core/Execution/CleanupPlan.cs
 886 Deguffer.Core/Execution/CleanupPlanner.cs
 707 Deguffer.Core/Execution/CleanupStep.cs
@@ -27,7 +26,7 @@
 562 Deguffer.Core/Providers/TempDirectoryProvider.cs
 516 Deguffer.Core/Providers/UnrealDerivedDataCacheProvider.cs
 659 Deguffer.Core/Providers/VcpkgCacheProvider.cs
-903 Deguffer.Core/Safety/FileInformation.cs
+889 Deguffer.Core/Safety/FileInformation.cs
 743 Deguffer.Core/Safety/IUserEnvironment.cs
 622 Deguffer.Core/Safety/LongPath.cs
 593 Deguffer.Core/Scanning/DirectoryScanner.cs

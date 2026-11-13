@@ -11,13 +11,7 @@ namespace Deguffer.Core.Health;
 /// </summary>
 internal static partial class KingstonSata
 {
-    private const string GigabyteUnit =
-        " Kingston's document counts this figure in gigabytes without saying whether one is 1,000,000,000 or 1,073,741,824 bytes, so it is shown in that unit.";
-
     private const string TemperatureExplanation = "The temperature the drive measures inside itself, with the lowest and highest it has recorded.";
-
-    private static readonly AtaAttributeDefinition LifeLeftInLowByte =
-        AtaVendorOverlay.RemainingLife with { Format = SmartRawFormat.RawPercent, Width = RawWidth.LowByte };
 
     private static readonly AtaAttributeDefinition TemperatureLowestFirst = new(
         "Temperature", TemperatureExplanation, SmartRawFormat.CelsiusRange, AttributeRole.Temperature);
@@ -27,28 +21,25 @@ internal static partial class KingstonSata
     /// of the attribute before or after them, so each row read here is matched by what its text describes:
     /// the raw usage for 177 is printed under 181. 177 counts the spread of wear, not wear levelling, and
     /// 194 puts the highest temperature before the lowest. 241 and 242 fill the low four bytes, and 242
-    /// counts in steps of 64 GB.
+    /// counts in steps of 64 GB. The document gives 177 as a percentage in bytes 0-3. It is read from byte 0,
+    /// as the shared wear range is, which holds it whole up to 255%.
     /// </summary>
     private static readonly Document SandForce = new(SandForceModels(), new Dictionary<byte, AtaAttributeDefinition>
     {
-        [177] = new(
-            "Wear spread",
-            "How far apart the wear on the most-worn and least-worn blocks of flash memory is, as a share of the wear the flash memory is rated for.",
-            SmartRawFormat.RawPercent,
-            AttributeRole.Information),
+        [177] = AtaVendorOverlay.WearRange,
         [194] = new("Temperature", TemperatureExplanation, SmartRawFormat.CelsiusRangeHighestFirst, AttributeRole.Temperature),
         [231] = AtaVendorOverlay.RemainingLife,
-        [241] = Written(RawWidth.LowFourBytes),
-        [242] = ReadBack(RawWidth.LowFourBytes, " The drive counts in steps of 64 GB."),
+        [241] = AtaVendorOverlay.GigabytesWritten,
+        [242] = AtaVendorOverlay.GigabytesRead with { Explanation = $"{AtaVendorOverlay.GigabytesRead.Explanation} The drive counts in steps of 64 GB." },
     }.ToFrozenDictionary());
 
     /// <summary>The layout MKP-521.5 and MKP-521.8US share for the attributes Deguffer reads.</summary>
     private static readonly FrozenDictionary<byte, AtaAttributeDefinition> PhisonAttributes = new Dictionary<byte, AtaAttributeDefinition>
     {
         [194] = TemperatureLowestFirst,
-        [231] = LifeLeftInLowByte,
-        [241] = Written(RawWidth.AllSixBytes),
-        [242] = ReadBack(RawWidth.AllSixBytes),
+        [231] = AtaVendorOverlay.RemainingLifeInLowByte,
+        [241] = AtaVendorOverlay.GigabytesWritten with { Width = RawWidth.AllSixBytes },
+        [242] = AtaVendorOverlay.GigabytesRead with { Width = RawWidth.AllSixBytes },
     }.ToFrozenDictionary();
 
     /// <summary>
@@ -72,8 +63,8 @@ internal static partial class KingstonSata
     {
         [194] = TemperatureLowestFirst,
         [231] = AtaVendorOverlay.RemainingLife,
-        [241] = Written(RawWidth.LowFourBytes),
-        [242] = ReadBack(RawWidth.LowFourBytes),
+        [241] = AtaVendorOverlay.GigabytesWritten,
+        [242] = AtaVendorOverlay.GigabytesRead,
     }.ToFrozenDictionary());
 
     /// <summary>
@@ -105,12 +96,6 @@ internal static partial class KingstonSata
 
         return null;
     }
-
-    private static AtaAttributeDefinition Written(RawWidth width) => new(
-        "Total data written", $"How much the computer has written to the drive over its life.{GigabyteUnit}", SmartRawFormat.Gigabytes, AttributeRole.Usage, width);
-
-    private static AtaAttributeDefinition ReadBack(RawWidth width, string step = "") => new(
-        "Total data read", $"How much the computer has read from the drive over its life.{GigabyteUnit}{step}", SmartRawFormat.Gigabytes, AttributeRole.Usage, width);
 
     /// <summary>The models one document names, and what it says each attribute means on them.</summary>
     private sealed record Document(Regex Models, FrozenDictionary<byte, AtaAttributeDefinition> Attributes);

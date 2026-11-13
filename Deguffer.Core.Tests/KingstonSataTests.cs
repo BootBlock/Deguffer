@@ -119,7 +119,7 @@ public sealed class KingstonSataTests
     [InlineData(241)]
     [InlineData(242)]
     public void GigabytesNameTheUnitTheDocumentLeavesUndefined(byte id) =>
-        Assert.Contains("1,073,741,824", Row(id, Dc500R).Meaning, StringComparison.Ordinal);
+        Assert.Contains("1,024 megabytes", Row(id, Dc500R).Meaning, StringComparison.Ordinal);
 
     [Fact]
     public void Mkp306DataReadNamesItsStepOf64Gigabytes() =>
@@ -158,11 +158,11 @@ public sealed class KingstonSataTests
         Assert.Equal("30 °C", Reading(194, model, LowestInBytesTwoAndThree));
 
     [Fact]
-    public void Mkp306CountsTheSpreadOfWearAsAPercentageInTheLowFourBytes()
+    public void Mkp306CountsTheSpreadOfWearAsAPercentage()
     {
         var row = Row(177, Kc300, raw: 0x0005_0000_0002);
 
-        Assert.Equal("Wear spread", row.Name);
+        Assert.Equal("Wear range", row.Name);
         Assert.Equal(("2%", AttributeStanding.Normal), (row.Reading, row.Standing));
     }
 

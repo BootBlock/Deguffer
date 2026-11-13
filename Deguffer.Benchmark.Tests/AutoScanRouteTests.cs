@@ -14,7 +14,7 @@ public sealed class AutoScanRouteTests : IDisposable
     public void Dispose() => _temp.Dispose();
 
     [Fact]
-    public void EachRunOpensTheVolumeAgainAndCountsTheFolder()
+    public async Task EachRunOpensTheVolumeAgainAndCountsTheFolder()
     {
         var root = _temp.CreateDirectory("root");
         _temp.CreateFile(10, "root", "a", "one.bin");
@@ -22,10 +22,10 @@ public sealed class AutoScanRouteTests : IDisposable
         var volumes = FakeMftSourceFactory.Unavailable(FallbackReason.NotElevated);
         var route = AutoScanRoute.On(volumes, root, ScanTuner.Shipped);
 
-        route.Before!(CancellationToken.None);
-        var first = route.Run(CancellationToken.None);
-        route.Before(CancellationToken.None);
-        var second = route.Run(CancellationToken.None);
+        await route.Before!(CancellationToken.None);
+        var first = await route.Run(CancellationToken.None);
+        await route.Before(CancellationToken.None);
+        var second = await route.Run(CancellationToken.None);
 
         // The folder itself, as a removal takes it, then a, one.bin in it, and two.bin.
         Assert.Equal(4, first.Items);

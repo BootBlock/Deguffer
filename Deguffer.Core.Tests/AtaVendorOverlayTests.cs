@@ -21,11 +21,20 @@ public sealed class AtaVendorOverlayTests
     /// <summary>A PM863a part number, which shares the PM863's prefix and no document covers.</summary>
     private const string Pm863a = "SAMSUNG MZ7LM999HMTE-00000";
 
+    /// <summary>A part number in the FireCuda 120's form: ZA, a capacity, then GM10001.</summary>
+    private const string FireCuda120 = "ZA999GM10001";
+
+    /// <summary>A Seagate SSD part number with another family code after the capacity.</summary>
+    private const string FireCuda120Sibling = "ZA999CM10003";
+
+    /// <summary>A Seagate hard drive's name. No published Seagate document gives their attribute layouts.</summary>
+    private const string SeagateHardDrive = "ST9999TEST000-1TEST";
+
     /// <summary>A consumer model's name. No Samsung document covers the consumer drives.</summary>
     private const string Consumer = "Samsung SSD 999 EVO 1TB";
 
-    private static string Reading(byte id, string model, string firmware = "TEST01", ulong raw = 0) =>
-        Row(id, model, firmware, raw).Reading;
+    private static string Reading(byte id, string model, string firmware = "TEST01", ulong raw = 0, byte value = 50) =>
+        Row(id, model, firmware, raw, value).Reading;
 
     private static HealthAttribute Row(byte id, string model, string firmware = "TEST01", ulong raw = 0, byte value = 50) =>
         Assert.Single(AtaAttributeRows.Of([new AtaAttribute(id, false, value, value, raw, null)], AtaDrives.Named(model, firmware), logicalSectorBytes: null));
@@ -182,6 +191,82 @@ public sealed class AtaVendorOverlayTests
     [InlineData(Consumer)]
     public void SamsungModeStatusIsNotReadWhereNoDocumentDefinesIt(string model) =>
         Assert.Equal(AsReported, Reading(202, model, raw: 0x20));
+
+    /// <summary>
+    /// The life left is in the first raw byte, under a throttling level, while the normalised value stays
+    /// at the 64h the manual lists, so a reading of either the normalised value or the whole raw value fails.
+    /// </summary>
+    [Theory]
+    [InlineData(FireCuda120, "7% left")]
+    [InlineData("Seagate FireCuda 120 SSD ZA9999GM10001", "7% left")]
+    [InlineData(FireCuda120Sibling, "Scored 100")]
+    [InlineData("ZA999GM10002", "Scored 100")]
+    [InlineData("XZA999GM10001", "Scored 100")]
+    [InlineData(SeagateHardDrive, "Scored 100")]
+    public void SeagateLifeRemainingIsReadFromTheFirstRawByteOnlyOnTheFireCuda120(string model, string expected) =>
+        Assert.Equal(expected, Reading(231, model, raw: ThrottledLifeLeft(7), value: 100));
+
+    [Fact]
+    public void FireCuda120LifeRemainingWarnsNearTheEndOfLife()
+    {
+        Assert.Equal(AttributeStanding.Watch, Row(231, FireCuda120, raw: ThrottledLifeLeft(10), value: 100).Standing);
+        Assert.Equal(AttributeStanding.Normal, Row(231, FireCuda120, raw: ThrottledLifeLeft(11), value: 100).Standing);
+    }
+
+    [Fact]
+    public void FireCuda120SpareBlocksWarnNearTheEndOfLife()
+    {
+        Assert.Equal(AttributeStanding.Watch, Row(170, FireCuda120, value: 10).Standing);
+        Assert.Equal(AttributeStanding.Normal, Row(170, FireCuda120, value: 11).Standing);
+    }
+
+    [Fact]
+    public void FireCuda120SpareBlocksAreReadByTheirNormalisedValue() =>
+        Assert.Equal(Read, Reading(170, FireCuda120, raw: 7));
+
+    /// <summary>The figure is in the first raw byte, so the bytes above it, and the normalised value the manual fixes at 0, are not read.</summary>
+    [Fact]
+    public void FireCuda120WearRangeIsAPercentageInTheFirstRawByte()
+    {
+        var row = Assert.Single(AtaAttributeRows.Of([new AtaAttribute(177, false, 0, 0, 0x0000_0102_0007UL, null)], AtaDrives.Named(FireCuda120, "TEST01"), logicalSectorBytes: null));
+
+        Assert.Equal(("Wear range", "7%", AttributeStanding.Normal), (row.Name, row.Reading, row.Standing));
+    }
+
+    [Theory]
+    [InlineData(233, "Total written to flash")]
+    [InlineData(241, "Total data written")]
+    [InlineData(242, "Total data read")]
+    public void FireCuda120DataTotalsAreGigabytesInTheManualsOwnUnit(byte id, string name)
+    {
+        var row = Row(id, FireCuda120, raw: 0x0100_0000_3039UL);
+
+        Assert.Equal((name, "12,345 GB", AttributeStanding.Normal), (row.Name, row.Reading, row.Standing));
+        Assert.Contains("does not say whether a gigabyte is a thousand or 1,024 megabytes", row.Meaning, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(170, FireCuda120Sibling)]
+    [InlineData(177, FireCuda120Sibling)]
+    [InlineData(233, FireCuda120Sibling)]
+    [InlineData(241, SeagateHardDrive)]
+    [InlineData(242, SeagateHardDrive)]
+    [InlineData(177, Consumer)]
+    public void FireCuda120ReadingsAreNotTakenForOtherDrives(byte id, string model) =>
+        Assert.Equal(AsReported, Reading(id, model, raw: 7));
+
+    [Theory]
+    [InlineData(16)]
+    [InlineData(17)]
+    [InlineData(173)]
+    [InlineData(232)]
+    [InlineData(234)]
+    [InlineData(235)]
+    public void FireCuda120AttributesWithoutAStatedLayoutStayAsTheCatalogueReportsThem(byte id) =>
+        Assert.Equal(Row(id, SeagateHardDrive, raw: 7), Row(id, FireCuda120, raw: 7));
+
+    /// <summary>A FireCuda 120 attribute 231 raw value: the life left in byte 0 and a throttling level of 2 in byte 4.</summary>
+    private static ulong ThrottledLifeLeft(byte percent) => 0x0002_0000_0000UL | percent;
 
     private static (string Reading, AttributeStanding Standing) Standing(HealthAttribute row) => (row.Reading, row.Standing);
 }

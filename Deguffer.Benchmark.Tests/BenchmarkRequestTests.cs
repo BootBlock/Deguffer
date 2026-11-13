@@ -1,4 +1,5 @@
 using Deguffer.Core.Configuration;
+using Deguffer.Core.Duplicates;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Media;
 using Deguffer.Core.Scanning.Mft;
@@ -71,6 +72,66 @@ public sealed class BenchmarkRequestTests
     public void TheFoldersRouteNeedsAFolderBeforeTheOptions()
     {
         Assert.Null(BenchmarkRequest.Parse(["folders", "--runs", "3"], out var error));
+        Assert.NotNull(error);
+    }
+
+    [Fact]
+    public void TheDuplicatesRouteTakesEveryFolderItsChecksumAndItsCache()
+    {
+        var request = BenchmarkRequest.Parse(
+            ["duplicates", "first", @"C:\second", "--checksum", "sha-256", "--cache", "warm", "--runs", "2"], out var error);
+
+        Assert.Null(error);
+        Assert.Equal(Route.Duplicates, request!.Route);
+        Assert.Equal([Path.GetFullPath("first"), @"C:\second"], request.Folders);
+        Assert.Equal(request.Folders[0], request.Path);
+        Assert.Equal(ChecksumAlgorithm.Sha256, request.Checksum);
+        Assert.Equal(CacheStart.Warm, request.Cache);
+        Assert.Equal(2, request.Runs);
+    }
+
+    /// <summary>A search's own checksum, from a cache with nothing in it, unless told otherwise.</summary>
+    [Fact]
+    public void TheDuplicatesRouteComparesByXxh128FromAColdCacheByDefault()
+    {
+        var request = BenchmarkRequest.Parse(["duplicates", @"C:\photos"], out _)!;
+
+        Assert.Equal(ChecksumAlgorithm.XxHash128, request.Checksum);
+        Assert.Equal(CacheStart.Cold, request.Cache);
+    }
+
+    /// <summary>A checksum is named as other tools print it, in any case, with or without its hyphen.</summary>
+    [Theory]
+    [InlineData("sha-256", ChecksumAlgorithm.Sha256)]
+    [InlineData("SHA256", ChecksumAlgorithm.Sha256)]
+    [InlineData("XXH128", ChecksumAlgorithm.XxHash128)]
+    [InlineData("crc32", ChecksumAlgorithm.Crc32)]
+    [InlineData("sha-1", ChecksumAlgorithm.Sha1)]
+    public void TheDuplicatesRouteTakesAChecksumByTheNameOtherToolsPrint(string name, ChecksumAlgorithm expected) =>
+        Assert.Equal(expected, BenchmarkRequest.Parse(["duplicates", @"C:\photos", "--checksum", name], out _)!.Checksum);
+
+    /// <summary>
+    /// Only the duplicates route compares content or keeps checksums, and it walks with a search's
+    /// values, so each of these is refused rather than timed as something else.
+    /// </summary>
+    [Theory]
+    [InlineData("duplicates", "--checksum", "sha-384")]
+    [InlineData("duplicates", "--checksum", "sha")]
+    [InlineData("duplicates", "--checksum")]
+    [InlineData("duplicates", "--cache", "hot")]
+    [InlineData("duplicates", "--threads", "4")]
+    [InlineData("folders", "--checksum", "sha-256")]
+    [InlineData("walk", "--cache", "warm")]
+    public void ADuplicatesValueIsTakenOnlyByItsRouteAndOnlyFromItsNames(string route, params string[] rest)
+    {
+        Assert.Null(BenchmarkRequest.Parse([route, @"C:\photos", .. rest], out var error));
+        Assert.NotNull(error);
+    }
+
+    [Fact]
+    public void TheDuplicatesRouteNeedsAFolderBeforeTheOptions()
+    {
+        Assert.Null(BenchmarkRequest.Parse(["duplicates", "--cache", "warm"], out var error));
         Assert.NotNull(error);
     }
 

@@ -41,8 +41,8 @@ internal enum SmartRawFormat
     /// <summary>The raw value is not used. The normalised value is a percentage.</summary>
     Percent,
 
-    /// <summary>A percentage in the raw value, as wide as the definition's <see cref="RawWidth"/>.</summary>
-    RawPercent,
+    /// <summary>A percentage in the low raw byte, where the document fixes the normalised value and gives the figure there.</summary>
+    PercentInLowByte,
 
     /// <summary>A count of 512-byte sectors.</summary>
     Bytes512,
@@ -51,11 +51,38 @@ internal enum SmartRawFormat
     LogicalSectors,
 
     /// <summary>
-    /// A count of gigabytes, as wide as the definition's <see cref="RawWidth"/>. It is shown in that unit,
-    /// not converted, because the documents that use it do not say how many bytes a gigabyte of that
-    /// attribute is.
+    /// A count of gigabytes, as wide as the definition's <see cref="RawWidth"/>. It is shown in the
+    /// document's own unit, because a document that does not say whether a gigabyte is 10^9 or 2^30 bytes
+    /// cannot be turned into bytes without guessing.
     /// </summary>
     Gigabytes,
+
+    /// <summary>A count of 32 MiB units, each 65,536 sectors of 512 bytes, as wide as the definition's <see cref="RawWidth"/>.</summary>
+    Units32MiB,
+
+    /// <summary>Minutes, as wide as the definition's <see cref="RawWidth"/>. FFFFh means the drive has not measured it yet.</summary>
+    Minutes,
+
+    /// <summary>The raw value divided by 1024 is a percentage. FFFFh means the drive has not measured it yet.</summary>
+    PercentPer1024,
+
+    /// <summary>The raw value is a whole percentage. FFFFh means the drive has not measured it yet.</summary>
+    RawPercent,
+
+    /// <summary>
+    /// Degrees in bytes 0-1, the lowest seen in byte 2, the highest seen in byte 3, and in bytes 4-5 the
+    /// times the drive ran hotter than it is rated for.
+    /// </summary>
+    CelsiusWithOverheats,
+
+    /// <summary>
+    /// A power-loss capacitor test: the microseconds the capacitor took to discharge in bytes 0-1, the
+    /// minutes since that test in bytes 2-3, and the number of tests in bytes 4-5.
+    /// </summary>
+    CapacitorTest,
+
+    /// <summary>How hard the drive is slowing itself to cool down, as a percentage in byte 0, and the times it has done so in bytes 1-4.</summary>
+    ThrottleStatus,
 
     /// <summary>Manufacturers use these bytes differently, so they are shown as they are and judged by nothing.</summary>
     Opaque,
@@ -64,7 +91,7 @@ internal enum SmartRawFormat
     Status,
 }
 
-/// <summary>How much of the six raw bytes a count, a number of hours, a raw percentage or a number of gigabytes fills.</summary>
+/// <summary>How much of the six raw bytes a count or a number of hours fills.</summary>
 internal enum RawWidth
 {
     /// <summary>The low 32 bits, because many drives pack other figures above them.</summary>
@@ -72,9 +99,6 @@ internal enum RawWidth
 
     /// <summary>All six bytes, where the manufacturer's document says the figure fills them.</summary>
     AllSixBytes,
-
-    /// <summary>Byte 0 alone, where the manufacturer's document defines no more.</summary>
-    LowByte,
 }
 
 /// <summary>What the page knows about one attribute.</summary>

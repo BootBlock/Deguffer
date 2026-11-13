@@ -1,3 +1,5 @@
+using Deguffer.Core.Diagnostics;
+
 namespace Deguffer.Core.Safety;
 
 /// <summary>Who holds <paramref name="files"/> open, asked in one session: <see cref="RestartManager.Query"/>.</summary>
@@ -40,7 +42,7 @@ internal static class LockFileHolders
         // One candidate's shared session would be its own session, asked twice where it is held.
         if (lockSets.Count > 1)
         {
-            var shared = query([.. lockSets.SelectMany(files => files)], ct);
+            var shared = Session(query, [.. lockSets.SelectMany(files => files)], ct);
 
             if (shared is { Answered: true, Holders.Count: 0 })
             {
@@ -52,9 +54,17 @@ internal static class LockFileHolders
         for (var i = 0; i < lockSets.Count; i++)
         {
             ct.ThrowIfCancellationRequested();
-            answers[i] = query(lockSets[i], ct);
+            answers[i] = Session(query, lockSets[i], ct);
         }
 
         return answers;
+    }
+
+    /// <summary>One session of <paramref name="query"/>, timed for whatever tally counts the caller.</summary>
+    private static FileHolders Session(FileHolderQuery query, IReadOnlyList<string> files, CancellationToken ct)
+    {
+        using var timing = MachineCallTally.Time(MachineCall.RestartManagerSession);
+
+        return query(files, ct);
     }
 }

@@ -41,7 +41,7 @@ internal sealed class RaceRoute
         _beforePart = beforePart;
     }
 
-    public RouteRun Timed => new(Run);
+    public RouteRun Timed => RouteRun.Blocking(Run);
 
     /// <summary>
     /// The route on this machine: <paramref name="racer"/> over <paramref name="folder"/>, raced
