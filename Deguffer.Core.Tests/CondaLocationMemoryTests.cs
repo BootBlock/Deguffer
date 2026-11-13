@@ -320,6 +320,7 @@ public sealed class CondaLocationMemoryTests : IDisposable
         _runner.Responding(_conda, Info, "{}", exitCode: 1);
         var provider = CreateProvider();
         Assert.Contains((await provider.PlanAsync()).Notes, n => n.Message.Contains("conda did not describe", StringComparison.Ordinal));
+        Assert.False(_memory.Holds($"{Info}|{_conda}"));
 
         Answering(Miniconda);
         provider.InvalidateCaches();
