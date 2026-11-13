@@ -50,7 +50,7 @@ public sealed class CleanupPlannerTests
         });
 
         await new CleanupPlanner([slow, new FakeCleanupProvider("quick")])
-            .PlanAllAsync(MinimumAge.Off, status: null, reporting, CancellationToken.None);
+            .PlanAllAsync(MinimumAge.Off, status: null, reporting, ct: CancellationToken.None);
 
         Assert.True(slowSawIt, "The quick provider's finding was not reported until the slow one had finished.");
         Assert.Equal(["quick", "slow"], found.Reports.Select(f => f.Provider.Id));
@@ -71,7 +71,7 @@ public sealed class CleanupPlannerTests
 
         var found = new ProgressRecorder<Finding>();
 
-        var findings = await planner.PlanAsync([third, first], MinimumAge.Off, status: null, found, CancellationToken.None);
+        var findings = await planner.PlanAsync([third, first], MinimumAge.Off, status: null, found, ct: CancellationToken.None);
 
         // Planned together, so in no fixed order, but each only once its cache had gone and was held,
         // and once every provider being planned had started what its plan waits on.

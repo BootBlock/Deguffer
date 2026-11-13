@@ -33,8 +33,9 @@ open a public issue.
 
 `Deguffer.Benchmark` times the routes a scan takes and the removal a clean makes, so a change to how
 Deguffer reads or removes can be judged by a measurement rather than a guess. Every route but
-`remove`, `clean` and `protect` only reads: nothing on the drive is written, moved or deleted. Those
-three write and delete only inside a folder they create. It is not part of `dotnet test`, because a timing
+`remove`, `clean`, `protect` and `plan` only reads: nothing on the drive is written, moved or deleted.
+The first three write and delete only inside a folder they create. `plan` deletes nothing, and writes
+only the figures a scan keeps for its first paint, as a scan does. It is not part of `dotnet test`, because a timing
 changes with whatever else the machine is doing.
 
 Build it in Release, then run one route at a time:
@@ -59,6 +60,7 @@ Deguffer.Benchmark clean D:\benchmark --trees 500 --files-per-tree 100
 Deguffer.Benchmark protect D:\benchmark --folders 5000
 Deguffer.Benchmark race C:\Users\<user>\source --build D --reads-in-flight 2
 Deguffer.Benchmark scan C:\Users\<user>\source --runs 6
+Deguffer.Benchmark plan --runs 6 > %TEMP%\deguffer-plan.txt
 ```
 
 - `walk <folder>` walks a folder as an unelevated scan does. Run it from an ordinary prompt.
@@ -148,6 +150,17 @@ Deguffer.Benchmark scan C:\Users\<user>\source --runs 6
   Each run follows an untimed walk of the folder. It times what the `race` route leaves out: the
   open, which a scan makes before it starts the walk. It needs an elevated prompt, and it walks and
   reads with what a scan uses for the drive's kind, so it takes none of the walk or table options.
+- `plan` plans every provider as a Storage scan does, with the default planner and the shipped
+  settings, and cleans nothing. It takes no target and no option but `--runs`. It reports the whole
+  pass, and for each provider, by its id, when it took one of the pass's slots, when it ended and
+  how long it took, measured from the start of the pass and listed in the order the first run
+  started them. It also counts the costly questions the pass asked Windows (where a volume is
+  mounted, Restart Manager sessions, final paths and readings of the process table) and the time
+  they took, summed. One planner serves every run, so the first run is a pass from a fresh process and
+  the later runs are warm. The result states how many providers are planned at once and whether the
+  prompt was elevated: run it from both to compare, because some providers ask their slowest
+  question only with administrator rights. A provider's id names no place, but write the result
+  outside the source tree, as every benchmark result.
 - `remove` and `clean` refuse a folder that already exists, and its parent must exist. After each
   run they check that a file they keep beside the trees, and every project, is still there, and
   stop if one is not. They remove the folder when they finish, even when cancelled. The tree is
