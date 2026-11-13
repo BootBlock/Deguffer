@@ -1413,6 +1413,21 @@ A clean that you cancel while this command runs is left to finish. It is one del
 root, and Yarn 1 reads a package as cached by a file inside its folder, so a folder cut off part-way
 could be read as whole.
 
+Deguffer remembers which Yarn answered and where Yarn 1 said its cache is until one of these
+changes, and then asks again: the `yarn` it runs (usually `yarn.cmd`), `node.exe` beside it and the
+`node` on your `PATH`; `node_modules\yarn\package.json` beside it, and the `package.json` one folder
+up, where the Windows installer keeps it; Corepack's home (`%COREPACK_HOME%`, or
+`C:\Users\<user>\AppData\Local\node\corepack`) and the releases in it; `package.json` and
+`.corepack.env` in the folder Yarn runs in and in each folder above it, which decide what Corepack
+runs; `.yarnrc`, `.yarnrc.yml` and `.npmrc` in each of those folders and in your profile;
+`C:\Users\<user>\.yarn\config`; whatever is in `C:\Users\<user>\.config\yarn` and in Yarn's own
+`Config` folder; the file `%YARN_CONFIG%` names; `etc\yarnrc` and `etc\npmrc` under Node.js and under
+`%PREFIX%`; the script a `yarn-path` setting hands Yarn to, which Deguffer asks for beside the cache;
+and every environment variable Yarn is started with, because Yarn expands any `${VAR}` its
+configuration names. Where Yarn would not say what its `yarn-path` is, the answer is used for that
+scan and never remembered. See Yarn's [`.yarnrc`](https://classic.yarnpkg.com/en/docs/yarnrc)
+documentation and [Corepack](https://github.com/nodejs/corepack).
+
 ### What is protected
 
 Yarn's **`Data`** and **`Berry`** folders, and **`.yarnrc`** and **`.yarnrc.yml`** in your profile,
@@ -1482,6 +1497,17 @@ deletes whatever folder its settings name. And a `yarnPath` setting or a Corepac
 Yarn 1 behind the same `yarn` between the preview and the clean: Yarn 1 ignores options it does not
 know, so it would clear its own cache instead. Deguffer's removal does what Yarn's command does to
 the folder, and cannot reach anything else.
+
+Deguffer remembers where Berry said its global folder is until one of these changes, and then asks
+again: the `yarn` it runs and the Node.js and Corepack files Yarn 1's row lists; `.yarnrc.yml` (or
+the name `%YARN_RC_FILENAME%` gives) and `yarn.lock` in the folder Yarn runs in and in each folder
+above it; `C:\Users\<user>\.yarnrc.yml`; the script a `yarnPath` setting hands Yarn to, which
+Deguffer asks for beside the global folder; and every environment variable Yarn is started with.
+The remembered folder only answers what Explore and a duplicate search are told. A preview asks Yarn
+again every time, because this row removes the cache by path rather than through Yarn's own command.
+Which Yarn answered is remembered once for both rows. See Yarn's
+[`.yarnrc.yml`](https://yarnpkg.com/configuration/yarnrc) documentation and
+[Corepack](https://github.com/nodejs/corepack).
 
 ### What is protected
 

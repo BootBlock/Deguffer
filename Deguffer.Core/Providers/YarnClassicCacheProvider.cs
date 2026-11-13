@@ -42,14 +42,27 @@ public sealed class YarnClassicCacheProvider : CleanupProviderBase
 
     private readonly ISystemDirectories _system;
     private readonly PassMemo<Task<YarnClassicCache?>> _cache = new();
+    private readonly ToolAnswerMemory _memory;
 
+    /// <param name="environment">The profile, the executables and the variables Yarn is started with.</param>
+    /// <param name="runner">Starts Yarn.</param>
+    /// <param name="inspector">Tells whether Yarn or Node.js is running.</param>
+    /// <param name="scanner">Measures the cache.</param>
+    /// <param name="system">Windows' own folders, which a configured cache root must not be.</param>
+    /// <param name="volumes">The volumes, which a configured cache root must not be the root of.</param>
+    /// <param name="memory">
+    /// Where Yarn's answers about which Yarn it is and where its cache is are kept while nothing Yarn
+    /// read has changed: the memory for <paramref name="runner"/> when null, which is the process-wide
+    /// one for the real runner.
+    /// </param>
     public YarnClassicCacheProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
         IDirectoryScanner? scanner = null,
         ISystemDirectories? system = null,
-        IVolumeInventory? volumes = null)
+        IVolumeInventory? volumes = null,
+        ToolAnswerMemory? memory = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
@@ -58,6 +71,7 @@ public sealed class YarnClassicCacheProvider : CleanupProviderBase
             volumes: volumes)
     {
         _system = system ?? SystemDirectories.Current;
+        _memory = memory ?? ToolAnswerMemory.For(runner);
     }
 
     public override string Id => "yarn";
@@ -140,7 +154,11 @@ public sealed class YarnClassicCacheProvider : CleanupProviderBase
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(Environment.FindExecutable("yarn") is not null);
 
-    /// <summary>Which Yarn runs, and where its cache is, are both configuration that can change between scans.</summary>
+    /// <summary>
+    /// Which Yarn runs, and where its cache is, are both configuration that can change between scans.
+    /// The pass's answer is forgotten here, and the memory keeps Yarn's answers only while everything
+    /// <see cref="YarnToolInputs"/> declares, and the environment Yarn is started with, read the same.
+    /// </summary>
     public override void InvalidateCaches()
     {
         _cache.Forget();
@@ -159,16 +177,16 @@ public sealed class YarnClassicCacheProvider : CleanupProviderBase
             return UnexaminedPlan("Yarn did not say which version it is, so Deguffer cannot tell whether its cache clean is Yarn 1's.");
         }
 
-        if (!answer.IsClassic)
+        if (answer.Location is not { } location)
         {
             return EmptyPlan(
-                $"The yarn on your PATH runs Yarn {answer.Version}, not Yarn 1. Yarn 2 and later keep a cache "
+                $"The yarn on your PATH runs Yarn {answer.Version.Text}, not Yarn 1. Yarn 2 and later keep a cache "
                 + "Plug'n'Play projects run from, which Deguffer offers in its Yarn global package cache row.");
         }
 
-        if (answer.Root is not { } root)
+        if (location.Root is not { } root)
         {
-            return UnexaminedPlan(answer.Reported is { } reported
+            return UnexaminedPlan(location.Reported is { } reported
                 ? $"Yarn reported its cache as '{reported}', which is not a full path to a versioned cache folder, so "
                     + "Deguffer cannot tell what its cache clean would remove."
                 : "Yarn did not say where its cache is, so Deguffer cannot tell what its cache clean would remove.");
@@ -197,7 +215,7 @@ public sealed class YarnClassicCacheProvider : CleanupProviderBase
         var notes = new List<PlanNote>
         {
             new(PlanNoteSeverity.Information,
-                $"Yarn {answer.Version} reports its cache as {answer.Reported}. Its cache clean removes {root} and "
+                $"Yarn {answer.Version.Text} reports its cache as {location.Reported}. Its cache clean removes {root} and "
                 + "makes an empty cache folder there again."),
         };
 
@@ -297,11 +315,40 @@ public sealed class YarnClassicCacheProvider : CleanupProviderBase
 
     private async Task<string?> AcceptedRootAsync(CancellationToken ct) =>
         Environment.FindExecutable("yarn") is { } yarn
-        && await ResolveAsync(yarn, ct).ConfigureAwait(false) is { IsClassic: true, Root: { } root }
+        && await ResolveAsync(yarn, ct).ConfigureAwait(false) is { Location.Root: { } root }
         && WhyNotCleared(root) is null
             ? root
             : null;
 
     private Task<YarnClassicCache?> ResolveAsync(string yarn, CancellationToken ct) =>
-        _cache.Get(() => YarnClassicCache.AskAsync(Runner, yarn, ct));
+        _cache.Get(() => AskAsync(yarn, ct));
+
+    /// <summary>
+    /// Which Yarn runs and, for Yarn 1, where its cache is, each through the memory, once per pass.
+    /// The plan runs Yarn's own clean (§5.1), sent to a root it vets on the disk as it plans, so a
+    /// remembered answer can at worst misstate the figure. Null where Yarn would not say which it is.
+    /// </summary>
+    private async Task<YarnClassicCache?> AskAsync(string yarn, CancellationToken ct)
+    {
+        if (await YarnVersion.AskAsync(_memory, Environment, Runner, yarn, ct).ConfigureAwait(false) is not { } version)
+        {
+            return null;
+        }
+
+        if (!version.IsClassic)
+        {
+            return new YarnClassicCache(version, Location: null);
+        }
+
+        var location = await _memory.AskAsync(
+            new ToolQuestion<YarnClassicLocation>(
+                $"cache dir;config get yarn-path|{yarn}",
+                Environment.ToolEnvironment,
+                answer => YarnToolInputs.Classic(Environment, yarn, answer.Script),
+                static answer => answer.IsAnswer,
+                askCt => YarnClassicLocation.AskAsync(Runner, yarn, askCt)),
+            ct).ConfigureAwait(false);
+
+        return new YarnClassicCache(version, location);
+    }
 }
