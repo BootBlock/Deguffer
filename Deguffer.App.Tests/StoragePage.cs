@@ -3,6 +3,7 @@ using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Execution.Sizes;
+using Deguffer.Core.Execution.Timing;
 using Deguffer.Core.Health;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Working;
@@ -106,6 +107,9 @@ internal sealed class StoragePage : IDisposable
 
     /// <summary>Each provider's figure at each scan, in this test's own profile.</summary>
     public ProviderSizeHistory Sizes { get; }
+
+    /// <summary>How long each provider took to plan in the recent full scans, read afresh from this test's own profile.</summary>
+    public PlanTimeHistory PlanTimes => new(new PlanTimeStore(Environment));
 
     /// <summary>What Health last read of each volume's drives, which a test writes as Health would.</summary>
     public HealthByVolume DriveHealth { get; } = new();

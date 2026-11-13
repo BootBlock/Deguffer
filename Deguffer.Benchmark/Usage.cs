@@ -10,6 +10,7 @@ internal static class Usage
                Deguffer.Benchmark duplicates <folder> [<folder>...] [--runs N] [options]
                Deguffer.Benchmark remove|clean|protect <new folder> [--runs N] [options]
                Deguffer.Benchmark race <folder> [--build <drive>] [--runs N] [options]
+               Deguffer.Benchmark plan [--runs N]
 
         Routes:
           table <drive>     Read the volume's file table end to end, parse only. Elevated.
@@ -58,6 +59,12 @@ internal static class Usage
           scan <folder>     Measure the folder as an elevated scan does the first time it
                             asks about the volume: open it, find its table, and race the
                             walk against the build, after an untimed walk. Elevated.
+          plan              Plan every provider as a Storage scan does, and time the whole
+                            pass, when each provider took a slot and ended, and the costly
+                            questions it asked Windows. The first run is a fresh process,
+                            the later runs warm. It only plans: nothing is cleaned. Run it
+                            elevated and not to compare the two. Write its output outside
+                            the source tree, as every report.
 
         --runs N               How many times to run the route, 1 to 1000. The default is 5. The
                                first run is reported apart from the others.
@@ -124,10 +131,11 @@ internal static class Usage
         shipped settings, as the race it reproduces does. The Explore routes also report what
         the finished tree keeps on the managed heap.
 
-        Every route but remove, clean and protect only reads: nothing on the drive is written,
-        moved or deleted, but the checksums the duplicates route keeps in a new folder of its
-        own in the temporary folder, never the app's, and removes when it finishes. Those three
-        refuse a folder that already exists, create it, write and delete only inside it, and
-        remove it when they finish.
+        Every route but remove, clean, protect and plan only reads: nothing on the drive is
+        written, moved or deleted, but the checksums the duplicates route keeps in a new folder
+        of its own in the temporary folder, never the app's, and removes when it finishes.
+        Remove, clean and protect refuse a folder that already exists, create it, write and
+        delete only inside it, and remove it when they finish. Plan deletes nothing, and writes
+        only the figures a scan keeps for its first paint, as a scan does.
         """;
 }

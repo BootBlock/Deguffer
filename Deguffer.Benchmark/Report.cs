@@ -45,7 +45,12 @@ internal static class Report
 
         Line(text, "Deguffer benchmark");
         Field(text, "route", route.ToString().ToLowerInvariant());
-        Field(text, places.Count == 1 ? "place" : "places", string.Join(", ", places));
+        // The plan route names no place: each provider looks where it looks.
+        if (places.Count > 0)
+        {
+            Field(text, places.Count == 1 ? "place" : "places", string.Join(", ", places));
+        }
+
         Field(text, "tuning", tuning);
         Field(text, "machine", Describe(machine));
         Field(text, "collector", machine.Collector.ToString());
@@ -72,6 +77,12 @@ internal static class Report
             // rate of nothing. The parts are below.
             Row(text, "round", Duration(first.Elapsed.TotalSeconds), Over(later, r => r.Elapsed.TotalSeconds, Duration));
             RaceRows(text, first, later);
+        }
+        else if (route is Route.Plan)
+        {
+            // A pass's rate in providers is the rate of nothing: one provider waits on a tool for
+            // seconds and the next answers in a millisecond.
+            Row(text, "elapsed", Duration(first.Elapsed.TotalSeconds), Over(later, r => r.Elapsed.TotalSeconds, Duration));
         }
         else
         {
@@ -107,7 +118,7 @@ internal static class Report
             Row(text, "MiB/s read", Rate(first.MegabytesPerSecond), Over(later, r => r.MegabytesPerSecond, Rate));
             SearchRows(text, first, later);
         }
-        else if (!route.ReadsTable())
+        else if (!route.ReadsTable() && route is not Route.Plan)
         {
             Row(text, "folders at once", Count(first.Tally.PeakListings), Over(later, r => r.Tally.PeakListings, Count));
         }
@@ -129,6 +140,11 @@ internal static class Report
 
         Row(text, "peak working set", Bytes(first.PeakWorkingSet), later.Length > 0 ? Bytes(later.Max(r => r.PeakWorkingSet)) : string.Empty);
         Row(text, itemName, Count(first.Tally.Items), Over(later, r => r.Tally.Items, Count));
+
+        if (route is Route.Plan)
+        {
+            PlanReport.Rows(text, first, later);
+        }
 
         return text.ToString();
     }
@@ -398,11 +414,11 @@ internal static class Report
         return $"{format(spread.Median)} ({format(spread.Minimum)} to {format(spread.Maximum)})";
     }
 
-    private static string Duration(double seconds) => seconds < 1
+    internal static string Duration(double seconds) => seconds < 1
         ? string.Create(Invariant, $"{seconds * 1000:N1} ms")
         : string.Create(Invariant, $"{seconds:N3} s");
 
-    private static string Count(double value) => string.Create(Invariant, $"{value:N0}");
+    internal static string Count(double value) => string.Create(Invariant, $"{value:N0}");
 
     private static string Times(double ratio) => string.Create(Invariant, $"{ratio:N2}x");
 
@@ -420,5 +436,5 @@ internal static class Report
     private static void Row(StringBuilder text, string label, string first, string later) =>
         Line(text, (label.PadRight(LabelWidth) + first.PadRight(FirstWidth) + later).TrimEnd());
 
-    private static void Line(StringBuilder text, string line = "") => text.Append(line).Append('\n');
+    internal static void Line(StringBuilder text, string line = "") => text.Append(line).Append('\n');
 }

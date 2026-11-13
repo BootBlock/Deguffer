@@ -83,7 +83,7 @@ public sealed class ProviderSizeHistoryTests : IDisposable
     {
         using var shipped = new ShippedProviders();
 
-        Assert.All(shipped.Providers, provider => Assert.True(ProviderSizeStore.IsProviderId(provider.Id), provider.Id));
+        Assert.All(shipped.Providers, provider => Assert.True(ProviderPointFile.IsProviderId(provider.Id), provider.Id));
     }
 
     /// <summary>Each way a file can be unusable is read as no history at all, never in part.</summary>

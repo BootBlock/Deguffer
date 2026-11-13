@@ -14,7 +14,8 @@ namespace Deguffer.Benchmark;
 /// For a route that reads the table, the root of the volume, such as <c>C:\</c>, or for
 /// <see cref="Route.ExploreFolder"/> the folder. For a route that walks, the folder. A folder is
 /// fully qualified. For a route that takes several folders, the first of <paramref name="Folders"/>.
-/// Never printed: see <see cref="MeasuredPlace"/>.
+/// Empty for <see cref="Route.Plan"/>, which plans wherever each provider looks. Never printed: see
+/// <see cref="MeasuredPlace"/>.
 /// </param>
 /// <param name="Runs">How many times to run the route. The first is reported apart from the rest.</param>
 /// <param name="Walk">The values the routes that walk run with. The table routes take none of them.</param>
@@ -26,7 +27,7 @@ namespace Deguffer.Benchmark;
 /// <param name="ReadBy">How the links route reads each file. No other route reads any.</param>
 /// <param name="Folders">
 /// Every folder the folders route scans or the duplicates route searches, fully qualified, in the
-/// order given. For any other route, <paramref name="Path"/> alone.
+/// order given. None for the plan route. For any other route, <paramref name="Path"/> alone.
 /// </param>
 /// <param name="Tree">
 /// For <see cref="Route.Remove"/>, the tree it builds and removes. For <see cref="Route.Clean"/>, each
@@ -131,7 +132,7 @@ internal sealed record BenchmarkRequest(
     {
         error = null;
 
-        if (args.Count < 2)
+        if (args.Count == 0)
         {
             error = "Name a route and a target.";
             return null;
@@ -146,7 +147,14 @@ internal sealed record BenchmarkRequest(
 
         if (named is not { } route)
         {
-            error = "The route must be table, index, explore, explorefolder, walk, measure, explorewalk, sources, links, folders, duplicates, remove, clean, protect, race or scan.";
+            error = "The route must be table, index, explore, explorefolder, walk, measure, explorewalk, sources, links, folders, duplicates, remove, clean, protect, race, scan or plan.";
+            return null;
+        }
+
+        // The plan route alone takes no target: each provider looks where it looks.
+        if (route is not Route.Plan && args.Count < 2)
+        {
+            error = "Name a route and a target.";
             return null;
         }
 
@@ -186,8 +194,13 @@ internal sealed record BenchmarkRequest(
         }
 
         // Only the routes that take several folders take more than one target, so for them the
-        // options start at the first argument that is one.
-        var options = route.TakesFolders() ? FirstOption(args) : 2;
+        // options start at the first argument that is one. The plan route takes no target at all.
+        var options = route switch
+        {
+            Route.Plan => 1,
+            _ when route.TakesFolders() => FirstOption(args),
+            _ => 2,
+        };
 
         for (var i = options; i < args.Count; i += 2)
         {
@@ -259,7 +272,7 @@ internal sealed record BenchmarkRequest(
             }
         }
 
-        if (options < 2)
+        if (options < 2 && route is not Route.Plan)
         {
             error = "Name a folder before the options.";
             return null;
@@ -277,8 +290,18 @@ internal sealed record BenchmarkRequest(
             return null;
         }
 
-        var path = route.TargetsVolume() ? VolumeRoot(args[1]) : Folder(args[1]);
-        string?[] folders = route.TakesFolders() ? [.. args.Take(options).Skip(1).Select(Folder)] : [path];
+        var path = route switch
+        {
+            Route.Plan => string.Empty,
+            _ when route.TargetsVolume() => VolumeRoot(args[1]),
+            _ => Folder(args[1]),
+        };
+        string?[] folders = route switch
+        {
+            Route.Plan => [],
+            _ when route.TakesFolders() => [.. args.Take(options).Skip(1).Select(Folder)],
+            _ => [path],
+        };
         if (path is null || folders.Contains(null) || (route.ReadsTable() && !VolumePath.TryParse(path, out _)))
         {
             error = route.TargetsVolume() ? "The target must be a drive letter, such as C or C:."
@@ -298,7 +321,7 @@ internal sealed record BenchmarkRequest(
             [.. folders.Select(folder => folder!)],
             route is Route.Clean ? CleanRoute.Shape(filesPerTree) : new TreeShape(files, depth, fanout, readOnly),
             trees,
-            build ?? path[0],
+            build ?? path.FirstOrDefault(),
             racer,
             beforePart,
             buildYields,
