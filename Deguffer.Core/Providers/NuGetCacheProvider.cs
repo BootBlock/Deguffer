@@ -144,6 +144,14 @@ public sealed class NuGetCacheProvider : CleanupProviderBase, ITemporaryFolderTe
     }
 
     /// <summary>
+    /// NuGet's list of its cache locations, asked as the pass begins: <c>dotnet nuget</c> starts the .NET
+    /// SDK and loads NuGet's command assemblies before it answers, which is most of this row's wait. The
+    /// temporary-folder row asks for the same list.
+    /// </summary>
+    public override Task BeginPass(PassStart start) =>
+        start.Ask(ct => Environment.FindExecutable("dotnet") is { } dotnet ? ResolveLocalsAsync(dotnet, ct) : Task.CompletedTask);
+
+    /// <summary>
     /// NuGet's scratch folder, <c>NuGetScratch</c>, which its own command clears and which sits in
     /// the temporary folder.
     ///

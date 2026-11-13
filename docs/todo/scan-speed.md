@@ -54,7 +54,7 @@ each of them for.
 | --- | --- |
 | #441 | Start DISM's component-store analysis when an elevated pass starts. The largest single gain. |
 | #442 | Hand out planning slots longest first, by remembered cost from #443. |
-| #450 | Let a provider start the tool query its plan will wait on when the pass begins. |
+| #450 | Let a provider start the tool query its plan will wait on when the pass begins. Done: `BeginPass` takes a `PassStart`, which holds the pass's token, bounds the package managers' queries to half the logical processors (`Ask`), and starts a service's or a native tool's long answer without a place (`AskAtOnce`). Every tool row whose plan awaits a query it can ask before its own disk work adopts it, and `EarlyStartProof` holds each to asking once per pass. |
 | #451 | Show each location's check time. Built on #443. |
 
 ### 3. Tool queries that wait on each other

@@ -63,6 +63,25 @@ public sealed class PnpmStoreProviderTests : IDisposable
     /// <c>--force</c>, because pnpm's force means "also remove alien files" — directories the
     /// package manager did not create, which is precisely what §5.2 refuses to name as targets.
     /// </summary>
+    /// <summary>#450: pnpm is asked where its store is as the pass begins, and the plan awaits that answer.</summary>
+    [Fact]
+    public async Task AsksPnpmWhereItsStoreIsAsThePassBegins()
+    {
+        Populate(Store);
+        var runner = Reporting(Store);
+
+        await EarlyStartProof.StartsBeforeItPlansAsync(CreateProvider(runner), runner, "store path");
+    }
+
+    [Fact]
+    public async Task StartsNothingAsThePassBeginsWhenPnpmIsNotInstalled()
+    {
+        var runner = new FakeProcessRunner();
+        var provider = new PnpmStoreProvider(new FakeUserEnvironment(_temp.Path), runner, FakeProcessInspector.NothingRunning);
+
+        await EarlyStartProof.StartsNothingAsync(provider, runner);
+    }
+
     [Fact]
     public async Task PlansPruneAloneAndNeverForce()
     {

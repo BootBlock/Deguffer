@@ -128,6 +128,13 @@ public sealed class PipCacheProvider : CleanupProviderBase
         base.InvalidateCaches();
     }
 
+    /// <summary>
+    /// pip's answer for where its cache is, asked as the pass begins: pip is a Python module, and
+    /// starting the interpreter and importing pip is most of this row's wait.
+    /// </summary>
+    public override Task BeginPass(PassStart start) =>
+        start.Ask(ct => FindPip() is { } pip ? ResolveCacheDirectoryAsync(pip, ct) : Task.CompletedTask);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         if (FindPip() is not { } pip)

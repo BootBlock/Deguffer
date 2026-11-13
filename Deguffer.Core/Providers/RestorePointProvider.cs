@@ -49,6 +49,15 @@ public sealed class RestorePointProvider : CleanupProviderBase
     /// <summary>The listing presence and planning both read, taken once per planning pass (G4).</summary>
     private readonly PassMemo<Task<RestorePointListing>> _listing = new();
 
+    /// <summary>
+    /// The rest of the plan's questions, each asked once per planning pass, so the pass's start and the
+    /// plan share one answer. The clean asks the machine afresh for what it proves.
+    /// </summary>
+    private readonly PassMemo<Task<PointInTimeRestore>> _pointInTime = new();
+
+    private readonly PassMemo<Task<ShadowCopyListing>> _copies = new();
+    private readonly PassMemo<Task<IReadOnlyList<VolumeShadowStorage>>> _storage = new();
+
     public RestorePointProvider(
         ISystemProtection protection,
         IUserEnvironment? environment = null,
@@ -98,8 +107,33 @@ public sealed class RestorePointProvider : CleanupProviderBase
     public override void InvalidateCaches()
     {
         _listing.Forget();
+        _pointInTime.Forget();
+        _copies.Forget();
+        _storage.Forget();
         base.InvalidateCaches();
     }
+
+    /// <summary>
+    /// The plan's chain of questions asked as the pass begins, each only where the answer before it lets
+    /// the plan go on, as the plan asks them: System Restore's list, point-in-time restore's record, the
+    /// Volume Shadow Copy service's list and the storage each volume keeps. Each is a call into a system
+    /// service in another process, and none of them waits on anything the plan reads from the disk.
+    ///
+    /// <para><b>It takes no place under the pass's bound on tool queries.</b> None of them starts a
+    /// process: their wait is on the services, not on the processor. An unelevated account is refused the
+    /// first at once, which ends the chain there.</para>
+    /// </summary>
+    public override Task BeginPass(PassStart start) => start.AskAtOnce(async ct =>
+    {
+        if (!MayOffer(await ListingAsync(ct).ConfigureAwait(false))
+            || (await PointInTimeAsync(ct).ConfigureAwait(false)).MayKeepSnapshots
+            || !SeesRestorePoints(await CopiesAsync(ct).ConfigureAwait(false)))
+        {
+            return;
+        }
+
+        await StorageAsync(ct).ConfigureAwait(false);
+    });
 
     /// <summary>
     /// A restore point older than the newest. A listing Windows refused or failed is no evidence that
@@ -128,32 +162,29 @@ public sealed class RestorePointProvider : CleanupProviderBase
             return unlisted;
         }
 
-        if (listing.Newest is not { } newest || listing.Points.Count < 2)
+        if (!MayOffer(listing) || listing.Newest is not { } newest)
         {
             return EmptyPlan(listing.Points.Count == 0
                 ? "System Restore keeps no restore point on this machine."
                 : "System Restore keeps only one restore point here, and the newest is never offered.");
         }
 
-        var pointInTime = await Task.Run(_protection.ReadPointInTimeRestore, ct).ConfigureAwait(false);
+        var pointInTime = await PointInTimeAsync(ct).ConfigureAwait(false);
 
         if (pointInTime.MayKeepSnapshots)
         {
             return UnexaminedPlan(SharedWithPointInTimeRestore(pointInTime));
         }
 
-        var copies = await Task.Run(_protection.ListShadowCopies, ct).ConfigureAwait(false);
+        var copies = await CopiesAsync(ct).ConfigureAwait(false);
 
-        // Every restore point is kept as a shadow copy, so a list holding none that could be one is not
-        // seeing them, and what it says is absent could not be proved standing afterwards.
-        var blind = copies.Answer is ListingAnswer.Listed && !copies.Copies.Any(copy => copy.CouldBeRestorePoint)
-            ? UnexaminedPlan(
-                $"The Volume Shadow Copy service listed no shadow copy that could hold a restore point, although "
-                + $"System Restore lists {listing.Points.Count}, so its list cannot be complete.")
-            : null;
-
-        if ((blind ?? Unlisted(copies.Answer, copies.Failure, "the shadow copies on this machine")) is { } uncheckable)
+        if (!SeesRestorePoints(copies))
         {
+            var uncheckable = Unlisted(copies.Answer, copies.Failure, "the shadow copies on this machine")
+                ?? UnexaminedPlan(
+                    $"The Volume Shadow Copy service listed no shadow copy that could hold a restore point, although "
+                    + $"System Restore lists {listing.Points.Count}, so its list cannot be complete.");
+
             return uncheckable with
             {
                 Notes =
@@ -167,7 +198,7 @@ public sealed class RestorePointProvider : CleanupProviderBase
             };
         }
 
-        var storage = await Task.Run(_protection.ReadStorage, ct).ConfigureAwait(false);
+        var storage = await StorageAsync(ct).ConfigureAwait(false);
         var stated = storage.Where(volume => volume.Storage.Statement is Statement.Stated).ToList();
 
         if (stated.Count == 0)
@@ -293,6 +324,27 @@ public sealed class RestorePointProvider : CleanupProviderBase
     private static string Count(int count, string one, string? many = null) =>
         count == 1 ? $"1 {one}" : $"{count} {many ?? one + "s"}";
 
+    /// <summary>Whether <paramref name="listing"/> holds a restore point older than the newest, which the rest of the plan is asked for.</summary>
+    private static bool MayOffer(RestorePointListing listing) =>
+        listing.Answer is ListingAnswer.Listed && listing.Newest is not null && listing.Points.Count >= 2;
+
+    /// <summary>
+    /// Whether <paramref name="copies"/> is a list the clean can prove other programs' shadow copies
+    /// against. Every restore point is kept as a shadow copy, so a list holding none that could be one
+    /// is not seeing them, and what it says is absent could not be proved standing afterwards.
+    /// </summary>
+    private static bool SeesRestorePoints(ShadowCopyListing copies) =>
+        copies.Answer is ListingAnswer.Listed && copies.Copies.Any(copy => copy.CouldBeRestorePoint);
+
     private Task<RestorePointListing> ListingAsync(CancellationToken ct) =>
         _listing.Get(() => Task.Run(_protection.ListRestorePoints, ct));
+
+    private Task<PointInTimeRestore> PointInTimeAsync(CancellationToken ct) =>
+        _pointInTime.Get(() => Task.Run(_protection.ReadPointInTimeRestore, ct));
+
+    private Task<ShadowCopyListing> CopiesAsync(CancellationToken ct) =>
+        _copies.Get(() => Task.Run(_protection.ListShadowCopies, ct));
+
+    private Task<IReadOnlyList<VolumeShadowStorage>> StorageAsync(CancellationToken ct) =>
+        _storage.Get(() => Task.Run(_protection.ReadStorage, ct));
 }

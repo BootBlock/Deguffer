@@ -1,3 +1,4 @@
+using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.VirtualDisks;
@@ -22,6 +23,9 @@ public sealed class VirtualDiskProvider : VirtualDiskReportProvider
     private readonly ISystemDirectories _system;
 
     private readonly DockerInsideFigure _docker;
+
+    /// <summary>Docker's own figure, or null where it was not asked, read once per planning pass.</summary>
+    private readonly PassMemo<Task<DockerInsideReading?>> _inside = new();
 
     public VirtualDiskProvider(
         ISystemDirectories? system = null,
@@ -62,10 +66,33 @@ public sealed class VirtualDiskProvider : VirtualDiskReportProvider
     protected override Task<VirtualDiskInventory> ReadInventoryAsync(CancellationToken ct) =>
         Task.FromResult(VirtualDiskInventory.Read(Environment, _system));
 
-    /// <summary>Docker's own figure, asked only where Docker Desktop's data disk is there to ask about.</summary>
-    protected override async Task<DockerInsideReading?> InsideAsync(
+    public override void InvalidateCaches()
+    {
+        _inside.Forget();
+        base.InvalidateCaches();
+    }
+
+    /// <summary>
+    /// Docker's own figure asked as the pass begins, where Docker Desktop is running and its data disk is
+    /// there: before <c>docker system df</c> answers, the engine works out the size of every image,
+    /// container, volume and build cache it keeps, so the wait grows with what Docker holds.
+    ///
+    /// <para>The disks are read from WSL's registration and Docker Desktop's settings and measured from
+    /// outside first, as the plan does, and the plan then reports those same figures. It takes no place
+    /// under the pass's bound on tool queries: <c>docker</c> is a native program whose wait is the
+    /// engine's work, not an interpreter loading.</para>
+    /// </summary>
+    public override Task BeginPass(PassStart start) =>
+        start.AskAtOnce(async ct => await InsideAsync(await MeasuredAsync(ct).ConfigureAwait(false), ct).ConfigureAwait(false));
+
+    /// <summary>
+    /// Docker's own figure, asked only where Docker Desktop's data disk is there to ask about, once per
+    /// planning pass. Every caller in a pass passes the pass's one measurement, so the first decides.
+    /// </summary>
+    protected override Task<DockerInsideReading?> InsideAsync(
         IReadOnlyList<(VirtualDisk Disk, VirtualDiskSize Size)> measured, CancellationToken ct) =>
-        measured.Any(entry => entry.Disk.Owner is DockerDesktopData && entry.Size.Presence == PathPresence.Present)
-            ? await _docker.ReadAsync(ct).ConfigureAwait(false)
-            : null;
+        _inside.Get(async () =>
+            measured.Any(entry => entry.Disk.Owner is DockerDesktopData && entry.Size.Presence == PathPresence.Present)
+                ? await _docker.ReadAsync(ct).ConfigureAwait(false)
+                : null);
 }

@@ -62,6 +62,26 @@ public sealed class OtherAccountProfilesProviderTests : IDisposable
         Assert.Contains("Windows found no account for it", NoteAbout(plan, gone), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// #450: each profile's account is looked up as the pass begins, and the plan reads that survey
+    /// rather than asking Windows again.
+    /// </summary>
+    [Fact]
+    public async Task LooksUpEachProfilesAccountAsThePassBegins()
+    {
+        var gone = _profiles.AddLocal(1002, "former");
+        var provider = Provider();
+
+        await EarlyStartProof.BeginPassAsync(provider);
+
+        Assert.Equal(2, _profiles.Lookups);
+
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(2, _profiles.Lookups);
+        Assert.Equal(gone.Sid, Step(plan).Profile.Sid);
+    }
+
     [Fact]
     public async Task ItIsTier3NeverPreSelectedAndSaysNothingBringsItBack()
     {

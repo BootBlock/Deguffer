@@ -85,6 +85,7 @@ public sealed class VagrantSupersededBoxProvider : CleanupProviderBase
     ];
 
     private readonly ISystemDirectories _system;
+    private readonly PassMemo<Task<CheckedAnswer<VagrantPruneReading>>> _prune = new();
 
     public VagrantSupersededBoxProvider(
         IUserEnvironment? environment = null,
@@ -176,6 +177,23 @@ public sealed class VagrantSupersededBoxProvider : CleanupProviderBase
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(Environment.FindExecutable("vagrant") is not null);
 
+    /// <summary>
+    /// Where the home is, what is installed in it and what prune would remove are all the machine's, and a
+    /// box added or a variable changed between one scan and the next moves each of them.
+    /// </summary>
+    public override void InvalidateCaches()
+    {
+        _prune.Forget();
+        base.InvalidateCaches();
+    }
+
+    /// <summary>
+    /// Vagrant's prune dry run, asked as the pass begins: Vagrant is a Ruby program that loads its gems and
+    /// plugins before it answers, so its start is most of this row's wait.
+    /// </summary>
+    public override Task BeginPass(PassStart start) =>
+        start.Ask(ct => Environment.FindExecutable("vagrant") is { } vagrant ? ResolvePruneAsync(vagrant, ct) : Task.CompletedTask);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         if (Environment.FindExecutable("vagrant") is not { } vagrant)
@@ -183,50 +201,12 @@ public sealed class VagrantSupersededBoxProvider : CleanupProviderBase
             return EmptyPlan("Vagrant is not installed on this machine.");
         }
 
-        var setting = Resolve(VariableReading.Tool);
-
-        if (setting.Folder is not { } home)
+        if ((await ResolvePruneAsync(vagrant, ct).ConfigureAwait(false)).Refused(out var refusal, out var reading))
         {
-            return UnexaminedPlan(
-                $"{HomeVariable} is set to '{setting.Value}', and Deguffer will not treat that as Vagrant's "
-                + $"folder: {setting.Declined} Vagrant is not run, and none of its boxes is offered.");
+            return refusal;
         }
 
-        var boxes = VagrantBoxLayout.BoxesIn(home);
-
-        if (NothingToPlanFor(boxes, $"Vagrant has no boxes for this account: {boxes} does not exist.") is { } nothing)
-        {
-            return nothing;
-        }
-
-        // Read before the dry run rather than after it, so a box installed or removed while the dry
-        // run is ranking them shows at the clean as a change, never as part of a layout the dry run
-        // did not see. See VagrantPruneTarget.
-        if (VagrantBoxLayout.Installed(boxes) is not { } installed)
-        {
-            var unread = new PlanNote(
-                PlanNoteSeverity.Warning,
-                $"Deguffer could not read every box folder in {boxes}, so it could not check again when the "
-                + "clean runs that Vagrant's prune would remove only what it shows, and offers nothing.");
-
-            return UnexaminedPlan(unread.Message) with { Notes = [unread] };
-        }
-
-        var outcome = await Runner.RunAsync(vagrant, DryRun, ToolRun.Query, ct).ConfigureAwait(false);
-
-        if (!outcome.Succeeded)
-        {
-            return UnexaminedPlan(
-                "Vagrant could not say which box versions its prune would remove, so none is offered. "
-                + $"It said: {outcome.Message}");
-        }
-
-        if (VagrantPruneReport.TryRead(outcome.StandardOutput) is not { } preview)
-        {
-            return UnexaminedPlan(
-                "Vagrant's prune did not report which box versions it would keep and remove, so none is "
-                + "offered. Measuring the boxes instead would count the newest version of each.");
-        }
+        var (home, boxes, installed, preview) = reading;
 
         if (preview.Removed.Count == 0)
         {
@@ -329,6 +309,66 @@ public sealed class VagrantSupersededBoxProvider : CleanupProviderBase
             ],
             ct);
     }
+
+    private Task<CheckedAnswer<VagrantPruneReading>> ResolvePruneAsync(string vagrant, CancellationToken ct) =>
+        _prune.Get(() => AskPruneAsync(vagrant, ct));
+
+    /// <summary>
+    /// Vagrant's prune dry run, asked only where the home the prune reads is one Deguffer accepts, its boxes
+    /// folder is there, and every box in it was read first.
+    /// </summary>
+    private async Task<CheckedAnswer<VagrantPruneReading>> AskPruneAsync(string vagrant, CancellationToken ct)
+    {
+        var setting = Resolve(VariableReading.Tool);
+
+        if (setting.Folder is not { } home)
+        {
+            return UnexaminedPlan(
+                $"{HomeVariable} is set to '{setting.Value}', and Deguffer will not treat that as Vagrant's "
+                + $"folder: {setting.Declined} Vagrant is not run, and none of its boxes is offered.");
+        }
+
+        var boxes = VagrantBoxLayout.BoxesIn(home);
+
+        if (NothingToPlanFor(boxes, $"Vagrant has no boxes for this account: {boxes} does not exist.") is { } nothing)
+        {
+            return nothing;
+        }
+
+        // Read before the dry run rather than after it, so a box installed or removed while the dry
+        // run is ranking them shows at the clean as a change, never as part of a layout the dry run
+        // did not see. See VagrantPruneTarget.
+        if (VagrantBoxLayout.Installed(boxes) is not { } installed)
+        {
+            var unread = new PlanNote(
+                PlanNoteSeverity.Warning,
+                $"Deguffer could not read every box folder in {boxes}, so it could not check again when the "
+                + "clean runs that Vagrant's prune would remove only what it shows, and offers nothing.");
+
+            return UnexaminedPlan(unread.Message) with { Notes = [unread] };
+        }
+
+        var outcome = await Runner.RunAsync(vagrant, DryRun, ToolRun.Query, ct).ConfigureAwait(false);
+
+        if (!outcome.Succeeded)
+        {
+            return UnexaminedPlan(
+                "Vagrant could not say which box versions its prune would remove, so none is offered. "
+                + $"It said: {outcome.Message}");
+        }
+
+        if (VagrantPruneReport.TryRead(outcome.StandardOutput) is not { } preview)
+        {
+            return UnexaminedPlan(
+                "Vagrant's prune did not report which box versions it would keep and remove, so none is "
+                + "offered. Measuring the boxes instead would count the newest version of each.");
+        }
+
+        return new VagrantPruneReading(home, boxes, installed, preview);
+    }
+
+    /// <summary>The home the prune reads, its boxes folder, the boxes read before the dry run, and the dry run.</summary>
+    private sealed record VagrantPruneReading(string Home, string Boxes, IReadOnlySet<string> Installed, VagrantPrunePreview Preview);
 
     private static bool IsThere(PathPresence presence) => presence is PathPresence.Present;
 

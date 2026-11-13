@@ -189,6 +189,20 @@ public sealed class ConanCacheProvider : CleanupProviderBase
         base.InvalidateCaches();
     }
 
+    /// <summary>
+    /// Conan's answers for its home and then its package store, asked as the pass begins: Conan is a
+    /// Python program asked twice in turn, and those starts are most of this row's wait. Asked only
+    /// where the plan would ask: a home worked out without Conan, and no Conan running, read from the
+    /// pass's one snapshot of the processes. <see cref="LocateAsync"/> itself never asks about a home
+    /// that is not there.
+    /// </summary>
+    public override Task BeginPass(PassStart start) =>
+        start.Ask(ct => Environment.FindExecutable("conan") is { } conan
+            && OwnHome() is ConanHomeAnswer.Found
+            && Inspector.FindRunning(ConflictingProcessNames).Count == 0
+                ? LocateAsync(conan, ct)
+                : Task.CompletedTask);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         if (Environment.FindExecutable("conan") is not { } conan)

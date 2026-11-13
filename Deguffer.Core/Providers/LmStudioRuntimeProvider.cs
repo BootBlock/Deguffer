@@ -48,6 +48,8 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
     /// <summary>The folder of libraries the runtimes share, which is never a runtime.</summary>
     private const string Vendor = "vendor";
 
+    private readonly PassMemo<Task<CheckedAnswer<RuntimeListing>>> _runtimes = new();
+
     public LmStudioRuntimeProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
@@ -183,51 +185,29 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
         return lines.Any(line => line.Count() > 1);
     }
 
+    /// <summary>
+    /// LM Studio's answer, and whether it was running to be asked, change between one scan and the next.
+    /// </summary>
+    public override void InvalidateCaches()
+    {
+        _runtimes.Forget();
+        base.InvalidateCaches();
+    }
+
+    /// <summary>
+    /// LM Studio's list of its runtimes, asked as the pass begins: <c>lms</c> has to start and then ask the
+    /// running app, and this row waits on both.
+    /// </summary>
+    public override Task BeginPass(PassStart start) => start.Ask(ResolveRuntimesAsync);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
-        if (NothingToPlanFor(Backends, $"LM Studio has not downloaded any runtimes on this machine ({Backends}).") is { } nothing)
+        if ((await ResolveRuntimesAsync(ct).ConfigureAwait(false)).Refused(out var refusal, out var answer))
         {
-            return nothing;
+            return refusal;
         }
 
-        // §5.6 asserts every runtime folder beside the ones offered, read from this listing. A folder
-        // that will not be listed leaves nothing to assert, so nothing is offered from it.
-        var listing = ChildDirectories.Under(Backends);
-
-        if (listing.Unreadable)
-        {
-            return EmptyPlan(UnreadableRoot.WhyNothingWasPlanned(Backends)) with { HasUnreadableRoot = true };
-        }
-
-        switch (LongPath.ProbeFile(Lms))
-        {
-            case PathPresence.Absent:
-                return UnexaminedPlan(
-                    $"LM Studio's command-line tool is not at {Lms}, so Deguffer cannot ask LM Studio which "
-                    + "runtimes it uses.");
-
-            // Not "is not at": nothing established that it is missing.
-            case PathPresence.Refused:
-                return UnexaminedPlan(
-                    $"Windows would not say whether LM Studio's command-line tool is at {Lms}, so Deguffer "
-                    + "cannot ask LM Studio which runtimes it uses.") with { HasUnreadableRoot = true };
-        }
-
-        if (Inspector.FindRunning(LmStudio).Count == 0)
-        {
-            return UnexaminedPlan(
-                "Open LM Studio, then preview again. Deguffer asks LM Studio which runtimes it uses, and "
-                + "LM Studio's command would start LM Studio if it were closed.");
-        }
-
-        var listed = await Runner.RunAsync(Lms, "runtime ls", ToolRun.Query, ct).ConfigureAwait(false);
-
-        if (!listed.Succeeded || LmStudioRuntimeList.TryRead(listed.StandardOutput) is not { } runtimes)
-        {
-            return UnexaminedPlan(
-                "LM Studio did not list its runtimes in a form Deguffer can read, so none is offered. "
-                + "Which runtime LM Studio uses is what keeps it from being removed.");
-        }
+        var (listing, runtimes) = answer;
 
         if (!runtimes.Any(runtime => runtime.IsSelected))
         {
@@ -407,6 +387,65 @@ public sealed partial class LmStudioRuntimeProvider : CleanupProviderBase
                 .Select(path => path with { Marker = Marker }),
         ];
     }
+
+    private Task<CheckedAnswer<RuntimeListing>> ResolveRuntimesAsync(CancellationToken ct) =>
+        _runtimes.Get(() => AskRuntimesAsync(ct));
+
+    /// <summary>
+    /// LM Studio's list of its runtimes, asked only where the runtimes' folder lists, <c>lms</c> is there
+    /// and LM Studio is running, because <c>lms</c> starts LM Studio when it is not.
+    /// </summary>
+    private async Task<CheckedAnswer<RuntimeListing>> AskRuntimesAsync(CancellationToken ct)
+    {
+        if (NothingToPlanFor(Backends, $"LM Studio has not downloaded any runtimes on this machine ({Backends}).") is { } nothing)
+        {
+            return nothing;
+        }
+
+        // §5.6 asserts every runtime folder beside the ones offered, read from this listing. A folder
+        // that will not be listed leaves nothing to assert, so nothing is offered from it.
+        var listing = ChildDirectories.Under(Backends);
+
+        if (listing.Unreadable)
+        {
+            return EmptyPlan(UnreadableRoot.WhyNothingWasPlanned(Backends)) with { HasUnreadableRoot = true };
+        }
+
+        switch (LongPath.ProbeFile(Lms))
+        {
+            case PathPresence.Absent:
+                return UnexaminedPlan(
+                    $"LM Studio's command-line tool is not at {Lms}, so Deguffer cannot ask LM Studio which "
+                    + "runtimes it uses.");
+
+            // Not "is not at": nothing established that it is missing.
+            case PathPresence.Refused:
+                return UnexaminedPlan(
+                    $"Windows would not say whether LM Studio's command-line tool is at {Lms}, so Deguffer "
+                    + "cannot ask LM Studio which runtimes it uses.") with { HasUnreadableRoot = true };
+        }
+
+        if (Inspector.FindRunning(LmStudio).Count == 0)
+        {
+            return UnexaminedPlan(
+                "Open LM Studio, then preview again. Deguffer asks LM Studio which runtimes it uses, and "
+                + "LM Studio's command would start LM Studio if it were closed.");
+        }
+
+        var listed = await Runner.RunAsync(Lms, "runtime ls", ToolRun.Query, ct).ConfigureAwait(false);
+
+        if (!listed.Succeeded || LmStudioRuntimeList.TryRead(listed.StandardOutput) is not { } runtimes)
+        {
+            return UnexaminedPlan(
+                "LM Studio did not list its runtimes in a form Deguffer can read, so none is offered. "
+                + "Which runtime LM Studio uses is what keeps it from being removed.");
+        }
+
+        return new RuntimeListing(listing, runtimes);
+    }
+
+    /// <summary>The runtimes' folder, listed for the §5.6 negative before LM Studio was asked, and LM Studio's answer.</summary>
+    private sealed record RuntimeListing(ChildDirectoryScan Folders, IReadOnlyList<LmStudioRuntime> Runtimes);
 
     private static PlanNote Information(string message) => new(PlanNoteSeverity.Information, message);
 }

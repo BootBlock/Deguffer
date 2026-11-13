@@ -100,15 +100,16 @@ public interface ICleanupProvider
     /// runs once. Any check the plan makes before asking is made here first, and a provider that is not
     /// present starts nothing.</para>
     /// </summary>
-    /// <param name="ct">
-    /// The pass's, which the planner cancels when the pass ends, fails or is cancelled.
+    /// <param name="start">
+    /// The pass's token, which the planner cancels when the pass ends, fails or is cancelled, and the
+    /// bound a tool query started here takes a place under (<see cref="PassStart.Ask"/>).
     /// </param>
     /// <returns>
     /// The work started, which ends once nothing it started is still running, whether it answered or
     /// was cancelled. The planner awaits it before the pass returns, so nothing started here outlives
     /// the pass. A completed task where nothing was started.
     /// </returns>
-    Task BeginPass(CancellationToken ct);
+    Task BeginPass(PassStart start);
 
     /// <summary>
     /// Exact paths and commands, with sizes measured. Never executed here.

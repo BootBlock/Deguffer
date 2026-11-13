@@ -38,6 +38,13 @@ public sealed class DeliveryOptimizationProvider : CleanupProviderBase
     private readonly DeliveryOptimizationCache _cache;
     private readonly ISystemDirectories _system;
 
+    /// <summary>
+    /// What Windows says the cache holds, or null where the module is not on this machine, asked once
+    /// per planning pass. The clean asks afresh through <see cref="DeliveryOptimizationCache"/>, because
+    /// its figures are the cache before and after the command.
+    /// </summary>
+    private readonly PassMemo<Task<DeliveryOptimizationReading?>> _reading = new();
+
     /// <summary>Where Delivery Optimization keeps its own folder, in the Network Service profile.</summary>
     private readonly string _serviceFolder;
 
@@ -107,16 +114,31 @@ public sealed class DeliveryOptimizationProvider : CleanupProviderBase
     public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<CleanedPlace>>([CleanedPlace.Whole(_serviceFolder)]);
 
+    public override void InvalidateCaches()
+    {
+        _reading.Forget();
+        base.InvalidateCaches();
+    }
+
+    /// <summary>
+    /// Windows asked what the cache holds as the pass begins: the answer comes from the Delivery
+    /// Optimization service through WMI, and the first query in a new process took 515 to 1,052 ms on
+    /// one machine, against 5 to 54 ms for each later one (#692).
+    ///
+    /// <para><b>It takes no place under the pass's bound on tool queries.</b> The read starts no process:
+    /// its wait is the service starting and answering, so it adds nothing to what the bound shares out,
+    /// and queued behind every package manager's query it would start only once they had ended.</para>
+    /// </summary>
+    public override Task BeginPass(PassStart start) => start.AskAtOnce(ReadingAsync);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
-        if (LongPath.ProbeFile(_cache.ModuleManifest) is PathPresence.Absent)
+        if (await ReadingAsync(ct).ConfigureAwait(false) is not { } reading)
         {
             return EmptyPlan(
                 "Windows' Delivery Optimization commands are not on this machine, so it keeps no "
                 + "cache Deguffer can ask about.");
         }
-
-        var reading = await _cache.ReadAsync(ct).ConfigureAwait(false);
 
         if (reading.Bytes is not { } bytes)
         {
@@ -175,6 +197,16 @@ public sealed class DeliveryOptimizationProvider : CleanupProviderBase
             ],
         };
     }
+
+    /// <summary>
+    /// The pass's reading, which the module's manifest decides is worth asking: a Windows edition without
+    /// the module has nothing to ask, and its absence is settled in the same step, so the plan does not
+    /// probe for it again.
+    /// </summary>
+    private Task<DeliveryOptimizationReading?> ReadingAsync(CancellationToken ct) => _reading.Get(async () =>
+        LongPath.ProbeFile(_cache.ModuleManifest) is PathPresence.Absent
+            ? null
+            : await _cache.ReadAsync(ct).ConfigureAwait(false));
 
     /// <summary>
     /// The service's own folder as §5.6 can assert it: on its existence where Windows describes it,

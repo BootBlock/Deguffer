@@ -54,6 +54,37 @@ public sealed class VagrantSupersededBoxProviderTests : IDisposable
         Assert.Empty(runner.Invocations);
     }
 
+    /// <summary>#450: Vagrant is asked what its prune would remove as the pass begins, and the plan awaits that answer.</summary>
+    [Fact]
+    public async Task AsksVagrantWhatItsPruneWouldRemoveAsThePassBegins()
+    {
+        var (_, removed) = InstallBionic(DefaultHome);
+        var runner = Reporting(BionicReport);
+
+        var plan = await EarlyStartProof.StartsBeforeItPlansAsync(CreateProvider(runner), runner, "--dry-run");
+
+        Assert.Equal(removed.Order(StringComparer.OrdinalIgnoreCase), TheStep(plan).MeasuredPaths.Order(StringComparer.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task StartsNothingAsThePassBeginsWhenVagrantIsNotInstalled()
+    {
+        var runner = new FakeProcessRunner();
+        var environment = new FakeUserEnvironment(Path.Combine(_temp.Path, "bare"));
+
+        await EarlyStartProof.StartsNothingAsync(
+            new VagrantSupersededBoxProvider(environment, runner, FakeProcessInspector.NothingRunning, system: _system), runner);
+    }
+
+    /// <summary>The dry run waits, as in the plan, on Vagrant having a boxes folder to prune.</summary>
+    [Fact]
+    public async Task StartsNothingAsThePassBeginsWhenVagrantHasNoBoxes()
+    {
+        var runner = Reporting(BionicReport);
+
+        await EarlyStartProof.StartsNothingAsync(CreateProvider(runner), runner);
+    }
+
     /// <summary>The tier is the product (§3), and §7 derives the confirmation from it.</summary>
     [Fact]
     public async Task IsTier2AndCarriesThatIntoThePlan()

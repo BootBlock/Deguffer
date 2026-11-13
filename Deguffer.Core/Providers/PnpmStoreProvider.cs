@@ -172,6 +172,13 @@ public sealed class PnpmStoreProvider : CleanupProviderBase
         base.InvalidateCaches();
     }
 
+    /// <summary>
+    /// pnpm's answer for where its store is, asked as the pass begins: pnpm is a Node.js program, and
+    /// its start is most of this row's wait.
+    /// </summary>
+    public override Task BeginPass(PassStart start) =>
+        start.Ask(ct => Environment.FindExecutable("pnpm") is { } pnpm ? ResolveStoreAsync(pnpm, ct) : Task.CompletedTask);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         var pnpm = Environment.FindExecutable("pnpm");
