@@ -431,10 +431,13 @@ public class CleanViewModelCleanTests
         cache.Steps = [page.Cache("taken", 1024), unticked];
         page.Scan();
         page.Row("cache").Steps[1].IsSelected = false;
+        var whole = page.Row("cache").Finding.Plan!;
         var confirmedOn = new List<int>();
-        page.ViewModel.ConfirmCleanAsync = _ =>
+        var asked = new List<CleanConfirmation>();
+        page.ViewModel.ConfirmCleanAsync = confirmation =>
         {
             confirmedOn.Add(Environment.CurrentManagedThreadId);
+            asked.Add(confirmation);
             return Task.FromResult(true);
         };
 
@@ -445,10 +448,70 @@ public class CleanViewModelCleanTests
         Assert.DoesNotContain(window, walkedOn);
         Assert.Equal([false], scanAllowedWhileWalking);
 
-        var declined = Assert.Single(Assert.Single(cache.Executed).ProtectedPaths, path => path.Path == unticked.Path);
+        // The dialog states what the narrowed plan reclaims, never the whole row's figure.
+        var ran = Assert.Single(cache.Executed);
+        Assert.Equal(CleanConfirmation.For([ran]).TotalLabel, Assert.Single(asked).TotalLabel);
+        Assert.NotEqual(CleanConfirmation.For([whole]).TotalLabel, asked[0].TotalLabel);
+
+        var declined = Assert.Single(ran.ProtectedPaths, path => path.Path == unticked.Path);
         Assert.Equal(PathPresence.Present, declined.PresenceBefore);
         Assert.False(declined.HeldContentBefore);
         Assert.True(Directory.Exists(unticked.Path));
+    }
+
+    /// <summary>
+    /// A step unticked while the narrowing runs is not taken (§5.6). The checkboxes stay live while the
+    /// walks run, so the step is on screen as left alone, and with no confirmation to show it the run
+    /// would otherwise take it on the earlier ticks, unchecked afterwards because it was never declined.
+    /// </summary>
+    [Fact]
+    public void AStepUntickedWhileTheRowsAreNarrowedIsLeftStandingAndProtected()
+    {
+        SynchronizationContext? window = null;
+        StoragePage? shown = null;
+        using var unticking = new ManualResetEventSlim();
+        var cache = new FakeCleanupProvider("cache");
+        using var page = new StoragePage([cache], narrowing: PlanNarrowings.Asking(path =>
+        {
+            if (!unticking.IsSet)
+            {
+                // Posted to the window's thread, as a click lands, and waited for, so the tick changes
+                // while this walk is still under way.
+                window!.Post(_ =>
+                {
+                    shown!.Row("cache").Steps[0].IsSelected = false;
+                    unticking.Set();
+                }, null);
+                unticking.Wait(TimeSpan.FromSeconds(10));
+            }
+
+            return true;
+        }));
+        shown = page;
+        var first = page.Cache("first", 1024);
+        var second = page.Cache("second", 1024);
+        var third = page.Cache("third", 1024);
+        cache.Steps = [first, second, third];
+        page.Scan();
+        page.Row("cache").Steps[2].IsSelected = false;
+        page.ViewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(CleanViewModel.IsBusy) && page.ViewModel.IsBusy)
+            {
+                window ??= SynchronizationContext.Current;
+            }
+        };
+
+        page.Clean();
+
+        Assert.True(unticking.IsSet);
+        var ran = Assert.Single(cache.Executed);
+        Assert.Equal([second.Path], ran.TargetedPaths);
+        Assert.Contains(ran.ProtectedPaths, path => path.Path == first.Path);
+        Assert.Contains(ran.ProtectedPaths, path => path.Path == third.Path);
+        Assert.True(Directory.Exists(first.Path));
+        Assert.True(Directory.Exists(third.Path));
+        Assert.False(Directory.Exists(second.Path));
     }
 
     /// <summary>

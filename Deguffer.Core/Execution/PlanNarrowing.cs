@@ -9,13 +9,13 @@ namespace Deguffer.Core.Execution;
 ///
 /// <para><b>Off the UI thread, and several subjects at once</b> (<see cref="DiskBoundWork"/>). A row
 /// offers one step per item and some rows offer thousands, so a user who unticks most of a large row
-/// makes thousands of content walks. Asked one after another on the thread that pressed Clean, the
-/// window stopped responding until the last one finished, for seconds on a cold or spinning disk. Here
-/// every declined subject of every row is one list, worked under each volume's walk tuning and the
-/// shared listing budget, so the walks share a disk with whatever else is reading it.</para>
+/// makes thousands of content walks, which take seconds on a cold or spinning disk. Every declined
+/// subject of every row is one list, worked under each volume's walk tuning and the shared listing
+/// budget, so the walks share a disk with whatever else is reading it, and the window that pressed
+/// Clean goes on answering.</para>
 ///
-/// <para><b>What each subject records is unchanged.</b> Every declined subject is protected with the
-/// answers it was given when each was asked alone, and in the order its plan gives its steps.</para>
+/// <para><b>Each subject records what asking it alone records.</b> Every declined subject is protected
+/// with its own answer, in the order its plan gives its steps.</para>
 /// </summary>
 public sealed class PlanNarrowing
 {

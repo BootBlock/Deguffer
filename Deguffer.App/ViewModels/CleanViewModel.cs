@@ -630,11 +630,9 @@ public sealed partial class CleanViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanClean), IncludeCancelCommand = true)]
     private async Task CleanAsync(CancellationToken ct)
     {
-        // The ticks are read here, on the UI thread, and every row is narrowed once, off it: each
-        // declined subject is a content walk, and a row of thousands of unticked items froze the window
-        // between the press and the dialog. The confirmation below is asked of these narrowed rows,
-        // which are the ones that execute. A row with no plan has no step to tick, so is never selected.
-        FindingViewModel[] rows = [.. Findings.Where(f => f.IsSelected)];
+        // The ticks are read on the UI thread and each row is narrowed off it, because every declined
+        // subject is a content walk and a row can decline thousands. The confirmation below is asked
+        // of these narrowed rows, which are the ones that execute.
         List<Finding> selected;
 
         // Busy while the walks run, so no scan or keep can change the rows under the narrowing (a step
@@ -643,8 +641,19 @@ public sealed partial class CleanViewModel : ObservableObject
 
         try
         {
-            var narrowed = await _narrowing.NarrowAsync([.. rows.Select(row => row.ChosenSteps!)], ct);
-            selected = [.. rows.Select((row, index) => row.Finding with { Plan = narrowed[index] })];
+            // Narrowed again where a tick changed while the walks ran, so what runs is what the page
+            // shows ticked. See TickedRows.
+            TickedRows ticked;
+            IReadOnlyList<CleanupPlan> narrowed;
+
+            do
+            {
+                ticked = TickedRows.Of(Findings);
+                narrowed = await _narrowing.NarrowAsync(ticked.Choices, ct);
+            }
+            while (!ticked.AreCurrent(Findings));
+
+            selected = ticked.With(narrowed);
         }
         catch (OperationCanceledException)
         {
