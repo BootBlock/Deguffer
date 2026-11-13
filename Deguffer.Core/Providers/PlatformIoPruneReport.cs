@@ -35,7 +35,38 @@ internal sealed record PlatformIoPrunablePackage(string Name, string Size);
 /// </param>
 internal sealed record PlatformIoPrunePreview(
     long Bytes,
-    IReadOnlyList<PlatformIoPrunablePackage> Packages);
+    IReadOnlyList<PlatformIoPrunablePackage> Packages)
+{
+    /// <summary>How many packages the evidence names before it summarises the rest.</summary>
+    private const int PackagesNamed = 5;
+
+    /// <summary>
+    /// PlatformIO's own list, largest first, as the evidence behind the row. A user who is about to
+    /// agree to a multi-gigabyte toolchain removal can check a named package against their own
+    /// projects; a bare total gives them nothing to check.
+    ///
+    /// <para>Null where the report carried a total but no readable table. The estimate note beside
+    /// this one always appears, so a row is never left with no explanation of where its figure came
+    /// from.</para>
+    /// </summary>
+    public string? DescribePackages()
+    {
+        if (Packages.Count == 0)
+        {
+            return null;
+        }
+
+        var named = string.Join(
+            ", ",
+            Packages.Take(PackagesNamed).Select(package => $"{package.Name} ({package.Size})"));
+
+        var rest = Packages.Count - PackagesNamed;
+
+        return rest > 0
+            ? $"PlatformIO named {Packages.Count} packages, largest first: {named}, and {rest} more."
+            : $"PlatformIO named these packages: {named}.";
+    }
+}
 
 /// <summary>
 /// Reads what <c>pio system prune --dry-run</c> printed.

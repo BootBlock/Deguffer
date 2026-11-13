@@ -54,10 +54,8 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
     /// </summary>
     private const string PackagePrune = "system prune --core-packages --platform-packages";
 
-    /// <summary>How many packages the evidence note names before it summarises the rest.</summary>
-    private const int PackagesNamed = 5;
-
     private readonly PassMemo<Task<PlatformIoLocations>> _locations = new();
+    private readonly PassMemo<Task<PlatformIoPrunePreview?>> _prune = new();
 
     public PlatformIoCacheProvider(
         IUserEnvironment? environment = null,
@@ -219,8 +217,19 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
     public override void InvalidateCaches()
     {
         _locations.Forget();
+        _prune.Forget();
         base.InvalidateCaches();
     }
+
+    /// <summary>
+    /// PlatformIO's two answers, asked as the pass begins: what its own prune would remove, and where
+    /// it keeps things. pio is a Python program whose start is most of this row's wait, and the plan
+    /// asks both at once, so each takes a place of its own, the dry run first as in the plan.
+    /// </summary>
+    public override Task BeginPass(PassStart start) =>
+        Task.WhenAll(
+            start.Ask(ct => Environment.FindExecutable("pio") is { } pio ? ResolvePruneAsync(pio, ct) : Task.CompletedTask),
+            start.Ask(ct => Environment.FindExecutable("pio") is { } pio ? ResolveLocationsAsync(pio, ct) : Task.CompletedTask));
 
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
@@ -377,11 +386,7 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
         Task<PlatformIoLocations> pending,
         CancellationToken ct)
     {
-        var outcome = await Runner
-            .RunAsync(pio, PackagePrune + " --dry-run", ToolRun.Query, ct)
-            .ConfigureAwait(false);
-
-        var preview = PlatformIoPruneReport.TryRead(outcome.StandardOutput);
+        var preview = await ResolvePruneAsync(pio, ct).ConfigureAwait(false);
         var locations = await pending.ConfigureAwait(false);
 
         if (preview is null)
@@ -417,7 +422,7 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
                 + "Anything an installed platform still requires is neither counted nor removed."),
         };
 
-        if (DescribePackages(preview.Packages) is { } evidence)
+        if (preview.DescribePackages() is { } evidence)
         {
             notes.Add(Information(evidence));
         }
@@ -444,33 +449,6 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
             },
             notes,
             probed.Fallback);
-    }
-
-    /// <summary>
-    /// PlatformIO's own list, largest first, as the evidence behind the row. A user who is about to
-    /// agree to a multi-gigabyte toolchain removal can check a named package against their own
-    /// projects; a bare total gives them nothing to check.
-    ///
-    /// <para>Null where the report carried a total but no readable table. The estimate note beside
-    /// this one always appears, so a row is never left with no explanation of where its figure came
-    /// from.</para>
-    /// </summary>
-    private static string? DescribePackages(IReadOnlyList<PlatformIoPrunablePackage> packages)
-    {
-        if (packages.Count == 0)
-        {
-            return null;
-        }
-
-        var named = string.Join(
-            ", ",
-            packages.Take(PackagesNamed).Select(package => $"{package.Name} ({package.Size})"));
-
-        var rest = packages.Count - PackagesNamed;
-
-        return rest > 0
-            ? $"PlatformIO named {packages.Count} packages, largest first: {named}, and {rest} more."
-            : $"PlatformIO named these packages: {named}.";
     }
 
     /// <summary>
@@ -523,6 +501,18 @@ public sealed class PlatformIoCacheProvider : CleanupProviderBase
 
         return PlatformIoLocations.Read(
             outcome.Succeeded ? outcome.StandardOutput : string.Empty, CoreRoot);
+    }
+
+    private Task<PlatformIoPrunePreview?> ResolvePruneAsync(string pio, CancellationToken ct) =>
+        _prune.Get(() => AskPruneAsync(pio, ct));
+
+    private async Task<PlatformIoPrunePreview?> AskPruneAsync(string pio, CancellationToken ct)
+    {
+        var outcome = await Runner
+            .RunAsync(pio, PackagePrune + " --dry-run", ToolRun.Query, ct)
+            .ConfigureAwait(false);
+
+        return PlatformIoPruneReport.TryRead(outcome.StandardOutput);
     }
 
     private static PlanNote Information(string message) => new(PlanNoteSeverity.Information, message);
