@@ -291,6 +291,33 @@ public sealed class ToolAnswerMemoryTests : IDisposable
         Assert.False(_memory.Holds(Key));
     }
 
+    /// <summary>
+    /// An answer that differs from the one it would confirm, with every declared input reading the
+    /// same, came from something the inputs do not account for: an input that changed and changed back
+    /// while the tool ran, or one nobody declared.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotTrustAnAnswerThatDiffersFromTheOneItWouldConfirm()
+    {
+        await AskAsync();
+        _answer = @"C:\cache	wo";
+
+        await AskAsync();
+
+        Assert.False(_memory.Holds(Key));
+    }
+
+    [Fact]
+    public async Task AnAnswerThatDifferedIsTrustedOnceTheNextAskGivesItAgain()
+    {
+        await AskAsync();
+        _answer = @"C:\cache	wo";
+        await AskAsync();
+
+        Assert.Equal(@"C:\cache	wo", await AskAsync());
+        Assert.True(_memory.Holds(Key));
+    }
+
     [Fact]
     public async Task DoesNotTrustAnAnswerTheToolDidNotGive()
     {
@@ -445,14 +472,18 @@ public sealed class ToolAnswerMemoryTests : IDisposable
     }
 
     [Fact]
-    public async Task AskingAfreshStartsTheToolWhateverIsTrustedAndKeepsTheNewAnswer()
+    public async Task AskingAfreshStartsTheToolWhateverIsTrustedAndHoldsTheNewAnswerUntilConfirmed()
     {
         await TrustAsync();
         _answer = @"C:\cache\two";
 
+        // A different answer with every input unchanged is held, not trusted, so the next ask confirms it.
         Assert.Equal(@"C:\cache\two", await _memory.AskAfreshAsync(Question(Inputs()), CancellationToken.None));
+        Assert.False(_memory.Holds(Key));
         Assert.Equal(@"C:\cache\two", await AskAsync());
-        Assert.Equal(1, _asked);
+        Assert.True(_memory.Holds(Key));
+        Assert.Equal(@"C:\cache\two", await AskAsync());
+        Assert.Equal(2, _asked);
     }
 
     [Fact]

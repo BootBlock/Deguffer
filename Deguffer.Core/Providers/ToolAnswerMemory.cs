@@ -22,7 +22,9 @@ namespace Deguffer.Core.Providers;
 /// and a moved one keeps its old times. Nor do the folders above the inputs say it reliably, because
 /// tools write in them as they answer (pnpm leaves an entry in its home folder and in the folder it
 /// runs in). The inputs to read beforehand are those the last answer named, so the first answer to a
-/// question is held untrusted and the next ask confirms it.</para>
+/// question is held untrusted, and the next ask confirms it only by giving the same answer: an answer
+/// given from a state that came and went during the ask, or that changed while every declared input
+/// stayed the same, is not one the inputs account for.</para>
 ///
 /// <para><b>What is never trusted.</b> A failed or cancelled ask; an answer the tool did not give
 /// (<see cref="ToolQuestion{T}.IsAnswer"/>); an answer whose inputs could not all be read; and an
@@ -72,15 +74,18 @@ public sealed class ToolAnswerMemory
     /// </summary>
     internal async Task<T> AskAsync<T>(ToolQuestion<T> question, CancellationToken ct)
     {
-        if (_answers.TryGetValue(question.Key, out var held)
-            && held.Trusted
-            && held.Answer is T answer
-            && question.InputsOf(answer).Read(question.Environment).Matches(held.Fingerprint))
+        if (!_answers.TryGetValue(question.Key, out var held) || held.Answer is not T last)
         {
-            return answer;
+            return await AskAndHoldAsync(question, last: default, before: null, ct).ConfigureAwait(false);
         }
 
-        return await AskAfreshAsync(question, ct).ConfigureAwait(false);
+        // One reading serves both: what the trusted answer is checked by, and what the ask that
+        // replaces it compares its own reading with.
+        var now = question.InputsOf(last).Read(question.Environment);
+
+        return held.Trusted && now.Matches(held.Fingerprint)
+            ? last
+            : await AskAndHoldAsync(question, last, now, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -89,18 +94,25 @@ public sealed class ToolAnswerMemory
     /// under the location it plans from, where a missed input would move a deletion (§5.2) rather than
     /// misstate a figure.
     /// </summary>
-    internal async Task<T> AskAfreshAsync<T>(ToolQuestion<T> question, CancellationToken ct)
-    {
-        var before = _answers.TryGetValue(question.Key, out var held) && held.Answer is T last
-            ? question.InputsOf(last).Read(question.Environment)
-            : null;
+    internal Task<T> AskAfreshAsync<T>(ToolQuestion<T> question, CancellationToken ct) =>
+        _answers.TryGetValue(question.Key, out var held) && held.Answer is T last
+            ? AskAndHoldAsync(question, last, question.InputsOf(last).Read(question.Environment), ct)
+            : AskAndHoldAsync(question, last: default, before: null, ct);
 
+    /// <param name="last">The answer held before this ask, which the new one must equal to be trusted.</param>
+    /// <param name="before">What the inputs <paramref name="last"/> named read before the tool started, or null where none is held.</param>
+    private async Task<T> AskAndHoldAsync<T>(ToolQuestion<T> question, T? last, ToolFingerprint? before, CancellationToken ct)
+    {
         var started = (_time.GetUtcNow() - CoarseTimes).ToFileTime();
         var answer = await question.Ask(ct).ConfigureAwait(false);
 
         if (question.IsAnswer(answer) && question.InputsOf(answer).Read(question.Environment) is { IsComplete: true } after)
         {
-            var trusted = before is not null && before.Matches(after) && after.Newest < started;
+            var trusted = before is not null
+                && EqualityComparer<T>.Default.Equals(last, answer)
+                && before.Matches(after)
+                && after.Newest < started;
+
             _answers[question.Key] = new Remembered(answer, after, trusted);
         }
         else

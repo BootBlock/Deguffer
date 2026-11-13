@@ -30,9 +30,10 @@ of these tools again (`scan-progress.md` §4: conda about 0.9-1.0 s, npm 0.4-0.6
 - **`ToolAnswerMemory`** holds each remembered answer with its inputs and fingerprint, one memory per
   `IProcessRunner`, so the answers the real runner received are shared process-wide (every Explore
   build constructs fresh providers) and a test's fake runner never sees another's. A provider reads
-  it inside its `PassMemo`, so the fingerprint is read once per pass.
+  it inside its `PassMemo`, so a pass reads the inputs once to serve a trusted answer, or before and
+  after the tool where it asks.
 - **An answer is trusted only once its inputs read the same before the tool started and after it
-  answered.** A file edited, deleted, or moved in or away while the tool runs shows as a difference
+  answered, and the tool gave the same answer as last time.** A file edited, deleted, or moved in or away while the tool runs shows as a difference
   between the two readings, which nothing read afterwards can show: a deleted file leaves no time,
   and a moved one keeps its old times. The inputs read beforehand are those the last answer named, so
   the first answer to a question is held untrusted and the next ask confirms it.
@@ -67,15 +68,18 @@ PlatformIO joins under #1053, once #591 has changed what its query reads.
 
 ## Stages
 
-1. The shared types and their tests: a second ask with nothing changed is answered from memory; each
-   kind of input changed (a file written, created or deleted, a folder's listing changed, a variable
-   set, the executable replaced) asks again; a refused input, an unanswered ask and an input written
-   during the ask are not kept; a second set of providers on the same runner shares the answer.
+1. The shared types and their tests: the first answer is held untrusted, the next ask confirms it,
+   and a confirmed answer is served while nothing changed; each kind of input changed (a file
+   written, created or deleted, a folder's listing changed, a variable set, the executable replaced)
+   asks again; a refused input, an unanswered ask, an input written during the ask and an answer
+   that differs from the one it would confirm are not trusted; a second set of providers on the same
+   runner shares the answer.
 2. conda. 3. Poetry. 4. pip. 5. npm. 6. pnpm. 7. Yarn 1 and Yarn Berry. Each adopter has one test
-   per declared input kind, a test that a second set of providers on the same memory asks nothing,
-   and the §5.6 negative of its plan when the location moved between two passes. Each row that asks
-   its tool when Explore builds its policy (conda, Poetry, pnpm and both Yarn rows) has a test that a
-   second policy build asks nothing; npm's and pip's Explore declarations ask no tool.
+   per declared input kind, a test that a set of providers on the same memory asks nothing once the
+   answer is confirmed, and the §5.6 negative of its plan when the location moved between two
+   passes. Each row that asks its tool when Explore builds its policy (conda, Poetry, pnpm and both
+   Yarn rows) has a test that a policy build asks nothing once the answer is confirmed; npm's and
+   pip's Explore declarations ask no tool.
 8. `CLAUDE.md` G4, `docs/cache-locations.md` (each adopter's inputs, citing the tool's
    documentation) and the comments that said the answer must not outlive a pass.
 

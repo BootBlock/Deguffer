@@ -365,7 +365,8 @@ public sealed class PoetryLocationMemoryTests : IDisposable
     /// The plan deletes <c>artifacts</c> by path, so it asks Poetry afresh even though the memory
     /// holds an answer whose inputs read the same, and even when a declaration earlier in the same
     /// pass was answered from the memory. An input the memory missed would otherwise move a deletion
-    /// (§5.2). The fresh answer is then what the memory holds.
+    /// (§5.2). The fresh answer is then what the memory holds, untrusted because it differs from the
+    /// trusted one while no declared input changed, so the next declaration asks Poetry to confirm it.
     /// </summary>
     [Fact]
     public async Task ThePlanAsksPoetryAfreshEvenWhenTheMemoryHoldsTheAnswer()
@@ -390,6 +391,6 @@ public sealed class PoetryLocationMemoryTests : IDisposable
         provider.InvalidateCaches();
 
         Assert.Equal(MovedCache, await DeclaredCacheAsync(provider), StringComparer.OrdinalIgnoreCase);
-        Assert.Equal(1, Asked(CacheDir));
+        Assert.Equal(2, Asked(CacheDir));
     }
 }

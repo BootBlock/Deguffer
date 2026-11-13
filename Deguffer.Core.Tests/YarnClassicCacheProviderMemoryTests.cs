@@ -353,8 +353,9 @@ public sealed class YarnClassicCacheProviderMemoryTests : IDisposable
 
     /// <summary>
     /// A failed script question leaves a script in use that no input names: which Yarn runs and the
-    /// location are planned from and asked again next time. The failure comes after trusted answers,
-    /// from an ask replacing Yarn forced, so only the failed script question can refuse them.
+    /// location are planned from and asked on every pass. The failed answers name no script, unlike the
+    /// trusted ones before them, so the second failed pass is the first a kept answer could be
+    /// confirmed by, and the third the first it could be served to.
     /// </summary>
     [Fact]
     public async Task AFailedScriptQueryIsPlannedFromButNotKept()
@@ -366,14 +367,16 @@ public sealed class YarnClassicCacheProviderMemoryTests : IDisposable
         _yarn.ScriptFails = true;
         provider.InvalidateCaches();
         var failed = await provider.PlanAsync();
+        provider.InvalidateCaches();
+        await provider.PlanAsync();
         Assert.False(_yarn.Memory.Holds(_yarn.VersionKey));
         Assert.False(_yarn.Memory.Holds(_yarn.ClassicKey));
         provider.InvalidateCaches();
         await provider.PlanAsync();
 
         Assert.Equal([Root], Assert.IsType<RunCommandStep>(Assert.Single(failed.Steps)).MeasuredPaths);
-        Assert.Equal(2, Asked);
-        Assert.Equal(2, _yarn.Asked("-v"));
+        Assert.Equal(3, Asked);
+        Assert.Equal(3, _yarn.Asked("-v"));
     }
 
     /// <summary>Three passes that each ask: a kept answer would have been confirmed by the second and served to the third.</summary>

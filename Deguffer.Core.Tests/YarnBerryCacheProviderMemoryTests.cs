@@ -392,8 +392,9 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
 
     /// <summary>
     /// A failed script question leaves a script in use that no input names: which Yarn runs and the
-    /// global folder are used and asked again next time. The failure comes after trusted answers, from
-    /// an ask replacing Yarn forced, so only the failed script question can refuse them.
+    /// global folder are used and asked on every pass. The failed answers name no script, unlike the
+    /// trusted ones before them, so the second failed pass is the first a kept answer could be
+    /// confirmed by, and the third the first it could be served to.
     /// </summary>
     [Fact]
     public async Task AFailedScriptQueryIsUsedButNotKept()
@@ -405,14 +406,16 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
         _yarn.ScriptFails = true;
         provider.InvalidateCaches();
         var failed = await provider.CleanedPlacesAsync();
+        provider.InvalidateCaches();
+        await provider.CleanedPlacesAsync();
         Assert.False(_yarn.Memory.Holds(_yarn.VersionKey));
         Assert.False(_yarn.Memory.Holds(_yarn.BerryKey));
         provider.InvalidateCaches();
         await provider.CleanedPlacesAsync();
 
         Assert.Contains(failed, p => p.Path == Path.Combine(_first, "cache"));
-        Assert.Equal(2, Asked);
-        Assert.Equal(2, _yarn.Asked("-v"));
+        Assert.Equal(3, Asked);
+        Assert.Equal(3, _yarn.Asked("-v"));
     }
 
     /// <summary>

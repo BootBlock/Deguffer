@@ -8,8 +8,8 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para><b>Both times, not the last-write time alone.</b> A configuration file replaced by a copy
 /// can keep the copied file's last-write time, and the copy is a new file with a new creation time.
-/// A folder's own last-write time moves when an entry is added, removed or renamed in it, which is
-/// what a listing of it is compared by.</para>
+/// A folder whose entries are listed is compared by those entries instead (<see cref="ToolInputs"/>),
+/// since its own last-write time also moves when a tool leaves and removes an entry in it.</para>
 /// </summary>
 /// <param name="Path">The path as the declaration named it.</param>
 /// <param name="Presence">
