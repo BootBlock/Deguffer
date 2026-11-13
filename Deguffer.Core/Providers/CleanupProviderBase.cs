@@ -298,7 +298,13 @@ public abstract class CleanupProviderBase : ICleanupProvider
         // Every other provider returns a plan with no guard of its own, so this is exactly the
         // user's value for all of them.
         var effective = MinimumAge.Stricter(plan.Keep, keep);
-        var guarded = effective.IsOn ? Guarded(plan, effective, keep) : plan;
+        var guarded = effective.IsOn
+            ? Guarded(
+                plan,
+                effective,
+                keep,
+                await RecentFileSteps.KeptAsync([.. plan.Steps.OfType<DeleteFileStep>()], effective, Scanner.Tuning, ct).ConfigureAwait(false))
+            : plan;
 
         // Stamped here for the reason the guard is: no provider held the defect, and a provider
         // cannot be allowed to forget the fix. After the guard, so what is asked again is exactly
@@ -610,7 +616,8 @@ public abstract class CleanupProviderBase : ICleanupProvider
         [.. results.Select(r => r.WithheldRecent)],
         [.. results.Select(r => r.MailStores)],
         [.. results.Select(r => r.WasReached)],
-        [.. results.Select(r => r.LastWritten)]);
+        [.. results.Select(r => r.LastWritten)],
+        [.. results.Select(r => r.FileKept)]);
 
     /// <summary>
     /// Measure every target and turn it into the step that will delete it.
@@ -651,7 +658,10 @@ public abstract class CleanupProviderBase : ICleanupProvider
         {
             DeleteStep step = target.Kind switch
             {
-                TargetKind.File => new DeleteFileStep(target.Path, target.Reason),
+                TargetKind.File => new DeleteFileStep(target.Path, target.Reason)
+                {
+                    AgeVerdict = group.FileKept is { } kept ? new FileAgeVerdict(keep, kept) : null,
+                },
                 TargetKind.RecycleBin => new EmptyRecycleBinStep(target.Path, target.Reason),
                 TargetKind.DirectoryContents => new ClearDirectoryStep(target.Path, target.Reason)
                 {
@@ -808,7 +818,8 @@ public abstract class CleanupProviderBase : ICleanupProvider
                 span.Aggregate(ScanSize.Zero, (total, i) => total + measured.Sizes[i]),
                 span.Any(i => measured.WithheldRecent[i]),
                 [.. span.SelectMany(i => measured.MailStores[i]).Distinct(StringComparer.OrdinalIgnoreCase)],
-                measured.LastWritten[span[0]]));
+                measured.LastWritten[span[0]],
+                group.Count == 1 ? measured.FileKept[span[0]] : null));
         }
 
         return (each, measured);
@@ -819,7 +830,12 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// The age of the group's first path, the step's own, which every caller puts first. See
     /// <see cref="ScanResult.LastWritten"/>.
     /// </param>
-    private readonly record struct GroupMeasure(ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores, DateTime? LastWritten);
+    /// <param name="FileKept">
+    /// For a group of one file, whether the guard it was measured under keeps it. See
+    /// <see cref="ScanResult.FileKept"/>.
+    /// </param>
+    private readonly record struct GroupMeasure(
+        ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores, DateTime? LastWritten, bool? FileKept);
 
     /// <summary>
     /// What the removal of <paramref name="target"/> leaves standing, for its measurement to leave
@@ -869,13 +885,12 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// the provider imposed and the user never chose. A provider with a floor explains it itself,
     /// where the reasoning for that particular location is.
     /// </param>
-    private static CleanupPlan Guarded(CleanupPlan plan, MinimumAge keep, MinimumAge asked)
+    /// <param name="files">
+    /// The plan's file steps <paramref name="keep"/> keeps, as <see cref="RecentFileSteps.KeptAsync"/>
+    /// answers them.
+    /// </param>
+    private static CleanupPlan Guarded(CleanupPlan plan, MinimumAge keep, MinimumAge asked, IReadOnlyList<DeleteFileStep> files)
     {
-        var files = plan.Steps
-            .OfType<DeleteFileStep>()
-            .Where(step => keep.ProtectsFile(step.Path))
-            .ToList();
-
         // Windows clears a handler's directories whole, so one holding anything the guard would keep
         // cannot do less: it would do all of it. See PlanDiskCleanupsAsync.
         var whole = plan.Steps

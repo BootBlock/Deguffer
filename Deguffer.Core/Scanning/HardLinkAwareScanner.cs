@@ -166,8 +166,7 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
 
             if (presence is PathPresence.Present)
             {
-                results[i] = [.. MeasureFile(path, keeps, _files)
-                    .Select(file => ScanResult.Direct(file.Size, file.WithheldRecent) with { MailStores = file.MailStores })];
+                results[i] = MeasureFile(path, owns[i], keeps, _files);
 
                 // A file is read whole, so its reading is final, and it counts before any walk starts.
                 running.Report(i, results[i][0].Size);
@@ -424,16 +423,21 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
     /// <see cref="ParallelEnumerationScanner"/>: a single named file is a legitimate subject, and
     /// answering zero for one would make its step unofferable.
     ///
-    /// <para>One reading for each of <paramref name="keeps"/>, with the file read at most once.</para>
+    /// <para>One reading for each of <paramref name="keeps"/>, with the file opened at most once and
+    /// its age judged from the attribute read that found it, <paramref name="newestFileTime"/>, rather
+    /// than by reading it again for each guard.</para>
     /// </summary>
-    private static (ScanSize Size, bool WithheldRecent, IReadOnlyList<string> MailStores)[] MeasureFile(
+    private static ScanResult[] MeasureFile(
         string path,
+        long newestFileTime,
         MinimumAge[] keeps,
         FileInformation files)
     {
         if (MailStore.Is(path))
         {
-            return [.. keeps.Select(_ => (Approximate(0, 0), false, (IReadOnlyList<string>)[LongPath.Display(path)]))];
+            IReadOnlyList<string> store = [LongPath.Display(path)];
+
+            return [.. keeps.Select(_ => ScanResult.Direct(Approximate(0, 0)) with { MailStores = store })];
         }
 
         var sole = new Lazy<ScanSize>(() => files.Standard(LongPath.Extended(path), new ByNameRoute()) is { } info
@@ -442,8 +446,8 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
                 info.NumberOfLinks == 1 ? info.EndOfFile : 0)
             : Approximate(0, 0));
 
-        return [.. keeps.Select(keep => keep.ProtectsFile(path)
-            ? (Approximate(0, 0), true, (IReadOnlyList<string>)[])
-            : (sole.Value, false, []))];
+        return [.. keeps.Select(keep => keep.Protects(newestFileTime)
+            ? ScanResult.Direct(Approximate(0, 0), withheldRecent: true) with { FileKept = true }
+            : ScanResult.Direct(sole.Value) with { FileKept = false })];
     }
 }

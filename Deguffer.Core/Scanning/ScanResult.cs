@@ -59,6 +59,20 @@ public sealed record ScanResult(
     /// </summary>
     public DateTime? LastWritten { get; init; }
 
+    /// <summary>
+    /// For a reading of one file, whether the guard it was measured under keeps that file, judged by
+    /// the file's own times from the read that measured it: a link's own, as the removal judges a link.
+    /// Null for anything else: a directory, a path absent or refused, and an Outlook mail store, which
+    /// the plan withholds as a store before any guard is asked.
+    ///
+    /// <para>Kept apart from <see cref="WithheldRecent"/>, which says whether the figure left a real
+    /// file out. The two agree for an ordinary file, and part for a link, which the figure never counts
+    /// and the guard still keeps. So this is what lets the plan withdraw a recent file's step on the
+    /// measurement's word, rather than reading the file a further time to ask the same question. See
+    /// <see cref="Execution.DeleteFileStep.AgeVerdict"/>.</para>
+    /// </summary>
+    public bool? FileKept { get; init; }
+
     public static ScanResult Fast(ScanSize size, bool withheldRecent = false) =>
         new(size, ScanStrategy.MasterFileTable, FallbackReason.None, withheldRecent);
 

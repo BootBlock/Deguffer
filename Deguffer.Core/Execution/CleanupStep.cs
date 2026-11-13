@@ -704,4 +704,13 @@ public sealed record DiskCleanupStep(string Path, string What) : DeleteStep(Path
 public sealed record DeleteFileStep(string Path, string What) : DeleteStep(Path, What)
 {
     public override string Description => $"{What} — {LongPath.Display(Path)}";
+
+    /// <summary>
+    /// What the guard decided about the file when it was measured, so the plan withdraws a recent
+    /// file's step without reading the file again. Null where the measurement judged nothing about
+    /// the file's age: it was absent, refused or a mail store, or a scanner gave no verdict. The plan
+    /// reads the file for those, and for a verdict given under a guard other than the one in force.
+    /// See <see cref="FileAgeVerdict"/>.
+    /// </summary>
+    public FileAgeVerdict? AgeVerdict { get; init; }
 }

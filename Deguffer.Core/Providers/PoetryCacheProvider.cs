@@ -81,7 +81,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     private static readonly IReadOnlyList<CacheLevel> Levels = [new CacheLevel(string.Empty, DisposableChildren)];
 
     /// <summary>No paths measured, for the routes that produce no command step at all.</summary>
-    private static readonly ScanBatch NothingMeasured = new([], FallbackReason.None, [], [], [], []);
+    private static readonly ScanBatch NothingMeasured = new([], FallbackReason.None, [], [], [], [], []);
 
     private readonly PoetryDiscovery _discovery;
     private readonly RowDeclarations _declarations;
