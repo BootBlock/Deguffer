@@ -80,14 +80,14 @@ internal sealed class NameLayer
         Follow(carried);
     }
 
-    /// <summary>The visual every name hangs under, through its fade step's.</summary>
+    /// <summary>
+    /// The visual every name hangs under, through the visual of its pair of fade steps, which is under
+    /// this only while a name is in the pair.
+    /// </summary>
     public ContainerVisual Root { get; }
 
     /// <summary>How the names fade, by step, under <see cref="Root"/>.</summary>
     public NameFades Fades { get; }
-
-    /// <summary>How many expressions the compositor works out on every frame for the names: three here, and one per fade step in use.</summary>
-    public int Running => _expressions.Length + Fades.Running;
 
     /// <summary>Lay the names out for a drawing placed in the picture by <paramref name="placed"/>, drawn at <paramref name="scale"/>.</summary>
     public void Place(MapTransform placed, double scale)

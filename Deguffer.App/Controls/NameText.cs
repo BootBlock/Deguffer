@@ -40,43 +40,29 @@ internal sealed class NameText
     public bool IsDrawn => _drawn is not null && _drawn == _wanted;
 
     /// <summary>
-    /// Write <paramref name="text"/> in <paramref name="lettering"/>, in <paramref name="colour"/>, in a
-    /// box <paramref name="room"/> device-independent pixels wide: centred in it where
-    /// <paramref name="centred"/> and it fits, and otherwise from its left, cut short at its right. Lines
-    /// of SpaceMonger's type are <paramref name="spacing"/> apart, and the application's type is set at
-    /// <paramref name="textScale"/> times its standard size. Measured on <paramref name="device"/>.
+    /// Write what <paramref name="writing"/> says, measured on <paramref name="device"/> in one of
+    /// <paramref name="formats"/>: how much room it takes is <see cref="Size"/>.
     /// </summary>
-    /// <returns>How much room the text takes, in device-independent pixels.</returns>
-    public Size Write(
-        CanvasDevice device,
-        NameFormats formats,
-        string text,
-        MapLettering lettering,
-        float room,
-        bool centred,
-        Color colour,
-        float spacing,
-        double textScale)
+    public void Write(CanvasDevice device, NameFormats formats, in NameWriting writing)
     {
-        var classic = lettering == MapLettering.Classic;
-        var format = classic ? formats.Classic(spacing) : formats.Standard(textScale);
-        var (natural, height) = Measure(device, text, format, classic);
+        var classic = writing.Lettering == MapLettering.Classic;
+        var format = classic ? formats.Classic(writing.Spacing) : formats.Standard(writing.TextScale);
+        var (natural, height) = Measure(device, writing.Text, format, classic);
 
         if (classic)
         {
-            var lines = text.Length == 0 ? 0 : text.AsSpan().Count('\n') + 1;
-            height = lines * spacing;
+            var lines = writing.Text.Length == 0 ? 0 : writing.Text.AsSpan().Count('\n') + 1;
+            height = lines * writing.Spacing;
         }
 
         // Centred in its box where it fits; where it does not, from the box's left, cut off at its
         // right, as SpaceMonger writes a name too long for its box and a text block trims one.
-        var fits = natural <= room;
-        var width = Math.Max(1, fits ? natural : room);
+        var fits = natural <= writing.Room;
+        var width = Math.Max(1, fits ? natural : writing.Room);
 
-        _wanted = new Drawing(text, format, classic, width, Math.Max(1, height), centred && fits, colour);
-        Size = new Size(width, Math.Max(1, height));
-
-        return Size;
+        height = Math.Max(1, height);
+        _wanted = new Drawing(writing.Text, format, classic, width, height, writing.Centred && fits, writing.Colour);
+        Size = new Size(width, height);
     }
 
     /// <summary>Draw what the name shows into <paramref name="session"/>, which is over the name's own rectangle and cleared.</summary>
@@ -93,7 +79,13 @@ internal sealed class NameText
         };
 
         session.TextAntialiasing = wanted.Classic ? CanvasTextAntialiasing.Aliased : CanvasTextAntialiasing.Grayscale;
-        session.DrawTextLayout(layout, 0, 0, wanted.Colour);
+
+        // Kept to its box: a name cut short runs on past its right edge, into the name beside it on
+        // the sheet, and a drawing session over part of a surface does not stop it there.
+        using (session.CreateLayer(1, new Rect(0, 0, wanted.Width, wanted.Height)))
+        {
+            session.DrawTextLayout(layout, 0, 0, wanted.Colour);
+        }
 
         _drawn = wanted;
     }
@@ -132,3 +124,19 @@ internal sealed class NameText
         bool Centred,
         Color Colour);
 }
+
+/// <summary>
+/// What one name of a drawing says and how (see <see cref="NameText.Write"/>): its text in its
+/// lettering, in a box <paramref name="Room"/> device-independent pixels wide, centred in it where
+/// <paramref name="Centred"/> and it fits, in <paramref name="Colour"/>. Lines of SpaceMonger's type
+/// are <paramref name="Spacing"/> apart, and the application's type is set at
+/// <paramref name="TextScale"/> times its standard size.
+/// </summary>
+internal readonly record struct NameWriting(
+    string Text,
+    MapLettering Lettering,
+    float Room,
+    bool Centred,
+    Color Colour,
+    float Spacing,
+    double TextScale);

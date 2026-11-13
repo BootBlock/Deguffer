@@ -21,7 +21,7 @@ namespace Deguffer.App.Controls;
 internal sealed class SheetShelves(int width, int height)
 {
     /// <summary>The clear pixel kept to the right of and below each rectangle.</summary>
-    private const int Gutter = 1;
+    public const int Gutter = 1;
 
     /// <summary>
     /// How much taller than a name a shelf of another height can be and still take it: twice, so a name

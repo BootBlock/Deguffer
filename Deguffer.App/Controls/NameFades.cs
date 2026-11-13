@@ -9,10 +9,10 @@ namespace Deguffer.App.Controls;
 /// fade steps (<see cref="LabelFade.Step"/>) a drawing's names fall in, whose opacity the compositor
 /// works out once for every name in it.
 ///
-/// <para>By step rather than by name, because the camera changes on every frame of a zoom, and an
-/// opacity per name was an expression per name for the compositor to work out on every one of them:
-/// with two thousand names on a maximised map, more of each frame than the drawing of the names. A
-/// drawing's names fall in a few dozen steps whatever their number.</para>
+/// <para>By step rather than by name, because the camera changes on every frame of a pan or a zoom, and
+/// an opacity per name would be an expression per name for the compositor to work out on every one of
+/// them. The pairs of steps a drawing's names fall in are bounded by the steps there are, and do not
+/// grow with the number of names.</para>
 ///
 /// <para>A step's visual is as large as the visual over every name (see <see cref="NameLayer"/>), so a
 /// name in it is carried with the picture as it would be there, and its opacity reads that visual's
@@ -38,9 +38,6 @@ internal sealed class NameFades
         _compositor = compositor;
         _layer = layer;
     }
-
-    /// <summary>How many steps' opacities the compositor is working out now: one for each step a name is in.</summary>
-    public int Running { get; private set; }
 
     /// <summary>Fade <paramref name="name"/> as <paramref name="across"/> and <paramref name="down"/> say, by their steps.</summary>
     public void Join(Visual name, LabelFade across, LabelFade down)
@@ -69,11 +66,9 @@ internal sealed class NameFades
     /// </summary>
     public void Settle()
     {
-        Running = 0;
-
         foreach (var step in _steps.Values)
         {
-            Running += step.Settle() ? 1 : 0;
+            step.Settle();
         }
     }
 
@@ -105,9 +100,11 @@ internal sealed class NameFades
 
         public ContainerVisual Visual { get; }
 
-        /// <summary>Run the opacity where a name is in the step, and stop it where none is.</summary>
-        /// <returns>Whether it runs.</returns>
-        public bool Settle()
+        /// <summary>
+        /// Run the opacity, with the step's visual under the layer, where a name is in the step, and
+        /// stop it and take the visual off where none is.
+        /// </summary>
+        public void Settle()
         {
             var wanted = Visual.Children.Count > 0;
 
@@ -123,8 +120,6 @@ internal sealed class NameFades
             }
 
             _running = wanted;
-
-            return wanted;
         }
     }
 }

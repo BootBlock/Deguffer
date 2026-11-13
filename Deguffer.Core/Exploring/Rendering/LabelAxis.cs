@@ -38,21 +38,14 @@ public readonly record struct LabelAxis(float From, float To, float Inset, bool 
     /// </summary>
     public float Carried => Centred ? (From + To) / 2 : From;
 
-    /// <summary>The anchor along this axis on the canvas the label was laid out for, <paramref name="extent"/> pixels long.</summary>
-    public float Drawn(float extent) => At(From, To, extent);
-
     /// <summary>
-    /// The anchor along this axis on a canvas <paramref name="extent"/> pixels long, where the span lies
-    /// from <paramref name="from"/> to <paramref name="to"/>: <see cref="From"/> and <see cref="To"/>
-    /// as the picture is magnified and moved.
+    /// The anchor along this axis on the canvas the label was laid out for, <paramref name="extent"/>
+    /// pixels long: the span cut to the canvas where it is kept on it, then its start or its middle,
+    /// inset.
     /// </summary>
-    public float At(float from, float to, float extent)
+    public float Drawn(float extent)
     {
-        if (KeptOnCanvas)
-        {
-            from = Math.Max(from, 0);
-            to = Math.Min(to, extent);
-        }
+        var (from, to) = KeptOnCanvas ? (Math.Max(From, 0), Math.Min(To, extent)) : (From, To);
 
         return (Centred ? (from + to) / 2 : from) + Inset;
     }

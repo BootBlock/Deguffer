@@ -26,7 +26,7 @@ public sealed class NameSheetTests
         var (first, again, surface) = CompositionThread.Run(() =>
         {
             using var compositor = new Compositor();
-            var sheet = new NameSheet(CompositionDevice.For(compositor));
+            var sheet = new NameSheet(MapGraphics.For(compositor));
 
             var first = sheet.Prepare();
             var made = sheet.Surface;
@@ -47,8 +47,9 @@ public sealed class NameSheetTests
         var (drawn, keptDrawing, size) = CompositionThread.Run(() =>
         {
             using var compositor = new Compositor();
-            var device = CompositionDevice.For(compositor);
-            var sheet = new NameSheet(device);
+            var graphics = MapGraphics.For(compositor);
+            var device = graphics.Device;
+            var sheet = new NameSheet(graphics);
             sheet.Prepare();
             var name = new NameSprite(compositor, sheet);
 
@@ -81,8 +82,9 @@ public sealed class NameSheetTests
         var (remade, newSurface, forgotten, drawnAgain) = CompositionThread.Run(() =>
         {
             using var compositor = new Compositor();
-            var device = CompositionDevice.For(compositor);
-            var sheet = new NameSheet(device);
+            var graphics = MapGraphics.For(compositor);
+            var device = graphics.Device;
+            var sheet = new NameSheet(graphics);
             sheet.Prepare();
             var before = sheet.Surface;
             var name = new NameSprite(compositor, sheet);
@@ -123,8 +125,9 @@ public sealed class NameSheetTests
         var (hidden, next) = CompositionThread.Run(() =>
         {
             using var compositor = new Compositor();
-            var device = CompositionDevice.For(compositor);
-            var sheet = new NameSheet(device);
+            var graphics = MapGraphics.For(compositor);
+            var device = graphics.Device;
+            var sheet = new NameSheet(graphics);
             sheet.Prepare();
 
             var name = new NameSprite(compositor, sheet);
@@ -142,6 +145,22 @@ public sealed class NameSheetTests
         Assert.Equal(0, next?.Y);
     }
 
+    /// <summary>
+    /// A name is drawn with a pixel cleared all round it, which a name moved off the pixel grid samples,
+    /// and only as far as the sheet's edge where it lies against one.
+    /// </summary>
+    [Fact]
+    public void ANameIsClearedWithAPixelAllRoundIt()
+    {
+        var inside = NameSheet.Ring(new SheetRegion(10, 20, 30, 12));
+        var corner = NameSheet.Ring(new SheetRegion(0, 0, 30, 12));
+
+        Assert.Equal(new Windows.Foundation.Rect(9, 19, 32, 14), inside.Cleared);
+        Assert.Equal(new Windows.Foundation.Point(1, 1), inside.Corner);
+        Assert.Equal(new Windows.Foundation.Rect(0, 0, 31, 13), corner.Cleared);
+        Assert.Equal(new Windows.Foundation.Point(0, 0), corner.Corner);
+    }
+
     private static void Write(NameSprite name, CompositionDevice device, double scale) =>
-        name.Text.Write(device.Current, Formats, "Downloads", MapLettering.Classic, 200, true, Ink, (float)(13 / scale), 1);
+        name.Text.Write(device.Current, Formats, new NameWriting("Downloads", MapLettering.Classic, 200, true, Ink, (float)(13 / scale), 1));
 }

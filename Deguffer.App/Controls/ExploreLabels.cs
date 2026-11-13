@@ -66,18 +66,18 @@ internal sealed class ExploreLabels : Canvas
     /// <summary>
     /// Names that move with <paramref name="camera"/>, wherever <see cref="Place"/> puts them in the
     /// picture, and with <paramref name="carried"/> as a folder opening carries the picture, drawn
-    /// through <paramref name="device"/>, the map's own.
+    /// through <paramref name="graphics"/>, the map's own.
     /// </summary>
-    public ExploreLabels(MapCamera camera, Visual carried, CompositionDevice device, IMotionPolicy motion)
+    public ExploreLabels(MapCamera camera, Visual carried, MapGraphics graphics, IMotionPolicy motion)
     {
         // Never the thing being clicked. A click that landed on a name rather than the shape under
         // it would select whatever that name happened to overlap.
         IsHitTestVisible = false;
 
         _compositor = ElementCompositionPreview.GetElementVisual(this).Compositor;
-        _device = device;
+        _device = graphics.Device;
         _motion = motion;
-        _sheet = new NameSheet(device);
+        _sheet = new NameSheet(graphics);
         _layer = new NameLayer(_compositor, camera.Properties, carried);
         _names = new NameSlots<NameSprite>(() => new NameSprite(_compositor, _sheet));
 
@@ -223,9 +223,7 @@ internal sealed class ExploreLabels : Canvas
             var label = drawing.Labels[i];
             var name = _names.Assigned[i];
 
-            name.Text.Write(
-                device,
-                _formats,
+            var writing = new NameWriting(
                 caption(label).Text(drawing.Lettering, label.Lines),
                 drawing.Lettering,
                 (float)(label.Width / scale),
@@ -233,6 +231,8 @@ internal sealed class ExploreLabels : Canvas
                 label.Colour.ToColor(),
                 (float)(drawing.LineSpacing / scale),
                 textScale);
+
+            name.Text.Write(device, _formats, writing);
 
             fitted &= name.Fit(_sheet, scale);
         }

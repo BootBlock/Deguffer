@@ -14,10 +14,11 @@ public readonly record struct LabelFade(float Gone, float Whole)
     /// <summary>
     /// How many steps of <see cref="Step"/> there are to each halving of the magnification.
     ///
-    /// <para>A map fades its names by step rather than one by one, so that every name of a step shares
-    /// one opacity the compositor works out, and a drawing of two thousand names costs a frame no more
-    /// than one of ten. A step is under 4.5% of the magnification, against the fifth of it a fade runs
-    /// over (<see cref="ExploreLabel.FadeRange"/>), so a name fading a step early is not seen to.</para>
+    /// <para>A map fades its names by step rather than one by one, so that every name whose fades fall in
+    /// the same step on each axis shares one opacity the compositor works out, and the number of those
+    /// opacities does not grow with the number of names. A step is under 4.5% of the magnification,
+    /// against the fifth of it a fade runs over (<see cref="ExploreLabel.FadeRange"/>), so a name fading
+    /// a step early is not seen to.</para>
     /// </summary>
     public const int StepsPerOctave = 16;
 

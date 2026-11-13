@@ -393,7 +393,7 @@ scan leaves about 600 MB committed (#738), and Classic names draw through a seco
 | #700 | The Capture One row examines its sessions twice per pass (code-read estimate). |
 | #693 | pnputil `/devices` costs about 1 s of kernel processor time per pass. Done: pnputil lists the packages without `/devices`, and which are in use comes from every device's `DEVPKEY_Device_DriverInfPath` and `DEVPKEY_Device_ExtendedConfigurationIds`, phantoms included, read in process (`DeviceDrivers`). Where a device does not read, or the store holds an extension package and no device reports its extensions, pnputil is asked again with `/devices`. On one machine, unelevated, the reading took 12-23 ms for 252 devices and named the same 31 packages in use as pnputil, 3 of them extensions, and the listing fell from 1,585 ms to 290 ms. |
 | #699 | Windows.old is measured in full (96-172 s elevated) to ask whether it is empty. Waits on a decision. |
-| #702 | The Classic names hold 79-83% of a core while a maximized map pans. Waits on a decision. |
+| #702 | The Classic names hold 79-83% of a core while a maximized map pans. Done: every name is a sprite drawn into one shared surface and hung under one visual that follows the camera, faded by pairs of fade steps, so the compositor works out three expressions plus one per pair in use, whatever the number of names, and the UI thread walks no element per name. Both letterings are drawn through Win2D. The maximized pan has not been traced again since. |
 
 ### Waiting on a decision
 
@@ -402,7 +402,7 @@ scan leaves about 600 MB committed (#738), and Classic names draw through a seco
 | #693 | Keep pnputil's `/devices` answer, or read device properties in process and accept that extension INFs need their own source. `safety`. Decided: read in process, with `DEVPKEY_Device_ExtendedConfigurationIds` as the extension INFs' source, and pnputil's `/devices` answer wherever that reading cannot vouch for every package. |
 | #696 | Keep transcript readings across passes, keyed by length and write time, against the recorded "read afresh" (#531). Decided: kept. "Read afresh" stands for the list of running sessions, which changes without notice. A transcript's first lines and title cannot change without moving its length or write time, and what is running is still read live each pass. |
 | #699 | Ask Disk Cleanup's handler for emptiness without its full measure, or take Windows.old's size from the scanner. `safety`. |
-| #702 | The Classic names' look against their cost: two expressions and an image source per name. |
+| #702 | The Classic names' look against their cost: two expressions and an image source per name. Decided: a name the drawing kept at the canvas edge moves with its shape while the picture moves, and the drawing made where it stops puts it back at the edge; fades are rounded to a sixteenth of an octave, never later. |
 | #738 | Who owns an `ExploreTree`'s arrays, so that snapshots can share and hand back column buffers instead of allocating new ones. |
 | #739 | Static bounds while the tracker rests: whether a pinch's first frames against the bounds from before it started are invisible. Decided: pinned wide enough for any scale it rests at, so those frames are free rather than held. An injected pinch at an edge showed no jump and the same frames as the build before it. |
 | #743 | 35 MB of download and disk against about 65 ms of start-up. |

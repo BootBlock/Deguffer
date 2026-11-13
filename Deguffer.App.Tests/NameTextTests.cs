@@ -125,8 +125,8 @@ public sealed class NameTextTests
         var (cut, whole) = OnDevice(device =>
         {
             var formats = new NameFormats();
-            var cut = new NameText().Write(device, formats, "A name far too long for its shape", MapLettering.Standard, 40, false, Ink, 13, 1);
-            var whole = new NameText().Write(device, formats, "A", MapLettering.Standard, 40, false, Ink, 13, 1);
+            var cut = Write(new NameText(), device, formats, new NameWriting("A name far too long for its shape", MapLettering.Standard, 40, false, Ink, 13, 1));
+            var whole = Write(new NameText(), device, formats, new NameWriting("A", MapLettering.Standard, 40, false, Ink, 13, 1));
 
             return (cut.Width, whole.Width);
         });
@@ -148,7 +148,7 @@ public sealed class NameTextTests
         var (start, width) = OnDevice(device =>
         {
             var text = new NameText();
-            var size = text.Write(device, new NameFormats(), "Downloads\nD", MapLettering.Classic, 200, centred, Ink, 13, 1);
+            var size = Write(text, device, new NameFormats(), new NameWriting("Downloads\nD", MapLettering.Classic, 200, centred, Ink, 13, 1));
             using var bitmap = Drawn(device, text, size);
 
             return (FirstInkedColumn(bitmap, fromRow: 13, toRow: 26), (int)bitmap.SizeInPixels.Width);
@@ -166,6 +166,83 @@ public sealed class NameTextTests
         }
     }
 
+    /// <summary>
+    /// A name in the application's type cut short ends in an ellipsis, as a text block's does: its last
+    /// inked columns hold dots on the baseline, where a word merely cut off would have ink up the height
+    /// of its letters.
+    /// </summary>
+    [Fact]
+    public void AStandardNameCutShortEndsInAnEllipsis()
+    {
+        var (inked, highest, height) = OnDevice(device =>
+        {
+            var text = new NameText();
+            var size = Write(text, device, new NameFormats(), new NameWriting("Mmmmmmmmmmmmmmmmmmmm", MapLettering.Standard, 60, false, Ink, 13, 1));
+            using var bitmap = Drawn(device, text, size);
+
+            var width = (int)bitmap.SizeInPixels.Width;
+            var height = (int)bitmap.SizeInPixels.Height;
+            var pixels = bitmap.GetPixelBytes();
+            var last = -1;
+
+            for (var column = 0; column < width; column++)
+            {
+                for (var row = 0; row < height; row++)
+                {
+                    if (pixels[(((row * width) + column) * 4) + 3] > 64)
+                    {
+                        last = column;
+                    }
+                }
+            }
+
+            // The last few inked columns: the ellipsis's dots, or the end of a letter.
+            var inked = last >= 0;
+            var highest = height;
+
+            for (var column = Math.Max(0, last - 6); column <= last; column++)
+            {
+                for (var row = 0; row < height; row++)
+                {
+                    if (pixels[(((row * width) + column) * 4) + 3] > 64)
+                    {
+                        highest = Math.Min(highest, row);
+                    }
+                }
+            }
+
+            return (inked, highest, height);
+        });
+
+        Assert.True(inked, "Nothing was drawn.");
+        Assert.True(highest > height / 2, $"Ink at row {highest} of {height}: letters, not an ellipsis.");
+    }
+
+    /// <summary>
+    /// A name in SpaceMonger's type cut short is cut at the edge of its box, and draws nothing past it:
+    /// on the names' sheet, past it is the name beside it.
+    /// </summary>
+    [Fact]
+    public void ANameCutShortDrawsNothingPastItsBox()
+    {
+        var past = OnDevice(device =>
+        {
+            var text = new NameText();
+            Write(text, device, new NameFormats(), new NameWriting("A name far too long for its box", MapLettering.Classic, 30, false, Ink, 13, 1));
+            using var bitmap = new CanvasRenderTarget(device, 200, 20, 96);
+
+            using (var session = bitmap.CreateDrawingSession())
+            {
+                session.Clear(Color.FromArgb(0, 0, 0, 0));
+                text.Draw(session);
+            }
+
+            return FirstInkedColumn(bitmap, fromRow: 0, toRow: 20, fromColumn: 30);
+        });
+
+        Assert.Equal(200, past);
+    }
+
     [Fact]
     public void NamesOfOneSpacingOrTextSizeShareOneFormat()
     {
@@ -179,7 +256,14 @@ public sealed class NameTextTests
     }
 
     private static Windows.Foundation.Size Write(NameText text, CanvasDevice device, NameFormats formats, string written, MapLettering lettering) =>
-        text.Write(device, formats, written, lettering, room: 200, centred: true, Ink, spacing: 13, textScale: 1);
+        Write(text, device, formats, new NameWriting(written, lettering, Room: 200, Centred: true, Ink, Spacing: 13, TextScale: 1));
+
+    private static Windows.Foundation.Size Write(NameText text, CanvasDevice device, NameFormats formats, NameWriting writing)
+    {
+        text.Write(device, formats, writing);
+
+        return text.Size;
+    }
 
     /// <summary>What <paramref name="work"/> returns on the map's device for a compositor of its own.</summary>
     private static T OnDevice<T>(Func<CanvasDevice, T> work) =>
@@ -203,7 +287,7 @@ public sealed class NameTextTests
     }
 
     /// <summary>The leftmost column with any ink in rows <paramref name="fromRow"/> up to <paramref name="toRow"/>, or the image's width where there is none.</summary>
-    private static int FirstInkedColumn(CanvasRenderTarget image, int fromRow, int toRow)
+    private static int FirstInkedColumn(CanvasRenderTarget image, int fromRow, int toRow, int fromColumn = 0)
     {
         var pixels = image.GetPixelBytes();
         var width = (int)image.SizeInPixels.Width;
@@ -212,7 +296,7 @@ public sealed class NameTextTests
 
         for (var row = fromRow; row < height; row++)
         {
-            for (var column = 0; column < first; column++)
+            for (var column = fromColumn; column < first; column++)
             {
                 if (pixels[(((row * width) + column) * 4) + 3] != 0)
                 {
