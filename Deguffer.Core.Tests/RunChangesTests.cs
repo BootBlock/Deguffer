@@ -235,7 +235,7 @@ public sealed class RunChangesTests
 
         public PassHold HoldCaches() => throw new NotSupportedException();
 
-        public Task BeginPass(CancellationToken ct) => throw new NotSupportedException();
+        public Task BeginPass(PassStart start) => throw new NotSupportedException();
 
         public Task<bool> IsPresentAsync(CancellationToken ct = default) => throw new NotSupportedException();
 

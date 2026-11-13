@@ -125,8 +125,9 @@ public sealed class ComponentStoreEarlyStartTests : IDisposable
         var environment = new FakeUserEnvironment(_temp.Path);
         var runner = new FakeProcessRunner();
         var row = new ComponentStoreCleanupProvider(environment, runner, FakeProcessInspector.NothingRunning, _system, _servicing);
+        using var start = new PassStart(1, CancellationToken.None);
 
-        row.BeginPass(CancellationToken.None);
+        row.BeginPass(start);
 
         Assert.Empty(runner.Invocations);
     }
@@ -137,10 +138,11 @@ public sealed class ComponentStoreEarlyStartTests : IDisposable
     {
         Directory.Delete(_store, recursive: true);
         var runner = new FakeProcessRunner();
+        using var start = new PassStart(1, CancellationToken.None);
 
         foreach (var row in Rows(runner))
         {
-            row.BeginPass(CancellationToken.None);
+            row.BeginPass(start);
         }
 
         Assert.Empty(runner.Invocations);

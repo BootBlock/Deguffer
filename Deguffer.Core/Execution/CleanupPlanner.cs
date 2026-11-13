@@ -440,6 +440,18 @@ public sealed class CleanupPlanner
     /// </summary>
     internal const int ProvidersAtOnce = 8;
 
+    /// <summary>
+    /// How many tool queries the providers start at the top of a pass run at once (<see cref="PassStart"/>).
+    ///
+    /// <para>Half the logical processors, because what the queries contend for is processor time while
+    /// each interpreter loads, and a query waits on almost nothing else: about twenty start in a pass,
+    /// and one machine measured 13.1 to 14.7 s of the tools' processor time in a whole warm pass.
+    /// Never fewer than two, so one slow tool does not hold every other behind it,
+    /// and never more than <see cref="ProvidersAtOnce"/>, which already holds that many tools at once
+    /// when each plan starts its own.</para>
+    /// </summary>
+    internal static readonly int ToolsAtOnce = Math.Clamp(Environment.ProcessorCount / 2, 2, ProvidersAtOnce);
+
     public IReadOnlyList<ICleanupProvider> Providers => _providers;
 
     /// <summary>
@@ -533,6 +545,7 @@ public sealed class CleanupPlanner
         // What a provider starts at the top of the pass ends with it, however it ends: a pass that
         // fails or is cancelled must not leave a tool running beside the next pass's own.
         using var pass = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        using var start = new PassStart(ToolsAtOnce, pass.Token);
         var started = new List<Task>(providers.Count);
 
         try
@@ -546,7 +559,7 @@ public sealed class CleanupPlanner
             // runs while the rows ahead of it plan, rather than starting only when its turn comes.
             foreach (var provider in providers)
             {
-                started.Add(provider.BeginPass(pass.Token));
+                started.Add(provider.BeginPass(start));
             }
 
             // Before any row plans, so every plan in the pass is held to the same set. The account's

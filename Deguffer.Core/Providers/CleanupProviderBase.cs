@@ -222,7 +222,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
     public virtual PassHold HoldCaches() => Scanner.Hold();
 
     /// <summary>Nothing, for a provider whose plan waits on nothing slow enough to start early.</summary>
-    public virtual Task BeginPass(CancellationToken ct) => Task.CompletedTask;
+    public virtual Task BeginPass(PassStart start) => Task.CompletedTask;
 
     /// <summary>
     /// Nothing, for a provider that owns no directory whose unrecognised children must be
