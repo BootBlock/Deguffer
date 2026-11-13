@@ -7,8 +7,8 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// A label's place as a rule (<see cref="LabelAxis"/>): on the canvas it was laid out for the rule gives
-/// the place the drawing gave it, and worked out for the picture at another zoom it gives the place the
-/// drawing at that zoom gives it, so a name is already there when that drawing arrives.
+/// the place the drawing gave it, and a picture dragged across the screen carries the name by its point
+/// to where the drawing at the new place puts it, unless its shape runs off the canvas.
 /// </summary>
 public sealed class LabelAxisTests
 {
@@ -19,10 +19,10 @@ public sealed class LabelAxisTests
     [Fact]
     public void AKeptSpanIsCutToTheCanvasBeforeTheAnchorIsMeasured()
     {
-        Assert.Equal(4, new LabelAxis(-50, 100, 4, Centred: false, KeptOnCanvas: true).At(-50, 100, 800));
-        Assert.Equal(-46, new LabelAxis(-50, 100, 4, Centred: false, KeptOnCanvas: false).At(-50, 100, 800));
-        Assert.Equal(745, new LabelAxis(700, 900, -5, Centred: true, KeptOnCanvas: true).At(700, 900, 800));
-        Assert.Equal(795, new LabelAxis(700, 900, -5, Centred: true, KeptOnCanvas: false).At(700, 900, 800));
+        Assert.Equal(4, new LabelAxis(-50, 100, 4, Centred: false, KeptOnCanvas: true).Drawn(800));
+        Assert.Equal(-46, new LabelAxis(-50, 100, 4, Centred: false, KeptOnCanvas: false).Drawn(800));
+        Assert.Equal(745, new LabelAxis(700, 900, -5, Centred: true, KeptOnCanvas: true).Drawn(800));
+        Assert.Equal(795, new LabelAxis(700, 900, -5, Centred: true, KeptOnCanvas: false).Drawn(800));
     }
 
     /// <summary>Every label's rule, on the canvas it was laid out for, gives the anchor the drawing gave it.</summary>
@@ -41,57 +41,72 @@ public sealed class LabelAxisTests
         {
             var (anchorX, anchorY) = label.Anchor;
 
-            Assert.Equal(anchorX, label.Across.At(label.Across.From, label.Across.To, Width), 3);
-            Assert.Equal(anchorY, label.Down.At(label.Down.From, label.Down.To, Height), 3);
+            Assert.Equal(anchorX, label.Across.Drawn(Width), 3);
+            Assert.Equal(anchorY, label.Down.Drawn(Height), 3);
         });
     }
 
     /// <summary>
-    /// A name carried by its rule through a zoom in, a zoom out or a drag ends where the drawing at the
-    /// new place puts it: the padding stays the same on the screen, a band's name stays centred in the
-    /// band, and a shape running off an edge keeps its name at that edge. Carried by its point, it was
-    /// up to a band's height away and jumped there once the new drawing arrived.
+    /// The point a moving picture carries a name by is the start of its span, or the middle of a
+    /// centred one, before any cut or inset: a point of the picture, which moves as the picture does.
     /// </summary>
-    [Theory]
-    [InlineData(1, 0.5, 0.5, 2.5, 0.3, 0.3)]
-    [InlineData(2.5, 0.3, 0.3, 1, 0.5, 0.5)]
-    [InlineData(3, 0.2, 0.6, 3, 0.35, 0.5)]
-    [InlineData(2, 0.6, 0.4, 5, 0.8, 0.1)]
-    public void ANameCarriedThroughAZoomEndsWhereTheNewDrawingPutsIt(
-        double fromZoom, double fromX, double fromY, double toZoom, double toX, double toY)
+    [Fact]
+    public void ANameIsCarriedByTheStartOrMiddleOfItsSpan()
+    {
+        Assert.Equal(-50, new LabelAxis(-50, 100, 4, Centred: false, KeptOnCanvas: true).Carried);
+        Assert.Equal(800, new LabelAxis(700, 900, -5, Centred: true, KeptOnCanvas: true).Carried);
+    }
+
+    /// <summary>
+    /// Dragged across the screen, a name carried at the distance from its point its drawing put it at
+    /// is where the drawing at the new place puts it, except a name of a shape that runs off the canvas
+    /// at either place: that name goes with its shape until the drawing made where the picture stops
+    /// puts it back at the edge.
+    /// </summary>
+    [Fact]
+    public void ADraggedNameIsWhereTheNewDrawingPutsItUnlessItsShapeRunsOffTheCanvas()
     {
         var tree = Tree();
-        var from = MapViewport.Anchored(fromZoom, fromX, fromY, 0.5, 0.5, MapCeiling.Least);
-        var to = MapViewport.Anchored(toZoom, toX, toY, 0.5, 0.5, MapCeiling.Least);
+        var from = MapViewport.Anchored(1.5, 0.4, 0.45, 0.5, 0.5, MapCeiling.Least);
+        var to = MapViewport.Anchored(1.5, 0.55, 0.55, 0.5, 0.5, MapCeiling.Least);
         var before = Draw(tree, ExploreView.Treemap, from);
         var after = Draw(tree, ExploreView.Treemap, to).Labels.ToDictionary(label => label.Node);
 
-        var compared = 0;
+        var inside = 0;
         var cut = 0;
 
         foreach (var label in before.Labels)
         {
-            // A folder drawn as a box at one zoom and opened with a band at the other is named by
-            // another rule, and changing between them is a change of what is drawn, not a jump.
             if (!after.TryGetValue(label.Node, out var arrived) || arrived.Down.Centred != label.Down.Centred)
             {
                 continue;
             }
 
-            var x = label.Across.At(Moved(label.Across.From, from, to, Width), Moved(label.Across.To, from, to, Width), Width);
-            var y = label.Down.At(Moved(label.Down.From, from, to, Height), Moved(label.Down.To, from, to, Height), Height);
+            var shiftX = Moved(label.Across.Carried, from, to, Width) - label.Across.Carried;
+            var shiftY = Moved(label.Down.Carried, from, to, Height) - label.Down.Carried;
+            var carried = (X: label.Across.Drawn(Width) + shiftX, Y: label.Down.Drawn(Height) + shiftY);
             var (anchorX, anchorY) = arrived.Anchor;
 
-            Assert.Equal(anchorX, x, 1);
-            Assert.Equal(anchorY, y, 1);
-
-            compared++;
-            cut += arrived.Room.Left < 0 || arrived.Room.Top < 0 ? 1 : 0;
+            if (OnTheCanvas(label.Across, Width) && OnTheCanvas(arrived.Across, Width)
+                && OnTheCanvas(label.Down, Height) && OnTheCanvas(arrived.Down, Height))
+            {
+                Assert.Equal(anchorX, carried.X, 1);
+                Assert.Equal(anchorY, carried.Y, 1);
+                inside++;
+            }
+            else if (Math.Abs(anchorX - carried.X) > 1 || Math.Abs(anchorY - carried.Y) > 1)
+            {
+                cut++;
+            }
         }
 
-        Assert.True(compared >= 2, $"only {compared} names were on both drawings");
-        Assert.True(cut >= 1 || toZoom < fromZoom, "no name was on a shape running off the canvas, so nothing tested the cut");
+        Assert.True(inside >= 2, $"only {inside} names were inside the canvas at both places");
+        Assert.True(cut >= 1, "no name was on a shape running off the canvas, so nothing tested the cut");
     }
+
+    /// <summary>Whether a kept span lies wholly on a canvas <paramref name="extent"/> long, so cutting it to the canvas changes nothing.</summary>
+    private static bool OnTheCanvas(LabelAxis axis, int extent) =>
+        !axis.KeptOnCanvas || (axis.From >= 0 && axis.To <= extent);
 
     /// <summary>Where a canvas point of a drawing at <paramref name="from"/> is on a drawing at <paramref name="to"/>.</summary>
     private static float Moved(float at, MapViewport from, MapViewport to, int extent)

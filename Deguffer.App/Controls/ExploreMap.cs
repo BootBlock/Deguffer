@@ -230,7 +230,7 @@ public sealed class ExploreMap : UserControl
         _readingOf = _marking.ReadingOf;
         _keyboard = new ExploreKeyboard(_marking.Picked, node => Reader?.FolderOf(node));
         _moves = new ExploreMoves(compositor, _graphics.Geometry, _camera, SystemMotion.Current);
-        _labels = new ExploreLabels(_camera, pictures.Root, _graphics.Device, SystemMotion.Current);
+        _labels = new ExploreLabels(_camera, pictures.Root, _graphics, SystemMotion.Current);
         _pointer = new ExplorePointer(Locate, Shine, ShowHovered, Report);
         _overview = new ExploreOverview(_camera, _zoom, SystemMotion.Current, () => _pointer.Position);
 
@@ -1016,7 +1016,7 @@ public sealed class ExploreMap : UserControl
 
         _highlight.PlaceOver(Placed(drawing), ActualWidth, ActualHeight, _zoom.Origin);
 
-        _labels.Place(_drawn.Labels(drawing.Width, drawing.Height, ActualWidth, ActualHeight, _canvas.Scale, _zoom.Origin), ActualWidth, ActualHeight);
+        _labels.Place(_drawn.Labels(drawing.Width, drawing.Height, ActualWidth, ActualHeight, _canvas.Scale, _zoom.Origin), _canvas.Scale);
     }
 
     /// <summary>
