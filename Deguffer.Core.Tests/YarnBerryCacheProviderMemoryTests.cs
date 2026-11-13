@@ -310,8 +310,8 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
     }
 
     /// <summary>
-    /// A failed script question leaves a script in use that no input names: the global folder is
-    /// used and asked again next time.
+    /// A failed script question leaves a script in use that no input names: which Yarn runs and the
+    /// global folder are used and asked again next time.
     /// </summary>
     [Fact]
     public async Task AFailedScriptQueryIsUsedButNotKept()
@@ -325,6 +325,7 @@ public sealed class YarnBerryCacheProviderMemoryTests : IDisposable
 
         Assert.Contains(first, p => p.Path == Path.Combine(_first, "cache"));
         Assert.Equal(2, Asked);
+        Assert.Equal(2, _yarn.Asked("-v"));
     }
 
     /// <summary>

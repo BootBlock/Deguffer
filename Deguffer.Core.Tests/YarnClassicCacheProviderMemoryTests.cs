@@ -324,8 +324,8 @@ public sealed class YarnClassicCacheProviderMemoryTests : IDisposable
     }
 
     /// <summary>
-    /// A failed script question leaves a script in use that no input names: the location is planned
-    /// from and asked again next time.
+    /// A failed script question leaves a script in use that no input names: which Yarn runs and the
+    /// location are planned from and asked again next time.
     /// </summary>
     [Fact]
     public async Task AFailedScriptQueryIsPlannedFromButNotKept()
@@ -339,6 +339,7 @@ public sealed class YarnClassicCacheProviderMemoryTests : IDisposable
 
         Assert.Equal([Root], Assert.IsType<RunCommandStep>(Assert.Single(first.Steps)).MeasuredPaths);
         Assert.Equal(2, Asked);
+        Assert.Equal(2, _yarn.Asked("-v"));
     }
 
     [Fact]
