@@ -212,6 +212,18 @@ caches by different routes, because Poetry only ships a command for one of them:
 
 The `Cache` folder itself is never removed, and neither is `virtualenvs`.
 
+Deguffer remembers where Poetry said its two folders are until one of these changes: the
+`poetry.exe` it asked; any variable Deguffer starts Poetry with, which covers every `POETRY_<KEY>`
+[setting override](https://python-poetry.org/docs/configuration/#using-environment-variables) and
+`POETRY_CONFIG_DIR`; `config.toml` or `auth.toml` in Poetry's
+[configuration folder](https://python-poetry.org/docs/configuration/#config-directory)
+(`%POETRY_CONFIG_DIR%`, or `C:\Users\<user>\AppData\Roaming\pypoetry`); or a `pyproject.toml` or
+[`poetry.toml`](https://python-poetry.org/docs/configuration/#local-configuration) in the folder
+Deguffer runs its tools in or any folder above it. The plan still asks Poetry afresh every time,
+because it removes `artifacts` itself and a missed change must never move that deletion. Only
+Explore and the duplicate search read the remembered answer. `poetry cache list` is asked again
+every time, because what is cached changes whenever Poetry is used.
+
 ### What is protected
 
 `virtualenvs`, first and most importantly — asserted to have survived every run, not merely left out
