@@ -1,12 +1,10 @@
 using Deguffer.Core.Viewing;
 using System.Runtime.CompilerServices;
-using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Media;
 
 namespace Deguffer.App.Shell;
@@ -28,9 +26,9 @@ internal sealed class RowGhosts
     /// </summary>
     private static readonly ConditionalWeakTable<ScrollContentPresenter, RowGhosts> Layers = [];
 
-    private readonly Canvas _layer;
+    private readonly GhostCanvas _layer;
 
-    private RowGhosts(Canvas layer) => _layer = layer;
+    private RowGhosts(GhostCanvas layer) => _layer = layer;
 
     /// <summary>
     /// A layer over the viewport <paramref name="viewport"/> presents, beside it in the scroller's
@@ -66,7 +64,7 @@ internal sealed class RowGhosts
 
         panel.Children.Insert(panel.Children.IndexOf(viewport) + 1, layer);
 
-        var ghosts = new RowGhosts(layer);
+        var ghosts = new RowGhosts(new GhostCanvas(layer));
         Layers.Add(viewport, ghosts);
 
         return ghosts;
@@ -164,77 +162,36 @@ internal sealed class RowGhosts
         }
     }
 
-    /// <summary>Fade <paramref name="item"/> out where its row stood, as <paramref name="played"/> plays.</summary>
-    public void Leave(object item, Stood stood, Motion played)
-    {
-        var ghost = new ContentControl
-        {
-            Content = item,
-            ContentTemplate = stood.Template,
-            ContentTemplateSelector = stood.Selector,
-            HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            VerticalContentAlignment = VerticalAlignment.Stretch,
-            Width = stood.At.Width,
-            Height = stood.At.Height,
-            IsTabStop = false,
-        };
-        Canvas.SetLeft(ghost, stood.At.X);
-        Canvas.SetTop(ghost, stood.At.Y);
-        _layer.Children.Add(ghost);
-        ghost.UpdateLayout();
-        Inert(ghost);
-        Align(ghost, stood);
-
-        var visual = ElementCompositionPreview.GetElementVisual(ghost);
-        var fade = visual.Compositor.CreateScalarKeyFrameAnimation();
-        fade.InsertKeyFrame(0, 1);
-        fade.InsertKeyFrame(1, 0);
-        fade.Duration = played.Duration;
-
-        var fading = visual.Compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
-        visual.StartAnimation(nameof(Visual.Opacity), fade);
-        fading.End();
-        fading.Completed += (_, _) => _layer.Children.Remove(ghost);
-    }
+    /// <summary>
+    /// Fade each of a change's leaving rows out where it stood, as <paramref name="played"/> plays.
+    /// </summary>
+    public void Leave(IReadOnlyList<(object Item, Stood Stood)> leaving, Motion played) => Leave(_layer, leaving, played);
 
     /// <summary>
-    /// Make every part of a ghost unreachable. It is drawn from the row's own template, so it holds the
-    /// row's controls: a checkbox or a Keep button that could take focus from the keyboard would act on
-    /// an item that has left the list, such as one a search has just hidden. The layer already takes no
-    /// pointer input, and hiding the layer from assistive technology does not hide what it holds, so
-    /// each part is taken out of the tab order and out of what a screen reader reads.
+    /// Add a ghost for each row in <paramref name="leaving"/> to <paramref name="layer"/>, lay the layer
+    /// out once for them all, then fade each. A ghost is laid out before it is faded because only then
+    /// does it hold the controls to make unreachable and stand where it can be aligned, and the pass is
+    /// shared because each one lays out the whole window.
     /// </summary>
-    private static void Inert(DependencyObject root)
+    public static void Leave<TGhost>(IGhostLayer<TGhost> layer, IReadOnlyList<(object Item, Stood Stood)> leaving, Motion played)
     {
-        foreach (var part in VisualTree.Descendants<DependencyObject>(root).Prepend(root))
-        {
-            if (part is UIElement element)
-            {
-                AutomationProperties.SetAccessibilityView(element, AccessibilityView.Raw);
-            }
-
-            if (part is Control control)
-            {
-                control.IsTabStop = false;
-            }
-        }
-    }
-
-    /// <summary>Move a tree row's ghost until its content stands where the row's content did.</summary>
-    private void Align(ContentControl ghost, Stood stood)
-    {
-        if (stood.Branch is not { } wanted)
+        if (leaving.Count == 0)
         {
             return;
         }
 
-        if (ghost.ContentTemplateRoot is TreeViewItem { Content: FrameworkElement content })
+        var ghosts = new TGhost[leaving.Count];
+
+        for (var at = 0; at < leaving.Count; at++)
         {
-            var drawn = content.TransformToVisual(_layer).TransformPoint(default);
-            // Moved by the difference and narrowed by it, so the row's right edge stays where it was.
-            var shift = wanted.X - drawn.X;
-            Canvas.SetLeft(ghost, stood.At.X + shift);
-            ghost.Width = Math.Max(0, stood.At.Width - shift);
+            ghosts[at] = layer.Add(leaving[at].Item, leaving[at].Stood);
+        }
+
+        layer.LayOut();
+
+        for (var at = 0; at < leaving.Count; at++)
+        {
+            layer.Fade(ghosts[at], leaving[at].Stood, played);
         }
     }
 }

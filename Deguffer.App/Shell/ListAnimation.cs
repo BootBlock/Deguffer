@@ -58,6 +58,12 @@ internal sealed class ListAnimation
     /// <summary>How each of those rows was drawn, for a ghost of it should it leave.</summary>
     private readonly Dictionary<object, RowGhosts.Stood> _drawn = new(Rows);
 
+    /// <summary>
+    /// The rows the frame's change takes off the screen, and how each was drawn, ghosted together so
+    /// that they share one layout pass.
+    /// </summary>
+    private readonly List<(object Item, RowGhosts.Stood Stood)> _leaving = [];
+
     /// <summary>The items the frame's changes put into the list.</summary>
     private readonly HashSet<object> _arrived = new(Rows);
 
@@ -229,6 +235,7 @@ internal sealed class ListAnimation
         {
             _stood.Clear();
             _drawn.Clear();
+            _leaving.Clear();
             _arrived.Clear();
             _reset = false;
             _removed = false;
@@ -287,7 +294,7 @@ internal sealed class ListAnimation
             switch (row.Move)
             {
                 case RowMove.Leave when _drawn.TryGetValue(row.Key, out var stood):
-                    _ghosts?.Leave(row.Key, stood, played);
+                    _leaving.Add((row.Key, stood));
                     break;
                 case RowMove.Arrive when Container(after, row.Key) is { } arriving:
                     _moves.Arrive(arriving, played, slides: !plan.Crossfade);
@@ -298,6 +305,8 @@ internal sealed class ListAnimation
                     break;
             }
         }
+
+        _ghosts?.Leave(_leaving, played);
     }
 
     /// <summary>Every row and heading on screen now, and where it stands, from the top down.</summary>
