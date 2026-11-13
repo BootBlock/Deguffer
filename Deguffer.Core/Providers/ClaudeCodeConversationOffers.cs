@@ -35,7 +35,7 @@ internal static class ClaudeCodeConversationOffers
         CancellationToken ct)
     {
         var offers = conversations.Offers;
-        var described = Titled(offers, evidence.Reader, ct);
+        var described = Titled(offers, evidence.Transcripts, ct);
         var targets = new List<DeletionTarget>(offers.Count * 2);
         var survivors = new List<(string Path, string Reason)>(conversations.Sorted.Survivors);
         var unplaced = conversations.Unplaced;
@@ -68,14 +68,14 @@ internal static class ClaudeCodeConversationOffers
     /// rather than the pool's: each read blocks its thread on the disk. See <see cref="ListWorkers"/>.
     /// </summary>
     private static ClaudeCodeConversation?[] Titled(
-        IReadOnlyList<ClaudeCodeConversationOffer> offers, ClaudeCodeTranscriptReader reader, CancellationToken ct)
+        IReadOnlyList<ClaudeCodeConversationOffer> offers, ClaudeCodeTranscriptAnswers transcripts, CancellationToken ct)
     {
         var described = new ClaudeCodeConversation?[offers.Count];
 
         ListWorkers.Run(
             offers.Count,
             ClaudeCodeConversations.ReadParallelism,
-            index => described[index] = reader.Describe(offers[index].Transcript.Path, offers[index].Placement, ct),
+            index => described[index] = transcripts.Describe(offers[index].Transcript, offers[index].Placement, ct),
             ct);
 
         return described;

@@ -279,7 +279,17 @@ orders of magnitude in both directions.
 | `BoundedFileWalk.Visit` | this level's directory count | at each level | present, unreported |
 | `ParallelEnumerationScanner` | bytes so far | per level | reported; **there is no entry count** |
 | `ScanEstimateCache` | last measured size per path | at start-up | the only cross-run signal that exists |
-| anywhere | elapsed time per path or per provider | — | **not recorded** |
+| `CleanupPlanner.PlanAsync` | when each provider took a slot and ended | per provider, as it ends | reported through `timed` (#443); a full pass is kept by `PlanTimeHistory` |
+| anywhere | elapsed time per path | — | **not recorded** |
+
+> **Since this was written:** each provider's planning time is recorded (#443). A pass reports when
+> each provider took one of its slots and ended, on the planner's `TimeProvider`, through a sink
+> beside `found`, so the planner keeps nothing itself. `PlanTimeHistory` keeps each provider's last
+> five times at each elevation in `%LOCALAPPDATA%\Deguffer\planning-times.json`, apart from
+> `ScanEstimateCache` for the reasons route D lists, and only from a pass that planned every provider
+> and ended: a re-plan after a clean, a scan of chosen locations and a cancelled or failed pass write
+> nothing. The benchmark's `plan` route times a whole pass and each provider's start and end. Time per
+> path is still not recorded.
 
 Two gaps in that table are the substance of the answer.
 
@@ -401,8 +411,9 @@ It is also the largest change, and the one with the most ways to be wrong:
 - **A flat `k / N` bar over providers.** A 27-point worst error, reading 4% at the moment 31% of the
   work is done.
 - **A denominator derived from the walk's level queue.** Not monotone, so the bar goes backwards.
-- **An elapsed-time or "time remaining" estimate.** Nothing times a provider or a path today —
-  `PlanExecutor` times a whole clean, and that is all — and a scan
+- **An elapsed-time or "time remaining" estimate.** When this was written nothing timed a provider
+  or a path, and `PlanExecutor` timed a whole clean. Each provider's planning time is now kept
+  (#443), but nothing times a path, and a scan
   whose cost is dominated by other programs' start-up is a poor thing to extrapolate from. The
   Win32 guide's own rule is to withhold an estimate rather than show an inaccurate one.
 - **Drawing a partial picture as the progress indicator**, on the Clean page. DaisyDisk tried and

@@ -50,7 +50,8 @@ public static class PlanVerifier
     {
         ArgumentNullException.ThrowIfNull(plan);
 
-        var places = new RunPlaces(runReach ?? RunReach.Of([plan]), volumes ?? VolumeInventory.Current);
+        var inventory = volumes ?? VolumeInventory.Current;
+        var places = runReach?.PlacesOn(inventory) ?? new RunPlaces(RunReach.Of([plan]), inventory);
         var checks = new List<VerificationCheck>(plan.ProtectedPaths.Count);
 
         foreach (var protectedPath in plan.ProtectedPaths)

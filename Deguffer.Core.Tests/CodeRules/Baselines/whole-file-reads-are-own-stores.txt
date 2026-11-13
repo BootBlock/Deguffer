@@ -9,7 +9,6 @@
 1 Deguffer.Core/Configuration/SourceRootStore.cs
 1 Deguffer.Core/Configuration/WindowPlacementStore.cs
 1 Deguffer.Core/Execution/RefusalRecord.cs
-1 Deguffer.Core/Execution/Sizes/ProviderSizeStore.cs
 1 Deguffer.Core/InstalledApps/RegistryBackupListing.cs
 1 Deguffer.Core/InstalledApps/RegistryBackups.cs
 1 Deguffer.Core/Providers/AzureFunctionsToolTags.cs

@@ -21,6 +21,12 @@ namespace Deguffer.Core.Execution;
 /// <para><b>Compared as folders.</b> A tool reports where it keeps its cache the way its own process
 /// reached it, which may be through a letter <c>subst</c> made, or another mount of its volume, and a
 /// row naming the same folder another way was left stating a figure the run had changed.</para>
+///
+/// <para><b>Looked up, not compared in pairs.</b> A page's rows can name thousands of locations, and
+/// comparing each with every location the run changed costs their product. The changed locations are
+/// filed under the folders that hold them and the folders they hold (<see cref="ChangedLocations"/>),
+/// so each of a row's locations costs a walk up its own path. It takes a moment on a large page, and asks the machine where each location is, so the
+/// shell calls it off the window's thread.</para>
 /// </summary>
 public static class RunChanges
 {
@@ -59,23 +65,80 @@ public static class RunChanges
                 followed.TryGetValue(path, out var folder) ? folder : followed[path] = ReachedFolder.At(path, remembered)),
         ];
 
-        var changed = LocationsOf(RunReach.Of([.. removing.Select(f => f.Plan!)]));
+        var changed = new ChangedLocations(LocationsOf(RunReach.Of([.. removing.Select(f => f.Plan!)])));
 
         return
         [
             .. shown
                 .Where(f => ranIds.Contains(f.Provider.Id)
                             || f.Plan is { CountsLinksFromElsewhere: true }
-                            || f.Plan is { } plan && Overlaps(LocationsOf(RunReach.Of([plan])), changed))
+                            || f.Plan is { } plan && LocationsOf(RunReach.Of([plan])).Any(changed.Overlaps))
                 .Select(f => f.Provider),
         ];
     }
 
     /// <summary>
-    /// Whether a location of one set and one of the other are the same folder or one holds the other.
-    /// A step's path may carry the extended-length prefix (§6.3) where a command's declared path does
-    /// not, and <see cref="ReachedFolder"/> compares each without it.
+    /// The locations a run changed, filed so that whether a location is one of them, holds one or is
+    /// held by one is a lookup at each folder on its own path rather than a comparison with each.
+    ///
+    /// <para>The index only narrows. Each location it names is asked the question itself, the same
+    /// <see cref="ReachedFolder.Holds(ReachedFolder)"/> in both directions the pairs were asked, so
+    /// the answer is the comparison's. A step's path may carry the extended-length prefix (§6.3) where
+    /// a command's declared path does not, and <see cref="ReachedFolder"/> files and compares each
+    /// without it.</para>
     /// </summary>
-    private static bool Overlaps(IReadOnlyList<ReachedFolder> these, IReadOnlyList<ReachedFolder> those) =>
-        these.Any(a => those.Any(b => a.Holds(b) || b.Holds(a)));
+    private sealed class ChangedLocations
+    {
+        private readonly IReadOnlyList<ReachedFolder> _changed;
+
+        /// <summary>Each changed location at every one of its places, for the locations inside one.</summary>
+        private readonly FolderIndex<int> _at;
+
+        /// <summary>Each changed location at every one of its places and every folder above them, for the locations holding one.</summary>
+        private readonly FolderIndex<int> _within;
+
+        public ChangedLocations(IReadOnlyList<ReachedFolder> changed)
+        {
+            _changed = changed;
+            _at = new FolderIndex<int>(Enumerable.Range(0, changed.Count), position => changed[position].Places);
+            _within = new FolderIndex<int>(Enumerable.Range(0, changed.Count), position => changed[position].PlacesAndAbove());
+        }
+
+        /// <summary>Whether <paramref name="location"/> and a changed location are the same folder, or one holds the other.</summary>
+        public bool Overlaps(ReachedFolder location)
+        {
+            foreach (var place in location.Places)
+            {
+                foreach (var filed in _at.Holding(place))
+                {
+                    if (AnyOverlaps(filed, location))
+                    {
+                        return true;
+                    }
+                }
+
+                if (AnyOverlaps(_within.At(place), location))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool AnyOverlaps(ReadOnlySpan<int> positions, ReachedFolder location)
+        {
+            foreach (var position in positions)
+            {
+                var changed = _changed[position];
+
+                if (changed.Holds(location) || location.Holds(changed))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
 }
