@@ -1,8 +1,11 @@
+using Deguffer.Core.Providers;
+
 namespace Deguffer.Core.Execution;
 
 /// <summary>
-/// What a planning pass hands each provider as it begins (<see cref="Providers.ICleanupProvider.BeginPass"/>):
-/// the pass's token, and a bound on how many tool queries started that way run at once.
+/// The work a planning pass starts at its top (<see cref="ICleanupProvider.BeginPass"/>), from the
+/// moment each provider starts it to the moment the last of it has ended: the pass's token, the bound on
+/// how many tool queries started that way run at once, and the tasks the pass waits for before it returns.
 ///
 /// <para><b>Why a bound.</b> Most of what the providers start early is a package manager reporting one
 /// setting, and most of those are interpreters (npm and pnpm are Node.js, pip, conda and Poetry are
@@ -19,21 +22,37 @@ namespace Deguffer.Core.Execution;
 /// </summary>
 public sealed class PassStart : IDisposable
 {
+    /// <summary>
+    /// How many tool queries the providers start at the top of a pass run at once.
+    ///
+    /// <para>Half the logical processors, because what the queries contend for is processor time while
+    /// each interpreter loads, and a query waits on almost nothing else: about twenty start in a pass,
+    /// and one machine measured 13.1 to 14.7 s of the tools' processor time in a whole warm pass.
+    /// Never fewer than two, so one slow tool does not hold every other behind it, and never more than
+    /// <see cref="CleanupPlanner.ProvidersAtOnce"/>, which already holds that many tools at once when
+    /// each plan starts its own.</para>
+    /// </summary>
+    internal static readonly int ToolsAtOnce = Math.Clamp(Environment.ProcessorCount / 2, 2, CleanupPlanner.ProvidersAtOnce);
+
+    private readonly CancellationTokenSource _pass;
     private readonly SemaphoreSlim _places;
+    private readonly List<Task> _started = [];
 
     /// <param name="toolsAtOnce">How many queries started through <see cref="Ask"/> run at once.</param>
-    /// <param name="token">The pass's, which the planner cancels when the pass ends, fails or is cancelled.</param>
-    public PassStart(int toolsAtOnce, CancellationToken token)
+    /// <param name="ct">The caller's, which ends the pass's work when it is cancelled.</param>
+    public PassStart(int toolsAtOnce, CancellationToken ct)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(toolsAtOnce);
 
         _places = new SemaphoreSlim(toolsAtOnce, toolsAtOnce);
-        Token = token;
+        _pass = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        Token = _pass.Token;
     }
 
     /// <summary>
-    /// The pass's token, for work started early that takes no place: one long answer whose wait is not
-    /// spent starting an interpreter, and which would lengthen the pass if it queued behind the rest.
+    /// The pass's token, cancelled when the pass ends, fails or is cancelled. For work started early
+    /// that takes no place: one long answer whose wait is not spent starting an interpreter, and which
+    /// would lengthen the pass if it queued behind the rest.
     /// </summary>
     public CancellationToken Token { get; }
 
@@ -63,5 +82,30 @@ public sealed class PassStart : IDisposable
         }
     }
 
-    public void Dispose() => _places.Dispose();
+    /// <summary>Has <paramref name="provider"/> start what its plan will wait on, and keeps it to wait for.</summary>
+    internal void Begin(ICleanupProvider provider) => _started.Add(provider.BeginPass(this));
+
+    /// <summary>Tells everything started to stop, for a plan that failed and so ends the pass at once.</summary>
+    internal Task CancelAsync() => _pass.CancelAsync();
+
+    /// <summary>
+    /// Stops everything started, and returns once each has ended, not only been told to: a tool ends
+    /// after its cancellation is asked for, and the next pass may start its own the moment this one
+    /// returns.
+    ///
+    /// <para>How each ended is not thrown here. A plan that awaited it reported it, a plan that asked
+    /// after it failed asked again and reported its own answer, and a pass that ended before any plan
+    /// asked reports why it ended, which is the answer its caller is owed.</para>
+    /// </summary>
+    internal async Task EndAsync()
+    {
+        await _pass.CancelAsync().ConfigureAwait(false);
+        await Task.WhenAll(_started).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+    }
+
+    public void Dispose()
+    {
+        _places.Dispose();
+        _pass.Dispose();
+    }
 }

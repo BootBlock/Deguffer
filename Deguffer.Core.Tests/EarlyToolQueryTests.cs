@@ -7,7 +7,7 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// #450: the tool queries the providers' plans wait on start as the planning pass begins, outside the
-/// planning slots, and no more of them run at once than <see cref="CleanupPlanner.ToolsAtOnce"/>.
+/// planning slots, and no more of them run at once than <see cref="PassStart.ToolsAtOnce"/>.
 ///
 /// <para>Proved by the order things happen in, never by how long they took: the providers ahead of the
 /// row each wait for its query to start, and fill every slot the planner has while they wait.</para>
@@ -88,11 +88,11 @@ public sealed class EarlyToolQueryTests : IDisposable
         {
             WhilePlanning = () =>
             {
-                for (var i = 0; i < CleanupPlanner.ToolsAtOnce; i++)
+                for (var i = 0; i < PassStart.ToolsAtOnce; i++)
                 {
                     if (!begun.Wait(Deadline))
                     {
-                        throw new TimeoutException($"Only {i} of {CleanupPlanner.ToolsAtOnce} early queries started.");
+                        throw new TimeoutException($"Only {i} of {PassStart.ToolsAtOnce} early queries started.");
                     }
                 }
 
@@ -107,12 +107,12 @@ public sealed class EarlyToolQueryTests : IDisposable
             },
         };
 
-        var querying = Enumerable.Range(0, CleanupPlanner.ToolsAtOnce + 1)
+        var querying = Enumerable.Range(0, PassStart.ToolsAtOnce + 1)
             .Select(i => new FakeCleanupProvider($"tool-{i}") { EarlyQuery = Query });
 
         await new CleanupPlanner([watcher, .. querying]).PlanAllAsync().WaitAsync(Deadline);
 
-        Assert.Equal(CleanupPlanner.ToolsAtOnce, heldAtOnce);
+        Assert.Equal(PassStart.ToolsAtOnce, heldAtOnce);
         Assert.Equal(0, Volatile.Read(ref running));
     }
 
@@ -155,7 +155,7 @@ public sealed class EarlyToolQueryTests : IDisposable
             },
         };
 
-        var querying = Enumerable.Range(0, CleanupPlanner.ToolsAtOnce + 1)
+        var querying = Enumerable.Range(0, PassStart.ToolsAtOnce + 1)
             .Select(i => new FakeCleanupProvider($"tool-{i}") { EarlyQuery = Query });
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(

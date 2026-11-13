@@ -440,18 +440,6 @@ public sealed class CleanupPlanner
     /// </summary>
     internal const int ProvidersAtOnce = 8;
 
-    /// <summary>
-    /// How many tool queries the providers start at the top of a pass run at once (<see cref="PassStart"/>).
-    ///
-    /// <para>Half the logical processors, because what the queries contend for is processor time while
-    /// each interpreter loads, and a query waits on almost nothing else: about twenty start in a pass,
-    /// and one machine measured 13.1 to 14.7 s of the tools' processor time in a whole warm pass.
-    /// Never fewer than two, so one slow tool does not hold every other behind it,
-    /// and never more than <see cref="ProvidersAtOnce"/>, which already holds that many tools at once
-    /// when each plan starts its own.</para>
-    /// </summary>
-    internal static readonly int ToolsAtOnce = Math.Clamp(Environment.ProcessorCount / 2, 2, ProvidersAtOnce);
-
     public IReadOnlyList<ICleanupProvider> Providers => _providers;
 
     /// <summary>
@@ -544,9 +532,7 @@ public sealed class CleanupPlanner
 
         // What a provider starts at the top of the pass ends with it, however it ends: a pass that
         // fails or is cancelled must not leave a tool running beside the next pass's own.
-        using var pass = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        using var start = new PassStart(ToolsAtOnce, pass.Token);
-        var started = new List<Task>(providers.Count);
+        using var start = new PassStart(PassStart.ToolsAtOnce, ct);
 
         try
         {
@@ -559,7 +545,7 @@ public sealed class CleanupPlanner
             // runs while the rows ahead of it plan, rather than starting only when its turn comes.
             foreach (var provider in providers)
             {
-                started.Add(provider.BeginPass(start));
+                start.Begin(provider);
             }
 
             // Before any row plans, so every plan in the pass is held to the same set. The account's
@@ -569,18 +555,12 @@ public sealed class CleanupPlanner
                 AnotherAccountPlan.For(_account, _volumes),
                 keep);
 
-            return await PlanHeldAsync(providers, terms, status, found, timed, clock, pass, ct).ConfigureAwait(false);
+            return await PlanHeldAsync(providers, terms, status, found, timed, clock, start, ct).ConfigureAwait(false);
         }
         finally
         {
-            await pass.CancelAsync().ConfigureAwait(false);
-
-            // Until each has ended, not only been told to: a tool ends after its cancellation is asked
-            // for, and the next pass may start its own the moment this one returns. How each ended is
-            // not thrown here. A plan that awaited it reported it, a plan that asked after it failed
-            // asked again and reported its own answer, and a pass that ended before any plan asked
-            // reports why it ended, which is the answer its caller is owed.
-            await Task.WhenAll(started).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            // Before the holds end, because what was started may still be reading what they keep.
+            await start.EndAsync().ConfigureAwait(false);
 
             foreach (var hold in holds)
             {
@@ -599,7 +579,7 @@ public sealed class CleanupPlanner
         IProgress<Finding>? found,
         IProgress<ProviderPlanTime>? timed,
         PassClock clock,
-        CancellationTokenSource pass,
+        PassStart start,
         CancellationToken ct)
     {
         // In the providers' order, whatever order they finish in, so the sort below breaks a tie the
@@ -635,7 +615,7 @@ public sealed class CleanupPlanner
                 // the pass open until the work answered.
                 if (!planned)
                 {
-                    await pass.CancelAsync().ConfigureAwait(false);
+                    await start.CancelAsync().ConfigureAwait(false);
                 }
             }
 
