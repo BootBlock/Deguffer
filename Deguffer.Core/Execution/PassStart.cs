@@ -3,9 +3,10 @@ using Deguffer.Core.Providers;
 namespace Deguffer.Core.Execution;
 
 /// <summary>
-/// The work a planning pass starts at its top (<see cref="ICleanupProvider.BeginPass"/>), from the
-/// moment each provider starts it to the moment the last of it has ended: the pass's token, the bound on
-/// how many tool queries started that way run at once, and the tasks the pass waits for before it returns.
+/// The work a planning pass starts at its top (<see cref="ICleanupProvider.BeginPass"/>, and the planner's
+/// own reading of the registered storage), from the moment each is started to the moment the last of it
+/// has ended: the pass's token, the bound on how many tool queries started that way run at once, and the
+/// tasks the pass waits for before it returns.
 ///
 /// <para><b>Why a bound.</b> Most of what the providers start early is a package manager reporting one
 /// setting, and most of those are interpreters (npm and pnpm are Node.js, pip, conda and Poetry are
@@ -101,7 +102,24 @@ public sealed class PassStart : IDisposable
     /// <summary>Has <paramref name="provider"/> start what its plan will wait on, and keeps it to wait for.</summary>
     internal void Begin(ICleanupProvider provider) => _started.Add(provider.BeginPass(this));
 
-    /// <summary>Tells everything started to stop, for a plan that failed and so ends the pass at once.</summary>
+    /// <summary>
+    /// Starts the planner's own <paramref name="work"/> for the pass under <see cref="Token"/>, off the
+    /// planner's thread and without a place, and keeps it to wait for. For the reading of the registered
+    /// storage, which every plan of the pass is held to: queued behind the tool queries, every plan would
+    /// wait for them too. Asked on the planner's thread, as <see cref="Begin(ICleanupProvider)"/> is,
+    /// because the tasks kept are not guarded for two threads at once.
+    /// </summary>
+    internal Task<T> Begin<T>(Func<CancellationToken, Task<T>> work)
+    {
+        var started = Task.Run(() => work(Token), Token);
+        _started.Add(started);
+        return started;
+    }
+
+    /// <summary>
+    /// Tells everything started to stop, for a failure that ends the pass at once: a plan's, the reading
+    /// of the registered storage, or a plan's while it is held to that reading.
+    /// </summary>
     internal Task CancelAsync() => _pass.CancelAsync();
 
     /// <summary>

@@ -86,6 +86,12 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
     /// <summary>Run each time it is planned, such as the user pressing Cancel while a re-plan is under way.</summary>
     public Action? WhilePlanning { get; set; }
 
+    /// <summary>
+    /// Awaited each time it is planned, after <see cref="WhilePlanning"/>, with the plan's token: a plan
+    /// waiting on a tool, which ends when the pass stops it.
+    /// </summary>
+    public Func<CancellationToken, Task>? AwaitWhilePlanning { get; set; }
+
     /// <summary>How many times it has been planned. A re-plan that left it alone did not add to this.</summary>
     public int PlanCount { get; private set; }
 
@@ -126,7 +132,7 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
     /// </summary>
     public IReadOnlyList<long> Counted { get; set; } = [];
 
-    public Task<CleanupPlan> PlanAsync(
+    public async Task<CleanupPlan> PlanAsync(
         MinimumAge keep = default, IProgress<ScanSize>? counted = null, CancellationToken ct = default)
     {
         PlanCount++;
@@ -138,9 +144,14 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
 
         WhilePlanning?.Invoke();
 
+        if (AwaitWhilePlanning is { } waiting)
+        {
+            await waiting(ct).ConfigureAwait(false);
+        }
+
         return PlanFailure is { } failure
-            ? Task.FromException<CleanupPlan>(failure)
-            : Task.FromResult(new CleanupPlan
+            ? throw failure
+            : new CleanupPlan
             {
                 ProviderId = Id,
                 ProviderName = Name,
@@ -148,7 +159,7 @@ public sealed class FakeCleanupProvider(string id, SafetyTier tier = SafetyTier.
                 WhatHappensOnNextUse = WhatHappensOnNextUse,
                 Steps = Steps,
                 ProtectedPaths = ProtectedPaths,
-            });
+            };
     }
 
     public Task<CleanupResult> ExecuteAsync(
