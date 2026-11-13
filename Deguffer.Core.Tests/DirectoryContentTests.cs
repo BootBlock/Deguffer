@@ -111,6 +111,80 @@ public sealed class DirectoryContentTests : IDisposable
     }
 
     /// <summary>
+    /// The walk enters each folder as it lists it, so it must come back out of a branch that held
+    /// nothing and carry on with the next. The file sits in the last branch listed, behind two empty
+    /// ones, one of them nested, so a walk that stopped at the end of its first branch would miss it.
+    /// </summary>
+    [Fact]
+    public void AFileBehindEmptyBranchesIsContent()
+    {
+        var holder = _temp.CreateDirectory("holder");
+        _temp.CreateDirectory("holder", "a", "b", "c");
+        _temp.CreateDirectory("holder", "m");
+
+        Assert.False(DirectoryContent.IsPresent(holder));
+
+        _temp.CreateFile(8, "holder", "z", "y", "one.bin");
+
+        Assert.True(DirectoryContent.IsPresent(holder));
+    }
+
+    /// <summary>
+    /// A refusal met while the directory asked about is still being listed, two levels down and ahead
+    /// of a sibling that holds nothing. The walk is still inside the top-level listing when the
+    /// refusal arrives, and must read it as a subfolder's refusal, not the directory's own.
+    /// </summary>
+    [Fact]
+    public void ARefusalDeepInsideTheFirstBranchIsContent()
+    {
+        var holder = _temp.CreateDirectory("holder");
+        var refused = _temp.CreateDirectory("holder", "a", "refused");
+        _temp.CreateDirectory("holder", "b");
+
+        Assert.False(DirectoryContent.IsPresent(holder));
+
+        using var denied = new DeniedDirectory(refused);
+
+        Assert.True(DirectoryContent.IsPresent(holder));
+    }
+
+    /// <summary>A link below the top level counts as it does at the top, and is not entered.</summary>
+    [Theory]
+    [MemberData(nameof(DirectoryLink.Kinds), MemberType = typeof(DirectoryLink))]
+    public void ANestedLinkIsContent(DirectoryLinkKind kind)
+    {
+        var holder = _temp.CreateDirectory("holder");
+        DirectoryLink.Create(kind, Path.Combine(_temp.CreateDirectory("holder", "a", "b"), "link"), _temp.CreateDirectory("outside-empty"));
+
+        Assert.True(DirectoryContent.IsPresent(holder));
+    }
+
+    /// <summary>
+    /// G4: a wide folder whose top level holds only folders, each holding a file, is the shape of
+    /// <c>C:\Windows\WinSxS</c>. Any file answers the question, so the cost must not grow with the
+    /// width: the bound allows a few listings and paths, far less than an entry each for 2,000
+    /// folders.
+    /// </summary>
+    [Fact]
+    public void AWideFolderOfFoldersIsAnsweredWithoutListingItsWidth()
+    {
+        var wide = _temp.CreateDirectory("wide");
+        for (var i = 0; i < 2000; i++)
+        {
+            _temp.CreateFile(8, "wide", $"component-{i:D4}", "one.bin");
+        }
+
+        Assert.True(DirectoryContent.IsPresent(wide));
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var present = DirectoryContent.IsPresent(wide);
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.True(present);
+        Assert.True(allocated < 64 * 1024, $"Proving a folder of 2,000 folders has content allocated {allocated:N0} bytes.");
+    }
+
+    /// <summary>
     /// §6.3: the only content sits past <c>MAX_PATH</c>. A crash guard rather than a discriminating
     /// test, on the reasoning CLAUDE.md's G8 records: .NET prefixes a long path itself, and the answer
     /// is a boolean, so the form of the paths the walk builds cannot be observed from here.
