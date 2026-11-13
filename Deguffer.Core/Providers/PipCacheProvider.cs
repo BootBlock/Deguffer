@@ -23,18 +23,33 @@ namespace Deguffer.Core.Providers;
 public sealed class PipCacheProvider : CleanupProviderBase
 {
     private readonly PassMemo<Task<AskedLocation>> _resolvedCacheDirectory = new();
+    private readonly ISystemDirectories _systemDirectories;
+    private readonly ToolAnswerMemory _memory;
 
+    /// <param name="environment">The profile, the PATH and the variables pip is started with.</param>
+    /// <param name="runner">Starts pip.</param>
+    /// <param name="inspector">Tells whether pip or Python is running.</param>
+    /// <param name="scanner">Measures the cache.</param>
+    /// <param name="systemDirectories">Where pip's site-wide configuration is.</param>
+    /// <param name="memory">
+    /// Where pip's answer about its cache directory is kept while nothing it read has changed: the
+    /// memory for <paramref name="runner"/> when null, which is the process-wide one for the real runner.
+    /// </param>
     public PipCacheProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        ISystemDirectories? systemDirectories = null,
+        ToolAnswerMemory? memory = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner)
     {
+        _systemDirectories = systemDirectories ?? SystemDirectories.Current;
+        _memory = memory ?? ToolAnswerMemory.For(runner);
     }
 
     public override string Id => "pip";
@@ -119,8 +134,9 @@ public sealed class PipCacheProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// PIP_CACHE_DIR can move the cache between one scan and the next, so a remembered location
-    /// would measure a directory pip has stopped using.
+    /// PIP_CACHE_DIR, a pip.ini or another pip can move the cache between one scan and the next, so
+    /// the pass's answer is forgotten. The memory behind it keeps pip's answer only while everything
+    /// pip read to give it (<see cref="PipLocationInputs"/>) reads the same.
     /// </summary>
     public override void InvalidateCaches()
     {
@@ -208,8 +224,19 @@ public sealed class PipCacheProvider : CleanupProviderBase
 
     private string? FindPip() => PipCommand.Find(Environment);
 
+    /// <summary>
+    /// The plan only sends pip its own purge (§5.1), so it may plan from a remembered answer: a missed
+    /// input there misstates the figure, and never moves what is removed.
+    /// </summary>
     private Task<AskedLocation> ResolveCacheDirectoryAsync(string pip, CancellationToken ct) =>
-        _resolvedCacheDirectory.Get(() => AskCacheDirectoryAsync(pip, ct));
+        _resolvedCacheDirectory.Get(() => _memory.AskAsync(
+            new ToolQuestion<AskedLocation>(
+                $"cache dir --no-color|{pip}",
+                Environment.ToolEnvironment,
+                _ => PipLocationInputs.Of(pip, Environment, _systemDirectories),
+                static located => located.Answered,
+                ct2 => AskCacheDirectoryAsync(pip, ct2)),
+            ct));
 
     private async Task<AskedLocation> AskCacheDirectoryAsync(string pip, CancellationToken ct)
     {

@@ -147,6 +147,15 @@ It asks `pip cache dir` where the cache is rather than assuming, because `PIP_CA
 `--cache-dir` and the `cache-dir` key in `pip.ini` can all move it. It then runs `pip cache purge`.
 Deguffer never deletes the path itself.
 
+Deguffer remembers where pip said its cache is until one of these changes, and then asks again:
+the `pip.exe` it runs, the Python interpreter that launcher names, that interpreter's
+`pyvenv.cfg`, `pip.ini` and `Lib\site-packages` (an upgrade of pip renames its folder there), your
+user site under `%APPDATA%\Python`, the configuration files pip reads
+(`C:\ProgramData\pip\pip.ini`, `C:\Users\<user>\pip\pip.ini`, `%APPDATA%\pip\pip.ini` and the
+file `PIP_CONFIG_FILE` names), and any environment variable. These are the sources pip's
+[configuration guide](https://pip.pypa.io/en/stable/topics/configuration/) lists. A `pip` that is
+not a launcher naming its interpreter, such as a `pip.bat`, is asked every time.
+
 pip's purge follows a junction it finds inside the cache, and deletes the files
 on the far side. So Deguffer looks through the cache again immediately before the command, and does
 not run it while anything inside is a link. That holds for every tool's own command, not only pip's.

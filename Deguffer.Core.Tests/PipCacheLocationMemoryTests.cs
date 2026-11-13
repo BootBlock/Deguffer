@@ -1,0 +1,275 @@
+using Deguffer.Core.Execution;
+using Deguffer.Core.Providers;
+using Deguffer.Core.Safety;
+using Deguffer.Testing;
+
+namespace Deguffer.Core.Tests;
+
+/// <summary>
+/// pip's answer about where its cache is outlives a pass while everything <c>pip cache dir</c> read
+/// to give it reads the same (#447), and is asked again the moment any of it does not.
+///
+/// <para>The pip here is a real launcher in the temp tree naming a real interpreter file, because the
+/// launcher is how the provider learns <c>sys.prefix</c>, and a launcher it cannot read is never
+/// remembered.</para>
+/// </summary>
+public sealed class PipCacheLocationMemoryTests : IDisposable
+{
+    private readonly TempDirectory _temp = new();
+    private readonly FakeUserEnvironment _environment;
+    private readonly FakeSystemDirectories _system;
+    private readonly ManualTimeProvider _clock = new();
+    private readonly ToolAnswerMemory _memory;
+    private readonly FakeProcessRunner _runner;
+    private readonly string _pip;
+    private readonly string _interpreter;
+    private string _answer;
+    private int _exitCode;
+
+    public PipCacheLocationMemoryTests()
+    {
+        _environment = new FakeUserEnvironment(_temp.Path);
+        _system = new FakeSystemDirectories(_temp.CreateDirectory("machine"));
+        _memory = new ToolAnswerMemory(_clock);
+
+        _interpreter = Path.Combine(_temp.Path, "Python312", "python.exe");
+        _temp.CreateFile(64, "Python312", "python.exe");
+        _temp.CreateDirectory("Python312", "Lib", "site-packages", "pip-24.0.dist-info");
+        _temp.CreateDirectory("profile", "AppData", "Roaming", "Python", "Python312", "site-packages");
+
+        // A folder's entry in its parent's listing takes the folder's new last-write time some moments
+        // after an entry is created in it, so each listed folder is given its times outright, or a
+        // reading moments later than the first would differ for nothing.
+        foreach (var listed in (string[])[@"Python312\Lib\site-packages", @"Python312\Lib\site-packages\pip-24.0.dist-info",
+            @"profile\AppData\Roaming\Python", @"profile\AppData\Roaming\Python\Python312", @"profile\AppData\Roaming\Python\Python312\site-packages"])
+        {
+            TempDirectory.Age(Path.Combine(_temp.Path, listed), TimeSpan.FromMinutes(5));
+        }
+
+        File.WriteAllText(Path.Combine(_environment.RoamingAppData, "pip", "pip.ini").Created(), "[global]\n");
+
+        _pip = Path.Combine(_temp.Path, "Python312", "Scripts", "pip.exe");
+        DistlibLaunchers.Write(_pip, _interpreter);
+        _environment.WithExecutable("pip", _pip);
+
+        _answer = CreateCache("first-cache");
+        _runner = new FakeProcessRunner().Replying(_pip, arguments =>
+            arguments.Contains("cache dir", StringComparison.Ordinal) ? new CommandOutcome(_exitCode, _answer, string.Empty) : null);
+
+        // Every pass starts after the fixture was written, as a real one starts long after pip's
+        // configuration was last saved.
+        _clock.Advance(DateTimeOffset.UtcNow - _clock.GetUtcNow() + TimeSpan.FromMinutes(1));
+    }
+
+    public void Dispose() => _temp.Dispose();
+
+    private int LocationQueries => _runner.Invocations.Count(i => i.Arguments.Contains("cache dir", StringComparison.Ordinal));
+
+    private PipCacheProvider CreateProvider() =>
+        new(_environment, _runner, FakeProcessInspector.NothingRunning, scanner: null, _system, _memory);
+
+    private string CreateCache(string name)
+    {
+        _temp.CreateFile(4096, name, "http-v2", "payload.bin");
+        return Path.Combine(_temp.Path, name);
+    }
+
+    private static async Task SecondPassAsync(PipCacheProvider provider)
+    {
+        provider.InvalidateCaches();
+        await provider.PlanAsync();
+    }
+
+    [Fact]
+    public async Task ASecondPassWithNothingChangedStartsNoLocationQuery()
+    {
+        var provider = CreateProvider();
+        await provider.PlanAsync();
+
+        await SecondPassAsync(provider);
+
+        Assert.Equal(1, LocationQueries);
+    }
+
+    /// <summary>Each place pip reads its configuration or its code from, relative to the temp tree.</summary>
+    public static TheoryData<string, InputChange> DeclaredInputs => new()
+    {
+        { @"machine\ProgramData\pip\pip.ini", InputChange.Create },
+        { @"profile\pip\pip.ini", InputChange.Create },
+        { @"profile\AppData\Roaming\pip\pip.ini", InputChange.Write },
+        { @"profile\AppData\Roaming\pip\pip.ini", InputChange.Delete },
+        { @"Python312\pip.ini", InputChange.Create },
+        { @"Python312\pyvenv.cfg", InputChange.Create },
+        { "pyvenv.cfg", InputChange.Create },
+        { @"Python312\python.exe", InputChange.Write },
+        { @"Python312\Lib\site-packages\pip-25.0.dist-info", InputChange.CreateFolder },
+        { @"Python312\Lib\site-packages\pip-24.0.dist-info", InputChange.Delete },
+        { @"profile\AppData\Roaming\Python\Python312\site-packages\pip-25.0.dist-info", InputChange.CreateFolder },
+    };
+
+    [Theory]
+    [MemberData(nameof(DeclaredInputs))]
+    public async Task ChangingADeclaredInputAsksAgain(string relative, InputChange change)
+    {
+        var provider = CreateProvider();
+        await provider.PlanAsync();
+
+        Apply(Path.Combine(_temp.Path, relative), change);
+        await SecondPassAsync(provider);
+
+        Assert.Equal(2, LocationQueries);
+    }
+
+    [Fact]
+    public async Task AVariableSetInTheToolEnvironmentAsksAgain()
+    {
+        var provider = CreateProvider();
+        await provider.PlanAsync();
+
+        _environment.WithToolEnvironmentVariable("PIP_CACHE_DIR", Path.Combine(_temp.Path, "elsewhere"));
+        await SecondPassAsync(provider);
+
+        Assert.Equal(2, LocationQueries);
+    }
+
+    [Fact]
+    public async Task WritingTheFilePipConfigFileNamesAsksAgain()
+    {
+        var named = _temp.CreateFile(16, "named", "pip.ini");
+        _environment.WithEnvironmentVariable("PIP_CONFIG_FILE", named);
+        var provider = CreateProvider();
+        await provider.PlanAsync();
+        await SecondPassAsync(provider);
+        Assert.Equal(1, LocationQueries);
+
+        File.WriteAllText(named, "[global]\ncache-dir = elsewhere\n");
+        await SecondPassAsync(provider);
+
+        Assert.Equal(2, LocationQueries);
+    }
+
+    [Fact]
+    public async Task ReplacingTheExecutableAsksAgain()
+    {
+        var provider = CreateProvider();
+        await provider.PlanAsync();
+
+        DistlibLaunchers.Write(_pip, Path.Combine(_temp.Path, "Python313", "python.exe"));
+        await SecondPassAsync(provider);
+
+        Assert.Equal(2, LocationQueries);
+    }
+
+    /// <summary>
+    /// A pip whose launcher names no interpreter leaves <c>sys.prefix</c>, and the two places pip reads
+    /// from it, unknown, so nothing it says can be kept.
+    /// </summary>
+    [Fact]
+    public async Task AnswerFromALauncherNamingNoInterpreterIsNotKept()
+    {
+        File.WriteAllText(_pip, "@echo off\r\npython -m pip %*\r\n");
+        var provider = CreateProvider();
+        await provider.PlanAsync();
+
+        await SecondPassAsync(provider);
+
+        Assert.Equal(2, LocationQueries);
+    }
+
+    [Fact]
+    public async Task AnAnswerPipDidNotGiveIsNotKept()
+    {
+        _exitCode = 1;
+        var provider = CreateProvider();
+        await provider.PlanAsync();
+
+        await SecondPassAsync(provider);
+
+        Assert.Equal(2, LocationQueries);
+    }
+
+    /// <summary>
+    /// Explore builds fresh providers for each policy, so the answer one heard must reach the next
+    /// through the memory they share.
+    /// </summary>
+    [Fact]
+    public async Task ASecondProviderOnTheSameMemoryAnswersWhereItCleansWithoutAsking()
+    {
+        await CreateProvider().PlanAsync();
+
+        var places = await CreateProvider().CleanedPlacesAsync();
+
+        Assert.Equal(1, LocationQueries);
+        Assert.Contains(places, place => place.Path == _answer);
+    }
+
+    /// <summary>
+    /// §5.6 when pip's cache moved between two passes: the purge measures the new cache and not the
+    /// old, nothing is targeted for deletion, and pip's own folder and configuration are still named
+    /// as what must survive.
+    /// </summary>
+    [Fact]
+    public async Task ThePlanFollowsTheCacheWhenItMovedBetweenTwoPasses()
+    {
+        var provider = CreateProvider();
+        var first = _answer;
+        await provider.PlanAsync();
+
+        var roamingConfig = Path.Combine(_environment.RoamingAppData, "pip", "pip.ini");
+        _answer = CreateCache("moved-cache");
+        File.WriteAllText(roamingConfig, $"[global]\ncache-dir = {_answer}\n");
+        provider.InvalidateCaches();
+        var plan = await provider.PlanAsync();
+
+        Assert.Equal(2, LocationQueries);
+        Assert.Empty(plan.TargetedPaths);
+        Assert.Equal([_answer], Assert.Single(plan.Steps.OfType<RunCommandStep>()).MeasuredPaths);
+        Assert.DoesNotContain(plan.Steps.OfType<RunCommandStep>(), step => step.MeasuredPaths.Contains(first));
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == provider.LocalRoot);
+        Assert.Contains(plan.ProtectedPaths, p => p.Path == roamingConfig && p.PresenceBefore is PathPresence.Present);
+        Assert.Contains(await provider.CleanedPlacesAsync(), place => place.Path == _answer);
+        Assert.DoesNotContain(await provider.CleanedPlacesAsync(), place => place.Path == first);
+    }
+
+    private static void Apply(string path, InputChange change)
+    {
+        switch (change)
+        {
+            case InputChange.Create:
+                File.WriteAllText(path.Created(), "[global]\n");
+                break;
+            case InputChange.CreateFolder:
+                Directory.CreateDirectory(path);
+                break;
+            case InputChange.Write:
+                File.AppendAllText(path, "# a longer file than before\n");
+                break;
+            case InputChange.Delete when Directory.Exists(path):
+                Directory.Delete(path, recursive: true);
+                break;
+            case InputChange.Delete:
+                File.Delete(path);
+                break;
+        }
+    }
+
+    /// <summary>What a test does to one declared input.</summary>
+    public enum InputChange
+    {
+        Create,
+        CreateFolder,
+        Write,
+        Delete,
+    }
+}
+
+/// <summary>Paths a test writes a file to.</summary>
+file static class TestPaths
+{
+    /// <summary><paramref name="path"/>, once its folder exists.</summary>
+    public static string Created(this string path)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        return path;
+    }
+}
