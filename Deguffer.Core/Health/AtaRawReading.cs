@@ -10,6 +10,7 @@ namespace Deguffer.Core.Health;
 internal static class AtaRawReading
 {
     private const ulong LowDoubleWord = 0xFFFF_FFFF;
+    private const ulong LowByte = 0xFF;
     private const int BitsPerByte = 8;
 
     /// <summary>
@@ -37,6 +38,10 @@ internal static class AtaRawReading
 
     internal static string Code(AtaAttribute attribute) => $"Code 0x{attribute.Raw:X2}";
 
+    /// <summary>The percentage a <see cref="SmartRawFormat.Percent"/> or <see cref="SmartRawFormat.PercentInLowByte"/> attribute reports.</summary>
+    internal static int Percentage(AtaAttribute attribute, AtaAttributeDefinition known) =>
+        known.Format is SmartRawFormat.PercentInLowByte ? (int)(attribute.Raw & LowByte) : attribute.Value;
+
     internal static string Temperature(AtaAttribute attribute, SmartRawFormat format) => format switch
     {
         SmartRawFormat.CelsiusRange => Celsius(Field(attribute, 0, 2), Field(attribute, 2, 2), Field(attribute, 4, 2), overheats: 0),
@@ -53,7 +58,7 @@ internal static class AtaRawReading
             ? HealthText.Size((UInt128)attribute.Raw * size)
             : $"{HealthText.Count(attribute.Raw)} sectors",
         SmartRawFormat.Units32MiB => HealthText.Size((UInt128)Figure(attribute, known) * SectorsPer32MiB * DriveRequests.SectorBytes),
-        SmartRawFormat.Percent => HealthText.Percent(attribute.Value),
+        SmartRawFormat.Percent or SmartRawFormat.PercentInLowByte => HealthText.Percent(Percentage(attribute, known)),
         SmartRawFormat.PercentPer1024 => Measured(Figure(attribute, known), Thousandths),
         SmartRawFormat.RawPercent => Measured(Figure(attribute, known), percent => $"{HealthText.Count(percent)}%"),
         SmartRawFormat.CapacitorTest => CapacitorTest(attribute),

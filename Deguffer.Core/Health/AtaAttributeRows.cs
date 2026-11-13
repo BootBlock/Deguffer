@@ -20,6 +20,7 @@ internal static class AtaAttributeRows
     private const int HighestValid = 253;
 
     private const string UnusedNumbers = "Manufacturers use this number differently, so Deguffer shows it as reported.";
+    private const string UnstatedGigabyte = "The drive counts in gigabytes, and its maker does not say whether a gigabyte is a thousand or 1,024 megabytes, so Deguffer shows the count as the drive gives it.";
     private const string BackUpAdvice = "This can mean the drive is starting to fail. Back up important files.";
 
     internal static HealthAttribute Prediction(bool predictsFailure) => new(
@@ -125,6 +126,7 @@ internal static class AtaAttributeRows
         { Role: AttributeRole.FailureCount } => FailureCount(attribute, known),
         { Role: AttributeRole.RemainingLife } => RemainingLife(attribute, known),
         { Role: AttributeRole.Temperature } => (AtaRawReading.Temperature(attribute, known.Format), known.Explanation, AttributeStanding.Normal),
+        { Format: SmartRawFormat.Gigabytes } => (HealthText.StatedGigabytes(AtaRawReading.Figure(attribute, known)), $"{known.Explanation} {UnstatedGigabyte}", AttributeStanding.Normal),
         _ => (AtaRawReading.Decoded(attribute, known, logicalSectorBytes), known.Explanation, AttributeStanding.Normal),
     };
 
@@ -142,10 +144,14 @@ internal static class AtaAttributeRows
             : (HealthText.Count(count), $"{known.Explanation} {BackUpAdvice}", AttributeStanding.Watch);
     }
 
-    private static (string, string, AttributeStanding) RemainingLife(AtaAttribute attribute, AtaAttributeDefinition known) =>
-        attribute.Value <= LifeLeftWarningPercent
-            ? ($"{attribute.Value}% left", $"{known.Explanation} The drive is near the end of its rated life, so plan to replace it.", AttributeStanding.Watch)
-            : ($"{attribute.Value}% left", known.Explanation, AttributeStanding.Normal);
+    private static (string, string, AttributeStanding) RemainingLife(AtaAttribute attribute, AtaAttributeDefinition known)
+    {
+        var left = AtaRawReading.Percentage(attribute, known);
+
+        return left <= LifeLeftWarningPercent
+            ? ($"{left}% left", $"{known.Explanation} The drive is near the end of its rated life, so plan to replace it.", AttributeStanding.Watch)
+            : ($"{left}% left", known.Explanation, AttributeStanding.Normal);
+    }
 
     private static string Value(AtaAttribute attribute) => $"Scored {attribute.Value}";
 

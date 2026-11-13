@@ -16,8 +16,13 @@ internal static partial class AtaVendorOverlay
     /// <summary>The threshold code TN-FD-22 table 7 defines as always failing.</summary>
     private const byte AlwaysFailingThreshold = 0xFF;
 
+    private const string LifeLeft = "How much of the drive's rated write life is left.";
+
     private static readonly AtaAttributeDefinition RemainingLife = new(
-        "Remaining life", "How much of the drive's rated write life is left.", SmartRawFormat.Percent, AttributeRole.RemainingLife);
+        "Remaining life", LifeLeft, SmartRawFormat.Percent, AttributeRole.RemainingLife);
+
+    private static readonly AtaAttributeDefinition RemainingLifeInLowByte = new(
+        "Remaining life", LifeLeft, SmartRawFormat.PercentInLowByte, AttributeRole.RemainingLife);
 
     private static readonly AtaAttributeDefinition TotalWritten = new(
         "Total data written", "How much the computer has written to the drive over its life.", SmartRawFormat.Bytes512, AttributeRole.Usage);
@@ -52,6 +57,18 @@ internal static partial class AtaVendorOverlay
     private static readonly AtaAttributeDefinition SuddenPowerLoss = new(
         "Unexpected power loss", "Times power was lost without warning, so the drive had to recover its data when next switched on.", SmartRawFormat.Count, AttributeRole.Usage);
 
+    private static readonly AtaAttributeDefinition WearRange = new(
+        "Wear range", "How far apart the most and least erased blocks of flash memory are, as a share of the erases each block is rated for. A low figure means the drive spreads its wear evenly.", SmartRawFormat.PercentInLowByte, AttributeRole.Information);
+
+    private static readonly AtaAttributeDefinition GigabytesWritten = new(
+        "Total data written", "How much the computer has written to the drive over its life.", SmartRawFormat.Gigabytes, AttributeRole.Usage);
+
+    private static readonly AtaAttributeDefinition GigabytesRead = new(
+        "Total data read", "How much the computer has read from the drive over its life.", SmartRawFormat.Gigabytes, AttributeRole.Usage);
+
+    private static readonly AtaAttributeDefinition GigabytesWrittenToFlash = new(
+        "Total written to flash", "How much the drive has written to its flash memory over its life: what the computer sent and the drive's own upkeep together.", SmartRawFormat.Gigabytes, AttributeRole.Usage);
+
     private static readonly AtaAttributeDefinition InterfaceDownshifts = new(
         "Interface speed drops", "Times the connection to the computer settled at a slower speed than it had before.", SmartRawFormat.Count, AttributeRole.Information);
 
@@ -77,6 +94,7 @@ internal static partial class AtaVendorOverlay
         : IntelDcS3500.Covers(drive) ? IntelDcS3500.Of(id)
         : SamsungPm863OrSm863().IsMatch(drive.Model) ? SamsungPm863OrSm863Of(id)
         : Samsung845Dc().IsMatch(drive.Model) ? Samsung845DcOf(id)
+        : SeagateFireCuda120().IsMatch(drive.Model) ? SeagateFireCuda120Of(id)
         : null;
 
     /// <summary>
@@ -136,6 +154,30 @@ internal static partial class AtaVendorOverlay
     };
 
     /// <summary>
+    /// Seagate's FireCuda 120 SSD product manual, 100867394 Rev B (May 2020), table 11. Note a makes
+    /// 170's normalised value the percentage of spare blocks left, and the drive's own threshold of 0Ah
+    /// judges it. Note b gives 177 as the spread between the most and least erased blocks, as a
+    /// percentage of the rated program/erase cycles, in the first raw byte, with the normalised value
+    /// fixed at 00h. Note c and section 7.2.3 make 231 the percentage of life left, and the table puts
+    /// note c in the same first raw byte, with a throttling level above it and the normalised value
+    /// listed as 64h like the static attributes, so 231 is read from that byte too. 233, 241 and 242
+    /// count gigabytes without saying which base a gigabyte has. The table does not give byte widths
+    /// for the erase counts packed into 173, the per-plane spare blocks in 16 and 17, or the two
+    /// figures in 232, and it does not say whether the flash sectors 234 and 235 count are the 512-byte
+    /// sectors the computer addresses, so those stay as the catalogue reports them.
+    /// </summary>
+    private static AtaAttributeDefinition? SeagateFireCuda120Of(byte id) => id switch
+    {
+        170 => SpareBlocksLeft,
+        177 => WearRange,
+        231 => RemainingLifeInLowByte,
+        233 => GigabytesWrittenToFlash,
+        241 => GigabytesWritten,
+        242 => GigabytesRead,
+        _ => null,
+    };
+
+    /// <summary>
     /// The PM863 (MZ7LM...HC) and SM863 (MZ7KM...HA) part numbers in Samsung's data sheets. The PM863a
     /// and SM863a share the prefixes with other letters after the capacity, and are not covered.
     /// </summary>
@@ -148,4 +190,12 @@ internal static partial class AtaVendorOverlay
     /// </summary>
     [GeneratedRegex(@"\bSamsung SSD 845 ?DC (?:EVO|PRO)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex Samsung845Dc();
+
+    /// <summary>
+    /// The FireCuda 120 part numbers in its manual's table 2: ZA, the capacity in gigabytes, then GM10001.
+    /// Other Seagate drives are not covered: the manual names only these, and no Seagate document giving
+    /// an attribute layout for its hard drives is published.
+    /// </summary>
+    [GeneratedRegex(@"\bZA\d{3,4}GM10001\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex SeagateFireCuda120();
 }
