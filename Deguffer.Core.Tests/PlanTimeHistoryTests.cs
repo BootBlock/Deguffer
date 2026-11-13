@@ -159,6 +159,22 @@ public sealed class PlanTimeHistoryTests : IDisposable
         Assert.Equal(TimeSpan.FromMilliseconds(200), NewHistory().MedianOf("npm", elevated: false));
     }
 
+    /// <summary>
+    /// Two kept times as long as the file accepts still give a median, rather than overflowing as their
+    /// sum would. Only a hand edit writes such a file.
+    /// </summary>
+    [Fact]
+    public void TheMedianOfTheLongestTimesTheFileHoldsDoesNotOverflow()
+    {
+        var longest = long.MaxValue / TimeSpan.TicksPerMicrosecond;
+        Directory.CreateDirectory(Path.GetDirectoryName(File)!);
+        System.IO.File.WriteAllText(
+            File,
+            $$$"""{"format":1,"providers":{"npm":[{"takenUtc":"2026-06-01T10:00:00Z","microseconds":{{{longest - 20}}},"elevated":false},{"takenUtc":"2026-06-01T11:00:00Z","microseconds":{{{longest}}},"elevated":false}]}}""");
+
+        Assert.Equal(TimeSpan.FromMicroseconds(longest - 10), NewHistory().MedianOf("npm", elevated: false));
+    }
+
     /// <summary>The file holds a provider's id, a time and a flag, and nothing that names a place.</summary>
     [Fact]
     public void TheHistoryHoldsNoPath()
