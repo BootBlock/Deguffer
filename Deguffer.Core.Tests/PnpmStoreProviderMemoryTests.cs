@@ -260,9 +260,12 @@ public sealed class PnpmStoreProviderMemoryTests : IDisposable
     [InlineData("", 0)]
     [InlineData("undefined", 0)]
     [InlineData("", 1)]
-    public async Task AStoreWithoutItsGlobalConfigurationServesThePassButIsNotKept(string printed, int exitCode)
+    [InlineData(null, 1)]
+    public async Task AStoreWithoutItsGlobalConfigurationServesThePassButIsNotKept(string? printed, int exitCode)
     {
-        _runner.Responding(_pnpm, "config get globalconfig", printed, exitCode);
+        // Null stands for the real global configuration's path, printed by a query that failed: a
+        // failed query is no answer, whatever it printed.
+        _runner.Responding(_pnpm, "config get globalconfig", printed ?? GlobalConfig, exitCode);
         var provider = CreateProvider();
 
         var plan = await provider.PlanAsync();
