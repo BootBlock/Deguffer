@@ -1,4 +1,3 @@
-using System.Collections;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Layout;
@@ -243,31 +242,4 @@ public sealed class NodeShapesTests
 
     private static ExploreChild[] Folders(string prefix, int count) =>
         [.. Enumerable.Range(0, count).Select(i => new ExploreChild($"{prefix}{i}", IsDirectory: true, IsLink: false, Size: 0))];
-
-    /// <summary>A drawing's rectangles that note which of them are read, by index or by enumeration.</summary>
-    private sealed class WatchedTiles(IReadOnlyList<ExploreTile> tiles) : IReadOnlyList<ExploreTile>
-    {
-        public HashSet<int> Read { get; } = [];
-
-        public int Count => tiles.Count;
-
-        public ExploreTile this[int index]
-        {
-            get
-            {
-                Read.Add(index);
-                return tiles[index];
-            }
-        }
-
-        public IEnumerator<ExploreTile> GetEnumerator()
-        {
-            for (var i = 0; i < tiles.Count; i++)
-            {
-                yield return this[i];
-            }
-        }
-
-        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
-    }
 }

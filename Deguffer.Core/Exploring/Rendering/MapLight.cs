@@ -65,6 +65,25 @@ public abstract class MapLight
     private protected abstract IReadOnlyList<ExploreOutline> Lit(ExploreSurface drawing);
 
     /// <summary>
+    /// Work out now, on the caller's thread, what <see cref="On"/> reads of <paramref name="drawing"/>
+    /// that is fixed for the drawing whatever the light asks, so lit on the UI thread it only reads it.
+    /// </summary>
+    public void Prepare(ExploreSurface drawing)
+    {
+        ArgumentNullException.ThrowIfNull(drawing);
+
+        if (ReferenceEquals(drawing.Tree, Tree))
+        {
+            Prime(drawing);
+        }
+    }
+
+    /// <summary>See <see cref="Prepare"/>. Nothing, for a light that reads only the shapes it lights.</summary>
+    private protected virtual void Prime(ExploreSurface drawing)
+    {
+    }
+
+    /// <summary>
     /// A folder the tree no longer holds, removed since the scan, lights nothing: the folder above it
     /// is drawn where it was, and lighting that would say the folder is still there.
     /// </summary>
@@ -78,5 +97,14 @@ public abstract class MapLight
     {
         private protected override IReadOnlyList<ExploreOutline> Lit(ExploreSurface drawing) =>
             drawing.Uncovered(node => DominantTypes.KindOf(tree, node, measured) == kind);
+
+        /// <summary>The folders a drawing of rectangles has covered, which every kind asks about (<see cref="TiledSurface.Covered"/>).</summary>
+        private protected override void Prime(ExploreSurface drawing)
+        {
+            if (drawing is TiledSurface tiled)
+            {
+                _ = tiled.Covered;
+            }
+        }
     }
 }

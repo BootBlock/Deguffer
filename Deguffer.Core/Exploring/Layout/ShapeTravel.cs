@@ -29,7 +29,7 @@ public readonly record struct ShapeTravel(bool ShowsEarlier, MapFrame Source, Sp
         ArgumentNullException.ThrowIfNull(earlier);
         ArgumentNullException.ThrowIfNull(later);
 
-        if (earlier.Width != later.Width || earlier.Height != later.Height || earlier.Zoom?.Viewport != later.Zoom?.Viewport)
+        if (!Travels(earlier, later))
         {
             return [];
         }
@@ -46,6 +46,26 @@ public readonly record struct ShapeTravel(bool ShowsEarlier, MapFrame Source, Sp
 
         return travels;
     }
+
+    /// <summary>
+    /// Work out now, on the caller's thread, what <see cref="Between"/> reads of
+    /// <paramref name="earlier"/> and <paramref name="later"/> that is fixed for each drawing, so asked
+    /// later on the UI thread it only reads it. Nothing for two drawings shapes cannot travel between.
+    /// </summary>
+    public static void Prepare(ExploreSurface earlier, ExploreSurface later)
+    {
+        ArgumentNullException.ThrowIfNull(earlier);
+        ArgumentNullException.ThrowIfNull(later);
+
+        if (Travels(earlier, later))
+        {
+            ShapeChanges.Prepare(earlier, later);
+        }
+    }
+
+    /// <summary>Whether shapes travel between two drawings: of one canvas at one zoom, whose shapes are where the same rectangles of the screen say.</summary>
+    private static bool Travels(ExploreSurface earlier, ExploreSurface later) =>
+        earlier.Width == later.Width && earlier.Height == later.Height && earlier.Zoom?.Viewport == later.Zoom?.Viewport;
 
     /// <summary>
     /// The travel of <paramref name="change"/> on a canvas of <paramref name="width"/> by
