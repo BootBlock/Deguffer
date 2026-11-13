@@ -129,7 +129,7 @@ public sealed class YarnClassicCacheProviderMemoryTests : IDisposable
     [InlineData("COREPACK_HOME", "corepack", "corepack\\yarn\\yarn-4.5.0.tgz")]
     public async Task ChangingAFileAVariableNamesAsksAgain(string variable, string value, string input)
     {
-        YarnToolFixture.AgeListedTree(Path.Combine(Environment.UserProfile, "corepack"), "yarn");
+        Directory.CreateDirectory(Path.Combine(Environment.UserProfile, "corepack", "yarn"));
         Environment.WithEnvironmentVariable(variable, Path.Combine(Environment.UserProfile, value));
         var provider = Provider();
 

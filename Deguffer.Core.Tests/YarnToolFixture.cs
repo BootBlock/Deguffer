@@ -27,7 +27,7 @@ internal sealed class YarnToolFixture : IDisposable
         Yarn = Write("AppData", "Roaming", "npm", "yarn.cmd");
         Write("AppData", "Roaming", "npm", "node_modules", "yarn", "package.json");
         Environment.WithExecutable("yarn", Yarn).WithExecutable("node", Write("nodejs", "node.exe"));
-        AgeListedTree(Path.Combine(Environment.LocalAppData, "node", "corepack"), "yarn");
+        Directory.CreateDirectory(Path.Combine(Environment.LocalAppData, "node", "corepack", "yarn"));
         Directory.CreateDirectory(ToolInputs.WorkingDirectory(Environment));
         Script = Write("project", ".yarn", "releases", "yarn.cjs");
 
@@ -101,20 +101,6 @@ internal sealed class YarnToolFixture : IDisposable
         {
             Write(relative.Split(Path.DirectorySeparatorChar));
         }
-    }
-
-    /// <summary>
-    /// Create <paramref name="child"/> in <paramref name="folder"/> and set both folders' times an hour
-    /// back. Windows can update a folder's entry in its parent's listing a moment after something is
-    /// created in it, so a listing read straight after the fixture is written can read differently a
-    /// few milliseconds later, and a pass that should ask nothing would ask again.
-    /// </summary>
-    public static void AgeListedTree(string folder, string child)
-    {
-        var inner = Path.Combine(folder, child);
-        Directory.CreateDirectory(inner);
-        TempDirectory.Age(inner, TimeSpan.FromHours(1));
-        TempDirectory.Age(folder, TimeSpan.FromHours(1));
     }
 
     /// <summary>Replace the program with another at the same path, as an upgrade does.</summary>

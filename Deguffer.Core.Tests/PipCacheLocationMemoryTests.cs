@@ -37,15 +37,6 @@ public sealed class PipCacheLocationMemoryTests : IDisposable
         _temp.CreateDirectory("Python312", "Lib", "site-packages", "pip-24.0.dist-info");
         _temp.CreateDirectory("profile", "AppData", "Roaming", "Python", "Python312", "site-packages");
 
-        // A folder's entry in its parent's listing takes the folder's new last-write time some moments
-        // after an entry is created in it, so each listed folder is given its times outright, or a
-        // reading moments later than the first would differ for nothing.
-        foreach (var listed in (string[])[@"Python312\Lib\site-packages", @"Python312\Lib\site-packages\pip-24.0.dist-info",
-            @"profile\AppData\Roaming\Python", @"profile\AppData\Roaming\Python\Python312", @"profile\AppData\Roaming\Python\Python312\site-packages"])
-        {
-            TempDirectory.Age(Path.Combine(_temp.Path, listed), TimeSpan.FromMinutes(5));
-        }
-
         File.WriteAllText(Path.Combine(_environment.RoamingAppData, "pip", "pip.ini").Created(), "[global]\n");
 
         _pip = Path.Combine(_temp.Path, "Python312", "Scripts", "pip.exe");

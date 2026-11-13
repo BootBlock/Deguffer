@@ -325,34 +325,15 @@ public sealed class PnpmStoreProviderMemoryTests : IDisposable
                 break;
         }
 
-        SettleFolderTimes();
         provider.InvalidateCaches();
         await provider.PlanAsync();
 
         Assert.Equal(2, StoreAsks);
     }
 
-    /// <summary>A provider on the shared memory, once the fixture's folder times are current (<see cref="SettleFolderTimes"/>).</summary>
-    private PnpmStoreProvider CreateProvider()
-    {
-        SettleFolderTimes();
-        return new(_environment, _runner, FakeProcessInspector.NothingRunning, memory: _memory);
-    }
-
-    /// <summary>
-    /// NTFS copies a folder's times into its parent's listing some milliseconds after an entry in it
-    /// changes, so a listing read straight after the fixture is written can show a folder's old time
-    /// and a later one its new time with nothing changed in between. Setting each folder's time to
-    /// itself brings the parent's copy up to date at once, as the time between a real change and the
-    /// next scan does.
-    /// </summary>
-    private void SettleFolderTimes()
-    {
-        foreach (var folder in Directory.EnumerateDirectories(_temp.Path, "*", SearchOption.AllDirectories))
-        {
-            Directory.SetLastWriteTimeUtc(folder, Directory.GetLastWriteTimeUtc(folder));
-        }
-    }
+    /// <summary>A provider on the shared memory.</summary>
+    private PnpmStoreProvider CreateProvider() =>
+        new(_environment, _runner, FakeProcessInspector.NothingRunning, memory: _memory);
 
     private string InProfile(string relative) => Path.Combine(_environment.UserProfile, relative);
 
