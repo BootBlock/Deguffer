@@ -52,7 +52,7 @@ public readonly record struct ShapeTravel(bool ShowsEarlier, MapFrame Source, Sp
     /// <paramref name="earlier"/> and <paramref name="later"/> that is fixed for each drawing, so asked
     /// later on the UI thread it only reads it. Nothing for two drawings shapes cannot travel between.
     /// </summary>
-    public static void Prepare(ExploreSurface earlier, ExploreSurface later)
+    internal static void Prepare(ExploreSurface earlier, ExploreSurface later)
     {
         ArgumentNullException.ThrowIfNull(earlier);
         ArgumentNullException.ThrowIfNull(later);

@@ -68,7 +68,7 @@ public abstract class MapLight
     /// Work out now, on the caller's thread, what <see cref="On"/> reads of <paramref name="drawing"/>
     /// that is fixed for the drawing whatever the light asks, so lit on the UI thread it only reads it.
     /// </summary>
-    public void Prepare(ExploreSurface drawing)
+    internal void Prepare(ExploreSurface drawing)
     {
         ArgumentNullException.ThrowIfNull(drawing);
 
