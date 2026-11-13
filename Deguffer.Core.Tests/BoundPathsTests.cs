@@ -47,8 +47,8 @@ public sealed class BoundPathsTests
     }
 
     /// <summary>
-    /// Nothing a walk lists is a volume's top, so a bound naming one holds nothing back, as it did when
-    /// each entry's full path was looked up.
+    /// Nothing a walk lists is a volume's top or a share's, so a bound naming one has no entry to hold
+    /// back, and is not filed at all.
     /// </summary>
     [Fact]
     public void ABoundNamingAVolumesTopHoldsNothingBack()
@@ -60,8 +60,8 @@ public sealed class BoundPathsTests
     }
 
     /// <summary>
-    /// User work is the reason that outlasts the others, so a path given for two reasons is reported as
-    /// user work, as the walk asked it first when each reason was a set of its own.
+    /// User work is the reason that outlasts the others, so a path given for it and another reason is
+    /// reported as user work, and a path spared and owned elsewhere is reported as spared.
     /// </summary>
     [Fact]
     public void APathGivenForTwoReasonsIsHeldBackForTheFirst()

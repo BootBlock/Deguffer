@@ -22,10 +22,10 @@ namespace Deguffer.Core.Execution;
 ///
 /// <para><b>On the walk every scan takes.</b> A tree of a million files and a hundred thousand
 /// folders is listed by several workers at once, with no recursion for a deep tree to exhaust the
-/// stack with, and through <see cref="IFileSystem.ListEntries"/>, so its tests still see every
-/// listing. Each folder's findings stay with the folder until the walk is over, and are put in order
-/// only then, so the inventory is the same however many workers there were and however their work
-/// interleaved.</para>
+/// stack with, and through the listing its caller hands it (a removal's
+/// <see cref="IFileSystem.ListEntries"/>), so its tests still see every listing. Each folder's
+/// findings stay with the folder until the walk is over, and are put in order only then, so the
+/// inventory is the same however many workers there were and however their work interleaved.</para>
 /// </summary>
 internal static class RemovalWalk
 {
@@ -39,22 +39,22 @@ internal static class RemovalWalk
         string extendedRoot,
         MinimumAge keep,
         RemovalBounds bounds,
-        IFileSystem fs,
+        ListDirectory list,
         CancellationToken ct) =>
-        Gather(extendedRoot, keep, bounds, fs, WalkTuning.Default, ct);
+        Gather(extendedRoot, keep, bounds, list, WalkTuning.Default, ct);
 
     /// <summary>The same walk with <paramref name="tuning"/>'s workers, which is how a test sets them.</summary>
     internal static Folder Gather(
         string extendedRoot,
         MinimumAge keep,
         RemovalBounds bounds,
-        IFileSystem fs,
+        ListDirectory list,
         WalkTuning tuning,
         CancellationToken ct)
     {
         var root = new Folder(extendedRoot);
 
-        Visit(root, keep, bounds, fs, tuning, static _ => { }, ct);
+        Visit(root, keep, bounds, list, tuning, static _ => { }, ct);
 
         return root;
     }
@@ -74,7 +74,7 @@ internal static class RemovalWalk
         TFolder root,
         MinimumAge keep,
         RemovalBounds bounds,
-        IFileSystem fs,
+        ListDirectory list,
         WalkTuning tuning,
         Action<TFolder> listed,
         CancellationToken ct)
@@ -89,7 +89,7 @@ internal static class RemovalWalk
             (Folder)root,
             tuning,
             FileNames.All,
-            fs.ListEntries,
+            list,
             (folder, contents, descend) =>
             {
                 folder.Gather(contents, descend, keep, bounded ? bounds.Paths.In(contents.Directory) : null);

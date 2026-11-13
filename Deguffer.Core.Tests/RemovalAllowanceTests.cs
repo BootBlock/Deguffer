@@ -77,7 +77,7 @@ public sealed class RemovalAllowanceTests : IDisposable
             RemovalBounds.None,
             (listed, stop) =>
             {
-                RemovalWalk.Visit(root, MinimumAge.Off, RemovalBounds.None, fs, WalkTuning.Default, listed, stop);
+                RemovalWalk.Visit(root, MinimumAge.Off, RemovalBounds.None, fs.ListEntries, WalkTuning.Default, listed, stop);
                 allowance.Return();
             },
             progress: null,

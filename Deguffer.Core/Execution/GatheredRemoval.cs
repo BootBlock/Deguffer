@@ -74,7 +74,7 @@ internal abstract record GatheredRemoval(string Extended, RemovalBounds Bounds)
         // would act on, and then deleted from what the walk gathered.
         var started = time.GetTimestamp();
         var root = new RemovalFolder(extended, parent: null);
-        RemovalWalk.Visit(root, keep, bounds, fs, WalkTuning.Default, static _ => { }, ct);
+        RemovalWalk.Visit(root, keep, bounds, fs.ListEntries, WalkTuning.Default, static _ => { }, ct);
 
         var took = time.GetElapsedTime(started);
         var entries = root.InWalkOrder().Sum(folder => 1L + folder.Files.Count + folder.Links.Count);

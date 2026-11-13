@@ -30,33 +30,33 @@ public sealed class RemovalWalkPathTests
     [Fact]
     public void AFolderKeepsTheOneStringItWasFoundAndListedBy()
     {
-        var fs = Tree();
+        var tree = Tree();
 
-        var folders = Gather(fs, RemovalBounds.None).InWalkOrder();
+        var folders = Gather(tree, RemovalBounds.None).InWalkOrder();
 
         Assert.Equal(Folders + 1, folders.Count);
         Assert.All(folders, folder => Assert.Same(folder.FoundAs, folder.Path));
-        Assert.All(folders, folder => Assert.Contains(fs.Listed, listed => ReferenceEquals(listed, folder.Path)));
+        Assert.All(folders, folder => Assert.Contains(tree.Listed, listed => ReferenceEquals(listed, folder.Path)));
     }
 
     /// <summary>
     /// A bounded removal whose bounds name nothing in the tree allocates no more for each entry than one
     /// that holds nothing back. The bounds are asked once per folder, by the string its listing already
-    /// has, and a folder holding no bound path builds no entry's path to look up. Asked per entry, each
-    /// built a path of about 250 bytes and dropped it.
+    /// has, and a folder holding no bound path builds no entry's path to look up. A path built per entry
+    /// here would be about 250 bytes of garbage each.
     /// </summary>
     [Fact]
     public void ABoundThatNamesNothingInAFolderBuildsNoPathForItsEntries()
     {
-        var fs = Tree();
+        var tree = Tree();
         var bounds = new RemovalBounds(
             KeepRoot: true,
             [Path.Combine(Root, "folder-00", "not-here")],
             [Path.Combine(Root, "elsewhere", "another-rows")],
             [@"Q:\Users\testuser\Documents\sketch.psd"]);
 
-        var unbounded = LeastPerEntry(fs, RemovalBounds.None);
-        var bounded = LeastPerEntry(fs, bounds);
+        var unbounded = LeastPerEntry(tree, RemovalBounds.None);
+        var bounded = LeastPerEntry(tree, bounds);
 
         // The only bound folder in the tree is folder-00, whose 200 files are looked up by name.
         Assert.True(
@@ -73,7 +73,7 @@ public sealed class RemovalWalkPathTests
     [Fact]
     public void HoldsBackABoundPathDirectlyBelowAVolumesTop()
     {
-        var fs = new ListedTreeFileSystem(@"Q:\")
+        var tree = new ListedTree(@"Q:\")
             .AddFile(@"Q:\session\inside.bin")
             .AddFile(@"Q:\notes\draft.txt")
             .AddFile(@"Q:\another-rows.bin")
@@ -85,13 +85,13 @@ public sealed class RemovalWalkPathTests
             [@"\\?\Q:\another-rows.bin"],
             [@"Q:\NOTES\"]);
 
-        var root = RemovalWalk.Gather(LongPath.Extended(@"Q:\"), MinimumAge.Off, bounds, fs, OneWorker, default);
+        var root = RemovalWalk.Gather(LongPath.Extended(@"Q:\"), MinimumAge.Off, bounds, tree.List, OneWorker, default);
 
         Assert.Equal([@"\\?\Q:\session"], root.Spared);
         Assert.Equal([@"\\?\Q:\notes"], root.UserWork);
         Assert.Equal([@"\\?\Q:\loose.bin"], root.Files.Select(file => file.FullName));
         Assert.Single(root.InWalkOrder());
-        Assert.Equal([@"\\?\Q:\"], fs.Listed);
+        Assert.Equal([@"\\?\Q:\"], tree.Listed);
     }
 
     /// <summary>
@@ -101,12 +101,12 @@ public sealed class RemovalWalkPathTests
     public void HoldsBackABoundPathWrittenWithATrailingSeparator()
     {
         var held = Path.Combine(Root, "folder-03");
-        var fs = Tree();
+        var tree = Tree();
 
-        var root = Gather(fs, new RemovalBounds(KeepRoot: true, [held + Path.DirectorySeparatorChar]));
+        var root = Gather(tree, new RemovalBounds(KeepRoot: true, [held + Path.DirectorySeparatorChar]));
 
         Assert.Equal([LongPath.Extended(held)], root.InWalkOrder().SelectMany(folder => folder.Spared));
-        Assert.DoesNotContain(fs.Listed, listed => listed.Equals(LongPath.Extended(held), StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(tree.Listed, listed => listed.Equals(LongPath.Extended(held), StringComparison.OrdinalIgnoreCase));
         Assert.Equal((Folders - 1) * FilesInEach, root.InWalkOrder().Sum(folder => folder.Files.Count));
     }
 
@@ -114,38 +114,38 @@ public sealed class RemovalWalkPathTests
     /// The least a gather of the tree allocated for each entry, over three gathers, on the one worker that
     /// is the calling thread, so what this thread allocated is what the walk did.
     /// </summary>
-    private static long LeastPerEntry(ListedTreeFileSystem fs, RemovalBounds bounds)
+    private static long LeastPerEntry(ListedTree tree, RemovalBounds bounds)
     {
         // Once first, so what is counted is the walk rather than the first call's compilation.
-        Gather(fs, bounds);
+        Gather(tree, bounds);
 
         var least = long.MaxValue;
 
         for (var gather = 0; gather < 3; gather++)
         {
             var before = GC.GetAllocatedBytesForCurrentThread();
-            Gather(fs, bounds);
+            Gather(tree, bounds);
             least = Math.Min(least, (GC.GetAllocatedBytesForCurrentThread() - before) / (Folders * (FilesInEach + 1)));
         }
 
         return least;
     }
 
-    private static RemovalWalk.Folder Gather(ListedTreeFileSystem fs, RemovalBounds bounds) =>
-        RemovalWalk.Gather(LongPath.Extended(Root), MinimumAge.Off, bounds, fs, OneWorker, default);
+    private static RemovalWalk.Folder Gather(ListedTree tree, RemovalBounds bounds) =>
+        RemovalWalk.Gather(LongPath.Extended(Root), MinimumAge.Off, bounds, tree.List, OneWorker, default);
 
-    private static ListedTreeFileSystem Tree()
+    private static ListedTree Tree()
     {
-        var fs = new ListedTreeFileSystem(Root);
+        var tree = new ListedTree(Root);
 
         for (var folder = 0; folder < Folders; folder++)
         {
             for (var file = 0; file < FilesInEach; file++)
             {
-                fs.AddFile(Path.Combine(Root, $"folder-{folder:D2}", $"file-{file:D3}.bin"));
+                tree.AddFile(Path.Combine(Root, $"folder-{folder:D2}", $"file-{file:D3}.bin"));
             }
         }
 
-        return fs;
+        return tree;
     }
 }

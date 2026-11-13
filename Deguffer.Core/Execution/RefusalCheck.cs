@@ -205,7 +205,7 @@ internal static class RefusalCheck
 
         if (isDirectory is true)
         {
-            var root = RemovalWalk.Gather(extended, keep, bounds, fs, ct);
+            var root = RemovalWalk.Gather(extended, keep, bounds, fs.ListEntries, ct);
             var counter = new RefusalCounter();
             var files = new ConcurrentBag<string>();
             List<WalkEntry> candidates = [.. root.InWalkOrder().SelectMany(folder => folder.Files)];

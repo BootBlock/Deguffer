@@ -126,7 +126,7 @@ public static class DirectoryRemover
         return TreeRemoval.Run(
             root,
             bounds,
-            (listed, stop) => RemovalWalk.Visit(root, keep, bounds, fs, WalkTuning.Default, listed, stop),
+            (listed, stop) => RemovalWalk.Visit(root, keep, bounds, fs.ListEntries, WalkTuning.Default, listed, stop),
             progress,
             plannedEntries,
             fs,
