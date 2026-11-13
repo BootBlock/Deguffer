@@ -318,6 +318,7 @@ public sealed class ProviderInvalidationTests : IDisposable
         : parameter == typeof(ISystemDirectories) ? new FakeSystemDirectories(_temp.Path)
         : parameter == typeof(ICurrentPreferences) ? new FakePreferences(AppPreferences.Default)
         : parameter == typeof(TimeProvider) ? new ManualTimeProvider()
+        : parameter == typeof(ToolAnswerMemory) ? new ToolAnswerMemory(new ManualTimeProvider())
 
         // The shipped values, which open none of the machine's devices to learn what they are.
         : parameter == typeof(ScanTuner) ? ScanTuner.Shipped

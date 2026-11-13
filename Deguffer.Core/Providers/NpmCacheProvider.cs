@@ -23,19 +23,30 @@ public sealed class NpmCacheProvider : CleanupProviderBase
     /// <summary>Where npx keeps the packages it ran. No npm command evicts it.</summary>
     private const string NpxCacheName = "_npx";
 
-    private readonly PassMemo<Task<AskedLocation>> _resolvedCacheDirectory = new();
+    private readonly PassMemo<Task<NpmLocations>> _resolvedCacheDirectory = new();
+    private readonly ToolAnswerMemory _memory;
 
+    /// <param name="environment">The profile, the executables and the variables npm is started with.</param>
+    /// <param name="runner">Starts npm.</param>
+    /// <param name="inspector">Tells whether npm or Node.js is running.</param>
+    /// <param name="scanner">Measures the cache.</param>
+    /// <param name="memory">
+    /// Where npm's answer about its cache is kept while nothing it read has changed: the memory for
+    /// <paramref name="runner"/> when null, which is the process-wide one for the real runner.
+    /// </param>
     public NpmCacheProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        ToolAnswerMemory? memory = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner)
     {
+        _memory = memory ?? ToolAnswerMemory.For(runner);
     }
 
     public override string Id => "npm";
@@ -115,13 +126,15 @@ public sealed class NpmCacheProvider : CleanupProviderBase
 
         var reported = await ResolveCacheDirectoryAsync(npm, ct).ConfigureAwait(false);
 
-        return [CleanedPlace.Whole(ContentCacheIn(DefaultCacheDirectory)), CleanedPlace.Whole(ContentCacheIn(reported.Path))];
+        return [CleanedPlace.Whole(ContentCacheIn(DefaultCacheDirectory)), CleanedPlace.Whole(ContentCacheIn(reported.Cache.Path))];
     }
 
     /// <summary>
-    /// npm's cache location is configuration, not a constant — <c>npm config set cache</c> and the
-    /// <c>npm_config_cache</c> environment variable both move it. Keeping the resolved answer across
-    /// an invalidation would measure a directory npm has stopped using.
+    /// npm's cache location is configuration, not a constant: <c>npm config set cache</c> and the
+    /// <c>npm_config_cache</c> environment variable both move it. The pass's answer is forgotten here,
+    /// and the memory keeps npm's answer only while everything <see cref="InputsOf"/> declares, and
+    /// the environment npm is started with, read the same, so a moved cache is asked for again rather
+    /// than measured where npm has stopped keeping it.
     /// </summary>
     public override void InvalidateCaches()
     {
@@ -137,7 +150,7 @@ public sealed class NpmCacheProvider : CleanupProviderBase
             return EmptyPlan("npm is not installed on this machine.");
         }
 
-        var located = await ResolveCacheDirectoryAsync(npm, ct).ConfigureAwait(false);
+        var located = (await ResolveCacheDirectoryAsync(npm, ct).ConfigureAwait(false)).Cache;
         var cacheDirectory = located.Path;
         var notes = new List<PlanNote>();
         var steps = new List<CleanupStep>();
@@ -214,13 +227,81 @@ public sealed class NpmCacheProvider : CleanupProviderBase
 
     private static string ContentCacheIn(string cacheDirectory) => Path.Combine(cacheDirectory, ContentCacheName);
 
-    private Task<AskedLocation> ResolveCacheDirectoryAsync(string npm, CancellationToken ct) =>
-        _resolvedCacheDirectory.Get(() => AskCacheDirectoryAsync(npm, ct));
+    /// <summary>
+    /// Where npm keeps its cache, asked through the memory once per pass. The plan only runs npm's own
+    /// clean (§5.1), which goes wherever npm really keeps its cache, so a remembered answer can at
+    /// worst misstate the figure, never move what is removed.
+    /// </summary>
+    private Task<NpmLocations> ResolveCacheDirectoryAsync(string npm, CancellationToken ct) =>
+        _resolvedCacheDirectory.Get(() => _memory.AskAsync(
+            new ToolQuestion<NpmLocations>(
+                $"config get {NpmLocations.Keys}|{npm}",
+                Environment.ToolEnvironment,
+                answer => InputsOf(npm, answer),
+                static answer => answer.IsComplete,
+                askCt => AskCacheDirectoryAsync(npm, askCt)),
+            ct));
 
-    private async Task<AskedLocation> AskCacheDirectoryAsync(string npm, CancellationToken ct)
+    private async Task<NpmLocations> AskCacheDirectoryAsync(string npm, CancellationToken ct)
     {
-        var outcome = await Runner.RunAsync(npm, "config get cache", ToolRun.Query, ct).ConfigureAwait(false);
+        var outcome = await Runner.RunAsync(npm, $"config get {NpmLocations.Keys}", ToolRun.Query, ct).ConfigureAwait(false);
 
-        return AskedLocation.FromLastRootedLine(outcome, DefaultCacheDirectory);
+        return NpmLocations.From(outcome, DefaultCacheDirectory);
+    }
+
+    /// <summary>
+    /// Everything npm reads to say where its cache is
+    /// (https://docs.npmjs.com/cli/v10/configuring-npm/npmrc,
+    /// https://docs.npmjs.com/cli/v10/using-npm/config).
+    ///
+    /// <para>The shim (<c>npm.cmd</c>) runs <c>node.exe</c> beside it, or the <c>node</c> on the path
+    /// where there is none, and runs the npm installed under the prefix in preference to the one
+    /// bundled beside it, each with its built-in <c>npmrc</c>. npm takes the project from the first
+    /// folder up from where it runs that holds a <c>package.json</c> or a <c>node_modules</c>, and that
+    /// folder's <c>.npmrc</c> is the project configuration, so all three are read in each folder up.
+    /// The user and global configuration files are the ones npm named, so a moved prefix or
+    /// <c>userconfig</c> is followed.</para>
+    /// </summary>
+    private ToolInputs InputsOf(string npm, NpmLocations answer)
+    {
+        var files = new List<string> { npm };
+        var beside = Path.GetDirectoryName(npm);
+
+        if (beside is not null)
+        {
+            files.Add(Path.Combine(beside, "node.exe"));
+            AddInstalledNpm(beside, files);
+        }
+
+        if (Environment.FindExecutable("node") is { } node)
+        {
+            files.Add(node);
+        }
+
+        if (answer.Prefix is { } prefix)
+        {
+            AddInstalledNpm(prefix, files);
+        }
+
+        if (answer.UserConfig is { } userConfig)
+        {
+            files.Add(userConfig);
+        }
+
+        if (answer.GlobalConfig is { } globalConfig)
+        {
+            files.Add(globalConfig);
+        }
+
+        files.AddRange(ToolInputs.InEachFolderUp(ToolInputs.WorkingDirectory(Environment), ".npmrc", "package.json", "node_modules"));
+
+        return new ToolInputs { Files = files };
+    }
+
+    /// <summary>The npm installed in <paramref name="folder"/>: its version, and its built-in configuration.</summary>
+    private static void AddInstalledNpm(string folder, List<string> files)
+    {
+        files.Add(Path.Combine(folder, "node_modules", "npm", "package.json"));
+        files.Add(Path.Combine(folder, "node_modules", "npm", "npmrc"));
     }
 }

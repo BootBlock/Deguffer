@@ -1249,10 +1249,21 @@ ran, and **`_logs`**, npm's own logs.
 
 ### What Deguffer does
 
-It asks `npm config get cache` where the cache folder is, because `npm config set cache` and the
-`npm_config_cache` environment variable can move it. It then runs `npm cache clean --force`. Where npm
-gives no answer, Deguffer measures the default location, and npm's own command still clears wherever
-its cache really is.
+It asks `npm config get cache userconfig globalconfig prefix` where the cache folder is, because
+`npm config set cache` and the `npm_config_cache` environment variable can move it. It then runs
+`npm cache clean --force`. Where npm gives no answer, Deguffer measures the default location, and npm's
+own command still clears wherever its cache really is.
+
+Deguffer remembers where npm said its cache is until one of these changes, and then asks again: the
+npm it runs (usually `npm.cmd`), `node.exe` beside it and the `node` on your `PATH`; the npm bundled
+beside it and the one installed under npm's `prefix`, each by its `package.json` and its built-in
+`npmrc`; the user and global configuration files npm named (`userconfig`, such as
+`C:\Users\<user>\.npmrc`, and `globalconfig`); `.npmrc`, `package.json` and `node_modules` in the folder
+npm runs in and in each folder above it, because those decide which `.npmrc` is the project's; and
+every environment variable npm is started with, because npm expands any `${VAR}` its configuration
+names. An answer that left out any of the three paths is used for that scan and never remembered. See
+npm's [`npmrc`](https://docs.npmjs.com/cli/v10/configuring-npm/npmrc) and
+[`config`](https://docs.npmjs.com/cli/v10/using-npm/config) documentation.
 
 `--force` does not override a safety check. npm refuses to clean its cache without it, and suggests
 `npm cache verify` instead, because the cache checks itself. Deguffer is asked to free the space, so
