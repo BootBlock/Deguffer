@@ -217,6 +217,8 @@ public class CrashLogTests
 
         public IReadOnlyDictionary<string, string> ReadEnvironmentNow() => CurrentEnvironment;
 
+        public IReadOnlyDictionary<string, string> ToolEnvironment => CurrentEnvironment;
+
         public IUserHive UserHive => Safety.UserHive.Unread;
 
         public IUserHive? RunningAccountHive => null;

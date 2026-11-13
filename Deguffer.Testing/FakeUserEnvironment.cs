@@ -339,6 +339,29 @@ public sealed class FakeUserEnvironment : IUserEnvironment
         : _variables.TryGetValue(name, out value) ? value
         : null;
 
+    /// <summary>Every variable <see cref="GetToolEnvironmentVariable"/> reads as set, as it stands when asked.</summary>
+    public IReadOnlyDictionary<string, string> ToolEnvironment
+    {
+        get
+        {
+            var given = new Dictionary<string, string>(_variables, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var (name, value) in _toolVariables)
+            {
+                if (value is null)
+                {
+                    given.Remove(name);
+                }
+                else
+                {
+                    given[name] = value;
+                }
+            }
+
+            return given;
+        }
+    }
+
     /// <summary>Pretend Deguffer started with <paramref name="name"/> set, and the machine has since dropped it.</summary>
     public FakeUserEnvironment WithToolEnvironmentVariable(string name, string value)
     {

@@ -11,7 +11,7 @@ namespace Deguffer.Core.Safety;
 /// The ambient machine, behind an interface so provider rules are testable against a temp
 /// directory rather than the developer's real profile.
 /// </summary>
-public interface IUserEnvironment
+public partial interface IUserEnvironment
 {
     /// <summary><c>%USERPROFILE%</c>.</summary>
     string UserProfile { get; }
