@@ -807,10 +807,10 @@ public sealed partial class CleanViewModel : ObservableObject
                 work.Fail();
             }
 
-            // The rows the run changed say sizes and "Ready to clean" labels about a machine that no
-            // longer exists, so they are planned again. Only those: every other row still describes
-            // the disk, and measuring it again is the whole scan over for answers already on screen.
-            var stale = RunChanges.Stale([.. Findings.Select(row => row.Finding)], authorised, _volumes);
+            // Only the rows the run changed are planned again. Found on a worker, as it asks where each
+            // location is, and never cancelled: a cancel here would read as a clean that removed nothing.
+            Finding[] shown = [.. Findings.Select(row => row.Finding)];
+            var stale = await Task.Run(() => RunChanges.Stale(shown, authorised, _volumes));
 
             await ReplanRunChangesAsync(stale, ct);
 

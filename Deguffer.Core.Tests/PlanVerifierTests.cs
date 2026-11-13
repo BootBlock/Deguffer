@@ -400,6 +400,43 @@ public sealed class PlanVerifierTests : IDisposable
     }
 
     /// <summary>
+    /// A run's verifications share what its targets were followed to, so a run of five plans asks the
+    /// machine where each target is once, not once for each plan whose missing path is measured
+    /// against them (#499). A verification of one plan on its own still follows them for itself.
+    /// </summary>
+    [Fact]
+    public void ARunsTargetsAreFollowedOnceAcrossEveryPlansVerification()
+    {
+        var volumes = new FakeVolumeInventory();
+        var plans = Enumerable.Range(0, 5)
+            .Select(i => Plan(
+                [new DeleteDirectoryStep(_temp.CreateDirectory("targets", $"target{i}"), "Output")],
+                Protect(_temp.CreateDirectory("kept", $"lost{i}"))))
+            .ToList();
+        var reach = RunReach.Of(plans);
+
+        foreach (var plan in plans)
+        {
+            Directory.Delete(plan.ProtectedPaths[0].Path);
+        }
+
+        int Asked(int target) =>
+            volumes.MountPointQueries.Count(path => Path.GetFileName(path).Equals($"target{target}", StringComparison.OrdinalIgnoreCase));
+
+        var first = Verify(plans[0], reach, volumes: volumes);
+        var once = Enumerable.Range(0, 5).Select(Asked).ToList();
+
+        foreach (var plan in plans.Skip(1))
+        {
+            Assert.Equal(VerificationOutcome.Failed, Verify(plan, reach, volumes: volumes).Checks.Single().Outcome);
+        }
+
+        Assert.Equal(VerificationOutcome.Failed, first.Checks.Single().Outcome);
+        Assert.All(once, asked => Assert.True(asked > 0));
+        Assert.Equal(once, Enumerable.Range(0, 5).Select(Asked));
+    }
+
+    /// <summary>
     /// §5.1 leaves an eviction command deciding what it removes, and a run holds many plans, so one
     /// provider's command makes the whole run's reach unbounded — including for the delete-only
     /// providers beside it, which is where the suppressed alarm would otherwise land.

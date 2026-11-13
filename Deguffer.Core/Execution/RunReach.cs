@@ -1,3 +1,6 @@
+using System.Collections.Concurrent;
+using Deguffer.Core.Safety;
+
 namespace Deguffer.Core.Execution;
 
 /// <summary>
@@ -15,6 +18,10 @@ namespace Deguffer.Core.Execution;
 /// <para>It is a separate value rather than a field on <see cref="CleanupPlan"/> because it belongs
 /// to the run and not to any plan in it. Passing it explicitly is what stops a caller executing a
 /// plan without saying what else the run will touch.</para>
+///
+/// <para><b>A class, not a record,</b> because it keeps the run's paths as folders once they are
+/// followed (<see cref="PlacesOn"/>). A copy made with <c>with</c> would have carried those folders
+/// over to a reach naming other paths.</para>
 /// </summary>
 /// <param name="TargetedPaths">Every path the run's plans will destroy outright.</param>
 /// <param name="ProbedPaths">
@@ -46,11 +53,23 @@ namespace Deguffer.Core.Execution;
 /// every folder standing, which is the shape the deeper question exists for. See
 /// <c>PlanVerifier.WasEmptied</c> for what a run without one is asked, and what that costs.</para>
 /// </param>
-public sealed record RunReach(
+public sealed class RunReach(
     IReadOnlyList<string> TargetedPaths,
     IReadOnlyList<string> ProbedPaths,
     bool Unbounded)
 {
+    /// <summary>The run's paths followed to folders, one set for each inventory they were asked of.</summary>
+    private ConcurrentDictionary<IVolumeInventory, RunPlaces>? _places;
+
+    /// <summary>Every path the run's plans will destroy outright.</summary>
+    public IReadOnlyList<string> TargetedPaths { get; } = TargetedPaths;
+
+    /// <summary>Every path a tool's own eviction command in the run is sent to clear.</summary>
+    public IReadOnlyList<string> ProbedPaths { get; } = ProbedPaths;
+
+    /// <summary>Whether any plan hands a tool its own eviction command, or Windows one of its Disk Cleanup handlers.</summary>
+    public bool Unbounded { get; } = Unbounded;
+
     /// <summary>A run that will destroy nothing, for a verification with no execution behind it.</summary>
     public static readonly RunReach Nothing = new([], [], Unbounded: false);
 
@@ -69,5 +88,27 @@ public sealed record RunReach(
             ],
             [.. commands.SelectMany(command => command.MeasuredPaths)],
             Unbounded: commands.Count > 0 || plans.Any(plan => plan.Steps.OfType<DiskCleanupStep>().Any()));
+    }
+
+    /// <summary>
+    /// This reach's paths as folders, each followed the first time any verification in the run asks
+    /// about it, and then for every plan after it.
+    ///
+    /// <para><b>One set for the run, not one for each plan.</b> Every plan's §5.6 verification is
+    /// measured against this same reach, so a set for each verification would follow the run's
+    /// targets again for every plan, asking the machine where each volume is mounted each time. What a
+    /// folder is reachable at changes only where a volume is mounted or a letter is substituted, and a
+    /// run is one operation: the window <see cref="RememberedMountPoints"/> accepts for any owner that
+    /// lives for one.</para>
+    ///
+    /// <para>Kept for each inventory, by reference, because the folders are the inventory's answers. In
+    /// the app every provider asks the machine's own, so a run follows each path once.</para>
+    /// </summary>
+    internal RunPlaces PlacesOn(IVolumeInventory volumes)
+    {
+        var places = LazyInitializer.EnsureInitialized(
+            ref _places, () => new ConcurrentDictionary<IVolumeInventory, RunPlaces>(ReferenceEqualityComparer.Instance));
+
+        return places.GetOrAdd(volumes, inventory => new RunPlaces(this, inventory));
     }
 }
