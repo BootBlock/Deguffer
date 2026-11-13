@@ -9,7 +9,7 @@ namespace Deguffer.Core.Providers;
 /// <para><b>A declaration must be complete for its tool.</b> A path left out is a change nobody
 /// notices, and the remembered answer then names a folder the tool has stopped using. Each adopting
 /// provider lists its tool's documented configuration sources in <c>docs/cache-locations.md</c>, and
-/// <c>docs/todo/tool-location-memory.md</c> holds the inventories they were drawn from.</para>
+/// <c>docs/todo/done/tool-location-memory.md</c> holds the inventories they were drawn from.</para>
 ///
 /// <para><b>A file named by another file's content needs no entry of its own.</b> Where a setting in
 /// one file moves another (npm's <c>prefix</c> moves its global configuration), the file holding the

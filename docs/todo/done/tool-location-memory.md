@@ -1,8 +1,7 @@
 # Remembering where a tool keeps its cache
 
-> **Status:** 🟢 ACTIVE — the design and the per-tool input inventories for remembering a package
-> tool's location answer across planning passes and Explore policy builds (#447). Flip to
-> ✅ COMPLETE and `git mv` into `done/` when every stage below has landed.
+> **Status:** ✅ COMPLETE — every stage below landed for #447. PlatformIO joins under #1053 once
+> #591 has changed what its query reads.
 
 ## The decision
 
@@ -58,7 +57,7 @@ inherits Deguffer's own start-up environment, which the whole-block hash covers.
 | Yarn 1 | the shim; `node.exe`; `node_modules\yarn\package.json`; Corepack's home listing | `.yarnrc`, `.npmrc` and `package.json` in each folder up; `~\.yarnrc`, `~\.npmrc`; `%LOCALAPPDATA%\Yarn\Config`; `~\.config\yarn`; `%YARN_CONFIG%` | `yarn-path` (asked beside `cache dir` on a miss) |
 | Yarn Berry | as Yarn 1 | `.yarnrc.yml` (or `%YARN_RC_FILENAME%`), `package.json` and `yarn.lock` in each folder up; `~\.yarnrc.yml` | `yarnPath` (asked beside the settings on a miss) |
 
-PlatformIO joins once #591 has changed what its query reads.
+PlatformIO joins under #1053, once #591 has changed what its query reads.
 
 ## Stages
 
@@ -71,3 +70,17 @@ PlatformIO joins once #591 has changed what its query reads.
    negative of its plan when the location moved between two passes.
 8. `CLAUDE.md` G4, `docs/cache-locations.md` (each adopter's inputs, citing the tool's
    documentation) and the comments that said the answer must not outlive a pass.
+
+## As built
+
+- A folder listing gives only the names of its entries, and each entry is stamped by its own
+  attribute read. The size and times a listing reports are NTFS's copy in the parent's index, which
+  lags the entry: a folder that just gained an entry lists with its old time.
+- conda declares every search-path entry as a listed folder, because conda reads any entry that is a
+  folder as the YAML files in it, and expands a variable's value as conda does (once, then a leading
+  `~`, then a relative path from the tools' working folder).
+- pip finds `sys.prefix` from the interpreter its launcher names (`DistlibLauncher`). A launcher it
+  cannot read declares an unreadable input, so that answer is asked every pass.
+- Yarn 1 also declares `~\.yarnrc.yml`, which it reads beside every `.yarnrc`. Both Yarn rows share
+  one `yarn -v` question.
+- pip's comments name a `%LOCALAPPDATA%\pip\pip.ini` pip never reads: #1054.
