@@ -474,7 +474,7 @@ the §5.6 verification follows every surviving protected path to its mount point
 left standing (#1016), and the checks before and after a clean probe paths one at a time (#1017,
 #1018). Most rows probe again for §5.6 the paths their own listing returned (#1039). A file-table
 scan copied its whole table at every snapshot (#1015, done), every walk boxed an enumerator per directory
-(#1021, done), and the map rebuilds per-drawing facts on the UI thread (#1026). These classes recur, so
+(#1021, done), and the map rebuilt per-drawing facts on the UI thread (#1026, done). These classes recur, so
 `CLAUDE.md` G4 now states them, and the source sweep holds the mechanical ones.
 
 ### Order of work
@@ -489,7 +489,7 @@ scan copied its whole table at every snapshot (#1015, done), every walk boxed an
 | #1017, #1018, #1019 | §5.6 checks and the Clean press's narrowing probe paths one at a time, the last on the UI thread; registered storage follows every step live. `safety`. |
 | #1039 | `ProtectAsync`'s default takes no listing, so most rows probe again what they listed. The seam fix for #755's leftovers. `safety`. |
 | #1021, #1020, #1022, #1032 | Per-directory and per-file costs in the walk, the removal walk, Explore's occupancy probe and file targets. #1020 and #1032 are `safety`. #1021 done: a listing is handed to its callback as spans in a `ref struct`, so no walk boxes an enumerator for it, and the compiler keeps it inside the callback. The benchmark's `walk` of 145,005 entries allocated 33.9 MiB against 36.9 MiB, and its `measure` 39.2 MiB against 45.0 MiB. |
-| #1026, #1027, #1028 | Per-drawing facts rebuilt on the UI thread, layouts copying unsized lists, and the overview's second upload. |
+| #1026, #1027, #1028 | Per-drawing facts rebuilt on the UI thread, layouts copying unsized lists, and the overview's second upload. #1026 done: a drawing of rectangles keeps which shapes move on their own and which folders are covered, made once, and the worker that lays out a drawing works out what the map will ask of it as it arrives (the cut of a shift and of the drawing it travels from, and the covered folders a kind light reads), so the UI thread only reads them. |
 | #1033, #1034, #1035, #1023 | The duplicate search: judging inside the shared lock, the checksum store's load, stream listings per copy, and linear place lists per folder. |
 | #1029, #1030, #1031 | UI-thread churn: progress by count, Duplicates page state per group, a bound list cleared and refilled. |
 | #1036 | Files other programs wrote, read in full with no bound. `safety`. |

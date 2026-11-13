@@ -244,14 +244,15 @@ internal sealed class ExploreCanvas
     /// the picture on screen and is handed to the map as it arrives.
     /// </summary>
     /// <param name="fade">How the new drawing comes in over the old. See <see cref="ExploreLayers.Replacement"/>.</param>
-    public void Draw(ExplorePainting painting, MapViewport viewport, Motion fade)
+    /// <param name="arrival">What the map will ask of the new drawing as it arrives, worked out on the worker that lays it out.</param>
+    public void Draw(ExplorePainting painting, MapViewport viewport, Motion fade, DrawingArrival arrival)
     {
         var width = DevicePixels(_host.ActualWidth);
         var height = DevicePixels(_host.ActualHeight);
 
         Arriving = Start(
             painting,
-            Layout(painting, viewport, width, height),
+            Layout(painting, viewport, width, height, arrival),
             width,
             height,
             Focus(viewport, width, height),
@@ -279,7 +280,7 @@ internal sealed class ExploreCanvas
 
         Start(
             painting,
-            Layout(painting, MapViewport.Whole, drawing.Width, drawing.Height),
+            Layout(painting, MapViewport.Whole, drawing.Width, drawing.Height, arrival: null),
             drawing.Width,
             drawing.Height,
             focus: null,
@@ -326,14 +327,25 @@ internal sealed class ExploreCanvas
     /// there, the display scale and the text size would be read from the wrong thread, and could be
     /// read after the page had handed over another picture.</para>
     /// </summary>
-    private Func<ExploreSurface> Layout(ExplorePainting painting, MapViewport viewport, int width, int height)
+    /// <param name="arrival">
+    /// What the map will ask of the drawing as it arrives, worked out there too, or null for a drawing
+    /// it is not handed (<see cref="DrawingArrival"/>).
+    /// </param>
+    private Func<ExploreSurface> Layout(ExplorePainting painting, MapViewport viewport, int width, int height, DrawingArrival? arrival)
     {
         var (tree, (_, node, view, volume), colours, look, _) = painting;
         var scale = Scale;
         var textScale = SystemLook.Current.State.TextScale;
 
-        return () => ExploreSurface.Create(
-            tree, node, view, width, height, scale, textScale, colours, look.Spacing, volume, viewport, look.Style);
+        return () =>
+        {
+            var drawing = ExploreSurface.Create(
+                tree, node, view, width, height, scale, textScale, colours, look.Spacing, volume, viewport, look.Style);
+
+            arrival?.Prepare(drawing);
+
+            return drawing;
+        };
     }
 
     /// <summary>

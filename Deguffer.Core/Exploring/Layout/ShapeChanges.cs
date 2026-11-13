@@ -28,10 +28,6 @@ public static class ShapeChanges
     /// </summary>
     public const int MostShapes = 200;
 
-    /// <summary>The largest shape first, and of two the same size the one drawn first, so a cut is the same every time.</summary>
-    private static readonly Comparer<(float Area, int Index)> LargestFirst =
-        Comparer<(float Area, int Index)>.Create((x, y) => y.Area != x.Area ? y.Area.CompareTo(x.Area) : x.Index.CompareTo(y.Index));
-
     /// <summary>
     /// How far a shape has to move, or change size, in pixels of the later drawing, before it is said
     /// to have: anything less is the same rectangle, drawn the same in both, which crossfades unseen.
@@ -52,6 +48,22 @@ public static class ShapeChanges
         return earlier is TiledSurface tiledEarlier && later is TiledSurface tiledLater ? Between(tiledEarlier, tiledLater) : [];
     }
 
+    /// <summary>
+    /// Work out now, on the caller's thread, the cut of each drawing that <see cref="Between"/> reads,
+    /// where it would read one: each drawing's is made once and kept (<see cref="TiledSurface.Cut"/>).
+    /// </summary>
+    internal static void Prepare(ExploreSurface earlier, ExploreSurface later)
+    {
+        if (earlier is TiledSurface tiledEarlier
+            && later is TiledSurface tiledLater
+            && earlier.Tree is ITrackedTree before
+            && before.CounterpartsIn(later.Tree) is not null)
+        {
+            _ = tiledEarlier.Cut;
+            _ = tiledLater.Cut;
+        }
+    }
+
     private static IReadOnlyList<ShapeChange> Between(TiledSurface earlier, TiledSurface later)
     {
         if (earlier.Tree is not ITrackedTree before
@@ -62,17 +74,17 @@ public static class ShapeChanges
             return [];
         }
 
-        var earlierTiles = Indexed(earlier.Tiles);
-        var laterTiles = Indexed(later.Tiles);
+        var earlierCut = earlier.Cut;
+        var laterCut = later.Cut;
         var stayed = new HashSet<int>();
         var changes = new List<ShapeChange>();
 
-        foreach (var index in Cut(later, laterTiles))
+        foreach (var index in laterCut.Moving)
         {
             var tile = later.Tiles[index];
             var to = tile.FrameIn(later.Width, later.Height);
 
-            if ((tile.IsNode ? back(tile.Node) : tile.Node) is { } was && earlierTiles.TryGetValue(was, out var from))
+            if ((tile.IsNode ? back(tile.Node) : tile.Node) is { } was && earlierCut.IndexOf(was) is { } from)
             {
                 stayed.Add(was);
 
@@ -91,12 +103,12 @@ public static class ShapeChanges
 
         // A shape of the earlier cut still drawn in the later layout moves with whatever it is in
         // there, or as the shapes it was cut into, and is already said. One no longer drawn went.
-        foreach (var index in Cut(earlier, earlierTiles))
+        foreach (var index in earlierCut.Moving)
         {
             var tile = earlier.Tiles[index];
 
             if (stayed.Contains(tile.Node)
-                || ((tile.IsNode ? onward(tile.Node) : tile.Node) is { } now && laterTiles.ContainsKey(now)))
+                || ((tile.IsNode ? onward(tile.Node) : tile.Node) is { } now && laterCut.IndexOf(now) is not null))
             {
                 continue;
             }
@@ -107,119 +119,6 @@ public static class ShapeChanges
         }
 
         return changes;
-    }
-
-    /// <summary>
-    /// Where each node's shape is in <paramref name="tiles"/>, and each shape that stands for no node
-    /// but is one of a kind, such as the volume's free space. Not the lumps of shapes too small to
-    /// draw, which stand for different things in different places and are never matched.
-    /// </summary>
-    private static Dictionary<int, int> Indexed(IReadOnlyList<ExploreTile> tiles)
-    {
-        var indexed = new Dictionary<int, int>(tiles.Count);
-
-        for (var index = 0; index < tiles.Count; index++)
-        {
-            if (tiles[index].Block != MapBlock.Aggregate)
-            {
-                indexed.TryAdd(tiles[index].Node, index);
-            }
-        }
-
-        return indexed;
-    }
-
-    /// <summary>
-    /// The shapes of <paramref name="drawing"/> that move on their own: those drawn at the top, each
-    /// replaced by what is drawn inside it, largest first, while there is room in
-    /// <see cref="MostShapes"/>. See <see cref="ShapeChanges"/>.
-    /// </summary>
-    private static List<int> Cut(TiledSurface drawing, Dictionary<int, int> indexed)
-    {
-        var tiles = drawing.Tiles;
-        var inside = new Dictionary<int, List<int>>();
-        var cut = new List<int>();
-
-        foreach (var index in indexed.Values)
-        {
-            if (Holder(drawing, indexed, index) is { } holder)
-            {
-                (inside.TryGetValue(holder, out var held) ? held : inside[holder] = []).Add(index);
-            }
-            else
-            {
-                cut.Add(index);
-            }
-        }
-
-        if (cut.Count > MostShapes)
-        {
-            return [.. cut.OrderByDescending(index => Area(tiles[index])).ThenBy(index => index).Take(MostShapes)];
-        }
-
-        var open = new PriorityQueue<int, (float Area, int Index)>(LargestFirst);
-
-        foreach (var index in cut)
-        {
-            Offer(open, inside, tiles, index);
-        }
-
-        var members = new HashSet<int>(cut);
-
-        while (open.TryDequeue(out var index, out _))
-        {
-            var held = inside[index];
-
-            if (members.Count - 1 + held.Count > MostShapes)
-            {
-                continue;
-            }
-
-            members.Remove(index);
-
-            foreach (var child in held)
-            {
-                members.Add(child);
-                Offer(open, inside, tiles, child);
-            }
-        }
-
-        return [.. members.Order()];
-    }
-
-    private static void Offer(PriorityQueue<int, (float Area, int Index)> open, Dictionary<int, List<int>> inside, IReadOnlyList<ExploreTile> tiles, int index)
-    {
-        if (inside.ContainsKey(index))
-        {
-            open.Enqueue(index, (Area(tiles[index]), index));
-        }
-    }
-
-    /// <summary>
-    /// The shape of the nearest folder drawn above the shape at <paramref name="index"/>, where the
-    /// shape lies inside it, and null where it is drawn at the top or beside its folder, as in an
-    /// icicle. A shape that stands for no node is drawn at the top.
-    /// </summary>
-    private static int? Holder(TiledSurface drawing, Dictionary<int, int> indexed, int index)
-    {
-        var tile = drawing.Tiles[index];
-
-        if (!tile.IsNode)
-        {
-            return null;
-        }
-
-        var tree = drawing.Tree;
-
-        for (int node = tile.Node, parent = tree.ParentOf(node); parent != node; node = parent, parent = tree.ParentOf(node))
-        {
-            if (indexed.TryGetValue(parent, out var holder))
-            {
-                return TiledSurface.Inside(tile, drawing.Tiles[holder]) ? holder : null;
-            }
-        }
-
-        return null;
     }
 
     private static MapFrame Point(MapFrame frame)
@@ -234,6 +133,4 @@ public static class ShapeChanges
         && Math.Abs(a.Y - b.Y) * drawing.Height < Still
         && Math.Abs(a.Width - b.Width) * drawing.Width < Still
         && Math.Abs(a.Height - b.Height) * drawing.Height < Still;
-
-    private static float Area(ExploreTile tile) => tile.Width * tile.Height;
 }

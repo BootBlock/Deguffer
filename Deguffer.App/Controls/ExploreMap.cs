@@ -1048,7 +1048,7 @@ public sealed class ExploreMap : UserControl
     {
         var motion = SystemMotion.Current.For(MotionToken.Shift);
 
-        Redraw(motion);
+        Redraw(motion, motion.Travels ? _drawing : null);
         _moves.Owe(MapMove.Shift, motion, _canvas.Pending is not null);
     }
 
@@ -1068,7 +1068,8 @@ public sealed class ExploreMap : UserControl
     private void Redraw() => Redraw(Motion.Instant);
 
     /// <param name="fade">How the new drawing comes in over the old. See <see cref="ExploreLayers.Replacement"/>.</param>
-    private void Redraw(Motion fade)
+    /// <param name="travelsFrom">The drawing on screen the new drawing's shapes travel from, or null where no move is owed.</param>
+    private void Redraw(Motion fade, ExploreSurface? travelsFrom = null)
     {
         // Whatever brought us here is more current than a size change still waiting to be drawn, or a
         // redraw stopped when the page was left; and a redraw for any other reason replaces a move
@@ -1141,7 +1142,7 @@ public sealed class ExploreMap : UserControl
         // for the rest of the move like any other drawing.
         _flight.Pictures.Forget();
 
-        Request(new ExplorePainting(tree, Drawn, colours, _look, Ground()), _zoom.Shown, fade);
+        Request(new ExplorePainting(tree, Drawn, colours, _look, Ground()), _zoom.Shown, fade, travelsFrom);
     }
 
     /// <summary>
@@ -1193,7 +1194,7 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        Request(Painting, _zoom.Shown, Motion.Instant);
+        Request(Painting, _zoom.Shown, Motion.Instant, travelsFrom: null);
     }
 
     /// <summary>
@@ -1201,7 +1202,8 @@ public sealed class ExploreMap : UserControl
     /// once, where there is one, and otherwise a redraw of it, which lands over the picture on screen.
     /// </summary>
     /// <param name="fade">How a new drawing comes in over the one on screen. See <see cref="ExploreLayers.Replacement"/>.</param>
-    private void Request(ExplorePainting painting, MapViewport viewport, Motion fade)
+    /// <param name="travelsFrom">The drawing on screen a new drawing's shapes travel from, or null where no move is owed.</param>
+    private void Request(ExplorePainting painting, MapViewport viewport, Motion fade, ExploreSurface? travelsFrom)
     {
         if (_canvas.Kept(viewport) is { } kept)
         {
@@ -1215,7 +1217,7 @@ public sealed class ExploreMap : UserControl
         // arrives, the old one answers, and it has to be shown where it is resolved.
         Place();
 
-        _canvas.Draw(painting, viewport, fade);
+        _canvas.Draw(painting, viewport, fade, new DrawingArrival(travelsFrom, _marking.Lit));
     }
 
     /// <summary>
