@@ -256,6 +256,22 @@ public sealed class ToolAnswerMemoryTests : IDisposable
     }
 
     [Fact]
+    public async Task DoesNotKeepAnAnswerWhenAFolderHoldingAnInputCannotBeDescribed()
+    {
+        var folder = _temp.CreateDirectory("refused");
+        var file = Path.Combine(folder, "tool.ini");
+        File.WriteAllText(file, "cache=one");
+        _clock.Advance(TimeSpan.FromMinutes(1));
+        using var denied = DeniedDirectory.WithUnreadableAttributes(folder);
+        Assert.Equal(PathPresence.Present, InputStamp.Of(file).Presence);
+        Assert.Equal(PathPresence.Refused, InputStamp.Of(folder).Presence);
+
+        await AskAsync(new ToolInputs { Files = [file] });
+
+        Assert.False(_memory.Holds(Key));
+    }
+
+    [Fact]
     public async Task KeepsAnAnswerOnTheRealClockWhenNothingHoldingItsInputsChangedWhileTheToolRan()
     {
         var memory = OnTheRealClock();
