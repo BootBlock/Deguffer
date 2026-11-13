@@ -30,19 +30,30 @@ namespace Deguffer.Core.Providers;
 /// </summary>
 public sealed class PnpmStoreProvider : CleanupProviderBase
 {
-    private readonly PassMemo<Task<string?>> _resolvedStore = new();
+    private readonly PassMemo<Task<PnpmStoreAnswer>> _resolvedStore = new();
+    private readonly ToolAnswerMemory _memory;
 
+    /// <param name="environment">The profile's folders, the tool's variables and the executable search.</param>
+    /// <param name="runner">Starts pnpm.</param>
+    /// <param name="inspector">Finds a running Node or pnpm before the prune.</param>
+    /// <param name="scanner">Measures the store, link-aware unless told otherwise.</param>
+    /// <param name="memory">
+    /// Where pnpm said its store is, kept across passes and providers while everything it read is
+    /// unchanged: the process-wide memory unless a test hands two providers one of its own.
+    /// </param>
     public PnpmStoreProvider(
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        ToolAnswerMemory? memory = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner ?? HardLinkAwareScanner.Default)
     {
+        _memory = memory ?? ToolAnswerMemory.For(runner);
     }
 
     public override string Id => "pnpm";
@@ -163,8 +174,9 @@ public sealed class PnpmStoreProvider : CleanupProviderBase
         Task.FromResult(Environment.FindExecutable("pnpm") is not null);
 
     /// <summary>
-    /// The store moves with the <c>store-dir</c> setting and with the drive the answer was asked
-    /// from, so a remembered location would measure a store pnpm has stopped using.
+    /// The pass's answer is forgotten, because the store moves with the <c>store-dir</c> setting. The
+    /// memory behind it keeps pnpm's answer only while everything pnpm read to give it is unchanged
+    /// (<see cref="PnpmStoreAnswer.InputsFor"/>), so the next pass asks again once any of it moves.
     /// </summary>
     public override void InvalidateCaches()
     {
@@ -261,35 +273,50 @@ public sealed class PnpmStoreProvider : CleanupProviderBase
         ct);
 
     /// <summary>
-    /// Ask pnpm where the active store is. The one line of stdout is a configured value in §5.2's
-    /// sense — <c>store-dir</c> moves it — so it goes through <see cref="LongPath.Configured"/>,
-    /// and an answer with no containing directory (a volume root, which no pnpm writes) is treated
-    /// as no answer at all rather than measured.
+    /// Where the active store is, asked at most once a pass, and of pnpm only when something it read
+    /// to answer last time has changed. Planning reads the remembered answer too: the plan runs
+    /// pnpm's own prune and deletes no path (§5.1), so a missed input could only misstate the figure.
     /// </summary>
     private async Task<string?> ResolveStoreAsync(string pnpm, CancellationToken ct)
     {
-        var store = await _resolvedStore.Get(() => AskStoreAsync(pnpm, ct)).ConfigureAwait(false);
+        var answer = await _resolvedStore.Get(() => _memory.AskAsync(
+                new ToolQuestion<PnpmStoreAnswer>(
+                    $"store path, config get globalconfig|{pnpm}",
+                    Environment.ToolEnvironment,
+                    asked => asked.InputsFor(Environment, pnpm),
+                    static asked => asked.IsAnswer,
+                    ct2 => AskStoreAsync(pnpm, ct2)),
+                ct))
+            .ConfigureAwait(false);
 
-
-        return store;
+        return answer.Store;
     }
 
-    private async Task<string?> AskStoreAsync(string pnpm, CancellationToken ct)
+    /// <summary>
+    /// Ask pnpm where the active store is and which npm global configuration it reads, both at once.
+    /// The store's one line of stdout is a configured value in §5.2's sense (<c>store-dir</c> moves
+    /// it), so it goes through <see cref="LongPath.Configured"/>, and an answer with no containing
+    /// directory (a volume root, which no pnpm writes) is treated as no answer at all rather than
+    /// measured.
+    /// </summary>
+    private async Task<PnpmStoreAnswer> AskStoreAsync(string pnpm, CancellationToken ct)
     {
-        var outcome = await Runner.RunAsync(pnpm, "store path", ToolRun.Query, ct).ConfigureAwait(false);
-        if (!outcome.Succeeded)
-        {
-            return null;
-        }
+        var storeQuery = Runner.RunAsync(pnpm, "store path", ToolRun.Query, ct);
+        var globalConfigQuery = Runner.RunAsync(pnpm, "config get globalconfig", ToolRun.Query, ct);
+        await Task.WhenAll(storeQuery, globalConfigQuery).ConfigureAwait(false);
 
-        var reported = outcome.StandardOutput
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .FirstOrDefault();
+        var store = FirstLineAsPath(await storeQuery.ConfigureAwait(false));
 
-        var store = LongPath.Configured(reported);
-
-        return store is not null && Path.GetDirectoryName(store) is not null
-            ? store
-            : null;
+        return new PnpmStoreAnswer(
+            store is not null && Path.GetDirectoryName(store) is not null ? store : null,
+            FirstLineAsPath(await globalConfigQuery.ConfigureAwait(false)));
     }
+
+    /// <summary>The full path a query printed on its first line, or null where it failed or printed none.</summary>
+    private static string? FirstLineAsPath(CommandOutcome outcome) =>
+        outcome.Succeeded
+            ? LongPath.Configured(outcome.StandardOutput
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .FirstOrDefault())
+            : null;
 }

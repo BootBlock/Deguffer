@@ -1346,6 +1346,21 @@ It asks pnpm where the store is, because a `store-dir` setting moves it, and pnp
 store per drive. It then runs `pnpm store prune`, which removes exactly the packages that **no
 project on your machine still references**. Deguffer deletes no path here at all.
 
+Deguffer remembers where pnpm said its store is until one of the things pnpm reads to answer
+changes, so a rescan does not start pnpm again for nothing. Those are: the `pnpm` program itself,
+the `node.exe` beside it and the one on `PATH`, and `node_modules\pnpm\package.json` beside it;
+Corepack's folder (`%COREPACK_HOME%`, or `%LOCALAPPDATA%\node\corepack`) and pnpm's home
+(`%PNPM_HOME%`, or `%LOCALAPPDATA%\pnpm`), where the pnpm versions they switch between are kept;
+`rc`, `config.yaml` and `auth.ini` in `%LOCALAPPDATA%\pnpm\config` and, when it is set, in
+`%XDG_CONFIG_HOME%\pnpm`; `C:\Users\<user>\.npmrc` and the file `%npm_config_userconfig%` names;
+the npm global configuration file pnpm reports (`pnpm config get globalconfig`, asked alongside the
+store); and `.npmrc`, `pnpm-workspace.yaml` and `package.json` in the folder Deguffer runs tools in
+and every folder above it. Any change to the environment Deguffer starts pnpm with counts too,
+because pnpm expands variables written in its settings. pnpm documents these sources in its
+[`.npmrc` page](https://pnpm.io/npmrc), its [settings page](https://pnpm.io/settings) and its
+[`pnpm store` page](https://pnpm.io/cli/store). The plan only runs pnpm's own command, so an answer
+remembered past a change nobody could see would misstate the figure, never move what is removed.
+
 That selectivity is why this is a better eviction than npm's. `npm cache clean` empties the lot;
 `pnpm store prune` keeps everything in use and takes only the rest.
 
