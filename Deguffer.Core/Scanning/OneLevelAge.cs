@@ -52,7 +52,7 @@ internal static class OneLevelAge
     public static DateTime? ToUtc(long fileTime) =>
         fileTime is > Unknown && fileTime <= LatestFileTime ? DateTime.FromFileTimeUtc(fileTime) : null;
 
-    private static long Raise(long newest, IReadOnlyList<WalkEntry> entries)
+    private static long Raise(long newest, ReadOnlySpan<WalkEntry> entries)
     {
         foreach (var entry in entries)
         {

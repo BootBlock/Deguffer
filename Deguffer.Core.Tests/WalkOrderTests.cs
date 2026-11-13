@@ -101,7 +101,7 @@ public sealed class WalkOrderTests : IDisposable
             {
                 onRead(name, Environment.CurrentManagedThreadId);
 
-                foreach (var entry in contents.Entries.Where(e => e.IsDirectory))
+                foreach (var entry in contents.Entries.ToArray().Where(e => e.IsDirectory))
                 {
                     descend(entry, entry.Name);
                 }

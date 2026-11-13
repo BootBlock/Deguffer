@@ -133,7 +133,7 @@ internal sealed class RecycleBinFolderWalk
                 + $"({FreeSpace.Format(_limit)}), and Windows deletes outright what is larger than its bin.");
     }
 
-    private static WalkEntry? TooLong(int prefix, IReadOnlyList<WalkEntry> entries)
+    private static WalkEntry? TooLong(int prefix, ReadOnlySpan<WalkEntry> entries)
     {
         foreach (var entry in entries)
         {

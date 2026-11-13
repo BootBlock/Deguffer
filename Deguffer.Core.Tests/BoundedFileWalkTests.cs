@@ -84,9 +84,9 @@ public sealed class BoundedFileWalkTests : IDisposable
 
         Walk(root, "cache", (state, contents, descend) =>
         {
-            seen.Add((state, string.Join(", ", contents.Entries.Select(e => e.Name).Order(StringComparer.Ordinal))));
+            seen.Add((state, string.Join(", ", contents.Entries.ToArray().Select(e => e.Name).Order(StringComparer.Ordinal))));
 
-            foreach (var entry in contents.Entries.Where(e => e.IsDirectory))
+            foreach (var entry in contents.Entries.ToArray().Where(e => e.IsDirectory))
             {
                 descend(entry, entry.Name);
             }
@@ -163,9 +163,9 @@ public sealed class BoundedFileWalkTests : IDisposable
 
         Walk(root, "cache", (state, contents, descend) =>
         {
-            outcomes.Add((state, contents.WasRefused, contents.Entries.Count));
+            outcomes.Add((state, contents.WasRefused, contents.Entries.Length));
 
-            foreach (var entry in contents.Entries.Where(e => e.IsDirectory))
+            foreach (var entry in contents.Entries.ToArray().Where(e => e.IsDirectory))
             {
                 descend(entry, entry.Name);
             }
@@ -288,7 +288,7 @@ public sealed class BoundedFileWalkTests : IDisposable
                 leafRead.Set();
             }
 
-            foreach (var entry in contents.Entries.Where(e => e.IsDirectory))
+            foreach (var entry in contents.Entries.ToArray().Where(e => e.IsDirectory))
             {
                 descend(entry, entry.Name);
             }
@@ -347,7 +347,7 @@ public sealed class BoundedFileWalkTests : IDisposable
                 // Every worker finds a report due, so every one of them reaches for the lock.
                 clock.Advance(BoundedFileWalk.ProgressInterval);
 
-                foreach (var entry in contents.Entries.Where(e => e.IsDirectory))
+                foreach (var entry in contents.Entries.ToArray().Where(e => e.IsDirectory))
                 {
                     descend(entry, 0);
                 }
@@ -405,7 +405,7 @@ public sealed class BoundedFileWalkTests : IDisposable
                     cancel.Cancel();
                 }
 
-                foreach (var entry in contents.Entries.Where(e => e.IsDirectory))
+                foreach (var entry in contents.Entries.ToArray().Where(e => e.IsDirectory))
                 {
                     descend(entry, entry.Name);
                 }
@@ -449,7 +449,7 @@ public sealed class BoundedFileWalkTests : IDisposable
                     Interlocked.Exchange(ref childRead, 1);
                 }
 
-                foreach (var entry in contents.Entries.Where(e => e.IsDirectory))
+                foreach (var entry in contents.Entries.ToArray().Where(e => e.IsDirectory))
                 {
                     descend(entry, entry.Name);
                 }
@@ -513,7 +513,7 @@ public sealed class BoundedFileWalkTests : IDisposable
                     Thread.Sleep(200);
                 }
 
-                foreach (var entry in contents.Entries.Where(e => e.IsDirectory))
+                foreach (var entry in contents.Entries.ToArray().Where(e => e.IsDirectory))
                 {
                     descend(entry, entry.Name);
                 }
@@ -553,13 +553,13 @@ public sealed class BoundedFileWalkTests : IDisposable
             (path, contents, descend) =>
             {
                 var described = new List<string> { contents.WasRefused ? "refused" : "listed" };
-                described.AddRange(contents.Entries.Select(e => Line("entry", e)).Order(StringComparer.Ordinal));
-                described.AddRange(contents.Links.Select(e => Line("link", e)).Order(StringComparer.Ordinal));
-                described.AddRange(contents.ReparseFiles.Select(e => Line("marked", e)).Order(StringComparer.Ordinal));
+                described.AddRange(contents.Entries.ToArray().Select(e => Line("entry", e)).Order(StringComparer.Ordinal));
+                described.AddRange(contents.Links.ToArray().Select(e => Line("link", e)).Order(StringComparer.Ordinal));
+                described.AddRange(contents.ReparseFiles.ToArray().Select(e => Line("marked", e)).Order(StringComparer.Ordinal));
 
                 Assert.True(found.TryAdd(path, string.Join('\n', described)), $"A directory was read twice.");
 
-                foreach (var entry in contents.Entries.Where(e => e.IsDirectory))
+                foreach (var entry in contents.Entries.ToArray().Where(e => e.IsDirectory))
                 {
                     descend(entry, entry.FullName);
                 }
@@ -586,7 +586,7 @@ public sealed class BoundedFileWalkTests : IDisposable
             FileNames.All,
             (_, contents, descend) =>
             {
-                foreach (var entry in contents.Entries.Where(e => e.IsDirectory))
+                foreach (var entry in contents.Entries.ToArray().Where(e => e.IsDirectory))
                 {
                     descend(entry, 0);
                 }

@@ -39,7 +39,7 @@ public sealed class LentNamesTests : IDisposable
         using var listing = Listing(FileNames.AllLent);
         var contents = listing.Read(folder, followsLink: true);
 
-        Assert.All(contents.Entries, entry =>
+        Assert.All(contents.Entries.ToArray(), entry =>
         {
             Assert.StartsWith(@"\\?\", entry.FullName, StringComparison.Ordinal);
             Assert.Equal(folder + @"\" + entry.NameSpan.ToString(), entry.FullName);
@@ -203,7 +203,7 @@ public sealed class LentNamesTests : IDisposable
         using var listing = Listing(names);
         var contents = listing.Read(folder, followsLink: true);
 
-        return [.. contents.Entries
+        return [.. contents.Entries.ToArray()
             .Select(entry => (entry.Name, entry.FullName, entry.IsDirectory, entry.Length))
             .OrderBy(entry => entry.Name, StringComparer.Ordinal)];
     }

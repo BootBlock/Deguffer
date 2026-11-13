@@ -390,9 +390,22 @@ public static class ChromiumUserDataWalk
     /// </summary>
     private static PathPresence Marked(string directory, DirectoryContents listed) => listed.WasRefused
         ? LongPath.ProbeFile(Path.Combine(directory, ChromiumLayout.Browser.IdentifyingFile))
-        : listed.Entries.Any(entry => !entry.IsDirectory && IsMarker(entry)) || listed.ReparseFiles.Any(IsMarker)
+        : HoldsMarker(listed.Entries) || HoldsMarker(listed.ReparseFiles)
             ? PathPresence.Present
             : PathPresence.Absent;
+
+    private static bool HoldsMarker(ReadOnlySpan<WalkEntry> entries)
+    {
+        foreach (var entry in entries)
+        {
+            if (!entry.IsDirectory && IsMarker(entry))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     // A file listed without a name is not the marker: the walk names the marker wherever it lists it.
     private static bool IsMarker(WalkEntry file) =>

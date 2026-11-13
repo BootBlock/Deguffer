@@ -79,7 +79,7 @@ internal static class TreeAge
         return Volatile.Read(ref refused) == 1 ? null : DateTime.FromFileTimeUtc(Math.Min(Interlocked.Read(ref newest), LatestFileTime));
     }
 
-    private static long Newest(IReadOnlyList<WalkEntry> entries, long newest)
+    private static long Newest(ReadOnlySpan<WalkEntry> entries, long newest)
     {
         foreach (var entry in entries)
         {

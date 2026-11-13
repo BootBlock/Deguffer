@@ -151,7 +151,7 @@ public sealed class ScansReadTheirTuningTests : IDisposable
                     listings.End();
                 }
 
-                foreach (var entry in contents.Entries.Where(entry => entry.IsDirectory))
+                foreach (var entry in contents.Entries.ToArray().Where(entry => entry.IsDirectory))
                 {
                     descend(entry, depth + 1);
                 }
