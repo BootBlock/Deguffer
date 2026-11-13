@@ -95,6 +95,7 @@ public sealed class KingstonSataTests
     [InlineData("XSKC310S37A999G")]
     [InlineData("KINGSTON SUV500B999G")]
     [InlineData("KINGSTON SEDC1000B999G")]
+    [InlineData("KINGSTON SEDC600ME999G")]
     public void LifeLeftIsLeftUninterpretedWhereNoDocumentDefinesIt(string model) =>
         Assert.Equal(AsReported, Reading(231, model, FortyTwoInByteZero));
 

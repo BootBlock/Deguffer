@@ -429,9 +429,9 @@ A reading whose meaning differs from one maker to another is shown as the drive 
 the maker documents it for that model family. Micron and Crucial client SATA drives covered by Micron's
 technical note TN-FD-22 get every attribute the note defines, including the lowest and highest
 temperature recorded and the drive's write amplification. Kingston SATA drives named in one of
-Kingston's SMART attribute documents get their remaining life, data written and read, and
-temperature range read as that document lays them out. The documents differ from each other, so
-each is read only on the models it names.
+Kingston's SMART attribute documents get the readings that document defines for them, such as
+remaining life, data written and read, and the temperature range. The documents differ from each
+other, so each is read only on the models it names.
 
 The page reads nothing until you open it, and it reads again only when you press Refresh, because a
 read can wake a sleeping disk. Everything it sends a drive is a read: it never starts a self-test or

@@ -12,7 +12,7 @@ namespace Deguffer.Core.Health;
 internal static partial class KingstonSata
 {
     private const string GigabyteUnit =
-        " Kingston's document counts in gigabytes without saying whether one is 1,000,000,000 or 1,073,741,824 bytes, so the figure is shown in its unit.";
+        " Kingston's document counts this figure in gigabytes without saying whether one is 1,000,000,000 or 1,073,741,824 bytes, so it is shown in that unit.";
 
     private const string TemperatureExplanation = "The temperature the drive measures inside itself, with the lowest and highest it has recorded.";
 

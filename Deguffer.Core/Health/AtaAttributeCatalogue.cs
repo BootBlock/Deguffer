@@ -52,7 +52,8 @@ internal enum SmartRawFormat
 
     /// <summary>
     /// A count of gigabytes, as wide as the definition's <see cref="RawWidth"/>. It is shown in that unit,
-    /// not converted, because no document that uses it says how many bytes its gigabyte is.
+    /// not converted, because the documents that use it do not say how many bytes a gigabyte of that
+    /// attribute is.
     /// </summary>
     Gigabytes,
 
