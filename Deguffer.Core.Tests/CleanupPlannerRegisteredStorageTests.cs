@@ -9,8 +9,8 @@ using Deguffer.Testing;
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// A planning pass reads the registered virtual machine storage beside its rows rather than before
-/// them (#1014), and still holds every plan to the one set it reads: a row's plan is reported only once
+/// A planning pass reads the registered virtual machine storage beside its rows, and holds every plan
+/// to the one set it reads: a row's plan is reported only once
 /// the set has been applied to it, and a set that cannot be read fails the pass with no plan reported.
 /// </summary>
 public sealed class CleanupPlannerRegisteredStorageTests
@@ -81,12 +81,11 @@ public sealed class CleanupPlannerRegisteredStorageTests
     }
 
     /// <summary>
-    /// The set is in the registrars' order whatever order they answer in, as it was when they were asked
-    /// in turn.
+    /// The set is in the registrars' order whatever order they answer in.
     ///
     /// <para>The second's reading is given time to finish before the first is answered, so a set gathered
-    /// in the order the readings finish comes out the wrong way round. That wait can only let such a set
-    /// pass, never fail a correct one.</para>
+    /// in the order the readings finish comes out the wrong way round. A wait too short for that can only
+    /// let such a set pass, never fail a correct one.</para>
     /// </summary>
     [Fact]
     public async Task TheSetIsInTheRegistrarsOrderWhateverOrderTheyAnswerIn()
