@@ -257,6 +257,15 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
         base.InvalidateCaches();
     }
 
+    /// <summary>
+    /// Poetry's answers for where its cache and its virtual environments are, asked as the pass begins:
+    /// Poetry is a Python program asked twice in turn, and those two starts are most of this row's wait.
+    /// </summary>
+    public override Task BeginPass(PassStart start) =>
+        start.Ask(ct => Environment.FindExecutable("poetry") is { } poetry
+            ? _discovery.DiscoverAsync(poetry, DefaultCacheRoot, ct)
+            : Task.CompletedTask);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         if (Environment.FindExecutable("poetry") is not { } poetry)
@@ -295,7 +304,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
                 + $"{LongPath.Display(cacheRoot)} alone.");
         }
 
-        var notes = new List<PlanNote> { new(PlanNoteSeverity.Information, Describe(located)) };
+        var notes = new List<PlanNote> { new(PlanNoteSeverity.Information, located.Describe()) };
 
         var (targets, walk, spared, withheld) = await CollectTargetsAsync(cacheRoot, environments, notes, ct).ConfigureAwait(false);
         var (deletions, deleted) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
@@ -360,32 +369,6 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
             // see CleanupPlan.WasNotExamined.
             WasNotExamined = offersNothing && declined,
         };
-    }
-
-    /// <summary>
-    /// What the plan says about Poetry's two folders, each as Poetry's report or as a default.
-    ///
-    /// <para>A guessed cache directory is worded for this provider rather than by
-    /// <see cref="AskedLocation.Describe"/>, because half of this plan is Deguffer's own deletion:
-    /// the archives it removes are in the folder named here, while Poetry's clear acts on wherever
-    /// Poetry really keeps its cache.</para>
-    /// </summary>
-    private static string Describe(PoetryLocations located)
-    {
-        var (cacheRoot, environments) = (LongPath.Display(located.CacheRoot.Path), LongPath.Display(located.Environments.Path));
-
-        var cache = located.CacheRoot.Answered
-            ? $"Poetry reports its cache directory as {cacheRoot}."
-            : $"Poetry did not say where its cache directory is, so {cacheRoot} is the documented default "
-              + "rather than this machine's setting. What Deguffer removes itself is in that folder, and "
-              + "Poetry's own cache clear acts on wherever Poetry really keeps its cache.";
-
-        var kept = located.Environments.Answered
-            ? $"Poetry reports its virtual environments as {environments}."
-            : $"Poetry did not say where it keeps its virtual environments, so Deguffer takes them to be in "
-              + $"{environments}, where Poetry creates them by default, and leaves that folder alone.";
-
-        return $"{cache} {kept}";
     }
 
     /// <summary>

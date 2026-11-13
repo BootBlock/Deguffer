@@ -88,6 +88,24 @@ public sealed class YarnClassicCacheProviderTests : IDisposable
         Assert.True((await provider.PlanAsync()).IsEmpty);
     }
 
+    /// <summary>#450: Yarn is asked which it is and where its cache is as the pass begins, and the plan awaits those answers.</summary>
+    [Fact]
+    public async Task AsksYarnWhichItIsAndWhereItsCacheIsAsThePassBegins()
+    {
+        PopulateCache();
+        var runner = YarnAnswering();
+
+        await EarlyStartProof.StartsBeforeItPlansAsync(CreateProvider(runner), runner, "-v", "cache dir");
+    }
+
+    [Fact]
+    public async Task StartsNothingAsThePassBeginsWhenYarnIsNotInstalled()
+    {
+        var runner = new FakeProcessRunner();
+
+        await EarlyStartProof.StartsNothingAsync(CreateProvider(runner), runner);
+    }
+
     [Fact]
     public async Task PlansYarnsCleanSentToTheRootItMeasured()
     {

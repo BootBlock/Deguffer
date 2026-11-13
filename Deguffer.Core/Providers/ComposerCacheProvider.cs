@@ -160,6 +160,17 @@ public sealed class ComposerCacheProvider : CleanupProviderBase
         base.InvalidateCaches();
     }
 
+    /// <summary>
+    /// Composer's settings, asked as the pass begins: each is a PHP start of its own, seven in turn, and
+    /// they are almost all of this row's wait. Nothing is asked where a <c>COMPOSER</c> project makes
+    /// the plan refuse before it asks.
+    /// </summary>
+    public override Task BeginPass(PassStart start) =>
+        start.Ask(ct => Environment.FindExecutable("composer") is { } composer
+            && string.IsNullOrWhiteSpace(Environment.GetToolEnvironmentVariable("COMPOSER"))
+                ? ResolveSettingsAsync(composer, ct)
+                : Task.CompletedTask);
+
     protected override async Task<CleanupPlan> BuildPlanAsync(MinimumAge keep, CancellationToken ct)
     {
         if (Environment.FindExecutable("composer") is not { } composer)
