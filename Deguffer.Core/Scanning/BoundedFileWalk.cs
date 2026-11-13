@@ -110,6 +110,38 @@ internal static class BoundedFileWalk
         Visit([(root, rootState)], tuning, files, DirectoryHold.None, list, onDirectory, onProgress, clock, ct);
 
     /// <summary>
+    /// The walk above, for a caller that builds each child's path itself and keeps it: it descends by
+    /// handing that path over with the entry, and the walk lists the child by the same string, so the
+    /// caller's copy and the listing's are one. A removal keeps a path for every folder of its tree
+    /// until it is over, and a second copy of each would be held as long.
+    ///
+    /// <para>The path must be the entry's <see cref="WalkEntry.FullName"/>, and the walk throws an
+    /// <see cref="ArgumentException"/> where it is not: listing anything else would describe a tree the
+    /// caller never classified.</para>
+    /// </summary>
+    public static void VisitByPath<TState>(
+        string root,
+        TState rootState,
+        WalkTuning tuning,
+        FileNames files,
+        ListDirectory list,
+        Action<TState, DirectoryContents, Action<WalkEntry, string, TState>> onDirectory,
+        Action<bool> onProgress,
+        TimeProvider clock,
+        CancellationToken ct) =>
+        Walk(
+            [(root, rootState)],
+            tuning,
+            files,
+            DirectoryHold.None,
+            ListingBudget.Shared,
+            list,
+            (state, contents, _, descendByPath) => onDirectory(state, contents, descendByPath),
+            onProgress,
+            clock,
+            ct);
+
+    /// <summary>
     /// The walk above over several roots at once, each with its own value, sharing one set of
     /// workers. For a caller with many small trees to read, each of which alone would leave most of
     /// the threads idle. See <see cref="RootSetWalk"/>.
@@ -140,6 +172,33 @@ internal static class BoundedFileWalk
         ListingBudget budget,
         ListDirectory list,
         Action<TState, DirectoryContents, Action<WalkEntry, TState>> onDirectory,
+        Action<bool> onProgress,
+        TimeProvider clock,
+        CancellationToken ct) =>
+        Walk(
+            roots,
+            tuning,
+            files,
+            hold,
+            budget,
+            list,
+            (state, contents, descend, _) => onDirectory(state, contents, descend),
+            onProgress,
+            clock,
+            ct);
+
+    /// <summary>
+    /// The one walk every form above takes, handing <paramref name="onDirectory"/> both ways to descend
+    /// so each form passes on the one its caller asked for.
+    /// </summary>
+    private static void Walk<TState>(
+        IReadOnlyList<(string Root, TState State)> roots,
+        WalkTuning tuning,
+        FileNames files,
+        DirectoryHold hold,
+        ListingBudget budget,
+        ListDirectory list,
+        Action<TState, DirectoryContents, Action<WalkEntry, TState>, Action<WalkEntry, string, TState>> onDirectory,
         Action<bool> onProgress,
         TimeProvider clock,
         CancellationToken ct)
@@ -188,7 +247,7 @@ internal static class BoundedFileWalk
     /// </summary>
     private static Action<string, (TState State, bool Descended)> DiskReader<TState>(
         WalkListing listing,
-        Action<TState, DirectoryContents, Action<WalkEntry, TState>> onDirectory,
+        Action<TState, DirectoryContents, Action<WalkEntry, TState>, Action<WalkEntry, string, TState>> onDirectory,
         Action<string, (TState State, bool Descended)> descend)
     {
         Action<WalkEntry, TState> descendUnlessLink = (directory, state) =>
@@ -204,11 +263,30 @@ internal static class BoundedFileWalk
             }
         };
 
+        Action<WalkEntry, string, TState> descendByPathUnlessLink = (directory, path, state) =>
+        {
+            if (directory.IsReparsePoint)
+            {
+                return;
+            }
+
+            if (!directory.IsFullName(path))
+            {
+                throw new ArgumentException($"{path} is not the path of the directory {directory.Name} in {directory.Directory}.", nameof(path));
+            }
+
+            descend(path, (state, Descended: true));
+        };
+
         return (path, at) =>
         {
             try
             {
-                onDirectory(at.State, listing.Read(path, followsLink: !at.Descended), descendUnlessLink);
+                onDirectory(
+                    at.State,
+                    listing.Read(path, followsLink: !at.Descended),
+                    descendUnlessLink,
+                    descendByPathUnlessLink);
             }
             finally
             {

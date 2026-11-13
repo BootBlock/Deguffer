@@ -63,7 +63,7 @@ public sealed class RemovalWalkTests : IDisposable
     /// <summary>
     /// A folder and every file gathered from it share one path, the listing's own. A removal holds a
     /// folder's files until the last of them goes, so a second copy of its path would be held that long.
-    /// The bounds are set so the walk builds each entry's path to compare, as it does where a bound is.
+    /// The bounds hold back an entry in one folder, so the walk asks its bounds as it does where one is.
     /// </summary>
     [Fact]
     public void AFolderAndTheFilesGatheredFromItShareOnePath()

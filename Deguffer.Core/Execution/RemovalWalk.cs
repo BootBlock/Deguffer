@@ -80,12 +80,11 @@ internal static class RemovalWalk
         CancellationToken ct)
         where TFolder : Folder
     {
-        // Most removals hold nothing back, and only a bound needs an entry's full path before the
-        // removal acts on it. Building one per file to look up in an empty set would be most of what
-        // gathering a large tree allocates.
+        // Most removals hold nothing back, and a removal that does is asked about each folder only, never
+        // each entry: see BoundPaths.
         var bounded = bounds.IsBounded;
 
-        BoundedFileWalk.Visit(
+        BoundedFileWalk.VisitByPath(
             root.FoundAs,
             (Folder)root,
             tuning,
@@ -93,7 +92,7 @@ internal static class RemovalWalk
             fs.ListEntries,
             (folder, contents, descend) =>
             {
-                folder.Gather(contents, descend, keep, bounds, bounded);
+                folder.Gather(contents, descend, keep, bounded ? bounds.Paths.In(contents.Directory) : null);
                 listed((TFolder)folder);
             },
             static _ => { },
@@ -106,8 +105,9 @@ internal static class RemovalWalk
     /// worker that listed the directory, so the workers share nothing and take no lock.
     ///
     /// <para>Its path is the listing's own, set when the directory is listed rather than when it is
-    /// found, so the folder and every file gathered from it share one string for the whole removal.
-    /// </para>
+    /// found, so the folder and every file gathered from it share one string for the whole removal. For
+    /// a folder below the root that is also the string it was found at, because the walk lists a child
+    /// by the path the folder was made with (<see cref="BoundedFileWalk.VisitByPath{TState}"/>).</para>
     /// </summary>
     /// <param name="foundAs">
     /// The path the folder was found at, in extended form. What it is called where a walk stopped before
@@ -133,12 +133,12 @@ internal static class RemovalWalk
         // when the first file arrives: a list grown by doubling allocates twice what it ends up holding.
         private int _listed;
 
+        /// <param name="held">The entries held back directly inside the folder, or null where none is.</param>
         public void Gather(
             DirectoryContents contents,
-            Action<WalkEntry, Folder> descend,
+            Action<WalkEntry, string, Folder> descend,
             MinimumAge keep,
-            RemovalBounds bounds,
-            bool bounded)
+            BoundPaths.Folder? held)
         {
             _path = contents.Directory;
 
@@ -160,50 +160,44 @@ internal static class RemovalWalk
 
             foreach (var entry in contents.Entries)
             {
-                Classify(entry, descend, keep, bounds, bounded);
+                Classify(entry, descend, keep, held);
             }
 
             foreach (var entry in contents.Links)
             {
-                Classify(entry, descend, keep, bounds, bounded);
+                Classify(entry, descend, keep, held);
             }
 
             foreach (var entry in contents.ReparseFiles)
             {
-                Classify(entry, descend, keep, bounds, bounded);
+                Classify(entry, descend, keep, held);
             }
         }
 
         private void Classify(
             WalkEntry entry,
-            Action<WalkEntry, Folder> descend,
+            Action<WalkEntry, string, Folder> descend,
             MinimumAge keep,
-            RemovalBounds bounds,
-            bool bounded)
+            BoundPaths.Folder? held)
         {
-            var path = bounded ? entry.FullName : null;
-
-            // First, because it is the reason that outlasts the others: an unsaved sketch an editor
-            // has open is spared while the editor runs and is still the user's work once it closes.
-            if (path is not null && bounds.UserWorkPaths.Contains(path))
+            // Asked before the link branch below, because a held-back entry is held back whatever it
+            // turns out to be. A scratch directory a running program was handed as a junction is still
+            // that program's, and removing the link is still taking it away. User work is the reason
+            // that outlasts the others (an unsaved sketch an editor has open is spared while the editor
+            // runs and is still the user's work once it closes), so BoundPaths answers it first.
+            switch (held?.Of(entry.NameSpan) ?? BoundReason.None)
             {
-                (_userWork ??= []).Add(path);
-                return;
-            }
+                case BoundReason.UserWork:
+                    (_userWork ??= []).Add(entry.FullName);
+                    return;
 
-            // Asked before the link branch below, because a spared entry is spared whatever it
-            // turns out to be. A scratch directory a running program was handed as a junction is
-            // still that program's, and removing the link is still taking it away.
-            if (path is not null && bounds.SparedPaths.Contains(path))
-            {
-                (_spared ??= []).Add(path);
-                return;
-            }
+                case BoundReason.Spared:
+                    (_spared ??= []).Add(entry.FullName);
+                    return;
 
-            // Another row's, so it is neither this removal's subject nor something it held back.
-            if (path is not null && bounds.OwnedElsewherePaths.Contains(path))
-            {
-                return;
+                // Another row's, so it is neither this removal's subject nor something it held back.
+                case BoundReason.OwnedElsewhere:
+                    return;
             }
 
             // §9, asked before the link branch and before the guard. Before the link branch, because the
@@ -215,7 +209,7 @@ internal static class RemovalWalk
             // file relies on — a folder still holding something cannot be removed.
             if (entry.IsMailStore)
             {
-                (_mailStores ??= []).Add(path ?? entry.FullName);
+                (_mailStores ??= []).Add(entry.FullName);
                 return;
             }
 
@@ -247,9 +241,11 @@ internal static class RemovalWalk
                     _recentFolders++;
                 }
 
-                var folder = NewChild(entry.FullName);
+                // One string for the folder and the walk's listing of it, which then becomes its Path.
+                var path = entry.FullName;
+                var folder = NewChild(path);
                 (_folders ??= []).Add(folder);
-                descend(entry, folder);
+                descend(entry, path, folder);
             }
             else if (keep.Protects(entry.NewestFileTime))
             {
