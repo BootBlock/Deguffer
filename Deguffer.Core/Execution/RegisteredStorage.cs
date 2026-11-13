@@ -20,7 +20,7 @@ namespace Deguffer.Core.Execution;
 public sealed record RegisteredEntry(VirtualMachineStorage Storage, string RegisteredBy, PathPresence Presence, ReachedFolder Reached);
 
 /// <summary>
-/// Every virtual machine's disk and folder the rows registered, read once before a planning pass so every
+/// Every virtual machine's disk and folder the rows registered, read once for a planning pass so every
 /// plan in it is held to the same set, and again before a clean so the clean proves them. See
 /// <see cref="IRegistersVirtualMachineStorage"/>.
 ///
@@ -32,7 +32,13 @@ public sealed record RegisteredStorage(IReadOnlyList<RegisteredEntry> Entries)
 
     /// <summary>
     /// Asks every row in <paramref name="providers"/> that registers storage, and probes and places each
-    /// path once.
+    /// path once. The entries are in the rows' order, whatever order they answer in.
+    ///
+    /// <para><b>Every row at once, each off the caller's thread.</b> A row's reading may start a tool (the
+    /// Hyper-V row starts Windows PowerShell), and each path is probed and followed to its mounts. Asked
+    /// in turn, every row waited for the slowest before it. Started on the caller's thread, the part of a
+    /// reading before its first wait would hold up a planning pass that starts this beside its rows. One
+    /// task per registering row, and there are only as many of those as the planner has.</para>
     /// </summary>
     public static async Task<RegisteredStorage> ReadAsync(
         IEnumerable<ICleanupProvider> providers, IVolumeInventory volumes, CancellationToken ct)
@@ -40,28 +46,39 @@ public sealed record RegisteredStorage(IReadOnlyList<RegisteredEntry> Entries)
         ArgumentNullException.ThrowIfNull(providers);
         ArgumentNullException.ThrowIfNull(volumes);
 
-        List<RegisteredEntry> entries = [];
+        List<Task<RegisteredEntry[]>> readings = [];
 
         foreach (var provider in providers)
         {
-            if (provider is not IRegistersVirtualMachineStorage registrar)
+            if (provider is IRegistersVirtualMachineStorage registrar)
             {
-                continue;
-            }
-
-            foreach (var storage in await registrar.RegisteredStorageAsync(ct).ConfigureAwait(false))
-            {
-                var path = LongPath.Display(storage.Path);
-
-                entries.Add(new RegisteredEntry(
-                    storage with { Path = path },
-                    provider.Id,
-                    LongPath.ProbeEntry(path),
-                    Reach(path, volumes)));
+                readings.Add(Task.Run(() => EntriesOfAsync(registrar, provider.Id, volumes, ct), ct));
             }
         }
 
+        List<RegisteredEntry> entries = [.. (await Task.WhenAll(readings).ConfigureAwait(false)).SelectMany(reading => reading)];
+
         return entries.Count == 0 ? None : new RegisteredStorage(entries);
+    }
+
+    private static async Task<RegisteredEntry[]> EntriesOfAsync(
+        IRegistersVirtualMachineStorage registrar, string registeredBy, IVolumeInventory volumes, CancellationToken ct)
+    {
+        var storage = await registrar.RegisteredStorageAsync(ct).ConfigureAwait(false);
+        var entries = new RegisteredEntry[storage.Count];
+
+        for (var index = 0; index < storage.Count; index++)
+        {
+            var path = LongPath.Display(storage[index].Path);
+
+            entries[index] = new RegisteredEntry(
+                storage[index] with { Path = path },
+                registeredBy,
+                LongPath.ProbeEntry(path),
+                Reach(path, volumes));
+        }
+
+        return entries;
     }
 
     /// <summary>
