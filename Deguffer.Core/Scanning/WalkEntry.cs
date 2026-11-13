@@ -103,6 +103,27 @@ public readonly record struct WalkEntry
     /// <summary>The entry's path, built on each call. Ask once and keep it. Throws as <see cref="Name"/> does.</summary>
     public string FullName => Path.Join(Directory, NameSpan);
 
+    /// <summary>
+    /// Whether <paramref name="path"/> is exactly what <see cref="FullName"/> builds, compared in place
+    /// with no string built. Throws as <see cref="Name"/> does.
+    /// </summary>
+    public bool IsFullName(ReadOnlySpan<char> path)
+    {
+        var directory = Directory.AsSpan();
+        var name = NameSpan;
+
+        // Path.Join's own rule: a separator goes between the two unless one already sits at the seam.
+        var joined = directory.Length > 0 && name.Length > 0
+            && !Path.EndsInDirectorySeparator(directory)
+            && name[0] != Path.DirectorySeparatorChar && name[0] != Path.AltDirectorySeparatorChar;
+        var separator = joined ? 1 : 0;
+
+        return path.Length == directory.Length + separator + name.Length
+            && path.StartsWith(directory, StringComparison.Ordinal)
+            && (!joined || path[directory.Length] == Path.DirectorySeparatorChar)
+            && path.EndsWith(name, StringComparison.Ordinal);
+    }
+
     /// <summary>The one number <see cref="MinimumAge"/> judges, from the timestamps the listing read.</summary>
     public long NewestFileTime => MinimumAge.NewestFileTimeOf(CreationFileTime, LastWriteFileTime);
 

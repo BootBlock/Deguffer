@@ -13,6 +13,12 @@ internal sealed class TargetsProvider(IUserEnvironment environment, IDirectorySc
     public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<CleanedPlace>>([]);
 
+    /// <summary>
+    /// A guard of the provider's own, carried on the plan as a provider with a floor carries one, while the
+    /// targets are still measured under the guard the plan is asked with.
+    /// </summary>
+    public MinimumAge Floor { get; init; }
+
     public override string Id => "targets";
 
     public override string Name => "Targets";
@@ -49,6 +55,7 @@ internal sealed class TargetsProvider(IUserEnvironment environment, IDirectorySc
             Steps = steps,
             Notes = measured.Note is { } note ? [note] : [],
             Fallback = measured.Fallback,
+            Keep = Floor,
         };
     }
 }
