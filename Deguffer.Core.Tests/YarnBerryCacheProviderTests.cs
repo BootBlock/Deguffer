@@ -55,6 +55,7 @@ public sealed class YarnBerryCacheProviderTests : IDisposable
             "config get enableCacheClean --json" => cleanEnabled is null
                 ? new CommandOutcome(1, "Usage Error: Couldn't find a configuration settings named \"enableCacheClean\"\n", string.Empty)
                 : new CommandOutcome(0, cleanEnabled + "\n", string.Empty),
+            "config get yarnPath --json" => new CommandOutcome(0, "null\n", string.Empty),
             _ => throw new Xunit.Sdk.XunitException($"Yarn was asked '{arguments}'."),
         });
     }
@@ -329,6 +330,8 @@ public sealed class YarnBerryCacheProviderTests : IDisposable
                     return new CommandOutcome(0, "1.22.22\n", string.Empty);
                 case "cache dir":
                     return new CommandOutcome(0, Path.Combine(classicRoot, "v6") + "\n", string.Empty);
+                case "config get yarn-path":
+                    return new CommandOutcome(0, "undefined\n", string.Empty);
             }
 
             Directory.Delete(classicRoot, recursive: true);

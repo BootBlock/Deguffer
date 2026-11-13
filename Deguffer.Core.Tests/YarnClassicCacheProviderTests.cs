@@ -51,6 +51,8 @@ public sealed class YarnClassicCacheProviderTests : IDisposable
                     return new CommandOutcome(0, version + "\n", string.Empty);
                 case "cache dir":
                     return new CommandOutcome(0, (reported ?? Path.Combine(root, "v6")) + "\n", string.Empty);
+                case "config get yarn-path":
+                    return new CommandOutcome(0, "undefined\n", string.Empty);
             }
 
             Assert.Equal($"cache clean --cache-folder \"{root}\" --non-interactive", arguments);

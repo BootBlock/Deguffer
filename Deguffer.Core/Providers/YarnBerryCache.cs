@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using Deguffer.Core.Safety;
 
@@ -10,17 +9,9 @@ namespace Deguffer.Core.Providers;
 /// Every behaviour here is read from yarnpkg/berry at @yarnpkg/cli/4.18.1
 /// (<c>75ebe063092f86e47e4afeaf1ae4bdf24402874b</c>), 3.8.7 and 2.4.3.
 /// </summary>
-/// <param name="Version">What <c>yarn -v</c> printed.</param>
-/// <param name="IsBerry">Whether that is Yarn 2 or later, the only Yarn whose settings name the global folder.</param>
-/// <param name="GlobalFolder">
-/// The global folder Berry reports, as a full path, or null where it was not asked, said nothing, or
-/// named something that is not a full path.
-/// </param>
-/// <param name="CleanDisabled">
-/// Whether Berry's settings turn its cache clean off (<c>enableCacheClean: false</c>, from Yarn 4.6),
-/// which says the cache is not to be cleared.
-/// </param>
-internal sealed partial record YarnBerryCache(string Version, bool IsBerry, string? GlobalFolder, bool CleanDisabled)
+/// <param name="Version">Which Yarn the <c>yarn</c> on the PATH runs (<see cref="YarnVersion"/>).</param>
+/// <param name="Settings">What Berry's settings say, or null where it is not Berry and was not asked.</param>
+internal sealed partial record YarnBerryCache(YarnVersion Version, YarnBerrySettings? Settings)
 {
     /// <summary>
     /// Berry's global folder where nothing moves it: <c>%LOCALAPPDATA%\Yarn\Berry</c> on Windows, in
@@ -41,39 +32,6 @@ internal sealed partial record YarnBerryCache(string Version, bool IsBerry, stri
     public static string CacheIn(string globalFolder) => Path.Combine(globalFolder, "cache");
 
     /// <summary>
-    /// Ask <paramref name="yarn"/> which Yarn it is and, for Berry, where its global folder is and
-    /// whether its cache clean is turned off. Null where it would not say which Yarn it is.
-    ///
-    /// <para><c>config get</c> works outside a project in every Berry release and prints no banner.
-    /// With <c>--json</c> it prints one JSON value, a path in Windows form, and no colour
-    /// (<a href="https://github.com/yarnpkg/berry/blob/75ebe063092f86e47e4afeaf1ae4bdf24402874b/packages/plugin-essentials/sources/commands/config/get.ts#L52-L98">get.ts</a>).
-    /// It reads <c>YARN_GLOBAL_FOLDER</c> and the <c>.yarnrc.yml</c> in the profile, which a project's
-    /// own settings can override for that project alone. A Yarn before 4.6 does not know
-    /// <c>enableCacheClean</c>, fails the question, and has no such setting to honour.</para>
-    /// </summary>
-    public static async Task<YarnBerryCache?> AskAsync(IProcessRunner runner, string yarn, CancellationToken ct)
-    {
-        if ((await runner.RunAsync(yarn, "-v", ToolRun.Query, ct).ConfigureAwait(false)).LastLine is not { } version)
-        {
-            return null;
-        }
-
-        if (!BerryVersion().IsMatch(version))
-        {
-            return new YarnBerryCache(version, IsBerry: false, GlobalFolder: null, CleanDisabled: false);
-        }
-
-        var global = Value(await runner.RunAsync(yarn, "config get globalFolder --json", ToolRun.Query, ct).ConfigureAwait(false));
-        var clean = Value(await runner.RunAsync(yarn, "config get enableCacheClean --json", ToolRun.Query, ct).ConfigureAwait(false));
-
-        return new YarnBerryCache(
-            version,
-            IsBerry: true,
-            global is { ValueKind: JsonValueKind.String } path ? LongPath.Configured(path.GetString()) : null,
-            CleanDisabled: clean is { ValueKind: JsonValueKind.False });
-    }
-
-    /// <summary>
     /// Whether <paramref name="name"/> is a file Berry writes into its cache. Nothing else is written
     /// there: no folder, and no <c>.gitignore</c>, which Berry writes only into a project's own cache.
     ///
@@ -92,30 +50,6 @@ internal sealed partial record YarnBerryCache(string Version, bool IsBerry, stri
     /// </list>
     /// </summary>
     public static bool IsCacheFile(string name) => CacheFile().IsMatch(name);
-
-    private static JsonElement? Value(CommandOutcome outcome)
-    {
-        if (outcome.LastLine is not { } line)
-        {
-            return null;
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(line);
-
-            return document.RootElement.Clone();
-        }
-        catch (JsonException)
-        {
-            // Not an answer: --json prints one JSON value, and anything else is not it.
-            return null;
-        }
-    }
-
-    /// <summary>A release of Yarn 2 or later, as <c>yarn -v</c> prints it, release candidates included.</summary>
-    [GeneratedRegex(@"^(?:[2-9]|[1-9]\d+)\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$", RegexOptions.CultureInvariant)]
-    private static partial Regex BerryVersion();
 
     [GeneratedRegex(@"\A[^\\/]+-[0-9a-f]{10}-(?:\d+(?:c\d)?|[0-9a-f]{10})\.zip(?:-[0-9a-f]{16}\.tmp|\.flock)?\z", RegexOptions.CultureInvariant)]
     private static partial Regex CacheFile();
