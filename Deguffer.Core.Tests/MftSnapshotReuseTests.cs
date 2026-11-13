@@ -169,9 +169,11 @@ public sealed class MftSnapshotReuseTests
                 Describe(columns, next, users, names.Intern(name), ExploreNodeFlags.None, size: 512 * (next % 4), next % 2 == 0 ? Older : Newer);
             }
 
+            // Names whose keys differ, out of the order they are met in, so a key found by the wrong
+            // number would put the folder's children out of order rather than tie and be compared whole.
             for (var i = 0; i < outside; i++, next++)
             {
-                Describe(columns, next, VolumeRoot, names.Intern($"elsewhere-with-a-long-name-{next}"), ExploreNodeFlags.None, size: 1);
+                Describe(columns, next, VolumeRoot, names.Intern($"{next * 7919 % 1000:D3}-elsewhere-on-the-volume"), ExploreNodeFlags.None, size: 1);
             }
 
             var fromReused = Snapshot(columns, names, reused, order, ["Users"]);
