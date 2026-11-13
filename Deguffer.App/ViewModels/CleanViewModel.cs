@@ -804,8 +804,8 @@ public sealed partial class CleanViewModel : ObservableObject
                 work.Fail();
             }
 
-            // Only the rows the run changed are planned again: the rest still describe the disk. Found on
-            // a worker from the rows as they stand, as it asks where each of their locations is (#499).
+            // Only the rows the run changed are planned again. Found on a worker, as it asks where each
+            // location is, and never cancelled: a cancel here would read as a clean that removed nothing.
             Finding[] shown = [.. Findings.Select(row => row.Finding)];
             var stale = await Task.Run(() => RunChanges.Stale(shown, authorised, _volumes));
 

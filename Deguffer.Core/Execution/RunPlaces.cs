@@ -4,7 +4,7 @@ using Deguffer.Core.Safety;
 namespace Deguffer.Core.Execution;
 
 /// <summary>
-/// The paths one §5.6 verification compares, each at every path it is reachable at, so a survivor is
+/// The paths a run's §5.6 verifications compare, each at every path it is reachable at, so a survivor is
 /// measured against the run's reach as folders rather than as text. See <see cref="ReachedFolder"/>.
 ///
 /// <para><b>A step and a protected path may name one folder two ways.</b> A step removing

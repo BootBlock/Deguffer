@@ -441,8 +441,8 @@ public class CleanViewModelCleanTests
 
     /// <summary>
     /// Which rows the run changed is worked out off the window's thread: it asks the machine where every
-    /// location of every row on the page is, which on a large page froze the window (#499). The row it
-    /// finds is still planned again, and the one beside it is not.
+    /// location of every row on the page is, which on a large page takes long enough to freeze the
+    /// window. The row it finds is still planned again, and the one beside it is not.
     ///
     /// <para>The row that did not run is the witness: nothing but that work asks where its location is.
     /// The page's free-space reading asks about the profile on the window's thread, which is one

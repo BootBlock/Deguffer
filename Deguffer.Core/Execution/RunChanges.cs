@@ -22,11 +22,10 @@ namespace Deguffer.Core.Execution;
 /// reached it, which may be through a letter <c>subst</c> made, or another mount of its volume, and a
 /// row naming the same folder another way was left stating a figure the run had changed.</para>
 ///
-/// <para><b>Looked up, not compared in pairs.</b> A page whose rows name thousands of locations,
-/// compared with every location the run changed, made millions of comparisons on the way to the
-/// re-plan (#499). The changed locations are filed under the folders that hold them and the folders
-/// they hold (<see cref="ChangedLocations"/>), so each of a row's locations costs a walk up its own
-/// path. It takes a moment on a large page, and asks the machine where each location is, so the
+/// <para><b>Looked up, not compared in pairs.</b> A page's rows can name thousands of locations, and
+/// comparing each with every location the run changed costs their product. The changed locations are
+/// filed under the folders that hold them and the folders they hold (<see cref="ChangedLocations"/>),
+/// so each of a row's locations costs a walk up its own path. It takes a moment on a large page, and asks the machine where each location is, so the
 /// shell calls it off the window's thread.</para>
 /// </summary>
 public static class RunChanges

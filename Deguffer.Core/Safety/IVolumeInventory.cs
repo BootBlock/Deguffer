@@ -265,7 +265,7 @@ public interface IVolumeInventory
     ///
     /// <para><b>Remembered per volume by the owners that already remember each path's answer</b>,
     /// through <see cref="RememberedMountPoints"/>, for no longer than they do: a provider's pass, one
-    /// reading of the process table, one §5.6 verification, one reading of the installed programs,
+    /// reading of the process table, one clean's §5.6 verifications, one reading of the installed programs,
     /// one comparison of a clean's locations, the building of one Explore policy, and one judgement
     /// of a duplicate search's copies (<see cref="FileMountPoints"/>). Nearly every
     /// path is on one of a few drives. <see cref="VolumeNameOf"/> stays live there, so a letter or folder given to another

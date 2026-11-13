@@ -92,10 +92,10 @@ public sealed class RunReach(
 
     /// <summary>
     /// This reach's paths as folders, each followed the first time any verification in the run asks
-    /// about it, and then for every plan after it (#499).
+    /// about it, and then for every plan after it.
     ///
     /// <para><b>One set for the run, not one for each plan.</b> Every plan's §5.6 verification is
-    /// measured against this same reach, so a set made for each verification followed the run's
+    /// measured against this same reach, so a set for each verification would follow the run's
     /// targets again for every plan, asking the machine where each volume is mounted each time. What a
     /// folder is reachable at changes only where a volume is mounted or a letter is substituted, and a
     /// run is one operation: the window <see cref="RememberedMountPoints"/> accepts for any owner that
