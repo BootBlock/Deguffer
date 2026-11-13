@@ -108,12 +108,12 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
     /// pass's longest chain, so queued behind every package manager's query it would lengthen the pass
     /// by however long they took.</para>
     /// </summary>
-    public override Task BeginPass(PassStart start) =>
+    public override Task BeginPass(PassStart start) => start.AskAtOnce(ct =>
         !Environment.IsAdministrator
         || !LongPath.DirectoryMayExist(_store)
         || UnfinishedUpdate.HoldsEverything(ServicingThisPass, _servicingCalls) is not null
             ? Task.CompletedTask
-            : _analysis.ReadingAsync(start.Token);
+            : _analysis.ReadingAsync(ct));
 
     /// <summary>The store's folder. DISM is part of every Windows that has one.</summary>
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
