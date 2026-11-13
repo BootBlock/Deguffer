@@ -84,19 +84,27 @@ internal sealed record ToolInputs
     /// <summary>
     /// The entries of <paramref name="folder"/>, in name order so two readings of an unchanged folder
     /// compare equal, and those of each folder in it to <paramref name="depth"/> levels.
+    ///
+    /// <para><b>Each entry is read for itself, and the listing gives only its name.</b> The size and
+    /// times a listing reports are NTFS's copy in the parent folder's index, which it brings up to
+    /// date some time after the entry changes: a folder that just gained an entry, or a file still
+    /// open for writing, lists with its old values. Stamped from the listing, a change could go
+    /// unseen until the index caught up and an unchanged folder could read differently a moment
+    /// later. One attribute read per entry, a few hundred a pass, is what an exact answer costs.</para>
     /// </summary>
     private static void List(string folder, int depth, List<InputStamp> stamps)
     {
-        var entries = FolderEntries.Of(folder, static (ref System.IO.Enumeration.FileSystemEntry entry) => InputStamp.Of(ref entry));
+        var names = FolderEntries.Of(folder, static (ref System.IO.Enumeration.FileSystemEntry entry) => entry.ToFullPath());
 
-        if (entries is null)
+        if (names is null)
         {
             stamps.Add(InputStamp.Unreadable(folder));
             return;
         }
 
-        foreach (var entry in entries.OrderBy(static entry => entry.Path, StringComparer.Ordinal))
+        foreach (var name in names.Order(StringComparer.Ordinal))
         {
+            var entry = InputStamp.Of(name);
             stamps.Add(entry);
 
             if (entry.IsDirectory && depth > 1)

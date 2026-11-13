@@ -137,6 +137,24 @@ public sealed class ToolAnswerMemoryTests : IDisposable
     }
 
     [Fact]
+    public async Task AsksAgainWhenAFolderInAListedFolderGainsAnEntry()
+    {
+        var inner = Directory.CreateDirectory(Path.Combine(_folder, "inner")).FullName;
+        TempDirectory.Age(inner, TimeSpan.FromHours(1));
+        TempDirectory.Age(_folder, TimeSpan.FromHours(1));
+
+        await AskAsync();
+
+        // NTFS brings the folder's entry in its parent's index up to date some time after the folder
+        // changes, so only a read of the folder itself sees the new time at once.
+        File.WriteAllText(Path.Combine(inner, "added.yml"), "added");
+
+        await AskAsync();
+
+        Assert.Equal(2, _asked);
+    }
+
+    [Fact]
     public async Task AsksAgainWhenAnEntryTwoLevelsDownIsRewrittenInAFolderListedThatDeep()
     {
         var inner = Directory.CreateDirectory(Path.Combine(_folder, "inner")).FullName;

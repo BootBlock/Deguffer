@@ -1,4 +1,3 @@
-using System.IO.Enumeration;
 using Deguffer.Core.Safety;
 
 namespace Deguffer.Core.Providers;
@@ -50,15 +49,6 @@ internal readonly record struct InputStamp(
 
         return new(path, PathPresence.Present, isDirectory, isDirectory ? 0 : length, created, written);
     }
-
-    /// <summary>An entry as a listing of its folder described it, without a second read.</summary>
-    public static InputStamp Of(ref FileSystemEntry entry) => new(
-        entry.ToFullPath(),
-        PathPresence.Present,
-        entry.IsDirectory,
-        entry.IsDirectory ? 0 : entry.Length,
-        entry.CreationTimeUtc.ToFileTime(),
-        entry.LastWriteTimeUtc.ToFileTime());
 
     /// <summary>A path whose content nobody could read.</summary>
     public static InputStamp Unreadable(string path) => new(path, PathPresence.Refused, false, 0, 0, 0);
