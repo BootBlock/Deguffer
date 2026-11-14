@@ -11,9 +11,12 @@
         <!-- One row, two lines high: the name with its badges, then the entry's own name, who made it
              and where it comes from, with what its program holds now beside both. §7.5 puts the
              reason on every row: the badge opens it, and the row's help text carries it for a screen
-             reader. The memory figure is a fact about the program, never a reason to change it. -->
+             reader. The memory figure is a fact about the program, never a reason to change it. The
+             row is tinted by whether the entry starts, edge to edge, so the container gives up its
+             padding to the row. -->
         <DataTemplate x:Key="EntryTemplate" x:DataType="vm:StartupRow">
-            <Grid Padding="0,8" ColumnSpacing="12"
+            <Grid Padding="16,8,12,8" ColumnSpacing="12"
+                  Style="{x:Bind StateKind, Mode=OneWay, Converter={StaticResource StartupRowStyle}}"
                   BorderThickness="0,0,0,1" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                   AutomationProperties.Name="{x:Bind Title, Mode=OneWay}"
                   AutomationProperties.HelpText="{x:Bind Description, Mode=OneWay}">
@@ -83,6 +86,7 @@
         <Style x:Key="EntryContainer" TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="0" />
         </Style>
     </Page.Resources>
 
