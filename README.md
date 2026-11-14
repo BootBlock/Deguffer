@@ -48,16 +48,16 @@ Besides Settings and About, Deguffer has seven pages:
 - [Duplicates](#duplicates) finds files that are stored more than once, matching them by name, size,
   date or content. Before it removes a copy you marked, it compares that copy byte for byte with the
   one you are keeping.
+- [Health](#health) shows what each drive reports about its own condition, in plain words with the
+  numbers behind them. It only reads, and it changes nothing on a drive.
 - [Installed apps](#installed-apps) finds entries in Windows' list of installed programs whose
   programs are provably gone. It backs each entry up before removing it unless you turn that off,
   and it can run a program's own uninstaller when you ask it to.
-- [Memory](#memory) shows where physical memory is going, by application, by service and to Windows
-  itself, and can ask a program you choose to close.
 - [Startup](#startup) lists what Windows starts when you sign in, along with how much memory each
   running program is using. It can stop an entry from starting in the same way Task Manager does,
   without deleting it.
-- [Health](#health) shows what each drive reports about its own condition, in plain words with the
-  numbers behind them. It only reads, and it changes nothing on a drive.
+- [Memory](#memory) shows where physical memory is going, by application, by service and to Windows
+  itself, and can ask a program you choose to close.
 
 Deguffer starts without administrator rights. Storage, Explore and Duplicates can restart it as
 administrator so that it can read a drive's file table directly, which makes scanning much faster,
@@ -368,56 +368,6 @@ that exist only in the cloud are never read, so a search will not make Windows d
 After a removal, Deguffer checks that every kept and reference copy, and everything next to a removed
 copy, is still there. You can save the results as a CSV file.
 
-## Installed apps
-
-Over time, Windows' list of installed programs collects entries for programs that are no longer
-there. Deguffer removes an entry only when the machine proves the program has gone, for example
-because Windows Installer reports that the product is not installed, or because its uninstaller is
-missing. By default it backs the entry up with `reg.exe` first. It removes only the registry key,
-never any files, and you can restore a backup from the same page. For programs that are still
-installed, it runs each one's own uninstaller, one at a time.
-
-## Memory
-
-Low free memory on Windows is usually a sign that Windows is working well. It fills memory that
-nothing else needs with cache, and gives it back as soon as something asks for it. The problems you
-do notice come from committed memory reaching its limit, when programs can no longer allocate any
-more, and from constant hard faults, which show up as disk activity rather than in any memory figure.
-The Memory page leads with committed memory, because that single figure shows how close
-the machine is to the limit.
-
-The page draws memory with the same treemap, icicle and sunburst views as Explore, in three parts:
-applications grouped by process tree, services grouped by the process that hosts them, and Windows
-itself, including the memory that no figure accounts for. Every size is a lower bound, and where a
-figure is missing the page says which one, rather than drawing it as zero.
-
-Its only action is to ask a program you pick to close, in the same way as the program's own close
-button, so any question about unsaved work comes from the program itself. Deguffer asks you to
-confirm each close, and names the program and how many of its windows will be asked. It never ends a
-process, closes a service host, touches a program in another session or under another account, or
-asks for more rights to reach one.
-
-## Startup
-
-A program you close from the Memory page will come back after the next restart if Windows starts it
-when you sign in. The Startup page lists those entries from the same places Task Manager reads: the
-`Run` registry keys for you and for every user, both Startup folders, and packaged apps' startup
-tasks. Each entry shows its program, its publisher and, if the program is running, how much memory
-it is using now. If a program you pick on the Memory page has one of these entries, the Memory page
-points this out and links to the entry.
-
-Disabling an entry records that it should not start, in the same place and in the same form that
-Task Manager uses, so Task Manager and Settings show the change too. The entry, its shortcut and its
-program are left in place, and Enable reverses the change. The list opens with the entries that
-start first, and you can sort it either way round by name, by whether each entry starts, where it
-comes from, or its publisher. Right-click an entry, or press Shift+F10, to disable or enable it, open
-its program's file location or properties, show a Startup folder entry in its folder, or copy what it
-runs.
-Deguffer only changes a record in a form it has seen Windows write. A packaged app's startup task
-can only be changed by the app itself or in Settings, so for those the page offers Settings' own
-Startup page instead. The page never suggests disabling anything because of how much memory a
-program uses.
-
 ## Health
 
 The Health page lists every drive with what it reports about its own condition. Each reading is
@@ -447,6 +397,56 @@ Once Health has read your drives, a drive it marks Watch or Failing is also name
 space is shown: on the Storage page, and in the drive lists of Explore and Duplicates. A drive that
 is filling needs a clean, but a drive that is failing needs a backup first. Those pages never ask a
 drive anything themselves, so they show nothing until you have opened Health.
+
+## Installed apps
+
+Over time, Windows' list of installed programs collects entries for programs that are no longer
+there. Deguffer removes an entry only when the machine proves the program has gone, for example
+because Windows Installer reports that the product is not installed, or because its uninstaller is
+missing. By default it backs the entry up with `reg.exe` first. It removes only the registry key,
+never any files, and you can restore a backup from the same page. For programs that are still
+installed, it runs each one's own uninstaller, one at a time.
+
+## Startup
+
+A program you close from the Memory page will come back after the next restart if Windows starts it
+when you sign in. The Startup page lists those entries from the same places Task Manager reads: the
+`Run` registry keys for you and for every user, both Startup folders, and packaged apps' startup
+tasks. Each entry shows its program, its publisher and, if the program is running, how much memory
+it is using now. If a program you pick on the Memory page has one of these entries, the Memory page
+points this out and links to the entry.
+
+Disabling an entry records that it should not start, in the same place and in the same form that
+Task Manager uses, so Task Manager and Settings show the change too. The entry, its shortcut and its
+program are left in place, and Enable reverses the change. The list opens with the entries that
+start first, and you can sort it either way round by name, by whether each entry starts, where it
+comes from, or its publisher. Right-click an entry, or press Shift+F10, to disable or enable it, open
+its program's file location or properties, show a Startup folder entry in its folder, or copy what it
+runs.
+Deguffer only changes a record in a form it has seen Windows write. A packaged app's startup task
+can only be changed by the app itself or in Settings, so for those the page offers Settings' own
+Startup page instead. The page never suggests disabling anything because of how much memory a
+program uses.
+
+## Memory
+
+Low free memory on Windows is usually a sign that Windows is working well. It fills memory that
+nothing else needs with cache, and gives it back as soon as something asks for it. The problems you
+do notice come from committed memory reaching its limit, when programs can no longer allocate any
+more, and from constant hard faults, which show up as disk activity rather than in any memory figure.
+The Memory page leads with committed memory, because that single figure shows how close
+the machine is to the limit.
+
+The page draws memory with the same treemap, icicle and sunburst views as Explore, in three parts:
+applications grouped by process tree, services grouped by the process that hosts them, and Windows
+itself, including the memory that no figure accounts for. Every size is a lower bound, and where a
+figure is missing the page says which one, rather than drawing it as zero.
+
+Its only action is to ask a program you pick to close, in the same way as the program's own close
+button, so any question about unsaved work comes from the program itself. Deguffer asks you to
+confirm each close, and names the program and how many of its windows will be asked. It never ends a
+process, closes a service host, touches a program in another session or under another account, or
+asks for more rights to reach one.
 
 ## Building
 
