@@ -11,8 +11,9 @@ using Deguffer.Core.Viewing;
 namespace Deguffer.App.ViewModels;
 
 /// <summary>
-/// Drives the Memory page: reads where memory is every couple of seconds, builds the tree from each
-/// read, and keeps the reader on whatever they were looking at.
+/// Drives the Memory page: reads where memory is every couple of seconds, or each time the reader
+/// presses Refresh with live update off, builds the tree from each read, and keeps the reader on
+/// whatever they were looking at.
 ///
 /// <para>It shows and explains. What the page <em>does</em> is <see cref="MemorySelection"/>'s, and
 /// there is exactly one of it: asking one program the user picked to close itself (§7.2.1). Nothing
@@ -41,7 +42,11 @@ public sealed partial class MemoryViewModel : ObservableObject, IMapNavigator, I
 
         _feed = feed;
         Selection = selection;
+        Updates = new MemoryUpdates(feed);
     }
+
+    /// <summary>When the page reads the machine: the Live update box and the Refresh button.</summary>
+    public MemoryUpdates Updates { get; }
 
     /// <summary>The program the user picked out by hand, and the one thing §7.2.1 lets them do with it.</summary>
     public MemorySelection Selection { get; }
@@ -137,13 +142,13 @@ public sealed partial class MemoryViewModel : ObservableObject, IMapNavigator, I
 
         try
         {
-            await foreach (var snapshot in _feed.ReadAsync(ct).ConfigureAwait(true))
+            await foreach (var reading in _feed.ReadAsync(ct).ConfigureAwait(true))
             {
                 // A read already past its own last check still finishes, so without this a reading
                 // taken for a page the reader has left could be drawn over a newer one.
                 ct.ThrowIfCancellationRequested();
 
-                Show(MemoryTreeBuilder.Build(snapshot));
+                Show(MemoryTreeBuilder.Build(reading.Snapshot), reading.Read);
             }
         }
         catch (OperationCanceledException)
@@ -259,8 +264,14 @@ public sealed partial class MemoryViewModel : ObservableObject, IMapNavigator, I
     /// <summary>
     /// Take a new reading: keep the reader where they were, and rebuild everything on screen from it.
     /// </summary>
-    private void Show(MemoryTree tree) =>
+    private void Show(MemoryTree tree, DateTimeOffset read)
+    {
+        // Before the reading is shown, so whatever the page does once it has been is done with the
+        // time it was read already said.
+        Updates.Shown(read);
+
         Show(tree, MemoryPlace.Carry(Tree, CurrentNode, tree), MemoryViewChange.Reading);
+    }
 
     /// <param name="change">
     /// Whether the reader moved or a reading arrived, which decides what happens to the selection.

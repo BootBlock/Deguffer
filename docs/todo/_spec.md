@@ -772,7 +772,9 @@ view first, and §7.2.1's one action after it.
   the rest in the remainder.
 - **A snapshot is stale as soon as it is read.** The view refreshes on a bounded cadence, never
   starts a read while one is still running, and keeps what the user is looking at across a refresh by
-  process identifier and creation time, never by name.
+  process identifier and creation time, never by name. The user can turn the cadence off with a
+  *Live update* box, which is stored. Off, the view reads only when the user presses *Refresh*, and
+  says when the figures on screen were read.
 - **Hover text says what one of Windows' own parts is, and why the size it is drawn at is normal.**
   A reader meets one of these when it is the largest shape on screen, which is where a "RAM cleaner"
   would offer to act, so a bare label is the one thing it cannot be. It never says that anything is

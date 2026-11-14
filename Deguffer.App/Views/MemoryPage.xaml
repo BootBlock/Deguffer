@@ -54,11 +54,12 @@
             </ComboBox>
         </Grid>
 
-        <!-- Where you are, and the way back out. -->
-        <Grid Grid.Row="1" ColumnSpacing="8" ColumnDefinitions="Auto,*"
-              Visibility="{x:Bind ViewModel.HasTree, Mode=OneWay}">
+        <!-- Where you are and the way back out, then when the figures are read. The reading controls
+             stand before the first reading too, so a reader can turn live update off before it lands. -->
+        <Grid Grid.Row="1" ColumnSpacing="8" ColumnDefinitions="Auto,*,Auto,Auto,Auto">
             <Button Grid.Column="0"
                     Padding="8,4"
+                    Visibility="{x:Bind ViewModel.HasTree, Mode=OneWay}"
                     Click="OnAscend"
                     IsEnabled="{x:Bind ViewModel.CanAscend, Mode=OneWay}"
                     ToolTipService.ToolTip="Go up one level"
@@ -66,7 +67,10 @@
                 <FontIcon Glyph="&#xE74A;" FontSize="12" />
             </Button>
 
-            <ItemsControl Grid.Column="1" ItemsSource="{x:Bind ViewModel.Trail}" VerticalAlignment="Center">
+            <ItemsControl Grid.Column="1"
+                          ItemsSource="{x:Bind ViewModel.Trail}"
+                          VerticalAlignment="Center"
+                          Visibility="{x:Bind ViewModel.HasTree, Mode=OneWay}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <StackPanel Orientation="Horizontal" />
@@ -95,6 +99,31 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+
+            <!-- When the figures were read, said only while live update is off: on the cadence they
+                 are never more than a couple of seconds old. One line that never wraps, so it cannot
+                 change the height of the picture below it. -->
+            <TextBlock Grid.Column="2"
+                       Text="{x:Bind ViewModel.Updates.ReadAt, Mode=OneWay}"
+                       Visibility="{x:Bind ViewModel.Updates.HasReadAt, Mode=OneWay}"
+                       VerticalAlignment="Center"
+                       TextWrapping="NoWrap"
+                       Style="{StaticResource SecondaryText}" />
+
+            <CheckBox x:Name="LiveToggle"
+                      Grid.Column="3"
+                      MinWidth="0"
+                      VerticalAlignment="Center"
+                      Content="Live update"
+                      ToolTipService.ToolTip="Read where memory is every two seconds. Turned off, the figures change only when you press Refresh."
+                      AutomationProperties.HelpText="Read where memory is every two seconds. Turned off, the figures change only when you press Refresh." />
+
+            <Button x:Name="RefreshButton"
+                    Grid.Column="4"
+                    VerticalAlignment="Center"
+                    Content="Refresh"
+                    Command="{x:Bind ViewModel.Updates.RefreshCommand}"
+                    ToolTipService.ToolTip="Read where memory is now" />
         </Grid>
 
         <!-- What this read could not measure, and that every figure is a lower bound (§7.2). Above

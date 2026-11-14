@@ -15,7 +15,7 @@ public sealed class DesignTrimmedTextTests
     private static readonly Dictionary<string, int> Baseline = new(StringComparer.Ordinal)
     {
         ["Deguffer.App/Controls/DriveTemplates.xaml"] = 1,
-        ["Deguffer.App/Views/CleanPage.xaml"] = 2,
+        ["Deguffer.App/Views/CleanPage.xaml"] = 1,
         ["Deguffer.App/Views/DuplicatesPage.xaml"] = 2,
         ["Deguffer.App/Views/ExplorePage.xaml"] = 10,
         ["Deguffer.App/Views/HealthPage.xaml"] = 1,
