@@ -737,7 +737,7 @@
                      the unelevated one it replaces, and hidden once a preview has shown that
                      elevating would not help — so it never offers administrator rights for a
                      problem they cannot fix. The wording follows the same state. -->
-                <Button Content="{x:Bind ViewModel.ElevateLabel, Mode=OneWay}"
+                <Button Content="{x:Bind ViewModel.ElevateLabel, Mode=OneWay}" Style="{StaticResource ElevateButtonStyle}"
                         Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
                         Command="{x:Bind ViewModel.ElevateAndRescanCommand}"
                         AutomationProperties.AutomationId="ElevateButton"

@@ -102,7 +102,7 @@
                     Command="{x:Bind ViewModel.OpenSettingsCommand}"
                     ToolTipService.ToolTip="Windows' own Startup page, where a packaged app's startup task can be changed too." />
 
-            <Button Grid.Column="3" Content="Reopen as administrator" VerticalAlignment="Center"
+            <Button Grid.Column="3" Content="Reopen as administrator" VerticalAlignment="Center" Style="{StaticResource ElevateButtonStyle}"
                     Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
                     Command="{x:Bind ViewModel.ElevateCommand}"
                     ToolTipService.ToolTip="Entries that start for every user can be changed only with administrator rights." />

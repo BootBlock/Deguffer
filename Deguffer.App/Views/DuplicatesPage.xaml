@@ -252,7 +252,7 @@
         <Grid Grid.Row="0" ColumnSpacing="12" ColumnDefinitions="*,Auto">
             <TextBlock Text="Duplicates" Style="{StaticResource PageTitle}" VerticalAlignment="Center" />
 
-            <Button Grid.Column="1" Content="Reopen as administrator" VerticalAlignment="Center"
+            <Button Grid.Column="1" Content="Reopen as administrator" VerticalAlignment="Center" Style="{StaticResource ElevateButtonStyle}"
                     Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
                     Command="{x:Bind ViewModel.ElevateCommand}"
                     ToolTipService.ToolTip="As administrator, a search reads each drive's file table, which is much faster than walking its folders." />
