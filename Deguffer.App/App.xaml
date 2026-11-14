@@ -15,6 +15,45 @@
                 <controls:DriveTemplates />
             </ResourceDictionary.MergedDictionaries>
 
+            <!--
+                The brushes of a button that restarts Deguffer as administrator: a warm, quiet tint, so
+                the offer is noticed beside the plain buttons around it without reading as the page's
+                primary action (the accent) or as a failure (critical red). The label says what the
+                button does, so the tint only draws the eye to it (§6.5).
+
+                Default (dark) and Light repeat their keys because ThemeDictionaries cannot share an
+                entry between two themes. High Contrast takes the ordinary button's brushes, so the
+                user's chosen contrast colours and borders are kept.
+            -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Default">
+                    <SolidColorBrush x:Key="ElevateButtonBackground" Color="#3A2A1B" />
+                    <SolidColorBrush x:Key="ElevateButtonBackgroundPointerOver" Color="#46321E" />
+                    <SolidColorBrush x:Key="ElevateButtonBackgroundPressed" Color="#322519" />
+                    <SolidColorBrush x:Key="ElevateButtonBorderBrush" Color="#9A5A22" />
+                    <SolidColorBrush x:Key="ElevateButtonBorderBrushPointerOver" Color="#B86C2A" />
+                    <SolidColorBrush x:Key="ElevateButtonBorderBrushPressed" Color="#86501F" />
+                </ResourceDictionary>
+
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="ElevateButtonBackground" Color="#FDF1E4" />
+                    <SolidColorBrush x:Key="ElevateButtonBackgroundPointerOver" Color="#FBE7D1" />
+                    <SolidColorBrush x:Key="ElevateButtonBackgroundPressed" Color="#F7DCBE" />
+                    <SolidColorBrush x:Key="ElevateButtonBorderBrush" Color="#E6A066" />
+                    <SolidColorBrush x:Key="ElevateButtonBorderBrushPointerOver" Color="#DA8A44" />
+                    <SolidColorBrush x:Key="ElevateButtonBorderBrushPressed" Color="#C97A36" />
+                </ResourceDictionary>
+
+                <ResourceDictionary x:Key="HighContrast">
+                    <StaticResource x:Key="ElevateButtonBackground" ResourceKey="ButtonBackground" />
+                    <StaticResource x:Key="ElevateButtonBackgroundPointerOver" ResourceKey="ButtonBackgroundPointerOver" />
+                    <StaticResource x:Key="ElevateButtonBackgroundPressed" ResourceKey="ButtonBackgroundPressed" />
+                    <StaticResource x:Key="ElevateButtonBorderBrush" ResourceKey="ButtonBorderBrush" />
+                    <StaticResource x:Key="ElevateButtonBorderBrushPointerOver" ResourceKey="ButtonBorderBrushPointerOver" />
+                    <StaticResource x:Key="ElevateButtonBorderBrushPressed" ResourceKey="ButtonBorderBrushPressed" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+
             <converters:TierChipStyleConverter x:Key="TierChipStyle" />
             <converters:RunStatementStyleConverter x:Key="RunStatementStyle" />
             <converters:StandingChipStyleConverter x:Key="StandingChipStyle" />
@@ -181,6 +220,75 @@
                 <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
                 <Setter Property="FontSize" Value="26" />
                 <Setter Property="FontWeight" Value="SemiBold" />
+            </Style>
+
+            <!--
+                Every button that offers to restart Deguffer as administrator, on every page, so the
+                offer looks the same wherever it is made. DesignElevateButtonTests holds every such
+                button to it.
+
+                A whole template, because a Style cannot set the lightweight-styling keys the default
+                Button template reads in its PointerOver and Pressed states: with only Background and
+                BorderBrush set, the tint vanished under the pointer. This is DefaultButtonStyle's
+                template with the elevation brushes in those states. Disabled keeps the SDK's own.
+            -->
+            <Style x:Key="ElevateButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+                <Setter Property="Background" Value="{ThemeResource ElevateButtonBackground}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource ElevateButtonBorderBrush}" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <ContentPresenter x:Name="ContentPresenter"
+                                              Background="{TemplateBinding Background}"
+                                              Foreground="{TemplateBinding Foreground}"
+                                              BackgroundSizing="{TemplateBinding BackgroundSizing}"
+                                              BorderBrush="{TemplateBinding BorderBrush}"
+                                              BorderThickness="{TemplateBinding BorderThickness}"
+                                              Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                                              ContentTransitions="{TemplateBinding ContentTransitions}"
+                                              CornerRadius="{TemplateBinding CornerRadius}"
+                                              Padding="{TemplateBinding Padding}"
+                                              HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              AutomationProperties.AccessibilityView="Raw">
+                                <ContentPresenter.BackgroundTransition>
+                                    <BrushTransition Duration="0:0:0.083" />
+                                </ContentPresenter.BackgroundTransition>
+
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal" />
+
+                                        <VisualState x:Name="PointerOver">
+                                            <VisualState.Setters>
+                                                <Setter Target="ContentPresenter.Background" Value="{ThemeResource ElevateButtonBackgroundPointerOver}" />
+                                                <Setter Target="ContentPresenter.BorderBrush" Value="{ThemeResource ElevateButtonBorderBrushPointerOver}" />
+                                                <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource ButtonForegroundPointerOver}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+
+                                        <VisualState x:Name="Pressed">
+                                            <VisualState.Setters>
+                                                <Setter Target="ContentPresenter.Background" Value="{ThemeResource ElevateButtonBackgroundPressed}" />
+                                                <Setter Target="ContentPresenter.BorderBrush" Value="{ThemeResource ElevateButtonBorderBrushPressed}" />
+                                                <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource ButtonForegroundPressed}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+
+                                        <VisualState x:Name="Disabled">
+                                            <VisualState.Setters>
+                                                <Setter Target="ContentPresenter.Background" Value="{ThemeResource ButtonBackgroundDisabled}" />
+                                                <Setter Target="ContentPresenter.BorderBrush" Value="{ThemeResource ButtonBorderBrushDisabled}" />
+                                                <Setter Target="ContentPresenter.Foreground" Value="{ThemeResource ButtonForegroundDisabled}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                            </ContentPresenter>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
             </Style>
 
             <!-- The hairline between findings, and between a page's regions. -->

@@ -97,7 +97,7 @@
             <ProgressRing Grid.Column="1" IsActive="{x:Bind ViewModel.IsReading, Mode=OneWay}"
                           Width="20" Height="20" VerticalAlignment="Center" />
 
-            <Button Grid.Column="2" Content="Reopen as administrator" VerticalAlignment="Center"
+            <Button Grid.Column="2" Content="Reopen as administrator" VerticalAlignment="Center" Style="{StaticResource ElevateButtonStyle}"
                     Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
                     Command="{x:Bind ViewModel.ElevateCommand}"
                     ToolTipService.ToolTip="Entries for all users can be removed or restored only with administrator rights." />
