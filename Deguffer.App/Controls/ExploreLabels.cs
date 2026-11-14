@@ -223,7 +223,7 @@ internal sealed class ExploreLabels : Canvas
             var name = _names.Assigned[i];
 
             var writing = new NameWriting(
-                caption(label).Text(drawing.Lettering, label.Lines, drawing.Sizes),
+                caption(label).Text(drawing.Lettering, label.Lines, drawing.Detail),
                 drawing.Lettering,
                 (float)(label.Width / scale),
                 label.Centred,

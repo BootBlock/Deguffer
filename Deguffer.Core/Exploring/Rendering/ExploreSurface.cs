@@ -51,8 +51,10 @@ public abstract class ExploreSurface
     /// <summary>The shapes at the top of the picture, once asked.</summary>
     private IReadOnlyList<MapShape>? _top;
 
-    /// <param name="style">How every shape is finished, and what text is written on them.</param>
-    /// <param name="detail">How many names are written and what each says, or null for <see cref="MapDetail.Default"/>.</param>
+    /// <param name="look">
+    /// How every shape is finished and what text is written on them, and how many names are written
+    /// and what each says. Its spacing and the rest of its detail are in <paramref name="limits"/>.
+    /// </param>
     protected ExploreSurface(
         ISizedTree tree,
         int root,
@@ -60,13 +62,12 @@ public abstract class ExploreSurface
         int height,
         LayoutLimits limits,
         ShapeColours colours,
-        MapStyle style,
-        DrawnZoom? zoom,
-        MapDetail? detail)
+        MapLook look,
+        DrawnZoom? zoom)
     {
         ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(colours);
-        ArgumentNullException.ThrowIfNull(style);
+        ArgumentNullException.ThrowIfNull(look);
 
         colours.EnsureDescribes(tree);
 
@@ -76,10 +77,10 @@ public abstract class ExploreSurface
         Height = height;
         Zoom = zoom;
         Limits = limits;
-        Style = style;
-        Detail = detail ?? MapDetail.Default;
+        Style = look.Style;
+        Detail = look.Detail;
         _colours = colours;
-        _tuning = ColourTuning.Of(style);
+        _tuning = ColourTuning.Of(look.Style);
         _hues = new BranchHues(tree, root);
 
         // One device pixel at 100%, and as many as the display's scale makes of one, so a line or a
@@ -88,7 +89,7 @@ public abstract class ExploreSurface
         // text size.
         var pixel = Math.Max(1, (int)MathF.Round(limits.RowHeight / LayoutLimits.Default.RowHeight));
 
-        Finish = colours.Contrast is { } contrast ? ShapeFinish.Contrasted(contrast, pixel) : ShapeFinish.Of(style, pixel);
+        Finish = colours.Contrast is { } contrast ? ShapeFinish.Contrasted(contrast, pixel) : ShapeFinish.Of(look.Style, pixel);
     }
 
     public int Width { get; }
@@ -101,7 +102,7 @@ public abstract class ExploreSurface
     ///
     /// <para>Said by the drawing rather than assumed by the caller, because the caller asks for a view
     /// and does not always get it: a scan still running is drawn as an icicle whichever view was
-    /// picked (see <see cref="Create(ISizedTree, int, ExploreView, int, int, double, double, ShapeColours, ExploreSpacing, VolumeSpace, MapViewport, MapStyle, MapDetail)"/>).
+    /// picked (see <see cref="Create(ISizedTree, int, ExploreView, int, int, double, double, ShapeColours, MapLook, VolumeSpace, MapViewport)"/>).
     /// A caller that took its own zoom as what was drawn would place the picture, and resolve a click
     /// on it, for a zoom the picture does not have (§7.1).</para>
     /// </summary>
@@ -138,14 +139,11 @@ public abstract class ExploreSurface
     /// <summary>How every shape is finished, and what text is written on them.</summary>
     protected MapStyle Style { get; }
 
-    /// <summary>How many names are written and what each says.</summary>
-    protected MapDetail Detail { get; }
+    /// <summary>How much of the tree this drawing draws, and how many names it writes and what each says.</summary>
+    public MapDetail Detail { get; }
 
     /// <summary>How the text on this drawing is set, and what it says (<see cref="MapStyle.Lettering"/>).</summary>
     public MapLettering Lettering => Style.Lettering;
-
-    /// <summary>Whether each name is followed by its size (<see cref="MapDetail.Sizes"/>).</summary>
-    public bool Sizes => Detail.Sizes;
 
     /// <summary>
     /// The size the application's lettering is set at on this drawing, 1 at the standard size: the
@@ -155,8 +153,9 @@ public abstract class ExploreSurface
     public double TextScale => Limits.TextScale;
 
     /// <summary>
-    /// How many shapes to name at most: as many as the reader asked for (<see cref="MapDetail.MostNames"/>),
-    /// or under <see cref="MapLettering.Classic"/>, <see cref="MaximumClassicLabels"/>.
+    /// How many shapes a drawing of rectangles names at most: as many as the reader asked for
+    /// (<see cref="MapDetail.MostNames"/>), or under <see cref="MapLettering.Classic"/>,
+    /// <see cref="MaximumClassicLabels"/>, which names every box with room as SpaceMonger does.
     ///
     /// <para>The size threshold already keeps this small on an ordinary tree, but a directory of
     /// several hundred near-equal children defeats it: every shape is then big enough to label and
@@ -164,6 +163,13 @@ public abstract class ExploreSurface
     /// list view is the honest way to read that many names, so the reader chooses how many.</para>
     /// </summary>
     protected int MostLabels => Style.Lettering == MapLettering.Classic ? MaximumClassicLabels : Detail.MostNames;
+
+    /// <summary>
+    /// How many sectors a sunburst names at most: as many as the reader asked for, or under
+    /// <see cref="MapLettering.Classic"/>, whose number the reader cannot choose, the standard number.
+    /// SpaceMonger drew no sunburst, so there is no box of it to name every one of.
+    /// </summary>
+    protected int MostSectorLabels => Style.Lettering == MapLettering.Classic ? MapDetail.Default.MostNames : Detail.MostNames;
 
     /// <summary>How far apart the lines of a label of several lines are, in canvas pixels.</summary>
     public float LineSpacing => Limits.LineSpacing;
@@ -229,11 +235,16 @@ public abstract class ExploreSurface
     /// </summary>
     /// <param name="textScale">
     /// The reader's Windows text size, 1 at 100%. The labels grow with it, and with the size
-    /// <paramref name="detail"/> asks for on top of it, so the thresholds for where a label fits grow
-    /// with both — see <see cref="LayoutLimits.ForText"/>.
+    /// <paramref name="look"/>'s detail asks for on top of it, so the thresholds for where a label
+    /// fits grow with both — see <see cref="LayoutLimits.ForText"/>.
     /// </param>
     /// <param name="colours">What the colours are to say.</param>
-    /// <param name="spacing">How much room a treemap leaves round what each folder holds.</param>
+    /// <param name="look">
+    /// How much room a treemap leaves round what each folder holds, how every shape is finished and
+    /// what is written on it, the smallest shape drawn, how many levels are opened, and how many names
+    /// are written at what size. Its folder bands are part of the treemap's layout as well. Its schemes
+    /// are not read: <paramref name="colours"/> carries what the colours say.
+    /// </param>
     /// <param name="volume">
     /// The volume to draw beside <paramref name="root"/>, or <see cref="VolumeSpace.None"/>. The caller
     /// decides whether the reader is on the volume or inside its root (see
@@ -245,14 +256,6 @@ public abstract class ExploreSurface
     /// The part of the picture to show. Only the treemap can be zoomed, and every other drawing shows
     /// the whole picture whatever this asks; <see cref="Zoom"/> says which happened.
     /// </param>
-    /// <param name="style">
-    /// How every shape is finished and what is written on them, or null for
-    /// <see cref="MapStyle.Default"/>. Its folder bands are part of the treemap's layout as well.
-    /// </param>
-    /// <param name="detail">
-    /// The smallest shape drawn, how many levels are opened, and how many names are written at what
-    /// size, or null for <see cref="MapDetail.Default"/>.
-    /// </param>
     public static ExploreSurface Create(
         ISizedTree tree,
         int root,
@@ -262,43 +265,39 @@ public abstract class ExploreSurface
         double scale,
         double textScale,
         ShapeColours colours,
-        ExploreSpacing spacing,
+        MapLook look,
         VolumeSpace volume,
-        MapViewport viewport = default,
-        MapStyle? style = null,
-        MapDetail? detail = null)
+        MapViewport viewport = default)
     {
         ArgumentNullException.ThrowIfNull(tree);
+        ArgumentNullException.ThrowIfNull(look);
 
-        var styled = style ?? MapStyle.Default;
-        var detailed = detail ?? MapDetail.Default;
+        var style = look.Style;
         var limits = LayoutLimits.Default
-            .Lettered(styled.Lettering)
-            .Spaced(spacing)
-            .Banded(styled.FolderNames)
-            .Detailed(detailed)
-            .ForText(detailed.TextScaleFor(styled.Lettering, textScale))
+            .Lettered(style.Lettering)
+            .Spaced(look.Spacing)
+            .Banded(style.FolderNames)
+            .Detailed(look.Detail)
+            .ForText(look.Detail.TextScaleFor(style.Lettering, textScale))
             .At(scale);
         var beside = root == tree.RootNode ? volume : VolumeSpace.None;
 
         return Drawn(tree, view) switch
         {
             ExploreView.Sunburst => new SunburstSurface(
-                tree, root, width, height, limits, colours, styled, detailed),
+                tree, root, width, height, limits, colours, look),
             ExploreView.Icicle => new TiledSurface(
-                tree, root, width, height, limits, colours, styled,
-                IcicleLayout.Compute(tree, root, width, height, limits),
-                detail: detailed),
+                tree, root, width, height, limits, colours, look,
+                IcicleLayout.Compute(tree, root, width, height, limits)),
 
             // Including List, Tree and Files, none of which draws a map at all. A page hides the map
             // rather than telling it to stop, so this is the drawing it will be showing again when
             // the user switches back, and it is the one they last saw.
             _ => new TiledSurface(
-                tree, root, width, height, limits, colours, styled,
+                tree, root, width, height, limits, colours, look,
                 TreemapLayout.Compute(tree, root, width, height, limits, beside, viewport),
                 viewport,
-                beside,
-                detailed),
+                beside),
         };
     }
 

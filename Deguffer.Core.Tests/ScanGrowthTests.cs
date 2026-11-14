@@ -132,14 +132,14 @@ public class ScanGrowthTests
         var grew = GrowthPalette.BandOf(growth.BytesAt(file)).Colour;
         var colours = ShapeColours.For(after, ExploreColouring.Growth, ExploreScheme.Standard, Now, growth, types: null);
         var surface = ExploreSurface.Create(
-            after, after.RootNode, ExploreView.Icicle, 200, 200, 1, 1, colours, ExploreSpacing.Comfortable, VolumeSpace.None);
+            after, after.RootNode, ExploreView.Icicle, 200, 200, 1, 1, colours, MapLook.Default, VolumeSpace.None);
         Assert.Equal(grew, colours.For(surface, file, depth: 2));
 
         // A comparison of one tree describes nothing in another, even one with the same shape.
         var another = Tree(@"C:\", ("Logs", 2000 * Megabyte));
         var stale = ShapeColours.For(another, ExploreColouring.Growth, ExploreScheme.Standard, Now, growth, types: null);
         var unrelated = ExploreSurface.Create(
-            another, another.RootNode, ExploreView.Icicle, 200, 200, 1, 1, stale, ExploreSpacing.Comfortable, VolumeSpace.None);
+            another, another.RootNode, ExploreView.Icicle, 200, 200, 1, 1, stale, MapLook.Default, VolumeSpace.None);
         Assert.Equal(GrowthPalette.BandOf((long?)null).Colour, stale.For(unrelated, file, depth: 2));
     }
 
@@ -189,7 +189,7 @@ public class ScanGrowthTests
         var file = left.ChildrenOf(Child(after, "Logs"))[0];
         var colours = ShapeColours.For(left, ExploreColouring.Growth, ExploreScheme.Standard, Now, growth, types: null);
         var surface = ExploreSurface.Create(
-            left, left.RootNode, ExploreView.Icicle, 200, 200, 1, 1, colours, ExploreSpacing.Comfortable, VolumeSpace.None);
+            left, left.RootNode, ExploreView.Icicle, 200, 200, 1, 1, colours, MapLook.Default, VolumeSpace.None);
 
         Assert.Equal(GrowthPalette.BandOf(growth.BytesAt(file)).Colour, colours.For(surface, file, depth: 2));
         Assert.NotEqual(GrowthPalette.BandOf((long?)null).Colour, colours.For(surface, file, depth: 2));

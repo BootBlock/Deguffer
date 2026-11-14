@@ -26,7 +26,7 @@ public sealed class ExploreKeyboardTests
         Height,
         LayoutLimits.Default,
         ShapeColours.ByBranch(ExploreScheme.Standard),
-        MapStyle.Default,
+        MapLook.Default,
         [
             new ExploreTile(Tree.RootNode, Depth: 0, Bytes: 4000, X: 0, Y: 0, Width: Width, Height: Height),
             new ExploreTile(1, Depth: 1, Bytes: 1000, X: 0, Y: 0, Width: 100, Height: Height),

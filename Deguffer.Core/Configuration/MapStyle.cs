@@ -206,7 +206,10 @@ public enum MapBevelWidth
 /// </summary>
 public enum MapSaturation
 {
-    /// <summary>No colour at all: each shape in the grey as light as its colour, so only the shading and the lines tell the shapes apart.</summary>
+    /// <summary>
+    /// No colour at all: each shape in the grey of its colour's luma (<see cref="Exploring.Rendering.ColourTuning"/>),
+    /// so only the shading, the lines and how light each shape is tell the shapes apart.
+    /// </summary>
     Grey = 0,
 
     /// <summary>A little under half the palette's colour.</summary>

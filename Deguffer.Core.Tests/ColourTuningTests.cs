@@ -23,7 +23,7 @@ public sealed class ColourTuningTests
         Assert.Equal(Orange, ColourTuning.None.Apply(Orange));
     }
 
-    /// <summary>No colour at all is a grey, the same in every channel, as light as the colour was.</summary>
+    /// <summary>No colour at all is a grey, the same in every channel, at the colour's luma.</summary>
     [Fact]
     public void GreyLeavesNoColour()
     {
@@ -31,8 +31,19 @@ public sealed class ColourTuningTests
 
         Assert.Equal(grey.Red, grey.Green);
         Assert.Equal(grey.Green, grey.Blue);
-        Assert.InRange(grey.RelativeLuminance, Orange.RelativeLuminance - 0.05, Orange.RelativeLuminance + 0.05);
+        Assert.Equal(ColourTuning.Luma(Orange), grey.Red);
     }
+
+    /// <summary>Every saturation keeps a colour's luma, short of a channel cut at the screen's limit.</summary>
+    [Theory]
+    [InlineData(MapSaturation.Muted)]
+    [InlineData(MapSaturation.Soft)]
+    [InlineData(MapSaturation.Vivid)]
+    public void ASaturationKeepsTheLuma(MapSaturation saturation) =>
+        Assert.InRange(
+            ColourTuning.Luma(ColourTuning.Of(MapStyle.Default with { Saturation = saturation }).Apply(Orange)),
+            ColourTuning.Luma(Orange) - 1,
+            ColourTuning.Luma(Orange) + 1);
 
     /// <summary>Each step of saturation keeps more of the colour than the one before it, and vivid more than the palette's own.</summary>
     [Fact]
@@ -121,7 +132,7 @@ public sealed class ColourTuningTests
 
     private static TiledSurface Draw(MapStyle style) => (TiledSurface)ExploreSurface.Create(
         Tree(), ExploreTreeBuilder.RootNode, ExploreView.Treemap, 600, 400, scale: 1, textScale: 1,
-        ShapeColours.ByDepth, ExploreSpacing.Comfortable, VolumeSpace.None, style: style);
+        ShapeColours.ByDepth, MapLook.Default with { Style = style }, VolumeSpace.None);
 
     /// <summary>A folder of files beside large files, and a run of files each too small to draw, which the layout draws as one block.</summary>
     private static ExploreTree Tree()

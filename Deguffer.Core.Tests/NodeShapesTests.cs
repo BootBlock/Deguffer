@@ -61,7 +61,7 @@ public sealed class NodeShapesTests
         var root = atAFolder ? FirstFolderOf(tree, tree.RootNode) : tree.RootNode;
         var sectors = SunburstLayout.Compute(tree, root, Width, Height, LayoutLimits.Default).Sectors;
         var surface = new SunburstSurface(
-            tree, root, Width, Height, LayoutLimits.Default, ShapeColours.ByBranch(ExploreScheme.Standard), MapStyle.Default);
+            tree, root, Width, Height, LayoutLimits.Default, ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default);
 
         for (var node = 0; node < tree.NodeCount; node++)
         {
@@ -140,7 +140,7 @@ public sealed class NodeShapesTests
     }
 
     private static TiledSurface Tiled(ExploreTree tree, int root, IReadOnlyList<ExploreTile> tiles) =>
-        new(tree, root, Width, Height, LayoutLimits.Default, ShapeColours.ByBranch(ExploreScheme.Standard), MapStyle.Default, tiles);
+        new(tree, root, Width, Height, LayoutLimits.Default, ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default, tiles);
 
     /// <summary>What the drawing answered before it kept an index: the deepest shape on the node's path, the first of two as deep.</summary>
     private static int? PassedShownAs(ExploreTree tree, int root, IReadOnlyList<ExploreTile> tiles, int node)

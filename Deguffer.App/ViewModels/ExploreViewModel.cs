@@ -411,16 +411,18 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         FollowReplay();
     }
 
-    /// <summary>
-    /// How the maps are drawn, which holds the colours each picture is drawn in. The page hands it
-    /// over as the appearance window changes it.
-    /// </summary>
+    /// <summary>How the maps are drawn, which the page hands over as the appearance window changes it.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedScheme))]
     [NotifyPropertyChangedFor(nameof(ShowsLegend))]
     public partial MapLook Look { get; set; } = MapLook.Default;
 
-    partial void OnLookChanged(MapLook value) => ShowLegend();
+    /// <summary>The look moved: the legend and the kinds' swatches take the colours the map now draws.</summary>
+    partial void OnLookChanged(MapLook value)
+    {
+        ShowLegend();
+        Types.Tune(ColourTuning.Of(value.Style));
+    }
 
     /// <summary>
     /// Which set of colours the picture on screen is drawn in. See <see cref="ExploreDisplay.Scheme"/>.
@@ -429,9 +431,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     /// </summary>
     public ExploreScheme SelectedScheme => Display.Scheme;
 
-    /// <summary>
-    /// What the page shows round its picture, from what it is showing. See <see cref="ExploreDisplay"/>.
-    /// </summary>
+    /// <summary>What the page shows round its picture, from what it is showing. See <see cref="ExploreDisplay"/>.</summary>
     private ExploreDisplay Display => new(Tree, SelectedView, SelectedColouring, Look, MapInContrast, Files.Listing);
 
     /// <summary>What each colour on the map means. See <see cref="MapLegend"/>.</summary>

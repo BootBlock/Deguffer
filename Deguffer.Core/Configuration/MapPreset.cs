@@ -169,7 +169,7 @@ public sealed record MapPreset(
     /// <summary>Pale, quiet colours on low cushions, with pale lines and room round every folder.</summary>
     public static readonly MapPreset Pastel = new(
         "Pastel",
-        "Pale, muted colours on low cushions, a faint pale line round each shape and room round every folder.",
+        "Pale, muted colours on low cushions, a faint pale line round each shape, a firmer one round each folder, and room round every folder.",
         new MapStyle(
             Shading: MapShading.Cushion,
             Relief: MapRelief.Subtle,
@@ -194,10 +194,10 @@ public sealed record MapPreset(
         ExploreSpacing.Comfortable,
         Colouring: null);
 
-    /// <summary>Every shape in grey, so the shading and the lines show the structure and nothing else.</summary>
+    /// <summary>Every shape in grey, so the shading, the lines and how light each level is show the structure.</summary>
     public static readonly MapPreset Monochrome = new(
         "Monochrome",
-        "Every shape in grey on a cushion, so only the shading and a faint line show the folders.",
+        "Every shape in grey on a steep cushion, with a faint line round each and a firmer one round each folder.",
         new MapStyle(
             Shading: MapShading.Cushion,
             Relief: MapRelief.Strong,
@@ -210,7 +210,7 @@ public sealed record MapPreset(
     /// <summary>A wide bevel on strong colours, so every shape reads as a raised tile.</summary>
     public static readonly MapPreset Tiles = new(
         "Tiles",
-        "Strong colours on a wide, deep bevel, so every shape stands up from the one beside it like a tile.",
+        "Strong colours on a wide, strong bevel, so every shape stands up from the one beside it like a tile.",
         new MapStyle(
             Shading: MapShading.Bevel,
             Relief: MapRelief.Strong,

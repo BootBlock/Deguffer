@@ -33,7 +33,7 @@ public sealed class MapNamesViewModel : MapAppearanceSection
         set => Window.Restyle(style => style with { FolderNames = value });
     }
 
-    /// <summary>Whether a shape with room for it has its name and size written inside it.</summary>
+    /// <summary>Whether a shape with room for it has its name written inside it, and its size where <see cref="Sizes"/>.</summary>
     public bool ShapeNames
     {
         get => Look.Style.ShapeNames;

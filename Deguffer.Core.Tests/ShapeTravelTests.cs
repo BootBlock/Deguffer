@@ -117,7 +117,7 @@ public sealed class ShapeTravelTests
     private static ExploreSurface Drawing(ISizedTree tree, int width, int height, MapViewport viewport) =>
         ExploreSurface.Create(
             tree, tree.RootNode, ExploreView.Treemap, width, height, scale: 1, textScale: 1,
-            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None, viewport);
+            ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default, VolumeSpace.None, viewport);
 
     /// <summary>Folders of one file each, sized as given, met in the order given.</summary>
     private static ExploreTree Scan(params (string Name, long Size)[] folders)

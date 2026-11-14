@@ -17,8 +17,6 @@ public abstract class MapAppearanceSection : ObservableObject
     /// <param name="properties">Every property of the section a change of look can move.</param>
     private protected MapAppearanceSection(MapAppearanceViewModel window, string[] properties)
     {
-        ArgumentNullException.ThrowIfNull(window);
-
         Window = window;
         _properties = properties;
     }

@@ -164,7 +164,7 @@ public sealed class MapFollowTests
 
         var unplaced = ExploreSurface.Create(
             after, after.RootNode, ExploreView.Icicle, Width, Height, scale: 1, textScale: 1,
-            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None);
+            ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default, VolumeSpace.None);
 
         Assert.Null(unplaced.Zoom);
         Assert.Null(MapFollow.From(earlier, unplaced, viewport, viewport, movable: true));
@@ -203,7 +203,7 @@ public sealed class MapFollowTests
     private static TiledSurface Drawing(ISizedTree tree, MapViewport viewport) =>
         (TiledSurface)ExploreSurface.Create(
             tree, tree.RootNode, ExploreView.Treemap, Width, Height, scale: 1, textScale: 1,
-            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None, viewport);
+            ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default, VolumeSpace.None, viewport);
 
     /// <summary>An application and two service hosts, the one watched at <paramref name="hostMiB"/>.</summary>
     private static MemoryTree Memory(long hostMiB) => MemoryTreeBuilder.Build(new MemorySnapshotBuilder()

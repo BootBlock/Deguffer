@@ -42,7 +42,7 @@ public sealed class MapShapeTextDrawingTests
     {
         var drawing = ExploreSurface.Create(
             Tree, Users, ExploreView.Treemap, Width, Height, 1, 1,
-            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None);
+            ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default, VolumeSpace.None);
 
         Assert.Equal(
             $"Documents, {FreeSpace.Format(600)}, 60% of Users",
@@ -128,7 +128,7 @@ public sealed class MapShapeTextDrawingTests
 
     private static ExploreSurface Drawn(VolumeSpace volume) => ExploreSurface.Create(
         Tree, Tree.RootNode, ExploreView.Treemap, Width, Height, 1, 1,
-        ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, volume);
+        ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default, volume);
 
     private static int Named(string name) =>
         Enumerable.Range(0, Tree.NodeCount).First(node => Tree.NameOf(node) == name);

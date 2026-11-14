@@ -11,12 +11,14 @@ namespace Deguffer.Core.Exploring.Rendering;
 /// or shader knows of it.</para>
 ///
 /// <para>The saturation is the Filter Effects specification's <c>saturate()</c>: each channel moved
-/// towards or away from the colour's luminance by the same factor, so a colour keeps its lightness as
-/// it loses its hue. The brightness is a mix towards black or white, as <see cref="ShapeFinish.Mix"/>
+/// towards or away from the colour's luma, its channels weighted as they are encoded, by the same
+/// factor, so a colour keeps its luma as it loses its hue. Luma is close to how light a colour looks
+/// but not the same as its relative luminance, which weighs the channels after linearising them. The
+/// brightness is a mix towards black or white, as <see cref="ShapeFinish.Mix"/>
 /// mixes a line. Both in whole numbers out of <see cref="ShapeFinish.Whole"/>, because a drawing asks
 /// it once for each of tens of thousands of shapes.</para>
 /// </summary>
-/// <param name="Saturation">How much of each channel's distance from the luminance is kept, out of <see cref="ShapeFinish.Whole"/>.</param>
+/// <param name="Saturation">How much of each channel's distance from the luma is kept, out of <see cref="ShapeFinish.Whole"/>.</param>
 /// <param name="Brightness">How far each channel is mixed towards white where positive, or black where negative, out of <see cref="ShapeFinish.Whole"/>.</param>
 public readonly record struct ColourTuning(int Saturation, int Brightness)
 {
@@ -76,20 +78,26 @@ public readonly record struct ColourTuning(int Saturation, int Brightness)
     }
 
     /// <summary>
-    /// Each channel moved from the colour's luminance by <see cref="Saturation"/>, cut to a byte where a
-    /// stronger colour than the screen can show is asked for. The weights are the specification's
-    /// 0.213, 0.715 and 0.072, in 256ths that add up to the whole.
+    /// <paramref name="colour"/>'s luma: its encoded channels weighted by the specification's 0.213,
+    /// 0.715 and 0.072, in 256ths that add up to the whole.
+    /// </summary>
+    internal static int Luma(TileColour colour) =>
+        ((55 * colour.Red) + (183 * colour.Green) + (18 * colour.Blue)) / ShapeFinish.Whole;
+
+    /// <summary>
+    /// Each channel moved from the colour's luma by <see cref="Saturation"/>, cut to a byte where a
+    /// stronger colour than the screen can show is asked for.
     /// </summary>
     private TileColour Saturate(TileColour colour)
     {
-        var luminance = ((55 * colour.Red) + (183 * colour.Green) + (18 * colour.Blue)) / ShapeFinish.Whole;
+        var luma = Luma(colour);
 
         return new TileColour(
-            Channel(colour.Red, luminance),
-            Channel(colour.Green, luminance),
-            Channel(colour.Blue, luminance));
+            Channel(colour.Red, luma),
+            Channel(colour.Green, luma),
+            Channel(colour.Blue, luma));
     }
 
-    private byte Channel(byte channel, int luminance) =>
-        (byte)Math.Clamp(luminance + ((channel - luminance) * Saturation / ShapeFinish.Whole), 0, 255);
+    private byte Channel(byte channel, int luma) =>
+        (byte)Math.Clamp(luma + ((channel - luma) * Saturation / ShapeFinish.Whole), 0, 255);
 }

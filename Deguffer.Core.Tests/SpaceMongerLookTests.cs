@@ -135,16 +135,16 @@ public sealed class SpaceMongerLookTests
         var bytes = 53_687_091_200L.ToString("N0", CultureInfo.CurrentCulture);
         var date = written.ToString("dd MMM yyyy", CultureInfo.CurrentCulture);
 
-        Assert.Equal("pagefile.sys  50.0 GB", caption.Text(MapLettering.Standard, 3));
-        Assert.Equal("pagefile.sys", caption.Text(MapLettering.Classic, 1));
-        Assert.Equal($"pagefile.sys\n{bytes} bytes", caption.Text(MapLettering.Classic, 2));
-        Assert.Equal($"pagefile.sys\n{bytes} bytes\n{date}", caption.Text(MapLettering.Classic, 3));
-        Assert.Equal(string.Empty, MapCaption.None.Text(MapLettering.Classic, 3));
+        Assert.Equal("pagefile.sys  50.0 GB", caption.Text(MapLettering.Standard, 3, MapDetail.Default));
+        Assert.Equal("pagefile.sys", caption.Text(MapLettering.Classic, 1, MapDetail.Default));
+        Assert.Equal($"pagefile.sys\n{bytes} bytes", caption.Text(MapLettering.Classic, 2, MapDetail.Default));
+        Assert.Equal($"pagefile.sys\n{bytes} bytes\n{date}", caption.Text(MapLettering.Classic, 3, MapDetail.Default));
+        Assert.Equal(string.Empty, MapCaption.None.Text(MapLettering.Classic, 3, MapDetail.Default));
     }
 
     private static TiledSurface Draw(MapStyle style) => (TiledSurface)ExploreSurface.Create(
         Tree(), ExploreTreeBuilder.RootNode, ExploreView.Treemap, Width, Height, scale: 1, textScale: 1,
-        ShapeColours.ByDepth, ExploreSpacing.Comfortable, VolumeSpace.None, style: style);
+        ShapeColours.ByDepth, MapLook.Default with { Style = style }, VolumeSpace.None);
 
     /// <summary>Two files side by side in one row, whole on the canvas, and the colour each is painted.</summary>
     private static ((int Left, int Top, int Right, int Bottom, TileColour Colour) Left, (int Left, int Top, int Right, int Bottom, TileColour Colour) Right) Neighbours(TiledSurface drawing)

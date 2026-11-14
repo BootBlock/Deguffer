@@ -65,7 +65,7 @@ public sealed class MapShapesTests
         var tree = Tree();
         var drawing = (TiledSurface)ExploreSurface.Create(
             tree, tree.RootNode, ExploreView.Treemap, Width, Height, 1, 1,
-            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable,
+            ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default,
             new VolumeSpace(TotalBytes: 40_000_000, FreeBytes: 20_000_000));
 
         Assert.True(drawing.HasVolumeBeside);
@@ -87,7 +87,7 @@ public sealed class MapShapesTests
         var tree = Tree();
         var drawing = (TiledSurface)ExploreSurface.Create(
             tree, tree.RootNode, ExploreView.Treemap, Width, Height, 1, 1,
-            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None,
+            ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default, VolumeSpace.None,
             MapViewport.Seen(zoom: 6, left: 0.05, top: 0.05));
         var shapes = drawing.Shapes(null);
 
@@ -115,7 +115,7 @@ public sealed class MapShapesTests
         var nook = Named(tree, "nook");
         var inner = ExploreSurface.Create(
             tree, Named(tree, "folder"), ExploreView.Treemap, Width, Height, 1, 1,
-            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None);
+            ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default, VolumeSpace.None);
 
         Assert.Contains(drawing.Tiles, tile => tile.Node == nook && tile.Header == 0);
         Assert.Empty(drawing.Shapes(nook));
@@ -430,7 +430,7 @@ public sealed class MapShapesTests
 
     private static ExploreSurface Drawn(ExploreTree tree, ExploreView view) => ExploreSurface.Create(
         tree, tree.RootNode, view, Width, Height, 1, 1,
-        ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None);
+        ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default, VolumeSpace.None);
 
     private static TiledSurface Tiled(ExploreTree tree, ExploreView view) => (TiledSurface)Drawn(tree, view);
 

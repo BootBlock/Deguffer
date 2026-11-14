@@ -179,11 +179,11 @@ public sealed class DrawingFactsTests
     private static TiledSurface Draw(ExploreTree tree, ExploreView view, bool beside) =>
         (TiledSurface)ExploreSurface.Create(
             tree, tree.RootNode, view, Width, Height, scale: 1, textScale: 1,
-            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable,
+            ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default,
             beside ? new VolumeSpace(TotalBytes: 4 * tree.SizeOf(tree.RootNode), FreeBytes: 2 * tree.SizeOf(tree.RootNode)) : VolumeSpace.None);
 
     private static TiledSurface Tiled(ExploreTree tree, IReadOnlyList<ExploreTile> tiles) =>
-        new(tree, tree.RootNode, Width, Height, LayoutLimits.Default, ShapeColours.ByBranch(ExploreScheme.Standard), MapStyle.Default, tiles);
+        new(tree, tree.RootNode, Width, Height, LayoutLimits.Default, ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default, tiles);
 
     /// <summary>
     /// A tree of folders three deep under the root, of files of uneven sizes and a few long tails of

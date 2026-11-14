@@ -33,5 +33,5 @@ internal static class Surfaces
         ExploreSurface.Create(
             tree, root, view, width, height, scale, textScale,
             ShapeColours.For(tree, colouring, scheme, nowUtc, growth: null, types: null),
-            spacing, volume);
+            MapLook.Default with { Spacing = spacing }, volume);
 }

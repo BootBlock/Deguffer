@@ -340,7 +340,7 @@ internal sealed class ExploreCanvas
         return () =>
         {
             var drawing = ExploreSurface.Create(
-                tree, node, view, width, height, scale, textScale, colours, look.Spacing, volume, viewport, look.Style, look.Detail);
+                tree, node, view, width, height, scale, textScale, colours, look, volume, viewport);
 
             arrival?.Prepare(drawing);
 

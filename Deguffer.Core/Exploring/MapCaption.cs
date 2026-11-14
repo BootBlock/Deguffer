@@ -23,12 +23,16 @@ public readonly record struct MapCaption(string Name, string Size, long Bytes, D
 
     /// <summary>
     /// The text written on the shape in <paramref name="lettering"/>, with room for
-    /// <paramref name="lines"/> lines of it, with its size where <paramref name="sizes"/>
-    /// (<see cref="MapDetail.Sizes"/>): after the name, or under SpaceMonger's lettering a line of
+    /// <paramref name="lines"/> lines of it, with its size where <paramref name="detail"/> asks for
+    /// sizes (<see cref="MapDetail.Sizes"/>): after the name, or under SpaceMonger's lettering a line of
     /// bytes between the name and the date, whose place the date takes where there is none.
     /// </summary>
-    public string Text(MapLettering lettering, int lines, bool sizes = true)
+    public string Text(MapLettering lettering, int lines, MapDetail detail)
     {
+        ArgumentNullException.ThrowIfNull(detail);
+
+        var sizes = detail.Sizes;
+
         if (Name.Length == 0)
         {
             return string.Empty;

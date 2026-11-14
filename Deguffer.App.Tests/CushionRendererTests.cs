@@ -358,10 +358,9 @@ public sealed class CushionRendererTests : IDisposable
             1,
             1,
             colours ?? ShapeColours.ByBranch(ExploreScheme.Standard),
-            ExploreSpacing.Comfortable,
+            MapLook.Default with { Style = style ?? MapStyle.Default },
             VolumeSpace.None,
-            viewport,
-            style);
+            viewport);
 
     /// <summary>
     /// Folders inside folders four levels down, each with files of falling sizes, so the picture has

@@ -373,7 +373,7 @@ public sealed class ShapeChangesTests
     private static ExploreSurface Drawing(ISizedTree tree, ExploreView view) =>
         ExploreSurface.Create(
             tree, tree.RootNode, view, Width, Height, scale: 1, textScale: 1,
-            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None);
+            ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default, VolumeSpace.None);
 
     private static ExploreTree Scan(params (string Name, long Size)[] folders) => Scan(@"C:\", folders);
 

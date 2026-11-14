@@ -18,21 +18,29 @@ namespace Deguffer.App.ViewModels;
 /// </summary>
 public sealed partial class ExploreTypeRow : ObservableObject
 {
-    public ExploreTypeRow(FileCategory category)
+    /// <summary>The palette's colour for the kind, before the look tunes it.</summary>
+    private readonly TileColour _palette;
+
+    /// <param name="tuning">How the map's colours are moved from the palette's, as the swatch is.</param>
+    public ExploreTypeRow(FileCategory category, ColourTuning tuning)
     {
-        var colour = TypePalette.For(category);
+        _palette = TypePalette.For(category);
 
         Category = category;
         Label = FileCategories.Label(category);
-        Swatch = colour.ToColor();
+        Swatch = tuning.Apply(_palette).ToColor();
     }
 
     public FileCategory Category { get; }
 
     public string Label { get; }
 
-    /// <summary>The colour a map coloured by type paints the kind, beside its name.</summary>
-    public Color Swatch { get; }
+    /// <summary>The colour a map coloured by type paints the kind, beside its name, tuned as the map's colours are.</summary>
+    [ObservableProperty]
+    public partial Color Swatch { get; private set; }
+
+    /// <summary>Paint the swatch as the map paints the kind under <paramref name="tuning"/>.</summary>
+    public void Tune(ColourTuning tuning) => Swatch = tuning.Apply(_palette).ToColor();
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(Description))]
@@ -99,6 +107,9 @@ public sealed partial class ExploreTypes : ObservableObject
     /// <summary>The tree <see cref="_measuring"/> is measuring.</summary>
     private ExploreTree? _measuringTree;
 
+    /// <summary>How the map's colours are moved from the palette's, which every swatch follows.</summary>
+    private ColourTuning _tuning = ColourTuning.None;
+
     /// <summary>
     /// The kinds of file, largest first, in the folder on screen. Updated in place rather than rebuilt,
     /// so a snapshot of a running scan moves a row rather than rebuilding the list (G4).
@@ -142,6 +153,25 @@ public sealed partial class ExploreTypes : ObservableObject
     /// </summary>
     public void Point(ExploreTree? tree, int? node) =>
         Pointed = tree is not null && node is { } over ? DominantTypes.KindOf(tree, over, Dominant) : null;
+
+    /// <summary>
+    /// Paint every swatch as the map paints its kind under <paramref name="tuning"/>, in place: a
+    /// swatch in a colour the map does not draw would name the wrong shapes.
+    /// </summary>
+    public void Tune(ColourTuning tuning)
+    {
+        if (tuning == _tuning)
+        {
+            return;
+        }
+
+        _tuning = tuning;
+
+        foreach (var row in Rows)
+        {
+            row.Tune(tuning);
+        }
+    }
 
     /// <summary>Point the panel at <paramref name="root"/> of <paramref name="tree"/>, or at nothing.</summary>
     public void Show(ExploreTree? tree, int root)
@@ -219,7 +249,7 @@ public sealed partial class ExploreTypes : ObservableObject
                 share => share.Category,
                 share =>
                 {
-                    var row = new ExploreTypeRow(share.Category);
+                    var row = new ExploreTypeRow(share.Category, _tuning);
                     row.Show(share, total);
                     return row;
                 },

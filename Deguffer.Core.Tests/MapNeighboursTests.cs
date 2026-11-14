@@ -103,7 +103,7 @@ public sealed class MapNeighboursTests
         var tree = Tree();
         var drawing = ExploreSurface.Create(
             tree, tree.RootNode, view, 800, 600, 1, 1,
-            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None);
+            ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default, VolumeSpace.None);
         var shapes = drawing.Shapes(null);
         var reached = new HashSet<int> { 0 };
         var waiting = new Queue<int>([0]);

@@ -95,6 +95,23 @@ public sealed class MapDetailTests
     }
 
     /// <summary>
+    /// A sunburst in SpaceMonger's lettering, whose number of names the reader cannot choose, names as
+    /// many sectors as the standard number and no more, whatever the detail says.
+    /// </summary>
+    [Fact]
+    public void AClassicSunburstNamesTheStandardNumberOfSectors()
+    {
+        var look = MapLook.Default with { Style = MapStyle.Default with { Lettering = MapLettering.Classic } };
+
+        int Named(MapNameCount count) => ExploreSurface.Create(
+            Chains(100, 6), ExploreTreeBuilder.RootNode, ExploreView.Sunburst, 2400, 2400, scale: 1, textScale: 1,
+            ShapeColours.ByDepth, look with { Detail = new MapDetail(Names: count) }, VolumeSpace.None).Labels.Count;
+
+        Assert.Equal(MapDetail.Default.MostNames, Named(MapNameCount.Most));
+        Assert.Equal(MapDetail.Default.MostNames, Named(MapNameCount.Fewer));
+    }
+
+    /// <summary>
     /// A drawing carries the text size its labels' room was measured at, so the names are set at it,
     /// and whether each is followed by its size.
     /// </summary>
@@ -104,7 +121,7 @@ public sealed class MapDetailTests
         var drawing = Draw(Wide(20), new MapDetail(TextSize: MapTextSize.Larger, Sizes: false), textScale: 1.25);
 
         Assert.Equal(1.25 * 1.4, drawing.TextScale, 6);
-        Assert.False(drawing.Sizes);
+        Assert.False(drawing.Detail.Sizes);
         Assert.Equal(1, Draw(Wide(20), MapDetail.Default).TextScale);
     }
 
@@ -119,10 +136,10 @@ public sealed class MapDetailTests
         var caption = new MapCaption("pagefile.sys", "50.0 GB", 53_687_091_200, written);
         var date = written.ToString("dd MMM yyyy", CultureInfo.CurrentCulture);
 
-        Assert.Equal("pagefile.sys", caption.Text(MapLettering.Standard, 1, sizes: false));
-        Assert.Equal($"pagefile.sys\n{date}", caption.Text(MapLettering.Classic, 2, sizes: false));
-        Assert.Equal($"pagefile.sys\n{date}", caption.Text(MapLettering.Classic, 3, sizes: false));
-        Assert.Equal("pagefile.sys", caption.Text(MapLettering.Classic, 1, sizes: false));
+        Assert.Equal("pagefile.sys", caption.Text(MapLettering.Standard, 1, new MapDetail(Sizes: false)));
+        Assert.Equal($"pagefile.sys\n{date}", caption.Text(MapLettering.Classic, 2, new MapDetail(Sizes: false)));
+        Assert.Equal($"pagefile.sys\n{date}", caption.Text(MapLettering.Classic, 3, new MapDetail(Sizes: false)));
+        Assert.Equal("pagefile.sys", caption.Text(MapLettering.Classic, 1, new MapDetail(Sizes: false)));
     }
 
     /// <summary>A file written before the detail could be chosen reads with the detail the map always had.</summary>
@@ -160,7 +177,7 @@ public sealed class MapDetailTests
     private static TiledSurface Draw(ExploreTree tree, MapDetail detail, int width = 800, int height = 600, double textScale = 1) =>
         (TiledSurface)ExploreSurface.Create(
             tree, ExploreTreeBuilder.RootNode, ExploreView.Treemap, width, height, scale: 1, textScale,
-            ShapeColours.ByDepth, ExploreSpacing.Comfortable, VolumeSpace.None, detail: detail);
+            ShapeColours.ByDepth, MapLook.Default with { Detail = detail }, VolumeSpace.None);
 
     /// <summary>Files from large to very small, so where the smallest shape is drawn decides how many are.</summary>
     private static ExploreTree ManySizes()
@@ -192,6 +209,32 @@ public sealed class MapDetailTests
         }
 
         builder.AddChildren(folder, [new ExploreChild("last.bin", IsDirectory: false, IsLink: false, Size: 4)]);
+
+        return builder.Build(ExploreChildOrder.BySize);
+    }
+
+    /// <summary>
+    /// <paramref name="count"/> folders of one size at the top, each a chain <paramref name="depth"/>
+    /// folders deep ending in a file, so every outer ring of a sunburst has that many sectors with
+    /// room for a name.
+    /// </summary>
+    private static ExploreTree Chains(int count, int depth)
+    {
+        var builder = new ExploreTreeBuilder("Sample");
+
+        for (var chain = 0; chain < count; chain++)
+        {
+            var folder = builder.AddChildren(
+                ExploreTreeBuilder.RootNode,
+                [new ExploreChild($"top{chain}", IsDirectory: true, IsLink: false, Size: 0)]);
+
+            for (var level = 1; level < depth; level++)
+            {
+                folder = builder.AddChildren(folder, [new ExploreChild($"level{level}", IsDirectory: true, IsLink: false, Size: 0)]);
+            }
+
+            builder.AddChildren(folder, [new ExploreChild("file.bin", IsDirectory: false, IsLink: false, Size: 1_000_000)]);
+        }
 
         return builder.Build(ExploreChildOrder.BySize);
     }

@@ -102,7 +102,7 @@ public sealed class RegionPaintingTests
         scale: 1,
         textScale: 1,
         ShapeColours.ByBranch(ExploreScheme.Standard),
-        ExploreSpacing.Comfortable,
+        MapLook.Default,
         VolumeSpace.None,
         viewport);
 
