@@ -584,16 +584,9 @@
                 </ListView.GroupStyle>
             </ListView>
 
-            <StackPanel Grid.Row="2" Spacing="12" MaxWidth="460" Margin="0,24,0,0"
-                        HorizontalAlignment="Center" VerticalAlignment="Top"
-                        Visibility="{x:Bind ViewModel.HasNoGroups, Mode=OneWay}">
-                <FontIcon Glyph="&#xE8C8;" FontSize="44" HorizontalAlignment="Center"
-                          Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                          AutomationProperties.AccessibilityView="Raw" />
-                <TextBlock Text="{x:Bind ViewModel.Headline, Mode=OneWay}" Style="{StaticResource BodyStrongTextBlockStyle}"
-                           FontSize="16" TextAlignment="Center" TextWrapping="Wrap"
-                           AutomationProperties.LiveSetting="Polite" />
-            </StackPanel>
+            <controls:EmptyState Grid.Row="2" Glyph="&#xE8C8;"
+                                 Title="{x:Bind ViewModel.Headline, Mode=OneWay}"
+                                 Visibility="{x:Bind ViewModel.HasNoGroups, Mode=OneWay}" />
         </Grid>
 
         <!-- What is marked, and the two ways to remove it. Neither carries the accent: removing is
