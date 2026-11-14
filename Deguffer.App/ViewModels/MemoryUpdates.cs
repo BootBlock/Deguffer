@@ -15,6 +15,9 @@ namespace Deguffer.App.ViewModels;
 /// </summary>
 public sealed partial class MemoryUpdates(MemoryFeed feed) : ObservableObject
 {
+    /// <summary>When the reading on screen was read, or null before the first is shown.</summary>
+    private DateTimeOffset? _shown;
+
     /// <summary>Whether the page reads on the cadence, or only when the reader presses Refresh.</summary>
     public bool Live
     {
@@ -34,12 +37,16 @@ public sealed partial class MemoryUpdates(MemoryFeed feed) : ObservableObject
     }
 
     /// <summary>When the figures on screen were read, while live update is off. See <see cref="MemoryReadTime"/>.</summary>
-    public string ReadAt => MemoryReadTime.Said(feed.LastRead, feed.Live, CultureInfo.CurrentCulture);
+    public string ReadAt { get; private set; } = string.Empty;
 
     public bool HasReadAt => ReadAt.Length > 0;
 
-    /// <summary>A reading has been shown, so the time it was read is the one to say.</summary>
-    public void Shown() => Restate();
+    /// <summary>The reading read at <paramref name="read"/> is the one on screen now.</summary>
+    public void Shown(DateTimeOffset read)
+    {
+        _shown = read;
+        Restate();
+    }
 
     /// <summary>
     /// Read where memory is now, live or not. A read already running finishes first, so what arrives
@@ -48,9 +55,27 @@ public sealed partial class MemoryUpdates(MemoryFeed feed) : ObservableObject
     [RelayCommand]
     private void Refresh() => feed.Refresh();
 
+    /// <summary>
+    /// Say the time again, and tell the page only where the words changed: while live, every reading
+    /// would otherwise tell it twice that nothing is said.
+    /// </summary>
     private void Restate()
     {
+        var said = MemoryReadTime.Said(_shown, feed.Live, TimeZoneInfo.Local, CultureInfo.CurrentCulture);
+
+        if (said == ReadAt)
+        {
+            return;
+        }
+
+        var had = HasReadAt;
+
+        ReadAt = said;
         OnPropertyChanged(nameof(ReadAt));
-        OnPropertyChanged(nameof(HasReadAt));
+
+        if (had != HasReadAt)
+        {
+            OnPropertyChanged(nameof(HasReadAt));
+        }
     }
 }

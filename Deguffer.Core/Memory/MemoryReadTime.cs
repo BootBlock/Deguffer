@@ -14,14 +14,16 @@ public static class MemoryReadTime
 {
     /// <summary>
     /// What to say beside the live update switch: when <paramref name="read"/> was, in the reader's
-    /// own clock and time format, or nothing while <paramref name="live"/> or before the first read.
+    /// own time zone and time format, or nothing while <paramref name="live"/> or before the first
+    /// reading is shown.
     /// </summary>
-    public static string Said(DateTimeOffset? read, bool live, CultureInfo culture)
+    public static string Said(DateTimeOffset? read, bool live, TimeZoneInfo zone, CultureInfo culture)
     {
+        ArgumentNullException.ThrowIfNull(zone);
         ArgumentNullException.ThrowIfNull(culture);
 
         return !live && read is { } at
-            ? $"Read at {at.ToLocalTime().ToString("T", culture)}"
+            ? $"Read at {TimeZoneInfo.ConvertTime(at, zone).ToString("T", culture)}"
             : string.Empty;
     }
 }

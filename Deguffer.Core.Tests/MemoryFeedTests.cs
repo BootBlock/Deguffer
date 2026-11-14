@@ -23,7 +23,7 @@ public sealed class MemoryFeedTests
         WithFeed(new FakeMemorySource(), new ManualTimeProvider(), async (feed, source, _, _) =>
         {
             Assert.True(await feed.MoveNextAsync().AsTask().WaitAsync(Patience));
-            Assert.Same(FakeMemorySource.Snapshot, feed.Current);
+            Assert.Same(FakeMemorySource.Snapshot, feed.Current.Snapshot);
             Assert.Equal(1, source.Reads);
         });
 
@@ -118,7 +118,7 @@ public sealed class MemoryFeedTests
             control.Live = false;
 
             await feed.MoveNextAsync().AsTask().WaitAsync(Patience);
-            Assert.Equal(clock.GetUtcNow(), control.LastRead);
+            Assert.Equal(clock.GetUtcNow(), feed.Current.Read);
 
             var next = feed.MoveNextAsync().AsTask();
 
@@ -133,7 +133,7 @@ public sealed class MemoryFeedTests
 
             Assert.True(await next.WaitAsync(Patience));
             Assert.Equal(2, source.Reads);
-            Assert.Equal(clock.GetUtcNow(), control.LastRead);
+            Assert.Equal(clock.GetUtcNow(), feed.Current.Read);
         });
 
     /// <summary>Live, Refresh does not wait for the rest of the cadence, and leaves no beat behind it.</summary>
@@ -238,11 +238,11 @@ public sealed class MemoryFeedTests
 
     /// <summary>
     /// A page the reader comes back to with live update off shows what it showed, and does not read
-    /// until they ask: coming back is not asking. A feed that has never delivered still reads at once,
-    /// or the page would have nothing to show.
+    /// until they ask: coming back is not asking. The reading counts as shown once the page has asked
+    /// for the one after it, which is what a page does when it has finished showing one.
     /// </summary>
     [Fact]
-    public async Task ReadingAgainWithLiveUpdateOffWaitsForRefreshOnceAReadingWasDelivered()
+    public async Task ReadingAgainWithLiveUpdateOffWaitsForRefreshOnceAReadingWasTaken()
     {
         var source = new FakeMemorySource();
         var control = new MemoryFeed(source, new ManualTimeProvider()) { Live = false };
@@ -252,7 +252,10 @@ public sealed class MemoryFeedTests
             var visit = control.ReadAsync(first.Token).GetAsyncEnumerator();
 
             Assert.True(await visit.MoveNextAsync().AsTask().WaitAsync(Patience));
+
+            var waiting = visit.MoveNextAsync().AsTask();
             await first.CancelAsync();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => waiting.WaitAsync(Patience));
         }
 
         using var second = new CancellationTokenSource();
@@ -278,6 +281,39 @@ public sealed class MemoryFeedTests
     }
 
     /// <summary>
+    /// A reading the page threw away because it was left while the read ran was never on screen, so a
+    /// page come back to with live update off reads at once rather than standing empty until the
+    /// reader thinks to press Refresh.
+    /// </summary>
+    [Fact]
+    public async Task AReadingThrownAwayUnseenDoesNotHoldTheNextVisitBack()
+    {
+        var source = new FakeMemorySource();
+        var control = new MemoryFeed(source, new ManualTimeProvider()) { Live = false };
+
+        using (var first = new CancellationTokenSource())
+        {
+            var visit = control.ReadAsync(first.Token).GetAsyncEnumerator();
+
+            Assert.True(await visit.MoveNextAsync().AsTask().WaitAsync(Patience));
+            await first.CancelAsync();
+        }
+
+        using var second = new CancellationTokenSource();
+        var again = control.ReadAsync(second.Token).GetAsyncEnumerator();
+
+        try
+        {
+            Assert.True(await again.MoveNextAsync().AsTask().WaitAsync(Patience));
+            Assert.Equal(2, source.Reads);
+        }
+        finally
+        {
+            await second.CancelAsync();
+        }
+    }
+
+    /// <summary>
     /// Run <paramref name="test"/> against a feed over <paramref name="source"/> and
     /// <paramref name="clock"/>, and end whatever it left pending, however it ended.
     ///
@@ -289,7 +325,7 @@ public sealed class MemoryFeedTests
     private static Task WithFeed(
         FakeMemorySource source,
         ManualTimeProvider clock,
-        Func<IAsyncEnumerator<MemorySnapshot>, FakeMemorySource, ManualTimeProvider, CancellationTokenSource, Task> test) =>
+        Func<IAsyncEnumerator<MemoryReading>, FakeMemorySource, ManualTimeProvider, CancellationTokenSource, Task> test) =>
         WithFeed(source, clock, (_, feed, held, time, cancel) => test(feed, held, time, cancel));
 
     /// <summary>
@@ -299,7 +335,7 @@ public sealed class MemoryFeedTests
     private static async Task WithFeed(
         FakeMemorySource source,
         ManualTimeProvider clock,
-        Func<MemoryFeed, IAsyncEnumerator<MemorySnapshot>, FakeMemorySource, ManualTimeProvider, CancellationTokenSource, Task> test)
+        Func<MemoryFeed, IAsyncEnumerator<MemoryReading>, FakeMemorySource, ManualTimeProvider, CancellationTokenSource, Task> test)
     {
         using var cancel = new CancellationTokenSource();
         var control = new MemoryFeed(source, clock);

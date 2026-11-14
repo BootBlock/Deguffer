@@ -452,7 +452,8 @@ public sealed class MemoryViewModelTests : IDisposable
     /// <summary>
     /// The Live update box reaches the feed and the Refresh button reads: off, the page shows a new
     /// reading only when Refresh is pressed, and the line saying when the figures were read is told of
-    /// each one, before the page redraws, and of the box changing.
+    /// each new time, before the page redraws, and of the box changing. Live, a reading tells the line
+    /// nothing, because there is nothing for it to say.
     /// </summary>
     [Fact]
     public void WithLiveUpdateOffRefreshShowsAReadingAndSaysWhenItWasRead() => UiThread.Run(async () =>
@@ -482,13 +483,20 @@ public sealed class MemoryViewModelTests : IDisposable
         await refreshed;
 
         Assert.NotNull(page.Tree!.Find(Gamma));
-        Assert.Equal([nameof(MemoryUpdates.ReadAt), nameof(MemoryUpdates.HasReadAt), nameof(MemoryViewModel.ViewChanged)], told);
+        Assert.Equal([nameof(MemoryUpdates.ReadAt), nameof(MemoryViewModel.ViewChanged)], told);
 
         told.Clear();
+        var live = ShownAsync(page);
         page.Updates.Live = true;
 
         Assert.False(page.Updates.HasReadAt);
         Assert.Equal([nameof(MemoryUpdates.Live), nameof(MemoryUpdates.ReadAt), nameof(MemoryUpdates.HasReadAt)], told);
+
+        await live;
+
+        Assert.Equal(
+            [nameof(MemoryUpdates.Live), nameof(MemoryUpdates.ReadAt), nameof(MemoryUpdates.HasReadAt), nameof(MemoryViewModel.ViewChanged)],
+            told);
 
         await leave.CancelAsync();
         await watching.WaitAsync(Patience);

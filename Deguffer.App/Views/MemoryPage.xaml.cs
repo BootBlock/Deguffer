@@ -213,8 +213,9 @@ public sealed partial class MemoryPage : Page
     /// couple of seconds, for nobody.</para>
     ///
     /// <para>A page uncovered or restored starts a reading at once rather than at the next beat of the
-    /// cadence, so the reader never sees the list from before it was hidden presented as the
-    /// present.</para>
+    /// cadence, so the reader never sees the list from before it was hidden presented as the present.
+    /// With live update off it keeps the list it had instead, because the reader asked for figures that
+    /// change only when they press Refresh, and the page says when that list was read.</para>
     ///
     /// <para>Started and stopped only on a change of answer. A resize or a window moving elsewhere on the
     /// desktop asks again too, and restarting the loop each time would put the cadence back to nothing

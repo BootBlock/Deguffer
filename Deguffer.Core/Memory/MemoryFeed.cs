@@ -79,21 +79,12 @@ public sealed class MemoryFeed(IMemorySource source, TimeProvider time)
         }
     }
 
-    private DateTimeOffset? _lastRead;
-
-    /// <summary>When the last snapshot this feed delivered was read, or null before the first.</summary>
-    public DateTimeOffset? LastRead
-    {
-        get
-        {
-            // Under the lock because the loop writes it on the thread pool, and a nullable
-            // DateTimeOffset is wider than one write the processor makes whole.
-            lock (_gate)
-            {
-                return _lastRead;
-            }
-        }
-    }
+    /// <summary>
+    /// Whether a consumer has taken a reading from this feed: asked for the one after it, which it
+    /// does only once it has finished with the one before. A reading yielded to a consumer that was
+    /// cancelled while the read ran is thrown away unseen, so it does not count.
+    /// </summary>
+    private bool _taken;
 
     /// <summary>
     /// Ask for a read now, live or not. One already running is left to finish, and this one starts as
@@ -115,13 +106,21 @@ public sealed class MemoryFeed(IMemorySource source, TimeProvider time)
     /// <see cref="OperationCanceledException"/> and starts no further read.
     ///
     /// <para>Begun again while <see cref="Live"/> is off, by a page the reader has come back to, the
-    /// first read waits for <see cref="Refresh"/> as well, where this feed has delivered one already:
-    /// the reader turned the cadence off so that the figures would change only when they asked, and
-    /// coming back to the page is not asking.</para>
+    /// first read waits for <see cref="Refresh"/> as well, where a consumer has taken a reading from
+    /// this feed already: the reader turned the cadence off so that the figures would change only when
+    /// they asked, and coming back to the page is not asking. A feed whose every reading was thrown
+    /// away reads at once, or the page would stand empty until the reader thought to ask.</para>
     /// </summary>
-    public async IAsyncEnumerable<MemorySnapshot> ReadAsync([EnumeratorCancellation] CancellationToken ct)
+    public async IAsyncEnumerable<MemoryReading> ReadAsync([EnumeratorCancellation] CancellationToken ct)
     {
-        if (LastRead is not null && !Live)
+        bool waits;
+
+        lock (_gate)
+        {
+            waits = _taken && !_live;
+        }
+
+        if (waits)
         {
             await NextAsync(ct).ConfigureAwait(false);
         }
@@ -137,12 +136,12 @@ public sealed class MemoryFeed(IMemorySource source, TimeProvider time)
 
             var snapshot = await Task.Run(() => source.Read(ct), ct).ConfigureAwait(false);
 
+            yield return new MemoryReading(snapshot, time.GetUtcNow());
+
             lock (_gate)
             {
-                _lastRead = time.GetUtcNow();
+                _taken = true;
             }
-
-            yield return snapshot;
 
             await NextAsync(ct).ConfigureAwait(false);
         }

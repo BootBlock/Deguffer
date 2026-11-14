@@ -142,13 +142,13 @@ public sealed partial class MemoryViewModel : ObservableObject, IMapNavigator, I
 
         try
         {
-            await foreach (var snapshot in _feed.ReadAsync(ct).ConfigureAwait(true))
+            await foreach (var reading in _feed.ReadAsync(ct).ConfigureAwait(true))
             {
                 // A read already past its own last check still finishes, so without this a reading
                 // taken for a page the reader has left could be drawn over a newer one.
                 ct.ThrowIfCancellationRequested();
 
-                Show(MemoryTreeBuilder.Build(snapshot));
+                Show(MemoryTreeBuilder.Build(reading.Snapshot), reading.Read);
             }
         }
         catch (OperationCanceledException)
@@ -264,11 +264,11 @@ public sealed partial class MemoryViewModel : ObservableObject, IMapNavigator, I
     /// <summary>
     /// Take a new reading: keep the reader where they were, and rebuild everything on screen from it.
     /// </summary>
-    private void Show(MemoryTree tree)
+    private void Show(MemoryTree tree, DateTimeOffset read)
     {
         // Before the reading is shown, so whatever the page does once it has been is done with the
         // time it was read already said.
-        Updates.Shown();
+        Updates.Shown(read);
 
         Show(tree, MemoryPlace.Carry(Tree, CurrentNode, tree), MemoryViewChange.Reading);
     }

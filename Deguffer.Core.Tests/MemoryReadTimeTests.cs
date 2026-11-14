@@ -11,29 +11,26 @@ public sealed class MemoryReadTimeTests
 {
     private static readonly DateTimeOffset Read = new(2026, 6, 1, 14, 5, 9, TimeSpan.Zero);
 
+    /// <summary>Five and a half hours ahead of UTC, so neither the hour nor the minute survives a lost conversion.</summary>
+    private static readonly TimeZoneInfo Reader =
+        TimeZoneInfo.CreateCustomTimeZone("Reader", TimeSpan.FromHours(5.5), "Reader", "Reader");
+
     [Fact]
     public void NothingIsSaidWhileLive() =>
-        Assert.Empty(MemoryReadTime.Said(Read, live: true, CultureInfo.InvariantCulture));
+        Assert.Empty(MemoryReadTime.Said(Read, live: true, Reader, CultureInfo.InvariantCulture));
 
     [Fact]
-    public void NothingIsSaidBeforeTheFirstRead() =>
-        Assert.Empty(MemoryReadTime.Said(null, live: false, CultureInfo.InvariantCulture));
+    public void NothingIsSaidBeforeTheFirstReading() =>
+        Assert.Empty(MemoryReadTime.Said(null, live: false, Reader, CultureInfo.InvariantCulture));
 
     /// <summary>
-    /// In the reader's own clock and the reader's own time format: a 24-hour culture and a 12-hour one
-    /// read the same moment differently, which a fixed pattern would not.
+    /// In the reader's own time zone and time format: a 24-hour culture and a 12-hour one read the same
+    /// moment differently, which a fixed pattern would not.
     /// </summary>
     [Fact]
-    public void OffItSaysWhenInTheReadersClockAndFormat()
+    public void OffItSaysWhenInTheReadersZoneAndFormat()
     {
-        var local = Read.ToLocalTime();
-
-        Assert.Equal(
-            $"Read at {local.Hour:00}:{local.Minute:00}:{local.Second:00}",
-            MemoryReadTime.Said(Read, live: false, CultureInfo.GetCultureInfo("en-GB")));
-
-        Assert.EndsWith(
-            local.Hour < 12 ? "AM" : "PM",
-            MemoryReadTime.Said(Read, live: false, CultureInfo.GetCultureInfo("en-US")));
+        Assert.Equal("Read at 19:35:09", MemoryReadTime.Said(Read, live: false, Reader, CultureInfo.GetCultureInfo("en-GB")));
+        Assert.Equal("Read at 7:35:09 PM", MemoryReadTime.Said(Read, live: false, Reader, CultureInfo.GetCultureInfo("en-US")));
     }
 }
