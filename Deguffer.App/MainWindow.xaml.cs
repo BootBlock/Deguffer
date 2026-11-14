@@ -24,9 +24,28 @@ public sealed partial class MainWindow : Window
     private readonly ToolWindowOpener _mapAppearance;
     private readonly DrawnSetting<bool> _navigationCollapsed;
 
+    /// <summary>
+    /// The page each rail item opens. Keyed by the item rather than by a string written on it, so an
+    /// item with no page, or a page named wrong, cannot open Storage in silence as a fallback would.
+    /// </summary>
+    private readonly Dictionary<NavigationViewItem, Type> _destinations;
+
     public MainWindow()
     {
         InitializeComponent();
+
+        _destinations = new Dictionary<NavigationViewItem, Type>
+        {
+            [StorageItem] = typeof(CleanPage),
+            [ExploreItem] = typeof(ExplorePage),
+            [DuplicatesItem] = typeof(DuplicatesPage),
+            [HealthItem] = typeof(HealthPage),
+            [InstalledAppsItem] = typeof(InstalledAppsPage),
+            [StartupItem] = typeof(StartupPage),
+            [MemoryItem] = typeof(MemoryPage),
+            [SettingsItem] = typeof(SettingsPage),
+            [AboutItem] = typeof(AboutPage),
+        };
 
         Title = "Deguffer";
         ExtendsContentIntoTitleBar = true;
@@ -145,8 +164,8 @@ public sealed partial class MainWindow : Window
     public void CloseWhenIdle() => _closeGuard.CloseWhenIdle();
 
     /// <summary>
-    /// Open on the destination this instance was started for: Storage ordinarily, and Explore,
-    /// Duplicates or Installed apps where an elevated replacement was told to resume there.
+    /// Open on the destination this instance was started for: Storage ordinarily, and the page an
+    /// elevated replacement was told to resume on otherwise.
     ///
     /// <para>An elevated instance always replaces one the user was already using, because §6.3 does
     /// not elevate at startup. Opening it at the default destination throws away where they were,
@@ -162,17 +181,17 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private void OpenWhereTheLaunchAsked()
     {
-        var (page, item) = ElevatedRelaunch.Requested switch
+        var item = ElevatedRelaunch.Requested switch
         {
-            ExploreRequest => (typeof(ExplorePage), ExploreItem),
-            DuplicatesRequest => (typeof(DuplicatesPage), DuplicatesItem),
-            InstalledAppsRequest => (typeof(InstalledAppsPage), InstalledAppsItem),
-            HealthRequest => (typeof(HealthPage), HealthItem),
-            StartupRequest => (typeof(StartupPage), StartupItem),
-            _ => (typeof(CleanPage), StorageItem),
+            ExploreRequest => ExploreItem,
+            DuplicatesRequest => DuplicatesItem,
+            InstalledAppsRequest => InstalledAppsItem,
+            HealthRequest => HealthItem,
+            StartupRequest => StartupItem,
+            _ => StorageItem,
         };
 
-        Go(page);
+        Go(_destinations[item]);
 
         // The rail second. Assigning it raises OnDestinationChanged, which finds the frame already
         // where it is going and does nothing further. The selection is what the user reads as "where
@@ -216,7 +235,7 @@ public sealed partial class MainWindow : Window
     /// </summary>
     public void ShowStartupEntry(StartupKey entry)
     {
-        Go(typeof(StartupPage), entry);
+        Go(_destinations[StartupItem], entry);
         Navigation.SelectedItem = StartupItem;
     }
 
@@ -259,23 +278,13 @@ public sealed partial class MainWindow : Window
 
     private void OnDestinationChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
-        if (args.SelectedItem is not NavigationViewItem { Tag: string tag })
+        // A selection cleared to nothing leaves nowhere to go, and the page on screen stays.
+        if (args.SelectedItem is not NavigationViewItem item)
         {
             return;
         }
 
-        var page = tag switch
-        {
-            "Settings" => typeof(SettingsPage),
-            "About" => typeof(AboutPage),
-            "Explore" => typeof(ExplorePage),
-            "Duplicates" => typeof(DuplicatesPage),
-            "Memory" => typeof(MemoryPage),
-            "InstalledApps" => typeof(InstalledAppsPage),
-            "Startup" => typeof(StartupPage),
-            "Health" => typeof(HealthPage),
-            _ => typeof(CleanPage),
-        };
+        var page = _destinations[item];
 
         // Navigating to the page already shown would rebuild it, and CleanPage holds a scan the
         // user may be part-way through acting on.
