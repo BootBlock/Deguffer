@@ -401,6 +401,13 @@ public enum ExploreScheme
 /// up, so the reader can see what the time is being spent on. On by default. Presentation only: the
 /// status line says what the run is doing whatever this says.
 /// </param>
+/// <param name="MemoryLiveUpdate">
+/// Whether the Memory page reads the machine every couple of seconds, or only when the reader presses
+/// Refresh. On by default, because §7.2's picture is of a machine that keeps moving. Stored for the
+/// reason <paramref name="ExploreOverviewHidden"/> is: a reader who wants the figures to hold still
+/// while they read them wants that at every launch. It changes when the page reads, never what it
+/// reads or what it may do.
+/// </param>
 public sealed record AppPreferences(
     AppTheme Theme = AppTheme.System,
     ViewDensity View = ViewDensity.Standard,
@@ -428,7 +435,8 @@ public sealed record AppPreferences(
     bool BackUpInstalledAppEntries = true,
     Execution.CompletionAction WhenCleanComplete = Execution.CompletionAction.Nothing,
     bool NavigationCollapsed = false,
-    bool SpotlightCleanedRow = true)
+    bool SpotlightCleanedRow = true,
+    bool MemoryLiveUpdate = true)
 {
     public static readonly AppPreferences Default = new();
 

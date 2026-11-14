@@ -48,6 +48,9 @@ public sealed partial class MemoryPage : Page
     /// <summary>Ends the startup read begun as the page opened, when the page is left before it lands.</summary>
     private CancellationTokenSource? _startupRead;
 
+    /// <summary>Whether the page reads on the cadence or only on Refresh, chosen with the Live update box.</summary>
+    private readonly DrawnSetting<bool> _live;
+
     public MemoryPage()
     {
         // Assigned before InitializeComponent so no x:Bind can evaluate against a null view-model,
@@ -123,6 +126,19 @@ public sealed partial class MemoryPage : Page
             KeyDownEvent, new KeyEventHandler(OnRowsKeyDown), handledEventsToo: true);
 
         ViewSelector.SelectedIndex = (int)ViewModel.SelectedView;
+
+        // Read once, as the page is built, for the reason DrawnSetting.Stored gives. Before the
+        // handlers below, so putting the stored choice on the box does not write it straight back.
+        _live = new DrawnSetting<bool>(
+            App.Preferences,
+            current => current.MemoryLiveUpdate,
+            (current, live) => current with { MemoryLiveUpdate = live },
+            live => ViewModel.Updates.Live = live);
+
+        LiveToggle.IsChecked = _live.Stored;
+        ViewModel.Updates.Live = _live.Stored;
+        LiveToggle.Checked += OnLiveToggled;
+        LiveToggle.Unchecked += OnLiveToggled;
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -443,6 +459,13 @@ public sealed partial class MemoryPage : Page
     }
 
     private void OnAscend(object sender, RoutedEventArgs e) => ViewModel.Ascend();
+
+    /// <summary>
+    /// Shown first and written second (<see cref="DrawnSetting{T}"/>). A failed write costs the reader
+    /// this choice at the next launch and nothing sooner, and the box already shows what took effect,
+    /// so the result is not reported.
+    /// </summary>
+    private void OnLiveToggled(object sender, RoutedEventArgs e) => _live.Choose(LiveToggle.IsChecked == true);
 
 
     private void OnCrumbClicked(object sender, RoutedEventArgs e)

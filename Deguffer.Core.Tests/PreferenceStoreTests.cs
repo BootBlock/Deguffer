@@ -46,7 +46,8 @@ public class PreferenceStoreTests
             BackUpInstalledAppEntries: false,
             WhenCleanComplete: CompletionAction.Hibernate,
             NavigationCollapsed: true,
-            SpotlightCleanedRow: false)
+            SpotlightCleanedRow: false,
+            MemoryLiveUpdate: false)
         {
             // Every field of the map's style away from its default, so a field dropped from the file, or
             // read from another field's key, fails here.
@@ -111,6 +112,7 @@ public class PreferenceStoreTests
 
         // False, because true is the default and a missing key reads as true.
         Assert.False(loaded.SpotlightCleanedRow);
+        Assert.False(loaded.MemoryLiveUpdate);
 
         Assert.True(loaded.ShowNotInstalled);
         Assert.True(loaded.ShowAlreadyClear);
