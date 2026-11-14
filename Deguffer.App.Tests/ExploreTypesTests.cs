@@ -59,6 +59,36 @@ public sealed class ExploreTypesTests : IDisposable
         Assert.False(page.ShowsTypes);
     });
 
+    /// <summary>
+    /// A look that tunes the map's colours paints the legend and each kind's swatch as the map paints
+    /// the kind, and a swatch already on screen takes the new colour in place.
+    /// </summary>
+    [Fact]
+    public void TheSwatchesFollowTheColoursTheMapIsTunedTo() => UiThread.Run(async () =>
+    {
+        var (page, _) = await ScannedAsync();
+        page.SelectedColouring = ExploreColouring.Type;
+        await Eventually.HoldsAsync(() => page.Types.Rows.Count == 3, "the breakdown shown");
+        var row = page.Types.Rows[0];
+        var raised = new List<string?>();
+        row.PropertyChanged += (_, changed) => raised.Add(changed.PropertyName);
+
+        var style = MapStyle.Default with { Saturation = MapSaturation.Grey, Brightness = MapBrightness.Darker };
+        var tuning = ColourTuning.Of(style);
+        page.Look = MapLook.Default with { Style = style };
+
+        Assert.Same(row, page.Types.Rows[0]);
+        Assert.Equal(tuning.Apply(TypePalette.For(row.Category)), Colour(row));
+        Assert.Contains(nameof(ExploreTypeRow.Swatch), raised);
+        Assert.Equal(
+            TypePalette.Bands.Select(band => tuning.Apply(band.Colour)),
+            page.Legend.Select(band => new TileColour(band.Swatch.R, band.Swatch.G, band.Swatch.B)));
+
+        page.Look = MapLook.Default;
+
+        Assert.Equal(TypePalette.For(row.Category), Colour(row));
+    });
+
     /// <summary>The breakdown follows the folder the reader opens, and counts nothing outside it.</summary>
     [Fact]
     public void TheBreakdownFollowsTheFolderOnScreen() => UiThread.Run(async () =>

@@ -119,7 +119,7 @@ public sealed class LabelAxisTests
     private static ExploreSurface Draw(ExploreTree tree, ExploreView view, MapViewport viewport) =>
         ExploreSurface.Create(
             tree, tree.RootNode, view, Width, Height, scale: 1, textScale: 1,
-            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None, viewport);
+            ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default, VolumeSpace.None, viewport);
 
     /// <summary>Folders inside folders, each holding files of a few sizes, so a zoom shows bands and names cut by the canvas's edges.</summary>
     private static ExploreTree Tree()

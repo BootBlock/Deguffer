@@ -19,8 +19,8 @@ public sealed class SunburstSurface : ExploreSurface
         int height,
         LayoutLimits limits,
         ShapeColours colours,
-        MapStyle style)
-        : base(tree, root, width, height, limits, colours, style, zoom: null)
+        MapLook look)
+        : base(tree, root, width, height, limits, colours, look, zoom: null)
     {
         _hits = new SectorHitTest(SunburstLayout.Compute(tree, root, width, height, limits));
         _byNode = new NodeShapes<ExploreSector>(
@@ -300,7 +300,7 @@ public sealed class SunburstSurface : ExploreSurface
 
         var sectors = sunburst.Sectors;
 
-        for (var i = 0; i < sectors.Count && labels.Count < MaximumLabels; i++)
+        for (var i = 0; i < sectors.Count && labels.Count < MostSectorLabels; i++)
         {
             var sector = sectors[i];
 

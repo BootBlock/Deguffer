@@ -171,7 +171,7 @@ public sealed class ViewMorphTests
         var earlier = Drawing(tree, ExploreView.Treemap);
         var later = ExploreSurface.Create(
             tree, tree.RootNode, ExploreView.Sunburst, Width / 2, Height, scale: 1, textScale: 1,
-            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None);
+            ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default, VolumeSpace.None);
 
         Assert.Empty(ViewMorph.Between(earlier, later));
     }
@@ -186,7 +186,7 @@ public sealed class ViewMorphTests
         var tree = Many(folders: 3, files: 2);
         var zoomed = ExploreSurface.Create(
             tree, tree.RootNode, ExploreView.Treemap, Width, Height, scale: 1, textScale: 1,
-            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None,
+            ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default, VolumeSpace.None,
             MapViewport.Seen(4, 0.25, 0.25));
 
         Assert.False(zoomed.ShownAt.IsWhole);
@@ -261,7 +261,7 @@ public sealed class ViewMorphTests
     private static ExploreSurface Drawing(ISizedTree tree, ExploreView view) =>
         ExploreSurface.Create(
             tree, tree.RootNode, view, Width, Height, scale: 1, textScale: 1,
-            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None);
+            ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default, VolumeSpace.None);
 
     /// <summary>
     /// A folder six deep holding half the bytes, and beside it <paramref name="files"/> files sharing

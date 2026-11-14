@@ -161,7 +161,7 @@ public sealed class MapPresetTests
         var types = MapSample.ColoursFor(ExploreColouring.Type, ExploreScheme.Standard);
         var drawing = ExploreSurface.Create(
             MapSample.Tree, MapSample.Tree.RootNode, ExploreView.Treemap, 320, 160, 1, 1,
-            types, ExploreSpacing.Comfortable, VolumeSpace.None);
+            types, MapLook.Default, VolumeSpace.None);
         var colours = drawing.MorphShapes(drawing.NodesDrawn.ToHashSet()).Select(shape => shape.Colour).ToHashSet();
 
         Assert.Contains(TypePalette.For(FileCategory.Images), colours);

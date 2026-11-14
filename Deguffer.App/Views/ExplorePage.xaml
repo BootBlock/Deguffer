@@ -1186,7 +1186,7 @@
                                             VerticalAlignment="Center"
                                             AutomationProperties.AccessibilityView="Raw">
                                         <Border.Background>
-                                            <SolidColorBrush Color="{x:Bind Swatch}" />
+                                            <SolidColorBrush Color="{x:Bind Swatch, Mode=OneWay}" />
                                         </Border.Background>
                                     </Border>
 

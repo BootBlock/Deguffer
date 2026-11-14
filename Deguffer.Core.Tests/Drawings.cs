@@ -44,7 +44,7 @@ internal static class Drawings
             Size,
             LayoutLimits.Default,
             ShapeColours.ByBranch(ExploreScheme.Standard),
-            MapStyle.Default,
+            MapLook.Default,
             [new ExploreTile(node, Depth: 1, Bytes: 1000, X: 0, Y: 0, Width: Size, Height: Size)],
             viewport);
 }
@@ -62,7 +62,7 @@ internal sealed class GatedSurface(TiledSurface drawing, Func<CanvasRegion, bool
         drawing.Height,
         LayoutLimits.Default,
         ShapeColours.ByBranch(ExploreScheme.Standard),
-        MapStyle.Default,
+        MapLook.Default,
         drawing.Zoom)
 {
     private readonly ManualResetEventSlim _open = new();

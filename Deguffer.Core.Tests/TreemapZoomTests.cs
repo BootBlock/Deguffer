@@ -308,7 +308,7 @@ public sealed class TreemapZoomTests
         {
             var surface = ExploreSurface.Create(
                 tree, tree.RootNode, ExploreView.Treemap, Width, Height, scale: 1, textScale: 1,
-                ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None,
+                ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default, VolumeSpace.None,
                 MapViewport.Anchored(6, x, y, 0.5, 0.5, MapCeiling.Least));
 
             Assert.All(surface.Labels, label =>
@@ -505,7 +505,7 @@ public sealed class TreemapZoomTests
     private static ExploreSurface Draw(ExploreTree tree, ExploreView view, MapViewport viewport) =>
         ExploreSurface.Create(
             tree, tree.RootNode, view, Width, Height, scale: 1, textScale: 1,
-            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None, viewport);
+            ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default, VolumeSpace.None, viewport);
 
     private static byte[] Paint(IReadOnlyList<ExploreTile> tiles, int width, int height)
     {

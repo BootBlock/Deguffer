@@ -8,8 +8,8 @@ namespace Deguffer.App.Views;
 
 /// <summary>
 /// The map appearance window: presets, the colours each picture is drawn in, how every shape is
-/// shaded and outlined, the light under the pointer, and the room a treemap leaves round each folder.
-/// It changes nothing but how the maps look.
+/// shaded and outlined, the light under the pointer, the room a treemap leaves round each folder and
+/// how much of the tree it draws, and the names written on it. It changes nothing but how the maps look.
 ///
 /// <para>Modeless and owned by the main window, so the reader can keep it open, move it clear of the
 /// map, and watch each change land. It opens where it was left, and with the application where it was
@@ -25,11 +25,11 @@ namespace Deguffer.App.Views;
 /// </summary>
 public sealed class MapAppearanceWindow : Window, IToolWindow
 {
-    private const int OpenWidth = 560;
+    private const int OpenWidth = 680;
     private const int OpenHeight = 860;
 
-    /// <summary>One preset card wide, with every row still able to fit its box beside its words.</summary>
-    private const int MinimumWidth = 440;
+    /// <summary>Every section's name in the bar along the top, with every row still able to fit its box beside its words.</summary>
+    private const int MinimumWidth = 640;
 
     /// <summary>The preview, the sections and the foot, with a few rows of the open section between them.</summary>
     private const int MinimumHeight = 560;

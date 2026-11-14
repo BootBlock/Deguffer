@@ -109,7 +109,7 @@ public sealed class TypeColouringTests
     }
 
     private static ExploreSurface Surface(ExploreTree tree, ShapeColours colours) => ExploreSurface.Create(
-        tree, tree.RootNode, ExploreView.Icicle, 200, 200, 1, 1, colours, ExploreSpacing.Comfortable, VolumeSpace.None);
+        tree, tree.RootNode, ExploreView.Icicle, 200, 200, 1, 1, colours, MapLook.Default, VolumeSpace.None);
 
     private static byte[] Painted(ExploreTree tree, ShapeColours colours)
     {

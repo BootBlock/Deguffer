@@ -289,13 +289,29 @@ public sealed record ExploreLegendBand(string Label, Color Swatch)
     ];
 
     /// <summary>
-    /// The bands a map coloured by <paramref name="colouring"/> in <paramref name="scheme"/> needs
-    /// explained, ready to bind. See <see cref="MapLegend.For"/>.
+    /// The bands a map coloured by <paramref name="colouring"/> in <paramref name="scheme"/>, its
+    /// colours moved by <paramref name="tuning"/>, needs explained, ready to bind. See
+    /// <see cref="MapLegend.For"/>.
     ///
     /// <para>A colouring no member names, which the Colour box can give while nothing in it is selected,
     /// has no legend, as <see cref="MapLegend.For"/> says of it, rather than an index past the
     /// table.</para>
+    ///
+    /// <para>The palette's own colours come from the table. Tuned ones are made when asked, which is
+    /// once for each change of look, for a legend of a few bands: a swatch in a colour the map does
+    /// not draw would explain nothing.</para>
     /// </summary>
-    public static IReadOnlyList<ExploreLegendBand> For(ExploreColouring colouring, ExploreScheme scheme) =>
-        Enum.IsDefined(colouring) ? Built[(int)colouring][(int)scheme] : [];
+    public static IReadOnlyList<ExploreLegendBand> For(ExploreColouring colouring, ExploreScheme scheme, ColourTuning tuning)
+    {
+        if (!Enum.IsDefined(colouring))
+        {
+            return [];
+        }
+
+        var built = Built[(int)colouring][(int)scheme];
+
+        return tuning.IsNone
+            ? built
+            : [.. MapLegend.For(colouring, scheme).Select(band => new ExploreLegendBand(band.Label, tuning.Apply(band.Colour).ToColor()))];
+    }
 }

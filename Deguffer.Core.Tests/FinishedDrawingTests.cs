@@ -251,8 +251,7 @@ public sealed class FinishedDrawingTests
         var tree = builder.Build(ExploreChildOrder.BySize);
         var drawing = ExploreSurface.Create(
             tree, ExploreTreeBuilder.RootNode, ExploreView.Sunburst, Width, Height, scale: 1, textScale: 1,
-            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None,
-            style: MapStyle.Default with { Shading = MapShading.Gradient });
+            ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default with { Style = MapStyle.Default with { Shading = MapShading.Gradient } }, VolumeSpace.None);
         var pixels = Paint(drawing);
         var aggregated = 0;
 
@@ -480,7 +479,7 @@ public sealed class FinishedDrawingTests
 
     private static ExploreSurface Drawn(ExploreView view, MapStyle style, ShapeColours? colours = null, int root = ExploreTreeBuilder.RootNode) => ExploreSurface.Create(
         Tree, root, view, Width, Height, scale: 1, textScale: 1,
-        colours ?? ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None, style: style);
+        colours ?? ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default with { Style = style }, VolumeSpace.None);
 
     private static TiledSurface Treemap(MapStyle style, ShapeColours? colours = null, int root = ExploreTreeBuilder.RootNode) =>
         (TiledSurface)Drawn(ExploreView.Treemap, style, colours, root);

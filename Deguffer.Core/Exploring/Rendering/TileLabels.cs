@@ -26,7 +26,7 @@ namespace Deguffer.Core.Exploring.Rendering;
 /// How the text is set: a name at the top left of its shape, or under <see cref="MapLettering.Classic"/>
 /// as many lines of it as the shape has room for, in its middle.
 /// </param>
-/// <param name="maximumLabels">How many shapes to name inside at most: see <see cref="ExploreSurface.MaximumLabels"/>.</param>
+/// <param name="maximumLabels">How many shapes to name inside at most: see <see cref="ExploreSurface.MostLabels"/>.</param>
 /// <param name="textColourOf">The colour a shape's name is drawn in, which is its drawing's to say.</param>
 internal sealed class TileLabels(
     IReadOnlyList<ExploreTile> tiles,
@@ -43,7 +43,7 @@ internal sealed class TileLabels(
     /// <summary>
     /// How many folders to name in their frames at most, on top of the labels inside the shapes.
     ///
-    /// <para>Separate from <see cref="ExploreSurface.MaximumLabels"/>, which keeps the text over the
+    /// <para>Separate from <see cref="ExploreSurface.MostLabels"/>, which keeps the text over the
     /// picture from becoming noise. A folder's name is in a band the layout set aside for it, so it
     /// covers nothing, and a band left empty reads as a folder with no name — so this is set high
     /// enough that a real drive at 4K does not reach it. A band needs a folder at least three lines

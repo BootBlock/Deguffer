@@ -49,16 +49,23 @@ public readonly record struct ShapeFinish(MapShading Shading, float Relief, Shap
         ArgumentNullException.ThrowIfNull(style);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixel);
 
+        var bevelWidth = style.BevelWidth switch
+        {
+            MapBevelWidth.Medium => pixel * 2,
+            MapBevelWidth.Wide => pixel * 3,
+            _ => pixel,
+        };
+
         var bevel = style.Shading == MapShading.Bevel
             ? style.Relief switch
             {
-                MapRelief.Subtle => new ShapeBevel(pixel, Highlight: 64, Shadow: 32),
-                MapRelief.Strong => new ShapeBevel(pixel, Highlight: 192, Shadow: 112),
-                MapRelief.Deep => new ShapeBevel(pixel, Highlight: 224, Shadow: 160),
+                MapRelief.Subtle => new ShapeBevel(bevelWidth, Highlight: 64, Shadow: 32),
+                MapRelief.Strong => new ShapeBevel(bevelWidth, Highlight: 192, Shadow: 112),
+                MapRelief.Deep => new ShapeBevel(bevelWidth, Highlight: 224, Shadow: 160),
 
                 // Half way to white along the top and the left, and a quarter of the way to black
                 // along the bottom and the right.
-                _ => new ShapeBevel(pixel, Highlight: 128, Shadow: 64),
+                _ => new ShapeBevel(bevelWidth, Highlight: 128, Shadow: 64),
             } with
             {
                 Classic = style.BevelShades == MapBevelShades.Classic,

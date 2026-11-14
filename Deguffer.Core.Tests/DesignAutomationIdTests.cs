@@ -36,7 +36,6 @@ public sealed class DesignAutomationIdTests
         ["Deguffer.App/Views/HealthPage.xaml"] = 2,
         ["Deguffer.App/Views/InstalledAppsPage.xaml"] = 10,
         ["Deguffer.App/Views/ItemListView.xaml"] = 5,
-        ["Deguffer.App/Views/MapAppearanceView.xaml"] = 17,
         ["Deguffer.App/Views/MemoryPage.xaml"] = 5,
         ["Deguffer.App/Views/NetworkBrowserDialog.xaml"] = 6,
         ["Deguffer.App/Views/ProviderInfoView.xaml"] = 1,

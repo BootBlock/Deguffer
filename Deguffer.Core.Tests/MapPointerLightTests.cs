@@ -44,7 +44,9 @@ public sealed class MapPointerLightTests
     /// <summary>The light the map shines carries the strength it was given, to the shader that adds it.</summary>
     [Fact]
     public void ThePointersLightCarriesTheStrengthItWasGiven() =>
-        Assert.Equal(0.2f, PointerLight.At(10, 10, 1, 0.2f).Strength);
+        Assert.Equal(
+            new MapPointerLight(Strength: MapLightStrength.Bright).Amount,
+            PointerLight.At(10, 10, 1, new MapPointerLight(Strength: MapLightStrength.Bright)).Strength);
 
     /// <summary>Every file on an upgraded machine was written before the light could be chosen. It reads with the light on, at the default strength.</summary>
     [Fact]
@@ -68,7 +70,7 @@ public sealed class MapPointerLightTests
     public void AStrengthNoMemberNamesIsReadAsTheDefault() =>
         Assert.Equal(MapPointerLight.Default, new MapPointerLight(Strength: (MapLightStrength)9).Defined());
 
-    /// <summary>The file holds the two choices and nothing derived from them, which a hand-editor would take for a third.</summary>
+    /// <summary>The file holds the three choices and nothing derived from them, which a hand-editor would take for a fourth.</summary>
     [Fact]
     public void TheFileHoldsOnlyTheChoices()
     {
@@ -76,14 +78,14 @@ public sealed class MapPointerLightTests
         var environment = new FakeUserEnvironment(temp.Path);
         var store = new PreferenceStore(environment);
 
-        Assert.True(store.Save(AppPreferences.Default with { MapPointerLight = new MapPointerLight(Shown: false, MapLightStrength.Soft) }));
+        Assert.True(store.Save(AppPreferences.Default with { MapPointerLight = new MapPointerLight(Shown: false, MapLightStrength.Soft, MapLightReach.Narrow) }));
 
         using var written = JsonDocument.Parse(File.ReadAllText(Path.Combine(environment.LocalAppData, "Deguffer", "preferences.json")));
 
         Assert.Equal(
-            ["Shown", "Strength"],
+            ["Shown", "Strength", "Reach"],
             written.RootElement.GetProperty("MapPointerLight").EnumerateObject().Select(property => property.Name));
-        Assert.Equal(new MapPointerLight(Shown: false, MapLightStrength.Soft), store.Load().MapPointerLight);
+        Assert.Equal(new MapPointerLight(Shown: false, MapLightStrength.Soft, MapLightReach.Narrow), store.Load().MapPointerLight);
     }
 
     private static AppPreferences LoadWritten(string json)

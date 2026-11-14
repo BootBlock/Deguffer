@@ -174,6 +174,10 @@ public readonly record struct ExploreTile(
 /// <param name="LineSpacing">
 /// How far apart the lines of a label of several lines are: see <see cref="Lettered"/>.
 /// </param>
+/// <param name="TextScale">
+/// The size the text thresholds were grown to (<see cref="ForText"/>), 1 at the standard size, so the
+/// names are set at the size their room was measured for.
+/// </param>
 public readonly record struct LayoutLimits(
     float MinimumTileSize,
     int MaximumDepth,
@@ -182,7 +186,8 @@ public readonly record struct LayoutLimits(
     float MinimumLabelHeight,
     float ContainerGap,
     bool FolderBands = true,
-    float LineSpacing = 16f)
+    float LineSpacing = 16f,
+    double TextScale = 1)
 {
     public static readonly LayoutLimits Default = new(
         MinimumTileSize: 3f,
@@ -225,6 +230,17 @@ public readonly record struct LayoutLimits(
     public LayoutLimits Banded(bool bands) => this with { FolderBands = bands };
 
     /// <summary>
+    /// These limits with the smallest shape and the levels <paramref name="detail"/> asks for, in
+    /// device-independent pixels.
+    /// </summary>
+    public LayoutLimits Detailed(Configuration.MapDetail detail)
+    {
+        ArgumentNullException.ThrowIfNull(detail);
+
+        return this with { MinimumTileSize = detail.SmallestShapeInDips, MaximumDepth = detail.LevelCount };
+    }
+
+    /// <summary>
     /// The gap between a shape's edge and the text inside it. A quarter of the label height, so the
     /// padding stays in proportion to the text it separates instead of being a second constant that
     /// has to be remembered and scaled.
@@ -245,6 +261,7 @@ public readonly record struct LayoutLimits(
         MinimumLabelWidth = (float)(MinimumLabelWidth * textScale),
         MinimumLabelHeight = (float)(MinimumLabelHeight * textScale),
         LineSpacing = (float)(LineSpacing * textScale),
+        TextScale = TextScale * textScale,
     };
 
     /// <summary>The same limits in device pixels, for a display at <paramref name="scale"/>.</summary>
@@ -256,5 +273,6 @@ public readonly record struct LayoutLimits(
         (float)(MinimumLabelHeight * scale),
         (float)(ContainerGap * scale),
         FolderBands,
-        (float)(LineSpacing * scale));
+        (float)(LineSpacing * scale),
+        TextScale);
 }

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Deguffer.App.Views.MapPresetsSection"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:Deguffer.App.ViewModels">
+
+    <!-- A preset sets the shading, the lines, the colours' strength, the folders and the spacing at
+         once, and for a look whose colours are part of it, the page's Colour box as well. One row a
+         preset, its name over what it looks like, so the whole list is read top to bottom without
+         a grid of cards to scan across. -->
+    <StackPanel Spacing="12">
+        <Grid ColumnSpacing="12" ColumnDefinitions="*,Auto">
+            <TextBlock Text="{x:Bind ViewModel.PresetSummary, Mode=OneWay}"
+                       Style="{StaticResource SecondaryText}"
+                       VerticalAlignment="Center" />
+            <Button x:Name="RestoreDefaultsButton" Grid.Column="1"
+                    Content="Restore the default look"
+                    Click="OnRestoreClicked"
+                    ToolTipService.ToolTip="The Deguffer preset, standard colours for every picture, and the light and detail as the map is shipped" />
+        </Grid>
+
+        <ListView SelectionMode="Single"
+                  ItemsSource="{x:Bind ViewModel.Presets}"
+                  SelectedIndex="{x:Bind ViewModel.PresetIndex, Mode=TwoWay}"
+                  AutomationProperties.Name="Presets">
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
+                    <Setter Property="Margin" Value="0,0,0,4" />
+                    <Setter Property="Padding" Value="0" />
+                    <Setter Property="CornerRadius" Value="{StaticResource CardCorner}" />
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="vm:MapPresetOption">
+                    <Border Padding="16,8,12,8"
+                            Background="{ThemeResource LayerFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource CardCorner}"
+                            AutomationProperties.Name="{x:Bind Spoken}">
+                        <StackPanel Spacing="0">
+                            <TextBlock Text="{x:Bind Name}" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <TextBlock Text="{x:Bind Description}"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+    </StackPanel>
+</UserControl>

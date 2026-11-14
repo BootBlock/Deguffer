@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Deguffer.App.Views.MapLinesSection"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:views="using:Deguffer.App.Views">
+
+    <!-- How prominent each line is, then how every line is drawn. The last three change nothing while
+         no line is drawn, so they are greyed until one is. -->
+    <StackPanel Spacing="8">
+        <views:SettingsRow Glyph="&#xE8A9;"
+                           Title="Line round each file"
+                           Description="Round every file and block, and every shape of the icicle and the sunburst.">
+            <views:SettingsRow.Control>
+                <ComboBox x:Name="BlockBordersBox" MinWidth="140"
+                          SelectedIndex="{x:Bind ViewModel.BlockBordersIndex, Mode=TwoWay}"
+                          AutomationProperties.Name="Line round each file and block">
+                    <ComboBoxItem Content="None" />
+                    <ComboBoxItem Content="Faint" />
+                    <ComboBoxItem Content="Medium" />
+                    <ComboBoxItem Content="Strong" />
+                    <ComboBoxItem Content="Solid" />
+                </ComboBox>
+            </views:SettingsRow.Control>
+        </views:SettingsRow>
+
+        <views:SettingsRow Glyph="&#xE8B7;"
+                           Title="Line round each folder"
+                           Description="Round a treemap folder that has what it holds drawn inside it.">
+            <views:SettingsRow.Control>
+                <ComboBox x:Name="FolderBordersBox" MinWidth="140"
+                          SelectedIndex="{x:Bind ViewModel.FolderBordersIndex, Mode=TwoWay}"
+                          AutomationProperties.Name="Line round each folder">
+                    <ComboBoxItem Content="None" />
+                    <ComboBoxItem Content="Faint" />
+                    <ComboBoxItem Content="Medium" />
+                    <ComboBoxItem Content="Strong" />
+                    <ComboBoxItem Content="Solid" />
+                </ComboBox>
+            </views:SettingsRow.Control>
+        </views:SettingsRow>
+
+        <views:SettingsRow Glyph="&#xED5E;"
+                           Title="Line width"
+                           Description="How wide either line is, at the display's scale.">
+            <views:SettingsRow.Control>
+                <ComboBox x:Name="BorderWidthBox" MinWidth="140"
+                          SelectedIndex="{x:Bind ViewModel.BorderWidthIndex, Mode=TwoWay}"
+                          IsEnabled="{x:Bind ViewModel.Outlined, Mode=OneWay}"
+                          AutomationProperties.Name="Line width">
+                    <ComboBoxItem Content="Thin" />
+                    <ComboBoxItem Content="Thick" />
+                    <ComboBoxItem Content="Heavy" />
+                </ComboBox>
+            </views:SettingsRow.Control>
+        </views:SettingsRow>
+
+        <views:SettingsRow Glyph="&#xE790;"
+                           Title="Line colour"
+                           Description="What a line is mixed towards from the colour of its shape.">
+            <views:SettingsRow.Control>
+                <ComboBox x:Name="BorderToneBox" MinWidth="140"
+                          SelectedIndex="{x:Bind ViewModel.BorderToneIndex, Mode=TwoWay}"
+                          IsEnabled="{x:Bind ViewModel.Outlined, Mode=OneWay}"
+                          AutomationProperties.Name="Line colour">
+                    <ComboBoxItem Content="Darker" />
+                    <ComboBoxItem Content="Lighter" />
+                </ComboBox>
+            </views:SettingsRow.Control>
+        </views:SettingsRow>
+
+        <views:SettingsRow Glyph="&#xE8A9;"
+                           Title="Lines between shapes"
+                           Description="Whether two shapes side by side each draw their own line, or share one.">
+            <views:SettingsRow.Control>
+                <ComboBox x:Name="LinesBox" MinWidth="140"
+                          SelectedIndex="{x:Bind ViewModel.LinesIndex, Mode=TwoWay}"
+                          IsEnabled="{x:Bind ViewModel.Outlined, Mode=OneWay}"
+                          AutomationProperties.Name="Lines between shapes">
+                    <ComboBoxItem Content="Each its own" />
+                    <ComboBoxItem Content="Shared" />
+                </ComboBox>
+            </views:SettingsRow.Control>
+        </views:SettingsRow>
+    </StackPanel>
+</UserControl>

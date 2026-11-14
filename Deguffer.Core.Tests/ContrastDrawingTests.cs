@@ -241,7 +241,7 @@ public sealed class ContrastDrawingTests
     {
         var drawing = (TiledSurface)ExploreSurface.Create(
             Tree(), ExploreTreeBuilder.RootNode, ExploreView.Treemap, Width, Height, scale, textScale,
-            Contrasted, ExploreSpacing.Comfortable, VolumeSpace.None);
+            Contrasted, MapLook.Default, VolumeSpace.None);
 
         var finish = drawing.Quads().Finish;
 
@@ -255,7 +255,7 @@ public sealed class ContrastDrawingTests
     {
         var drawing = (TiledSurface)ExploreSurface.Create(
             Tree(), ExploreTreeBuilder.RootNode, ExploreView.Treemap, Width, Height, 1, 1,
-            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None);
+            ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default, VolumeSpace.None);
 
         Assert.Equal(ShapeFinish.Cushioned, drawing.Quads().Finish);
         Assert.All(drawing.MorphShapes(drawing.NodesDrawn.ToHashSet()), shape => Assert.Null(shape.Edges));
@@ -295,7 +295,7 @@ public sealed class ContrastDrawingTests
 
     private static ExploreSurface Drawn(ExploreView view) => ExploreSurface.Create(
         Tree(), ExploreTreeBuilder.RootNode, view, Width, Height, scale: 1, textScale: 1,
-        Contrasted, ExploreSpacing.Comfortable, new VolumeSpace(TotalBytes: 12_000_000, FreeBytes: 4_000_000));
+        Contrasted, MapLook.Default, new VolumeSpace(TotalBytes: 12_000_000, FreeBytes: 4_000_000));
 
     private static TiledSurface Treemap() => (TiledSurface)Drawn(ExploreView.Treemap);
 

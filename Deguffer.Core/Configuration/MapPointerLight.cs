@@ -20,7 +20,11 @@ namespace Deguffer.Core.Configuration;
 /// How bright it is where it is shown. Soft by default: the light is there to show which shape the
 /// pointer is on, and at Standard it competed with the colours it lies over.
 /// </param>
-public sealed record MapPointerLight(bool Shown = true, MapLightStrength Strength = MapLightStrength.Soft)
+/// <param name="Reach">How far from the pointer it falls: over the shape under it, or over its neighbours too.</param>
+public sealed record MapPointerLight(
+    bool Shown = true,
+    MapLightStrength Strength = MapLightStrength.Soft,
+    MapLightReach Reach = MapLightReach.Standard)
 {
     /// <summary>The light a map has until the reader chooses another.</summary>
     public static readonly MapPointerLight Default = new();
@@ -42,10 +46,26 @@ public sealed record MapPointerLight(bool Shown = true, MapLightStrength Strengt
     };
 
     /// <summary>
-    /// This light with a strength no member names read as the default's. The preferences file is read
-    /// with numbers allowed for an enum, as <see cref="MapStyle.Defined"/> says.
+    /// How far the light falls, as a multiple of <see cref="Exploring.Rendering.PointerLight.ReachInDips"/>,
+    /// which is the reach it has always had. Kept out of the file, as <see cref="Amount"/> is.
     /// </summary>
-    public MapPointerLight Defined() => this with { Strength = StoredEnum.Defined(Strength, Default.Strength) };
+    [JsonIgnore]
+    public float Spread => Reach switch
+    {
+        MapLightReach.Narrow => 0.5f,
+        MapLightReach.Wide => 1.75f,
+        _ => 1f,
+    };
+
+    /// <summary>
+    /// This light with a strength and a reach no member names read as the default's. The preferences
+    /// file is read with numbers allowed for an enum, as <see cref="MapStyle.Defined"/> says.
+    /// </summary>
+    public MapPointerLight Defined() => this with
+    {
+        Strength = StoredEnum.Defined(Strength, Default.Strength),
+        Reach = StoredEnum.Defined(Reach, Default.Reach),
+    };
 }
 
 /// <summary>
@@ -57,4 +77,17 @@ public enum MapLightStrength
     Soft = 0,
     Standard = 1,
     Bright = 2,
+}
+
+/// <summary>How far the pointer's light falls. Ordinal, as <see cref="MapLightStrength"/> is.</summary>
+public enum MapLightReach
+{
+    /// <summary>Half the standard reach: little more than the shape under the pointer.</summary>
+    Narrow = 0,
+
+    /// <summary>The reach the light has always had, over a few shapes of a crowded picture.</summary>
+    Standard = 1,
+
+    /// <summary>Nearly twice the standard reach, a broad pool of light.</summary>
+    Wide = 2,
 }

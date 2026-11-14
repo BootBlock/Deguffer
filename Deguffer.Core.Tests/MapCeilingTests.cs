@@ -230,7 +230,7 @@ public sealed class MapCeilingTests
     private static ExploreSurface Draw(ExploreTree tree, ExploreView view, MapViewport viewport) =>
         ExploreSurface.Create(
             tree, tree.RootNode, view, Width, Height, scale: 1, textScale: 1,
-            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None, viewport);
+            ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default, VolumeSpace.None, viewport);
 
     /// <summary>The tiles <see cref="Draw"/> lays out for a treemap, which its limits are the same as.</summary>
     private static IReadOnlyList<ExploreTile> Layout(ExploreTree tree, MapViewport viewport) =>

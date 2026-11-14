@@ -171,7 +171,7 @@ public sealed class TreemapVolumeTests
 
         var zoomed = ExploreSurface.Create(
             tree, tree.RootNode, ExploreView.Treemap, Width, Height, scale: 1, textScale: 1,
-            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, volume, viewport);
+            ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default, volume, viewport);
 
         Assert.DoesNotContain(Hits(zoomed), hit => hit.Block == MapBlock.FreeSpace || hit.Block == MapBlock.Unaccounted);
         Assert.True(zoomed.HasVolumeBeside);
@@ -392,7 +392,7 @@ public sealed class TreemapVolumeTests
     private static ExploreSurface Treemap(ExploreTree tree, int root, ExploreView view, VolumeSpace volume) =>
         ExploreSurface.Create(
             tree, root, view, Width, Height, scale: 1, textScale: 1, ShapeColours.ByBranch(ExploreScheme.Standard),
-            ExploreSpacing.Comfortable, volume);
+            MapLook.Default, volume);
 
     private static double Area(ExploreTile tile) => (double)tile.Width * tile.Height;
 

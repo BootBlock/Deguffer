@@ -49,11 +49,11 @@ public sealed class TiledSurface : ExploreSurface
         int height,
         LayoutLimits limits,
         ShapeColours colours,
-        MapStyle style,
+        MapLook look,
         IReadOnlyList<ExploreTile> tiles,
         MapViewport? viewport = null,
         VolumeSpace beside = default)
-        : base(tree, root, width, height, limits, colours, style, ZoomOf(viewport, tiles, limits))
+        : base(tree, root, width, height, limits, colours, look, ZoomOf(viewport, tiles, limits))
     {
         _tiles = tiles;
         _hits = new TileHitTest(tiles, width, height);
@@ -64,8 +64,8 @@ public sealed class TiledSurface : ExploreSurface
         HasVolumeBeside = TreemapLayout.DrawsBeside(tree.SizeOf(root), beside, width, height, limits);
 
         Labels = new TileLabels(
-            tiles, tree, root, width, height, limits, style.ShapeNames, style.Lettering,
-            style.Lettering == MapLettering.Classic ? MaximumClassicLabels : MaximumLabels,
+            tiles, tree, root, width, height, limits, look.Style.ShapeNames, look.Style.Lettering,
+            MostLabels,
             tile => TextColourFor(tile.Node, tile.Depth, tile.Framed)).Build();
     }
 

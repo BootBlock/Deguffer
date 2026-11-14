@@ -27,7 +27,6 @@ public sealed class DesignSpacingTests
         ["Deguffer.App/Views/HealthPage.xaml"] = 4,
         ["Deguffer.App/Views/InstalledAppsPage.xaml"] = 5,
         ["Deguffer.App/Views/ItemListView.xaml"] = 9,
-        ["Deguffer.App/Views/MapAppearanceView.xaml"] = 5,
         ["Deguffer.App/Views/MemoryPage.xaml"] = 5,
         ["Deguffer.App/Views/NetworkBrowserDialog.xaml"] = 4,
         ["Deguffer.App/Views/ProviderInfoView.xaml"] = 14,

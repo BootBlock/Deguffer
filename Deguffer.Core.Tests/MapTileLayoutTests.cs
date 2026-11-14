@@ -274,7 +274,7 @@ public sealed class MapTileLayoutTests
         var viewport = MapViewport.Anchored(2.5, 0.9, 0.5, 0.5, 0.5, MapCeiling.Most);
         var drawing = (TiledSurface)ExploreSurface.Create(
             Tree, Tree.RootNode, ExploreView.Treemap, Width, Height, scale: 1, textScale: 1,
-            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, volume, viewport);
+            ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default, volume, viewport);
         var level = MapTiling.LevelOf(viewport.Zoom);
 
         var free = drawing.Tiles.Single(shape => shape.Block == MapBlock.FreeSpace);
@@ -290,7 +290,7 @@ public sealed class MapTileLayoutTests
     {
         var icicle = (TiledSurface)ExploreSurface.Create(
             Tree, Tree.RootNode, ExploreView.Icicle, Width, Height, scale: 1, textScale: 1,
-            ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None);
+            ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default, VolumeSpace.None);
 
         Assert.Throws<InvalidOperationException>(() => icicle.Tile(Tiling, new MapTileKey(0, 0, 0)));
         Assert.Throws<ArgumentException>(() => Drawing(MapViewport.Whole).Tile(new MapTiling(Width + 1, Height), new MapTileKey(0, 0, 0)));
@@ -298,7 +298,7 @@ public sealed class MapTileLayoutTests
 
     private static TiledSurface Drawing(MapViewport viewport) => (TiledSurface)ExploreSurface.Create(
         Tree, Tree.RootNode, ExploreView.Treemap, Width, Height, scale: 1, textScale: 1,
-        ShapeColours.ByBranch(ExploreScheme.Standard), ExploreSpacing.Comfortable, VolumeSpace.None, viewport);
+        ShapeColours.ByBranch(ExploreScheme.Standard), MapLook.Default, VolumeSpace.None, viewport);
 
     /// <summary>Every tile of <paramref name="level"/> with any of <paramref name="frame"/> of the picture in it.</summary>
     private static List<MapTile> Overlapping(TiledSurface picture, MapFrame frame, int level)
