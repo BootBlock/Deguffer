@@ -22,6 +22,7 @@ public sealed partial class ScanChoiceGroup : ObservableCollection<ScanChoiceRow
         _owner = owner;
         Category = category;
         Title = ProviderListing.Title(category);
+        ToggleAutomationId = $"ScanChoiceGroupToggle.{category}";
     }
 
     public ProviderCategory Category { get; }
@@ -29,6 +30,9 @@ public sealed partial class ScanChoiceGroup : ObservableCollection<ScanChoiceRow
     public string Title { get; }
 
     public string ToggleName => $"Every location shown under {Title}";
+
+    /// <summary>The UI Automation id of the heading's tick, from the category rather than its title's wording.</summary>
+    public string ToggleAutomationId { get; }
 
     public bool? State
     {

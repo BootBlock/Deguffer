@@ -53,6 +53,7 @@ public sealed partial class FindingViewModel : ObservableObject
     public FindingViewModel(Finding finding, SelectionMemory memory, KeepList keepList, bool isElevated)
     {
         _isElevated = isElevated;
+        AutomationIds = new FindingAutomationIds(finding.Provider.Id);
         Load(finding, memory, keepList);
     }
 
@@ -204,6 +205,8 @@ public sealed partial class FindingViewModel : ObservableObject
     public Finding Finding { get; private set; }
 
     public string Name => Finding.Provider.Name;
+
+    public FindingAutomationIds AutomationIds { get; }
 
     public SafetyTier Tier => Finding.Provider.Tier;
 

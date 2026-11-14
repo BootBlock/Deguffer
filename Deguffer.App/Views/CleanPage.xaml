@@ -29,10 +29,6 @@
         <!-- The compact rows' figure column, one width down the whole list. See CompactFindingRow. -->
         <controls:WidthGroup x:Key="FigureWidths" />
 
-        <!-- The Scan drop-down's locations under their category headings. Handed its source from
-             code-behind, as ItemListView's grouped list is. -->
-        <CollectionViewSource x:Key="ScanChoiceGroups" IsSourceGrouped="True" />
-
         <!--
             The compact row: the four things the user is choosing between, on one line — is it
             ticked, what is it, what class of thing is it, and how big is it.
@@ -76,6 +72,7 @@
                           IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
                           IsEnabled="{x:Bind CanBeSelected, Mode=OneWay}"
                           AutomationProperties.Name="{x:Bind Name}"
+                          AutomationProperties.AutomationId="{x:Bind AutomationIds.Toggle}"
                           AutomationProperties.HelpText="{x:Bind WhatHappensOnNextUse}" />
 
                 <!-- The same sentence for a pointer. The row has no line to write it on, so it is
@@ -100,7 +97,8 @@
                                  VerticalAlignment="Center"
                                  Tag="{x:Bind}"
                                  Click="OnItemsLinkClicked"
-                                 AutomationProperties.Name="{x:Bind Text.ItemsLinkName}" />
+                                 AutomationProperties.Name="{x:Bind Text.ItemsLinkName}"
+                                 AutomationProperties.AutomationId="{x:Bind AutomationIds.ItemsLink}" />
 
                 <TextBlock Grid.Column="3"
                            Text="{x:Bind StatusLabel, Mode=OneWay}"
@@ -170,7 +168,8 @@
                               Margin="0,2,0,0"
                               IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
                               IsEnabled="{x:Bind CanBeSelected, Mode=OneWay}"
-                              AutomationProperties.Name="{x:Bind Name}" />
+                              AutomationProperties.Name="{x:Bind Name}"
+                              AutomationProperties.AutomationId="{x:Bind AutomationIds.Toggle}" />
 
                     <StackPanel Grid.Column="1" Spacing="6">
 
@@ -201,7 +200,8 @@
                                              Padding="0,2"
                                              Tag="{x:Bind}"
                                              Click="OnItemsLinkClicked"
-                                             AutomationProperties.Name="{x:Bind Text.ItemsLinkName}" />
+                                             AutomationProperties.Name="{x:Bind Text.ItemsLinkName}"
+                                             AutomationProperties.AutomationId="{x:Bind AutomationIds.ItemsLink}" />
 
                             <!-- Tier is text on a tinted chip, never colour alone:
                                  the classification must survive a flat background
@@ -250,7 +250,8 @@
                                              Padding="0,2"
                                              Tag="{x:Bind}"
                                              Click="OnWhatIsThisClicked"
-                                             AutomationProperties.Name="{x:Bind Text.InformationLinkName}" />
+                                             AutomationProperties.Name="{x:Bind Text.InformationLinkName}"
+                                             AutomationProperties.AutomationId="{x:Bind AutomationIds.InformationLink}" />
                         </Grid>
 
                         <TextBlock Text="{x:Bind WhatHappensOnNextUse}"
@@ -332,7 +333,8 @@
                                          Padding="0,2"
                                          Tag="{x:Bind}"
                                          Click="OnWhatIsThisClicked"
-                                         AutomationProperties.Name="{x:Bind Text.InformationLinkName}" />
+                                         AutomationProperties.Name="{x:Bind Text.InformationLinkName}"
+                                         AutomationProperties.AutomationId="{x:Bind AutomationIds.InformationLink}" />
                     </StackPanel>
                 </Expander>
 
@@ -738,10 +740,12 @@
                 <Button Content="{x:Bind ViewModel.ElevateLabel, Mode=OneWay}" Style="{StaticResource ElevateButtonStyle}"
                         Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
                         Command="{x:Bind ViewModel.ElevateAndRescanCommand}"
+                        AutomationProperties.AutomationId="ElevateButton"
                         AutomationProperties.HelpText="Restart Deguffer as administrator and scan, so it can read the volume's file table and carry out steps only an administrator may perform." />
                 <Button Content="{x:Bind ViewModel.CancelLabel, Mode=OneWay}"
                         Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
-                        Command="{x:Bind ViewModel.CancelCommand}" />
+                        Command="{x:Bind ViewModel.CancelCommand}"
+                        AutomationProperties.AutomationId="CancelButton" />
                 <!-- Beside Clean, because it is part of starting one: what Deguffer does once the clean
                      it is about to start has finished. Read when the clean ends, so it can be changed
                      while one runs. -->
@@ -753,11 +757,13 @@
                           VerticalAlignment="Center"
                           ItemsSource="{x:Bind ViewModel.WhenComplete.Labels}"
                           SelectedIndex="{x:Bind ViewModel.WhenComplete.SelectedIndex, Mode=TwoWay}"
+                          AutomationProperties.AutomationId="WhenCompleteSelector"
                           AutomationProperties.LabeledBy="{x:Bind WhenCompleteLabel}"
                           AutomationProperties.HelpText="{x:Bind ViewModel.WhenComplete.Explanation}"
                           ToolTipService.ToolTip="{x:Bind ViewModel.WhenComplete.Explanation}" />
                 <Button Content="Clean"
-                        Command="{x:Bind ViewModel.CleanCommand}" />
+                        Command="{x:Bind ViewModel.CleanCommand}"
+                        AutomationProperties.AutomationId="CleanButton" />
                 <!-- The primary action (§7), so it keeps the accent a plain Scan button had. The button
                      scans every location, and the drop-down scans only the ones ticked in it, for a
                      user who knows what they came to clear and need not measure every cache to clear
@@ -770,6 +776,7 @@
                 <controls:EnabledAwareSplitButton Content="Scan"
                                                   IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}"
                                                   Command="{x:Bind ViewModel.PreviewCommand}"
+                                                  AutomationProperties.AutomationId="ScanButton"
                                                   AutomationProperties.HelpText="Scan every location Deguffer recognises. Open the drop-down to choose the locations to scan on their own.">
                     <controls:EnabledAwareSplitButton.Resources>
                         <ResourceDictionary>
@@ -816,109 +823,7 @@
                     </controls:EnabledAwareSplitButton.Resources>
 
                     <controls:EnabledAwareSplitButton.Flyout>
-                        <Flyout x:Name="ScanChoiceFlyout" Placement="TopEdgeAlignedRight">
-                            <Grid Width="380" RowSpacing="8" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
-                                <TextBlock Text="Choose what to scan" Style="{StaticResource SectionHeading}" />
-
-                                <TextBox Grid.Row="1"
-                                         PlaceholderText="Search locations"
-                                         AutomationProperties.Name="Search locations"
-                                         Text="{x:Bind ViewModel.ScanChoice.Search, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-
-                                <Grid Grid.Row="2">
-                                    <!-- Virtualizing, with a fixed height to fill: given unbounded
-                                         height, a list realises every row. -->
-                                    <ListView x:Name="ScanChoiceList"
-                                              Height="360"
-                                              SelectionMode="None"
-                                              IsItemClickEnabled="False"
-                                              AutomationProperties.Name="Locations to scan">
-                                        <ListView.ItemContainerStyle>
-                                            <Style TargetType="ListViewItem">
-                                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                                                <Setter Property="MinHeight" Value="0" />
-                                            </Style>
-                                        </ListView.ItemContainerStyle>
-
-                                        <ListView.ItemTemplate>
-                                            <DataTemplate x:DataType="vm:ScanChoiceRow">
-                                                <!-- The mark sits beside the tick rather than taking it away: a
-                                                     tool installed since that scan is what a fresh scan finds. -->
-                                                <Grid ColumnSpacing="8" ColumnDefinitions="*,Auto">
-                                                    <CheckBox MinWidth="0"
-                                                              IsChecked="{x:Bind IsChosen, Mode=TwoWay}"
-                                                              AutomationProperties.Name="{x:Bind AccessibleName, Mode=OneWay}">
-                                                        <TextBlock Text="{x:Bind Name}" TextTrimming="CharacterEllipsis" />
-                                                    </CheckBox>
-
-                                                    <TextBlock Grid.Column="1"
-                                                               Text="Not found last scan"
-                                                               Style="{StaticResource SecondaryText}"
-                                                               FontSize="12"
-                                                               VerticalAlignment="Center"
-                                                               Visibility="{x:Bind WasMissing, Mode=OneWay}"
-                                                               AutomationProperties.AccessibilityView="Raw" />
-                                                </Grid>
-                                            </DataTemplate>
-                                        </ListView.ItemTemplate>
-
-                                        <ListView.GroupStyle>
-                                            <GroupStyle HidesIfEmpty="True">
-                                                <GroupStyle.HeaderContainerStyle>
-                                                    <Style TargetType="ListViewHeaderItem">
-                                                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                                                        <Setter Property="Padding" Value="12,8,12,0" />
-                                                        <Setter Property="MinHeight" Value="0" />
-                                                    </Style>
-                                                </GroupStyle.HeaderContainerStyle>
-
-                                                <GroupStyle.HeaderTemplate>
-                                                    <DataTemplate x:DataType="vm:ScanChoiceGroup">
-                                                        <!-- The heading's tick covers the rows the search shows under
-                                                             it, and a click on a mixed one clears them. See
-                                                             ItemSelection.ValueForClick. -->
-                                                        <CheckBox MinWidth="0"
-                                                                  IsChecked="{x:Bind State, Mode=OneWay}"
-                                                                  Command="{x:Bind ToggleCommand}"
-                                                                  AutomationProperties.Name="{x:Bind ToggleName}">
-                                                            <!-- Sized here, because a list header's own style sets a
-                                                                 heading-sized font that every text inside it inherits. -->
-                                                            <TextBlock Text="{x:Bind Title}" FontSize="14" FontWeight="SemiBold" />
-                                                        </CheckBox>
-                                                    </DataTemplate>
-                                                </GroupStyle.HeaderTemplate>
-                                            </GroupStyle>
-                                        </ListView.GroupStyle>
-                                    </ListView>
-
-                                    <TextBlock Text="No location matches the search."
-                                               Visibility="{x:Bind ViewModel.ScanChoice.HasNoMatches, Mode=OneWay}"
-                                               Style="{StaticResource SecondaryText}"
-                                               HorizontalAlignment="Center"
-                                               VerticalAlignment="Top"
-                                               Margin="0,24,0,0" />
-                                </Grid>
-
-                                <TextBlock Grid.Row="3"
-                                           Text="Your choice could not be written to disk, so it has not been applied. Check that %LOCALAPPDATA%\Deguffer is writable."
-                                           Foreground="{ThemeResource SystemFillColorCautionBrush}"
-                                           TextWrapping="Wrap"
-                                           Visibility="{x:Bind ViewModel.ScanChoice.SaveFailed, Mode=OneWay}" />
-
-                                <Grid Grid.Row="4" ColumnSpacing="12" ColumnDefinitions="*,Auto">
-                                    <TextBlock Text="{x:Bind ViewModel.ScanChoice.ChosenSummary, Mode=OneWay}"
-                                               Style="{StaticResource SecondaryText}"
-                                               VerticalAlignment="Center" />
-
-                                    <Button Grid.Column="1"
-                                            Content="Scan"
-                                            Style="{StaticResource AccentButtonStyle}"
-                                            Command="{x:Bind ViewModel.PreviewChosenCommand}"
-                                            Click="OnScanChosenClicked"
-                                            AutomationProperties.Name="Scan the chosen locations" />
-                                </Grid>
-                            </Grid>
-                        </Flyout>
+                        <Flyout x:Name="ScanChoiceFlyout" Placement="TopEdgeAlignedRight" />
                     </controls:EnabledAwareSplitButton.Flyout>
                 </controls:EnabledAwareSplitButton>
             </StackPanel>

@@ -18,11 +18,18 @@ public sealed partial class ScanChoiceRow : ObservableObject
     {
         _owner = owner;
         Provider = provider;
+        ToggleAutomationId = $"ScanChoiceToggle.{provider.Id}";
     }
 
     public ICleanupProvider Provider { get; }
 
     public string Name => Provider.Name;
+
+    /// <summary>
+    /// The UI Automation id of the tick, from the provider's stable id. Not the Storage row's id: the
+    /// drop-down opens over the Storage list, so one location is in both at once.
+    /// </summary>
+    public string ToggleAutomationId { get; }
 
     public bool IsChosen
     {
