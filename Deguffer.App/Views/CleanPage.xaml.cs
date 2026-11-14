@@ -11,7 +11,6 @@ using Deguffer.Core.Viewing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 
@@ -93,9 +92,10 @@ public sealed partial class CleanPage : Page
         ViewModel.WhenComplete.ExitRequested += (_, _) => App.CloseWhenIdle();
         InitializeComponent();
 
-        var scanChoiceGroups = (CollectionViewSource)Resources["ScanChoiceGroups"];
-        scanChoiceGroups.Source = ViewModel.ScanChoice.Shown;
-        ScanChoiceList.ItemsSource = scanChoiceGroups.View;
+        var scanChoice = new ScanChoiceView(ViewModel.ScanChoice, ViewModel.PreviewChosenCommand);
+        // The scan has started from the drop-down, and the page under it is where it reports.
+        scanChoice.ScanClicked += (_, _) => ScanChoiceFlyout.Hide();
+        ScanChoiceFlyout.Content = scanChoice;
 
         // Read once, here, and never again. Re-reading it whenever the page came back on screen
         // undid a choice whose write to disk had failed: PreferenceService leaves Current at the
@@ -464,9 +464,6 @@ public sealed partial class CleanPage : Page
 
         await ModalDialog.ShowAsync(dialog);
     }
-
-    /// <summary>The scan has started from the drop-down, and the page under it is where it reports.</summary>
-    private void OnScanChosenClicked(object sender, RoutedEventArgs e) => ScanChoiceFlyout.Hide();
 
     /// <summary>
     /// The retrim the replaced window was asked for. The user accepted the offer there, so it is not
