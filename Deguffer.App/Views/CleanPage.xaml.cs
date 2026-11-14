@@ -41,6 +41,9 @@ public sealed partial class CleanPage : Page
     /// <summary>Where a row stands, chosen in the Order box.</summary>
     private readonly DrawnSetting<StorageOrder> _order;
 
+    /// <summary>The list following a clean to the row it is on.</summary>
+    private readonly CleanRowSpotlight _cleanedRow;
+
     public CleanPage()
     {
         // Assigned before InitializeComponent so no x:Bind can ever evaluate against a null
@@ -105,6 +108,7 @@ public sealed partial class CleanPage : Page
         // A row's share bar comes in from nothing as the row itself arrives, rather than standing at
         // its figure under a row still fading in. Never as a row only scrolls into sight.
         ListAnimation.Play(FindingsList, SystemMotion.Current).Arrived += BarMotion.GrowIn;
+        _cleanedRow =new CleanRowSpotlight(FindingsList, ViewModel.CleanProgress, SystemMotion.Current);
 
         // A row's container is what assistive technology lands on, and unnamed it is read out as
         // the type of the object behind it.
@@ -182,16 +186,19 @@ public sealed partial class CleanPage : Page
     }
 
     /// <summary>
-    /// Which rows the list draws, for the filters whose control lives on the Settings page.
+    /// Which rows the list draws, and whether it follows a clean, as set on the Settings page.
     ///
     /// Re-read on every visit, unlike the view and the not-installed filter above. Those two are
     /// set from this page and applied before they are persisted, so re-reading them would undo a
-    /// choice whose write to disk had failed. This one is set on a page that persists first and
+    /// choice whose write to disk had failed. These are set on a page that persists first and
     /// applies second, so <see cref="PreferenceService.Current"/> is never anything but what took
     /// effect.
     /// </summary>
-    private void ApplyListPreferences() =>
+    private void ApplyListPreferences()
+    {
         ViewModel.ShowAlreadyClear = App.Preferences.Current.ShowAlreadyClear;
+        _cleanedRow.IsEnabled = App.Preferences.Current.SpotlightCleanedRow;
+    }
 
     /// <summary>
     /// Draw the list at <paramref name="density"/>, and leave the selector agreeing with what is on

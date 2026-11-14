@@ -604,6 +604,12 @@ public sealed class CleanupPlanner
     /// The tool the run is waiting on while a command step runs, and null when it returns, so the page
     /// can say what a cancellation pressed now would wait for. See <see cref="CleanCancelNotice"/>.
     /// </param>
+    /// <param name="started">
+    /// Each plan as the run reaches it, before its first step, with the span of
+    /// <paramref name="progress"/> it accounts for, so the page can show which row the run is on and
+    /// how far through that row it is. A plan the clean was cancelled before starting is reported
+    /// too, as only checked, because its §5.6 proof still takes time on that row.
+    /// </param>
     /// <param name="ct">
     /// Stops the run. <b>Never thrown:</b> the results hold every plan, the ones that finished, the
     /// one that was stopped and the ones never started, each <see cref="CleanupResult.Interrupted"/>
@@ -618,6 +624,7 @@ public sealed class CleanupPlanner
         IProgress<double>? progress = null,
         IProgress<CleanupResult>? finished = null,
         IProgress<CommandUnderway?>? underway = null,
+        IProgress<PlanUnderway>? started = null,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(selected);
@@ -700,14 +707,15 @@ public sealed class CleanupPlanner
             var (finding, plan) = plans[i];
 
             // A plan that deletes is not started once the clean is cancelled, and is only verified. See
-            // ProveUnstartedAsync. A plan that only proves is run whatever happened, with a token that
+            // UnstartedPlan. A plan that only proves is run whatever happened, with a token that
             // cannot be cancelled: its promise is about what the run leaves standing, and a cancelled
             // run is the one that most needs it kept.
             if (!plan.IsEmpty && (cancelled || ct.IsCancellationRequested))
             {
                 cancelled = true;
 
-                var unstarted = await ProveUnstartedAsync(finding, plan, reach, residue).ConfigureAwait(false);
+                started?.Report(PlanUnderway.Unstarted(finding.Provider, done / total));
+                var unstarted = await UnstartedPlan.ProveAsync(finding, plan, reach, residue).ConfigureAwait(false);
                 results.Add(unstarted);
                 finished?.Report(unstarted);
                 continue;
@@ -716,6 +724,7 @@ public sealed class CleanupPlanner
             status?.Report(plan.IsEmpty
                 ? $"Checking what {finding.Provider.Name} left alone…"
                 : $"Cleaning {finding.Provider.Name}…");
+            started?.Report(PlanUnderway.Of(finding.Provider, plan, done / total, weights[i] / total));
 
             var result = await finding.Provider
                 .ExecuteAsync(
@@ -749,23 +758,4 @@ public sealed class CleanupPlanner
     /// </summary>
     private IReadOnlyList<ICleanupProvider> RegistrarsAmong(IReadOnlyList<ICleanupProvider> also) =>
         [.. _providers.Concat(also).Distinct().Where(provider => provider is IRegistersVirtualMachineStorage)];
-
-    /// <summary>
-    /// The result of a plan the clean was cancelled before starting: no steps, and the §5.6 check of
-    /// everything it protects. An earlier plan's over-reach is what could have taken one of those
-    /// paths, and in a run that finished this plan's own verification would have been what said so.
-    /// </summary>
-    private static async Task<CleanupResult> ProveUnstartedAsync(
-        Finding finding,
-        CleanupPlan plan,
-        RunReach reach,
-        RunResidue residue) => new()
-    {
-        ProviderId = plan.ProviderId,
-        ProviderName = plan.ProviderName,
-        Interrupted = true,
-        Verification = await finding.Provider
-            .VerifyAsync(plan, reach, residue, CancellationToken.None)
-            .ConfigureAwait(false),
-    };
 }

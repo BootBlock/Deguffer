@@ -663,6 +663,68 @@ public class CleanViewModelCleanTests
     }
 
     /// <summary>
+    /// The page hears which row the run is on as it reaches each one, so the list can follow it, and
+    /// hears of no row once the run is over.
+    /// </summary>
+    [Fact]
+    public void TheRowACleanIsOnIsFollowedAndLetGoWhenItEnds()
+    {
+        var large = new FakeCleanupProvider("large");
+        var small = new FakeCleanupProvider("small");
+        using var page = new StoragePage([large, small]);
+        large.Steps = [page.Cache("a", 2048)];
+        small.Steps = [page.Cache("b", 1024)];
+        page.Scan();
+
+        var rows = new List<(FindingViewModel? Row, PlanStage Stage)>();
+        page.ViewModel.CleanProgress.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(CleanProgressViewModel.Row))
+            {
+                rows.Add((page.ViewModel.CleanProgress.Row, page.ViewModel.CleanProgress.Stage));
+            }
+        };
+
+        page.Clean();
+
+        Assert.Equal(
+            [(page.Row("large"), PlanStage.Removing), (page.Row("small"), PlanStage.Removing), (null, PlanStage.Removing)],
+            rows);
+    }
+
+    /// <summary>
+    /// How far through its own row the run is, which starts again from nothing at each row and moves
+    /// on the row's scale rather than the run's: the last row here is a third of the bar, and its
+    /// steps of 0.3 would be steps of 0.1 on the bar.
+    /// </summary>
+    [Fact]
+    public void HowFarThroughItsRowTheRunIsStartsAgainAtEachRow()
+    {
+        var large = new FakeCleanupProvider("large");
+        var small = new FakeCleanupProvider("small");
+        using var page = new StoragePage([large, small]);
+        large.Steps = [page.Cache("a", 2048)];
+        small.Steps = [page.Cache("b", 1024)];
+        small.Fractions = [0.3, 0.305, 0.6];
+        page.Scan();
+
+        var seen = new List<double>();
+        page.ViewModel.CleanProgress.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(CleanProgressViewModel.RowFraction))
+            {
+                seen.Add(Math.Round(page.ViewModel.CleanProgress.RowFraction, 6));
+            }
+        };
+
+        page.Clean();
+
+        // The large row done, the small one begun, its steps less the one too small to draw, done,
+        // and nothing once the run is over.
+        Assert.Equal([1.0, 0.0, 0.3, 0.6, 1.0, 0.0], seen);
+    }
+
+    /// <summary>
     /// An item list left open over a row that is planned again is closed as the row's steps are
     /// replaced: its ticks would land on steps no run takes. A list over a row the run did not reach
     /// stays open.

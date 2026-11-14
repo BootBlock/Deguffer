@@ -5,11 +5,15 @@ using Deguffer.Core.Scanning;
 namespace Deguffer.App.ViewModels;
 
 /// <summary>
-/// How far the clean under way has got: the bar and its figure, and what it has removed so far.
+/// How far the clean under way has got: the bar and its figure, what it has removed so far, and the
+/// row it is on.
 /// Shown while <see cref="CleanViewModel.IsCleaning"/> is up.
 /// </summary>
 public sealed partial class CleanProgressViewModel : ObservableObject
 {
+    /// <summary>A hundredth of a row: a few pixels across the widest window the list fits in.</summary>
+    private const double RowStep = 0.01;
+
     private readonly List<CleanupResult> _removedSoFar = [];
 
     /// <summary>How far through the clean, 0 to 100.</summary>
@@ -32,12 +36,56 @@ public sealed partial class CleanProgressViewModel : ObservableObject
     [ObservableProperty]
     public partial string RemovedSoFarLabel { get; private set; } = string.Empty;
 
-    /// <summary>Start again from nothing, for a clean about to run.</summary>
-    public void Start()
+    /// <summary>
+    /// The row the run is on, or null between runs and for a plan no row is listed for. Raised last
+    /// of the three row properties, so a listener reading <see cref="Stage"/> and
+    /// <see cref="RowFraction"/> as it changes reads the new row's.
+    /// </summary>
+    [ObservableProperty]
+    public partial FindingViewModel? Row { get; private set; }
+
+    /// <summary>Whether the run is removing anything from <see cref="Row"/>, or only checking it.</summary>
+    [ObservableProperty]
+    public partial PlanStage Stage { get; private set; }
+
+    /// <summary>How far through <see cref="Row"/> the run is, 0 to 1.</summary>
+    [ObservableProperty]
+    public partial double RowFraction { get; private set; }
+
+    /// <summary>The plan the run is on, which turns the run's progress into the row's.</summary>
+    private PlanUnderway? _plan;
+
+    /// <summary>
+    /// Start again from nothing, for a clean about to run over <paramref name="rows"/>. Returns what the
+    /// run reports each plan it reaches to, which finds the plan's row and is heard on the thread this
+    /// is called on. Matched by provider rather than by finding: the run is handed narrowed findings,
+    /// and the proof of a registered disk is a finding the planner makes for itself.
+    /// </summary>
+    public IProgress<PlanUnderway> Start(IReadOnlyList<FindingViewModel> rows)
     {
         _removedSoFar.Clear();
         Percent = 0;
         RemovedSoFarLabel = FreeSpace.Format(RunFigures.For(_removedSoFar).Removed);
+        Finish();
+
+        return new Progress<PlanUnderway>(plan => Begin(plan, rows.FirstOrDefault(row => row.Finding.Provider == plan.Provider)));
+    }
+
+    /// <summary>The run has reached <paramref name="plan"/>, which is <paramref name="row"/>'s.</summary>
+    private void Begin(PlanUnderway plan, FindingViewModel? row)
+    {
+        _plan = plan;
+        Stage = plan.Stage;
+        RowFraction = plan.Within(plan.From);
+        Row = row;
+    }
+
+    /// <summary>The run is over, so no row is being worked on.</summary>
+    public void Finish()
+    {
+        _plan = null;
+        Row = null;
+        RowFraction = 0;
     }
 
     /// <summary>
@@ -56,6 +104,13 @@ public sealed partial class CleanProgressViewModel : ObservableObject
         if (percent >= 100 || percent - Percent >= 0.5)
         {
             Percent = percent;
+        }
+
+        // Thinned on the row's own scale rather than the run's: one row of many crosses its whole
+        // width in less than the bar's half a percent, and would otherwise leap from empty to full.
+        if (_plan?.Within(fraction) is { } within && (within >= 1 || within - RowFraction >= RowStep))
+        {
+            RowFraction = within;
         }
     }
 

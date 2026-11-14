@@ -791,18 +791,17 @@ public sealed partial class CleanViewModel : ObservableObject
                 FreeSpaceNow = FreeSpaceOfProfile();
             });
 
-            CleanProgress.Start();
+            var started = CleanProgress.Start(Findings);
             IsCleaning = true;
 
-            // The planner is started whatever the token says, and never throws for it: a clean
-            // cancelled at any point returns what it did and its §5.6 verdict, and a Task.Run that
-            // declined to start would lose both.
+            // The planner is started whatever the token says, and never throws for it: a cancelled clean
+            // returns what it did and its §5.6 verdict, which a Task.Run that never started would lose.
             IReadOnlyList<CleanupResult> results;
             try
             {
                 results = await Task.Run(
                     () => _planner.ExecuteAsync(
-                        [.. authorised, .. proving], confirmations, requireTypedPhrase, progress, completed, landed, underway, ct),
+                        [.. authorised, .. proving], confirmations, requireTypedPhrase, progress, completed, landed, underway, started, ct),
                     CancellationToken.None);
             }
             finally
@@ -813,6 +812,7 @@ public sealed partial class CleanViewModel : ObservableObject
                 IsCleaning = false;
                 IsCancellingClean = false;
                 _underway = null;
+                CleanProgress.Finish();
 
                 // The re-plan that follows cannot say how far it has got.
                 work.Report(null);

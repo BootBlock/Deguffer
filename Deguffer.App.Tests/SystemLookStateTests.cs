@@ -16,7 +16,7 @@ public sealed class SystemLookStateTests
 
     private static readonly ContrastTheme Aquatic = new(Black, Yellow, Blue, Yellow);
 
-    private static readonly SystemLookState Before = new(null, Blue, 1, true);
+    private static readonly SystemLookState Before = new(null, Blue, Blue, 1, true);
 
     [Fact]
     public void An_identical_reading_moved_nothing()
@@ -45,6 +45,12 @@ public sealed class SystemLookStateTests
     }
 
     [Fact]
+    public void A_new_dark_accent_moved_the_colours_alone()
+    {
+        Assert.Equal(SystemLookChange.Colours, Before.ChangesTo(Before with { AccentDark = Yellow }));
+    }
+
+    [Fact]
     public void A_new_text_size_moved_the_text_size_alone()
     {
         Assert.Equal(SystemLookChange.TextScale, Before.ChangesTo(Before with { TextScale = 1.5 }));
@@ -59,7 +65,7 @@ public sealed class SystemLookStateTests
     [Fact]
     public void Every_part_that_moved_is_named()
     {
-        var after = new SystemLookState(Aquatic, Blue, 2, false);
+        var after = new SystemLookState(Aquatic, Blue, Blue, 2, false);
 
         Assert.Equal(
             SystemLookChange.Colours | SystemLookChange.TextScale | SystemLookChange.Effects,

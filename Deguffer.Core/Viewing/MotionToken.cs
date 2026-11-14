@@ -162,6 +162,16 @@ public sealed record MotionToken(Motion Full, Motion Reduced)
         new Motion(TimeSpan.FromMilliseconds(900), Travels: true),
         new Motion(TimeSpan.FromMilliseconds(150), Travels: false));
 
+    /// <summary>
+    /// The Storage row a clean is working on: a band of light travels its length and back, taking this
+    /// long each way, while its frame breathes in time. Long enough to read the row through, short
+    /// enough that a glance catches it moving. With motion off the row is lit and still, because a loop that only
+    /// faded would flicker for as long as the clean runs.
+    /// </summary>
+    public static MotionToken Spotlight { get; } = new(
+        new Motion(TimeSpan.FromMilliseconds(1800), Travels: true),
+        Motion.Instant);
+
     /// <summary>How this plays, given whether the reader has animation effects on.</summary>
     public Motion For(bool animationsEnabled) => animationsEnabled ? Full : Reduced;
 }

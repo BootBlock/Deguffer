@@ -12,7 +12,7 @@ public sealed class MotionTokenTests
     [Fact]
     public void WithMotionOnEveryMoveTravels()
     {
-        foreach (var token in new[] { MotionToken.Camera, MotionToken.Entrance, MotionToken.Page, MotionToken.Bar, MotionToken.Outcome, MotionToken.Starfield, MotionToken.Mark, MotionToken.Overview, MotionToken.Shift, MotionToken.Morph })
+        foreach (var token in new[] { MotionToken.Camera, MotionToken.Entrance, MotionToken.Page, MotionToken.Bar, MotionToken.Outcome, MotionToken.Starfield, MotionToken.Spotlight, MotionToken.Mark, MotionToken.Overview, MotionToken.Shift, MotionToken.Morph })
         {
             var motion = token.For(animationsEnabled: true);
 
@@ -90,6 +90,16 @@ public sealed class MotionTokenTests
     public void WithMotionOffTheStarfieldStandsStill()
     {
         var motion = MotionToken.Starfield.For(animationsEnabled: false);
+
+        Assert.True(motion.IsInstant);
+        Assert.False(motion.Travels);
+    }
+
+    /// <summary>With motion off the row a clean is on is lit and still: no sweep, and no breathing.</summary>
+    [Fact]
+    public void WithMotionOffTheCleanSpotlightStandsStill()
+    {
+        var motion = MotionToken.Spotlight.For(animationsEnabled: false);
 
         Assert.True(motion.IsInstant);
         Assert.False(motion.Travels);

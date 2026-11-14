@@ -396,6 +396,11 @@ public enum ExploreScheme
 /// destination is named. Stored for the reason <paramref name="ExploreOverviewHidden"/> is: a reader
 /// who wants the width for the map wants it at every launch. Presentation only.
 /// </param>
+/// <param name="SpotlightCleanedRow">
+/// Whether the Storage list follows a clean: it scrolls to the row being cleaned and lights that row
+/// up, so the reader can see what the time is being spent on. On by default. Presentation only: the
+/// status line names the row whatever this says.
+/// </param>
 public sealed record AppPreferences(
     AppTheme Theme = AppTheme.System,
     ViewDensity View = ViewDensity.Standard,
@@ -422,7 +427,8 @@ public sealed record AppPreferences(
     int MinimumTemporaryFileAgeDays = 7,
     bool BackUpInstalledAppEntries = true,
     Execution.CompletionAction WhenCleanComplete = Execution.CompletionAction.Nothing,
-    bool NavigationCollapsed = false)
+    bool NavigationCollapsed = false,
+    bool SpotlightCleanedRow = true)
 {
     public static readonly AppPreferences Default = new();
 
