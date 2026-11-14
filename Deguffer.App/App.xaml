@@ -24,6 +24,12 @@
                 Default (dark) and Light repeat their keys because ThemeDictionaries cannot share an
                 entry between two themes. High Contrast takes the ordinary button's brushes, so the
                 user's chosen contrast colours and borders are kept.
+
+                The Startup page's row tints: the success and critical hues at under a tenth of their
+                strength, so a column of entries that start reads apart from the disabled ones at a
+                glance without drowning the text, and translucent, so the list's own pointer-over and
+                selection backplates still show through. Each row's badge says the state in words, so
+                the tint is never the only cue. High Contrast draws none, leaving the user's colours.
             -->
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Default">
@@ -33,6 +39,8 @@
                     <SolidColorBrush x:Key="ElevateButtonBorderBrush" Color="#9A5A22" />
                     <SolidColorBrush x:Key="ElevateButtonBorderBrushPointerOver" Color="#B86C2A" />
                     <SolidColorBrush x:Key="ElevateButtonBorderBrushPressed" Color="#86501F" />
+                    <SolidColorBrush x:Key="StartupRowStartsBackground" Color="#186CCB5F" />
+                    <SolidColorBrush x:Key="StartupRowDisabledBackground" Color="#18FF99A4" />
                 </ResourceDictionary>
 
                 <ResourceDictionary x:Key="Light">
@@ -42,6 +50,8 @@
                     <SolidColorBrush x:Key="ElevateButtonBorderBrush" Color="#E6A066" />
                     <SolidColorBrush x:Key="ElevateButtonBorderBrushPointerOver" Color="#DA8A44" />
                     <SolidColorBrush x:Key="ElevateButtonBorderBrushPressed" Color="#C97A36" />
+                    <SolidColorBrush x:Key="StartupRowStartsBackground" Color="#140F7B0F" />
+                    <SolidColorBrush x:Key="StartupRowDisabledBackground" Color="#14C42B1C" />
                 </ResourceDictionary>
 
                 <ResourceDictionary x:Key="HighContrast">
@@ -51,6 +61,8 @@
                     <StaticResource x:Key="ElevateButtonBorderBrush" ResourceKey="ButtonBorderBrush" />
                     <StaticResource x:Key="ElevateButtonBorderBrushPointerOver" ResourceKey="ButtonBorderBrushPointerOver" />
                     <StaticResource x:Key="ElevateButtonBorderBrushPressed" ResourceKey="ButtonBorderBrushPressed" />
+                    <SolidColorBrush x:Key="StartupRowStartsBackground" Color="Transparent" />
+                    <SolidColorBrush x:Key="StartupRowDisabledBackground" Color="Transparent" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 
@@ -58,6 +70,7 @@
             <converters:RunStatementStyleConverter x:Key="RunStatementStyle" />
             <converters:StandingChipStyleConverter x:Key="StandingChipStyle" />
             <converters:StartupChipStyleConverter x:Key="StartupChipStyle" />
+            <converters:StartupRowStyleConverter x:Key="StartupRowStyle" />
             <converters:DriveVerdictChipStyleConverter x:Key="DriveVerdictChipStyle" />
             <converters:AttributeStandingChipStyleConverter x:Key="AttributeStandingChipStyle" />
 
@@ -143,6 +156,20 @@
                 desktop content, in light and dark, and with the backdrop absent entirely.
             -->
             <Thickness x:Key="CardPadding">20</Thickness>
+            <!-- A Startup row's tint by whether the entry starts (StartupRowStyleConverter). Styles, as the
+                 chips are, so each row re-resolves its brush on a light or dark switch. -->
+            <Style x:Key="StartupRowStarts" TargetType="Grid">
+                <Setter Property="Background" Value="{ThemeResource StartupRowStartsBackground}" />
+            </Style>
+
+            <Style x:Key="StartupRowDisabled" TargetType="Grid">
+                <Setter Property="Background" Value="{ThemeResource StartupRowDisabledBackground}" />
+            </Style>
+
+            <Style x:Key="StartupRowUnknown" TargetType="Grid">
+                <Setter Property="Background" Value="Transparent" />
+            </Style>
+
             <CornerRadius x:Key="CardCorner">8</CornerRadius>
 
             <!--
@@ -182,6 +209,24 @@
                 <Setter Property="Opacity" Value="0" />
                 <Setter Property="IsHitTestVisible" Value="False" />
                 <Setter Property="AutomationProperties.AccessibilityView" Value="Raw" />
+            </Style>
+
+            <!-- The parts of EmptyState, the banner a list shows in place of its rows. -->
+            <Style x:Key="EmptyStateGlyph" TargetType="FontIcon">
+                <Setter Property="FontSize" Value="44" />
+                <Setter Property="HorizontalAlignment" Value="Center" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorTertiaryBrush}" />
+                <Setter Property="AutomationProperties.AccessibilityView" Value="Raw" />
+            </Style>
+
+            <Style x:Key="EmptyStateTitle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
+                <Setter Property="FontSize" Value="16" />
+                <Setter Property="TextAlignment" Value="Center" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+
+            <Style x:Key="EmptyStateMessage" TargetType="TextBlock" BasedOn="{StaticResource SecondaryText}">
+                <Setter Property="TextAlignment" Value="Center" />
             </Style>
 
             <!-- A card's own sentence about what it is showing, under the figures rather than beside

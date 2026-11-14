@@ -18,7 +18,7 @@ public sealed partial class InstalledAppsViewModel : ObservableObject
     private readonly Func<ElevationRequest, bool> _relaunch;
     private readonly RunningActions _running;
     private readonly BusyWork _work;
-    private InstalledAppsReading _reading = new([], []);
+    private InstalledAppsReading? _reading;
     private CancellationTokenSource? _reads;
 
     /// <param name="read">Reads every entry. Run off the UI thread.</param>
@@ -55,6 +55,24 @@ public sealed partial class InstalledAppsViewModel : ObservableObject
 
     [ObservableProperty]
     public partial bool IsReading { get; private set; }
+
+    /// <summary>
+    /// Why the stale list is empty, shown in its place; null while it has rows and before the first
+    /// reading, so a list still being read is never said to be empty.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasNoStaleRows), nameof(StaleEmptyGlyph))]
+    public partial EmptyListNote? StaleEmpty { get; private set; }
+
+    public bool HasNoStaleRows => StaleEmpty is not null;
+
+    /// <summary>A tick where there is nothing stale, and the control that hides the rows otherwise.</summary>
+    public string StaleEmptyGlyph => StaleEmpty?.Cause switch
+    {
+        EmptyListCause.Filtered => "",
+        EmptyListCause.Hidden => "",
+        _ => "",
+    };
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ElevateCommand))]
@@ -132,10 +150,17 @@ public sealed partial class InstalledAppsViewModel : ObservableObject
 
     private void ShowLists()
     {
-        var lists = InstalledAppsLists.From(_reading.Entries, ShowHidden, Filter);
+        // Before the first reading there is nothing to list, and nothing yet to say there is none.
+        if (_reading is null)
+        {
+            return;
+        }
+
+        var lists = InstalledAppsLists.From(_reading, ShowHidden, Filter);
 
         Show(StaleRows, lists.Stale);
         Show(InstalledRows, lists.Installed);
+        StaleEmpty = lists.StaleEmpty;
     }
 
     private void Show(ObservableCollection<InstalledAppRow> rows, IReadOnlyList<InstalledEntry> entries) => LiveList.Show(
