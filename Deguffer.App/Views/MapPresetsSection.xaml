@@ -14,7 +14,7 @@
             <TextBlock Text="{x:Bind ViewModel.PresetSummary, Mode=OneWay}"
                        Style="{StaticResource SecondaryText}"
                        VerticalAlignment="Center" />
-            <Button Grid.Column="1"
+            <Button x:Name="RestoreDefaultsButton" Grid.Column="1"
                     Content="Restore the default look"
                     Click="OnRestoreClicked"
                     ToolTipService.ToolTip="The Deguffer preset, standard colours for every picture, and the light and detail as the map is shipped" />

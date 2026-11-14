@@ -12,7 +12,7 @@
                            Title="Line round each file"
                            Description="Round every file and block, and every shape of the icicle and the sunburst.">
             <views:SettingsRow.Control>
-                <ComboBox MinWidth="140"
+                <ComboBox x:Name="BlockBordersBox" MinWidth="140"
                           SelectedIndex="{x:Bind ViewModel.BlockBordersIndex, Mode=TwoWay}"
                           AutomationProperties.Name="Line round each file and block">
                     <ComboBoxItem Content="None" />
@@ -28,7 +28,7 @@
                            Title="Line round each folder"
                            Description="Round a treemap folder that has what it holds drawn inside it.">
             <views:SettingsRow.Control>
-                <ComboBox MinWidth="140"
+                <ComboBox x:Name="FolderBordersBox" MinWidth="140"
                           SelectedIndex="{x:Bind ViewModel.FolderBordersIndex, Mode=TwoWay}"
                           AutomationProperties.Name="Line round each folder">
                     <ComboBoxItem Content="None" />
@@ -44,7 +44,7 @@
                            Title="Line width"
                            Description="How wide either line is, at the display's scale.">
             <views:SettingsRow.Control>
-                <ComboBox MinWidth="140"
+                <ComboBox x:Name="BorderWidthBox" MinWidth="140"
                           SelectedIndex="{x:Bind ViewModel.BorderWidthIndex, Mode=TwoWay}"
                           IsEnabled="{x:Bind ViewModel.Outlined, Mode=OneWay}"
                           AutomationProperties.Name="Line width">
@@ -59,7 +59,7 @@
                            Title="Line colour"
                            Description="What a line is mixed towards from the colour of its shape.">
             <views:SettingsRow.Control>
-                <ComboBox MinWidth="140"
+                <ComboBox x:Name="BorderToneBox" MinWidth="140"
                           SelectedIndex="{x:Bind ViewModel.BorderToneIndex, Mode=TwoWay}"
                           IsEnabled="{x:Bind ViewModel.Outlined, Mode=OneWay}"
                           AutomationProperties.Name="Line colour">
@@ -73,7 +73,7 @@
                            Title="Lines between shapes"
                            Description="Whether two shapes side by side each draw their own line, or share one.">
             <views:SettingsRow.Control>
-                <ComboBox MinWidth="140"
+                <ComboBox x:Name="LinesBox" MinWidth="140"
                           SelectedIndex="{x:Bind ViewModel.LinesIndex, Mode=TwoWay}"
                           IsEnabled="{x:Bind ViewModel.Outlined, Mode=OneWay}"
                           AutomationProperties.Name="Lines between shapes">

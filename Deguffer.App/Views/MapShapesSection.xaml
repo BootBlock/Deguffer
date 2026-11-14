@@ -13,7 +13,7 @@
                            Title="Shading"
                            Description="A cushion rises to the middle. A bevel lights the top and left edges. Flat is plain colour. A sheen is lit from above.">
             <views:SettingsRow.Control>
-                <ComboBox MinWidth="140"
+                <ComboBox x:Name="ShadingBox" MinWidth="140"
                           SelectedIndex="{x:Bind ViewModel.ShadingIndex, Mode=TwoWay}"
                           AutomationProperties.Name="Shading">
                     <ComboBoxItem Content="Cushion" />
@@ -28,7 +28,7 @@
                            Title="Depth"
                            Description="How far a cushion rises, a bevel stands out, or a sheen runs from light to dark.">
             <views:SettingsRow.Control>
-                <ComboBox MinWidth="140"
+                <ComboBox x:Name="ReliefBox" MinWidth="140"
                           SelectedIndex="{x:Bind ViewModel.ReliefIndex, Mode=TwoWay}"
                           IsEnabled="{x:Bind ViewModel.Raised, Mode=OneWay}"
                           AutomationProperties.Name="Depth of a cushion or a bevel">
@@ -44,7 +44,7 @@
                            Title="Bevel shades"
                            Description="What a bevel's lighter and darker edges are drawn in.">
             <views:SettingsRow.Control>
-                <ComboBox MinWidth="140"
+                <ComboBox x:Name="BevelShadesBox" MinWidth="140"
                           SelectedIndex="{x:Bind ViewModel.BevelShadesIndex, Mode=TwoWay}"
                           IsEnabled="{x:Bind ViewModel.Bevelled, Mode=OneWay}"
                           AutomationProperties.Name="Bevel shades">
@@ -58,7 +58,7 @@
                            Title="Bevel width"
                            Description="How wide a bevel's lighter and darker edges are, at the display's scale.">
             <views:SettingsRow.Control>
-                <ComboBox MinWidth="140"
+                <ComboBox x:Name="BevelWidthBox" MinWidth="140"
                           SelectedIndex="{x:Bind ViewModel.BevelWidthIndex, Mode=TwoWay}"
                           IsEnabled="{x:Bind ViewModel.Bevelled, Mode=OneWay}"
                           AutomationProperties.Name="Bevel width">
@@ -79,7 +79,7 @@
                            Title="Light under the pointer"
                            Description="A soft light over the shapes near the pointer, which shows their slopes as it moves.">
             <views:SettingsRow.Control>
-                <ToggleSwitch IsOn="{x:Bind ViewModel.PointerLightShown, Mode=TwoWay}"
+                <ToggleSwitch x:Name="PointerLightShownSwitch" IsOn="{x:Bind ViewModel.PointerLightShown, Mode=TwoWay}"
                               OnContent="On"
                               OffContent="Off"
                               AutomationProperties.Name="Light under the pointer" />
@@ -90,7 +90,7 @@
                            Title="Brightness"
                            Description="How much the light adds to the shapes under it.">
             <views:SettingsRow.Control>
-                <ComboBox MinWidth="140"
+                <ComboBox x:Name="LightStrengthBox" MinWidth="140"
                           SelectedIndex="{x:Bind ViewModel.LightStrengthIndex, Mode=TwoWay}"
                           IsEnabled="{x:Bind ViewModel.PointerLightShown, Mode=OneWay}"
                           AutomationProperties.Name="Brightness of the light under the pointer">
@@ -105,7 +105,7 @@
                            Title="Reach"
                            Description="How far from the pointer the light falls: over little more than one shape, or over its neighbours too.">
             <views:SettingsRow.Control>
-                <ComboBox MinWidth="140"
+                <ComboBox x:Name="LightReachBox" MinWidth="140"
                           SelectedIndex="{x:Bind ViewModel.LightReachIndex, Mode=TwoWay}"
                           IsEnabled="{x:Bind ViewModel.PointerLightShown, Mode=OneWay}"
                           AutomationProperties.Name="Reach of the light under the pointer">

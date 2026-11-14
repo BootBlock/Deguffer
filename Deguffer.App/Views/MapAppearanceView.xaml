@@ -123,7 +123,7 @@
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                            TextWrapping="Wrap"
                            VerticalAlignment="Center" />
-                <Button Grid.Column="1"
+                <Button x:Name="CloseWindowButton" Grid.Column="1"
                         MinWidth="96"
                         Content="Close"
                         Click="OnCloseClicked" />

@@ -79,7 +79,7 @@
                            Title="Colour strength"
                            Description="How much colour each shape keeps, from none, which draws the map in greys, to more than the palette's own.">
             <views:SettingsRow.Control>
-                <ComboBox MinWidth="168"
+                <ComboBox x:Name="SaturationBox" MinWidth="168"
                           SelectedIndex="{x:Bind ViewModel.SaturationIndex, Mode=TwoWay}"
                           AutomationProperties.Name="Colour strength">
                     <ComboBoxItem Content="Grey" />
@@ -95,7 +95,7 @@
                            Title="Brightness"
                            Description="How far each shape's colour is lightened or darkened from the palette's own.">
             <views:SettingsRow.Control>
-                <ComboBox MinWidth="168"
+                <ComboBox x:Name="BrightnessBox" MinWidth="168"
                           SelectedIndex="{x:Bind ViewModel.BrightnessIndex, Mode=TwoWay}"
                           AutomationProperties.Name="Brightness of the colours">
                     <ComboBoxItem Content="Much darker" />
@@ -111,7 +111,7 @@
                            Title="Folders drawn round what they hold"
                            Description="The band along a treemap folder's top and the gap round what it holds.">
             <views:SettingsRow.Control>
-                <ComboBox MinWidth="168"
+                <ComboBox x:Name="FolderFillBox" MinWidth="168"
                           SelectedIndex="{x:Bind ViewModel.FolderFillIndex, Mode=TwoWay}"
                           AutomationProperties.Name="Folders drawn round what they hold">
                     <ComboBoxItem Content="In their own colour" />

@@ -15,7 +15,7 @@
                            Title="Room round each folder"
                            Description="The gap a treemap leaves round what each folder holds.">
             <views:SettingsRow.Control>
-                <ComboBox MinWidth="140"
+                <ComboBox x:Name="SpacingBox" MinWidth="140"
                           SelectedIndex="{x:Bind ViewModel.SpacingIndex, Mode=TwoWay}"
                           AutomationProperties.Name="Room round each folder in the treemap">
                     <ComboBoxItem Content="Dense" />
@@ -29,7 +29,7 @@
                            Title="Smallest shape drawn"
                            Description="Anything smaller is drawn in the grey block that stands for the rest. Finer shows more, larger is easier to point at.">
             <views:SettingsRow.Control>
-                <ComboBox MinWidth="140"
+                <ComboBox x:Name="SmallestShapeBox" MinWidth="140"
                           SelectedIndex="{x:Bind ViewModel.SmallestShapeIndex, Mode=TwoWay}"
                           AutomationProperties.Name="Smallest shape drawn">
                     <ComboBoxItem Content="Large" />
@@ -44,7 +44,7 @@
                            Title="Levels of folders"
                            Description="How many levels of folders the treemap and the sunburst open. Zooming in opens more.">
             <views:SettingsRow.Control>
-                <ComboBox MinWidth="140"
+                <ComboBox x:Name="LevelsBox" MinWidth="140"
                           SelectedIndex="{x:Bind ViewModel.LevelsIndex, Mode=TwoWay}"
                           AutomationProperties.Name="Levels of folders drawn">
                     <ComboBoxItem Content="Four" />
