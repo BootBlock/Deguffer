@@ -112,16 +112,19 @@ internal sealed class MapGraphics
             CompositionDevice.Alpha);
 
     /// <summary>
-    /// A surface for one tile of a moving map (see <see cref="MapTiling"/>), <paramref name="width"/> by
-    /// <paramref name="height"/> and written whole each time it is used: <paramref name="spare"/>, resized
-    /// to the tile, where there is one, rather than a surface made again (G5). A plain surface rather than
-    /// a virtual one, because a tile is never written in part.
+    /// A plain surface, one texture, <paramref name="width"/> by <paramref name="height"/>:
+    /// <paramref name="spare"/>, resized, where there is one, rather than a surface made again (G5). The
+    /// first write into it has to cover all of it.
     ///
-    /// <para>The tile's own size, never <see cref="MapTiling.Size"/> square. The first write into a plain
-    /// surface has to cover all of it, and a tile in the last column or row of the picture is smaller:
-    /// written into a whole square, it was refused as an invalid argument.</para>
+    /// <para>For a tile of a moving map (see <see cref="MapTiling"/>), which is written whole each time
+    /// it is used and never in part, and for a page of the map's names (see <see cref="NameSheet"/>),
+    /// which many brushes show at once and which a virtual surface is far slower to draw through.</para>
+    ///
+    /// <para>A tile is given its own size, never <see cref="MapTiling.Size"/> square: a tile in the last
+    /// column or row of the picture is smaller, and written into a whole square, it was refused as an
+    /// invalid argument.</para>
     /// </summary>
-    public CompositionDrawingSurface TileSurface(CompositionDrawingSurface? spare, int width, int height) =>
+    public CompositionDrawingSurface PlainSurface(CompositionDrawingSurface? spare, int width, int height) =>
         Sized(spare, new SizeInt32(width, height));
 
     /// <summary>

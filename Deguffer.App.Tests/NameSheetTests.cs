@@ -6,9 +6,9 @@ using Windows.UI;
 namespace Deguffer.App.Tests;
 
 /// <summary>
-/// Every name on a map is drawn into one surface made on the map's own device: a name written again
-/// unchanged is not drawn again, and the device replaced makes the sheet again and draws every name
-/// into it.
+/// Every name on a map is drawn into a few plain pages made on the map's own device: a page is made
+/// only when the others have no room, a name written again unchanged is not drawn again, and the
+/// device replaced makes the sheet again and draws every name into it.
 ///
 /// <para>On a compositor of each test's own, so a device lost here is not the one the other tests draw
 /// through.</para>
@@ -21,23 +21,112 @@ public sealed class NameSheetTests
     private static readonly NameFormats Formats = new();
 
     [Fact]
-    public void TheSheetIsMadeOnceOnTheMapsDevice()
+    public void TheSheetIsPreparedOnceOnTheMapsDevice()
     {
-        var (first, again, surface) = CompositionThread.Run(() =>
+        var (first, again, kept) = CompositionThread.Run(() =>
         {
             using var compositor = new Compositor();
             var sheet = new NameSheet(MapGraphics.For(compositor));
 
             var first = sheet.Prepare();
-            var made = sheet.Surface;
+            var place = sheet.Take(40, 12)!.Value;
+            var page = sheet.SurfaceOf(place);
             var again = sheet.Prepare();
 
-            return (first, again, made is not null && ReferenceEquals(made, sheet.Surface));
+            return (first, again, ReferenceEquals(page, sheet.SurfaceOf(place)));
         });
 
         Assert.True(first);
         Assert.False(again);
-        Assert.True(surface);
+        Assert.True(kept);
+    }
+
+    /// <summary>
+    /// Every name shows its own rectangle through a brush of its own, and the compositor draws a virtual
+    /// surface through each such brush far more slowly than a plain one: a pan of a maximised map of
+    /// Classic names costs about 300 ms a frame from one virtual sheet, and about 13 ms from a plain one.
+    /// </summary>
+    [Fact]
+    public void NoPageIsAVirtualSurface()
+    {
+        var isVirtual = CompositionThread.Run(() =>
+        {
+            using var compositor = new Compositor();
+            var sheet = new NameSheet(MapGraphics.For(compositor));
+            sheet.Prepare();
+
+            return sheet.SurfaceOf(sheet.Take(40, 12)!.Value) is CompositionVirtualDrawingSurface;
+        });
+
+        Assert.False(isVirtual);
+    }
+
+    /// <summary>
+    /// A page is made only when the ones before it have no room, up to the most there can be, and
+    /// emptying the sheet lets every page go, so the next name starts a page made anew.
+    /// </summary>
+    [Fact]
+    public void APageIsMadeOnlyWhenTheOthersAreFull()
+    {
+        var (first, small, second, last, full, afterClear, madeAnew) = CompositionThread.Run(() =>
+        {
+            using var compositor = new Compositor();
+            var sheet = new NameSheet(MapGraphics.For(compositor));
+            sheet.Prepare();
+
+            var first = sheet.Take(40, 12)!.Value;
+            var small = sheet.Take(40, 12)!.Value;
+            var second = sheet.Take(WholePage.Width, WholePage.Height)!.Value;
+            var last = second;
+
+            // Pages 0 and 1 are in use: fill the rest, one whole page each.
+            for (var i = 2; i < NameSheet.MostPages; i++)
+            {
+                last = sheet.Take(WholePage.Width, WholePage.Height)!.Value;
+            }
+
+            var full = sheet.Take(WholePage.Width, WholePage.Height);
+            var firstPage = sheet.SurfaceOf(first);
+            sheet.Clear();
+            var afterClear = sheet.Take(40, 12)!.Value;
+
+            return (first.Page, small.Page, second.Page, last.Page, full, afterClear.Page, !ReferenceEquals(firstPage, sheet.SurfaceOf(afterClear)));
+        });
+
+        Assert.Equal(0, first);
+        Assert.Equal(0, small);
+        Assert.Equal(1, second);
+        Assert.Equal(NameSheet.MostPages - 1, last);
+        Assert.Null(full);
+        Assert.Equal(0, afterClear);
+        Assert.True(madeAnew);
+    }
+
+    /// <summary>A name's brush shows the page its rectangle is on, not the first page.</summary>
+    [Fact]
+    public void ANameShowsThePageItsRectangleIsOn()
+    {
+        var (onSecond, notFirst) = CompositionThread.Run(() =>
+        {
+            using var compositor = new Compositor();
+            var graphics = MapGraphics.For(compositor);
+            var sheet = new NameSheet(graphics);
+            sheet.Prepare();
+
+            // The first page left with no room for a name.
+            var filler = sheet.Take(WholePage.Width, WholePage.Height)!.Value;
+
+            var name = new NameSprite(compositor);
+            Write(name, graphics.Device, scale: 1);
+            name.Fit(sheet, 1);
+
+            var second = filler with { Page = 1 };
+
+            return (ReferenceEquals(Shown(name), sheet.SurfaceOf(second)), !ReferenceEquals(Shown(name), sheet.SurfaceOf(filler)));
+        });
+
+        Assert.True(onSecond);
+        Assert.True(notFirst);
     }
 
     /// <summary>A name written again unchanged keeps its rectangle and what was drawn there.</summary>
@@ -51,7 +140,7 @@ public sealed class NameSheetTests
             var device = graphics.Device;
             var sheet = new NameSheet(graphics);
             sheet.Prepare();
-            var name = new NameSprite(compositor, sheet);
+            var name = new NameSprite(compositor);
 
             Write(name, device, scale: 1.5);
             name.Fit(sheet, 1.5);
@@ -86,12 +175,12 @@ public sealed class NameSheetTests
             var device = graphics.Device;
             var sheet = new NameSheet(graphics);
             sheet.Prepare();
-            var before = sheet.Surface;
-            var name = new NameSprite(compositor, sheet);
+            var name = new NameSprite(compositor);
 
             Write(name, device, scale: 1);
             name.Fit(sheet, 1);
             name.Draw(sheet);
+            var before = Shown(name);
 
             // As Win2D reports a loss, which it does only for a device that is lost.
             device.OnDeviceLost(device.Current, null);
@@ -100,7 +189,7 @@ public sealed class NameSheetTests
 
             if (remade)
             {
-                name.Renew(sheet);
+                name.Renew();
             }
 
             var forgotten = !name.Text.IsDrawn;
@@ -109,7 +198,7 @@ public sealed class NameSheetTests
             name.Fit(sheet, 1);
             name.Draw(sheet);
 
-            return (remade, !ReferenceEquals(before, sheet.Surface), forgotten, name.Text.IsDrawn);
+            return (remade, Shown(name) is { } after && !ReferenceEquals(before, after), forgotten, name.Text.IsDrawn);
         });
 
         Assert.True(remade);
@@ -130,7 +219,7 @@ public sealed class NameSheetTests
             var sheet = new NameSheet(graphics);
             sheet.Prepare();
 
-            var name = new NameSprite(compositor, sheet);
+            var name = new NameSprite(compositor);
             Write(name, device, scale: 1);
             name.Fit(sheet, 1);
             var (width, height) = ((int)name.Visual.Size.X, (int)name.Visual.Size.Y);
@@ -141,8 +230,9 @@ public sealed class NameSheetTests
         });
 
         Assert.True(hidden);
-        Assert.Equal(0, next?.X);
-        Assert.Equal(0, next?.Y);
+        Assert.Equal(0, next?.Page);
+        Assert.Equal(0, next?.Region.X);
+        Assert.Equal(0, next?.Region.Y);
     }
 
     /// <summary>
@@ -160,6 +250,12 @@ public sealed class NameSheetTests
         Assert.Equal(new Windows.Foundation.Rect(0, 0, 31, 13), corner.Cleared);
         Assert.Equal(new Windows.Foundation.Point(0, 0), corner.Corner);
     }
+
+    /// <summary>The largest rectangle a page holds, so each one taken takes a page of its own.</summary>
+    private static (int Width, int Height) WholePage => (NameSheet.PageWidth - SheetShelves.Gutter, NameSheet.PageHeight - SheetShelves.Gutter);
+
+    /// <summary>The page the brush of <paramref name="name"/> shows.</summary>
+    private static ICompositionSurface? Shown(NameSprite name) => ((CompositionSurfaceBrush)name.Visual.Brush).Surface;
 
     private static void Write(NameSprite name, CompositionDevice device, double scale) =>
         name.Text.Write(device.Current, Formats, new NameWriting("Downloads", MapLettering.Classic, 200, true, Ink, (float)(13 / scale), 1));
