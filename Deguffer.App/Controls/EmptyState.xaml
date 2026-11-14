@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    The banner a list shows in place of its rows: a large quiet glyph, a title and, where there is
+    one, a sentence saying what to do next. One control, so every empty list on every page looks
+    the same and says why it is empty in the same place.
+-->
+<UserControl
+    x:Class="Deguffer.App.Controls.EmptyState"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False"
+    HorizontalAlignment="Center"
+    VerticalAlignment="Top"
+    MaxWidth="460"
+    Margin="0,24,0,0">
+
+    <StackPanel Spacing="12">
+        <FontIcon Glyph="{x:Bind Glyph, Mode=OneWay}" Style="{StaticResource EmptyStateGlyph}" />
+        <TextBlock Text="{x:Bind Title, Mode=OneWay}" Style="{StaticResource EmptyStateTitle}" />
+        <TextBlock x:Name="MessageText" Text="{x:Bind Message, Mode=OneWay}" Style="{StaticResource EmptyStateMessage}" />
+    </StackPanel>
+</UserControl>
