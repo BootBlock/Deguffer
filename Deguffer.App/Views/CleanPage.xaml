@@ -735,7 +735,7 @@
                      the unelevated one it replaces, and hidden once a preview has shown that
                      elevating would not help — so it never offers administrator rights for a
                      problem they cannot fix. The wording follows the same state. -->
-                <Button Content="{x:Bind ViewModel.ElevateLabel, Mode=OneWay}"
+                <Button Content="{x:Bind ViewModel.ElevateLabel, Mode=OneWay}" Style="{StaticResource ElevateButtonStyle}"
                         Visibility="{x:Bind ViewModel.CanElevate, Mode=OneWay}"
                         Command="{x:Bind ViewModel.ElevateAndRescanCommand}"
                         AutomationProperties.HelpText="Restart Deguffer as administrator and scan, so it can read the volume's file table and carry out steps only an administrator may perform." />

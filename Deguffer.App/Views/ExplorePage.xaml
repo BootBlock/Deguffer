@@ -343,7 +343,7 @@
             <!-- §5.5's fallback made actionable, on the same terms the Storage page offers it:
                  offered from the start, and withdrawn once a scan has shown that elevating would
                  not help. -->
-            <Button Grid.Column="5"
+            <Button Grid.Column="5" Style="{StaticResource ElevateButtonStyle}"
                     VerticalAlignment="Bottom"
                     Content="{x:Bind ViewModel.Elevation.ElevateLabel, Mode=OneWay}"
                     Visibility="{x:Bind ViewModel.Elevation.CanElevate, Mode=OneWay}"
