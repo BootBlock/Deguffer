@@ -4,6 +4,7 @@ using Deguffer.Core.Configuration;
 using Deguffer.Core.Execution;
 using Deguffer.Core.InstalledApps;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Viewing;
 using Deguffer.Core.Working;
 using Deguffer.Testing;
 
@@ -137,6 +138,37 @@ public sealed class InstalledAppsViewModelTests : IDisposable
         await page.RefreshAsync();
 
         Assert.Same(kept, Assert.Single(page.StaleRows));
+    });
+
+    /// <summary>
+    /// The stale list's empty state comes from Core once a reading has arrived. Before it, and while
+    /// a filter typed before the first reading narrows nothing, the list is not said to be empty.
+    /// </summary>
+    [Fact]
+    public void TheStaleEmptyStateFollowsTheReadingAndTheFilter() => UiThread.Run(async () =>
+    {
+        Stale("Gone");
+        Installed("Tool");
+        var page = Page();
+        var raised = new List<string?>();
+        page.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        page.Filter = "tool";
+
+        Assert.False(page.HasNoStaleRows);
+
+        await page.RefreshAsync();
+
+        Assert.True(page.HasNoStaleRows);
+        Assert.Equal(EmptyListCause.Filtered, page.StaleEmpty!.Cause);
+        Assert.Equal("", page.StaleEmptyGlyph);
+        Assert.Contains(nameof(page.HasNoStaleRows), raised);
+        Assert.Contains(nameof(page.StaleEmptyGlyph), raised);
+
+        page.Filter = string.Empty;
+
+        Assert.False(page.HasNoStaleRows);
+        Assert.Null(page.StaleEmpty);
     });
 
     [Fact]

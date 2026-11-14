@@ -4,6 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:vm="using:Deguffer.App.ViewModels"
+    xmlns:controls="using:Deguffer.App.Controls"
     Background="Transparent">
 
     <Page.Resources>
@@ -145,6 +146,12 @@
                               ItemsSource="{x:Bind ViewModel.StaleRows}"
                               ItemTemplate="{StaticResource EntryTemplate}"
                               ItemContainerStyle="{StaticResource EntryContainer}" />
+
+                    <controls:EmptyState Grid.Row="1"
+                                         Glyph="{x:Bind ViewModel.StaleEmptyGlyph, Mode=OneWay}"
+                                         Title="{x:Bind ViewModel.StaleEmpty.Title, Mode=OneWay, FallbackValue=''}"
+                                         Message="{x:Bind ViewModel.StaleEmpty.Message, Mode=OneWay, FallbackValue=''}"
+                                         Visibility="{x:Bind ViewModel.HasNoStaleRows, Mode=OneWay}" />
 
                     <Grid Grid.Row="2" ColumnSpacing="12" ColumnDefinitions="*,Auto">
                         <TextBlock Text="{x:Bind ViewModel.Actions.RemovalNote, Mode=OneWay}" TextWrapping="Wrap"

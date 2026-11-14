@@ -1,4 +1,5 @@
 using Deguffer.Core.InstalledApps;
+using Deguffer.Core.Viewing;
 
 namespace Deguffer.Core.Tests;
 
@@ -27,8 +28,8 @@ public sealed class InstalledAppsListsTests
     [Fact]
     public void StaleAndInstalledEntriesGoToTheirOwnListsInNameOrder()
     {
-        var lists = InstalledAppsLists.From(
-            [Entry("b", EntryStanding.Stale), Entry("C"), Entry("a", EntryStanding.Stale), Entry("A2", EntryStanding.Unproven)],
+        var lists = InstalledAppsLists.From(new InstalledAppsReading(
+            [Entry("b", EntryStanding.Stale), Entry("C"), Entry("a", EntryStanding.Stale), Entry("A2", EntryStanding.Unproven)], []),
             showHidden: false,
             filter: null);
 
@@ -39,10 +40,83 @@ public sealed class InstalledAppsListsTests
     [Fact]
     public void AHiddenEntryIsShownOnlyOnRequest()
     {
-        IReadOnlyList<InstalledEntry> entries = [Entry("Hidden", EntryStanding.Stale, EntryVisibility.SystemComponent)];
+        var entries = new InstalledAppsReading([Entry("Hidden", EntryStanding.Stale, EntryVisibility.SystemComponent)], []);
 
         Assert.Empty(InstalledAppsLists.From(entries, showHidden: false, filter: null).Stale);
         Assert.Single(InstalledAppsLists.From(entries, showHidden: true, filter: null).Stale);
+    }
+
+    [Fact]
+    public void AStaleListWithRowsHasNoEmptyNote()
+    {
+        var reading = new InstalledAppsReading([Entry("Gone", EntryStanding.Stale)], []);
+
+        Assert.Null(InstalledAppsLists.From(reading, showHidden: false, filter: null).StaleEmpty);
+    }
+
+    [Fact]
+    public void AReadingWithNothingStaleSaysThereIsNone()
+    {
+        var reading = new InstalledAppsReading([Entry("Tool"), Entry("Maybe", EntryStanding.Unproven)], []);
+
+        var note = InstalledAppsLists.From(reading, showHidden: true, filter: null).StaleEmpty;
+
+        Assert.Equal(new EmptyListNote(
+            EmptyListCause.Nothing,
+            "No stale entries",
+            "Every entry belongs to a program that is still there, or that nothing proves gone."), note);
+    }
+
+    /// <summary>A key Windows would not open may hold stale entries, so "none" is said of what was read.</summary>
+    [Fact]
+    public void NothingStaleNamesAKeyWindowsWouldNotOpen()
+    {
+        var reading = new InstalledAppsReading([Entry("Tool")], [UninstallScope.Machine32]);
+
+        var note = InstalledAppsLists.From(reading, showHidden: false, filter: null).StaleEmpty!;
+
+        Assert.Equal(EmptyListCause.Nothing, note.Cause);
+        Assert.StartsWith("Every entry Deguffer could read", note.Message, StringComparison.Ordinal);
+        Assert.Contains(@"HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node", note.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AStaleEntryTheFilterExcludesIsNotSaidToBeAbsent()
+    {
+        var reading = new InstalledAppsReading([Entry("Gone", EntryStanding.Stale), Entry("Tool")], []);
+
+        var note = InstalledAppsLists.From(reading, showHidden: false, filter: "tool").StaleEmpty!;
+
+        Assert.Equal(EmptyListCause.Filtered, note.Cause);
+        Assert.Equal("No stale entry matches the filter", note.Title);
+    }
+
+    [Fact]
+    public void AHiddenStaleEntryIsCountedAndTheSwitchNamed()
+    {
+        var reading = new InstalledAppsReading(
+            [Entry("One", EntryStanding.Stale, EntryVisibility.SystemComponent), Entry("Two", EntryStanding.Stale, EntryVisibility.NoName)],
+            []);
+
+        var note = InstalledAppsLists.From(reading, showHidden: false, filter: null).StaleEmpty;
+
+        Assert.Equal(new EmptyListNote(
+            EmptyListCause.Hidden,
+            "No stale entries in the list Windows shows",
+            "2 stale entries are hidden. Turn on Show entries Windows hides to list hidden entries too."), note);
+    }
+
+    /// <summary>
+    /// Only a hidden entry the filter matches is one the switch would list. A hidden stale entry the
+    /// filter excludes leaves the filter as the cause.
+    /// </summary>
+    [Fact]
+    public void AHiddenStaleEntryTheFilterExcludesNamesTheFilter()
+    {
+        var reading = new InstalledAppsReading([Entry("Gone", EntryStanding.Stale, EntryVisibility.SystemComponent), Entry("Tool")], []);
+
+        Assert.Equal(EmptyListCause.Filtered, InstalledAppsLists.From(reading, showHidden: false, filter: "tool").StaleEmpty!.Cause);
+        Assert.Equal(EmptyListCause.Hidden, InstalledAppsLists.From(reading, showHidden: false, filter: "gone").StaleEmpty!.Cause);
     }
 
     [Theory]
@@ -52,7 +126,7 @@ public sealed class InstalledAppsListsTests
     [InlineData("remove-Tool")]
     public void TheFilterMatchesNamePublisherKeyAndCommand(string filter)
     {
-        IReadOnlyList<InstalledEntry> entries = [Entry("Tool", publisher: "Example Ltd"), Entry("Other")];
+        var entries = new InstalledAppsReading([Entry("Tool", publisher: "Example Ltd"), Entry("Other")], []);
 
         Assert.Equal("Tool", Assert.Single(InstalledAppsLists.From(entries, showHidden: false, filter).Installed).Name);
     }
