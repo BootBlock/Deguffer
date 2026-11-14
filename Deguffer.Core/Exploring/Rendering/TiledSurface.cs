@@ -52,8 +52,9 @@ public sealed class TiledSurface : ExploreSurface
         MapStyle style,
         IReadOnlyList<ExploreTile> tiles,
         MapViewport? viewport = null,
-        VolumeSpace beside = default)
-        : base(tree, root, width, height, limits, colours, style, ZoomOf(viewport, tiles, limits))
+        VolumeSpace beside = default,
+        MapDetail? detail = null)
+        : base(tree, root, width, height, limits, colours, style, ZoomOf(viewport, tiles, limits), detail)
     {
         _tiles = tiles;
         _hits = new TileHitTest(tiles, width, height);
@@ -65,7 +66,7 @@ public sealed class TiledSurface : ExploreSurface
 
         Labels = new TileLabels(
             tiles, tree, root, width, height, limits, style.ShapeNames, style.Lettering,
-            style.Lettering == MapLettering.Classic ? MaximumClassicLabels : MaximumLabels,
+            MostLabels,
             tile => TextColourFor(tile.Node, tile.Depth, tile.Framed)).Build();
     }
 

@@ -318,13 +318,16 @@ pointed at is touched. A link whose target is on a drive or share that is not co
 offered, because the drive may come back: Deguffer counts it and says so.
 
 The gear button next to the map opens *Map appearance*, and the map updates as you change the
-settings there. Each view has its own colours. Shapes can be shaded as a cushion, a bevel, a sheen
-lit from above, or flat colour. You can draw an outline of your chosen strength and width around
-each file and each folder, fill folders with grey or tint them towards grey, and hide the folder
-name bands or the names inside shapes. The soft light that follows the pointer over the map can be
-turned off, softened or brightened. Presets set the shapes, outlines and spacing all at once, and
-include looks based on SpaceMonger and WizTree. Your choices are saved, and the Memory page's map
-uses them too.
+settings there. Each view has its own colours, and you can make every colour stronger, softer or
+grey, and lighter or darker. Shapes can be shaded as a cushion, a bevel of your chosen width, a
+sheen lit from above, or flat colour. You can draw an outline of your chosen strength and width
+around each file and each folder, and fill folders with grey or tint them towards grey. You choose
+the smallest shape the map draws and how many levels of folders it opens. You also choose whether
+folders and shapes are named, how large the names are, how many are written, and whether each name
+shows its size. The soft light that follows the pointer over the map can be turned off, softened or
+brightened, and made to reach further or less far. Presets set the shapes, colours, outlines and
+spacing all at once, and include looks based on SpaceMonger and WizTree. Your choices are saved, and
+the Memory page's map uses them too.
 The window stays above Deguffer's main window, reopens where you left it, and opens again with
 Deguffer if you left it open.
 

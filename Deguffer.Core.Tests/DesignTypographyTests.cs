@@ -23,7 +23,7 @@ public sealed class DesignTypographyTests
         ["Deguffer.App/Views/ExplorePage.xaml"] = 34,
         ["Deguffer.App/Views/InstalledAppsPage.xaml"] = 2,
         ["Deguffer.App/Views/ItemListView.xaml"] = 12,
-        ["Deguffer.App/Views/MapAppearanceView.xaml"] = 4,
+        ["Deguffer.App/Views/MapAppearanceView.xaml"] = 2,
         ["Deguffer.App/Views/MemoryPage.xaml"] = 3,
         ["Deguffer.App/Views/NetworkBrowserDialog.xaml"] = 3,
         ["Deguffer.App/Views/ProviderInfoView.xaml"] = 9,

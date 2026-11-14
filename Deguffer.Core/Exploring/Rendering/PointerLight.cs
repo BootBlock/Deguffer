@@ -36,10 +36,14 @@ public readonly record struct PointerLight(float X, float Y, float Reach, float 
 
     /// <summary>
     /// The light over canvas point <paramref name="x"/>, <paramref name="y"/>, on a display at
-    /// <paramref name="scale"/>, adding at most <paramref name="strength"/>.
+    /// <paramref name="scale"/>, as bright and as far-reaching as <paramref name="light"/> says.
     /// </summary>
-    public static PointerLight At(float x, float y, double scale, float strength) =>
-        new(x, y, (float)(ReachInDips * scale), strength);
+    public static PointerLight At(float x, float y, double scale, Configuration.MapPointerLight light)
+    {
+        ArgumentNullException.ThrowIfNull(light);
+
+        return new(x, y, (float)(ReachInDips * light.Spread * scale), light.Amount);
+    }
 
     /// <summary>
     /// The part of a canvas <paramref name="width"/> by <paramref name="height"/> the light adds to,

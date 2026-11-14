@@ -28,16 +28,6 @@ namespace Deguffer.Core.Exploring.Rendering;
 public abstract class ExploreSurface
 {
     /// <summary>
-    /// How many labels to draw at most.
-    ///
-    /// <para>The size threshold already keeps this small on an ordinary tree, but a directory of
-    /// several hundred near-equal children defeats it — every shape is then big enough to label and
-    /// none of them is interesting. Past a few dozen the labels are noise over the picture anyway,
-    /// and the list view is the honest way to read that many names.</para>
-    /// </summary>
-    protected const int MaximumLabels = 64;
-
-    /// <summary>
     /// How many shapes to name at most under <see cref="MapLettering.Classic"/>, which names every box
     /// with room for a name, as SpaceMonger does. A bound on the text controls the shell makes for a
     /// canvas that somehow has more boxes that wide than a 4K screen fits, not a choice of which to name.
@@ -52,6 +42,9 @@ public abstract class ExploreSurface
 
     private readonly ShapeColours _colours;
 
+    /// <summary>How each shape's colour is moved from its palette's (<see cref="ColourTuning"/>).</summary>
+    private readonly ColourTuning _tuning;
+
     /// <summary>Each folder's <see cref="Shapes"/>, once asked. Concurrent because a drawing is made and read on any thread.</summary>
     private readonly ConcurrentDictionary<int, IReadOnlyList<MapShape>> _held = new();
 
@@ -59,6 +52,7 @@ public abstract class ExploreSurface
     private IReadOnlyList<MapShape>? _top;
 
     /// <param name="style">How every shape is finished, and what text is written on them.</param>
+    /// <param name="detail">How many names are written and what each says, or null for <see cref="MapDetail.Default"/>.</param>
     protected ExploreSurface(
         ISizedTree tree,
         int root,
@@ -67,7 +61,8 @@ public abstract class ExploreSurface
         LayoutLimits limits,
         ShapeColours colours,
         MapStyle style,
-        DrawnZoom? zoom)
+        DrawnZoom? zoom,
+        MapDetail? detail)
     {
         ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(colours);
@@ -82,7 +77,9 @@ public abstract class ExploreSurface
         Zoom = zoom;
         Limits = limits;
         Style = style;
+        Detail = detail ?? MapDetail.Default;
         _colours = colours;
+        _tuning = ColourTuning.Of(style);
         _hues = new BranchHues(tree, root);
 
         // One device pixel at 100%, and as many as the display's scale makes of one, so a line or a
@@ -104,7 +101,7 @@ public abstract class ExploreSurface
     ///
     /// <para>Said by the drawing rather than assumed by the caller, because the caller asks for a view
     /// and does not always get it: a scan still running is drawn as an icicle whichever view was
-    /// picked (see <see cref="Create(ISizedTree, int, ExploreView, int, int, double, double, ShapeColours, ExploreSpacing, VolumeSpace, MapViewport, MapStyle)"/>).
+    /// picked (see <see cref="Create(ISizedTree, int, ExploreView, int, int, double, double, ShapeColours, ExploreSpacing, VolumeSpace, MapViewport, MapStyle, MapDetail)"/>).
     /// A caller that took its own zoom as what was drawn would place the picture, and resolve a click
     /// on it, for a zoom the picture does not have (§7.1).</para>
     /// </summary>
@@ -122,7 +119,7 @@ public abstract class ExploreSurface
     public MapPlacement PlacementOn(MapViewport shown) => shown.PlacementOf(ShownAt);
 
     /// <summary>
-    /// Where the text goes. At most <see cref="MaximumLabels"/> inside shapes, and for a treemap a
+    /// Where the text goes. At most <see cref="MostLabels"/> inside shapes, and for a treemap a
     /// folder's name in each band as well — see <see cref="TiledSurface"/>.
     /// </summary>
     public abstract IReadOnlyList<ExploreLabel> Labels { get; }
@@ -141,8 +138,32 @@ public abstract class ExploreSurface
     /// <summary>How every shape is finished, and what text is written on them.</summary>
     protected MapStyle Style { get; }
 
+    /// <summary>How many names are written and what each says.</summary>
+    protected MapDetail Detail { get; }
+
     /// <summary>How the text on this drawing is set, and what it says (<see cref="MapStyle.Lettering"/>).</summary>
     public MapLettering Lettering => Style.Lettering;
+
+    /// <summary>Whether each name is followed by its size (<see cref="MapDetail.Sizes"/>).</summary>
+    public bool Sizes => Detail.Sizes;
+
+    /// <summary>
+    /// The size the application's lettering is set at on this drawing, 1 at the standard size: the
+    /// size its labels' room was measured for, so a name is never set larger than the room it was
+    /// given (<see cref="LayoutLimits.TextScale"/>).
+    /// </summary>
+    public double TextScale => Limits.TextScale;
+
+    /// <summary>
+    /// How many shapes to name at most: as many as the reader asked for (<see cref="MapDetail.MostNames"/>),
+    /// or under <see cref="MapLettering.Classic"/>, <see cref="MaximumClassicLabels"/>.
+    ///
+    /// <para>The size threshold already keeps this small on an ordinary tree, but a directory of
+    /// several hundred near-equal children defeats it: every shape is then big enough to label and
+    /// none of them is interesting. Past a few dozen the labels are noise over the picture, and the
+    /// list view is the honest way to read that many names, so the reader chooses how many.</para>
+    /// </summary>
+    protected int MostLabels => Style.Lettering == MapLettering.Classic ? MaximumClassicLabels : Detail.MostNames;
 
     /// <summary>How far apart the lines of a label of several lines are, in canvas pixels.</summary>
     public float LineSpacing => Limits.LineSpacing;
@@ -207,8 +228,9 @@ public abstract class ExploreSurface
     /// compared against raw constants draws half-size detail on a high-DPI display.</para>
     /// </summary>
     /// <param name="textScale">
-    /// The reader's Windows text size, 1 at 100%. The labels grow with it, so the thresholds for
-    /// where a label fits grow with it too — see <see cref="LayoutLimits.ForText"/>.
+    /// The reader's Windows text size, 1 at 100%. The labels grow with it, and with the size
+    /// <paramref name="detail"/> asks for on top of it, so the thresholds for where a label fits grow
+    /// with both — see <see cref="LayoutLimits.ForText"/>.
     /// </param>
     /// <param name="colours">What the colours are to say.</param>
     /// <param name="spacing">How much room a treemap leaves round what each folder holds.</param>
@@ -227,6 +249,10 @@ public abstract class ExploreSurface
     /// How every shape is finished and what is written on them, or null for
     /// <see cref="MapStyle.Default"/>. Its folder bands are part of the treemap's layout as well.
     /// </param>
+    /// <param name="detail">
+    /// The smallest shape drawn, how many levels are opened, and how many names are written at what
+    /// size, or null for <see cref="MapDetail.Default"/>.
+    /// </param>
     public static ExploreSurface Create(
         ISizedTree tree,
         int root,
@@ -239,21 +265,30 @@ public abstract class ExploreSurface
         ExploreSpacing spacing,
         VolumeSpace volume,
         MapViewport viewport = default,
-        MapStyle? style = null)
+        MapStyle? style = null,
+        MapDetail? detail = null)
     {
         ArgumentNullException.ThrowIfNull(tree);
 
         var styled = style ?? MapStyle.Default;
-        var limits = LayoutLimits.Default.Lettered(styled.Lettering).Spaced(spacing).Banded(styled.FolderNames).ForText(textScale).At(scale);
+        var detailed = detail ?? MapDetail.Default;
+        var limits = LayoutLimits.Default
+            .Lettered(styled.Lettering)
+            .Spaced(spacing)
+            .Banded(styled.FolderNames)
+            .Detailed(detailed)
+            .ForText(detailed.TextScaleFor(styled.Lettering, textScale))
+            .At(scale);
         var beside = root == tree.RootNode ? volume : VolumeSpace.None;
 
         return Drawn(tree, view) switch
         {
             ExploreView.Sunburst => new SunburstSurface(
-                tree, root, width, height, limits, colours, styled),
+                tree, root, width, height, limits, colours, styled, detailed),
             ExploreView.Icicle => new TiledSurface(
                 tree, root, width, height, limits, colours, styled,
-                IcicleLayout.Compute(tree, root, width, height, limits)),
+                IcicleLayout.Compute(tree, root, width, height, limits),
+                detail: detailed),
 
             // Including List, Tree and Files, none of which draws a map at all. A page hides the map
             // rather than telling it to stop, so this is the drawing it will be showing again when
@@ -262,7 +297,8 @@ public abstract class ExploreSurface
                 tree, root, width, height, limits, colours, styled,
                 TreemapLayout.Compute(tree, root, width, height, limits, beside, viewport),
                 viewport,
-                beside),
+                beside,
+                detailed),
         };
     }
 
@@ -391,7 +427,9 @@ public abstract class ExploreSurface
     /// act on it, so each is its own <see cref="MapBlock.Colour"/>.</para>
     ///
     /// <para>In a high contrast theme's colours every shape and block is the theme's window colour, and
-    /// only its edges tell it from its neighbour (<see cref="Finish"/>).</para>
+    /// only its edges tell it from its neighbour (<see cref="Finish"/>). Otherwise a shape's colour is
+    /// tuned as the style asks (<see cref="ColourTuning"/>), and a block's is not: its grey says what
+    /// it is.</para>
     ///
     /// <para>A folder drawn round what it holds is the neutral frame grey where the style asks for
     /// grey frames, whatever the colouring says of it, so the colours on the picture are what the
@@ -404,8 +442,8 @@ public abstract class ExploreSurface
         : MapBlock.Of(node) is { } block ? block.Colour
         : framed && Style.FolderFill == MapFolderFill.Grey ? TilePalette.FolderFrame
         : framed && Style.FolderFill == MapFolderFill.Tinted
-            ? ShapeFinish.Mix(_colours.For(this, node, depth), TilePalette.FolderFrame, ShapeFinish.Whole / 2)
-        : _colours.For(this, node, depth);
+            ? ShapeFinish.Mix(_tuning.Apply(_colours.For(this, node, depth)), TilePalette.FolderFrame, ShapeFinish.Whole / 2)
+        : _tuning.Apply(_colours.For(this, node, depth));
 
     /// <summary>What a rectangle of this drawing is painted. See <see cref="ColourFor(int, int, bool)"/>.</summary>
     protected TileColour ColourOf(ExploreTile tile) => ColourFor(tile.Node, tile.Depth, tile.Framed);

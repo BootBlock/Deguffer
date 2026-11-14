@@ -148,7 +148,7 @@ public sealed class ExploreMap : UserControl
     /// The picture the map was last handed, which a change of folder may still be on its way to: the
     /// tree, the node of it, the view, and the volume drawn beside the node or
     /// <see cref="VolumeSpace.None"/>, as the page decides. See
-    /// <see cref="ExploreSurface.Create(ISizedTree, int, ExploreView, int, int, double, double, ShapeColours, ExploreSpacing, VolumeSpace, MapViewport, MapStyle)"/>
+    /// <see cref="ExploreSurface.Create(ISizedTree, int, ExploreView, int, int, double, double, ShapeColours, ExploreSpacing, VolumeSpace, MapViewport, MapStyle, MapDetail)"/>
     /// for where the volume is drawn.
     /// </summary>
     private MapPicture _shown = new(null, 0, ExploreView.Treemap, VolumeSpace.None);
@@ -1725,7 +1725,7 @@ public sealed class ExploreMap : UserControl
             && _graphics.Shades
             && !Contrasted)
         {
-            _flight.Pictures.Light(found.Drawing, PointerLight.At(found.X, found.Y, _canvas.Scale, _look.Light.Amount));
+            _flight.Pictures.Light(found.Drawing, PointerLight.At(found.X, found.Y, _canvas.Scale, _look.Light));
         }
         else
         {
@@ -2005,7 +2005,7 @@ public sealed class ExploreMap : UserControl
             return;
         }
 
-        var text = SystemLook.Current.State.TextScale;
+        var text = _look.Detail.TextScaleFor(_look.Style.Lettering, SystemLook.Current.State.TextScale);
         var target = _zoom.Target.Showing(
             drawn.PictureOf(shape.Frame),
             LayoutLimits.Default.MinimumLabelWidth * text / ActualWidth,

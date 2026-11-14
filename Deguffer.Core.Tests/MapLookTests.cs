@@ -57,7 +57,7 @@ public sealed class MapLookTests
 
         File.WriteAllText(
             Path.Combine(directory.FullName, "preferences.json"),
-            """{ "TreemapSpacing": 9, "TreemapScheme": 9, "IcicleScheme": -1, "SunburstScheme": "Deep", "MapStyle": { "Shading": 9, "Relief": -2, "BlockBorders": "Solid", "FolderFill": 7 }, "MapPointerLight": { "Shown": false, "Strength": 9 } }""");
+            """{ "TreemapSpacing": 9, "TreemapScheme": 9, "IcicleScheme": -1, "SunburstScheme": "Deep", "MapStyle": { "Shading": 9, "Relief": -2, "BlockBorders": "Solid", "FolderFill": 7 }, "MapPointerLight": { "Shown": false, "Strength": 9, "Reach": 7 }, "MapDetail": { "SmallestShape": 9, "Levels": "More", "TextSize": -1, "Names": 12, "Sizes": false } }""");
 
         var look = MapLook.From(new PreferenceStore(environment).Load());
 
@@ -68,7 +68,8 @@ public sealed class MapLookTests
                 ExploreScheme.Standard,
                 ExploreScheme.Deep,
                 MapStyle.Default with { BlockBorders = MapBorder.Solid },
-                new MapPointerLight(Shown: false)),
+                new MapPointerLight(Shown: false),
+                new MapDetail(Levels: MapLevels.More, Sizes: false)),
             look);
     }
 
@@ -86,7 +87,8 @@ public sealed class MapLookTests
             ExploreScheme.Soft,
             ExploreScheme.Deep,
             MapPreset.SpaceMonger.Style,
-            new MapPointerLight(Shown: false, MapLightStrength.Bright));
+            new MapPointerLight(Shown: false, MapLightStrength.Bright, MapLightReach.Wide),
+            new MapDetail(MapSmallestShape.Tiny, MapLevels.Most, MapTextSize.Larger, MapNameCount.Fewer, Sizes: false));
 
         var after = look.Into(before);
 
@@ -99,7 +101,8 @@ public sealed class MapLookTests
                 IcicleScheme = ExploreScheme.Soft,
                 SunburstScheme = ExploreScheme.Deep,
                 MapStyle = MapPreset.SpaceMonger.Style,
-                MapPointerLight = new MapPointerLight(Shown: false, MapLightStrength.Bright),
+                MapPointerLight = new MapPointerLight(Shown: false, MapLightStrength.Bright, MapLightReach.Wide),
+                MapDetail = new MapDetail(MapSmallestShape.Tiny, MapLevels.Most, MapTextSize.Larger, MapNameCount.Fewer, Sizes: false),
             },
             after);
     }

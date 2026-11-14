@@ -6,8 +6,10 @@ namespace Deguffer.App.ViewModels;
 
 /// <summary>
 /// What the map appearance window shows and changes: the colours the picture on screen is drawn in,
-/// how much room a treemap leaves round each folder, how every shape is finished, the light under the
-/// pointer, and the presets that set the finish and the spacing at once.
+/// how strong and how light they are, how much room a treemap leaves round each folder and how much of
+/// the tree it draws, and the presets that set the finish and the spacing at once. How every shape is
+/// shaded, how it is outlined and what is written on it are each a section of their own
+/// (<see cref="Shapes"/>, <see cref="Lines"/>, <see cref="Names"/>), which change the look through this.
 ///
 /// <para>It holds the look rather than reading it from the preferences each time, and applies a
 /// change before it writes it. See <see cref="MapLook"/> for why that order: somebody trying colours
@@ -19,25 +21,16 @@ namespace Deguffer.App.ViewModels;
 /// </summary>
 public sealed partial class MapAppearanceViewModel : ObservableObject
 {
-    /// <summary>Every property a change of look can move, raised together so each box shows the look as it now stands.</summary>
+    /// <summary>Every property of its own a change of look can move, raised together so each box shows the look as it now stands.</summary>
     private static readonly string[] LookProperties =
     [
         nameof(SchemeIndex),
         nameof(SpacingIndex),
-        nameof(ShadingIndex),
-        nameof(ReliefIndex),
-        nameof(BevelShadesIndex),
-        nameof(BlockBordersIndex),
-        nameof(FolderBordersIndex),
-        nameof(BorderWidthIndex),
-        nameof(BorderToneIndex),
-        nameof(LinesIndex),
         nameof(FolderFillIndex),
-        nameof(FolderNames),
-        nameof(ShapeNames),
-        nameof(LetteringIndex),
-        nameof(PointerLightShown),
-        nameof(LightStrengthIndex),
+        nameof(SaturationIndex),
+        nameof(BrightnessIndex),
+        nameof(SmallestShapeIndex),
+        nameof(LevelsIndex),
         nameof(PresetIndex),
         nameof(PresetSummary),
     ];
@@ -72,6 +65,10 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
         View = choice.View;
         Colouring = choice.Colouring;
 
+        Shapes = new MapShapesViewModel(this);
+        Lines = new MapLinesViewModel(this);
+        Names = new MapNamesViewModel(this);
+
         // Heard for as long as the preferences last, which is as long as this does.
         preferences.Changed += (_, _) => Follow(preferences.Current.TreemapSpacing);
     }
@@ -89,6 +86,15 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
 
     /// <summary>The look as it stands, whether or not it has reached the preferences file yet.</summary>
     public MapLook Look => _look;
+
+    /// <summary>How every shape is shaded, and the light under the pointer.</summary>
+    public MapShapesViewModel Shapes { get; }
+
+    /// <summary>The lines round the shapes.</summary>
+    public MapLinesViewModel Lines { get; }
+
+    /// <summary>What is written on the picture, and how.</summary>
+    public MapNamesViewModel Names { get; }
 
     /// <summary>Every scheme, in the order the window lists them.</summary>
     public IReadOnlyList<MapSchemeOption> Schemes => MapSchemeOption.All;
@@ -167,69 +173,6 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
         }
     }
 
-    /// <summary>Index into the shading list, ordered to match <see cref="MapShading"/>.</summary>
-    public int ShadingIndex
-    {
-        get => (int)_look.Style.Shading;
-        set => Restyle(value, style => style with { Shading = (MapShading)value });
-    }
-
-    /// <summary>Index into the relief list, ordered to match <see cref="MapRelief"/>.</summary>
-    public int ReliefIndex
-    {
-        get => (int)_look.Style.Relief;
-        set => Restyle(value, style => style with { Relief = (MapRelief)value });
-    }
-
-    /// <summary>Index into the list of a bevel's shades, ordered to match <see cref="MapBevelShades"/>.</summary>
-    public int BevelShadesIndex
-    {
-        get => (int)_look.Style.BevelShades;
-        set => Restyle(value, style => style with { BevelShades = (MapBevelShades)value });
-    }
-
-    /// <summary>Index into the list of ways shapes side by side draw their lines, ordered to match <see cref="MapLines"/>.</summary>
-    public int LinesIndex
-    {
-        get => (int)_look.Style.Lines;
-        set => Restyle(value, style => style with { Lines = (MapLines)value });
-    }
-
-    /// <summary>Index into the lettering list, ordered to match <see cref="MapLettering"/>.</summary>
-    public int LetteringIndex
-    {
-        get => (int)_look.Style.Lettering;
-        set => Restyle(value, style => style with { Lettering = (MapLettering)value });
-    }
-
-    /// <summary>Index into the list of lines round each block, ordered to match <see cref="MapBorder"/>.</summary>
-    public int BlockBordersIndex
-    {
-        get => (int)_look.Style.BlockBorders;
-        set => Restyle(value, style => style with { BlockBorders = (MapBorder)value });
-    }
-
-    /// <summary>Index into the list of lines round each folder, ordered to match <see cref="MapBorder"/>.</summary>
-    public int FolderBordersIndex
-    {
-        get => (int)_look.Style.FolderBorders;
-        set => Restyle(value, style => style with { FolderBorders = (MapBorder)value });
-    }
-
-    /// <summary>Index into the line width list, ordered to match <see cref="MapBorderWidth"/>.</summary>
-    public int BorderWidthIndex
-    {
-        get => (int)_look.Style.BorderWidth;
-        set => Restyle(value, style => style with { BorderWidth = (MapBorderWidth)value });
-    }
-
-    /// <summary>Index into the line tone list, ordered to match <see cref="MapBorderTone"/>.</summary>
-    public int BorderToneIndex
-    {
-        get => (int)_look.Style.BorderTone;
-        set => Restyle(value, style => style with { BorderTone = (MapBorderTone)value });
-    }
-
     /// <summary>Index into the folder fill list, ordered to match <see cref="MapFolderFill"/>.</summary>
     public int FolderFillIndex
     {
@@ -237,38 +180,32 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
         set => Restyle(value, style => style with { FolderFill = (MapFolderFill)value });
     }
 
-    /// <summary>Whether each treemap folder with room for one keeps a band with its name in it.</summary>
-    public bool FolderNames
+    /// <summary>Index into the colour strength list, ordered to match <see cref="MapSaturation"/>.</summary>
+    public int SaturationIndex
     {
-        get => _look.Style.FolderNames;
-        set => Restyle(style => style with { FolderNames = value });
+        get => (int)_look.Style.Saturation;
+        set => Restyle(value, style => style with { Saturation = (MapSaturation)value });
     }
 
-    /// <summary>Whether a shape with room for it has its name and size written inside it.</summary>
-    public bool ShapeNames
+    /// <summary>Index into the brightness list, ordered to match <see cref="MapBrightness"/>.</summary>
+    public int BrightnessIndex
     {
-        get => _look.Style.ShapeNames;
-        set => Restyle(style => style with { ShapeNames = value });
+        get => (int)_look.Style.Brightness;
+        set => Restyle(value, style => style with { Brightness = (MapBrightness)value });
     }
 
-    /// <summary>Whether the map shines a soft light over the point under the pointer.</summary>
-    public bool PointerLightShown
+    /// <summary>Index into the list of smallest shapes, ordered to match <see cref="MapSmallestShape"/>.</summary>
+    public int SmallestShapeIndex
     {
-        get => _look.Light.Shown;
-        set => Relight(light => light with { Shown = value });
+        get => (int)_look.Detail.SmallestShape;
+        set => Redetail(value, detail => detail with { SmallestShape = (MapSmallestShape)value });
     }
 
-    /// <summary>Index into the light's strength list, ordered to match <see cref="MapLightStrength"/>.</summary>
-    public int LightStrengthIndex
+    /// <summary>Index into the list of levels, ordered to match <see cref="MapLevels"/>.</summary>
+    public int LevelsIndex
     {
-        get => (int)_look.Light.Strength;
-        set
-        {
-            if (value >= 0)
-            {
-                Relight(light => light with { Strength = (MapLightStrength)value });
-            }
-        }
+        get => (int)_look.Detail.Levels;
+        set => Redetail(value, detail => detail with { Levels = (MapLevels)value });
     }
 
     /// <summary>
@@ -306,8 +243,8 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
 
     /// <summary>
     /// Put every part of the look back as the map is shipped: the Deguffer preset, each picture's
-    /// standard colours and the light as it always was, with the preset's colouring handed to the page
-    /// as choosing the preset hands it.
+    /// standard colours, the light and the detail as they always were, with the preset's colouring
+    /// handed to the page as choosing the preset hands it.
     /// </summary>
     public void RestoreDefaults()
     {
@@ -318,6 +255,57 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
 
         HandOver(MapPreset.Standard.Colouring);
     }
+
+    /// <summary>
+    /// Change one part of the style, where <paramref name="index"/> is a choice. A list with nothing
+    /// selected reports -1 while it rebuilds, which is not a choice.
+    /// </summary>
+    internal void Restyle(int index, Func<MapStyle, MapStyle> change)
+    {
+        if (index >= 0)
+        {
+            Restyle(change);
+        }
+    }
+
+    /// <summary>
+    /// Change one part of the style, on screen and in the preferences. Only that part is written: the
+    /// rest of the stored style is left as the file holds it.
+    /// </summary>
+    internal void Restyle(Func<MapStyle, MapStyle> change) =>
+        Apply(
+            _look with { Style = change(_look.Style) },
+            current => current with { MapStyle = change(current.MapStyle.Defined()) });
+
+    /// <summary>Change one part of the pointer's light, where <paramref name="index"/> is a choice, as <see cref="Restyle(int, Func{MapStyle, MapStyle})"/> does.</summary>
+    internal void Relight(int index, Func<MapPointerLight, MapPointerLight> change)
+    {
+        if (index >= 0)
+        {
+            Relight(change);
+        }
+    }
+
+    /// <summary>Change one part of the pointer's light, on screen and in the preferences, as <see cref="Restyle(Func{MapStyle, MapStyle})"/> changes the style.</summary>
+    internal void Relight(Func<MapPointerLight, MapPointerLight> change) =>
+        Apply(
+            _look with { Light = change(_look.Light) },
+            current => current with { MapPointerLight = change(current.MapPointerLight.Defined()) });
+
+    /// <summary>Change one part of the detail, where <paramref name="index"/> is a choice, as <see cref="Restyle(int, Func{MapStyle, MapStyle})"/> does.</summary>
+    internal void Redetail(int index, Func<MapDetail, MapDetail> change)
+    {
+        if (index >= 0)
+        {
+            Redetail(change);
+        }
+    }
+
+    /// <summary>Change one part of the detail, on screen and in the preferences, as <see cref="Restyle(Func{MapStyle, MapStyle})"/> changes the style.</summary>
+    internal void Redetail(Func<MapDetail, MapDetail> change) =>
+        Apply(
+            _look with { Detail = change(_look.Detail) },
+            current => current with { MapDetail = change(current.MapDetail.Defined()) });
 
     /// <summary>
     /// Take up a spacing chosen on the Settings page, which writes it while this window can be open.
@@ -378,30 +366,6 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
         _preferences.Update(current => current with { ExploreColours = chosen });
     }
 
-    /// <summary>Change one part of the style, where <paramref name="index"/> is a choice. See <see cref="SchemeIndex"/> for -1.</summary>
-    private void Restyle(int index, Func<MapStyle, MapStyle> change)
-    {
-        if (index >= 0)
-        {
-            Restyle(change);
-        }
-    }
-
-    /// <summary>
-    /// Change one part of the style, on screen and in the preferences. Only that part is written: the
-    /// rest of the stored style is left as the file holds it.
-    /// </summary>
-    private void Restyle(Func<MapStyle, MapStyle> change) =>
-        Apply(
-            _look with { Style = change(_look.Style) },
-            current => current with { MapStyle = change(current.MapStyle.Defined()) });
-
-    /// <summary>Change one part of the pointer's light, on screen and in the preferences, as <see cref="Restyle(Func{MapStyle, MapStyle})"/> changes the style.</summary>
-    private void Relight(Func<MapPointerLight, MapPointerLight> change) =>
-        Apply(
-            _look with { Light = change(_look.Light) },
-            current => current with { MapPointerLight = change(current.MapPointerLight.Defined()) });
-
     /// <summary>
     /// Show <paramref name="look"/>, then write the settings that changed through
     /// <paramref name="write"/>.
@@ -428,13 +392,20 @@ public sealed partial class MapAppearanceViewModel : ObservableObject
         return _preferences.Update(write);
     }
 
-    /// <summary>Tell every box and whoever draws a map that the look moved.</summary>
+    /// <summary>
+    /// Tell every box and whoever draws a map that the look moved: this window's own boxes, then each
+    /// section's, then the maps.
+    /// </summary>
     private void Raise()
     {
         foreach (var property in LookProperties)
         {
             OnPropertyChanged(property);
         }
+
+        Shapes.Refresh();
+        Lines.Refresh();
+        Names.Refresh();
 
         Changed?.Invoke(this, EventArgs.Empty);
     }

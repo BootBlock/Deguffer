@@ -215,7 +215,6 @@ internal sealed class ExploreLabels : Canvas
             }
         }
 
-        var textScale = SystemLook.Current.State.TextScale;
         var fitted = true;
 
         for (var i = 0; i < drawing.Labels.Count; i++)
@@ -224,13 +223,13 @@ internal sealed class ExploreLabels : Canvas
             var name = _names.Assigned[i];
 
             var writing = new NameWriting(
-                caption(label).Text(drawing.Lettering, label.Lines),
+                caption(label).Text(drawing.Lettering, label.Lines, drawing.Sizes),
                 drawing.Lettering,
                 (float)(label.Width / scale),
                 label.Centred,
                 label.Colour.ToColor(),
                 (float)(drawing.LineSpacing / scale),
-                textScale);
+                drawing.TextScale);
 
             name.Text.Write(device, _formats, writing);
 

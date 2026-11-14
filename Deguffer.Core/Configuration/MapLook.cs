@@ -2,7 +2,8 @@ namespace Deguffer.Core.Configuration;
 
 /// <summary>
 /// How the maps are drawn: the colours each picture is drawn in, how much room a treemap leaves
-/// round what each folder holds, how every shape is finished, and the light under the pointer. The part of
+/// round what each folder holds, how every shape is finished, the light under the pointer, and how much
+/// of the tree the maps draw and name. The part of
 /// <see cref="AppPreferences"/> the map appearance window changes, as one value.
 ///
 /// <para>A value of its own because the window applies a change before it is written. A reader
@@ -16,13 +17,15 @@ namespace Deguffer.Core.Configuration;
 /// <param name="Sunburst">The colours the sunburst is drawn in.</param>
 /// <param name="Style">How every shape is finished, in every picture.</param>
 /// <param name="Light">The light over the point under the pointer, in every picture.</param>
+/// <param name="Detail">How much of the tree every picture draws, and how its names read.</param>
 public sealed record MapLook(
     ExploreSpacing Spacing,
     ExploreScheme Treemap,
     ExploreScheme Icicle,
     ExploreScheme Sunburst,
     MapStyle Style,
-    MapPointerLight Light)
+    MapPointerLight Light,
+    MapDetail Detail)
 {
     /// <summary>The look of a map nobody has changed.</summary>
     public static readonly MapLook Default = From(AppPreferences.Default);
@@ -46,7 +49,8 @@ public sealed record MapLook(
             StoredEnum.Defined(preferences.IcicleScheme, ExploreScheme.Standard),
             StoredEnum.Defined(preferences.SunburstScheme, ExploreScheme.Standard),
             preferences.MapStyle.Defined(),
-            preferences.MapPointerLight.Defined());
+            preferences.MapPointerLight.Defined(),
+            preferences.MapDetail.Defined());
     }
 
     /// <summary>
@@ -86,6 +90,7 @@ public sealed record MapLook(
             SunburstScheme = Sunburst,
             MapStyle = Style,
             MapPointerLight = Light,
+            MapDetail = Detail,
         };
     }
 }

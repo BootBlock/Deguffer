@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Deguffer.App.Views.MapNamesSection"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:views="using:Deguffer.App.Views">
+
+    <!-- Which shapes are named, then how. A box that changes nothing under the choices above it is
+         greyed rather than hidden, so the rows stay where the reader found them: SpaceMonger's
+         lettering has one size and names every box with room. -->
+    <StackPanel Spacing="8">
+        <views:SettingsRow Glyph="&#xE8B7;"
+                           Title="Folder names"
+                           Description="Name each treemap folder in a band along its top. Without the bands, folders give that room to what they hold.">
+            <views:SettingsRow.Control>
+                <ToggleSwitch IsOn="{x:Bind ViewModel.FolderNames, Mode=TwoWay}"
+                              OnContent="On"
+                              OffContent="Off"
+                              AutomationProperties.Name="Folder names in a band along each folder's top" />
+            </views:SettingsRow.Control>
+        </views:SettingsRow>
+
+        <views:SettingsRow Glyph="&#xE8C1;"
+                           Title="Names inside shapes"
+                           Description="Write the name inside each shape with room for it.">
+            <views:SettingsRow.Control>
+                <ToggleSwitch IsOn="{x:Bind ViewModel.ShapeNames, Mode=TwoWay}"
+                              OnContent="On"
+                              OffContent="Off"
+                              AutomationProperties.Name="Names inside shapes" />
+            </views:SettingsRow.Control>
+        </views:SettingsRow>
+
+        <views:SettingsRow Glyph="&#xE8D2;"
+                           Title="Lettering"
+                           Description="How the names are set: the application's own, or SpaceMonger's, unsmoothed, with a file's bytes and date in its box.">
+            <views:SettingsRow.Control>
+                <ComboBox MinWidth="140"
+                          SelectedIndex="{x:Bind ViewModel.LetteringIndex, Mode=TwoWay}"
+                          IsEnabled="{x:Bind ViewModel.Named, Mode=OneWay}"
+                          AutomationProperties.Name="Lettering">
+                    <ComboBoxItem Content="Standard" />
+                    <ComboBoxItem Content="SpaceMonger's" />
+                </ComboBox>
+            </views:SettingsRow.Control>
+        </views:SettingsRow>
+
+        <views:SettingsRow Glyph="&#xE8E9;"
+                           Title="Text size"
+                           Description="How large the names are set, on top of your Windows text size.">
+            <views:SettingsRow.Control>
+                <ComboBox MinWidth="140"
+                          SelectedIndex="{x:Bind ViewModel.TextSizeIndex, Mode=TwoWay}"
+                          IsEnabled="{x:Bind ViewModel.OwnLettering, Mode=OneWay}"
+                          AutomationProperties.Name="Text size of the names">
+                    <ComboBoxItem Content="Small" />
+                    <ComboBoxItem Content="Standard" />
+                    <ComboBoxItem Content="Large" />
+                    <ComboBoxItem Content="Larger" />
+                </ComboBox>
+            </views:SettingsRow.Control>
+        </views:SettingsRow>
+
+        <views:SettingsRow Glyph="&#xE7C3;"
+                           Title="Sizes"
+                           Description="Follow each name with how much it takes up.">
+            <views:SettingsRow.Control>
+                <ToggleSwitch IsOn="{x:Bind ViewModel.Sizes, Mode=TwoWay}"
+                              IsEnabled="{x:Bind ViewModel.Named, Mode=OneWay}"
+                              OnContent="On"
+                              OffContent="Off"
+                              AutomationProperties.Name="Sizes after the names" />
+            </views:SettingsRow.Control>
+        </views:SettingsRow>
+
+        <views:SettingsRow Glyph="&#xE8FD;"
+                           Title="How many names"
+                           Description="The most shapes named inside at once. Folder bands are always named.">
+            <views:SettingsRow.Control>
+                <ComboBox MinWidth="140"
+                          SelectedIndex="{x:Bind ViewModel.NameCountIndex, Mode=TwoWay}"
+                          IsEnabled="{x:Bind ViewModel.NamesCounted, Mode=OneWay}"
+                          AutomationProperties.Name="How many names inside shapes">
+                    <ComboBoxItem Content="Fewer" />
+                    <ComboBoxItem Content="Standard" />
+                    <ComboBoxItem Content="More" />
+                    <ComboBoxItem Content="Most" />
+                </ComboBox>
+            </views:SettingsRow.Control>
+        </views:SettingsRow>
+    </StackPanel>
+</UserControl>

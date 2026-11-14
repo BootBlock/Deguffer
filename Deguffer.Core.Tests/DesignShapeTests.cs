@@ -16,7 +16,6 @@ public sealed class DesignShapeTests
         ["Deguffer.App/Controls/ExploreOverview.xaml"] = 1,
         ["Deguffer.App/Views/DuplicatesPage.xaml"] = 2,
         ["Deguffer.App/Views/ExplorePage.xaml"] = 10,
-        ["Deguffer.App/Views/MapAppearanceView.xaml"] = 3,
         ["Deguffer.App/Views/MemoryPage.xaml"] = 2,
         ["Deguffer.App/Views/SettingsPage.xaml"] = 4,
     };

@@ -1,3 +1,4 @@
+using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring.Rendering;
 
 namespace Deguffer.Core.Tests;
@@ -13,9 +14,22 @@ public sealed class PointerLightTests
     [Fact]
     public void TheReachFollowsTheDisplayScale()
     {
-        Assert.Equal(PointerLight.ReachInDips, PointerLight.At(0, 0, 1, PointerLight.StandardStrength).Reach);
-        Assert.Equal(PointerLight.ReachInDips * 1.5f, PointerLight.At(0, 0, 1.5, PointerLight.StandardStrength).Reach);
+        Assert.Equal(PointerLight.ReachInDips, PointerLight.At(0, 0, 1, MapPointerLight.Default).Reach);
+        Assert.Equal(PointerLight.ReachInDips * 1.5f, PointerLight.At(0, 0, 1.5, MapPointerLight.Default).Reach);
     }
+
+    /// <summary>
+    /// The reach the reader chose widens or narrows the light by the same factor at any display scale,
+    /// and standard is the reach the light has always had.
+    /// </summary>
+    [Theory]
+    [InlineData(MapLightReach.Narrow, 0.5f)]
+    [InlineData(MapLightReach.Standard, 1f)]
+    [InlineData(MapLightReach.Wide, 1.75f)]
+    public void TheReachChosenScalesTheLight(MapLightReach reach, float factor) =>
+        Assert.Equal(
+            PointerLight.ReachInDips * factor * 2,
+            PointerLight.At(0, 0, 2, new MapPointerLight(Reach: reach)).Reach);
 
     /// <summary>
     /// The light lights a square round its point, wide enough to hold every pixel within its reach, and

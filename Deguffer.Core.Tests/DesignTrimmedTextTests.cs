@@ -21,7 +21,6 @@ public sealed class DesignTrimmedTextTests
         ["Deguffer.App/Views/HealthPage.xaml"] = 1,
         ["Deguffer.App/Views/InstalledAppsPage.xaml"] = 4,
         ["Deguffer.App/Views/ItemListView.xaml"] = 2,
-        ["Deguffer.App/Views/MapAppearanceView.xaml"] = 2,
         ["Deguffer.App/Views/MemoryPage.xaml"] = 6,
         ["Deguffer.App/Views/NetworkBrowserDialog.xaml"] = 1,
         ["Deguffer.App/Views/SettingsPage.xaml"] = 3,

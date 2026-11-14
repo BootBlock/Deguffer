@@ -166,9 +166,63 @@ public sealed record MapPreset(
         ExploreSpacing.Dense,
         Colouring: null);
 
+    /// <summary>Pale, quiet colours on low cushions, with pale lines and room round every folder.</summary>
+    public static readonly MapPreset Pastel = new(
+        "Pastel",
+        "Pale, muted colours on low cushions, a faint pale line round each shape and room round every folder.",
+        new MapStyle(
+            Shading: MapShading.Cushion,
+            Relief: MapRelief.Subtle,
+            BlockBorders: MapBorder.Faint,
+            FolderBorders: MapBorder.Medium,
+            BorderTone: MapBorderTone.Light,
+            Saturation: MapSaturation.Muted,
+            Brightness: MapBrightness.Lighter),
+        ExploreSpacing.Spacious,
+        Colouring: null);
+
+    /// <summary>Deep, strong colours under a sheen, for a dark room or a dark theme.</summary>
+    public static readonly MapPreset Dusk = new(
+        "Dusk",
+        "Darker, stronger colours lit from above, with a dark line round each folder.",
+        new MapStyle(
+            Shading: MapShading.Gradient,
+            Relief: MapRelief.Strong,
+            FolderBorders: MapBorder.Strong,
+            Saturation: MapSaturation.Vivid,
+            Brightness: MapBrightness.Darker),
+        ExploreSpacing.Comfortable,
+        Colouring: null);
+
+    /// <summary>Every shape in grey, so the shading and the lines show the structure and nothing else.</summary>
+    public static readonly MapPreset Monochrome = new(
+        "Monochrome",
+        "Every shape in grey on a cushion, so only the shading and a faint line show the folders.",
+        new MapStyle(
+            Shading: MapShading.Cushion,
+            Relief: MapRelief.Strong,
+            BlockBorders: MapBorder.Faint,
+            FolderBorders: MapBorder.Medium,
+            Saturation: MapSaturation.Grey),
+        ExploreSpacing.Comfortable,
+        Colouring: null);
+
+    /// <summary>A wide bevel on strong colours, so every shape reads as a raised tile.</summary>
+    public static readonly MapPreset Tiles = new(
+        "Tiles",
+        "Strong colours on a wide, deep bevel, so every shape stands up from the one beside it like a tile.",
+        new MapStyle(
+            Shading: MapShading.Bevel,
+            Relief: MapRelief.Strong,
+            FolderBorders: MapBorder.Medium,
+            BevelWidth: MapBevelWidth.Wide,
+            Saturation: MapSaturation.Vivid),
+        ExploreSpacing.Comfortable,
+        Colouring: null);
+
     /// <summary>Every preset, in the order the appearance window lists them.</summary>
     public static IReadOnlyList<MapPreset> All { get; } =
-        [Standard, SpaceMonger, WizTree, Flat, Outlined, Soft, Sheen, Embossed, Blueprint, Minimal];
+        [Standard, SpaceMonger, WizTree, Flat, Outlined, Soft, Sheen, Embossed, Blueprint, Minimal, Pastel, Dusk, Monochrome, Tiles];
 
     /// <summary>
     /// The preset <paramref name="look"/> is drawn as (see <see cref="Describes"/>), or null for a look
@@ -182,7 +236,10 @@ public sealed record MapPreset(
         return All.FirstOrDefault(preset => preset.Describes(look));
     }
 
-    /// <summary><paramref name="look"/> with this preset's style and spacing, and its schemes as they were.</summary>
+    /// <summary>
+    /// <paramref name="look"/> with this preset's style and spacing, and its schemes, its light and its
+    /// detail as they were.
+    /// </summary>
     public MapLook AppliedTo(MapLook look)
     {
         ArgumentNullException.ThrowIfNull(look);

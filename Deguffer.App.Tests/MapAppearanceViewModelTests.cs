@@ -227,15 +227,15 @@ public sealed class MapAppearanceViewModelTests : IDisposable
         var changes = 0;
         window.Changed += (_, _) => changes++;
 
-        window.ShadingIndex = (int)MapShading.Bevel;
+        window.Shapes.ShadingIndex = (int)MapShading.Bevel;
         _preferences.Update(current => current with { MapStyle = current.MapStyle with { FolderFill = MapFolderFill.Grey } });
-        window.BlockBordersIndex = (int)MapBorder.Strong;
-        window.FolderBordersIndex = (int)MapBorder.Faint;
-        window.BorderWidthIndex = (int)MapBorderWidth.Thick;
-        window.BorderToneIndex = (int)MapBorderTone.Light;
-        window.ReliefIndex = (int)MapRelief.Subtle;
-        window.FolderNames = false;
-        window.ShapeNames = false;
+        window.Lines.BlockBordersIndex = (int)MapBorder.Strong;
+        window.Lines.FolderBordersIndex = (int)MapBorder.Faint;
+        window.Lines.BorderWidthIndex = (int)MapBorderWidth.Thick;
+        window.Lines.BorderToneIndex = (int)MapBorderTone.Light;
+        window.Shapes.ReliefIndex = (int)MapRelief.Subtle;
+        window.Names.FolderNames = false;
+        window.Names.ShapeNames = false;
 
         var expected = new MapStyle(
             MapShading.Bevel,
@@ -270,12 +270,12 @@ public sealed class MapAppearanceViewModelTests : IDisposable
         var changes = 0;
         window.Changed += (_, _) => changes++;
 
-        window.ShadingIndex = -1;
-        window.ReliefIndex = -1;
-        window.BlockBordersIndex = -1;
-        window.FolderBordersIndex = -1;
-        window.BorderWidthIndex = -1;
-        window.BorderToneIndex = -1;
+        window.Shapes.ShadingIndex = -1;
+        window.Shapes.ReliefIndex = -1;
+        window.Lines.BlockBordersIndex = -1;
+        window.Lines.FolderBordersIndex = -1;
+        window.Lines.BorderWidthIndex = -1;
+        window.Lines.BorderToneIndex = -1;
         window.FolderFillIndex = -1;
         window.PresetIndex = -1;
 
@@ -351,14 +351,19 @@ public sealed class MapAppearanceViewModelTests : IDisposable
 
         Assert.Equal(0, window.PresetIndex);
 
+        var shapesRaised = new List<string?>();
+        var namesRaised = new List<string?>();
         window.PropertyChanged += (_, changed) => raised.Add(changed.PropertyName);
-        window.BorderToneIndex = (int)MapBorderTone.Light;
+        window.Shapes.PropertyChanged += (_, changed) => shapesRaised.Add(changed.PropertyName);
+        window.Names.PropertyChanged += (_, changed) => namesRaised.Add(changed.PropertyName);
+        window.Lines.BorderToneIndex = (int)MapBorderTone.Light;
 
         Assert.Equal(-1, window.PresetIndex);
         Assert.Contains("of your own", window.PresetSummary, StringComparison.Ordinal);
         Assert.Contains(nameof(MapAppearanceViewModel.PresetIndex), raised);
-        Assert.Contains(nameof(MapAppearanceViewModel.ShadingIndex), raised);
-        Assert.Contains(nameof(MapAppearanceViewModel.FolderNames), raised);
+        Assert.Contains(nameof(MapAppearanceViewModel.FolderFillIndex), raised);
+        Assert.Contains(nameof(MapShapesViewModel.ShadingIndex), shapesRaised);
+        Assert.Contains(nameof(MapNamesViewModel.FolderNames), namesRaised);
     }
 
     /// <summary>A preset that could not be written is still shown, as any other change is.</summary>
@@ -384,7 +389,7 @@ public sealed class MapAppearanceViewModelTests : IDisposable
     [Fact]
     public void TheDepthLegendNamesEachLevelInItsColour()
     {
-        var bands = ExploreLegendBand.For(ExploreColouring.Depth, ExploreScheme.Standard);
+        var bands = ExploreLegendBand.For(ExploreColouring.Depth, ExploreScheme.Standard, ColourTuning.None);
 
         Assert.Equal(DepthPalette.Bands.Select(band => band.Label), bands.Select(band => band.Label));
         Assert.Equal(DepthPalette.For(3), new TileColour(bands[3].Swatch.R, bands[3].Swatch.G, bands[3].Swatch.B));
@@ -447,22 +452,22 @@ public sealed class MapAppearanceViewModelTests : IDisposable
         var window = Window();
         var changes = 0;
         window.Changed += (_, _) => changes++;
-        window.BorderToneIndex = (int)MapBorderTone.Light;
+        window.Lines.BorderToneIndex = (int)MapBorderTone.Light;
 
-        window.PointerLightShown = false;
+        window.Shapes.PointerLightShown = false;
 
         Assert.Equal(2, changes);
         Assert.False(window.Look.Light.Shown);
         Assert.Equal(new MapPointerLight(Shown: false), _preferences.Current.MapPointerLight);
         Assert.Equal(MapBorderTone.Light, _preferences.Current.MapStyle.BorderTone);
 
-        window.LightStrengthIndex = (int)MapLightStrength.Bright;
-        window.PointerLightShown = true;
+        window.Shapes.LightStrengthIndex = (int)MapLightStrength.Bright;
+        window.Shapes.PointerLightShown = true;
 
         Assert.Equal(new MapPointerLight(Shown: true, MapLightStrength.Bright), window.Look.Light);
         Assert.Equal(new MapPointerLight(Shown: true, MapLightStrength.Bright), _preferences.Current.MapPointerLight);
 
-        window.PointerLightShown = false;
+        window.Shapes.PointerLightShown = false;
         window.PresetIndex = MapPreset.All.ToList().IndexOf(MapPreset.WizTree);
 
         Assert.False(window.Look.Light.Shown);
@@ -476,7 +481,7 @@ public sealed class MapAppearanceViewModelTests : IDisposable
     {
         var window = Window();
 
-        window.LightStrengthIndex = -1;
+        window.Shapes.LightStrengthIndex = -1;
 
         Assert.Equal(MapPointerLight.Default, window.Look.Light);
         Assert.Equal(AppPreferences.Default, _preferences.Current);
@@ -497,7 +502,7 @@ public sealed class MapAppearanceViewModelTests : IDisposable
         window.PresetIndex = MapPreset.All.ToList().IndexOf(MapPreset.WizTree);
         window.View = ExploreView.Icicle;
         window.SchemeIndex = (int)ExploreScheme.Vivid;
-        window.PointerLightShown = false;
+        window.Shapes.PointerLightShown = false;
 
         window.RestoreDefaults();
 
@@ -509,15 +514,17 @@ public sealed class MapAppearanceViewModelTests : IDisposable
         Assert.Equal(0, window.PresetIndex);
     }
 
-    /// <summary>Each preset card names what its preset sets, so two presets read apart before either is tried.</summary>
+    /// <summary>
+    /// The presets are listed one row each in the order Core lists them, each row naming its preset and
+    /// saying in its sentence what it looks like, which is what a screen reader hears for it.
+    /// </summary>
     [Fact]
-    public void EachPresetCardSaysWhatItSets()
+    public void EachPresetIsARowNamedAndDescribed()
     {
         var window = Window();
 
         Assert.Equal(MapPreset.All, window.Presets.Select(option => option.Preset));
-        Assert.Equal(window.Presets.Count, window.Presets.Select(option => option.Traits).Distinct().Count());
-        Assert.Equal("Bevelled · lines round every shape · comfortable · coloured by depth", window.Presets[1].Traits);
-        Assert.Contains(window.Presets[0].Description, window.Presets[0].Spoken, StringComparison.Ordinal);
+        Assert.Equal(window.Presets.Count, window.Presets.Select(option => option.Name).Distinct().Count());
+        Assert.All(window.Presets, option => Assert.Equal($"{option.Name}. {option.Description}", option.Spoken));
     }
 }

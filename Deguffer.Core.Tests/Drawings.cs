@@ -63,7 +63,8 @@ internal sealed class GatedSurface(TiledSurface drawing, Func<CanvasRegion, bool
         LayoutLimits.Default,
         ShapeColours.ByBranch(ExploreScheme.Standard),
         MapStyle.Default,
-        drawing.Zoom)
+        drawing.Zoom,
+        MapDetail.Default)
 {
     private readonly ManualResetEventSlim _open = new();
 

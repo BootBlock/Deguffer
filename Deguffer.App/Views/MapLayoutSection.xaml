@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Deguffer.App.Views.MapLayoutSection"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:views="using:Deguffer.App.Views">
+
+    <!-- Where the shapes go and how many there are. A shape too small to draw is still in the tree
+         and in every list: these change the picture, never what it stands for. -->
+    <StackPanel Spacing="8">
+
+        <!-- Indexed against ExploreSpacing, like the same box on the Settings page. The two write one
+             setting, which the Memory page's treemap follows as well. -->
+        <views:SettingsRow Glyph="&#xECA5;"
+                           Title="Room round each folder"
+                           Description="The gap a treemap leaves round what each folder holds.">
+            <views:SettingsRow.Control>
+                <ComboBox MinWidth="140"
+                          SelectedIndex="{x:Bind ViewModel.SpacingIndex, Mode=TwoWay}"
+                          AutomationProperties.Name="Room round each folder in the treemap">
+                    <ComboBoxItem Content="Dense" />
+                    <ComboBoxItem Content="Comfortable" />
+                    <ComboBoxItem Content="Spacious" />
+                </ComboBox>
+            </views:SettingsRow.Control>
+        </views:SettingsRow>
+
+        <views:SettingsRow Glyph="&#xE71E;"
+                           Title="Smallest shape drawn"
+                           Description="Anything smaller is drawn in the grey block that stands for the rest. Finer shows more, larger is easier to point at.">
+            <views:SettingsRow.Control>
+                <ComboBox MinWidth="140"
+                          SelectedIndex="{x:Bind ViewModel.SmallestShapeIndex, Mode=TwoWay}"
+                          AutomationProperties.Name="Smallest shape drawn">
+                    <ComboBoxItem Content="Large" />
+                    <ComboBoxItem Content="Standard" />
+                    <ComboBoxItem Content="Small" />
+                    <ComboBoxItem Content="Tiny" />
+                </ComboBox>
+            </views:SettingsRow.Control>
+        </views:SettingsRow>
+
+        <views:SettingsRow Glyph="&#xE8B7;"
+                           Title="Levels of folders"
+                           Description="How many levels of folders the treemap and the sunburst open. Zooming in opens more.">
+            <views:SettingsRow.Control>
+                <ComboBox MinWidth="140"
+                          SelectedIndex="{x:Bind ViewModel.LevelsIndex, Mode=TwoWay}"
+                          AutomationProperties.Name="Levels of folders drawn">
+                    <ComboBoxItem Content="Four" />
+                    <ComboBoxItem Content="Six" />
+                    <ComboBoxItem Content="Eight" />
+                    <ComboBoxItem Content="Ten" />
+                </ComboBox>
+            </views:SettingsRow.Control>
+        </views:SettingsRow>
+    </StackPanel>
+</UserControl>

@@ -438,7 +438,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     public ObservableCollection<ExploreLegendBand> Legend { get; } = [];
 
     /// <summary>Bring <see cref="Legend"/> to the colouring and the scheme on screen, in place.</summary>
-    private void ShowLegend() => LiveList.Rewrite(Legend, ExploreLegendBand.For(SelectedColouring, SelectedScheme));
+    private void ShowLegend() => LiveList.Rewrite(Legend, ExploreLegendBand.For(SelectedColouring, SelectedScheme, ColourTuning.Of(Look.Style)));
 
     /// <summary>Whether to show that legend. See <see cref="ExploreDisplay.ShowsLegend"/>.</summary>
     public bool ShowsLegend => Display.ShowsLegend;

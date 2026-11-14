@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Deguffer.Core.Configuration;
 
 /// <summary>
@@ -38,6 +40,12 @@ namespace Deguffer.Core.Configuration;
 /// </param>
 /// <param name="Lettering">How the text on the picture is set, and what it says.</param>
 /// <param name="BevelShades">What shades a bevel's two sides are drawn in.</param>
+/// <param name="BevelWidth">How wide a bevel's two sides are.</param>
+/// <param name="Saturation">
+/// How strong the colours the map's colouring gives each shape are, from none, which draws the map
+/// in greys, to stronger than the palette's own.
+/// </param>
+/// <param name="Brightness">How far each shape's colour is lightened or darkened from the palette's own.</param>
 public sealed record MapStyle(
     MapShading Shading = MapShading.Cushion,
     MapRelief Relief = MapRelief.Standard,
@@ -50,10 +58,51 @@ public sealed record MapStyle(
     bool ShapeNames = true,
     MapLines Lines = MapLines.Own,
     MapLettering Lettering = MapLettering.Standard,
-    MapBevelShades BevelShades = MapBevelShades.Mixed)
+    MapBevelShades BevelShades = MapBevelShades.Mixed,
+    MapBevelWidth BevelWidth = MapBevelWidth.Narrow,
+    MapSaturation Saturation = MapSaturation.Standard,
+    MapBrightness Brightness = MapBrightness.Standard)
 {
     /// <summary>The look the map had before any of this could be chosen.</summary>
     public static readonly MapStyle Default = new();
+
+    /// <summary>
+    /// Whether the shapes rise at all, so <see cref="Relief"/> changes anything: a flat shape is its
+    /// own colour whatever the relief. Kept out of the file, as every value derived from the others is.
+    /// </summary>
+    [JsonIgnore]
+    public bool Raised => Shading != MapShading.Flat;
+
+    /// <summary>Whether the shapes are bevelled, so <see cref="BevelShades"/> and <see cref="BevelWidth"/> change anything.</summary>
+    [JsonIgnore]
+    public bool Bevelled => Shading == MapShading.Bevel;
+
+    /// <summary>
+    /// Whether any line is drawn round a shape, so <see cref="BorderWidth"/>, <see cref="BorderTone"/>
+    /// and <see cref="Lines"/> change anything.
+    /// </summary>
+    [JsonIgnore]
+    public bool Outlined => BlockBorders != MapBorder.None || FolderBorders != MapBorder.None;
+
+    /// <summary>Whether any name is written on the picture, so what a name says changes anything.</summary>
+    [JsonIgnore]
+    public bool Named => FolderNames || ShapeNames;
+
+    /// <summary>
+    /// Whether the names are set in the application's own lettering, whose size and number the reader
+    /// can choose (<see cref="MapDetail.TextSize"/>, <see cref="MapDetail.Names"/>). SpaceMonger's is set
+    /// at its own size and names every box with room.
+    /// </summary>
+    [JsonIgnore]
+    public bool OwnLettering => Named && Lettering == MapLettering.Standard;
+
+    /// <summary>
+    /// Whether shapes are named in the application's own lettering, so how many are named
+    /// (<see cref="MapDetail.Names"/>) changes anything. A folder's band is named whatever that says,
+    /// because an empty band reads as a folder with no name.
+    /// </summary>
+    [JsonIgnore]
+    public bool NamesCounted => ShapeNames && Lettering == MapLettering.Standard;
 
     /// <summary>
     /// This style with every value no member names read as the default's.
@@ -74,7 +123,10 @@ public sealed record MapStyle(
         ShapeNames,
         StoredEnum.Defined(Lines, Default.Lines),
         StoredEnum.Defined(Lettering, Default.Lettering),
-        StoredEnum.Defined(BevelShades, Default.BevelShades));
+        StoredEnum.Defined(BevelShades, Default.BevelShades),
+        StoredEnum.Defined(BevelWidth, Default.BevelWidth),
+        StoredEnum.Defined(Saturation, Default.Saturation),
+        StoredEnum.Defined(Brightness, Default.Brightness));
 }
 
 /// <summary>
@@ -133,6 +185,63 @@ public enum MapBevelShades
     /// shade it draws that colour's edges in, and the mix for any other colour.
     /// </summary>
     Classic = 1,
+}
+
+/// <summary>How wide a bevel's two sides are, at the display's scale. Ordinal, as the others are.</summary>
+public enum MapBevelWidth
+{
+    /// <summary>One pixel at 100%, as SpaceMonger draws it.</summary>
+    Narrow = 0,
+
+    /// <summary>Two pixels at 100%.</summary>
+    Medium = 1,
+
+    /// <summary>Three pixels at 100%, for a bevel that reads as a raised tile.</summary>
+    Wide = 2,
+}
+
+/// <summary>
+/// How strong each shape's colour is, as a multiple of the palette's own. Ordinal, as the others are.
+/// Never the colour of a block, such as free space, whose grey says what it is.
+/// </summary>
+public enum MapSaturation
+{
+    /// <summary>No colour at all: each shape in the grey as light as its colour, so only the shading and the lines tell the shapes apart.</summary>
+    Grey = 0,
+
+    /// <summary>A little under half the palette's colour.</summary>
+    Muted = 1,
+
+    /// <summary>Three quarters of the palette's colour.</summary>
+    Soft = 2,
+
+    /// <summary>The palette's colour, as the map has always drawn it.</summary>
+    Standard = 3,
+
+    /// <summary>A third more than the palette's colour, as far as a screen can show it.</summary>
+    Vivid = 4,
+}
+
+/// <summary>
+/// How far each shape's colour is mixed towards black or towards white. Ordinal, as the others are.
+/// Never the colour of a block, as for <see cref="MapSaturation"/>.
+/// </summary>
+public enum MapBrightness
+{
+    /// <summary>Two fifths of the way to black.</summary>
+    MuchDarker = 0,
+
+    /// <summary>A fifth of the way to black.</summary>
+    Darker = 1,
+
+    /// <summary>The palette's own colour.</summary>
+    Standard = 2,
+
+    /// <summary>A fifth of the way to white.</summary>
+    Lighter = 3,
+
+    /// <summary>Two fifths of the way to white.</summary>
+    MuchLighter = 4,
 }
 
 /// <summary>

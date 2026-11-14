@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Deguffer.App.Views.MapShapesSection"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:views="using:Deguffer.App.Views">
+
+    <!-- How the inside of each shape is lit, then the light under the pointer. A box that changes
+         nothing under the shading chosen is greyed rather than hidden, so the rows stay where the
+         reader found them. -->
+    <StackPanel Spacing="8">
+        <views:SettingsRow Glyph="&#xE81E;"
+                           Title="Shading"
+                           Description="A cushion rises to the middle. A bevel lights the top and left edges. Flat is plain colour. A sheen is lit from above.">
+            <views:SettingsRow.Control>
+                <ComboBox MinWidth="140"
+                          SelectedIndex="{x:Bind ViewModel.ShadingIndex, Mode=TwoWay}"
+                          AutomationProperties.Name="Shading">
+                    <ComboBoxItem Content="Cushion" />
+                    <ComboBoxItem Content="Bevel" />
+                    <ComboBoxItem Content="Flat" />
+                    <ComboBoxItem Content="Sheen" />
+                </ComboBox>
+            </views:SettingsRow.Control>
+        </views:SettingsRow>
+
+        <views:SettingsRow Glyph="&#xE9D2;"
+                           Title="Depth"
+                           Description="How far a cushion rises, a bevel stands out, or a sheen runs from light to dark.">
+            <views:SettingsRow.Control>
+                <ComboBox MinWidth="140"
+                          SelectedIndex="{x:Bind ViewModel.ReliefIndex, Mode=TwoWay}"
+                          IsEnabled="{x:Bind ViewModel.Raised, Mode=OneWay}"
+                          AutomationProperties.Name="Depth of a cushion or a bevel">
+                    <ComboBoxItem Content="Subtle" />
+                    <ComboBoxItem Content="Standard" />
+                    <ComboBoxItem Content="Strong" />
+                    <ComboBoxItem Content="Deep" />
+                </ComboBox>
+            </views:SettingsRow.Control>
+        </views:SettingsRow>
+
+        <views:SettingsRow Glyph="&#xE790;"
+                           Title="Bevel shades"
+                           Description="What a bevel's lighter and darker edges are drawn in.">
+            <views:SettingsRow.Control>
+                <ComboBox MinWidth="140"
+                          SelectedIndex="{x:Bind ViewModel.BevelShadesIndex, Mode=TwoWay}"
+                          IsEnabled="{x:Bind ViewModel.Bevelled, Mode=OneWay}"
+                          AutomationProperties.Name="Bevel shades">
+                    <ComboBoxItem Content="Mixed" />
+                    <ComboBoxItem Content="SpaceMonger's" />
+                </ComboBox>
+            </views:SettingsRow.Control>
+        </views:SettingsRow>
+
+        <views:SettingsRow Glyph="&#xE740;"
+                           Title="Bevel width"
+                           Description="How wide a bevel's lighter and darker edges are, at the display's scale.">
+            <views:SettingsRow.Control>
+                <ComboBox MinWidth="140"
+                          SelectedIndex="{x:Bind ViewModel.BevelWidthIndex, Mode=TwoWay}"
+                          IsEnabled="{x:Bind ViewModel.Bevelled, Mode=OneWay}"
+                          AutomationProperties.Name="Bevel width">
+                    <ComboBoxItem Content="Narrow" />
+                    <ComboBoxItem Content="Medium" />
+                    <ComboBoxItem Content="Wide" />
+                </ComboBox>
+            </views:SettingsRow.Control>
+        </views:SettingsRow>
+
+        <TextBlock Text="Pointer light"
+                   Style="{StaticResource BodyStrongTextBlockStyle}"
+                   Margin="0,12,0,0" />
+
+        <!-- Off, the shape under the pointer is still named under the map and outlined when it is
+             picked: the light is decoration, never the only sign of where the pointer is. -->
+        <views:SettingsRow Glyph="&#xE706;"
+                           Title="Light under the pointer"
+                           Description="A soft light over the shapes near the pointer, which shows their slopes as it moves.">
+            <views:SettingsRow.Control>
+                <ToggleSwitch IsOn="{x:Bind ViewModel.PointerLightShown, Mode=TwoWay}"
+                              OnContent="On"
+                              OffContent="Off"
+                              AutomationProperties.Name="Light under the pointer" />
+            </views:SettingsRow.Control>
+        </views:SettingsRow>
+
+        <views:SettingsRow Glyph="&#xE793;"
+                           Title="Brightness"
+                           Description="How much the light adds to the shapes under it.">
+            <views:SettingsRow.Control>
+                <ComboBox MinWidth="140"
+                          SelectedIndex="{x:Bind ViewModel.LightStrengthIndex, Mode=TwoWay}"
+                          IsEnabled="{x:Bind ViewModel.PointerLightShown, Mode=OneWay}"
+                          AutomationProperties.Name="Brightness of the light under the pointer">
+                    <ComboBoxItem Content="Soft" />
+                    <ComboBoxItem Content="Standard" />
+                    <ComboBoxItem Content="Bright" />
+                </ComboBox>
+            </views:SettingsRow.Control>
+        </views:SettingsRow>
+
+        <views:SettingsRow Glyph="&#xE7B7;"
+                           Title="Reach"
+                           Description="How far from the pointer the light falls: over little more than one shape, or over its neighbours too.">
+            <views:SettingsRow.Control>
+                <ComboBox MinWidth="140"
+                          SelectedIndex="{x:Bind ViewModel.LightReachIndex, Mode=TwoWay}"
+                          IsEnabled="{x:Bind ViewModel.PointerLightShown, Mode=OneWay}"
+                          AutomationProperties.Name="Reach of the light under the pointer">
+                    <ComboBoxItem Content="Narrow" />
+                    <ComboBoxItem Content="Standard" />
+                    <ComboBoxItem Content="Wide" />
+                </ComboBox>
+            </views:SettingsRow.Control>
+        </views:SettingsRow>
+    </StackPanel>
+</UserControl>
