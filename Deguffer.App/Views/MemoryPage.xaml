@@ -118,7 +118,8 @@
                       ToolTipService.ToolTip="Read where memory is every two seconds. Turned off, the figures change only when you press Refresh."
                       AutomationProperties.HelpText="Read where memory is every two seconds. Turned off, the figures change only when you press Refresh." />
 
-            <Button Grid.Column="4"
+            <Button x:Name="RefreshButton"
+                    Grid.Column="4"
                     VerticalAlignment="Center"
                     Content="Refresh"
                     Command="{x:Bind ViewModel.Updates.RefreshCommand}"
