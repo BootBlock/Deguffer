@@ -239,7 +239,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     /// <summary>
     /// Whether the Storage list scrolls to the row a clean is on and lights it up. Presentation only:
-    /// the status line names the row either way.
+    /// the status line says what the run is doing either way.
     /// </summary>
     public bool SpotlightCleanedRow
     {

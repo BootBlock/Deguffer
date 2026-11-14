@@ -590,26 +590,7 @@ public sealed class CleanupPlanner
     /// demanding an answer would turn the preference into a refusal to clean. It defaults to the
     /// strict rule, so a caller that says nothing about it fails closed.
     /// </param>
-    /// <param name="progress">
-    /// How far through the whole run, 0 to 1. Unlike planning, execution knows its own extent
-    /// before it starts, so this is a fraction rather than a sentence.
-    /// </param>
-    /// <param name="finished">
-    /// Each plan's result the moment it has one, before the next plan starts, so the space a clean
-    /// gives back can be counted as it goes rather than only stated at the end. Every result the run
-    /// returns is reported here once and in the same order, a plan the clean was cancelled before
-    /// starting included, so whatever is summed from these lands on what is summed from the results.
-    /// </param>
-    /// <param name="underway">
-    /// The tool the run is waiting on while a command step runs, and null when it returns, so the page
-    /// can say what a cancellation pressed now would wait for. See <see cref="CleanCancelNotice"/>.
-    /// </param>
-    /// <param name="started">
-    /// Each plan as the run reaches it, before its first step, with the span of
-    /// <paramref name="progress"/> it accounts for, so the page can show which row the run is on and
-    /// how far through that row it is. A plan the clean was cancelled before starting is reported
-    /// too, as only checked, because its §5.6 proof still takes time on that row.
-    /// </param>
+    /// <param name="reporters">Where the run reports as it goes. See <see cref="CleanReporters"/>.</param>
     /// <param name="ct">
     /// Stops the run. <b>Never thrown:</b> the results hold every plan, the ones that finished, the
     /// one that was stopped and the ones never started, each <see cref="CleanupResult.Interrupted"/>
@@ -620,16 +601,13 @@ public sealed class CleanupPlanner
         IReadOnlyList<Finding> selected,
         IReadOnlyList<Confirmation>? confirmations = null,
         bool requireTypedPhrase = true,
-        IProgress<string>? status = null,
-        IProgress<double>? progress = null,
-        IProgress<CleanupResult>? finished = null,
-        IProgress<CommandUnderway?>? underway = null,
-        IProgress<PlanUnderway>? started = null,
+        CleanReporters? reporters = null,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(selected);
 
         confirmations ??= [];
+        reporters ??= CleanReporters.None;
 
         // Every registered disk and machine folder is proved standing by every clean (§5.6), whichever
         // rows were scanned or chosen: an over-broad rule anywhere in the run is what could take one, and
@@ -714,37 +692,37 @@ public sealed class CleanupPlanner
             {
                 cancelled = true;
 
-                started?.Report(PlanUnderway.Unstarted(finding.Provider, done / total));
+                reporters.Started?.Report(PlanUnderway.Unstarted(finding.Provider, done / total));
                 var unstarted = await UnstartedPlan.ProveAsync(finding, plan, reach, residue).ConfigureAwait(false);
                 results.Add(unstarted);
-                finished?.Report(unstarted);
+                reporters.Finished?.Report(unstarted);
                 continue;
             }
 
-            status?.Report(plan.IsEmpty
+            reporters.Status?.Report(plan.IsEmpty
                 ? $"Checking what {finding.Provider.Name} left alone…"
                 : $"Cleaning {finding.Provider.Name}…");
-            started?.Report(PlanUnderway.Of(finding.Provider, plan, done / total, weights[i] / total));
+            reporters.Started?.Report(PlanUnderway.Of(finding.Provider, plan, done / total, weights[i] / total));
 
             var result = await finding.Provider
                 .ExecuteAsync(
                     plan,
                     reach,
                     residue,
-                    ScaledProgress.Within(progress, done / total, weights[i] / total),
-                    underway,
+                    ScaledProgress.Within(reporters.Progress, done / total, weights[i] / total),
+                    reporters.Underway,
                     plan.IsEmpty ? CancellationToken.None : ct)
                 .ConfigureAwait(false);
 
             results.Add(result);
-            finished?.Report(result);
+            reporters.Finished?.Report(result);
             cancelled |= result.Interrupted;
 
             // Reported from here rather than trusted from the provider: a provider that reports
             // nothing would otherwise leave the bar wherever the previous one left it, and one that
             // stops short of 1 would leave a gap that never closes.
             done += weights[i];
-            progress?.Report(done / total);
+            reporters.Progress?.Report(done / total);
         }
 
         return results;

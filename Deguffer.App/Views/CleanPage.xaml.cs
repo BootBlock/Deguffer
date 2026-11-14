@@ -108,7 +108,7 @@ public sealed partial class CleanPage : Page
         // A row's share bar comes in from nothing as the row itself arrives, rather than standing at
         // its figure under a row still fading in. Never as a row only scrolls into sight.
         ListAnimation.Play(FindingsList, SystemMotion.Current).Arrived += BarMotion.GrowIn;
-        _cleanedRow =new CleanRowSpotlight(FindingsList, ViewModel.CleanProgress, SystemMotion.Current);
+        _cleanedRow = new CleanRowSpotlight(FindingsList, ViewModel, SystemMotion.Current);
 
         // A row's container is what assistive technology lands on, and unnamed it is read out as
         // the type of the object behind it.

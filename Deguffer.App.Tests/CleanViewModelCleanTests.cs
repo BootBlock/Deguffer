@@ -663,8 +663,9 @@ public class CleanViewModelCleanTests
     }
 
     /// <summary>
-    /// The page hears which row the run is on as it reaches each one, so the list can follow it, and
-    /// hears of no row once the run is over.
+    /// The page hears which row the run is on as it reaches each one, and what it is doing there, so the
+    /// list can follow it, and hears of no row once the run is over. The clean is cancelled after the
+    /// first row, so the second is only checked.
     /// </summary>
     [Fact]
     public void TheRowACleanIsOnIsFollowedAndLetGoWhenItEnds()
@@ -674,22 +675,61 @@ public class CleanViewModelCleanTests
         using var page = new StoragePage([large, small]);
         large.Steps = [page.Cache("a", 2048)];
         small.Steps = [page.Cache("b", 1024)];
+        large.AfterCleaning = () => page.ViewModel.CancelCommand.Execute(null);
         page.Scan();
 
-        var rows = new List<(FindingViewModel? Row, PlanStage Stage)>();
+        var heard = new List<RowUnderway?>();
         page.ViewModel.CleanProgress.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(CleanProgressViewModel.Row))
+            if (e.PropertyName == nameof(CleanProgressViewModel.Underway))
             {
-                rows.Add((page.ViewModel.CleanProgress.Row, page.ViewModel.CleanProgress.Stage));
+                heard.Add(page.ViewModel.CleanProgress.Underway);
             }
         };
 
         page.Clean();
 
         Assert.Equal(
-            [(page.Row("large"), PlanStage.Removing), (page.Row("small"), PlanStage.Removing), (null, PlanStage.Removing)],
-            rows);
+            [new RowUnderway(page.Row("large"), PlanStage.Removing), new RowUnderway(page.Row("small"), PlanStage.Checking), null],
+            heard);
+    }
+
+    /// <summary>
+    /// The run reaching a row it has already been on, to check it after removing from it, is heard as a
+    /// change: a ticked row that registers a virtual disk is proved standing after the run, under the
+    /// same provider. Heard as nothing, the row would go on being drawn as though it were being cleaned.
+    /// </summary>
+    [Fact]
+    public void TheSameRowReachedAgainToBeCheckedIsHeardAsAChange()
+    {
+        var disk = new FakeCleanupProvider("disk");
+        using var page = new StoragePage([disk]);
+        disk.Steps = [page.Cache("a", 1024)];
+        page.Scan();
+        var row = page.Row("disk");
+
+        var heard = new List<RowUnderway?>();
+        UiThread.Run(async () =>
+        {
+            var progress = new CleanProgressViewModel();
+            progress.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(CleanProgressViewModel.Underway))
+                {
+                    heard.Add(progress.Underway);
+                }
+            };
+
+            var started = progress.Start([row]);
+            started.Report(new PlanUnderway(disk, PlanStage.Removing, From: 0, Share: 1));
+            started.Report(new PlanUnderway(disk, PlanStage.Checking, From: 1, Share: 0));
+
+            // Each report is posted to this thread, and heard once it yields.
+            await Task.Yield();
+            await Task.Yield();
+        });
+
+        Assert.Equal([new RowUnderway(row, PlanStage.Removing), new RowUnderway(row, PlanStage.Checking)], heard);
     }
 
     /// <summary>

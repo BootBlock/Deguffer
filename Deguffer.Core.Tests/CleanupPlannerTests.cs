@@ -216,7 +216,7 @@ public sealed class CleanupPlannerTests
         var findings = await planner.PlanAllAsync();
         var progress = new ProgressRecorder<double>();
 
-        await planner.ExecuteAsync(findings, progress: progress);
+        await planner.ExecuteAsync(findings, reporters: new() { Progress = progress });
 
         Assert.Equal([0.5, 1.0], progress.Reports.Select(r => Math.Round(r, 6)));
     }
@@ -264,7 +264,7 @@ public sealed class CleanupPlannerTests
         var progress = new ProgressRecorder<double>();
 
         // Reversed, so the plan with nothing to delete arrives first.
-        await planner.ExecuteAsync([.. findings.OrderBy(f => f.EstimatedBytes)], progress: progress);
+        await planner.ExecuteAsync([.. findings.OrderBy(f => f.EstimatedBytes)], reporters: new() { Progress = progress });
 
         Assert.Equal(["execute:work", "execute:withheld"], journal);
         Assert.Equal([1.0, 1.0], progress.Reports.Select(r => Math.Round(r, 6)));
@@ -288,7 +288,7 @@ public sealed class CleanupPlannerTests
         var findings = await planner.PlanAllAsync();
         var progress = new ProgressRecorder<double>();
 
-        await planner.ExecuteAsync(findings, progress: progress);
+        await planner.ExecuteAsync(findings, reporters: new() { Progress = progress });
 
         Assert.Equal([1.0, 1.0], progress.Reports.Select(r => Math.Round(r, 6)));
     }
@@ -839,7 +839,7 @@ public sealed class CleanupPlannerTests
         var findings = await planner.PlanAllAsync();
         var progress = new ProgressRecorder<double>();
 
-        await planner.ExecuteAsync(findings, progress: progress);
+        await planner.ExecuteAsync(findings, reporters: new() { Progress = progress });
 
         Assert.Equal([0.9, 1.0], progress.Reports.Select(r => Math.Round(r, 6)));
     }
@@ -861,7 +861,7 @@ public sealed class CleanupPlannerTests
         var findings = await planner.PlanAllAsync();
         var progress = new ProgressRecorder<double>();
 
-        await planner.ExecuteAsync(findings, progress: progress);
+        await planner.ExecuteAsync(findings, reporters: new() { Progress = progress });
 
         // Half way through nine tenths of the run is 45%; half way through the last tenth is 95%.
         Assert.Equal([0.45, 0.9, 0.95, 1.0], progress.Reports.Select(r => Math.Round(r, 6)));
@@ -884,7 +884,7 @@ public sealed class CleanupPlannerTests
         var findings = await planner.PlanAllAsync();
         var progress = new ProgressRecorder<double>();
 
-        await planner.ExecuteAsync(findings, progress: progress);
+        await planner.ExecuteAsync(findings, reporters: new() { Progress = progress });
 
         Assert.Equal([1.0], progress.Reports.Select(r => Math.Round(r, 6)));
     }
@@ -906,7 +906,7 @@ public sealed class CleanupPlannerTests
         var findings = await planner.PlanAllAsync();
         var progress = new ProgressRecorder<double>();
 
-        await planner.ExecuteAsync(findings, progress: progress);
+        await planner.ExecuteAsync(findings, reporters: new() { Progress = progress });
 
         Assert.Equal([0.5, 1.0], progress.Reports.Select(r => Math.Round(r, 6)));
     }
@@ -922,7 +922,7 @@ public sealed class CleanupPlannerTests
     {
         var progress = new ProgressRecorder<double>();
 
-        var results = await new CleanupPlanner([]).ExecuteAsync([], progress: progress);
+        var results = await new CleanupPlanner([]).ExecuteAsync([], reporters: new() { Progress = progress });
 
         Assert.Empty(results);
         Assert.Empty(progress.Reports);
@@ -949,11 +949,14 @@ public sealed class CleanupPlannerTests
         var reported = new List<CleanupResult>();
         var results = await planner.ExecuteAsync(
             findings,
-            finished: new CallbackProgress<CleanupResult>(result =>
+            reporters: new()
             {
-                reported.Add(result);
-                journal.Add($"finished:{result.ProviderId}");
-            }));
+                Finished = new CallbackProgress<CleanupResult>(result =>
+                {
+                    reported.Add(result);
+                    journal.Add($"finished:{result.ProviderId}");
+                }),
+            });
 
         Assert.Equal(["execute:large", "finished:large", "execute:small", "finished:small"], journal);
         Assert.Equal(results, reported);
@@ -976,7 +979,7 @@ public sealed class CleanupPlannerTests
         var findings = await planner.PlanAllAsync();
         var reported = new ProgressRecorder<CleanupResult>();
 
-        var results = await planner.ExecuteAsync(findings, finished: reported, ct: new CancellationToken(canceled: true));
+        var results = await planner.ExecuteAsync(findings, reporters: new() { Finished = reported }, ct: new CancellationToken(canceled: true));
 
         Assert.Equal(2, results.Count);
         Assert.All(results, result => Assert.True(result.Interrupted));

@@ -791,7 +791,7 @@ public sealed partial class CleanViewModel : ObservableObject
                 FreeSpaceNow = FreeSpaceOfProfile();
             });
 
-            var started = CleanProgress.Start(Findings);
+            var reporters = new CleanReporters { Status = progress, Progress = completed, Finished = landed, Underway = underway, Started = CleanProgress.Start(Findings) };
             IsCleaning = true;
 
             // The planner is started whatever the token says, and never throws for it: a cancelled clean
@@ -801,7 +801,7 @@ public sealed partial class CleanViewModel : ObservableObject
             {
                 results = await Task.Run(
                     () => _planner.ExecuteAsync(
-                        [.. authorised, .. proving], confirmations, requireTypedPhrase, progress, completed, landed, underway, started, ct),
+                        [.. authorised, .. proving], confirmations, requireTypedPhrase, reporters, ct),
                     CancellationToken.None);
             }
             finally

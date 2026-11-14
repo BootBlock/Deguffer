@@ -24,7 +24,7 @@ namespace Deguffer.App.Controls;
 /// changes size moves one value. One set of visuals for the page, moved from row to row, because only
 /// one row is ever being cleaned.</para>
 ///
-/// <para>Decoration: the status line names the row in words (§6.5), and assistive technology never
+/// <para>Decoration: the status line says in words what the run is doing, and assistive technology never
 /// sees this. With motion off nothing sweeps or breathes (<see cref="MotionToken.Spotlight"/>). In high
 /// contrast only the frame and the rail are drawn (<see cref="CleanSpotlightLook"/>).</para>
 /// </summary>
@@ -87,8 +87,6 @@ internal sealed class CleanSpotlight
     private readonly ScalarKeyFrameAnimation _sweepLoop;
     private readonly ScalarKeyFrameAnimation _breathing;
 
-    private FrameworkElement? _host;
-
     /// <summary>
     /// The roots handed to the rows in turn, each holding <see cref="_layers"/> while its row is lit. A
     /// visual handed straight from one row to the next stayed drawn on the first, with no error raised,
@@ -99,8 +97,8 @@ internal sealed class CleanSpotlight
 
     private int _nextRoot;
 
-    /// <summary>The one of <see cref="_roots"/> on <see cref="_host"/>.</summary>
-    private ContainerVisual? _root;
+    /// <summary>The row the light is on and the one of <see cref="_roots"/> handed to it, or null while it is on none.</summary>
+    private (FrameworkElement Host, ContainerVisual Root)? _lit;
 
     private PlanStage _stage;
     private CleanSpotlightLook _look;
@@ -162,7 +160,7 @@ internal sealed class CleanSpotlight
     }
 
     /// <summary>The row the light is on, or null while it is on none.</summary>
-    public FrameworkElement? Host => _host;
+    public FrameworkElement? Host => _lit?.Host;
 
     /// <summary>
     /// Put the light on <paramref name="host"/>, <paramref name="fraction"/> of the way through it, taking
@@ -170,18 +168,20 @@ internal sealed class CleanSpotlight
     /// </summary>
     public void Show(FrameworkElement host, PlanStage stage, double fraction, CleanSpotlightLook look)
     {
-        if (!ReferenceEquals(host, _host))
+        if (!ReferenceEquals(host, Host))
         {
             Detach();
-            _host = host;
-            _host.SizeChanged += OnHostSizeChanged;
-            _state.InsertVector2("Size", host.ActualSize);
-            _root = _roots[_nextRoot];
+
+            var root = _roots[_nextRoot];
             _nextRoot ^= 1;
-            _root.Children.InsertAtTop(_layers);
-            ElementCompositionPreview.SetElementChildVisual(host, _root);
+            _lit = (host, root);
+
+            host.SizeChanged += OnHostSizeChanged;
+            _state.InsertVector2("Size", host.ActualSize);
+            root.Children.InsertAtTop(_layers);
+            ElementCompositionPreview.SetElementChildVisual(host, root);
             _fadeIn.Duration = _motion.For(MotionToken.Crossfade).Duration;
-            _root.StartAnimation(nameof(Visual.Opacity), _fadeIn);
+            root.StartAnimation(nameof(Visual.Opacity), _fadeIn);
         }
 
         _stage = stage;
@@ -264,15 +264,15 @@ internal sealed class CleanSpotlight
 
     private void Detach()
     {
-        if (_host is null)
+        if (_lit is not (var host, var root))
         {
             return;
         }
 
-        _host.SizeChanged -= OnHostSizeChanged;
-        _root!.Children.RemoveAll();
-        ElementCompositionPreview.SetElementChildVisual(_host, null);
-        _host = null;
+        host.SizeChanged -= OnHostSizeChanged;
+        root.Children.RemoveAll();
+        ElementCompositionPreview.SetElementChildVisual(host, null);
+        _lit = null;
     }
 
     private void OnHostSizeChanged(object sender, SizeChangedEventArgs e) =>

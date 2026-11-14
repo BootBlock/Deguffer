@@ -399,7 +399,7 @@ public enum ExploreScheme
 /// <param name="SpotlightCleanedRow">
 /// Whether the Storage list follows a clean: it scrolls to the row being cleaned and lights that row
 /// up, so the reader can see what the time is being spent on. On by default. Presentation only: the
-/// status line names the row whatever this says.
+/// status line says what the run is doing whatever this says.
 /// </param>
 public sealed record AppPreferences(
     AppTheme Theme = AppTheme.System,

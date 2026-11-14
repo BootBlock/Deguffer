@@ -37,18 +37,14 @@ public sealed partial class CleanProgressViewModel : ObservableObject
     public partial string RemovedSoFarLabel { get; private set; } = string.Empty;
 
     /// <summary>
-    /// The row the run is on, or null between runs and for a plan no row is listed for. Raised last
-    /// of the three row properties, so a listener reading <see cref="Stage"/> and
-    /// <see cref="RowFraction"/> as it changes reads the new row's.
+    /// The row the run is on and what it is doing there, or null between runs and for a plan no row is
+    /// listed for. Raised after <see cref="RowFraction"/>, so a listener reading it as this changes
+    /// reads the new row's.
     /// </summary>
     [ObservableProperty]
-    public partial FindingViewModel? Row { get; private set; }
+    public partial RowUnderway? Underway { get; private set; }
 
-    /// <summary>Whether the run is removing anything from <see cref="Row"/>, or only checking it.</summary>
-    [ObservableProperty]
-    public partial PlanStage Stage { get; private set; }
-
-    /// <summary>How far through <see cref="Row"/> the run is, 0 to 1.</summary>
+    /// <summary>How far through the row <see cref="Underway"/> names the run is, 0 to 1.</summary>
     [ObservableProperty]
     public partial double RowFraction { get; private set; }
 
@@ -75,16 +71,15 @@ public sealed partial class CleanProgressViewModel : ObservableObject
     private void Begin(PlanUnderway plan, FindingViewModel? row)
     {
         _plan = plan;
-        Stage = plan.Stage;
         RowFraction = plan.Within(plan.From);
-        Row = row;
+        Underway = row is null ? null : new RowUnderway(row, plan.Stage);
     }
 
     /// <summary>The run is over, so no row is being worked on.</summary>
     public void Finish()
     {
         _plan = null;
-        Row = null;
+        Underway = null;
         RowFraction = 0;
     }
 

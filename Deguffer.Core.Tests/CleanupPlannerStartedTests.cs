@@ -38,7 +38,7 @@ public sealed class CleanupPlannerStartedTests : IDisposable
         };
 
         var planner = new CleanupPlanner([first, second, proof]);
-        await planner.ExecuteAsync(await planner.PlanAllAsync(), started: started);
+        await planner.ExecuteAsync(await planner.PlanAllAsync(), reporters: new() { Started = started });
 
         Assert.Equal(1, reportedBeforeFirstCleaned);
         Assert.Equal(
@@ -67,7 +67,7 @@ public sealed class CleanupPlannerStartedTests : IDisposable
         var started = new ProgressRecorder<PlanUnderway>();
 
         var planner = new CleanupPlanner([first, second]);
-        await planner.ExecuteAsync(await planner.PlanAllAsync(), started: started, ct: cts.Token);
+        await planner.ExecuteAsync(await planner.PlanAllAsync(), reporters: new() { Started = started }, ct: cts.Token);
 
         Assert.Equal(
             [("first", PlanStage.Removing), ("second", PlanStage.Checking)],
