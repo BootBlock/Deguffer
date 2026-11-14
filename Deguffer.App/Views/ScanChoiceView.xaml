@@ -54,8 +54,8 @@
 
                             <TextBlock Grid.Column="1"
                                        Text="Not found last scan"
-                                       Style="{StaticResource SecondaryText}"
-                                       FontSize="12"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        VerticalAlignment="Center"
                                        Visibility="{x:Bind WasMissing, Mode=OneWay}"
                                        AutomationProperties.AccessibilityView="Raw" />
@@ -82,9 +82,9 @@
                                           Command="{x:Bind ToggleCommand}"
                                           AutomationProperties.Name="{x:Bind ToggleName}"
                                           AutomationProperties.AutomationId="{x:Bind ToggleAutomationId}">
-                                    <!-- Sized here, because a list header's own style sets a heading-sized
+                                    <!-- Styled here, because a list header's own style sets a heading-sized
                                          font that every text inside it inherits. -->
-                                    <TextBlock Text="{x:Bind Title}" FontSize="14" FontWeight="SemiBold" />
+                                    <TextBlock Text="{x:Bind Title}" Style="{StaticResource BodyStrongTextBlockStyle}" />
                                 </CheckBox>
                             </DataTemplate>
                         </GroupStyle.HeaderTemplate>

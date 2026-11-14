@@ -27,7 +27,6 @@ public sealed class DesignTypographyTests
         ["Deguffer.App/Views/MemoryPage.xaml"] = 3,
         ["Deguffer.App/Views/NetworkBrowserDialog.xaml"] = 3,
         ["Deguffer.App/Views/ProviderInfoView.xaml"] = 9,
-        ["Deguffer.App/Views/ScanChoiceView.xaml"] = 2,
         ["Deguffer.App/Views/SettingsPage.xaml"] = 16,
         ["Deguffer.App/Views/SettingsRow.xaml"] = 2,
         ["Deguffer.App/Views/StartupPage.xaml"] = 4,
