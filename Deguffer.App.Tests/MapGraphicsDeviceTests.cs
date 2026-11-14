@@ -66,7 +66,7 @@ public sealed class MapGraphicsDeviceTests
     {
         const int Side = 4;
 
-        var surface = graphics.TileSurface(null, Side, Side);
+        var surface = graphics.PlainSurface(null, Side, Side);
 
         graphics.Write(surface, new byte[PixelBuffer.LengthFor(Side, Side)], Side, new CanvasRegion(0, 0, Side, Side));
     }

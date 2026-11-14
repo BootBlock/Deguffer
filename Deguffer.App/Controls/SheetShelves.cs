@@ -1,7 +1,7 @@
 namespace Deguffer.App.Controls;
 
 /// <summary>
-/// Where each name's text goes on the one surface every name on the map is drawn into (see
+/// Where each name's text goes on one page of those every name on the map is drawn into (see
 /// <see cref="NameSheet"/>): rectangles handed out in shelves, rows of one height, and taken back as
 /// names change size or are put away.
 ///
@@ -13,11 +13,11 @@ namespace Deguffer.App.Controls;
 /// <para>Each rectangle keeps a pixel clear to its right and below it. A name moved off the pixel grid
 /// samples a little past its edges, and would otherwise show a sliver of its neighbour.</para>
 ///
-/// <para>Separate from <see cref="NameSheet"/>, which owns the surface and draws into it, because this
+/// <para>Separate from <see cref="NameSheet"/>, which owns the pages and draws into them, because this
 /// is arithmetic a test proves without a device (G1).</para>
 /// </summary>
-/// <param name="width">How wide the sheet is, in pixels.</param>
-/// <param name="height">How tall the sheet is, in pixels.</param>
+/// <param name="width">How wide the page is, in pixels.</param>
+/// <param name="height">How tall the page is, in pixels.</param>
 internal sealed class SheetShelves(int width, int height)
 {
     /// <summary>The clear pixel kept to the right of and below each rectangle.</summary>

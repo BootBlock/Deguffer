@@ -24,18 +24,18 @@ internal sealed class NameSprite
     private readonly CompositionSurfaceBrush _brush;
 
     /// <summary>The rectangle of the sheet the name is drawn into, or null where it has none.</summary>
-    private SheetRegion? _region;
+    private SheetPlace? _place;
 
-    /// <summary>The sheet's <see cref="NameSheet.Epoch"/> <see cref="_region"/> was taken in.</summary>
+    /// <summary>The sheet's <see cref="NameSheet.Epoch"/> <see cref="_place"/> was taken in.</summary>
     private int _epoch;
 
     /// <summary>The scale the name was last drawn at, which a change of draws it again.</summary>
     private double _scale;
 
-    /// <summary>A name on <paramref name="compositor"/>, drawn into <paramref name="sheet"/>.</summary>
-    public NameSprite(Compositor compositor, NameSheet sheet)
+    /// <summary>A name on <paramref name="compositor"/>, showing the page of the sheet it takes a rectangle of.</summary>
+    public NameSprite(Compositor compositor)
     {
-        _brush = compositor.CreateUnstretchedBrush(sheet.Surface);
+        _brush = compositor.CreateUnstretchedBrush();
 
         // A name moved off the pixel grid as the picture is magnified is drawn on it still, so
         // SpaceMonger's unsmoothed type is not smoothed by resampling.
@@ -51,11 +51,11 @@ internal sealed class NameSprite
     /// <summary>What shows the name, under its fade step's visual.</summary>
     public SpriteVisual Visual { get; }
 
-    /// <summary>Show <paramref name="sheet"/>'s surface, made anew, whose rectangles are all void.</summary>
-    public void Renew(NameSheet sheet)
+    /// <summary>Let go of the rectangle of a sheet made anew, whose rectangles are all void.</summary>
+    public void Renew()
     {
-        _brush.Surface = sheet.Surface;
-        _region = null;
+        _brush.Surface = null;
+        _place = null;
         Text.Forget();
     }
 
@@ -70,26 +70,30 @@ internal sealed class NameSprite
         var width = Math.Min(Pixels(Text.Size.Width, scale), sheet.Width);
         var height = Pixels(Text.Size.Height, scale);
 
-        if (_region is { } region && _epoch == sheet.Epoch)
+        if (_place is { } place && _epoch == sheet.Epoch)
         {
-            if (region.Width == width && region.Height == height && _scale == scale)
+            if (place.Region.Width == width && place.Region.Height == height && _scale == scale)
             {
                 return true;
             }
 
-            sheet.Give(region);
+            sheet.Give(place);
         }
 
-        _region = sheet.Take(width, height);
+        _place = sheet.Take(width, height);
         _epoch = sheet.Epoch;
         _scale = scale;
         Text.Forget();
 
-        if (_region is not { } taken)
+        if (_place is not { } placed)
         {
+            _brush.Surface = null;
             Visual.IsVisible = false;
             return false;
         }
+
+        _brush.Surface = sheet.SurfaceOf(placed);
+        var taken = placed.Region;
 
         // The rectangle's pixels at one to a device pixel: the window scales every visual by the
         // scale, so the brush shows a pixel of the sheet as a device-independent pixel's share of one.
@@ -102,9 +106,9 @@ internal sealed class NameSprite
     /// <summary>Draw the text into its rectangle of <paramref name="sheet"/>, unless it is drawn there already.</summary>
     public void Draw(NameSheet sheet)
     {
-        if (_region is { } region && _epoch == sheet.Epoch && !Text.IsDrawn)
+        if (_place is { } place && _epoch == sheet.Epoch && !Text.IsDrawn)
         {
-            using var session = sheet.Open(region, _scale);
+            using var session = sheet.Open(place, _scale);
 
             Text.Draw(session);
         }
@@ -136,7 +140,7 @@ internal sealed class NameSprite
     }
 
     /// <summary>Put the name on the map, where it has a rectangle to show.</summary>
-    public void Show() => Visual.IsVisible = _region is not null;
+    public void Show() => Visual.IsVisible = _place is not null;
 
     /// <summary>
     /// Put the name away until a drawing needs it, and give its rectangle back to
@@ -147,12 +151,12 @@ internal sealed class NameSprite
         Visual.IsVisible = false;
         Arrive();
 
-        if (_region is { } region && _epoch == sheet.Epoch)
+        if (_place is { } place && _epoch == sheet.Epoch)
         {
-            sheet.Give(region);
+            sheet.Give(place);
         }
 
-        _region = null;
+        _place = null;
         Text.Forget();
     }
 

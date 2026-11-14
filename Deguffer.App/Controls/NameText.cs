@@ -10,7 +10,7 @@ namespace Deguffer.App.Controls;
 /// The text of one name on the map, set in the drawing's lettering (<see cref="MapLettering"/>): what
 /// it says, how much room it takes, and drawing it.
 ///
-/// <para>Drawn rather than set in a text block, so that a name is a rectangle of the one surface every
+/// <para>Drawn rather than set in a text block, so that a name is a rectangle of the few pages every
 /// name is drawn into (<see cref="NameSheet"/>) and the compositor moves every name of a drawing with
 /// one transform. SpaceMonger's lettering needs drawing anyway: its type is drawn without smoothing,
 /// pixel for pixel, and a text block cannot be asked to draw without it. The application's own type is

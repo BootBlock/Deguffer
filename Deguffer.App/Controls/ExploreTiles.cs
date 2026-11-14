@@ -273,7 +273,7 @@ internal sealed class ExploreTiles
 
         _spare.TryPop(out var spare);
 
-        var surface = _graphics.TileSurface(spare?.Surface, tile.Width, tile.Height);
+        var surface = _graphics.PlainSurface(spare?.Surface, tile.Width, tile.Height);
         var sprite = spare ?? new TileSprite(_compositor, surface);
 
         write(surface);

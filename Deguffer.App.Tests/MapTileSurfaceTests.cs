@@ -55,7 +55,7 @@ public sealed class MapTileSurfaceTests
 
         var (size, shaded) = On(graphics =>
         {
-            var surface = graphics.TileSurface(null, width, height);
+            var surface = graphics.PlainSurface(null, width, height);
 
             graphics.Shade(surface, Quads(width, height), Ground);
 
@@ -74,7 +74,7 @@ public sealed class MapTileSurfaceTests
 
         var size = On(graphics =>
         {
-            var surface = graphics.TileSurface(null, width, height);
+            var surface = graphics.PlainSurface(null, width, height);
 
             Paint(graphics, surface, width, height);
 
@@ -102,7 +102,7 @@ public sealed class MapTileSurfaceTests
             {
                 var (width, height) = Tiling.PixelsOf(key);
 
-                spare = graphics.TileSurface(spare, width, height);
+                spare = graphics.PlainSurface(spare, width, height);
                 graphics.Shade(spare, Quads(width, height), Ground);
                 Paint(graphics, spare, width, height);
 

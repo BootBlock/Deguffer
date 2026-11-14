@@ -18,7 +18,7 @@ namespace Deguffer.App.Controls;
 /// shapes shrink round them. A shape too small to read is a shape the drawing gives no label, so there
 /// are only as many as the picture has room to write.</para>
 ///
-/// <para>Each name is a rectangle of one surface (<see cref="NameSheet"/>), shown by a visual of its
+/// <para>Each name is a rectangle of a few shared pages (<see cref="NameSheet"/>), shown by a visual of its
 /// own (<see cref="NameSprite"/>) hung under one visual that the compositor carries with the map's
 /// camera and with a folder opening (<see cref="NameLayer"/>), and faded by its step
 /// (<see cref="NameFades"/>). So a pan, a zoom or a fling costs the compositor the same few expressions
@@ -49,7 +49,7 @@ internal sealed class ExploreLabels : Canvas
 
     private readonly NameLayer _layer;
 
-    /// <summary>The one surface every name is drawn into.</summary>
+    /// <summary>The pages every name is drawn into.</summary>
     private readonly NameSheet _sheet;
 
     /// <summary>The type the names are set in, shared by every name on the map.</summary>
@@ -79,7 +79,7 @@ internal sealed class ExploreLabels : Canvas
         _motion = motion;
         _sheet = new NameSheet(graphics);
         _layer = new NameLayer(_compositor, camera.Properties, carried);
-        _names = new NameSlots<NameSprite>(() => new NameSprite(_compositor, _sheet));
+        _names = new NameSlots<NameSprite>(() => new NameSprite(_compositor));
 
         ElementCompositionPreview.SetElementChildVisual(this, _layer.Root);
     }
@@ -211,7 +211,7 @@ internal sealed class ExploreLabels : Canvas
         {
             foreach (var name in _names.All)
             {
-                name.Renew(_sheet);
+                name.Renew();
             }
         }
 
