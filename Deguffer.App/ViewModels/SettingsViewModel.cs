@@ -237,6 +237,16 @@ public sealed partial class SettingsViewModel : ObservableObject
         set => Apply(current => current with { ShowAlreadyClear = value });
     }
 
+    /// <summary>
+    /// Whether the Storage list scrolls to the row a clean is on and lights it up. Presentation only:
+    /// the status line says what the run is doing either way.
+    /// </summary>
+    public bool SpotlightCleanedRow
+    {
+        get => _preferences.Current.SpotlightCleanedRow;
+        set => Apply(current => current with { SpotlightCleanedRow = value });
+    }
+
     public bool ConfirmBeforeCleaning
     {
         get => _preferences.Current.ConfirmBeforeCleaning;

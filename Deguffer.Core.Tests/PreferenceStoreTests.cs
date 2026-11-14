@@ -45,7 +45,8 @@ public class PreferenceStoreTests
             MinimumTemporaryFileAgeDays: 2,
             BackUpInstalledAppEntries: false,
             WhenCleanComplete: CompletionAction.Hibernate,
-            NavigationCollapsed: true)
+            NavigationCollapsed: true,
+            SpotlightCleanedRow: false)
         {
             // Every field of the map's style away from its default, so a field dropped from the file, or
             // read from another field's key, fails here.
@@ -107,6 +108,9 @@ public class PreferenceStoreTests
         Assert.True(loaded.ExploreOverviewHidden);
         Assert.True(loaded.MemoryOverviewHidden);
         Assert.True(loaded.NavigationCollapsed);
+
+        // False, because true is the default and a missing key reads as true.
+        Assert.False(loaded.SpotlightCleanedRow);
 
         Assert.True(loaded.ShowNotInstalled);
         Assert.True(loaded.ShowAlreadyClear);
@@ -205,6 +209,9 @@ public class PreferenceStoreTests
         Assert.False(loaded.RequireTypedConfirmation);
         Assert.False(loaded.ShowNotInstalled);
         Assert.False(loaded.ShowAlreadyClear);
+
+        // On, so an upgraded machine follows its first clean down the list as a new one does.
+        Assert.True(loaded.SpotlightCleanedRow);
 
         // Off, so an upgraded machine keeps asking Windows to empty a bin rather than silently
         // switching to the route that leaves an open Recycle Bin window showing the old contents.

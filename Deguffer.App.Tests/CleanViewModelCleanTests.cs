@@ -663,6 +663,108 @@ public class CleanViewModelCleanTests
     }
 
     /// <summary>
+    /// The page hears which row the run is on as it reaches each one, and what it is doing there, so the
+    /// list can follow it, and hears of no row once the run is over. The clean is cancelled after the
+    /// first row, so the second is only checked.
+    /// </summary>
+    [Fact]
+    public void TheRowACleanIsOnIsFollowedAndLetGoWhenItEnds()
+    {
+        var large = new FakeCleanupProvider("large");
+        var small = new FakeCleanupProvider("small");
+        using var page = new StoragePage([large, small]);
+        large.Steps = [page.Cache("a", 2048)];
+        small.Steps = [page.Cache("b", 1024)];
+        large.AfterCleaning = () => page.ViewModel.CancelCommand.Execute(null);
+        page.Scan();
+
+        var heard = new List<RowUnderway?>();
+        page.ViewModel.CleanProgress.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(CleanProgressViewModel.Underway))
+            {
+                heard.Add(page.ViewModel.CleanProgress.Underway);
+            }
+        };
+
+        page.Clean();
+
+        Assert.Equal(
+            [new RowUnderway(page.Row("large"), PlanStage.Removing), new RowUnderway(page.Row("small"), PlanStage.Checking), null],
+            heard);
+    }
+
+    /// <summary>
+    /// The run reaching a row it has already been on, to check it after removing from it, is heard as a
+    /// change: a ticked row that registers a virtual disk is proved standing after the run, under the
+    /// same provider. Heard as nothing, the row would go on being drawn as though it were being cleaned.
+    /// </summary>
+    [Fact]
+    public void TheSameRowReachedAgainToBeCheckedIsHeardAsAChange()
+    {
+        var disk = new FakeCleanupProvider("disk");
+        using var page = new StoragePage([disk]);
+        disk.Steps = [page.Cache("a", 1024)];
+        page.Scan();
+        var row = page.Row("disk");
+
+        var heard = new List<RowUnderway?>();
+        UiThread.Run(async () =>
+        {
+            var progress = new CleanProgressViewModel();
+            progress.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(CleanProgressViewModel.Underway))
+                {
+                    heard.Add(progress.Underway);
+                }
+            };
+
+            var started = progress.Start([row]);
+            started.Report(new PlanUnderway(disk, PlanStage.Removing, From: 0, Share: 1));
+            started.Report(new PlanUnderway(disk, PlanStage.Checking, From: 1, Share: 0));
+
+            // Each report is posted to this thread, and heard once it yields.
+            await Task.Yield();
+            await Task.Yield();
+        });
+
+        Assert.Equal([new RowUnderway(row, PlanStage.Removing), new RowUnderway(row, PlanStage.Checking)], heard);
+    }
+
+    /// <summary>
+    /// How far through its own row the run is, which starts again from nothing at each row and moves
+    /// on the row's scale rather than the run's: the last row here is a third of the bar, and its
+    /// steps of 0.3 would be steps of 0.1 on the bar.
+    /// </summary>
+    [Fact]
+    public void HowFarThroughItsRowTheRunIsStartsAgainAtEachRow()
+    {
+        var large = new FakeCleanupProvider("large");
+        var small = new FakeCleanupProvider("small");
+        using var page = new StoragePage([large, small]);
+        large.Steps = [page.Cache("a", 2048)];
+        small.Steps = [page.Cache("b", 1024)];
+        small.Fractions = [0.3, 0.305, 0.6];
+        page.Scan();
+
+        var seen = new List<double>();
+        page.ViewModel.CleanProgress.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(CleanProgressViewModel.RowFraction))
+            {
+                seen.Add(Math.Round(page.ViewModel.CleanProgress.RowFraction, 6));
+            }
+        };
+
+        page.Clean();
+
+        // The large row done, the small one begun, its steps less the one too small to draw, done,
+        // and nothing once the run is over.
+        Assert.Equal([1.0, 0.0, 0.3, 0.6, 1.0, 0.0], seen);
+    }
+
+    /// <summary>
     /// An item list left open over a row that is planned again is closed as the row's steps are
     /// replaced: its ticks would land on steps no run takes. A list over a row the run did not reach
     /// stays open.

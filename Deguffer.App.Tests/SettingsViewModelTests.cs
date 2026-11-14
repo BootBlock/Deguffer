@@ -75,6 +75,23 @@ public sealed class SettingsViewModelTests : IDisposable
     }
 
     /// <summary>
+    /// The Storage list follows a clean unless the reader turns it off, and the switch stores the choice
+    /// the page reads when it next applies its settings.
+    /// </summary>
+    [Fact]
+    public void TheSwitchForFollowingACleanIsOnAndStoresItsChoice()
+    {
+        var (page, preferences) = Page();
+
+        Assert.True(page.SpotlightCleanedRow);
+
+        page.SpotlightCleanedRow = false;
+
+        Assert.False(preferences.Current.SpotlightCleanedRow);
+        Assert.False(new PreferenceStore(_environment).Load().SpotlightCleanedRow);
+    }
+
+    /// <summary>
     /// A rejected write changes nothing, so the control is showing a value that is not in effect. Every
     /// binding is read again, and reads what actually holds.
     /// </summary>

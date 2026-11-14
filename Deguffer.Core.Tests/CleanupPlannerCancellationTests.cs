@@ -89,7 +89,7 @@ public sealed class CleanupPlannerCancellationTests : IDisposable
         var underway = new ProgressRecorder<CommandUnderway?>();
 
         var planner = new CleanupPlanner([store]);
-        await planner.ExecuteAsync(await planner.PlanAllAsync(), underway: underway);
+        await planner.ExecuteAsync(await planner.PlanAllAsync(), reporters: new() { Underway = underway });
 
         Assert.Equal([running, null], underway.Reports);
     }

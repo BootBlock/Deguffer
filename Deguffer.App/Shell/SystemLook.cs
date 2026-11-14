@@ -70,6 +70,7 @@ internal sealed class SystemLook
                 _settings.UIElementColor(UIElementType.Hotlight))
             : null,
         _settings.GetColorValue(UIColorType.AccentLight2),
+        _settings.GetColorValue(UIColorType.AccentDark1),
         _settings.TextScaleFactor,
         _capabilities.AreEffectsFast());
 }
