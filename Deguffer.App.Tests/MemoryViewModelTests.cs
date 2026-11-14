@@ -23,6 +23,7 @@ public sealed class MemoryViewModelTests : IDisposable
 
     private static readonly MemoryNodeKey Alpha = new(MemoryPart.Process, 100, 10);
     private static readonly MemoryNodeKey Beta = new(MemoryPart.Process, 200, 20);
+    private static readonly MemoryNodeKey Gamma = new(MemoryPart.Process, 50, 5);
     private static readonly MemoryNodeKey Applications = MemoryNodeKey.Of(MemoryPart.Applications);
 
     private readonly TempDirectory _temp = new();
@@ -443,6 +444,59 @@ public sealed class MemoryViewModelTests : IDisposable
 
         Assert.False(page.HasFailure);
         Assert.Equal([string.Empty], failures);
+
+        await leave.CancelAsync();
+        await watching.WaitAsync(Patience);
+    });
+
+    /// <summary>
+    /// The Live update box reaches the feed and the Refresh button reads: off, the page shows a new
+    /// reading only when Refresh is pressed, and the line saying when the figures were read is told of
+    /// each new time, before the page redraws, and of the box changing. Live, a reading tells the line
+    /// nothing, because there is nothing for it to say.
+    /// </summary>
+    [Fact]
+    public void WithLiveUpdateOffRefreshShowsAReadingAndSaysWhenItWasRead() => UiThread.Run(async () =>
+    {
+        var page = Page(First(), Renumbered());
+        using var leave = new CancellationTokenSource();
+
+        page.Updates.Live = false;
+
+        var shown = ShownAsync(page);
+        var watching = page.WatchAsync(leave.Token);
+        await shown;
+
+        Assert.True(page.Updates.HasReadAt);
+        Assert.Null(page.Tree!.Find(Gamma));
+
+        _clock.Advance(MemoryFeed.Cadence * 10);
+        await Task.Delay(TimeSpan.FromMilliseconds(150));
+        Assert.Equal(0, _clock.Waiting);
+
+        var told = new List<string?>();
+        page.Updates.PropertyChanged += (_, changed) => told.Add(changed.PropertyName);
+        page.ViewChanged += (_, _) => told.Add(nameof(MemoryViewModel.ViewChanged));
+
+        var refreshed = ShownAsync(page);
+        page.Updates.RefreshCommand.Execute(null);
+        await refreshed;
+
+        Assert.NotNull(page.Tree!.Find(Gamma));
+        Assert.Equal([nameof(MemoryUpdates.ReadAt), nameof(MemoryViewModel.ViewChanged)], told);
+
+        told.Clear();
+        var live = ShownAsync(page);
+        page.Updates.Live = true;
+
+        Assert.False(page.Updates.HasReadAt);
+        Assert.Equal([nameof(MemoryUpdates.Live), nameof(MemoryUpdates.ReadAt), nameof(MemoryUpdates.HasReadAt)], told);
+
+        await live;
+
+        Assert.Equal(
+            [nameof(MemoryUpdates.Live), nameof(MemoryUpdates.ReadAt), nameof(MemoryUpdates.HasReadAt), nameof(MemoryViewModel.ViewChanged)],
+            told);
 
         await leave.CancelAsync();
         await watching.WaitAsync(Patience);

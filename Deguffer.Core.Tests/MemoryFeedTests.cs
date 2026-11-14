@@ -23,7 +23,7 @@ public sealed class MemoryFeedTests
         WithFeed(new FakeMemorySource(), new ManualTimeProvider(), async (feed, source, _, _) =>
         {
             Assert.True(await feed.MoveNextAsync().AsTask().WaitAsync(Patience));
-            Assert.Same(FakeMemorySource.Snapshot, feed.Current);
+            Assert.Same(FakeMemorySource.Snapshot, feed.Current.Snapshot);
             Assert.Equal(1, source.Reads);
         });
 
@@ -108,6 +108,212 @@ public sealed class MemoryFeedTests
         });
 
     /// <summary>
+    /// Live update off: the cadence reads nothing however long it runs, and Refresh reads once, at
+    /// once, with the time it was read.
+    /// </summary>
+    [Fact]
+    public Task WithLiveUpdateOffOnlyRefreshReads() =>
+        WithFeed(new FakeMemorySource(), new ManualTimeProvider(), async (control, feed, source, clock, _) =>
+        {
+            control.Live = false;
+
+            await feed.MoveNextAsync().AsTask().WaitAsync(Patience);
+            Assert.Equal(clock.GetUtcNow(), feed.Current.Read);
+
+            var next = feed.MoveNextAsync().AsTask();
+
+            clock.Advance(MemoryFeed.Cadence * 10);
+            await Task.Delay(Settle);
+
+            Assert.False(next.IsCompleted);
+            Assert.Equal(1, source.Reads);
+            Assert.Equal(0, clock.Waiting);
+
+            control.Refresh();
+
+            Assert.True(await next.WaitAsync(Patience));
+            Assert.Equal(2, source.Reads);
+            Assert.Equal(clock.GetUtcNow(), feed.Current.Read);
+        });
+
+    /// <summary>Live, Refresh does not wait for the rest of the cadence, and leaves no beat behind it.</summary>
+    [Fact]
+    public Task RefreshReadsAtOnceWhileLive() =>
+        WithFeed(new FakeMemorySource(), new ManualTimeProvider(), async (control, feed, source, clock, _) =>
+        {
+            await feed.MoveNextAsync().AsTask().WaitAsync(Patience);
+
+            var next = feed.MoveNextAsync().AsTask();
+            await clock.WhenWaitingAsync(Patience);
+
+            control.Refresh();
+
+            Assert.True(await next.WaitAsync(Patience));
+            Assert.Equal(2, source.Reads);
+            Assert.Equal(0, clock.Waiting);
+        });
+
+    /// <summary>
+    /// Turned on, the feed reads at once, because what is on screen may be as old as the last press,
+    /// and goes on reading on the cadence from there.
+    /// </summary>
+    [Fact]
+    public Task TurningLiveUpdateOnReadsAtOnceAndResumesTheCadence() =>
+        WithFeed(new FakeMemorySource(), new ManualTimeProvider(), async (control, feed, source, clock, _) =>
+        {
+            control.Live = false;
+            await feed.MoveNextAsync().AsTask().WaitAsync(Patience);
+
+            var next = feed.MoveNextAsync().AsTask();
+            await Task.Delay(Settle);
+            Assert.False(next.IsCompleted);
+
+            control.Live = true;
+
+            Assert.True(await next.WaitAsync(Patience));
+            Assert.Equal(2, source.Reads);
+
+            var after = feed.MoveNextAsync().AsTask();
+            await clock.WhenWaitingAsync(Patience);
+            clock.Advance(MemoryFeed.Cadence);
+
+            Assert.True(await after.WaitAsync(Patience));
+            Assert.Equal(3, source.Reads);
+        });
+
+    /// <summary>Turned off part way through a cadence, the read it was counting down to never happens.</summary>
+    [Fact]
+    public Task TurningLiveUpdateOffCallsOffTheNextBeat() =>
+        WithFeed(new FakeMemorySource(), new ManualTimeProvider(), async (control, feed, source, clock, _) =>
+        {
+            await feed.MoveNextAsync().AsTask().WaitAsync(Patience);
+
+            var next = feed.MoveNextAsync().AsTask();
+            await clock.WhenWaitingAsync(Patience);
+
+            control.Live = false;
+            await Task.Delay(Settle);
+
+            clock.Advance(MemoryFeed.Cadence * 10);
+            await Task.Delay(Settle);
+
+            Assert.False(next.IsCompleted);
+            Assert.Equal(1, source.Reads);
+            Assert.Equal(0, clock.Waiting);
+        });
+
+    /// <summary>
+    /// A press during a read is not answered by that read, which began before the press: one more read
+    /// follows it. Several presses during it are still one read, and never two at once.
+    /// </summary>
+    [Fact]
+    public Task PressesDuringAReadAskForOneReadAfterIt() =>
+        WithFeed(new FakeMemorySource(), new ManualTimeProvider(), async (control, feed, source, _, _) =>
+        {
+            control.Live = false;
+            await feed.MoveNextAsync().AsTask().WaitAsync(Patience);
+            source.HoldFrom(read: 2);
+
+            var second = feed.MoveNextAsync().AsTask();
+            control.Refresh();
+            await source.WhenReadStartsAsync(2, Patience);
+
+            control.Refresh();
+            control.Refresh();
+            source.Release();
+
+            Assert.True(await second.WaitAsync(Patience));
+
+            var third = feed.MoveNextAsync().AsTask();
+            Assert.True(await third.WaitAsync(Patience));
+            Assert.Equal(3, source.Reads);
+
+            var fourth = feed.MoveNextAsync().AsTask();
+            await Task.Delay(Settle);
+
+            Assert.False(fourth.IsCompleted);
+            Assert.Equal(3, source.Reads);
+            Assert.Equal(1, source.MostAtOnce);
+        });
+
+    /// <summary>
+    /// A page the reader comes back to with live update off shows what it showed, and does not read
+    /// until they ask: coming back is not asking. The reading counts as shown once the page has asked
+    /// for the one after it, which is what a page does when it has finished showing one.
+    /// </summary>
+    [Fact]
+    public async Task ReadingAgainWithLiveUpdateOffWaitsForRefreshOnceAReadingWasTaken()
+    {
+        var source = new FakeMemorySource();
+        var control = new MemoryFeed(source, new ManualTimeProvider()) { Live = false };
+
+        using (var first = new CancellationTokenSource())
+        {
+            var visit = control.ReadAsync(first.Token).GetAsyncEnumerator();
+
+            Assert.True(await visit.MoveNextAsync().AsTask().WaitAsync(Patience));
+
+            var waiting = visit.MoveNextAsync().AsTask();
+            await first.CancelAsync();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => waiting.WaitAsync(Patience));
+        }
+
+        using var second = new CancellationTokenSource();
+        var again = control.ReadAsync(second.Token).GetAsyncEnumerator();
+
+        try
+        {
+            var next = again.MoveNextAsync().AsTask();
+            await Task.Delay(Settle);
+
+            Assert.False(next.IsCompleted);
+            Assert.Equal(1, source.Reads);
+
+            control.Refresh();
+
+            Assert.True(await next.WaitAsync(Patience));
+            Assert.Equal(2, source.Reads);
+        }
+        finally
+        {
+            await second.CancelAsync();
+        }
+    }
+
+    /// <summary>
+    /// A reading the page threw away because it was left while the read ran was never on screen, so a
+    /// page come back to with live update off reads at once rather than standing empty until the
+    /// reader thinks to press Refresh.
+    /// </summary>
+    [Fact]
+    public async Task AReadingThrownAwayUnseenDoesNotHoldTheNextVisitBack()
+    {
+        var source = new FakeMemorySource();
+        var control = new MemoryFeed(source, new ManualTimeProvider()) { Live = false };
+
+        using (var first = new CancellationTokenSource())
+        {
+            var visit = control.ReadAsync(first.Token).GetAsyncEnumerator();
+
+            Assert.True(await visit.MoveNextAsync().AsTask().WaitAsync(Patience));
+            await first.CancelAsync();
+        }
+
+        using var second = new CancellationTokenSource();
+        var again = control.ReadAsync(second.Token).GetAsyncEnumerator();
+
+        try
+        {
+            Assert.True(await again.MoveNextAsync().AsTask().WaitAsync(Patience));
+            Assert.Equal(2, source.Reads);
+        }
+        finally
+        {
+            await second.CancelAsync();
+        }
+    }
+
+    /// <summary>
     /// Run <paramref name="test"/> against a feed over <paramref name="source"/> and
     /// <paramref name="clock"/>, and end whatever it left pending, however it ended.
     ///
@@ -116,17 +322,28 @@ public sealed class MemoryFeedTests
     /// of the assertion that failed. A read held by the source is released for the same reason, so a
     /// failed test does not leave a thread waiting for good.</para>
     /// </summary>
+    private static Task WithFeed(
+        FakeMemorySource source,
+        ManualTimeProvider clock,
+        Func<IAsyncEnumerator<MemoryReading>, FakeMemorySource, ManualTimeProvider, CancellationTokenSource, Task> test) =>
+        WithFeed(source, clock, (_, feed, held, time, cancel) => test(feed, held, time, cancel));
+
+    /// <summary>
+    /// As above, with the feed itself handed over as well, for a test that turns live update on and
+    /// off or presses Refresh while the sequence runs.
+    /// </summary>
     private static async Task WithFeed(
         FakeMemorySource source,
         ManualTimeProvider clock,
-        Func<IAsyncEnumerator<MemorySnapshot>, FakeMemorySource, ManualTimeProvider, CancellationTokenSource, Task> test)
+        Func<MemoryFeed, IAsyncEnumerator<MemoryReading>, FakeMemorySource, ManualTimeProvider, CancellationTokenSource, Task> test)
     {
         using var cancel = new CancellationTokenSource();
-        var feed = new MemoryFeed(source, clock).ReadAsync(cancel.Token).GetAsyncEnumerator();
+        var control = new MemoryFeed(source, clock);
+        var feed = control.ReadAsync(cancel.Token).GetAsyncEnumerator();
 
         try
         {
-            await test(feed, source, clock, cancel);
+            await test(control, feed, source, clock, cancel);
         }
         finally
         {
