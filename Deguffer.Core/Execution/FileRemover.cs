@@ -123,9 +123,8 @@ public static class FileRemover
         // so nothing on the far side of a link nobody could see is counted as reclaimed.
         var isLink = presence is PathPresence.Refused || describedAsLink is true;
 
-        // Something that is not a file has taken the name. Not this step's to remove, and the
-        // read-only retry below would otherwise clear a directory's own attributes on the way to
-        // failing anyway. A link to a directory skips this branch and goes to the deletion as a
+        // Something that is not a file has taken the name. Not this step's to remove, and reported
+        // as left rather than as a refusal, because nothing refused it. A link to a directory skips this branch and goes to the deletion as a
         // link, which Windows refuses for a directory link, so it stays and the step reports a
         // refusal.
         if (!isLink && isDirectory)
@@ -160,24 +159,6 @@ public static class FileRemover
         {
             fs.DeleteFile(extended);
         }
-        catch (UnauthorizedAccessException)
-        {
-            // Commonly the read-only bit; MEMORY.DMP is written with it set on some configurations.
-            try
-            {
-                fs.ClearAttributes(extended);
-                fs.DeleteFile(extended);
-            }
-            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
-            {
-                // It went between the two attempts, which is the race the arm below answers too.
-                return new FileRemovalOutcome(0, Refusals.None, Removed: true);
-            }
-            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
-            {
-                return new FileRemovalOutcome(0, Refusals.One(RefusalReasons.Of(ex), length ?? 0), Removed: false);
-            }
-        }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
         {
             // It went between the probe and the delete. The post-condition holds, so this is the
@@ -186,9 +167,11 @@ public static class FileRemover
             // below would call a file that is gone "left in place".
             return new FileRemovalOutcome(0, Refusals.None, Removed: true);
         }
-        catch (IOException ex)
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
         {
-            // Held open — a dump still being written, most likely. §5.3: leave it.
+            // Held open — a dump still being written, most likely — or refused. §5.3: leave it. A
+            // read-only file is not refused for its bit: MEMORY.DMP is written with it set on some
+            // configurations, and the seam deletes it in one call.
             return new FileRemovalOutcome(0, Refusals.One(RefusalReasons.Of(ex), length ?? 0), Removed: false);
         }
 

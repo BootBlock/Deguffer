@@ -2,7 +2,7 @@
 # each. The number only falls. Never add a line: call the declaration that exists.
 6 CloseHandle
 3 CoCreateInstance
-4 CreateFileW
+3 CreateFileW
 2 DefSubclassProc
 2 DwmGetWindowAttribute
 2 EnumWindows

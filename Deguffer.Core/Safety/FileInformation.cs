@@ -819,7 +819,7 @@ internal sealed unsafe partial class FileInformation
     }
 
     [LibraryImport("kernel32.dll", EntryPoint = "CreateFileW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
-    private static partial SafeFileHandle CreateFile(
+    internal static partial SafeFileHandle CreateFile(
         string fileName,
         uint desiredAccess,
         uint shareMode,

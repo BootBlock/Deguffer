@@ -1,5 +1,4 @@
 using System.Runtime.InteropServices;
-using Microsoft.Win32.SafeHandles;
 
 namespace Deguffer.Core.Safety;
 
@@ -11,8 +10,8 @@ namespace Deguffer.Core.Safety;
 /// file whose DACL granted its owner full control, with no deny entry and no integrity label, which
 /// still refused <c>DELETE</c> to its owner and to an administrator: a filter driver below the ACL
 /// was refusing the open. <c>AccessCheck</c> against the descriptor would have said yes. So the
-/// file is opened for deletion exactly as <c>DeleteFileW</c> opens it, and closed again at once
-/// without the disposition that would delete it.</para>
+/// file is opened for deletion exactly as <c>DeleteFileW</c> opens it (<see cref="EntryDeletion.Open"/>),
+/// and closed again at once without the disposition that would delete it.</para>
 ///
 /// <para><b>It is not free of side effects, and the callers are chosen for that.</b> While the
 /// handle is open, another program's open that does not share delete access fails. The handle lives
@@ -29,37 +28,13 @@ namespace Deguffer.Core.Safety;
 /// provider knows which directory a program runs from, the live-process veto spares it before this
 /// is asked.</para>
 /// </summary>
-internal static partial class DeletionProbe
+internal static class DeletionProbe
 {
-    private const uint Delete = 0x0001_0000;
-    private const uint FileReadAttributes = 0x0080;
-    private const uint ShareAll = 0x0007;
-    private const uint OpenExisting = 3;
-    private const uint OpenReparsePoint = 0x0020_0000;
-    private const uint BackupSemantics = 0x0200_0000;
-
     /// <param name="extendedPath">The file, in the extended-length form §6.3 requires.</param>
     public static RefusalReason? Probe(string extendedPath)
     {
-        using var handle = CreateFile(
-            extendedPath,
-            Delete | FileReadAttributes,
-            ShareAll,
-            securityAttributes: 0,
-            OpenExisting,
-            OpenReparsePoint | BackupSemantics,
-            templateFile: 0);
+        using var handle = EntryDeletion.Open(extendedPath);
 
         return handle.IsInvalid ? RefusalReasons.OfWin32Error(Marshal.GetLastPInvokeError()) : null;
     }
-
-    [LibraryImport("kernel32.dll", EntryPoint = "CreateFileW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
-    private static partial SafeFileHandle CreateFile(
-        string fileName,
-        uint desiredAccess,
-        uint shareMode,
-        nint securityAttributes,
-        uint creationDisposition,
-        uint flagsAndAttributes,
-        nint templateFile);
 }

@@ -296,7 +296,7 @@ internal sealed class TreeRemoval
         {
             var file = files[entry];
 
-            if (FileDeletion.TryDelete(file.FullName, file.Attributes, _fs) is { } reason)
+            if (FileDeletion.TryDelete(file.FullName, _fs) is { } reason)
             {
                 _tally.Refused(file, reason);
             }
@@ -310,7 +310,7 @@ internal sealed class TreeRemoval
             var link = folder.Links[entry - files.Count];
             var gone = link.IsDirectory
                 ? DirectoryDeletion.TryDelete(link.FullName, _fs) is null
-                : FileDeletion.TryDelete(link.FullName, link.Attributes, _fs) is null;
+                : FileDeletion.TryDelete(link.FullName, _fs) is null;
 
             if (gone)
             {

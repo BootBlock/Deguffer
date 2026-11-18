@@ -45,8 +45,6 @@ public sealed class ConfinedFileSystem(IFileSystem inner, string root) : IFileSy
 
     public void DeleteDirectory(string path) => For(path).DeleteDirectory(path);
 
-    public void ClearAttributes(string path) => For(path).ClearAttributes(path);
-
     public FileAttributes? TryGetAttributes(string path) => For(path).TryGetAttributes(path);
 
     public bool MayExist(string path) => For(path).MayExist(path);

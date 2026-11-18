@@ -160,8 +160,6 @@ public sealed class RemovalCheckCostTests
 
         public void DeleteDirectory(string path) => Inner.DeleteDirectory(path);
 
-        public void ClearAttributes(string path) => Inner.ClearAttributes(path);
-
         public FileAttributes? TryGetAttributes(string path) => FileAttributes.Directory;
 
         public bool MayExist(string path) => true;

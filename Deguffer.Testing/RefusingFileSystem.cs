@@ -12,10 +12,6 @@ namespace Deguffer.Testing;
 /// for deletion. A held <see cref="FileStream"/> and <see cref="UndeletableFile"/> are Windows'
 /// own refusals, for the tests that need Windows itself to say no; this is for the tests about what
 /// the removal and the check do with the answer.</para>
-///
-/// <para>A refused file refuses the attribute reset as well when it is denied, because that is what
-/// Windows does to a file this account may not touch: the removal's read-only retry must meet the
-/// same answer twice, or the classification it makes from the second one goes untested.</para>
 /// </summary>
 public sealed class RefusingFileSystem(IFileSystem inner, IReadOnlyDictionary<string, RefusalReason> refused) : IFileSystem
 {
@@ -72,16 +68,6 @@ public sealed class RefusingFileSystem(IFileSystem inner, IReadOnlyDictionary<st
                 inner.DeleteDirectory(path);
                 break;
         }
-    }
-
-    public void ClearAttributes(string path)
-    {
-        if (ReasonFor(path) == RefusalReason.Denied)
-        {
-            throw new UnauthorizedAccessException($"Denied: {path}");
-        }
-
-        inner.ClearAttributes(path);
     }
 
     public FileAttributes? TryGetAttributes(string path) => inner.TryGetAttributes(path);
