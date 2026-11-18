@@ -42,9 +42,9 @@ namespace Deguffer.Core.Execution;
 /// </param>
 /// <param name="time">
 /// The clock a command waits on while its tool marks what it will remove later (see
-/// <see cref="ScheduledRemoval"/>), and the one the plan, each step and each removal's passes are
-/// timed on. Defaulted to the system clock, and injected so a test of a tool that never marks anything
-/// does not wait out the real interval, and so a test can say how long a step took.
+/// <see cref="ScheduledRemoval"/>) or Deguffer's own servicing session stops (see <see cref="UpdateHoldAtClean"/>),
+/// and the plan, each step and each removal's passes are timed on. Defaulted to the system clock, and
+/// injected so a test waits out no real interval, and so a test can say how long a step took.
 /// </param>
 /// <param name="environment">
 /// The account whose own folders no step may destroy. See <see cref="StandingFolders"/>. Defaulted
@@ -428,7 +428,7 @@ public sealed class PlanExecutor(
         // Asked again, because the tool's measurement can take a minute, and an update that starts
         // during it is exactly what the hold exists for. The servicing stack the measurement itself
         // woke is not that update, where the step names the record it was made in: see
-        // RunCommandStep.ServicingCalls.
+        // CleanupStep.ServicingRecord and UpdateHoldAtClean.
         if (step is { HeldWhileUpdating: true, MeasuredBy: not null } && await _updateHold.WhyHeldAsync(step, ct).ConfigureAwait(false) is { } updating)
         {
             return new StepOutcome(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, updating);

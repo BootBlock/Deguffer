@@ -47,22 +47,26 @@ public sealed class OwnServicingWaitTests : IDisposable
         ],
     };
 
-    private Task<CleanupResult> ExecuteAsync(CancellationToken ct = default)
+    private Task<CleanupResult> ExecuteAsync(CancellationToken ct = default) =>
+        Executor().ExecuteAsync(Prepared(), runReach: null, residue: null, progress: null, underway: null, ct);
+
+    /// <summary>The plan, with its folder on the disk.</summary>
+    private CleanupPlan Prepared()
     {
         Directory.CreateDirectory(Staging);
         File.WriteAllBytes(Path.Combine(Staging, "install.esd"), new byte[4096]);
-
-        var executor = new PlanExecutor(
-            new FakeProcessRunner(),
-            ParallelEnumerationScanner.Default,
-            RefusalRecord.For(new FakeUserEnvironment(_temp.Path)),
-            handlers: _handlers,
-            servicing: _servicing,
-            inspector: _inspector,
-            time: _time);
-
-        return executor.ExecuteAsync(Plan(), runReach: null, residue: null, progress: null, underway: null, ct);
+        return Plan();
     }
+
+    /// <summary>An executor on the test's machine, as each provider builds one of its own.</summary>
+    private PlanExecutor Executor() => new(
+        new FakeProcessRunner(),
+        ParallelEnumerationScanner.Default,
+        RefusalRecord.For(new FakeUserEnvironment(_temp.Path)),
+        handlers: _handlers,
+        servicing: _servicing,
+        inspector: _inspector,
+        time: _time);
 
     /// <summary>The servicing stack, woke by a DISM call of Deguffer's own, as the analysis wakes it.</summary>
     private Task WakeTheStackOurselvesAsync() =>
@@ -118,6 +122,32 @@ public sealed class OwnServicingWaitTests : IDisposable
         Assert.Contains("still running after 10 minutes", outcome.Message, StringComparison.Ordinal);
         Assert.Empty(_handlers.Calls);
         Assert.True(Directory.Exists(Staging));
+    }
+
+    /// <summary>
+    /// The wait is for the session, not for each row: once it has outlasted the wait, the next row's
+    /// step is held at once, through another provider's executor, rather than waiting all over again.
+    /// </summary>
+    [Fact]
+    public async Task ARowAfterTheWaitRanOutIsHeldWithoutWaitingAgain()
+    {
+        await WakeTheStackOurselvesAsync();
+
+        var first = ExecuteAsync();
+
+        for (var waited = TimeSpan.Zero; !first.IsCompleted && waited <= UpdateHoldAtClean.OwnServicingWait; waited += TimeSpan.FromSeconds(2))
+        {
+            await Task.WhenAny(first, _time.WhenWaitingAsync(Patience));
+            _time.Advance(TimeSpan.FromSeconds(2));
+        }
+
+        await first.WaitAsync(Patience);
+
+        var outcome = Assert.Single((await ExecuteAsync().WaitAsync(Patience)).Steps);
+
+        Assert.Contains("still running after 10 minutes", outcome.Message, StringComparison.Ordinal);
+        Assert.Equal(0, _time.Waiting);
+        Assert.Empty(_handlers.Calls);
     }
 
     /// <summary>

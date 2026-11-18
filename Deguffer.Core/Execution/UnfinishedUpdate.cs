@@ -12,7 +12,8 @@ namespace Deguffer.Core.Execution;
 /// danger is not a locked file. A folder an unfinished update is still going to read — the rollback
 /// state it restores from, the files a restart will move into place — can be entirely unlocked, and
 /// removing it interrupts the update rather than failing to. So while any of these answers yes, the
-/// folder is not offered at all.</para>
+/// folder is not offered at all. Deguffer's own servicing session is the one exception: a row is
+/// offered beside it and its clean waits for it to stop (see <see cref="OnlyOwnServicing"/>).</para>
 /// </summary>
 internal static class UnfinishedUpdate
 {
@@ -77,7 +78,7 @@ internal static class UnfinishedUpdate
     /// the servicing stack one of <paramref name="ownCalls"/> woke, which Windows keeps running for
     /// minutes after the call returns, or the session key it wrote. That stack is not an update, but it
     /// cannot be told from one an update would reuse, so a removal that is not a DISM command waits for
-    /// it to stop rather than running beside it (see <see cref="PlanExecutor"/>).
+    /// it to stop rather than running beside it (see <see cref="UpdateHoldAtClean"/>).
     /// </summary>
     public static bool OnlyOwnServicing(ServicingState state, OwnServicingCalls ownCalls) =>
         HoldsEverything(state) is not null && HoldsEverything(state, ownCalls) is null;

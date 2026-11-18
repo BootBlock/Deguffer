@@ -97,8 +97,8 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
     /// which DISM refuses at once, so the row's own turn costs nothing there.</para>
     ///
     /// <para><b>The hold is asked before DISM starts, and that also serves the rows that remove an
-    /// update's leftovers by path.</b> Their hold takes any servicing stack or restart key for an update,
-    /// Deguffer's own included, and for as long as the analysis runs Windows runs the stack and keeps
+    /// update's leftovers by path.</b> Their clean waits for Deguffer's own servicing stack to stop
+    /// (see <see cref="UpdateHoldAtClean"/>), and for as long as the analysis runs Windows runs the stack and keeps
     /// <see cref="RestartKey.ServicingRebootPending"/> present. Asking reads the pass's one reading of
     /// both, <see cref="PlanningServicing"/>, so it is read before DISM starts, and every row the hold
     /// governs is planned against the machine as it was before the analysis began.</para>

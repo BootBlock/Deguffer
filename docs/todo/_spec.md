@@ -1703,8 +1703,12 @@ owed. A key carries no owner, so it is Deguffer's own only where it was last wri
 Deguffer's DISM calls ran and no restart was owed as that call began. Every other restart key, and
 this one written at any other time or at an unknown time, holds. A planning pass reads the restart
 keys and the servicing processes once, before it starts DISM's analysis, and plans every row the
-update hold governs against that one reading, so its own analysis holds none of them. The clean
-reads both again before every step the hold governs. Deleting from the store by path, and
+update hold governs against that one reading, so its own analysis holds none of them, and does
+not count a servicing stack an earlier pass's DISM call started. The clean reads both again before
+every step the hold governs. A step that is not itself a DISM command waits, for up to ten minutes,
+while the only thing holding it is a servicing stack one of Deguffer's DISM calls started, then reads
+both again and is held by anything else. The ten minutes are counted once for the clean, so a stack
+that outlasts them holds that step and every later one at once. Deleting from the store by path, and
 everything else in this section, stays excluded.
 
 **Restore points are offered on the component store's terms: only through Windows' own route, and

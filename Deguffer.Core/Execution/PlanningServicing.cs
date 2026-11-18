@@ -12,10 +12,10 @@ namespace Deguffer.Core.Execution;
 /// component store as it begins (see <see cref="ComponentStoreProviderBase.BeginPass"/>), and for as
 /// long as DISM runs, Windows runs its servicing stack and keeps
 /// <see cref="RestartKey.ServicingRebootPending"/> present. Read live after that, both say an update is
-/// under way, which would hold the driver store, Windows.old, the setup files and an update's leftovers
-/// on every elevated pass, and the component store's own rows before they read the analysis. The
+/// under way, and the component store's own rows would be held before they read the analysis. The
 /// component store's hold reads this before DISM starts, so the pass is planned against the machine as
-/// it was before Deguffer touched it.</para>
+/// it was before Deguffer touched it. The other rows' <see cref="Hold"/> does not count the stack an
+/// earlier pass's analysis left running either.</para>
 ///
 /// <para><b>Safe because the clean asks again.</b> Every step these rows plan is
 /// <see cref="CleanupStep.HeldWhileUpdating"/>, so <see cref="PlanExecutor"/> asks the machine itself
