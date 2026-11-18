@@ -646,6 +646,11 @@ not the shell asked.
   classification, it is not an offer, and the UI must never let a user read it as one — which is why
   Explore has no bulk action and no pre-selection, and why the refusals above are stated with their
   reason rather than by greying something out.
+- **A drive scanned before is drawn as it was while it is scanned again.** From the moment the last
+  kept scan of the whole drive is found until the new scan has a picture of its own, the map draws
+  that kept scan and says over it when it was taken. It answers nothing about it: nothing on it can
+  be picked, opened or removed, and the removal verdict reads only a scanned tree and the disk,
+  never a kept scan. A cancelled or failed scan takes it away.
 - **Removal from Explore goes to the Recycle Bin by default.** §8's fourth question concludes that
   undo is impossible at cache sizes, and that is true of a ten-gigabyte tree. It is not true of the
   one file a user picked out of a picture, and where recovery is available it is not optional.

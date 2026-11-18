@@ -402,9 +402,9 @@
         <ProgressBar Grid.Row="1"
                      Height="3"
                      Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
-                     IsIndeterminate="{x:Bind ViewModel.HasNoProgressFraction, Mode=OneWay}"
+                     IsIndeterminate="{x:Bind ViewModel.Progress.IsIndeterminate, Mode=OneWay}"
                      Maximum="1"
-                     Value="{x:Bind ViewModel.ProgressValue, Mode=OneWay}" />
+                     Value="{x:Bind ViewModel.Progress.Value, Mode=OneWay}" />
 
         <!--
             Where you are, and the way back out. A breadcrumb rather than a path in a label: every
@@ -696,15 +696,12 @@
 
                 <!-- The empty state. A large blank card reads as a screen that has failed rather
                      than one waiting to be told to start. -->
-                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="6"
-                            Visibility="{x:Bind ViewModel.HasNoTree, Mode=OneWay}">
-                    <TextBlock Text="Nothing scanned yet"
-                               HorizontalAlignment="Center"
-                               Style="{StaticResource SubtitleTextBlockStyle}" />
-                    <TextBlock Text="Choose a drive or a folder and press Scan. Nothing is changed by looking."
-                               HorizontalAlignment="Center"
-                               Style="{StaticResource SecondaryText}" />
-                </StackPanel>
+                <controls:EmptyState Glyph="&#xEDA2;" Title="Nothing scanned yet"
+                                     Message="Choose a drive or a folder and press Scan. Nothing is changed by looking."
+                                     Visibility="{x:Bind ViewModel.HasNoTree, Mode=OneWay}" />
+
+                <!-- Over the map while it draws the drive as it was (#491). See KeptScanMark. -->
+                <controls:KeptScanMark Scan="{x:Bind ViewModel.KeptScan}" Visibility="{x:Bind ViewModel.ShowsKept, Mode=OneWay}" />
 
                 <!--
                     The notes, over the picture rather than under it.

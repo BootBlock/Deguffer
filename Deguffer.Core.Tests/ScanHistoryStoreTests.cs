@@ -140,6 +140,33 @@ public sealed class ScanHistoryStoreTests : IDisposable
         Assert.True(record.Saved);
     }
 
+    /// <summary>
+    /// The newest kept summary that can be read is the one the map draws while a new scan runs (#491),
+    /// which is the one a finished scan is compared with: a damaged newest one gives way to the one
+    /// before it, and a volume with nothing kept has none.
+    /// </summary>
+    [Fact]
+    public void TheLatestSummaryIsTheNewestThatCanBeRead()
+    {
+        var history = new ScanHistory(_store);
+
+        Assert.Null(history.Latest(Volume));
+
+        Assert.True(_store.Save(Summary(Then)));
+        Assert.True(_store.Save(Summary(Then.AddDays(7))));
+
+        Assert.Equal(Then.AddDays(7), new ScanHistory(_store).Latest(Volume)?.TakenUtc);
+
+        var newest = Directory.GetFiles(Folder).Order(StringComparer.Ordinal).Last();
+        WriteJson(newest, Json(newest).Replace("\"Folders\":[[", "\"Folders\":[[\"x\",", StringComparison.Ordinal));
+
+        var latest = new ScanHistory(_store).Latest(Volume);
+
+        Assert.NotNull(latest);
+        Assert.Equal(Then, latest.TakenUtc);
+        Assert.Equal(Summary(Then).Folders, latest.Folders);
+    }
+
     [Fact]
     public void OnlyTheNewestSummariesOfAVolumeAreKept()
     {

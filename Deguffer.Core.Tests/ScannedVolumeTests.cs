@@ -63,6 +63,47 @@ public sealed class ScannedVolumeTests
         Assert.Equal(new VolumeSpace(12_000, 6_000), await (await starting).SpaceAsync(Tree(@"D:\", Svi.Absent)));
     }
 
+    /// <summary>
+    /// The volume a scan covers the whole of is named for the last kept scan of it (#491), and a scan
+    /// of a folder on it, or of a volume Windows gives no name, is not.
+    /// </summary>
+    [Theory]
+    [InlineData(@"D:\", Named)]
+    [InlineData(@"D:\data", null)]
+    public async Task OnlyAScanOfAWholeVolumeNamesIt(string root, string? name)
+    {
+        var volumes = new FakeVolumeInventory().With(@"D:\", totalBytes: 12_000, freeBytes: 6_000, volumeName: Named);
+
+        Assert.Equal(name, await ScannedVolume.Start(volumes, new FakeHiddenSpaceSource(), root, default).WholeVolumeNameAsync());
+
+        var unnamed = new FakeVolumeInventory().With(@"E:\", totalBytes: 12_000, freeBytes: 6_000);
+        Assert.Null(await ScannedVolume.Start(unnamed, new FakeHiddenSpaceSource(), @"E:\", default).WholeVolumeNameAsync());
+    }
+
+    /// <summary>
+    /// Naming the volume never waits on what Windows states about its hidden space, which can wait on
+    /// the Volume Shadow Copy service starting, so the kept scan is drawn in the first moments of the
+    /// scan.
+    /// </summary>
+    [Fact]
+    public async Task NamingTheVolumeNeverWaitsForTheHiddenSpace()
+    {
+        var volumes = new FakeVolumeInventory().With(@"D:\", totalBytes: 12_000, freeBytes: 6_000, volumeName: Named);
+        var naming = ScannedVolume.Start(volumes, new HiddenSpaceHeld(), @"D:\", default).WholeVolumeNameAsync();
+
+        Assert.Same(naming, await Task.WhenAny(naming, Task.Delay(Patience)));
+        Assert.Equal(Named, await naming);
+    }
+
+    /// <summary>A scan cancelled before its volume was read draws nothing, and naming it does not throw.</summary>
+    [Fact]
+    public async Task ACancelledScanNamesNoVolume()
+    {
+        var volumes = new FakeVolumeInventory().With(@"D:\", totalBytes: 12_000, freeBytes: 6_000, volumeName: Named);
+
+        Assert.Null(await ScannedVolume.Start(volumes, new FakeHiddenSpaceSource(), @"D:\", new CancellationToken(canceled: true)).WholeVolumeNameAsync());
+    }
+
     [Fact]
     public async Task AScanOfAFolderAsksWindowsNothing()
     {
@@ -180,6 +221,14 @@ public sealed class ScannedVolumeTests
         var name = await ScannedVolume.Start(volumes, new FakeHiddenSpaceSource(), @"D:\work", new CancellationToken(canceled: true)).NameAsync();
 
         Assert.Equal(@"\\?\Volume{d}\", name);
+    }
+
+    private const string Named = @"\\?\Volume{0b6f5c1e-3a7d-4c2b-9e10-6d2f1a4b8c33}\";
+
+    /// <summary>What Windows states about the hidden space, never answered, as a service that is still starting.</summary>
+    private sealed class HiddenSpaceHeld : IHiddenSpaceSource
+    {
+        public Task<HiddenSpace> ReadAsync(string volumeRoot, CancellationToken ct) => new TaskCompletionSource<HiddenSpace>().Task;
     }
 
     /// <summary>An inventory whose remembered list is read only once <c>gate</c> is set, as a dropped list is read slowly.</summary>
