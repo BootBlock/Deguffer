@@ -94,6 +94,13 @@ public interface IFileSystem
     /// </summary>
     long? TryGetNewestFileTime(string path);
 
+    /// <summary>
+    /// Deletes the file, or the link to a file, at <paramref name="path"/>, read-only or not, and
+    /// throws what <see cref="File.Delete"/> throws. A link is removed as itself, never followed.
+    ///
+    /// <para>A refusal leaves the file as it was, its read-only bit included. See
+    /// <see cref="EntryDeletion"/>.</para>
+    /// </summary>
     void DeleteFile(string path);
 
     /// <summary>
@@ -107,23 +114,16 @@ public interface IFileSystem
     /// </summary>
     RefusalReason? ProbeRemoval(string path);
 
-    /// <summary>Removes an empty directory; never recursive, so ordering stays the caller's.</summary>
+    /// <summary>
+    /// Removes an empty directory, or the link at <paramref name="path"/> without following it, read-only
+    /// or not, and throws what <see cref="Directory.Delete(string)"/> throws. Never recursive, so
+    /// ordering stays the caller's. A refusal leaves the directory as it was, as
+    /// <see cref="DeleteFile"/> leaves a file.
+    /// </summary>
     void DeleteDirectory(string path);
 
     /// <summary>
-    /// Resets every attribute on the entry, the read-only bit being the one that matters —
-    /// package manager caches set it liberally and it is what blocks a delete.
-    /// </summary>
-    void ClearAttributes(string path);
-
-    /// <summary>
-    /// The entry's attributes, or null when nothing is there.
-    ///
-    /// Asked before clearing them, so a directory whose removal was refused for some other reason
-    /// keeps the attributes it had. Windows reports a read-only directory's refusal as
-    /// <see cref="UnauthorizedAccessException"/> for a plain path and as a bare
-    /// <see cref="IOException"/> for the extended-length form §6.3 requires, so the exception
-    /// discriminates nothing and the attributes themselves are the only honest answer.
+    /// The entry's attributes, or null when nothing is there or Windows would not read them.
     /// </summary>
     FileAttributes? TryGetAttributes(string path);
 
@@ -193,13 +193,11 @@ public sealed class WindowsFileSystem : IFileSystem
         return directory.Exists ? MinimumAge.NewestFileTimeOf(directory) : null;
     }
 
-    public void DeleteFile(string path) => File.Delete(path);
+    public void DeleteFile(string path) => EntryDeletion.DeleteFile(path);
 
     public RefusalReason? ProbeRemoval(string path) => DeletionProbe.Probe(path);
 
-    public void DeleteDirectory(string path) => Directory.Delete(path, recursive: false);
-
-    public void ClearAttributes(string path) => File.SetAttributes(path, FileAttributes.Normal);
+    public void DeleteDirectory(string path) => EntryDeletion.DeleteDirectory(path);
 
     // Both extend the path themselves, as File.GetAttributes did: a caller behind this seam may hand
     // over either form.

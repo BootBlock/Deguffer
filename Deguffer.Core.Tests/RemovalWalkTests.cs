@@ -127,12 +127,12 @@ public sealed class RemovalWalkTests : IDisposable
     }
 
     /// <summary>
-    /// The read-only bit the listing saw is cleared before the file's first delete. Waiting for Windows
-    /// to refuse the delete cost a thrown exception and a second delete for every such file, and package
-    /// manager caches set the bit on all of them.
+    /// A read-only file goes in one call to the seam, with no refusal thrown first and no second call
+    /// to clear its bit. Each of those cost every such file another open, and package manager caches
+    /// set the bit on all of them.
     /// </summary>
     [Fact]
-    public async Task ClearsAReadOnlyBitBeforeTheFirstDelete()
+    public async Task DeletesAReadOnlyFileInOneCall()
     {
         var root = _temp.CreateDirectory("cache");
         var locked = _temp.CreateFile(128, "cache", "pkg", "locked.bin");
@@ -150,8 +150,9 @@ public sealed class RemovalWalkTests : IDisposable
         Assert.True(outcome!.RootRemoved);
         Assert.Equal(192, outcome.BytesReclaimed);
 
-        // Cleared once and deleted once. A delete refused for the bit would add a second delete.
-        Assert.Equal(2, recording.Paths.Count(path => path == LongPath.Extended(locked)));
+        // Deleted once, as the writable file beside it is. A clear first, or a retry after a refusal,
+        // would add a second call.
+        Assert.Equal(1, recording.Paths.Count(path => path == LongPath.Extended(locked)));
         Assert.Equal(1, recording.Paths.Count(path => path == LongPath.Extended(plain)));
 
         // §6.3 through the seam, and §5.6: what stood beside the tree is still there.

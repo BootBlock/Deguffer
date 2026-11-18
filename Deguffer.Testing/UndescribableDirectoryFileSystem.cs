@@ -67,8 +67,6 @@ public sealed class UndescribableDirectoryFileSystem(IFileSystem inner, string r
 
     public void DeleteDirectory(string path) => inner.DeleteDirectory(path);
 
-    public void ClearAttributes(string path) => inner.ClearAttributes(path);
-
     /// <summary>
     /// Null for the refused directory, as <see cref="WindowsFileSystem"/> answers when the read of
     /// the attributes fails. Delegating would describe the real directory underneath.

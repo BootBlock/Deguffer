@@ -10,8 +10,8 @@ namespace Deguffer.Benchmark;
 /// nothing more while it is removed.</para>
 /// </summary>
 /// <param name="ReadOnly">
-/// Whether every file carries the read-only attribute, which a removal has to clear before Windows
-/// lets it delete the file.
+/// Whether every file carries the read-only attribute, which Windows refuses to delete through
+/// <c>DeleteFileW</c> and which the removal deletes by telling Windows to ignore it.
 /// </param>
 internal sealed record TreeShape(long Files, int Depth, int Fanout, bool ReadOnly = false)
 {

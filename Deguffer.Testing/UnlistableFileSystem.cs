@@ -53,8 +53,6 @@ public sealed class UnlistableFileSystem(IFileSystem inner, string refused, bool
 
     public void DeleteDirectory(string path) => inner.DeleteDirectory(path);
 
-    public void ClearAttributes(string path) => inner.ClearAttributes(path);
-
     public FileAttributes? TryGetAttributes(string path) => inner.TryGetAttributes(path);
 
     public bool MayExist(string path) => inner.MayExist(path);

@@ -449,10 +449,10 @@ public sealed class DirectoryRemoverTests : IDisposable
     ///
     /// Windows refuses to remove a directory carrying <c>FILE_ATTRIBUTE_READONLY</c>, exactly as it
     /// refuses a read-only file — observed directly on this machine, where
-    /// <c>Directory.Delete</c> on one throws <see cref="UnauthorizedAccessException"/>. The file
-    /// path has always cleared the bit and retried; the directory path did not, so every file in
-    /// the tree went and the directory stayed. The step then reports success, because bytes were
-    /// reclaimed, and the folder the user was told would go is still on the disk.
+    /// <c>Directory.Delete</c> on one throws <see cref="UnauthorizedAccessException"/>. A removal that
+    /// deleted read-only files and not read-only directories would take every file in the tree and
+    /// leave the directory, and the step would report success, because bytes were reclaimed, with
+    /// the folder the user was told would go still on the disk.
     /// </summary>
     [Fact]
     public async Task RemovesADirectoryWhoseReadOnlyBitWouldOtherwiseBlockIt()
@@ -471,9 +471,9 @@ public sealed class DirectoryRemoverTests : IDisposable
     }
 
     /// <summary>
-    /// The other half of the same retry, and the reason it is gated on emptiness. A directory that
-    /// still holds something is one the removal is leaving standing, so its attributes are left
-    /// exactly as they were rather than reset on a path that survives.
+    /// The other half of the same rule. A directory that still holds something is one the removal
+    /// is leaving standing, so its attributes are left exactly as they were rather than reset on a
+    /// path that survives.
     /// </summary>
     [Fact]
     public async Task LeavesAReadOnlyDirectoryUntouchedWhileSomethingInsideItIsStillHeld()
@@ -495,9 +495,10 @@ public sealed class DirectoryRemoverTests : IDisposable
     }
 
     /// <summary>
-    /// The same gate where the folder will not be listed. A refused listing says nothing about what
-    /// the folder holds, so it is not read as empty, and a folder the removal leaves standing keeps
-    /// the attributes it had.
+    /// The same where the folder will not be listed. A refused listing says nothing about what the
+    /// folder holds, so nothing in it is deleted, and Windows refuses the folder for what is still
+    /// inside: it stays with the attributes it had. An unlisted folder that is truly empty goes, as a
+    /// writable one always did, because Windows removes only an empty folder.
     /// </summary>
     [Fact]
     public async Task LeavesAReadOnlyDirectoryUntouchedWhenItsListingIsRefused()
@@ -505,17 +506,40 @@ public sealed class DirectoryRemoverTests : IDisposable
         var root = _temp.CreateDirectory("cache");
         var free = _temp.CreateFile(1024, "cache", "free.bin");
         var directory = _temp.CreateDirectory("cache", "unlisted");
+        var unseen = _temp.CreateFile(64, "cache", "unlisted", "unseen.bin");
         File.SetAttributes(directory, File.GetAttributes(directory) | FileAttributes.ReadOnly);
 
         var outcome = await DirectoryRemover.RemoveAsync(
             root, fileSystem: new UnlistableFileSystem(WindowsFileSystem.Default, directory));
 
         Assert.True(Directory.Exists(directory));
+        Assert.True(File.Exists(unseen), "a file in a folder the removal could not list was deleted");
         Assert.True(
             File.GetAttributes(directory).HasFlag(FileAttributes.ReadOnly),
             "a directory that survived the removal had its attributes reset");
         Assert.False(File.Exists(free));
         Assert.False(outcome.RootRemoved);
+    }
+
+    /// <summary>
+    /// The other side of the same case: an unlisted read-only folder that is empty on disk goes, as a
+    /// writable one does, because Windows removes only an empty folder and nothing in it can be lost.
+    /// What stands beside the removal is untouched (§5.6).
+    /// </summary>
+    [Fact]
+    public async Task RemovesAnEmptyReadOnlyDirectoryWhoseListingIsRefused()
+    {
+        var root = _temp.CreateDirectory("cache");
+        var directory = _temp.CreateDirectory("cache", "unlisted");
+        var beside = _temp.CreateFile(64, "beside.bin");
+        File.SetAttributes(directory, File.GetAttributes(directory) | FileAttributes.ReadOnly);
+
+        var outcome = await DirectoryRemover.RemoveAsync(
+            root, fileSystem: new UnlistableFileSystem(WindowsFileSystem.Default, directory));
+
+        Assert.False(Directory.Exists(directory), "an empty read-only folder the removal could not list survived");
+        Assert.True(outcome.RootRemoved);
+        Assert.True(File.Exists(beside), "the removal reached beside its root");
     }
 
     [Fact]
@@ -547,9 +571,7 @@ public sealed class DirectoryRemoverTests : IDisposable
     ///
     /// <para>The defect in issue #117: Windows refused every file in guarded browser
     /// profiles, the removal counted each as a skip, and the run said a quarter of a million items
-    /// were "in use" about 5.9 GB nothing would ever release. The read-only retry is what makes the
-    /// classification easy to get wrong, because the first refusal is always an access refusal —
-    /// the reason has to come from the second attempt.</para>
+    /// were "in use" about 5.9 GB nothing would ever release.</para>
     /// </summary>
     [Fact]
     public async Task ReportsAFileWindowsDeniesAsDeniedRatherThanInUse()
@@ -670,8 +692,8 @@ public sealed class DirectoryRemoverTests : IDisposable
     /// <c>LongPathsEnabled</c> registry value set.
     ///
     /// The form of the path is what remains observable, and it discriminates everywhere. The tree
-    /// below covers each branch that touches the filesystem: enumeration, a plain delete, the
-    /// read-only retry, directory removal, and the reparse point.
+    /// below covers each branch that touches the filesystem: enumeration, a plain delete, a
+    /// read-only file, directory removal, and the reparse point.
     /// </summary>
     [Fact]
     public async Task HandsEveryPathToTheFilesystemInExtendedLengthForm()

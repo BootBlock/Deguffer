@@ -266,9 +266,8 @@ internal static class RemovalWalk
         public string FoundAs => foundAs;
 
         /// <summary>
-        /// Every file in it the guard and the bounds leave to the removal, as the listing read it: its
-        /// length, and the attributes that say whether its read-only bit has to be cleared before it
-        /// can go.
+        /// Every file in it the guard and the bounds leave to the removal, as the listing read it, with
+        /// its length.
         /// </summary>
         public IReadOnlyList<WalkEntry> Files => _files ?? [];
 

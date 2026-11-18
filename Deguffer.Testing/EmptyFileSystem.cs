@@ -49,8 +49,6 @@ public sealed class EmptyFileSystem : IFileSystem
 
     public void DeleteDirectory(string path) => throw NotFound(path);
 
-    public void ClearAttributes(string path) => throw NotFound(path);
-
     private static DirectoryNotFoundException NotFound(string path) =>
         new($"Could not find a part of the path '{path}'.");
 

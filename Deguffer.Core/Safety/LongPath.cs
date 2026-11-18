@@ -326,9 +326,6 @@ public static partial class LongPath
         206 or    // ERROR_FILENAME_EXCED_RANGE
         1231;     // ERROR_NETWORK_UNREACHABLE
 
-    /// <summary><c>ERROR_DIRECTORY</c>: what an open of a file named with a trailing separator fails with.</summary>
-    internal const int ErrorDirectory = 267;
-
     /// <summary>
     /// Whether a handle that would not open on a path, failing with <paramref name="win32Error"/>,
     /// says nothing is there: the answer <see cref="ProbeEntry(string)"/> gives for the same path,
@@ -341,7 +338,7 @@ public static partial class LongPath
     /// </para>
     /// </summary>
     internal static bool OpenSaysNothingIsThere(int win32Error) =>
-        SaysNothingIsThere(win32Error) || win32Error == ErrorDirectory;
+        SaysNothingIsThere(win32Error) || win32Error == Win32Error.NotADirectory;
 
     internal static bool EndsWithSeparator(string path) =>
         path.EndsWith(Path.DirectorySeparatorChar) || path.EndsWith(Path.AltDirectorySeparatorChar);
