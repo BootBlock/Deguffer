@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.History;
+using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Viewing;
 
@@ -116,6 +117,45 @@ public sealed partial class ExploreGrowth : ObservableObject
     /// </summary>
     public bool Opens(ExploreTree? tree, ExploreGrowthRow row) =>
         Comparison is { } growth && growth.Opens(tree, row.Node) && Rows.Contains(row);
+
+    /// <summary>
+    /// Compare a finished scan with the last kept scan of its volume, keep it for the next one, and
+    /// show what that produced. Only a scan of a whole volume is kept, because a summary of one folder
+    /// says nothing about what else on the drive grew.
+    ///
+    /// <para>Not cancellable. The scan has finished by now, the work is a pass over folders already
+    /// in memory and one small file, and a cancel arriving during it would otherwise throw away the
+    /// finished scan along with it.</para>
+    /// </summary>
+    /// <param name="scanned">The reading of the volume the scan was taken of, which names it.</param>
+    /// <param name="space">The volume's space beside the finished scan. See <see cref="ScanHistory.Record"/>.</param>
+    /// <param name="scoped">Whether the scan was started on a folder rather than a drive.</param>
+    /// <param name="onScreen">The tree the page shows once the record is made.</param>
+    public async Task RecordAsync(
+        ExploreScan scan,
+        ScannedVolume scanned,
+        VolumeSpace space,
+        bool scoped,
+        IVolumeInventory volumes,
+        TimeProvider time,
+        Func<ExploreTree?> onScreen)
+    {
+        ArgumentNullException.ThrowIfNull(scan);
+        ArgumentNullException.ThrowIfNull(scanned);
+
+        var volume = await scanned.NameAsync();
+        var taken = time.GetUtcNow().UtcDateTime;
+
+        var record = await Task.Run(() =>
+            _history.Record(scan, volume, space, ScanHistory.CoverageOf(scan.Tree.PathOf(scan.Tree.RootNode), scoped, volumes), taken));
+
+        // A comparison describes one scan, and the page can have moved to another while this ran.
+        // Shown only for the scan it was taken from, or what a removal left of it.
+        if (ReferenceEquals(onScreen()?.Scanned, scan.Tree))
+        {
+            Show(record);
+        }
+    }
 
     /// <summary>Show what recording a finished scan produced.</summary>
     public void Show(ScanRecord record)

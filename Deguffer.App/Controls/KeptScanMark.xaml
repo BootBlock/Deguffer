@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    What the Explore map is while it draws the last kept scan of the drive being scanned (#491): the
+    drive as it was, not as it is.
+
+    Apart from the notes, because the reader cannot put it away: a picture of the past read as the
+    present is what §7.1 forbids. Over the top of the picture rather than above it, so the map is not
+    resized as it comes and goes. It lets the pointer through, as the notes' sentences do, and nothing
+    on the map answers the pointer while it shows anyway. On a ground of its own for the reason the
+    notes have one: an InfoBar's tint alone over a treemap is not readable.
+-->
+<UserControl
+    x:Class="Deguffer.App.Controls.KeptScanMark"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False"
+    IsHitTestVisible="False"
+    HorizontalAlignment="Center"
+    VerticalAlignment="Top"
+    Margin="12">
+
+    <Border CornerRadius="{ThemeResource ControlCornerRadius}"
+            Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
+        <InfoBar IsOpen="True"
+                 IsClosable="False"
+                 Severity="Informational"
+                 Message="{x:Bind Scan.Mark, Mode=OneWay}"
+                 AutomationProperties.AutomationId="KeptScanMark"
+                 AutomationProperties.HelpText="{x:Bind Scan.Help, Mode=OneWay}" />
+    </Border>
+</UserControl>

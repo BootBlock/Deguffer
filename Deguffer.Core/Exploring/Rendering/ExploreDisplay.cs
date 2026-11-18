@@ -20,13 +20,18 @@ namespace Deguffer.Core.Exploring.Rendering;
 /// Whether the map is drawn in a high contrast theme's two colours, in which its colours say nothing.
 /// </param>
 /// <param name="Listing">What the Files layout lists, which decides whether its side panel is open.</param>
+/// <param name="Kept">
+/// The last kept scan of the drive being scanned, drawn until the scan has a tree, or null. See
+/// <see cref="History.KeptScanShown"/>.
+/// </param>
 public readonly record struct ExploreDisplay(
     ISizedTree? Tree,
     ExploreView View,
     ExploreColouring Colouring,
     MapLook Look,
     bool InContrast,
-    FileListing Listing = FileListing.LargestFiles)
+    FileListing Listing = FileListing.LargestFiles,
+    History.KeptScanTree? Kept = null)
 {
     /// <summary>
     /// The colours the picture is drawn in, and so the legend beside it: each picture keeps its own,
@@ -74,6 +79,24 @@ public readonly record struct ExploreDisplay(
     /// reader has stopped asking by asking this one.
     /// </summary>
     public bool ShowsShortcutFolders => SearchesFiles && Listing == FileListing.BrokenLinks && Tree is not null;
+
+    /// <summary>
+    /// Whether the view on screen draws a picture rather than a list, so the map is on the card.
+    /// </summary>
+    public bool DrawsPicture => View is not (ExploreView.List or ExploreView.Files);
+
+    /// <summary>
+    /// Whether the map draws <see cref="Kept"/>, with the line over it that says what it is: only in a
+    /// view that draws a picture. A list of a drive as it was is not offered, so a list waits for the
+    /// scan as it did.
+    /// </summary>
+    public bool ShowsKept => Kept is not null && DrawsPicture;
+
+    /// <summary>
+    /// Whether to show the empty state: nothing scanned and nothing kept on the map. A large blank card
+    /// reads as a screen that has failed rather than one waiting to be told to start.
+    /// </summary>
+    public bool ShowsEmptyState => Tree is null && !ShowsKept;
 
     /// <summary>
     /// Whether the largest files below the folder on screen are searched for: only while the Files

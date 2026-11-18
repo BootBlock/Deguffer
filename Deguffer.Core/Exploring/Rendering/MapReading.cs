@@ -44,10 +44,11 @@ public sealed class MapReading
 
     /// <summary>
     /// Whether anything drawn of <paramref name="tree"/> answers the pointer. A step of a replay of
-    /// what grew does not: it is a picture of what the disk held, part of it estimated, and nothing in
-    /// it can be picked, opened or removed (§7.1). See <see cref="GrowthReplay"/>.
+    /// what grew does not, nor does the last kept scan of a drive drawn while a new scan of it runs:
+    /// each is a picture of what the disk held, and nothing in it can be picked, opened or removed
+    /// (§7.1). See <see cref="GrowthReplay"/> and <see cref="KeptScanTree"/>.
     /// </summary>
-    public static bool Answers(ISizedTree? tree) => tree is not GrowthReplayFrame;
+    public static bool Answers(ISizedTree? tree) => tree is not (GrowthReplayFrame or KeptScanTree);
 
     /// <summary>
     /// How a drawing of <paramref name="drawn"/> is read in <paramref name="current"/>, or null where

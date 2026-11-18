@@ -24,6 +24,9 @@ public sealed class ScannedVolume
 
     private readonly string _scannedRoot;
 
+    /// <summary>The volume's space as the scan started, or <see cref="VolumeSpace.None"/> where it covers a folder.</summary>
+    private readonly Task<VolumeSpace> _space;
+
     private readonly Task<(VolumeSpace Space, HiddenSpace Hidden)> _read;
 
     private readonly Task<IReadOnlyList<LocalVolume>> _refreshed;
@@ -31,11 +34,13 @@ public sealed class ScannedVolume
     private ScannedVolume(
         IVolumeInventory volumes,
         string scannedRoot,
+        Task<VolumeSpace> space,
         Task<(VolumeSpace Space, HiddenSpace Hidden)> read,
         Task<IReadOnlyList<LocalVolume>> refreshed)
     {
         _volumes = volumes;
         _scannedRoot = scannedRoot;
+        _space = space;
         _read = read;
         _refreshed = refreshed;
     }
@@ -63,20 +68,23 @@ public sealed class ScannedVolume
     {
         ArgumentNullException.ThrowIfNull(hidden);
 
+        var space = Task.Run(() => VolumeSpace.Of(volumes, scannedRoot), ct);
+
         return new ScannedVolume(
             volumes,
             scannedRoot,
-            ReadAsync(volumes, hidden, scannedRoot, ct),
+            space,
+            ReadAsync(space, hidden, scannedRoot, ct),
             volumes.RefreshAsync(ct));
     }
 
     private static async Task<(VolumeSpace Space, HiddenSpace Hidden)> ReadAsync(
-        IVolumeInventory volumes,
+        Task<VolumeSpace> reading,
         IHiddenSpaceSource hidden,
         string scannedRoot,
         CancellationToken ct)
     {
-        var space = await Task.Run(() => VolumeSpace.Of(volumes, scannedRoot), ct).ConfigureAwait(false);
+        var space = await reading.ConfigureAwait(false);
 
         return space == VolumeSpace.None
             ? (space, HiddenSpace.None)
@@ -124,5 +132,33 @@ public sealed class ScannedVolume
         }
 
         return HostVolume.For(_volumes, _scannedRoot)?.VolumeName;
+    }
+
+    /// <summary>
+    /// The name of the volume the scan covers the whole of, for the last kept scan of it to be drawn
+    /// while the scan runs (#491), or null where the scan covers a folder, where no volume holds it, or
+    /// where it was cancelled first.
+    ///
+    /// <para>Never waits for what Windows states about the hidden space, which can wait on the Volume
+    /// Shadow Copy service starting. The name is <see cref="NameAsync"/>'s, from the list read again as
+    /// the scan started, so the picture and the comparison a finished scan is given are of one
+    /// volume.</para>
+    /// </summary>
+    public async Task<string?> WholeVolumeNameAsync()
+    {
+        try
+        {
+            if (await _space.ConfigureAwait(false) == VolumeSpace.None)
+            {
+                return null;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The scan was cancelled before its volume was read, and a cancelled scan draws nothing.
+            return null;
+        }
+
+        return await NameAsync().ConfigureAwait(false);
     }
 }

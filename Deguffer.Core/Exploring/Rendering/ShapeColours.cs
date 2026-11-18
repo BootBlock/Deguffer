@@ -93,6 +93,15 @@ public abstract class ShapeColours
     }
 
     /// <summary>
+    /// The last kept scan of a drive, drawn while a new scan of it runs (<see cref="KeptScanTree"/>):
+    /// by depth where <paramref name="colouring"/> asks for it, and by branch otherwise. A date, a
+    /// growth and a kind of file are facts about a scanned tree, and a kept scan recorded none of them,
+    /// so a map coloured by any of those is coloured by branch until the new scan draws.
+    /// </summary>
+    public static ShapeColours ForKept(ExploreColouring colouring, ExploreScheme scheme) =>
+        colouring == ExploreColouring.Depth ? ByDepth : ByBranch(scheme);
+
+    /// <summary>
     /// Every shape in the window colour of a high contrast theme, with its edges in the theme's text
     /// colour, and nothing shaded. See <see cref="ContrastColours"/>. Describes any tree, as a branch
     /// colouring does.

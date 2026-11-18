@@ -725,8 +725,9 @@ hour and a half.
 **What else #254 asked, and what the measurement leaves of it.**
 
 - **Reopening the tool is already quick for the cleanup view.** `ScanEstimateCache` shows the last
-  figures at once and measures afresh behind them (§5.5). Explore keeps nothing between runs, and on
-  the system volume it reads the table in about 5 seconds after #249.
+  figures at once and measures afresh behind them (§5.5). Explore keeps no tree between runs, but it
+  draws the last kept scan of a drive while it reads the drive again (#491), and on the system
+  volume it reads the table in about 5 seconds after #249.
 - **Within one run the journal does not help either.** Explore and the cleanup index each read the
   table, and sharing one snapshot brought up to date from the journal would save the second read.
   The snapshot would have to keep every file's name, which the index does not keep, and stay in
