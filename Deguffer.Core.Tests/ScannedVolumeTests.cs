@@ -223,7 +223,6 @@ public sealed class ScannedVolumeTests
         Assert.Equal(@"\\?\Volume{d}\", name);
     }
 
-    /// <summary>An inventory whose remembered list is read only once <c>gate</c> is set, as a dropped list is read slowly.</summary>
     private const string Named = @"\\?\Volume{0b6f5c1e-3a7d-4c2b-9e10-6d2f1a4b8c33}\";
 
     /// <summary>What Windows states about the hidden space, never answered, as a service that is still starting.</summary>
@@ -232,6 +231,7 @@ public sealed class ScannedVolumeTests
         public Task<HiddenSpace> ReadAsync(string volumeRoot, CancellationToken ct) => new TaskCompletionSource<HiddenSpace>().Task;
     }
 
+    /// <summary>An inventory whose remembered list is read only once <c>gate</c> is set, as a dropped list is read slowly.</summary>
     private sealed class ListHeldUntil(ManualResetEventSlim gate, IVolumeInventory machine) : IVolumeInventory
     {
         public IReadOnlyList<LocalVolume> Volumes

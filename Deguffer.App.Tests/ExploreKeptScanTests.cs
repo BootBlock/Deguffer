@@ -2,6 +2,7 @@ using Deguffer.App.ViewModels;
 using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.History;
+using Deguffer.Core.Exploring.Rendering;
 
 namespace Deguffer.App.Tests;
 
@@ -218,11 +219,12 @@ public sealed class ExploreKeptScanTests : IDisposable
     });
 
     /// <summary>
-    /// §7.1: nothing on the kept scan can be removed. The page answers nothing about its shapes, and a
-    /// pick on it leaves nothing Delete would act on.
+    /// §7.1: nothing on the kept scan can be removed. The tree the page hands the map answers no
+    /// pointer, so the map picks nothing on it, the page answers nothing about its shapes, and a pick
+    /// on it leaves nothing Delete would act on.
     /// </summary>
     [Fact]
-    public void APickOnTheKeptScanCannotBeRemoved() => UiThread.Run(async () =>
+    public void NothingOnTheKeptScanAnswersThePointerOrCanBeRemoved() => UiThread.Run(async () =>
     {
         await KeptAsync();
         var page = _explore.Page();
@@ -230,7 +232,10 @@ public sealed class ExploreKeptScanTests : IDisposable
         var running = page.ScanCommand.ExecuteAsync(null);
         await page.KeptScan.Lookup;
 
-        var kept = page.KeptScan.Tree!;
+        var kept = page.KeptScan.Tree;
+        Assert.NotNull(kept);
+        Assert.False(MapReading.Answers(kept));
+
         var logs = kept.ChildrenOf(kept.RootNode)[1];
         Assert.Equal("Logs", kept.NameOf(logs));
 

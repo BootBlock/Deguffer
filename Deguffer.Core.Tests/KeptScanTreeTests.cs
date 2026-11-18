@@ -175,7 +175,6 @@ public class KeptScanTreeTests
         Assert.False(MapReading.Answers(kept));
         Assert.Null(MapReading.Of(kept, now));
         Assert.Null(MapReading.Of(now, kept));
-        Assert.Null(ShownTree.Of(kept, now, Node(kept, "Logs")));
         Assert.True(MapReading.Answers(now));
     }
 
@@ -212,8 +211,40 @@ public class KeptScanTreeTests
     [InlineData(ExploreView.Tree, true)]
     [InlineData(ExploreView.List, false)]
     [InlineData(ExploreView.Files, false)]
-    public void OnlyTheViewsThatDrawAPictureDrawOne(ExploreView view, bool draws) =>
-        Assert.Equal(draws, new ExploreDisplay(null, view, ExploreColouring.Branch, MapLook.Default, InContrast: false).DrawsPicture);
+    public void OnlyTheViewsThatDrawAPictureDrawOne(ExploreView view, bool draws)
+    {
+        var kept = Kept(Tree(("Logs", 10 * Megabyte)));
+        var display = new ExploreDisplay(null, view, ExploreColouring.Branch, MapLook.Default, InContrast: false, Kept: kept);
+
+        Assert.Equal(draws, display.DrawsPicture);
+        Assert.Equal(draws, display.ShowsKept);
+        Assert.Equal(!draws, display.ShowsEmptyState);
+    }
+
+    /// <summary>The empty state shows only with nothing scanned and no kept scan on the map.</summary>
+    [Fact]
+    public void TheEmptyStateGivesWayToATreeOrAKeptScan()
+    {
+        var drive = Tree(("Logs", 10 * Megabyte));
+
+        Assert.True(new ExploreDisplay(null, ExploreView.Treemap, ExploreColouring.Branch, MapLook.Default, false).ShowsEmptyState);
+        Assert.False(new ExploreDisplay(drive, ExploreView.Treemap, ExploreColouring.Branch, MapLook.Default, false).ShowsEmptyState);
+        Assert.False(new ExploreDisplay(null, ExploreView.Treemap, ExploreColouring.Branch, MapLook.Default, false).ShowsKept);
+        Assert.False(new ExploreDisplay(null, ExploreView.Treemap, ExploreColouring.Branch, MapLook.Default, false, Kept: Kept(drive)).ShowsEmptyState);
+    }
+
+    /// <summary>Only folders are recorded, so a file or a link with a recorded folder's name is no counterpart of it, either way.</summary>
+    [Fact]
+    public void AFileWithARecordedFoldersNameIsNotThatFolder()
+    {
+        var kept = Kept(Tree(("Logs", 10 * Megabyte)));
+        var builder = new ExploreTreeBuilder(@"C:\");
+        builder.AddChildren(ExploreTreeBuilder.RootNode, [new ExploreChild("Logs", IsDirectory: false, IsLink: false, Size: 5 * Megabyte)]);
+        var now = builder.Build(ExploreChildOrder.BySize);
+
+        Assert.Null(kept.CounterpartsIn(now)!(Node(kept, "Logs")));
+        Assert.Null(now.CounterpartsIn(kept)!(Child(now, "Logs")));
+    }
 
     /// <summary>
     /// A scan that starts looks for the kept scan, shows what is offered for it, and drops it once it

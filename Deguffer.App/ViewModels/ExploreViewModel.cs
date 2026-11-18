@@ -429,7 +429,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     public ExploreScheme SelectedScheme => Display.Scheme;
 
     /// <summary>What the page shows round its picture, from what it is showing. See <see cref="ExploreDisplay"/>.</summary>
-    private ExploreDisplay Display => new(Tree, SelectedView, SelectedColouring, Look, MapInContrast, Files.Listing);
+    private ExploreDisplay Display => new(Tree, SelectedView, SelectedColouring, Look, MapInContrast, Files.Listing, KeptScan.Tree);
 
     /// <summary>What each colour on the map means. See <see cref="MapLegend"/>.</summary>
     public ObservableCollection<ExploreLegendBand> Legend { get; } = [];
@@ -512,14 +512,11 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
 
     public bool HasTree => Tree is not null;
 
-    /// <summary>
-    /// Whether to show the empty state instead of a picture. A large blank card reads as a screen
-    /// that has failed rather than one waiting to be told to start. Not while the map draws a kept scan.
-    /// </summary>
-    public bool HasNoTree => Tree is null && !ShowsKept;
+    /// <summary>Whether to show the empty state instead of a picture. See <see cref="ExploreDisplay.ShowsEmptyState"/>.</summary>
+    public bool HasNoTree => Display.ShowsEmptyState;
 
-    /// <summary>Whether the map draws <see cref="KeptScan"/>: only in a view that draws a picture, not in a list.</summary>
-    public bool ShowsKept => KeptScan.Tree is not null && Display.DrawsPicture;
+    /// <summary>Whether the map draws <see cref="KeptScan"/>. See <see cref="ExploreDisplay.ShowsKept"/>.</summary>
+    public bool ShowsKept => Display.ShowsKept;
 
     /// <summary>
     /// Whether the rows are being rewritten from here: this folder's (<see cref="ExploreRows.IsShowing"/>),

@@ -143,7 +143,7 @@ public sealed class KeptScanTree : ITrackedTree
     public ExploreChildOrder ChildOrder => ExploreChildOrder.BySize;
 
     /// <summary>How many nodes this numbers: every recorded folder, then each block of what one did not record.</summary>
-    public int NodeCount => _parents.Length;
+    internal int NodeCount => _parents.Length;
 
     public long SizeOf(int node) => _sizes[node];
 
@@ -173,7 +173,8 @@ public sealed class KeptScanTree : ITrackedTree
 
     /// <summary>
     /// Find each recorded folder in a scan of the same volume, by name, folder under folder, from the
-    /// root down, as <see cref="ScanGrowth"/> matches a summary: the root is the volume's whatever
+    /// root down, as <see cref="ScanGrowth"/> matches a summary and through the same lookup
+    /// (<see cref="ScanGrowth.FolderNamed"/>): the root is the volume's whatever
     /// letter it wears now (<see cref="RootPath"/>). A block of what was not recorded has no
     /// counterpart, and a tree rooted anywhere else is of something else.
     /// </summary>
@@ -194,24 +195,11 @@ public sealed class KeptScanTree : ITrackedTree
                 return known;
             }
 
-            int? there = null;
-
-            if (node < Summary.Folders.Count && Find(_parents[node]) is { } parent)
-            {
-                if (!names.TryGetValue(parent, out var children))
-                {
-                    children = new ChildrenByName(scanned);
-
-                    foreach (var child in scanned.ChildrenOf(parent))
-                    {
-                        children.Add(child);
-                    }
-
-                    names[parent] = children;
-                }
-
-                there = children.Find(Summary.Folders[node].Name);
-            }
+            int? there = node < Summary.Folders.Count
+                && Find(_parents[node]) is { } parent
+                && ScanGrowth.FolderNamed(scanned, parent, Summary.Folders[node].Name, names) is >= 0 and var folder
+                    ? folder
+                    : null;
 
             found[node] = there;
 
@@ -228,7 +216,8 @@ public sealed class KeptScanTree : ITrackedTree
     /// <summary>
     /// The way back from <see cref="CounterpartsIn"/>: each node of <paramref name="earlier"/>, a scan
     /// rooted where this tree is (<see cref="IsOf"/>), as this tree numbers it, or null where the kept
-    /// scan did not record it.
+    /// scan did not record it. Only a folder, as only folders are recorded: a file or a link of a
+    /// recorded folder's name is not that folder.
     /// </summary>
     internal Func<int, int?> CounterpartsFrom(ExploreTree earlier)
     {
@@ -244,7 +233,9 @@ public sealed class KeptScanTree : ITrackedTree
             var parent = earlier.ParentOf(node);
 
             // A node with no parent other than itself and not the root is one the tree cannot place.
-            var there = parent != node && Find(parent) is { } folder ? Recorded(folder, earlier.NameSpanOf(node)) : null;
+            var there = parent != node && earlier.IsDirectory(node) && !earlier.IsLink(node) && Find(parent) is { } folder
+                ? Recorded(folder, earlier.NameSpanOf(node))
+                : null;
 
             found[node] = there;
 

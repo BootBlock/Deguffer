@@ -415,7 +415,7 @@ public sealed class ScanGrowth
     /// folder in it (G4). Where a case-sensitive folder holds two names that differ only in case, the
     /// first one the tree lists answers.</para>
     /// </summary>
-    private static int FolderNamed(
+    internal static int FolderNamed(
         ExploreTree tree, int parent, string name, Dictionary<int, ChildrenByName> children)
     {
         if (!children.TryGetValue(parent, out var named))
