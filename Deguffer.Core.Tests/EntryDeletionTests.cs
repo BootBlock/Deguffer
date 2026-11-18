@@ -254,12 +254,14 @@ public sealed class EntryDeletionTests : IDisposable
     {
         var path = Arrange("full", out _);
         File.SetAttributes(path, File.GetAttributes(path) | FileAttributes.ReadOnly);
+        var changed = ChangeTimeOf(path);
 
         var refused = Assert.IsType<IOException>(Record.Exception(() => EntryDeletion.DeleteDirectory(path)));
 
         Assert.Equal(Win32Error.DirectoryNotEmpty, refused.HResult & 0xFFFF);
         Assert.True(Directory.Exists(path));
         Assert.True(File.GetAttributes(path).HasFlag(FileAttributes.ReadOnly));
+        Assert.Equal(changed, ChangeTimeOf(path));
         File.SetAttributes(path, FileAttributes.Directory);
     }
 
@@ -303,9 +305,10 @@ public sealed class EntryDeletionTests : IDisposable
         Assert.Equal(expected, EntryDeletion.RouteFor(described, asDirectory).ToString());
     }
 
-    private static long ChangeTimeOf(string file)
+    private static long ChangeTimeOf(string entry)
     {
-        using var handle = File.OpenHandle(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        // FILE_READ_ATTRIBUTES, every share, OPEN_EXISTING, and backup semantics so a folder opens too.
+        using var handle = FileInformation.CreateFile(LongPath.Extended(entry), 0x0080, 0x0007, 0, 3, 0x0200_0000, 0);
 
         Assert.True(FileInformation.TryBasic(handle, out var basic));
         return basic.ChangeTime;
