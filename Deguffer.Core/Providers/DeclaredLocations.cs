@@ -1,5 +1,6 @@
 using Deguffer.Core.Execution;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Providers;
 
@@ -210,8 +211,9 @@ public static class DeclaredLocations
         var isFile = location.Kind == DeclaredLocationKind.File;
 
         bool? pathIsLink;
+        var ownTime = OneLevelAge.Unknown;
 
-        switch (isFile ? LongPath.ProbeFile(path, out pathIsLink) : LongPath.ProbeDirectory(path, out pathIsLink))
+        switch (isFile ? LongPath.ProbeFile(path, out pathIsLink) : LongPath.ProbeDirectory(path, out pathIsLink, out ownTime))
         {
             case PathPresence.Refused:
                 Unreachable(path, unreachable, protectedPaths, notes);
@@ -246,7 +248,15 @@ public static class DeclaredLocations
         targets.Add(new DeletionTarget(
             path,
             location.Reason,
-            location.ReportsAge && isFile ? FileLastWritten(path) : null,
+            location.Age switch
+            {
+                DeclaredLocationAge.Unreported => null,
+                _ when isFile => FileLastWritten(path),
+                DeclaredLocationAge.Itself => OneLevelAge.ToUtc(ownTime),
+
+                // Dated with the rest of the plan's directories, in one bounded step.
+                _ => null,
+            },
             location.Kind switch
             {
                 DeclaredLocationKind.File => TargetKind.File,
@@ -254,7 +264,7 @@ public static class DeclaredLocations
                 _ => TargetKind.Directory,
             },
             root.RequiresElevation,
-            DatedOneLevelDown: location.ReportsAge && !isFile));
+            DatedOneLevelDown: location.Age is DeclaredLocationAge.OneLevelDown && !isFile));
     }
 
     /// <summary>
@@ -314,8 +324,8 @@ public static class DeclaredLocations
     ///
     /// One level is enough for the locations declared here because their own children are the things
     /// being written: the logs and dumps sit directly inside, and where a report is a directory of
-    /// its own, its arrival moves the parent. Where that does not hold, the location says so and is
-    /// never asked — see <see cref="DeclaredLocation.ReportsAge"/>.
+    /// its own, its arrival moves the parent. Where that does not hold, the location says how it is
+    /// dated instead — see <see cref="DeclaredLocationAge"/>.
     /// </summary>
     private static DateTime? FileLastWritten(string path)
     {

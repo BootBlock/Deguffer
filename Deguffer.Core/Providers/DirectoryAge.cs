@@ -34,7 +34,7 @@ namespace Deguffer.Core.Providers;
 /// enumerating hundreds of thousands of files to sharpen, and for build output it would mean walking
 /// the very tree discovery went out of its way not to walk. Where a location's content nests below
 /// this level, the answer is not to walk deeper but to report no age — see
-/// <see cref="DeclaredLocation.ReportsAge"/> for a Maven repository, whose top level moves only when
+/// <see cref="DeclaredLocationAge.Unreported"/> for a Maven repository, whose top level moves only when
 /// a whole new group first appears.</para>
 ///
 /// <para><b>Each time is the newer of creation and last write</b>, the one number
@@ -95,7 +95,7 @@ internal static class DirectoryAge
         // servicing log directory the account may not list is the live case: WMI rewrites the traces
         // inside it while the parent's timestamp sits still, and Tier 3 shows that age beside a row
         // whose loss is permanent. So §7's column goes blank, for the reason
-        // DeclaredLocation.ReportsAge gives for a location that cannot be dated one level down.
+        // DeclaredLocationAge.Unreported gives for a location that cannot be dated one level down.
         return listing.Outcome is PathPresence.Present ? OneLevelAge.ToUtc(newest) : null;
     }
 

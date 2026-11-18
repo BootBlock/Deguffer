@@ -202,7 +202,7 @@ public sealed class EpicLauncherContentCacheProvider : CleanupProviderBase
     /// <c>UnrealEngineLauncher</c> holds <c>LauncherInstalled.dat</c>, which is the machine's record
     /// of where its Epic games are installed and is what other launchers read to find them.</para>
     ///
-    /// <para><c>ReportsAge</c> is off, on <see cref="CleanupStep.LastWritten"/>'s rule that a whole
+    /// <para>The age is <c>Unreported</c>, on <see cref="CleanupStep.LastWritten"/>'s rule that a whole
     /// cache leaves it null. The measured folder's timestamps ran across four years, and its newest
     /// child is whichever store page was drawn last — so §7's column would say "today" about a cache
     /// that is mostly ancient. That is Maven's problem arriving from the other end, and §7 renders a
@@ -220,7 +220,7 @@ public sealed class EpicLauncherContentCacheProvider : CleanupProviderBase
                     Path.Combine(DataDirectory, "ContentCache"),
                     "Cover images, screenshots and banners the store has drawn. Each one is fetched "
                     + "from Epic again the next time a page showing it is opened.",
-                    ReportsAge: false),
+                    Age: DeclaredLocationAge.Unreported),
             ],
             [
                 (Path.Combine(DataDirectory, "Manifests"),

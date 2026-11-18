@@ -21,6 +21,43 @@ public enum DeclaredLocationKind
     DirectoryContents,
 }
 
+/// <summary>How a declared location is dated, for §7's age column and for a provider that decides by it.</summary>
+public enum DeclaredLocationAge
+{
+    /// <summary>
+    /// The newest of the location and its immediate children, or a file's own last-write time.
+    ///
+    /// <para>Right wherever those children are the things being written: a dump folder, a log
+    /// folder, a directory of downloaded archives.</para>
+    /// </summary>
+    OneLevelDown,
+
+    /// <summary>
+    /// The newer of the directory's own creation and last-write times, and nothing inside it.
+    ///
+    /// <para>For a folder made whole in one step whose contents a person may then rearrange.
+    /// <c>Windows.old</c> is created by the upgrade, and the age that decides whether the upgrade can
+    /// still be undone is the upgrade's. Moving a file out of the old profile inside it writes the
+    /// folder the file left, and dated one level down that would restart the uninstall window that
+    /// Windows itself counts from the upgrade. Adding or removing an entry at its top still moves the
+    /// folder's own time, which is the direction that holds back.</para>
+    /// </summary>
+    Itself,
+
+    /// <summary>
+    /// No age at all, and §7's column is blank rather than carrying a date nobody should act on.
+    ///
+    /// <para>For a location that nests before it reaches its content. A Maven local repository is
+    /// keyed by group and then artifact and then version, so its top level moves only when a whole
+    /// new group first appears, and a repository somebody builds against every day would report as
+    /// years old, which is precisely backwards for the one thing an age is read for. Walking deeper
+    /// is not the fix: the correct age would cost a full tree walk at plan time, and
+    /// <see cref="DeletionTarget.LastWritten"/> already says that one timestamp spanning everything a
+    /// tool ever cached is a number with nothing to mean.</para>
+    /// </summary>
+    Unreported,
+}
+
 /// <summary>
 /// One path a provider names outright, relative to a <see cref="DeclaredRoot"/>.
 ///
@@ -43,25 +80,12 @@ public enum DeclaredLocationKind
 /// </param>
 /// <param name="Reason">Why it is disposable, written for the user.</param>
 /// <param name="Kind">Directory or file. <c>MEMORY.DMP</c> is the reason the second exists.</param>
-/// <param name="ReportsAge">
-/// Whether §7's age column means anything for this location.
-///
-/// The age is read from the location's own immediate children, which is right wherever those
-/// children are the things being written: a dump folder, a log folder, a directory of downloaded
-/// archives. It is wrong wherever the location nests before it reaches its content. A Maven local
-/// repository is keyed by group and then artifact and then version, so its top level moves only
-/// when a whole new group first appears — and a repository somebody builds against every day would
-/// report as years old, which is precisely backwards for the one thing an age is read for. Walking
-/// deeper is not the fix: the correct age would cost a full tree walk at plan time, and
-/// <see cref="DeletionTarget.LastWritten"/> already says that one timestamp spanning everything a
-/// tool ever cached is a number with nothing to mean. So such a location reports no age at all, and
-/// §7's column is then blank rather than carrying a date nobody should act on.
-/// </param>
+/// <param name="Age">How §7's age is read for this location. See <see cref="DeclaredLocationAge"/>.</param>
 public sealed record DeclaredLocation(
     string RelativePath,
     string Reason,
     DeclaredLocationKind Kind = DeclaredLocationKind.Directory,
-    bool ReportsAge = true);
+    DeclaredLocationAge Age = DeclaredLocationAge.OneLevelDown);
 
 /// <summary>
 /// A directory a provider reaches into by name, and the exact paths under it that it may remove.

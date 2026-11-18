@@ -122,6 +122,9 @@ public sealed class PreviousWindowsInstallationProviderTests : IDisposable
             ["Windows.old", "$Windows.~BT", "$Windows.~WS", Path.Combine("ESD", "Windows"), Path.Combine("ESD", "Download")],
             root.Locations.Select(l => l.RelativePath));
         Assert.All(root.Locations, l => Assert.Equal(DeclaredLocationKind.Directory, l.Kind));
+        Assert.Equal(
+            [DeclaredLocationAge.Itself, .. Enumerable.Repeat(DeclaredLocationAge.OneLevelDown, 4)],
+            root.Locations.Select(l => l.Age));
         Assert.Equal(SystemDriveRoot.Survivors, root.ProtectedNames);
         Assert.True(root.RequiresElevation);
     }
@@ -253,6 +256,60 @@ public sealed class PreviousWindowsInstallationProviderTests : IDisposable
         Assert.Empty(handlers.Calls);
         Assert.True(Directory.Exists(old));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// The previous installation is dated by the upgrade that made it, not by what was written inside
+    /// it since. Recovering files from the old profile writes <c>Windows.old\Users</c>, and Windows
+    /// still counts its uninstall window from the upgrade: read one level down, that write held the
+    /// folder back for another full window while Windows' own Disk Cleanup offered it. The row's
+    /// age is the folder's own, and the old profile is gone afterwards with the rest of it.
+    /// </summary>
+    [Fact]
+    public async Task OffersThePreviousInstallationByTheUpgradesDateWhateverWasWrittenInsideItSince()
+    {
+        var old = Leftover("Windows.old", PastTheWindow);
+        var profile = Path.Combine(old, "Users", "testuser");
+        Directory.CreateDirectory(profile);
+        Aged(old, PastTheWindow);
+        var written = DateTime.UtcNow - TimeSpan.FromDays(2);
+        Directory.SetLastWriteTimeUtc(Path.Combine(old, "Users"), written);
+        Directory.SetLastWriteTimeUtc(profile, written);
+        var provider = CreateProvider();
+
+        var plan = await provider.PlanAsync();
+
+        var step = Assert.IsType<DiskCleanupStep>(Assert.Single(plan.Steps));
+        Assert.Equal(old, step.Path);
+        Assert.False(plan.HasRecentContentHeldBack);
+        Assert.NotNull(step.LastWritten);
+        Assert.True(DateTime.UtcNow - step.LastWritten.Value > TimeSpan.FromDays(19), $"{step.LastWritten:O}");
+
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.False(Directory.Exists(old));
+        Assert.True(result.Verification!.Passed, result.Verification.Summary);
+    }
+
+    /// <summary>
+    /// Setup's working folder is still dated by what was written inside it, because a write there is
+    /// Setup at work: an old folder with a new entry is held back for the window.
+    /// </summary>
+    [Fact]
+    public async Task HoldsSetupsWorkingFolderBackWhileAnythingDirectlyInsideItIsNew()
+    {
+        var setup = Leftover("$Windows.~BT", PastTheWindow);
+        var sources = Path.Combine(setup, "Sources");
+        Directory.CreateDirectory(sources);
+        Aged(setup, PastTheWindow);
+        Directory.SetLastWriteTimeUtc(sources, DateTime.UtcNow - TimeSpan.FromDays(2));
+
+        var plan = await CreateProvider().PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.HasRecentContentHeldBack);
+        Assert.Contains(plan.ProtectedPaths, p =>
+            p.Path.Equals(setup, StringComparison.OrdinalIgnoreCase) && p.Withheld == Withholding.TooRecent);
     }
 
     /// <summary>The window is the machine's own, not Windows' default.</summary>

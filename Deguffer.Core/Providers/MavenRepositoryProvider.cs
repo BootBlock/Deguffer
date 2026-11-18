@@ -472,8 +472,8 @@ public sealed class MavenRepositoryProvider : CleanupProviderBase
             DeclaredLocationKind.Directory,
 
             // A repository nests by group, artifact and version before it reaches a file, so its top
-            // level moves only when a whole new group first appears — see DeclaredLocation.ReportsAge.
-            ReportsAge: false);
+            // level moves only when a whole new group first appears — see DeclaredLocationAge.Unreported.
+            Age: DeclaredLocationAge.Unreported);
 
         var inHome = container.Equals(Home, StringComparison.OrdinalIgnoreCase);
 

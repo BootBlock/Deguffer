@@ -135,10 +135,10 @@ public sealed record RedshiftCacheLayout(
     // link, and so that the folder itself is asserted to survive. Only the numbered folders in it are
     // ever planned, by RedshiftCacheProvider's walk of Buckets.
     private static readonly DeclaredLocation DataFolderTextures = new(
-        Path.Combine(CacheFolder, TexturesFolder), TexturesFolderReason, DeclaredLocationKind.DirectoryContents, ReportsAge: false);
+        Path.Combine(CacheFolder, TexturesFolder), TexturesFolderReason, DeclaredLocationKind.DirectoryContents, Age: DeclaredLocationAge.Unreported);
 
     private static readonly DeclaredLocation MovedTextures = new(
-        TexturesFolder, TexturesFolderReason, DeclaredLocationKind.DirectoryContents, ReportsAge: false);
+        TexturesFolder, TexturesFolderReason, DeclaredLocationKind.DirectoryContents, Age: DeclaredLocationAge.Unreported);
 
     /// <summary>Redshift's folder for a standalone install.</summary>
     public static string StandaloneFolder(IUserEnvironment environment) =>

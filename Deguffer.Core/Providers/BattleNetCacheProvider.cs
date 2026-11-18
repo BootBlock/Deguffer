@@ -21,7 +21,7 @@ namespace Deguffer.Core.Providers;
 ///
 /// <para>§5.1 has nothing to prefer: the launcher has no command that empties its cache.</para>
 ///
-/// <para><c>ReportsAge</c> is off. The cache's children are hash buckets, so the newest of them is
+/// <para>The age is <c>Unreported</c>. The cache's children are hash buckets, so the newest of them is
 /// whichever bucket was last written, and §7's column would say "today" about a cache that is
 /// mostly old.</para>
 /// </summary>
@@ -48,7 +48,7 @@ public sealed class BattleNetCacheProvider : CleanupProviderBase
                     BattleNetFolder.CacheDirectory,
                     "Data the launcher downloaded and saved so it would not fetch it twice. The "
                     + "launcher downloads it again when it is next wanted.",
-                    ReportsAge: false)),
+                    Age: DeclaredLocationAge.Unreported)),
         ];
     }
 

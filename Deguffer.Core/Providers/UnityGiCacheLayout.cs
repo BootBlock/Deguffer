@@ -93,7 +93,7 @@ public static class UnityGiCacheLayout
         "Unity's own folder must survive. Its licence, logs and the caches every project shares are in "
         + "it, and only the GI cache inside it is removed.",
         RequiresElevation: false,
-        [new DeclaredLocation(Path.Combine(CachesFolder, CacheFolder), CacheReason, ReportsAge: false)],
+        [new DeclaredLocation(Path.Combine(CachesFolder, CacheFolder), CacheReason, Age: DeclaredLocationAge.Unreported)],
         Survivors);
 
     /// <summary>

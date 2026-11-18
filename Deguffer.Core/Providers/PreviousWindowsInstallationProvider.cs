@@ -32,15 +32,20 @@ public sealed class PreviousWindowsInstallationProvider : SetupCleanupProviderBa
             "Previous Installations",
             ["Windows.old"],
             "The previous Windows installation, kept so the upgrade could be undone. Windows' own "
-            + "cleanup removes it, together with the record that let Settings offer to go back."),
+            + "cleanup removes it, together with the record that let Settings offer to go back.",
+            // Dated by the upgrade that made it. Somebody recovering files from their old profile
+            // writes the folders inside it, and that does not make the upgrade any easier to undo.
+            DeclaredLocationAge.Itself),
         new(
             "Temporary Setup Files",
             ["$Windows.~BT"],
-            "Windows Setup's working folder from an upgrade that has finished."),
+            "Windows Setup's working folder from an upgrade that has finished.",
+            DeclaredLocationAge.OneLevelDown),
         new(
             "Windows ESD installation files",
             ["$Windows.~WS", Path.Combine("ESD", "Windows"), Path.Combine("ESD", "Download")],
-            "The Windows installation files Setup downloaded for an upgrade that has finished."),
+            "The Windows installation files Setup downloaded for an upgrade that has finished.",
+            DeclaredLocationAge.OneLevelDown),
     ];
 
     public PreviousWindowsInstallationProvider(

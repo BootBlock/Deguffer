@@ -54,6 +54,51 @@ public sealed class DeclaredLocationsTests : IDisposable
     }
 
     /// <summary>
+    /// Each way a declared directory is dated, with a folder whose own timestamps are old and whose
+    /// child was written since: one level down leaves the age to the plan's bounded step, which reads
+    /// the child, a folder dated by itself carries its own time and never the child's, and an
+    /// unreported age carries nothing.
+    /// </summary>
+    [Fact]
+    public void ADeclaredDirectoryIsDatedAsItsDeclarationSays()
+    {
+        var old = DateTime.UtcNow - TimeSpan.FromDays(30);
+        var root = Path.Combine(_temp.Path, "root");
+
+        foreach (var name in new[] { "below", "itself", "unreported" })
+        {
+            var folder = Path.Combine(root, name);
+            Directory.CreateDirectory(Path.Combine(folder, "child"));
+            Directory.SetLastWriteTimeUtc(Path.Combine(folder, "child"), DateTime.UtcNow);
+            Directory.SetCreationTimeUtc(folder, old);
+            Directory.SetLastWriteTimeUtc(folder, old);
+        }
+
+        var scan = DeclaredLocations.Examine(
+        [
+            Root(
+                root,
+                new DeclaredLocation("below", "Written inside.", Age: DeclaredLocationAge.OneLevelDown),
+                new DeclaredLocation("itself", "Made whole once.", Age: DeclaredLocationAge.Itself),
+                new DeclaredLocation("unreported", "Nested.", Age: DeclaredLocationAge.Unreported)),
+        ]);
+
+        var below = scan.Targets.Single(t => t.Path.EndsWith("below", StringComparison.Ordinal));
+        var itself = scan.Targets.Single(t => t.Path.EndsWith("itself", StringComparison.Ordinal));
+        var unreported = scan.Targets.Single(t => t.Path.EndsWith("unreported", StringComparison.Ordinal));
+
+        Assert.True(below.DatedOneLevelDown);
+        Assert.Null(below.LastWritten);
+
+        Assert.False(itself.DatedOneLevelDown);
+        Assert.NotNull(itself.LastWritten);
+        Assert.True((itself.LastWritten.Value - old).Duration() < TimeSpan.FromSeconds(1), $"{itself.LastWritten:O}");
+
+        Assert.False(unreported.DatedOneLevelDown);
+        Assert.Null(unreported.LastWritten);
+    }
+
+    /// <summary>
     /// A relative path written with a forward slash. Windows accepts both separators and
     /// <see cref="Path.Combine"/> resolves either, so a declaration written as <c>Logs/CBS</c> works
     /// — and splitting on the backslash alone would see one segment, skip the ancestor walk
