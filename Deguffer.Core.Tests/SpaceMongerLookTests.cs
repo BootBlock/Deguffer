@@ -126,19 +126,23 @@ public sealed class SpaceMongerLookTests
         Assert.All(drawing.Labels.Where(label => !label.Middle), label => Assert.Equal(1, label.Lines));
     }
 
-    /// <summary>The classic lettering writes a name, a size in bytes and a date, one to a line, as many as there is room for.</summary>
+    /// <summary>
+    /// The classic lettering writes a name, a size in the unit that suits it and a date, one to a line,
+    /// as many as there is room for. The size is the page's own, so a lower bound keeps its mark.
+    /// </summary>
     [Fact]
-    public void AClassicCaptionIsANameASizeInBytesAndADate()
+    public void AClassicCaptionIsANameAScaledSizeAndADate()
     {
         var written = new DateTime(2026, 11, 7, 16, 53, 10);
-        var caption = new MapCaption("pagefile.sys", "50.0 GB", 53_687_091_200, written);
-        var bytes = 53_687_091_200L.ToString("N0", CultureInfo.CurrentCulture);
+        var caption = MapShapeText.Caption("pagefile.sys", 53_687_091_200) with { Written = written };
+        var unread = new MapCaption("System Volume Information", ExploreNodeText.Size(1_100_000, lowerBound: true));
         var date = written.ToString("dd MMM yyyy", CultureInfo.CurrentCulture);
 
         Assert.Equal("pagefile.sys  50.0 GB", caption.Text(MapLettering.Standard, 3, MapDetail.Default));
         Assert.Equal("pagefile.sys", caption.Text(MapLettering.Classic, 1, MapDetail.Default));
-        Assert.Equal($"pagefile.sys\n{bytes} bytes", caption.Text(MapLettering.Classic, 2, MapDetail.Default));
-        Assert.Equal($"pagefile.sys\n{bytes} bytes\n{date}", caption.Text(MapLettering.Classic, 3, MapDetail.Default));
+        Assert.Equal("pagefile.sys\n50.0 GB", caption.Text(MapLettering.Classic, 2, MapDetail.Default));
+        Assert.Equal($"pagefile.sys\n50.0 GB\n{date}", caption.Text(MapLettering.Classic, 3, MapDetail.Default));
+        Assert.Equal("System Volume Information\n≥ 1.0 MB", unread.Text(MapLettering.Classic, 3, MapDetail.Default));
         Assert.Equal(string.Empty, MapCaption.None.Text(MapLettering.Classic, 3, MapDetail.Default));
     }
 
