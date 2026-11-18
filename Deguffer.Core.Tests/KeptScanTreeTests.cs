@@ -262,7 +262,7 @@ public class KeptScanTreeTests
         var builder = new ExploreTreeBuilder(@"C:\");
         builder.AddChildren(ExploreTreeBuilder.RootNode, [new ExploreChild("Logs", IsDirectory: true, IsLink: false, Size: 0)]);
 
-        Assert.True(KeptScanShown.Begin(1, @"C:\", builder.Snapshot(ExploreChildOrder.ByName), VolumeSpace.None).Looking);
+        Assert.True(KeptScanShown.Begin(1, @"C:\", builder.Snapshot(ExploreChildOrder.ByName), Space).Looking);
         Assert.True(KeptScanShown.Begin(1, @"C:\", whole, VolumeSpace.None).Looking);
         Assert.True(KeptScanShown.Begin(1, @"D:\", whole, Space).Looking);
     }
