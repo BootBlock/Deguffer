@@ -8654,9 +8654,12 @@ will not let Deguffer look inside, or an update that has started since, and noth
 
 A folder is offered only when all of these are true:
 
-- **The upgrade can no longer be undone.** Neither the folder nor anything directly inside it has
-  been written for longer than the uninstall window, which Deguffer reads from the machine rather than assuming ten days. Until then
-  the row says how many days are left.
+- **The upgrade can no longer be undone.** The folder is older than the uninstall window, which
+  Deguffer reads from the machine rather than assuming ten days. `Windows.old` is dated by its own
+  timestamps, which the upgrade set, so moving files out of the old profile inside it does not
+  restart the wait. Setup's working folders and the installation files are dated by the newest of
+  the folder and what is directly inside it, because a write there is Setup at work. Until then the
+  row says how many days are left.
 - **No update is unfinished.** No restart is owed for an update, neither the servicing stack nor
   Windows Setup is running, and no restart is due to move a file inside the folder. While any of
   that is true the row reads *Update in progress*.
@@ -8717,7 +8720,8 @@ It asks Windows to run that cleanup, the one Disk Cleanup's *Clean up system fil
 discarded by Windows upgrade*, and never deletes the folders itself. It is offered on exactly the
 terms of the [previous Windows installation](#previous-windows-installation), through the same Windows
 component: only once the upgrade can no longer be undone, never while an update is unfinished, and
-only where Windows' own cleanup says it has something to clear. The uninstall window is also the time
+only where Windows' own cleanup says it has something to clear. Its folders are dated by the newest
+of each folder and what is directly inside it, because what they hold may be your only copy. The uninstall window is also the time
 to notice that something of yours did not come across. Running it needs administrator rights.
 
 ### What is protected

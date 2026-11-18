@@ -261,9 +261,9 @@ public sealed class PreviousWindowsInstallationProviderTests : IDisposable
     /// <summary>
     /// The previous installation is dated by the upgrade that made it, not by what was written inside
     /// it since. Recovering files from the old profile writes <c>Windows.old\Users</c>, and Windows
-    /// still counts its uninstall window from the upgrade: read one level down, that write held the
-    /// folder back for another full window while Windows' own Disk Cleanup offered it. The row's
-    /// age is the folder's own, and the old profile is gone afterwards with the rest of it.
+    /// still counts its uninstall window from the upgrade, so that write does not hold the row back.
+    /// The row's age is the folder's own, the old profile goes with the rest of it, and the drive's
+    /// own users and Windows are asserted to survive.
     /// </summary>
     [Fact]
     public async Task OffersThePreviousInstallationByTheUpgradesDateWhateverWasWrittenInsideItSince()
@@ -275,6 +275,7 @@ public sealed class PreviousWindowsInstallationProviderTests : IDisposable
         var written = DateTime.UtcNow - TimeSpan.FromDays(2);
         Directory.SetLastWriteTimeUtc(Path.Combine(old, "Users"), written);
         Directory.SetLastWriteTimeUtc(profile, written);
+        var users = Users();
         var provider = CreateProvider();
 
         var plan = await provider.PlanAsync();
@@ -288,7 +289,11 @@ public sealed class PreviousWindowsInstallationProviderTests : IDisposable
         var result = await provider.ExecuteAsync(plan);
 
         Assert.False(Directory.Exists(old));
+        Assert.True(Directory.Exists(Path.Combine(users, "testuser")));
+        Assert.True(Directory.Exists(_system.WindowsDirectory));
         Assert.True(result.Verification!.Passed, result.Verification.Summary);
+        Assert.Contains(result.Verification.Checks, c =>
+            c.Subject.Equals(users, StringComparison.OrdinalIgnoreCase) && c.Outcome == VerificationOutcome.Survived);
     }
 
     /// <summary>
