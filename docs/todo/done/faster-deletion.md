@@ -1,7 +1,7 @@
 # Faster deletion: one open per entry
 
-> **Status:** 🟢 ACTIVE — measured, designed, reviewed and implemented; being verified. Flip to ✅ COMPLETE
-> and `git mv` into `done/` when it lands.
+> **Status:** ✅ COMPLETE — implemented, reviewed, mutation-tested and measured: a read-only tree
+> is removed in the time a writable one takes. The two items under *Out of scope* remain open.
 
 ## Why
 
@@ -121,6 +121,20 @@ Through the real file system in a test's own temporary folder, as the existing r
 
 Each new test is proved by mutation. The benchmark's `remove` route is run before and after, with
 and without `--read-only`.
+
+## Result
+
+Nine mutations of the new code (the ignore-read-only flag, the seam's call, the reparse-point open,
+the mount-point route, the kind check, the missing-file answer, a folder's access refusal, the
+runtime retry, and the fallback condition) each fail a test.
+
+The benchmark's `remove` route on the same machine, 100,000 empty files in 1,365 folders, four runs,
+median of the last three:
+
+| Tree | Before | After |
+| --- | --- | --- |
+| Writable | 5.9 s at best, 18.1 s median on a busy machine, 22.8 s of processor time | 6.2 s, 23.5 s of processor time |
+| Read-only | 12.1 s, 36.9 s of processor time | 6.7 s, 25.2 s of processor time |
 
 ## Out of scope
 
