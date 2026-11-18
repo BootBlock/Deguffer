@@ -121,7 +121,7 @@ public abstract class SetupCleanupProviderBase : CleanupProviderBase
         var offered = new List<DiskCleanupTarget>();
         var unclaimed = false;
 
-        var everything = UnfinishedUpdate.HoldsEverything(ServicingThisPass);
+        var everything = ServicingThisPass.Hold;
 
         if (everything is not null)
         {
@@ -200,6 +200,11 @@ public abstract class SetupCleanupProviderBase : CleanupProviderBase
 
         // Asked again when the run reaches each one: an update can start while the preview is open.
         IReadOnlyList<CleanupStep> steps = [.. cleanups.Select(step => step with { HeldWhileUpdating = true })];
+
+        if (steps.Count > 0 && ServicingThisPass.WaitsForOwnServicing is { } waits)
+        {
+            notes.Add(waits);
+        }
 
         if (measured.Note is { } scanNote)
         {

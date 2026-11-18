@@ -79,7 +79,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         _repository = Path.Combine(_system.WindowsDirectory, "System32", "DriverStore", "FileRepository");
         _volume = LongPath.Display(_system.SystemDrive);
         _reading = new DriverStoreReading(
-            _store, handlers, Handler, _volume, Question, () => UnfinishedUpdate.HoldsEverything(ServicingThisPass) is null);
+            _store, handlers, Handler, _volume, Question, () => ServicingThisPass.Hold is null);
     }
 
     public override string Id => "driver-store";
@@ -249,7 +249,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
 
         var folders = drivers.Superseded.Select(s => s.Package.Folder!).ToList();
 
-        if (UnfinishedUpdate.HoldsEverything(ServicingThisPass) is { } updating)
+        if (ServicingThisPass.Hold is { } updating)
         {
             notes.Add(new PlanNote(PlanNoteSeverity.Information, updating));
             return Plan([], notes, [.. kept, .. folders.Select(UnfinishedUpdate.Held)]);
@@ -409,7 +409,7 @@ public sealed class DriverStoreProvider : CleanupProviderBase
         WhatHappensOnNextUse = WhatHappensOnNextUse,
         Steps = steps,
         ProtectedPaths = protectedPaths,
-        Notes = notes,
+        Notes = steps.Count > 0 && ServicingThisPass.WaitsForOwnServicing is { } waits ? [.. notes, waits] : notes,
     };
 
     /// <summary>

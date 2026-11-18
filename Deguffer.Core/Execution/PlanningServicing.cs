@@ -54,6 +54,27 @@ public sealed class PlanningServicing
     /// <summary>The machine as this pass first asked about it.</summary>
     public ServicingState State => _state.Get(() => ServicingState.Read(_servicing, _inspector));
 
+    /// <summary>
+    /// Why nothing an update left may be offered this pass, or null where nothing holds it.
+    ///
+    /// <para>The servicing stack a component store command of Deguffer's own woke is not counted: a
+    /// pass started straight after another meets the stack the last pass's analysis woke, which Windows
+    /// keeps running for minutes. Every step offered on this answer must be
+    /// <see cref="CleanupStep.HeldWhileUpdating"/>, because <see cref="UpdateHoldAtClean"/> then waits
+    /// for that stack to stop before the step runs. A row offered while it runs says so with
+    /// <see cref="WaitsForOwnServicing"/>.</para>
+    /// </summary>
+    public string? Hold => UnfinishedUpdate.HoldsEverything(State, OwnServicingCalls.For(_servicing));
+
+    /// <summary>
+    /// The plan's note where only Deguffer's own servicing session is running this pass, so a row
+    /// offered by <see cref="Hold"/> says why its clean may wait, or null.
+    /// </summary>
+    public PlanNote? WaitsForOwnServicing =>
+        UnfinishedUpdate.OnlyOwnServicing(State, OwnServicingCalls.For(_servicing))
+            ? new PlanNote(PlanNoteSeverity.Information, UnfinishedUpdate.WaitsForOwnServicing)
+            : null;
+
     /// <summary>Forgets the last pass's reading, for a planning pass that starts afresh.</summary>
     public void Invalidate() => _state.Forget();
 }

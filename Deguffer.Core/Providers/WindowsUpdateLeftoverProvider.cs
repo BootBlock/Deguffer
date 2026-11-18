@@ -130,7 +130,7 @@ public sealed class WindowsUpdateLeftoverProvider : CleanupProviderBase
 
         var candidates = new List<DeletionTarget>(scan.Targets.Count);
 
-        if (UnfinishedUpdate.HoldsEverything(ServicingThisPass) is { } everything)
+        if (ServicingThisPass.Hold is { } everything)
         {
             notes.Add(new PlanNote(PlanNoteSeverity.Information, everything));
             held.AddRange(scan.Targets.Select(t => UnfinishedUpdate.Held(t.Path)));
@@ -186,6 +186,11 @@ public sealed class WindowsUpdateLeftoverProvider : CleanupProviderBase
         if (measured.Note is { } scanNote)
         {
             notes.Add(scanNote);
+        }
+
+        if (steps.Count > 0 && ServicingThisPass.WaitsForOwnServicing is { } waits)
+        {
+            notes.Add(waits);
         }
 
         return new CleanupPlan

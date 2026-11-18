@@ -111,7 +111,7 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
     public override Task BeginPass(PassStart start) => start.AskAtOnce(ct =>
         !Environment.IsAdministrator
         || !LongPath.DirectoryMayExist(_store)
-        || UnfinishedUpdate.HoldsEverything(ServicingThisPass, _servicingCalls) is not null
+        || UnfinishedUpdate.HoldsEverything(ServicingThisPass.State, _servicingCalls) is not null
             ? Task.CompletedTask
             : _analysis.ReadingAsync(ct));
 
@@ -136,7 +136,7 @@ public abstract class ComponentStoreProviderBase : CleanupProviderBase
         }
 
         // Asked before DISM is, because the analysis waits on the servicing stack while it works.
-        if (UnfinishedUpdate.HoldsEverything(ServicingThisPass, _servicingCalls) is { } updating)
+        if (UnfinishedUpdate.HoldsEverything(ServicingThisPass.State, _servicingCalls) is { } updating)
         {
             return EmptyPlan(updating) with { ProtectedPaths = [UnfinishedUpdate.Held(_store)] };
         }

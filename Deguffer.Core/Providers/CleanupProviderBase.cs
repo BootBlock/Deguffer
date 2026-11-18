@@ -168,7 +168,7 @@ public abstract class CleanupProviderBase : ICleanupProvider
     /// update hold of rather than <see cref="Servicing"/> and <see cref="Inspector"/> live. See
     /// <see cref="PlanningServicing"/>.
     /// </summary>
-    protected ServicingState ServicingThisPass => _planningServicing.State;
+    protected PlanningServicing ServicingThisPass => _planningServicing;
 
     protected IProcessRunner Runner { get; }
 
