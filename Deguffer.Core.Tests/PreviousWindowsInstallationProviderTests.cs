@@ -347,6 +347,46 @@ public sealed class PreviousWindowsInstallationProviderTests : IDisposable
         Assert.Contains(plan.Notes, n => n.Message.Contains("waiting for a restart", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The servicing stack a component store command of Deguffer's own woke is not an update, so the
+    /// row is offered and says its clean waits for that stack to stop. A preview runs that command
+    /// seconds before the row is planned again, and Windows keeps the stack running for minutes.
+    /// </summary>
+    [Fact]
+    public async Task OffersTheRowWhileOnlyDeguffersOwnServicingStackIsRunning()
+    {
+        var old = Leftover("Windows.old", PastTheWindow);
+        var servicing = FakeWindowsServicing.Settled;
+        var inspector = FakeProcessInspector.NothingRunning;
+        await OwnServicingCalls.For(servicing).MakeAsync(() =>
+        {
+            inspector.WithRunning("TiWorker", DateTimeOffset.UtcNow);
+            return Task.FromResult(0);
+        });
+
+        var plan = await CreateProvider(servicing: servicing, inspector: inspector).PlanAsync();
+
+        var step = Assert.IsType<DiskCleanupStep>(Assert.Single(plan.Steps));
+        Assert.Equal(old, step.Path);
+        Assert.True(step.HeldWhileUpdating);
+        Assert.False(plan.WaitsForAnUpdate);
+        Assert.Contains(plan.Notes, n => n.Message == UnfinishedUpdate.WaitsForOwnServicing);
+    }
+
+    /// <summary>A servicing stack nothing of Deguffer's woke still holds the row back.</summary>
+    [Fact]
+    public async Task HoldsTheRowBackWhileAServicingStackItDidNotWakeIsRunning()
+    {
+        Leftover("Windows.old", PastTheWindow);
+        var inspector = FakeProcessInspector.NothingRunning.WithRunning("TiWorker", DateTimeOffset.UtcNow);
+
+        var plan = await CreateProvider(inspector: inspector).PlanAsync();
+
+        Assert.Empty(plan.Steps);
+        Assert.True(plan.WaitsForAnUpdate);
+        Assert.DoesNotContain(plan.Notes, n => n.Message == UnfinishedUpdate.WaitsForOwnServicing);
+    }
+
     [Fact]
     public async Task HoldsEverythingBackWhileSetupIsRunning()
     {

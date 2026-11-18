@@ -748,6 +748,31 @@ public sealed class DriverStoreProviderTests : IDisposable
         Assert.Contains("restart", Assert.Single(result.Steps).Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A restart due since the preview to move a file inside a package's folder holds pnputil back
+    /// from that package, as it holds Windows' own cleanup from the folders it clears.
+    /// </summary>
+    [Fact]
+    public async Task ARestartDueToChangeAPackagesFolderStopsPnpUtil()
+    {
+        var older = Staged("oem1.inf", "2022-01-01");
+        var newest = Staged("oem2.inf", "2024-01-01");
+        var servicing = FakeWindowsServicing.Settled;
+        var runner = PnpUtil([older]);
+        var provider = CreateProvider(
+            new FakeDriverStore(older, newest), FakeDiskCleanupHandlers.NoneRegistered(), runner, servicing);
+
+        var plan = await provider.PlanAsync();
+        Assert.Single(plan.Steps);
+
+        servicing.PendingFileOperations = [Path.Combine(older.Folder!, "wifi.sys")];
+        var result = await provider.ExecuteAsync(plan);
+
+        Assert.DoesNotContain(runner.Invocations, i => i.Arguments.Contains("/delete-driver", StringComparison.OrdinalIgnoreCase));
+        Assert.True(Directory.Exists(older.Folder));
+        Assert.Contains("next restart", Assert.Single(result.Steps).Message, StringComparison.Ordinal);
+    }
+
     /// <summary>Windows Update installs drivers too, so nothing is offered while an update is unfinished.</summary>
     [Fact]
     public async Task HoldsEverythingBackWhileAnUpdateIsUnfinished()

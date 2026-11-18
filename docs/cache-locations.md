@@ -8662,7 +8662,10 @@ A folder is offered only when all of these are true:
   row says how many days are left.
 - **No update is unfinished.** No restart is owed for an update, neither the servicing stack nor
   Windows Setup is running, and no restart is due to move a file inside the folder. While any of
-  that is true the row reads *Update in progress*.
+  that is true the row reads *Update in progress*. Windows also starts the servicing stack for
+  Deguffer's own component store analysis, and keeps it running for minutes afterwards. That stack
+  does not hold the row back: the clean waits for it to stop, for up to ten minutes, before Windows
+  is asked, and holds the row if anything else is running by then.
 - **Windows' own cleanup says it has something to clear there.** Deguffer asks it first, the way
   Disk Cleanup does, and a folder it does not count as its own is left standing. Windows answers
   that question only for a program running as administrator, so until Deguffer is elevated the row
@@ -8837,10 +8840,10 @@ from the devices using it.
 Nothing is offered:
 
 - **while an update is unfinished**: while a restart is owed for an update, or the servicing stack
-  or Windows Setup is running, because Windows Update installs drivers too. Where Windows' cleanup
-  does the work, a restart due to move a file inside one of the package folders also stops it when
-  the clean reaches it. `pnputil` is given a package's name rather than a folder, so that last test
-  has nothing to apply to on its route.
+  or Windows Setup is running, because Windows Update installs drivers too. The servicing stack
+  Deguffer's own component store analysis started is waited out instead, as for the previous
+  installation above. A restart due to move a file inside a package's folder also stops its removal
+  when the clean reaches it, on either route.
 - **for a package a device is using**, whatever its age.
 - **where your recent-files setting would keep any of it**, when Windows' cleanup does the work,
   because it takes every older package at once and cannot be told to leave one. Where `pnputil`

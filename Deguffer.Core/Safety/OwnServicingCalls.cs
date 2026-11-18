@@ -17,9 +17,9 @@ namespace Deguffer.Core.Safety;
 /// one returned, was started by something else and still holds. The stack an update starts in the
 /// minutes after a call reuses the process the call woke, so it cannot be told apart from it. Windows'
 /// servicing runs one session at a time, and DISM refuses to clean while a restart is owed, which the
-/// hold asks separately, so that case is left to them. That covers a DISM command alone, so only the
-/// component store's hold consults this record, and a removal by path is held by any servicing
-/// stack.</para>
+/// hold asks separately, so that case is left to them. That covers a DISM command alone, which the
+/// hold then lets run. Anything else waits for the stack a call woke to stop, and is held by any other
+/// (see <see cref="Execution.UnfinishedUpdate.OnlyOwnServicing"/>).</para>
 ///
 /// <para><b>The restart key, by when it was written.</b> For the length of a DISM session the servicing
 /// stack also creates <see cref="RestartKey.ServicingRebootPending"/>, which is one of the keys that

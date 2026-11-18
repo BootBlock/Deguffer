@@ -42,9 +42,9 @@ namespace Deguffer.Core.Execution;
 /// </param>
 /// <param name="time">
 /// The clock a command waits on while its tool marks what it will remove later (see
-/// <see cref="ScheduledRemoval"/>), and the one the plan, each step and each removal's passes are
-/// timed on. Defaulted to the system clock, and injected so a test of a tool that never marks anything
-/// does not wait out the real interval, and so a test can say how long a step took.
+/// <see cref="ScheduledRemoval"/>) or Deguffer's own servicing session stops (see <see cref="UpdateHoldAtClean"/>),
+/// and the plan, each step and each removal's passes are timed on. Defaulted to the system clock, and
+/// injected so a test waits out no real interval, and so a test can say how long a step took.
 /// </param>
 /// <param name="environment">
 /// The account whose own folders no step may destroy. See <see cref="StandingFolders"/>. Defaulted
@@ -100,9 +100,10 @@ public sealed class PlanExecutor(
     private readonly IDiskCleanupHandlers? _handlers = handlers;
     private readonly ISystemProtection? _protection = protection;
     private readonly IUserProfiles? _profiles = profiles;
-    private readonly IWindowsServicing _servicing = servicing ?? WindowsServicing.Current;
     private readonly IProcessInspector _inspector = inspector ?? ProcessInspector.Default;
     private readonly TimeProvider _time = time ?? TimeProvider.System;
+    private readonly UpdateHoldAtClean _updateHold = new(
+        servicing ?? WindowsServicing.Current, inspector ?? ProcessInspector.Default, time ?? TimeProvider.System);
     private readonly IUserEnvironment _environment = environment ?? UserEnvironment.Current;
     private readonly ISystemDirectories _system = system ?? SystemDirectories.Current;
     private readonly IVolumeInventory _volumes = volumes ?? VolumeInventory.Current;
@@ -257,7 +258,7 @@ public sealed class PlanExecutor(
         IProgress<CommandUnderway?>? underway,
         CancellationToken ct)
     {
-        if (step.HeldWhileUpdating && StillUpdating(step) is { } updating)
+        if (step.HeldWhileUpdating && await _updateHold.WhyHeldAsync(step, ct).ConfigureAwait(false) is { } updating)
         {
             return new StepOutcome(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, updating);
         }
@@ -326,26 +327,6 @@ public sealed class PlanExecutor(
         RemoveProfileStep => _profiles is not null,
         _ => true,
     };
-
-    /// <summary>
-    /// Why <paramref name="step"/> must not run because Windows is now in the middle of an update, or
-    /// null where nothing says it is. The restart keys are read afresh, never from the preview's
-    /// <see cref="PlanningServicing"/>, and the process table again where the snapshot is past
-    /// <see cref="IUseCheck.ReadingLimit"/>, for the reason the step is asked about at all.
-    /// </summary>
-    private string? StillUpdating(CleanupStep step)
-    {
-        _inspector.DiscardOlderThan(IUseCheck.ReadingLimit);
-
-        if (UnfinishedUpdate.HoldsEverything(ServicingState.Read(_servicing, _inspector), (step as RunCommandStep)?.ServicingCalls) is { } everything)
-        {
-            return $"Nothing was removed: {everything}";
-        }
-
-        return step is DeleteStep delete && delete.Destroys.FirstOrDefault(_servicing.HasPendingOperationsIn) is { } pending
-            ? UnfinishedUpdate.PendingNow(pending)
-            : null;
-    }
 
     /// <summary>
     /// Why <paramref name="step"/> must not run because it would destroy a folder nothing may take,
@@ -447,8 +428,8 @@ public sealed class PlanExecutor(
         // Asked again, because the tool's measurement can take a minute, and an update that starts
         // during it is exactly what the hold exists for. The servicing stack the measurement itself
         // woke is not that update, where the step names the record it was made in: see
-        // RunCommandStep.ServicingCalls.
-        if (step is { HeldWhileUpdating: true, MeasuredBy: not null } && StillUpdating(step) is { } updating)
+        // CleanupStep.ServicingRecord and UpdateHoldAtClean.
+        if (step is { HeldWhileUpdating: true, MeasuredBy: not null } && await _updateHold.WhyHeldAsync(step, ct).ConfigureAwait(false) is { } updating)
         {
             return new StepOutcome(step.Description, Succeeded: false, BytesReclaimed: 0, Refusals.None, updating);
         }

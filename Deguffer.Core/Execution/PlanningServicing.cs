@@ -12,10 +12,10 @@ namespace Deguffer.Core.Execution;
 /// component store as it begins (see <see cref="ComponentStoreProviderBase.BeginPass"/>), and for as
 /// long as DISM runs, Windows runs its servicing stack and keeps
 /// <see cref="RestartKey.ServicingRebootPending"/> present. Read live after that, both say an update is
-/// under way, which would hold the driver store, Windows.old, the setup files and an update's leftovers
-/// on every elevated pass, and the component store's own rows before they read the analysis. The
+/// under way, and the component store's own rows would be held before they read the analysis. The
 /// component store's hold reads this before DISM starts, so the pass is planned against the machine as
-/// it was before Deguffer touched it.</para>
+/// it was before Deguffer touched it. The other rows' <see cref="Hold"/> does not count the stack an
+/// earlier pass's analysis left running either.</para>
 ///
 /// <para><b>Safe because the clean asks again.</b> Every step these rows plan is
 /// <see cref="CleanupStep.HeldWhileUpdating"/>, so <see cref="PlanExecutor"/> asks the machine itself
@@ -53,6 +53,27 @@ public sealed class PlanningServicing
 
     /// <summary>The machine as this pass first asked about it.</summary>
     public ServicingState State => _state.Get(() => ServicingState.Read(_servicing, _inspector));
+
+    /// <summary>
+    /// Why nothing an update left may be offered this pass, or null where nothing holds it.
+    ///
+    /// <para>The servicing stack a component store command of Deguffer's own woke is not counted: a
+    /// pass started straight after another meets the stack the last pass's analysis woke, which Windows
+    /// keeps running for minutes. Every step offered on this answer must be
+    /// <see cref="CleanupStep.HeldWhileUpdating"/>, because <see cref="UpdateHoldAtClean"/> then waits
+    /// for that stack to stop before the step runs. A row offered while it runs says so with
+    /// <see cref="WaitsForOwnServicing"/>.</para>
+    /// </summary>
+    public string? Hold => UnfinishedUpdate.HoldsEverything(State, OwnServicingCalls.For(_servicing));
+
+    /// <summary>
+    /// The plan's note where only Deguffer's own servicing session is running this pass, so a row
+    /// offered by <see cref="Hold"/> says why its clean may wait, or null.
+    /// </summary>
+    public PlanNote? WaitsForOwnServicing =>
+        UnfinishedUpdate.OnlyOwnServicing(State, OwnServicingCalls.For(_servicing))
+            ? new PlanNote(PlanNoteSeverity.Information, UnfinishedUpdate.WaitsForOwnServicing)
+            : null;
 
     /// <summary>Forgets the last pass's reading, for a planning pass that starts afresh.</summary>
     public void Invalidate() => _state.Forget();
