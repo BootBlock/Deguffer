@@ -33,7 +33,7 @@
 
         <views:SettingsRow Glyph="&#xE8D2;"
                            Title="Lettering"
-                           Description="How the names are set: the application's own, or SpaceMonger's, unsmoothed, with a file's bytes and date in its box.">
+                           Description="How the names are set: the application's own, or SpaceMonger's, unsmoothed, with a file's size and date in its box.">
             <views:SettingsRow.Control>
                 <ComboBox x:Name="LetteringBox" MinWidth="140"
                           SelectedIndex="{x:Bind ViewModel.LetteringIndex, Mode=TwoWay}"

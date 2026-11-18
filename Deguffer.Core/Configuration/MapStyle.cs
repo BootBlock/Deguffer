@@ -277,7 +277,7 @@ public enum MapLettering
 
     /// <summary>
     /// SpaceMonger's: small Microsoft Sans Serif type drawn without smoothing, a folder named in its band with no size, and a
-    /// file's name, its size in bytes and the date it was last written, as many of those lines as its
+    /// file's name, its size and the date it was last written, as many of those lines as its
     /// box has room for, in the middle of the box and cut off at its edge.
     /// </summary>
     Classic = 1,
