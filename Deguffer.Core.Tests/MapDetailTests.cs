@@ -127,13 +127,13 @@ public sealed class MapDetailTests
 
     /// <summary>
     /// A caption without sizes is the name alone in the application's lettering, and in SpaceMonger's a
-    /// name and its date, the date taking the place the bytes had.
+    /// name and its date, the date taking the place the size had.
     /// </summary>
     [Fact]
     public void ACaptionWithoutSizesLeavesTheSizeOut()
     {
         var written = new DateTime(2026, 11, 7, 16, 53, 10);
-        var caption = new MapCaption("pagefile.sys", "50.0 GB", 53_687_091_200, written);
+        var caption = new MapCaption("pagefile.sys", "50.0 GB", written);
         var date = written.ToString("dd MMM yyyy", CultureInfo.CurrentCulture);
 
         Assert.Equal("pagefile.sys", caption.Text(MapLettering.Standard, 1, new MapDetail(Sizes: false)));

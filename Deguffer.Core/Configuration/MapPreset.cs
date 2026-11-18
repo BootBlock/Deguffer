@@ -8,7 +8,7 @@ namespace Deguffer.Core.Configuration;
 /// <see cref="SpaceMonger"/> is SpaceMonger 1.4's, measured from its own pixels: flat boxes with a
 /// one-pixel bevel in its own shades of each colour, one black line between neighbours, each folder
 /// named in a band one line of its small type deep, what it holds three pixels in, and each file's
-/// name, size in bytes and date in the middle of its box, in a colour per level of depth from its own
+/// name, size and date in the middle of its box, in a colour per level of depth from its own
 /// eight.
 /// <see cref="WizTree"/> is WizTree 4's: cushions with no line round them, a narrow gap round
 /// what each folder holds, folders as dark grey frames named in their bands, and files coloured by
