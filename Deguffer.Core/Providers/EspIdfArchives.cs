@@ -101,7 +101,7 @@ internal sealed record EspIdfArchives(
                     folder.Path,
                     folder.Reason,
                     RequiresElevation: false,
-                    [new DeclaredLocation(EspIdfLayout.DownloadFolder, DownloadsReason, DeclaredLocationKind.DirectoryContents, ReportsAge: false)],
+                    [new DeclaredLocation(EspIdfLayout.DownloadFolder, DownloadsReason, DeclaredLocationKind.DirectoryContents, Age: DeclaredLocationAge.Unreported)],
                     [])),
             ],
             ct);

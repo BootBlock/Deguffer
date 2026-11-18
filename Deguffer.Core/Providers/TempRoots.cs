@@ -75,11 +75,11 @@ public static class TempRoots
     /// newer than the cut-off, which is not merely uninformative but the opposite of what the row
     /// does.</para>
     ///
-    /// <para>This is what <see cref="DeclaredLocation.ReportsAge"/> exists for, and a Maven
+    /// <para>This is what <see cref="DeclaredLocationAge.Unreported"/> exists for, and a Maven
     /// repository is the other case: a date that cannot be made to mean anything is better left off
     /// the screen than shown, because an age is what invites the reader to delete something.</para>
     /// </summary>
-    private const bool ReportsNoUsefulAge = false;
+    private const DeclaredLocationAge NoUsefulAge = DeclaredLocationAge.Unreported;
 
     private const string UserReason =
         "Scratch files this account's programs left behind. Installers, compilers, browsers and "
@@ -181,14 +181,14 @@ public static class TempRoots
                 + "the temporary folder itself is removed.",
                 RequiresElevation: false,
                 [new DeclaredLocation(
-                    Path.GetFileName(path), UserReason, DeclaredLocationKind.DirectoryContents, ReportsNoUsefulAge)],
+                    Path.GetFileName(path), UserReason, DeclaredLocationKind.DirectoryContents, NoUsefulAge)],
                 []))
             .ToList();
 
         roots.Add(WindowsSystemRoot.Holding(
             system,
             new DeclaredLocation(
-                FolderName, MachineReason, DeclaredLocationKind.DirectoryContents, ReportsNoUsefulAge)));
+                FolderName, MachineReason, DeclaredLocationKind.DirectoryContents, NoUsefulAge)));
 
         return new TempRootSet(roots, refused, account);
     }

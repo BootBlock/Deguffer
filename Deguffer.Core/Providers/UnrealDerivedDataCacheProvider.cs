@@ -304,7 +304,7 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
                         LegacyCache,
                         "The derived data cache Unreal Engine 5.3 and earlier share. Unreal fills it "
                         + "again the next time a project opens.",
-                        ReportsAge: false),
+                        Age: DeclaredLocationAge.Unreported),
                     .. Locations(stores, engine),
                 ],
                 [
@@ -336,7 +336,7 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
                     "The folder a setting names for Unreal's Zen store must survive. Only the store "
                     + "inside it is removed.",
                     RequiresElevation: false,
-                    [new DeclaredLocation(store.RelativePath, StoreReason, ReportsAge: false)],
+                    [new DeclaredLocation(store.RelativePath, StoreReason, Age: DeclaredLocationAge.Unreported)],
                     [])),
         ];
     }
@@ -346,7 +346,7 @@ public sealed class UnrealDerivedDataCacheProvider : CleanupProviderBase
     [
         .. stores
             .Where(store => !store.IsConfigured && store.Root.Equals(root, StringComparison.OrdinalIgnoreCase))
-            .Select(store => new DeclaredLocation(store.RelativePath, StoreReason, ReportsAge: false)),
+            .Select(store => new DeclaredLocation(store.RelativePath, StoreReason, Age: DeclaredLocationAge.Unreported)),
     ];
 
     /// <summary>

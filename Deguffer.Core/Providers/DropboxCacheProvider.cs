@@ -158,7 +158,7 @@ public sealed class DropboxCacheProvider : CleanupProviderBase
                     folder.Path,
                     FolderReason,
                     RequiresElevation: false,
-                    [new DeclaredLocation(DropboxFolders.CacheFolder, CacheReason, DeclaredLocationKind.DirectoryContents, ReportsAge: false)],
+                    [new DeclaredLocation(DropboxFolders.CacheFolder, CacheReason, DeclaredLocationKind.DirectoryContents, Age: DeclaredLocationAge.Unreported)],
                     ProtectedNames: [])),
             ],
             ct);

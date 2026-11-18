@@ -41,7 +41,10 @@ public sealed class UpgradeDiscardedFilesProvider : SetupCleanupProviderBase
             ["$WINDOWS.~Q", "$INPLACE.~TR", "$Windows.~LS"],
             "Files a Windows upgrade did not move to the new version and did not recognise as part of "
             + "Windows, kept as a precaution. Some of them may be your own, and this may be the only "
-            + "copy."),
+            + "copy.",
+            // By what was last written inside them, the reading that holds longest, because what
+            // they hold may be somebody's only copy.
+            DeclaredLocationAge.OneLevelDown),
     ];
 
     public UpgradeDiscardedFilesProvider(

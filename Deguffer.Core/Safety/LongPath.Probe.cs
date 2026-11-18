@@ -34,9 +34,21 @@ public static partial class LongPath
     /// <para>That is deliberately not <see cref="IsReparsePoint"/>'s shape, which fails closed
     /// because it has no way to say "I could not tell". This one has two.</para>
     /// </summary>
-    public static PathPresence ProbeDirectory(string path, out bool? isLink)
+    public static PathPresence ProbeDirectory(string path, out bool? isLink) =>
+        ProbeDirectory(path, out isLink, out _);
+
+    /// <summary>
+    /// The same answer, with whether the path is a link and the directory's own time, all from the
+    /// same attribute read, for a caller that both checks a declared directory and dates it by its
+    /// own timestamps.
+    /// </summary>
+    /// <param name="newestFileTime">
+    /// The newer of the directory's own creation and last-write times as a FILETIME, or zero where
+    /// Windows described nothing.
+    /// </param>
+    public static PathPresence ProbeDirectory(string path, out bool? isLink, out long newestFileTime)
     {
-        var presence = Probe(path, EntryKind.Directory, out var described, out _, out _);
+        var presence = Probe(path, EntryKind.Directory, out var described, out _, out newestFileTime);
 
         isLink = Carries(described, FileAttributes.ReparsePoint);
 

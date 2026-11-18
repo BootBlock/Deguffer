@@ -148,7 +148,7 @@ Nine things the work settled that this section did not anticipate.
   `DeclaredLocations` reads an age from a location's immediate children, which is right for a dump
   folder or a directory of archives and wrong for a Maven repository: that nests by group, artifact
   and version, so its top level moves only when a whole new group first appears, and a repository
-  built against daily would report as years old. `DeclaredLocation.ReportsAge` now carries that, and
+  built against daily would report as years old. `DeclaredLocationAge.Unreported` now carries that, and
   §7's column is then blank rather than carrying a date nobody should act on.
 
 - **vcpkg is the first tool whose main directory is a clone the user placed, and the provider has to

@@ -19,8 +19,9 @@ namespace Deguffer.Core.Providers;
 /// <para><b>Offered only once the upgrade can no longer be undone.</b> Windows keeps what an upgrade
 /// leaves for the uninstall window, ten days unless somebody has changed it. Offering any of it inside
 /// that window would take away the way back, or the chance to look for what the upgrade did not carry
-/// over, for the sake of a few days' space. So a folder is offered once neither it nor anything
-/// directly inside it has been written for longer than the window (see <see cref="DirectoryAge"/>).</para>
+/// over, for the sake of a few days' space. So a folder is offered once it is older than the window,
+/// dated as its row says (<see cref="SetupCleanup.Age"/>): Setup's working folders by the newest of
+/// them and what is directly inside them, and the previous installation by its own timestamps.</para>
 ///
 /// <para><b>Held back while an update is unfinished</b>, for the reasons
 /// <see cref="UnfinishedUpdate"/> gives. Setup's own handler refuses while Setup is running as well;
@@ -73,7 +74,7 @@ public abstract class SetupCleanupProviderBase : CleanupProviderBase
             SystemDriveRoot.Holding(
                 _system,
                 [.. cleanups.SelectMany(cleanup => cleanup.Directories.Select(directory =>
-                    new DeclaredLocation(directory, cleanup.Reason)))]),
+                    new DeclaredLocation(directory, cleanup.Reason, Age: cleanup.Age)))]),
         ];
     }
 
@@ -266,5 +267,13 @@ public abstract class SetupCleanupProviderBase : CleanupProviderBase
     /// <c>SetupDirectories</c> value, where it has one.
     /// </param>
     /// <param name="Reason">What the directories are, written for the user.</param>
-    protected internal sealed record SetupCleanup(string Handler, IReadOnlyList<string> Directories, string Reason);
+    /// <param name="Age">
+    /// How the directories are dated against the uninstall window: by what Setup last wrote in them,
+    /// or, for a folder the upgrade made whole, by the folder's own timestamps.
+    /// </param>
+    protected internal sealed record SetupCleanup(
+        string Handler,
+        IReadOnlyList<string> Directories,
+        string Reason,
+        DeclaredLocationAge Age);
 }

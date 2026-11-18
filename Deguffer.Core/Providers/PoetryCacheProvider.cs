@@ -463,7 +463,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
         // Poetry nests an artefact under four levels of its URL hash before it reaches a file, so the
         // top level moves only when a hash prefix is first seen. A cache filled every day would
         // report as years old, which is backwards for the one thing an age is read for — so these
-        // targets carry no age, as the walk leaves them. See DeclaredLocation.ReportsAge for the same
+        // targets carry no age, as the walk leaves them. See DeclaredLocationAge.Unreported for the same
         // call on Maven.
         foreach (var target in walk.Targets)
         {
