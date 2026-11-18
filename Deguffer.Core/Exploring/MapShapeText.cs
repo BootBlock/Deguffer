@@ -154,7 +154,7 @@ public static class MapShapeText
     {
         ArgumentNullException.ThrowIfNull(name);
 
-        return new MapCaption(name, FreeSpace.Format(bytes), bytes);
+        return new MapCaption(name, FreeSpace.Format(bytes));
     }
 
     /// <summary>
@@ -168,7 +168,6 @@ public static class MapShapeText
         return new MapCaption(
             tree.NameOf(node),
             ExploreNodeText.Size(tree, node),
-            tree.SizeOf(node),
             tree.ModifiedOf(node).Utc?.ToLocalTime());
     }
 
