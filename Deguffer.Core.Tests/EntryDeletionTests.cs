@@ -60,6 +60,8 @@ public sealed class EntryDeletionTests : IDisposable
         var file = _temp.CreateFile(64, "held.bin");
         File.SetAttributes(file, FileAttributes.ReadOnly);
 
+        var changed = ChangeTimeOf(file);
+
         using (new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read))
         {
             var refused = Assert.ThrowsAny<IOException>(() => EntryDeletion.DeleteFile(LongPath.Extended(file)));
@@ -68,7 +70,30 @@ public sealed class EntryDeletionTests : IDisposable
             Assert.True(File.GetAttributes(file).HasFlag(FileAttributes.ReadOnly), "a refused file had its read-only bit cleared");
         }
 
+        // Not changed even for a moment: clearing the bit and setting it again moves the time Windows
+        // keeps for a change to the file's metadata, which nothing else here touches.
+        Assert.Equal(changed, ChangeTimeOf(file));
         File.SetAttributes(file, FileAttributes.Normal);
+    }
+
+    /// <summary>
+    /// A folder an access rule refuses is refused as <see cref="Directory.Delete(string)"/> refuses it:
+    /// a bare <see cref="IOException"/>, which <see cref="Execution.DirectoryDeletion"/> reads as denied.
+    /// </summary>
+    [Fact]
+    public void RefusesAFolderAnAccessRuleGuardsAsDirectoryDeleteDoes()
+    {
+        var folder = _temp.CreateDirectory("holder", "guarded");
+
+        using (new UndeletableFolder(folder))
+        {
+            var expected = Record.Exception(() => Directory.Delete(LongPath.Extended(folder)));
+            var actual = Record.Exception(() => EntryDeletion.DeleteDirectory(LongPath.Extended(folder)));
+
+            AssertSameRefusal(expected, actual);
+            Assert.Equal(RefusalReason.Denied, RefusalReasons.Of(actual!));
+            Assert.True(Directory.Exists(folder));
+        }
     }
 
     /// <summary>
@@ -276,6 +301,14 @@ public sealed class EntryDeletionTests : IDisposable
             : null;
 
         Assert.Equal(expected, EntryDeletion.RouteFor(described, asDirectory).ToString());
+    }
+
+    private static long ChangeTimeOf(string file)
+    {
+        using var handle = File.OpenHandle(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+
+        Assert.True(FileInformation.TryBasic(handle, out var basic));
+        return basic.ChangeTime;
     }
 
     private static void AssertSameRefusal(Exception? expected, Exception? actual)
