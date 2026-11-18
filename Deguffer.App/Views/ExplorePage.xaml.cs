@@ -367,35 +367,7 @@ public sealed partial class ExplorePage : Page
     /// </summary>
     private void ShowCurrentNode()
     {
-        // A step of the replay of what grew, in place of the tree now: the same folder, as the map
-        // coloured by growth paints it, with the volume beside it as it was at that step (#285).
-        if (ViewModel.Replay.Frame is { } frame)
-        {
-            Map.Show(
-                frame,
-                ViewModel.CurrentNode,
-                ViewModel.SelectedView,
-                _ => ShapeColours.ForReplay(frame),
-                frame.Caption,
-                ViewModel.Look,
-                frame.Replay.VolumeAt(frame.Step, ViewModel.VolumeBeside));
-
-            _cards.Relight();
-            return;
-        }
-
-        Map.Show(
-            ViewModel.Tree,
-            ViewModel.CurrentNode,
-            ViewModel.SelectedView,
-            ViewModel.SelectedColouring,
-            ViewModel.SelectedScheme,
-            ViewModel.Look,
-            ViewModel.VolumeBeside,
-            ViewModel.Growth.Comparison,
-            ViewModel.Types.Dominant,
-            ViewModel.Visiting.Revisiting);
-
+        ExplorePicture.Draw(Map, ViewModel);
         _cards.Relight();
     }
 

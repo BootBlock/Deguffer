@@ -190,14 +190,14 @@ public sealed class ExploreTree : Layout.ITrackedTree, IShownTree
     /// <summary>
     /// Find each node in <paramref name="later"/> by its path, where that is a scan of the same place
     /// (see <see cref="ExploreCounterparts"/>), or by its number in a step of a replay that ends at this
-    /// tree, which numbers every node of this one the same (<see cref="History.GrowthReplay"/>).
+    /// tree, which numbers every node of this one the same (<see cref="History.GrowthReplay"/>), or by
+    /// name in the last kept scan of the volume this is rooted at (<see cref="History.KeptScanTree"/>).
     /// </summary>
     public Func<int, int?>? CounterpartsIn(Layout.ISizedTree later) =>
-        later is ExploreTree scanned && ExplorePlace.IsRootedAlike(this, scanned)
-            ? new ExploreCounterparts(this, scanned).Find
-            : later is History.GrowthReplayFrame frame && ReferenceEquals(frame.Replay.Today, this)
-                ? static node => node
-                : null;
+        later is ExploreTree scanned && ExplorePlace.IsRootedAlike(this, scanned) ? new ExploreCounterparts(this, scanned).Find
+        : later is History.GrowthReplayFrame frame && ReferenceEquals(frame.Replay.Today, this) ? static node => node
+        : later is History.KeptScanTree kept && kept.IsOf(this) ? kept.CounterpartsFrom(this)
+        : null;
 
     /// <summary>
     /// The bytes this node occupies on the disk, which is what every picture of the tree draws.

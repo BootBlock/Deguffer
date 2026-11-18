@@ -3,8 +3,8 @@
 590 Deguffer.App/Controls/ExploreLayers.cs
 802 Deguffer.App/Controls/ExploreZoom.cs
 1465 Deguffer.App/ViewModels/CleanViewModel.cs
-933 Deguffer.App/ViewModels/ExploreViewModel.cs
-773 Deguffer.App/Views/ExplorePage.xaml.cs
+920 Deguffer.App/ViewModels/ExploreViewModel.cs
+745 Deguffer.App/Views/ExplorePage.xaml.cs
 739 Deguffer.Core/Execution/CleanupPlanner.cs
 689 Deguffer.Core/Execution/CleanupStep.cs
 1082 Deguffer.Core/Execution/PlanExecutor.cs

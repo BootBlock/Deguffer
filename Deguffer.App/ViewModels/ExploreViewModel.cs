@@ -58,9 +58,6 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     private readonly IVolumeInventory _volumes;
     private readonly TimeProvider _time;
 
-    /// <summary>The kept summaries a finished scan of a whole volume is compared with and added to.</summary>
-    private readonly ScanHistory _history;
-
     /// <summary>What Windows states about the space on a scanned volume that no folder holds.</summary>
     private readonly IHiddenSpaceSource _hidden;
 
@@ -105,7 +102,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     /// <param name="isElevated">Whether this process holds administrator rights.</param>
     /// <param name="relaunch">See <see cref="ExploreElevation"/>.</param>
     /// <param name="running">What is changing the machine on every page, which the elevated relaunch waits for.</param>
-    /// <param name="history">See <see cref="_history"/>.</param>
+    /// <param name="history">The kept summaries a finished scan of a whole volume is compared with and added to, and drawn from while it runs.</param>
     /// <param name="driveHealth">What Health last read of each volume's drives, which the drive picker names a drive of concern from.</param>
     /// <param name="motion">How the reader wants things to move, which a play of the replay follows.</param>
     /// <param name="releaseSpent">
@@ -139,7 +136,6 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         _volumes = volumes;
         _hidden = hidden;
         _time = time;
-        _history = history;
         _guide = guide;
         _isElevated = isElevated;
         _work = work;
@@ -148,6 +144,8 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         Selection = new ExploreSelection(actions, work);
         Growth = new ExploreGrowth(history);
         Replay = new ExploreReplay(motion);
+        KeptScan = new ExploreKeptScan(history, time);
+        Progress = new ExploreScanProgress(Status);
         // A new inspection for each tree and each reading of the folders, so what one remembers about
         // the machine lasts as long as that operation and no longer (G4).
         LinkInspection Inspect() => new(links, new LinkTargets(probe, volumes));
@@ -178,6 +176,18 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
             ViewChanged?.Invoke(this, EventArgs.Empty);
         };
         Types.Changed += (_, _) => ViewChanged?.Invoke(this, EventArgs.Empty);
+
+        // A kept scan takes the place of a tree of another place, so nothing describes what the map is not drawing.
+        KeptScan.Arrived += (_, _) =>
+        {
+            ClearTree();
+            ViewChanged?.Invoke(this, EventArgs.Empty);
+        };
+        KeptScan.PropertyChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(ShowsKept));
+            OnPropertyChanged(nameof(HasNoTree));
+        };
 
         Targeting.Retargeted += (_, _) => ScanCommand.NotifyCanExecuteChanged();
 
@@ -233,6 +243,9 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
 
     /// <summary>The map moving from the earlier scan to now. See <see cref="ExploreReplay"/>.</summary>
     public ExploreReplay Replay { get; }
+
+    /// <summary>The last kept scan of the drive being scanned, drawn until the scan has a tree. See <see cref="ExploreKeptScan"/>.</summary>
+    public ExploreKeptScan KeptScan { get; }
 
     /// <summary>The largest files below the folder on screen, for the Files layout. See <see cref="ExploreFiles"/>.</summary>
     public ExploreFiles Files { get; }
@@ -295,26 +308,8 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     /// </summary>
     public bool IsIdle => !IsBusy;
 
-    /// <summary>
-    /// How far through, 0 to 1, or null where the route cannot say.
-    ///
-    /// <para>The file table states its record count before the first read, so that route drives a
-    /// real bar. A walk cannot know how many directories it has yet to open, so it gets an
-    /// indeterminate one rather than a made-up denominator that would run to 90% and stop.</para>
-    /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ProgressValue))]
-    [NotifyPropertyChangedFor(nameof(HasNoProgressFraction))]
-    public partial double? Progress { get; private set; }
-
-    /// <summary>
-    /// The same figure as a plain number, because a progress bar's value is not nullable and a
-    /// binding that has to fall back is a binding that fails silently when it is wrong.
-    /// </summary>
-    public double ProgressValue => Progress ?? 0;
-
-    /// <summary>Whether the bar has to be indeterminate. See <see cref="Progress"/>.</summary>
-    public bool HasNoProgressFraction => Progress is null;
+    /// <summary>How far through the scan is. See <see cref="ExploreScanProgress"/>.</summary>
+    public ExploreScanProgress Progress { get; }
 
     /// <summary>
     /// The line under the map: what the page last said, and the §5.6 checks a removal could not pass
@@ -369,6 +364,8 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     [NotifyPropertyChangedFor(nameof(ShowsMapControls))]
     [NotifyPropertyChangedFor(nameof(ShowsLegend))]
     [NotifyPropertyChangedFor(nameof(ShowsFileFilters))]
+    [NotifyPropertyChangedFor(nameof(ShowsKept))]
+    [NotifyPropertyChangedFor(nameof(HasNoTree))]
     public partial ExploreView SelectedView { get; set; }
 
     partial void OnSelectedViewChanged(ExploreView value)
@@ -517,9 +514,12 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
 
     /// <summary>
     /// Whether to show the empty state instead of a picture. A large blank card reads as a screen
-    /// that has failed rather than one waiting to be told to start.
+    /// that has failed rather than one waiting to be told to start. Not while the map draws a kept scan.
     /// </summary>
-    public bool HasNoTree => Tree is null;
+    public bool HasNoTree => Tree is null && !ShowsKept;
+
+    /// <summary>Whether the map draws <see cref="KeptScan"/>: only in a view that draws a picture, not in a list.</summary>
+    public bool ShowsKept => KeptScan.Tree is not null && Display.DrawsPicture;
 
     /// <summary>
     /// Whether the rows are being rewritten from here: this folder's (<see cref="ExploreRows.IsShowing"/>),
@@ -549,6 +549,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         var scoped = Targeting.IsScopedToFolder;
         var (scanned, volume) = Begin(target, ct);
         Targeting.Scanning();
+        KeptScan.Begin(target, Tree, Volume, volume);
 
         // Next to the try, so nothing can throw between the two and leave the taskbar busy.
         var work = _work.Begin();
@@ -582,14 +583,23 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         }
         finally
         {
+            // A cancelled or failed scan leaves nothing of the drive as it was on screen.
+            if (KeptScan.Replace())
+            {
+                ViewChanged?.Invoke(this, EventArgs.Empty);
+            }
+
             scanned.TrySetResult(null);
             IsBusy = false;
-            Progress = null;
+            Progress.Reset();
             work.Dispose();
 
             // A cancelled or failed scan took snapshots too, and nothing else will free them.
             _releaseSpent();
         }
+
+        // It waits only on the volume and its name, which a finished scan waited on already.
+        await KeptScan.Lookup;
     }
 
     /// <summary>
@@ -604,7 +614,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     private (TaskCompletionSource<ExploreScan?> Scanned, ScannedVolume Volume) Begin(string target, CancellationToken ct)
     {
         IsBusy = true;
-        Progress = null;
+        Progress.Reset();
         Notes.RouteNote = null;
 
         // What is on screen is about to be replaced, and a comparison describes one tree.
@@ -654,7 +664,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         // scan whose map is already drawn.
         Status.Say(ExploreStatusText.Finished(scan.Tree));
 
-        await RecordAsync(scan, volume, scoped);
+        await Growth.RecordAsync(scan, volume, Volume, scoped, _volumes, _time, () => Tree);
     }
 
     /// <summary>
@@ -666,6 +676,15 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     /// </summary>
     private void Abandon()
     {
+        ClearTree();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+
+        Status.Say(StatusLine.Said("Scan cancelled. Nothing was measured."));
+    }
+
+    /// <summary>Take the tree on screen away, with everything that describes it.</summary>
+    private void ClearTree()
+    {
         Tree = null;
         Volume = VolumeSpace.None;
         Visiting.Notify();
@@ -673,37 +692,6 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         Files.Show(null, 0);
         Types.Show(null, 0);
         Listing.Clear();
-        ViewChanged?.Invoke(this, EventArgs.Empty);
-
-        Status.Say(StatusLine.Said("Scan cancelled. Nothing was measured."));
-    }
-
-    /// <summary>
-    /// Compare a finished scan with the last kept scan of its volume, and keep it for the next one.
-    /// Only a scan of a whole volume, because a summary of one folder says nothing about what else
-    /// on the drive grew.
-    ///
-    /// <para>Not cancellable. The scan has finished by now, the work is a pass over folders already
-    /// in memory and one small file, and a cancel arriving during it would otherwise throw away the
-    /// finished scan along with it.</para>
-    /// </summary>
-    /// <param name="scanned">The reading of the volume the scan was taken of, which names it.</param>
-    /// <param name="scoped">Whether the scan was started on a folder rather than a drive.</param>
-    private async Task RecordAsync(ExploreScan scan, ScannedVolume scanned, bool scoped)
-    {
-        var space = Volume;
-        var volume = await scanned.NameAsync();
-        var taken = _time.GetUtcNow().UtcDateTime;
-
-        var record = await Task.Run(() =>
-            _history.Record(scan, volume, space, ScanHistory.CoverageOf(scan.Tree.PathOf(scan.Tree.RootNode), scoped, _volumes), taken));
-
-        // A comparison describes one scan, and the page can have moved to another while this ran.
-        // Shown only for the scan it was taken from, or what a removal left of it.
-        if (ReferenceEquals(Tree?.Scanned, scan.Tree))
-        {
-            Growth.Show(record);
-        }
     }
 
     /// <summary>
@@ -814,11 +802,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
 
     private void Report(ExploreProgress progress)
     {
-        Progress = progress.Fraction;
-
-        Status.Say(StatusLine.Said(progress.Total is null
-            ? $"Scanning… {progress.Done:N0} items, {FreeSpace.Format(progress.BytesSeen)} so far"
-            : $"Reading the file table… {progress.Fraction:P0}"));
+        Progress.Report(progress);
 
         // A partial tree, on the cadence the scanner chose. Drawing it is what stops a long scan
         // looking like a hung window — and it is only ever a snapshot, so the finished tree replaces
@@ -845,6 +829,9 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
         events.ShowStart(cause, tree.NodeCount);
 
         var redraw = ExploreRedraw.Between(Tree, _position, tree, position);
+
+        // The scan has a tree of its own, which this draws in place of the kept scan.
+        KeptScan.Replace();
 
         // Before the tree is replaced, because the steps' node numbers belong to the one leaving.
         Visiting.Carry(Tree, tree);

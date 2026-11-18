@@ -76,6 +76,11 @@ public readonly record struct ExploreDisplay(
     public bool ShowsShortcutFolders => SearchesFiles && Listing == FileListing.BrokenLinks && Tree is not null;
 
     /// <summary>
+    /// Whether the view on screen draws a picture rather than a list, so the map is on the card.
+    /// </summary>
+    public bool DrawsPicture => View is not (ExploreView.List or ExploreView.Files);
+
+    /// <summary>
     /// Whether the largest files below the folder on screen are searched for: only while the Files
     /// layout is on screen, because the search is a pass over every file below that folder.
     /// </summary>

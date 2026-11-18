@@ -121,21 +121,27 @@ public sealed class ScanHistory(ScanHistoryStore store)
 
         lock (_gate)
         {
-            var kept = KeptLocked(volume);
-            ScanGrowth? growth = null;
-
-            for (var i = kept.Count - 1; i >= 0 && growth is null; i--)
-            {
-                if (store.Read(kept[i]) is { } earlier)
-                {
-                    growth = ScanGrowth.Between(earlier, now, scan.Tree);
-                }
-            }
-
+            var growth = LatestLocked(volume) is { } earlier ? ScanGrowth.Between(earlier, now, scan.Tree) : null;
             var saved = store.Save(now);
             _byVolume.Remove(volume);
 
             return new ScanRecord(NotKept.None, volume, growth, KeptLocked(volume), saved);
+        }
+    }
+
+    /// <summary>
+    /// The newest kept summary of <paramref name="volume"/> that can be read, or null where none can,
+    /// for the map to draw while a new scan of the volume runs (#491). The one a finished scan of it
+    /// is compared with, so the picture shown while it runs and the comparison after are of one scan.
+    /// Reads a file, so never call it on the UI thread.
+    /// </summary>
+    public ScanSummary? Latest(string volume)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(volume);
+
+        lock (_gate)
+        {
+            return LatestLocked(volume);
         }
     }
 
@@ -198,6 +204,25 @@ public sealed class ScanHistory(ScanHistoryStore store)
         Changed?.Invoke(this, EventArgs.Empty);
 
         return removed;
+    }
+
+    /// <summary>
+    /// The newest summary of <paramref name="volume"/> that can be read. A damaged one is passed over
+    /// (<see cref="ScanHistoryStore"/>), and the one before it still describes the volume.
+    /// </summary>
+    private ScanSummary? LatestLocked(string volume)
+    {
+        var kept = KeptLocked(volume);
+
+        for (var i = kept.Count - 1; i >= 0; i--)
+        {
+            if (store.Read(kept[i]) is { } summary)
+            {
+                return summary;
+            }
+        }
+
+        return null;
     }
 
     private IReadOnlyList<KeptSummary> KeptLocked(string volume)
