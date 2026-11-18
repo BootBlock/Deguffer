@@ -51,8 +51,8 @@ public sealed class EntryDeletionTests : IDisposable
     }
 
     /// <summary>
-    /// A refusal changes nothing. Clearing the bit and then deleting left a read-only file another
-    /// program holds with its bit cleared, a change to a file the removal was leaving standing.
+    /// A refusal changes nothing. Clearing the bit and then deleting would leave a read-only file
+    /// another program holds with its bit cleared, a change to a file the removal is leaving standing.
     /// </summary>
     [Fact]
     public void LeavesAHeldReadOnlyFileWithItsBitStillSet()
@@ -97,8 +97,8 @@ public sealed class EntryDeletionTests : IDisposable
     }
 
     /// <summary>
-    /// The same where an access rule refuses it: the retry that cleared the bit and tried again ran on
-    /// every access refusal, and changed the attributes of a file Windows was never going to let go.
+    /// The same where an access rule refuses it: clearing the bit and trying again on an access refusal
+    /// would change the attributes of a file Windows is never going to let go.
     /// </summary>
     [Fact]
     public void LeavesAReadOnlyFileAnAccessRuleRefusesWithItsBitStillSet()
@@ -145,13 +145,17 @@ public sealed class EntryDeletionTests : IDisposable
         var bystander = _temp.CreateFile(64, "precious", "irreplaceable.bin");
         var link = Path.Combine(_temp.Path, "link");
         DirectoryLink.Create(kind, link, outside);
+        File.SetAttributes(outside, File.GetAttributes(outside) | FileAttributes.ReadOnly);
         File.SetAttributes(link, File.GetAttributes(link) | FileAttributes.ReadOnly);
 
         EntryDeletion.DeleteDirectory(LongPath.Extended(link));
 
         Assert.False(Directory.Exists(link));
         Assert.True(File.Exists(bystander), "deleting the link reached what it points at");
-        Assert.False(File.GetAttributes(outside).HasFlag(FileAttributes.ReadOnly));
+
+        // The bit was the link's own to clear: the folder it points at keeps its own.
+        Assert.True(File.GetAttributes(outside).HasFlag(FileAttributes.ReadOnly), "deleting the link changed the folder it points at");
+        File.SetAttributes(outside, FileAttributes.Directory);
     }
 
     [Fact]
@@ -302,7 +306,7 @@ public sealed class EntryDeletionTests : IDisposable
             ? new FileInformation.FileAttributeTagInfo { FileAttributes = known, ReparseTag = tag }
             : null;
 
-        Assert.Equal(expected, EntryDeletion.RouteFor(described, asDirectory).ToString());
+        Assert.Equal(expected, EntryDeletion.RouteFor(described, asDirectory ? DeletedAs.Directory : DeletedAs.File).ToString());
     }
 
     private static long ChangeTimeOf(string entry)

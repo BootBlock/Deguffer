@@ -14,11 +14,6 @@ namespace Deguffer.Core.Scanning;
 /// </param>
 public readonly record struct ListingEnd(PathPresence Presence, ListingRefusal Refusal, bool WhileReading)
 {
-    private const int ErrorFileNotFound = 2;
-    private const int ErrorPathNotFound = 3;
-    private const int ErrorAccessDenied = 5;
-    private const int ErrorDirectory = 267;
-
     /// <summary>A directory listed to the end.</summary>
     public static ListingEnd Listed => new(PathPresence.Present, ListingRefusal.None, WhileReading: false);
 
@@ -36,9 +31,9 @@ public readonly record struct ListingEnd(PathPresence Presence, ListingRefusal R
     /// </summary>
     public static ListingEnd Failed(int error, bool whileReading) => error switch
     {
-        ErrorFileNotFound or ErrorPathNotFound => new(PathPresence.Absent, ListingRefusal.None, whileReading),
-        ErrorAccessDenied => new(PathPresence.Refused, ListingRefusal.Denied, whileReading),
-        ErrorDirectory => new(PathPresence.Refused, ListingRefusal.NotADirectory, whileReading),
+        Win32Error.FileNotFound or Win32Error.PathNotFound => new(PathPresence.Absent, ListingRefusal.None, whileReading),
+        Win32Error.AccessDenied => new(PathPresence.Refused, ListingRefusal.Denied, whileReading),
+        Win32Error.NotADirectory => new(PathPresence.Refused, ListingRefusal.NotADirectory, whileReading),
         _ => new(PathPresence.Refused, ListingRefusal.Other, whileReading),
     };
 }

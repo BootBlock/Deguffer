@@ -88,8 +88,9 @@ and `FileRemover` delete through `IFileSystem.DeleteFile` and `DeleteDirectory`,
    stays with #992.
 
 What this does not change: the order a removal tries entries, its bounds, its threads, or §5.6's
-checks. A refusal still leaves the entry, and now leaves it exactly as it was: a read-only entry
-Windows refuses keeps its bit, where the old retry cleared it on every access refusal.
+checks. A refusal still leaves the entry. On the one-call route it leaves it exactly as it was, and
+on the runtime route a refused read-only entry has its bit set again after the retry, where the old
+retry left it cleared after every access refusal.
 
 One outcome does change. A read-only folder whose listing was refused but which is empty on disk
 was left standing, because the old retry would not clear the bit of a folder it could not list. It

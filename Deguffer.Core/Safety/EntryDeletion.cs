@@ -7,12 +7,11 @@ namespace Deguffer.Core.Safety;
 /// Deletes one file, or one empty directory, by its path through a single handle, read-only or not.
 ///
 /// <para><b>Why not <see cref="File.Delete"/> and <see cref="Directory.Delete(string)"/>.</b> Windows
-/// refuses them a read-only entry, so a removal cleared the bit through a second open first. Go marks
-/// its whole module cache read-only and Git marks its objects read-only, so a clean meets whole trees
-/// of them. Measured on one machine, a removal of 100,000 read-only files took 12.1 s against 5.9 s
-/// for the same files writable, and one open with the disposition <see cref="HandleDeletion"/> sets
-/// deleted 50,000 read-only files in 1.88 s against 5.21 s. For an ordinary file this makes the calls
-/// <c>DeleteFileW</c> makes, and was timed level with it.</para>
+/// refuses them a read-only entry, so deleting one through them takes a second open to clear its bit.
+/// Go marks its whole module cache read-only and Git marks its objects read-only, so a clean meets
+/// whole trees of them. Measured on one machine through the benchmark's removal route, 100,000
+/// read-only files took 6.7 s this way against 12.1 s cleared first, and the same files writable
+/// 6.2 s either way: for an ordinary file this makes the calls <c>DeleteFileW</c> makes.</para>
 ///
 /// <para><b>What the runtime would do, everywhere else.</b> Each refusal throws the exception
 /// <see cref="File.Delete"/> or <see cref="Directory.Delete(string)"/> throws for the same error,
@@ -21,10 +20,9 @@ namespace Deguffer.Core.Safety;
 /// from Windows' own calls go to those calls instead: see <see cref="RouteFor"/>. So does an entry on
 /// a file system without the one-call disposition, as <c>DeleteFileW</c> falls back there.</para>
 ///
-/// <para><b>A refusal changes nothing.</b> Clearing the bit first left a read-only file that Windows
-/// then refused with its bit cleared. On the one-call route the bit is never touched. On the
-/// runtime's route a refused read-only entry has its bit cleared for one more try, which is the only
-/// way that route deletes one, and set again where that try is refused too.</para>
+/// <para><b>What a refusal changes.</b> On the one-call route, nothing: the bit is never touched. On
+/// the runtime's route a refused read-only entry has its bit cleared for one more try, which is the
+/// only way that route deletes one, and set again where that try is refused too.</para>
 /// </summary>
 internal static class EntryDeletion
 {
@@ -63,21 +61,21 @@ internal static class EntryDeletion
     /// <see cref="File.Delete"/> throws: nothing where no file is there, and an exception where
     /// Windows refused.
     /// </summary>
-    public static void DeleteFile(string extendedPath) => Remove(extendedPath, asDirectory: false);
+    public static void DeleteFile(string extendedPath) => Remove(extendedPath, DeletedAs.File);
 
     /// <summary>
     /// Deletes the empty directory, or the link to a directory, at <paramref name="extendedPath"/>,
     /// throwing what <see cref="Directory.Delete(string)"/> throws.
     /// </summary>
-    public static void DeleteDirectory(string extendedPath) => Remove(extendedPath, asDirectory: true);
+    public static void DeleteDirectory(string extendedPath) => Remove(extendedPath, DeletedAs.Directory);
 
     /// <summary>
     /// How an entry Windows described as <paramref name="described"/> is deleted when it was asked for
-    /// as a directory or as a file, or null where Windows would not describe it.
+    /// as <paramref name="asked"/>. <paramref name="described"/> is null where Windows would not describe it.
     /// </summary>
-    internal static DeletionRoute RouteFor(FileInformation.FileAttributeTagInfo? described, bool asDirectory)
+    internal static DeletionRoute RouteFor(FileInformation.FileAttributeTagInfo? described, DeletedAs asked)
     {
-        // Nothing here can say what it is, so Windows' own call decides, as it did before.
+        // Nothing here can say what it is, so Windows' own call decides.
         if (described is not { } info)
         {
             return DeletionRoute.Runtime;
@@ -85,7 +83,7 @@ internal static class EntryDeletion
 
         var attributes = (FileAttributes)info.FileAttributes;
 
-        if (attributes.HasFlag(FileAttributes.Directory) != asDirectory)
+        if (attributes.HasFlag(FileAttributes.Directory) != (asked is DeletedAs.Directory))
         {
             return DeletionRoute.WrongKind;
         }
@@ -104,7 +102,7 @@ internal static class EntryDeletion
             : DeletionRoute.OneCall;
     }
 
-    private static void Remove(string extendedPath, bool asDirectory)
+    private static void Remove(string extendedPath, DeletedAs asked)
     {
         FileAttributes? attributes;
 
@@ -115,24 +113,24 @@ internal static class EntryDeletion
                 var error = Marshal.GetLastPInvokeError();
 
                 // File.Delete's own answer: a name with nothing at it is already the outcome.
-                if (error == Win32Error.FileNotFound && !asDirectory)
+                if (error == Win32Error.FileNotFound && asked is DeletedAs.File)
                 {
                     return;
                 }
 
-                throw Refusal(error, extendedPath, asDirectory);
+                throw Refusal(error, extendedPath, asked);
             }
 
             FileInformation.FileAttributeTagInfo? described =
                 FileInformation.TryAttributeTag(handle, out var info) ? info : null;
             attributes = described is { } known ? (FileAttributes)known.FileAttributes : null;
 
-            switch (RouteFor(described, asDirectory))
+            switch (RouteFor(described, asked))
             {
                 case DeletionRoute.WrongKind:
                     // What each call answers the other kind with: a folder refuses the open for a file,
                     // and a file is not a directory.
-                    throw Refusal(asDirectory ? Win32Error.NotADirectory : Win32Error.AccessDenied, extendedPath, asDirectory);
+                    throw Refusal(asked is DeletedAs.Directory ? Win32Error.NotADirectory : Win32Error.AccessDenied, extendedPath, asked);
 
                 case DeletionRoute.OneCall:
                     var refused = HandleDeletion.TryDeleteNow(handle);
@@ -144,7 +142,7 @@ internal static class EntryDeletion
 
                     if (!HandleDeletion.IsUnsupported(refused))
                     {
-                        throw Refusal(refused, extendedPath, asDirectory);
+                        throw Refusal(refused, extendedPath, asked);
                     }
 
                     break;
@@ -152,18 +150,18 @@ internal static class EntryDeletion
         }
 
         // Closed first, so the runtime's own open is not refused by this one.
-        ByTheRuntime(extendedPath, asDirectory, attributes);
+        ByTheRuntime(extendedPath, asked, attributes);
     }
 
     /// <summary>
     /// Deletes the entry through the runtime's call, clearing a read-only bit for one more try where
     /// the first was refused, and setting it again where that try is refused too.
     /// </summary>
-    private static void ByTheRuntime(string extendedPath, bool asDirectory, FileAttributes? attributes)
+    private static void ByTheRuntime(string extendedPath, DeletedAs asked, FileAttributes? attributes)
     {
         try
         {
-            RuntimeDelete(extendedPath, asDirectory);
+            RuntimeDelete(extendedPath, asked);
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException
             && (attributes ?? ReadAttributes(extendedPath)) is { } had
@@ -173,28 +171,30 @@ internal static class EntryDeletion
 
             try
             {
-                RuntimeDelete(extendedPath, asDirectory);
+                RuntimeDelete(extendedPath, asked);
             }
             catch (Exception again) when (again is UnauthorizedAccessException or IOException)
             {
                 // The second answer is the one that counts: a read-only file something holds open is
                 // refused first for the bit and then for the handle. The bit goes back, so the entry
-                // left standing is as it was.
+                // left standing keeps the attributes it had.
                 Restore(extendedPath, had);
                 throw;
             }
         }
     }
 
-    private static void RuntimeDelete(string extendedPath, bool asDirectory)
+    private static void RuntimeDelete(string extendedPath, DeletedAs asked)
     {
-        if (asDirectory)
+        switch (asked)
         {
-            Directory.Delete(extendedPath, recursive: false);
-        }
-        else
-        {
-            File.Delete(extendedPath);
+            case DeletedAs.Directory:
+                Directory.Delete(extendedPath, recursive: false);
+                break;
+
+            default:
+                File.Delete(extendedPath);
+                break;
         }
     }
 
@@ -219,15 +219,15 @@ internal static class EntryDeletion
     /// missing entry as a missing path, and an access refusal as a bare <see cref="IOException"/>,
     /// which <see cref="Execution.DirectoryDeletion"/> relies on.
     /// </summary>
-    private static Exception Refusal(int error, string path, bool asDirectory) => error switch
+    private static Exception Refusal(int error, string path, DeletedAs asked) => (error, asked) switch
     {
-        Win32Error.FileNotFound or Win32Error.PathNotFound when asDirectory =>
+        (Win32Error.FileNotFound or Win32Error.PathNotFound, DeletedAs.Directory) =>
             new DirectoryNotFoundException(Message(Win32Error.PathNotFound, path)),
-        Win32Error.AccessDenied when asDirectory => new IOException(Message(error, path)),
-        Win32Error.FileNotFound => new FileNotFoundException(Message(error, path), path),
-        Win32Error.PathNotFound => new DirectoryNotFoundException(Message(error, path)),
-        Win32Error.AccessDenied => new UnauthorizedAccessException(Message(error, path)),
-        Win32Error.NameTooLong => new PathTooLongException(Message(error, path)),
+        (Win32Error.AccessDenied, DeletedAs.Directory) => new IOException(Message(error, path)),
+        (Win32Error.FileNotFound, _) => new FileNotFoundException(Message(error, path), path),
+        (Win32Error.PathNotFound, _) => new DirectoryNotFoundException(Message(error, path)),
+        (Win32Error.AccessDenied, _) => new UnauthorizedAccessException(Message(error, path)),
+        (Win32Error.NameTooLong, _) => new PathTooLongException(Message(error, path)),
         _ => new IOException(Message(error, path), HResultOf(error)),
     };
 

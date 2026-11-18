@@ -113,7 +113,7 @@ public sealed class RemoveRouteTests : IDisposable
         Assert.Equal(["kept"], Directory.EnumerateFileSystemEntries(site.Beside).Select(Path.GetFileName));
     }
 
-    /// <summary>A read-only file is one the removal has to clear before it can delete it, and it still goes.</summary>
+    /// <summary>A read-only file is one Windows refuses to delete without being told to ignore the bit, and it still goes.</summary>
     [Fact]
     public async Task AReadOnlyTreeIsRemovedInFull()
     {

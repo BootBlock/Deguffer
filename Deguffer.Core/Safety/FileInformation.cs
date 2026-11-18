@@ -551,7 +551,7 @@ internal sealed unsafe partial class FileInformation
         opened.Dispose();
 
         // After the close, which sets the last error of its own.
-        Marshal.SetLastPInvokeError(LongPath.ErrorDirectory);
+        Marshal.SetLastPInvokeError(Win32Error.NotADirectory);
 
         return new SafeFileHandle(-1, ownsHandle: false);
     }

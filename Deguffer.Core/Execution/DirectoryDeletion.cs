@@ -13,9 +13,9 @@ internal static class DirectoryDeletion
     /// here, or already gone by the time this reached it, which is the same post-condition a removal
     /// reports for a file.
     ///
-    /// <para>A read-only directory goes in the one call, and one refused keeps its bit: see
-    /// <see cref="EntryDeletion"/>. Without that every file inside such a directory went, the
-    /// directory stayed, and the step still reported success because bytes were reclaimed.</para>
+    /// <para>A read-only directory goes too, and one refused keeps its bit: see
+    /// <see cref="EntryDeletion"/>. One left standing for its bit would be a folder the user was told
+    /// would go, in a step that still reports success because bytes were reclaimed.</para>
     /// </summary>
     public static Standing? TryDelete(string extendedPath, IFileSystem fs)
     {

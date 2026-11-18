@@ -249,7 +249,7 @@ public sealed class FileInformationTests
         using var answered = FileInformation.AsNamed(file + Path.DirectorySeparatorChar, opened);
 
         Assert.True(answered.IsInvalid);
-        Assert.Equal(LongPath.ErrorDirectory, Marshal.GetLastPInvokeError());
+        Assert.Equal(Win32Error.NotADirectory, Marshal.GetLastPInvokeError());
         Assert.True(opened.IsClosed);
     }
 
