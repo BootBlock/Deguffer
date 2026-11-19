@@ -7,8 +7,8 @@ namespace Deguffer.Core.VirtualDisks;
 /// The machine's <see cref="IHyperVManagement"/>: Hyper-V's <c>root\virtualization\v2</c> namespace,
 /// read in process through WMI's own COM interfaces (<see cref="WbemConnection"/>), which is what the
 /// Hyper-V module's <c>Get-VM</c>, <c>Get-VMSnapshot</c>, <c>Get-VMHardDiskDrive</c> and <c>Get-VHD</c>
-/// are cmdlets over. Starting Windows PowerShell to load that module cost a second or more of every
-/// planning pass, clean and Explore policy build.
+/// are cmdlets over. In process because the module is loaded only by starting Windows PowerShell, which
+/// costs a second or more, and every planning pass, clean and Explore policy build reads this.
 ///
 /// <para>Only reads. The one method called, <c>GetVirtualHardDiskSettingData</c>, describes a disk file and
 /// changes nothing, and is called by its class and name so no other method can be reached from here.</para>
@@ -142,7 +142,7 @@ public sealed class HyperVWmi : IHyperVManagement
             }
             finally
             {
-                Release(outputs);
+                WbemQuery.Release(outputs);
                 Marshal.ReleaseComObject(inputs);
             }
         }
@@ -197,11 +197,11 @@ public sealed class HyperVWmi : IHyperVManagement
             try
             {
                 hr = serviceClass.GetMethod(Method, 0, out var signature, out var outSignature);
-                Release(outSignature);
+                WbemQuery.Release(outSignature);
 
                 if (hr != WbemConnection.S_OK || signature is null)
                 {
-                    Release(signature);
+                    WbemQuery.Release(signature);
                     hr = hr == WbemConnection.S_OK ? WbemConnection.Failed : hr;
                     return null;
                 }
@@ -225,13 +225,5 @@ public sealed class HyperVWmi : IHyperVManagement
             object[] objects => objects.FirstOrDefault() as string,
             _ => null,
         };
-
-        private static void Release(object? instance)
-        {
-            if (instance is not null)
-            {
-                Marshal.ReleaseComObject(instance);
-            }
-        }
     }
 }

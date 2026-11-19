@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using Deguffer.Core.Safety;
@@ -27,16 +26,15 @@ public sealed class WindowsDeliveryOptimizationStatus : IDeliveryOptimizationSta
 
     private const string StatusQuery = "SELECT CacheSizeBytes FROM MSFT_DOCurrentStatus";
 
-    /// <summary>
-    /// How long, in milliseconds, each wait for the service's answer lasts before the token is looked
-    /// at again, so a cancelled scan stops waiting within this rather than when WMI gives up.
-    /// </summary>
-    private const int CancellationPoll = 100;
-
     private WindowsDeliveryOptimizationStatus()
     {
     }
 
+    /// <summary>
+    /// The one status the service reports. None is no figure, and more than one is a figure Deguffer
+    /// could only pick from, so both are unanswered rather than read as an empty cache. The wait is
+    /// held to <see cref="ToolRun.QueryLimit"/>, the limit the PowerShell query had.
+    /// </summary>
     public DeliveryOptimizationReading Read(CancellationToken ct)
     {
         if (WbemConnection.Connect(StatusNamespace, out var hr) is not { } services)
@@ -46,81 +44,20 @@ public sealed class WindowsDeliveryOptimizationStatus : IDeliveryOptimizationSta
 
         try
         {
-            hr = services.ExecQuery("WQL", StatusQuery, WbemConnection.SemiSynchronous, null, out var instances);
-
-            if (hr != WbemConnection.S_OK)
+            return WbemQuery.Rows(services, StatusQuery, status => ReadingOf(WbemQuery.Property(status, "CacheSizeBytes")), out hr, ct) switch
             {
-                return Unanswered(hr);
-            }
-
-            try
-            {
-                return Read(instances, ct);
-            }
-            finally
-            {
-                Marshal.ReleaseComObject(instances);
-            }
+                null when hr == WbemConnection.Unfinished => DeliveryOptimizationReading.Unanswered(
+                    $"Delivery Optimization did not answer within {ToolRun.QueryLimit.TotalMinutes:0} minutes."),
+                null => Unanswered(hr),
+                [] => DeliveryOptimizationReading.Unanswered("Windows gave no figure."),
+                [var reading] => reading,
+                _ => DeliveryOptimizationReading.Unanswered(
+                    "Windows reported more than one Delivery Optimization status, so the figure is not known."),
+            };
         }
         finally
         {
             Marshal.ReleaseComObject(services);
-        }
-    }
-
-    /// <summary>
-    /// The one status the service reports. None is no figure, and more than one is a figure Deguffer
-    /// could only pick from, so both are unanswered rather than read as an empty cache. The wait is
-    /// held to <see cref="ToolRun.QueryLimit"/>, the limit the PowerShell query had.
-    /// </summary>
-    private static DeliveryOptimizationReading Read(IEnumWbemClassObject instances, CancellationToken ct)
-    {
-        var waited = Stopwatch.StartNew();
-        DeliveryOptimizationReading? reading = null;
-
-        while (true)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            var hr = instances.Next(CancellationPoll, 1, out var instance, out var returned);
-
-            if (hr < 0)
-            {
-                return Unanswered(hr);
-            }
-
-            if (returned == 0)
-            {
-                if (hr != WbemConnection.TimedOut)
-                {
-                    return reading ?? DeliveryOptimizationReading.Unanswered("Windows gave no figure.");
-                }
-
-                if (waited.Elapsed >= ToolRun.QueryLimit)
-                {
-                    return DeliveryOptimizationReading.Unanswered(
-                        $"Delivery Optimization did not answer within {ToolRun.QueryLimit.TotalMinutes:0} minutes.");
-                }
-
-                continue;
-            }
-
-            try
-            {
-                if (reading is not null)
-                {
-                    return DeliveryOptimizationReading.Unanswered(
-                        "Windows reported more than one Delivery Optimization status, so the figure is not known.");
-                }
-
-                reading = instance.Get("CacheSizeBytes", 0, out var value, out _, out _) == WbemConnection.S_OK
-                    ? ReadingOf(value)
-                    : DeliveryOptimizationReading.Unanswered("Windows gave no figure.");
-            }
-            finally
-            {
-                Marshal.ReleaseComObject(instance);
-            }
         }
     }
 

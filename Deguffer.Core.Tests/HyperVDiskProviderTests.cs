@@ -86,7 +86,7 @@ public sealed class HyperVDiskProviderTests : IDisposable
         var plan = await provider.PlanAsync();
         var refusal = Assert.Single(plan.Notes, note => note.Severity == PlanNoteSeverity.Warning);
 
-        Assert.Contains("elevated PowerShell or a member of the Hyper-V Administrators group", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("elevated program or a member of the Hyper-V Administrators group", refusal.Message, StringComparison.Ordinal);
         Assert.Contains("is not known", refusal.Message, StringComparison.Ordinal);
         Assert.Empty(plan.Steps);
         Assert.Empty(await provider.RegisteredStorageAsync());
@@ -197,10 +197,9 @@ public sealed class HyperVDiskProviderTests : IDisposable
     /// <summary>
     /// The inventory a recorded answer gives: two machines, one with two checkpoints on two branches,
     /// each built on a chain down to the base disk, one whose chain Hyper-V cuts short. A disk on the
-    /// branch the machine no longer runs from is reached only through its checkpoint's disk. It is the inventory the
-    /// Windows PowerShell query gave for the same machines, disks and chains, which listed the attached
-    /// disks as the machine's, every checkpoint's disk and every parent as its checkpoints', each once,
-    /// and the first disk it could not describe. Mutation: following only the attached disks loses the
+    /// branch the machine no longer runs from is reached only through its checkpoint's disk. The attached
+    /// disks are the machine's, every checkpoint's disk and every parent are its checkpoints', each once,
+    /// and the first disk Hyper-V would not describe is said. Mutation: following only the attached disks loses the
     /// other branch's disk, and taking a disk Hyper-V would not describe for one built on nothing hides the cut chain.
     /// </summary>
     [Fact]
@@ -326,18 +325,19 @@ public sealed class HyperVDiskProviderTests : IDisposable
 
     /// <summary>
     /// Every way a disk's description can fail cuts its chain, and the cut is said: a call WMI failed, a
-    /// return value that is not completed, and a description with no <c>ParentPath</c> in it. Mutation:
+    /// return value that is not completed, and a description with no <c>ParentPath</c> in it. The first two
+    /// carry a readable description beside the failure, so only the failure can cut the chain. Mutation:
     /// reading any of them as a disk built on nothing leaves no problem.
     /// </summary>
     [Theory]
-    [InlineData(unchecked((int)0x80041010), null, null)]
+    [InlineData(unchecked((int)0x80041010), 0, null)]
     [InlineData(0, 4096, null)]
     [InlineData(0, 0, "<INSTANCE CLASSNAME=\"Msvm_VirtualHardDiskSettingData\"></INSTANCE>")]
     public void AParentHyperVWouldNotDescribeIsSaidRatherThanHidden(int error, int? returnValue, string? settingData)
     {
         var disk = Path.Combine(_temp.Path, "Dev.avhdx");
         var hyperV = new FakeHyperV()
-            .Answering(disk, new HyperVDiskAnswer(error, returnValue, settingData))
+            .Answering(disk, new HyperVDiskAnswer(error, returnValue, settingData ?? FakeHyperV.SettingData(disk, null)))
             .Machine("Dev", Off, [disk]);
 
         var inventory = new HyperVMachines(_system, _environment, hyperV).Read(CancellationToken.None);

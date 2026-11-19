@@ -26,10 +26,11 @@ internal static class WbemConnection
     public const int TimedOut = 0x40004;
 
     /// <summary>
-    /// <c>WBEM_E_TIMED_OUT</c>: the failure <see cref="WbemQuery.Rows{T}"/> gives where the provider did
-    /// not finish within <see cref="Safety.ToolRun.QueryLimit"/>, so a caller can say the wait ran out.
+    /// <c>WBEM_E_TIMED_OUT</c>: WMI's own code for a call that ran out of time, which
+    /// <see cref="WbemQuery.Rows{T}"/> also gives where the provider did not finish within
+    /// <see cref="Safety.ToolRun.QueryLimit"/>, so a caller says the wait ran out whichever ended it.
     /// </summary>
-    public const int Unfinished = unchecked((int)0x80043001);
+    public const int Unfinished = unchecked((int)0x80041069);
 
     /// <summary><c>WBEM_E_FAILED</c>: a call that reported success but gave nothing to read.</summary>
     public const int Failed = unchecked((int)0x80041001);

@@ -14,9 +14,9 @@ namespace Deguffer.Core.VirtualDisks;
 /// folder can be WSL's, Docker's or another host's. Each machine's active settings name the disks it is
 /// attached to, each checkpoint's settings name the disks it keeps, and each disk is asked what it is
 /// built on (<see cref="HyperVDiskChains"/>), so the whole chain of a machine with checkpoints is named
-/// and registered. That is what <c>Get-VMHardDiskDrive</c>, <c>Get-VMSnapshot</c> and <c>Get-VHD</c>
-/// read, and the answer keeps each thing they gave: the machine's name, whether it is saved, how many
-/// checkpoints it has, its attached disks and the disks its checkpoints and chains keep.</para>
+/// and registered. Those are the objects <c>Get-VMHardDiskDrive</c>, <c>Get-VMSnapshot</c> and
+/// <c>Get-VHD</c> read: the machine's name, whether it is saved, how many checkpoints it has, its
+/// attached disks and the disks its checkpoints and chains keep.</para>
 ///
 /// <para><b>Hyper-V's answer is only an answer to an account it trusts.</b> Every Hyper-V cmdlet refused an
 /// account that is neither elevated nor in Hyper-V Administrators where the survey measured it, and a
@@ -78,7 +78,7 @@ public sealed class HyperVMachines(ISystemDirectories system, IUserEnvironment e
         if (!environment.IsHyperVAdministrator)
         {
             return Problem(
-                "Hyper-V answers only an elevated PowerShell or a member of the Hyper-V Administrators group, and "
+                "Hyper-V answers only an elevated program or a member of the Hyper-V Administrators group, and "
                 + $"Deguffer is running as neither, {Unanswered}");
         }
 
@@ -110,20 +110,29 @@ public sealed class HyperVMachines(ISystemDirectories system, IUserEnvironment e
     private static VirtualDiskInventory Read(
         IReadOnlyList<HyperVSystemRow> systems, IReadOnlyList<HyperVSettingsRow> settings, HyperVDiskChains chains)
     {
-        var bySystem = settings
-            .Where(setting => setting.SystemName is not null)
-            .ToLookup(setting => setting.SystemName!, StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, List<HyperVSettingsRow>> bySystem = new(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var setting in settings)
+        {
+            if (setting.SystemName is { } owner)
+            {
+                if (!bySystem.TryGetValue(owner, out var listed))
+                {
+                    bySystem[owner] = listed = [];
+                }
+
+                listed.Add(setting);
+            }
+        }
 
         List<VirtualDisk> disks = [];
         List<string> problems = [];
 
-        foreach (var system in systems
-            .Where(system => system.ElementName is { Length: > 0 })
-            .OrderBy(system => system.ElementName, StringComparer.OrdinalIgnoreCase))
+        foreach (var system in systems.OrderBy(system => system.ElementName, StringComparer.OrdinalIgnoreCase))
         {
-            var own = bySystem[system.Name];
-
-            if (own.FirstOrDefault(setting => setting.Type == RealizedSystem) is not { } active)
+            if (system.ElementName is not { Length: > 0 } name
+                || !bySystem.TryGetValue(system.Name, out var own)
+                || own.FirstOrDefault(setting => setting.Type == RealizedSystem) is not { } active)
             {
                 continue;
             }
@@ -139,7 +148,6 @@ public sealed class HyperVMachines(ISystemDirectories system, IUserEnvironment e
             List<string> asked = [.. attached, .. kept];
             chains.Follow(asked, kept, unfollowed);
 
-            var name = system.ElementName!;
             var machine = new VirtualMachineRecord(
                 name,
                 checkpoints.Count,

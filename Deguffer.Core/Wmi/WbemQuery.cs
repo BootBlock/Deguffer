@@ -107,4 +107,13 @@ internal static class WbemQuery
         byte tiny => tiny,
         _ => null,
     };
+
+    /// <summary>Releases a COM object a call may or may not have given.</summary>
+    public static void Release(object? instance)
+    {
+        if (instance is not null)
+        {
+            Marshal.ReleaseComObject(instance);
+        }
+    }
 }

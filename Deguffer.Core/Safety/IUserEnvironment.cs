@@ -136,8 +136,8 @@ public partial interface IUserEnvironment
 
     /// <summary>
     /// Whether Hyper-V answers this process, which runs elevated or in Hyper-V Administrators. Read from the
-    /// token every tool started inherits, for the reason <see cref="IsAdministrator"/> is: Hyper-V refuses
-    /// anyone else, so starting Windows PowerShell to ask it is a process launch for a known refusal.
+    /// token, because Hyper-V refuses anyone else, and its WMI namespace lists only the host to such an
+    /// account, so asking would read a refusal as no machines.
     /// </summary>
     bool IsHyperVAdministrator { get; }
 
