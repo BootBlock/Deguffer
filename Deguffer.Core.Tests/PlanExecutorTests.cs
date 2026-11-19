@@ -1003,7 +1003,8 @@ public sealed class PlanExecutorTests : IDisposable
 
         var progress = new ProgressRecorder<double>();
 
-        await new PlanExecutor(new FakeProcessRunner(), new FakeDirectoryScanner(), RefusalLog)
+        // A clock held still, so a removal slowed by the machine still reports only its end.
+        await new PlanExecutor(new FakeProcessRunner(), new FakeDirectoryScanner(), RefusalLog, time: new ManualTimeProvider())
             .ExecuteAsync(plan, runReach: null, residue: null, progress, underway: null, default);
 
         // Repeats are ordinary — the removal reports its last file and then its own completion —
@@ -1044,7 +1045,9 @@ public sealed class PlanExecutorTests : IDisposable
 
         var progress = new ProgressRecorder<double>();
 
-        await new PlanExecutor(new FakeProcessRunner().Responding("tool", "prune", string.Empty), new FakeDirectoryScanner(), RefusalLog)
+        // A clock held still, so a removal slowed by the machine still reports only its end.
+        await new PlanExecutor(
+                new FakeProcessRunner().Responding("tool", "prune", string.Empty), new FakeDirectoryScanner(), RefusalLog, time: new ManualTimeProvider())
             .ExecuteAsync(plan, runReach: null, residue: null, progress, underway: null, default);
 
         Assert.Equal([0.9, 1.0], progress.Reports.Select(r => Math.Round(r, 6)).Distinct());

@@ -86,9 +86,9 @@ public sealed partial class CleanProgressViewModel : ObservableObject
     /// <summary>
     /// Takes a report from the run and moves the bar, but not for every one of them.
     ///
-    /// A directory removal reports every 256 files, which on a fast volume is hundreds of reports a
-    /// second, and each one that reaches the property raises a change notification and re-lays out
-    /// the bar. Half a percent is under two pixels on any window this screen fits in, so anything
+    /// Each directory removal reports up to ten times a second, several removals can run at once,
+    /// and each report that reaches the property raises a change notification and re-lays out the
+    /// bar. Half a percent is under two pixels on any window this screen fits in, so anything
     /// smaller is spent for nothing. The end is always taken, because the one value the bar has to
     /// arrive at is the last one.
     /// </summary>

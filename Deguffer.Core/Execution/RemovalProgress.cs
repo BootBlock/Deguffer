@@ -11,22 +11,43 @@ namespace Deguffer.Core.Execution;
 ///
 /// <para><b>Never moves backwards</b> (<see cref="ForwardProgress"/>). A plan that measured too little
 /// would otherwise pull the bar back each time the walk found more than it promised.</para>
+///
+/// <para><b>Reported by time, not by count.</b> Every entry is counted, so the fraction is exact, but
+/// a report is made at most once per <see cref="ReportEvery"/>. Each one is a post to the UI thread,
+/// and a count would set their rate by how fast the volume deletes: hundreds a second on a fast one,
+/// for a bar that moves by half a percent at the least.</para>
 /// </summary>
-/// <param name="progress">Where the fraction goes, or null where nobody is watching.</param>
-/// <param name="planned">How many entries the plan measured, or zero where it measured none.</param>
-internal sealed class RemovalProgress(IProgress<double>? progress, long planned)
+internal sealed class RemovalProgress
 {
-    /// <summary>
-    /// How many entries pass between reports. The UI cannot use thousands of reports a second, and
-    /// marshalling them would cost more than the deletions they describe.
-    /// </summary>
-    private const int ReportEvery = 256;
+    /// <summary>How often a removal says how far it has got, which is often enough to watch and rare enough not to flood the UI thread.</summary>
+    internal static readonly TimeSpan ReportEvery = TimeSpan.FromMilliseconds(100);
 
-    private readonly ForwardProgress _forward = new(progress);
+    private readonly ForwardProgress _forward;
+    private readonly long _planned;
+    private readonly TimeProvider _time;
+
+    // ReportEvery in the clock's own timestamp units, so the gate compares two longs per entry.
+    private readonly long _interval;
 
     private long _found;
     private long _done;
     private bool _counted;
+
+    // The timestamp from which the next report may be made. The first is one interval in, so a removal
+    // over sooner than that posts only its end.
+    private long _due;
+
+    /// <param name="progress">Where the fraction goes, or null where nobody is watching.</param>
+    /// <param name="planned">How many entries the plan measured, or zero where it measured none.</param>
+    /// <param name="time">What times the reports: the seam a test reports through.</param>
+    public RemovalProgress(IProgress<double>? progress, long planned, TimeProvider time)
+    {
+        _forward = new ForwardProgress(progress);
+        _planned = planned;
+        _time = time;
+        _interval = (long)(ReportEvery.TotalSeconds * time.TimestampFrequency);
+        _due = time.GetTimestamp() + _interval;
+    }
 
     /// <summary>Count <paramref name="entries"/> more as found by the walk and handed to the removal.</summary>
     public void Found(long entries) => Interlocked.Add(ref _found, entries);
@@ -34,10 +55,16 @@ internal sealed class RemovalProgress(IProgress<double>? progress, long planned)
     /// <summary>The walk is over, so what it found is the whole of the removal.</summary>
     public void Counted() => Volatile.Write(ref _counted, true);
 
-    /// <summary>Count one entry done, whatever became of it, and report every so often.</summary>
+    /// <summary>Count one entry done, whatever became of it, and report if the last report is old enough.</summary>
     public void Done()
     {
-        if (Interlocked.Increment(ref _done) % ReportEvery == 0)
+        Interlocked.Increment(ref _done);
+
+        var due = Interlocked.Read(ref _due);
+        var now = _time.GetTimestamp();
+
+        // Of the threads that find a report due, only the one that moves the next due time on reports.
+        if (now >= due && Interlocked.CompareExchange(ref _due, now + _interval, due) == due)
         {
             Report();
         }
@@ -49,7 +76,7 @@ internal sealed class RemovalProgress(IProgress<double>? progress, long planned)
     private void Report()
     {
         var found = Interlocked.Read(ref _found);
-        var whole = Volatile.Read(ref _counted) ? found : Math.Max(planned, found);
+        var whole = Volatile.Read(ref _counted) ? found : Math.Max(_planned, found);
 
         _forward.Report(whole == 0 ? 1.0 : Math.Min(1.0, (double)Interlocked.Read(ref _done) / whole));
     }

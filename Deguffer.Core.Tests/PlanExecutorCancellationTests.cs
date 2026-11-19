@@ -21,6 +21,12 @@ public sealed class PlanExecutorCancellationTests : IDisposable
     private RefusalRecord RefusalLog => RefusalRecord.For(new FakeUserEnvironment(_temp.Path));
 
     /// <summary>
+    /// A removal reports by time, so a clock that moves at every look makes it report within a few
+    /// dozen entries, which is where <see cref="CancelOnFirstWork"/> stops it.
+    /// </summary>
+    private static SteppingTimeProvider ReportingClock() => new(RemovalProgress.ReportEvery / 50);
+
+    /// <summary>
     /// The removal is stopped with most of its tree still to go, the next step never starts, and the
     /// tool's own folder (§5.2), the file beside the targets and an unrecognised sibling are proved
     /// standing all the same.
@@ -41,7 +47,7 @@ public sealed class PlanExecutorCancellationTests : IDisposable
         using var cts = new CancellationTokenSource();
         var runner = new FakeProcessRunner();
 
-        var result = await new PlanExecutor(runner, ParallelEnumerationScanner.Default, RefusalLog).ExecuteAsync(
+        var result = await new PlanExecutor(runner, ParallelEnumerationScanner.Default, RefusalLog, time: ReportingClock()).ExecuteAsync(
             Plan(
                 [new DeleteDirectoryStep(cache, "The cache"), new RunCommandStep("tool", "prune", "Prune the logs") { WhenCancelled = CancelledCommand.Ended }],
                 new ProtectedPath(root, "The tool's own folder.", PathPresence.Present),
@@ -352,11 +358,11 @@ public sealed class PlanExecutorCancellationTests : IDisposable
     }
 
     private PlanExecutor Executor() =>
-        new(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog);
+        new(new FakeProcessRunner(), ParallelEnumerationScanner.Default, RefusalLog, time: ReportingClock());
 
     /// <summary>
-    /// A tree of four folders holding enough files that a removal reports progress well before its
-    /// end, which is where the tests stop it.
+    /// A tree of four folders holding enough files that a removal timed by <see cref="ReportingClock"/>
+    /// reports progress well before its end, which is where the tests stop it.
     /// </summary>
     private string Tree(params string[] segments)
     {

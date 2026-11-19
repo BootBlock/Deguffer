@@ -105,7 +105,7 @@ public sealed class TaskbarIndicatorTests
             indicator.Current);
     }
 
-    /// <summary>A write to the taskbar is a call into another process, and a clean reports every 256 files.</summary>
+    /// <summary>A write to the taskbar is a call into another process, and each removal in a clean reports up to ten times a second.</summary>
     [Fact]
     public void AReportThatDrawsTheSameBarChangesNothing()
     {
