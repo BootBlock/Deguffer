@@ -9784,7 +9784,7 @@ and never offered.
 
 | | |
 | --- | --- |
-| **Location** | Wherever the hypervisor's own records put each machine's disks. Hyper-V: its answer to `Get-VM`, `Get-VMHardDiskDrive` and `Get-VHD`. VMware Workstation: the machines `%APPDATA%\VMware\inventory.vmls` and the recent list in `preferences.ini` name, each `.vmx` and `.vmsd`, and each disk's descriptor. VirtualBox: `VirtualBox.xml` in `VBOX_USER_HOME` or `%USERPROFILE%\.VirtualBox`, and each machine's `.vbox` |
+| **Location** | Wherever the hypervisor's own records put each machine's disks. Hyper-V: its WMI namespace, `root\virtualization\v2`, which `Get-VM`, `Get-VMHardDiskDrive` and `Get-VHD` read. VMware Workstation: the machines `%APPDATA%\VMware\inventory.vmls` and the recent list in `preferences.ini` name, each `.vmx` and `.vmsd`, and each disk's descriptor. VirtualBox: `VirtualBox.xml` in `VBOX_USER_HOME` or `%USERPROFILE%\.VirtualBox`, and each machine's `.vbox` |
 | **Method** | None. Deguffer reports each disk's size on the drive, says which disks a snapshot or checkpoint keeps, and names the vendor's commands in order. It runs none of them |
 | **Typical size** | Not measured. Each snapshot or checkpoint adds a delta disk that grows with every write after it |
 
@@ -9809,8 +9809,10 @@ configuration and state files are not registered, because Hyper-V's answer names
 - **Hyper-V** answers only an elevated account or a member of Hyper-V Administrators, and a
   third-party write-up ([Altaro](https://www.altaro.com/hyper-v/?p=21601)) reports `Get-VM` listing
   nothing, rather than failing, for anyone else. So Deguffer asks its own token first, and
-  for any other account the row says that whether there are machines is not known, with nothing
-  started. It asks only where the Hyper-V module is installed. The route: delete checkpoints with `Remove-VMCheckpoint`,
+  for any other account the row says that whether there are machines is not known, with Hyper-V never
+  asked. It asks only where Hyper-V's Virtual Machine Management service (`vmms.exe`) is installed,
+  and reads each machine's attached disks, each checkpoint's disks and each disk's `ParentPath` in
+  process, without opening any disk. The route: delete checkpoints with `Remove-VMCheckpoint`,
   which merges them, then compact with `Optimize-VHD` while the machine is off
   ([Optimize-VHD](https://learn.microsoft.com/en-us/powershell/module/hyper-v/optimize-vhd)).
 - **VMware Workstation** keeps no single complete list, so the machines are its library and its

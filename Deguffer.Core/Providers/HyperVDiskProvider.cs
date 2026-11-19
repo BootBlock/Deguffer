@@ -27,14 +27,15 @@ public sealed class HyperVDiskProvider : VirtualDiskReportProvider
         IUserEnvironment? environment = null,
         IProcessRunner? runner = null,
         IProcessInspector? inspector = null,
-        IDirectoryScanner? scanner = null)
+        IDirectoryScanner? scanner = null,
+        IHyperVManagement? hyperV = null)
         : base(
             environment ?? UserEnvironment.Current,
             runner ?? ProcessRunner.Default,
             inspector ?? ProcessInspector.Default,
             scanner)
     {
-        _machines = new HyperVMachines(system ?? SystemDirectories.Current, Environment, Runner);
+        _machines = new HyperVMachines(system ?? SystemDirectories.Current, Environment, hyperV ?? HyperVWmi.Machine);
     }
 
     public override string Id => "hyper-v-disks";

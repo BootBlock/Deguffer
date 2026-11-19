@@ -1,24 +1,30 @@
-using System.Text;
 using Deguffer.Core.Execution;
 using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.VirtualDisks;
+using Deguffer.Core.Wmi;
 using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 
 /// <summary>
-/// Hyper-V's machines, disks and checkpoints, as Hyper-V's own answer lists them, reported with Hyper-V's
-/// route and no step, and an answer Hyper-V would not give read as unknown, never as no machines.
+/// Hyper-V's machines, disks and checkpoints, as Hyper-V's own WMI namespace lists them, reported with
+/// Hyper-V's route and no step, and an answer Hyper-V would not give read as unknown, never as no machines.
 ///
-/// <para>Windows PowerShell is a <see cref="FakeProcessRunner"/> that replies as the query's JSON does,
-/// and throws for any other program, so a test with no reply also proves nothing was run. Every disk is a
-/// file in the test's own folder, and the account is a member of Hyper-V Administrators unless a test says
-/// otherwise.</para>
+/// <para>The namespace is a <see cref="FakeHyperV"/> holding a recorded answer, and nothing is started:
+/// every provider is given a <see cref="FakeProcessRunner"/> with no reply, which throws for any program.
+/// Every disk is a file in the test's own folder, and the account is a member of Hyper-V Administrators
+/// unless a test says otherwise.</para>
 /// </summary>
 public sealed class HyperVDiskProviderTests : IDisposable
 {
+    /// <summary><c>EnabledState</c> for a machine that is turned off.</summary>
+    private const int Off = 3;
+
+    /// <summary><c>EnabledState</c> 6, which the Hyper-V module calls <c>Saved</c>.</summary>
+    private const int Saved = 6;
+
     private readonly TempDirectory _temp = new();
     private readonly FakeUserEnvironment _environment;
     private readonly FakeSystemDirectories _system;
@@ -28,18 +34,19 @@ public sealed class HyperVDiskProviderTests : IDisposable
     {
         _environment = new FakeUserEnvironment(_temp.Path).AsHyperVAdministrator();
         _system = new FakeSystemDirectories(_temp.Path);
-        _machines = new HyperVMachines(_system, _environment, new FakeProcessRunner());
+        _machines = new HyperVMachines(_system, _environment, new FakeHyperV());
     }
 
     public void Dispose() => _temp.Dispose();
 
-    private HyperVDiskProvider Provider(FakeProcessRunner runner, IUserEnvironment? environment = null) =>
-        new(_system, environment ?? _environment, runner, FakeProcessInspector.NothingRunning);
+    private HyperVDiskProvider Provider(FakeHyperV hyperV, IUserEnvironment? environment = null) =>
+        new(_system, environment ?? _environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning, hyperV: hyperV);
 
-    private void InstallModule() => Directory.CreateDirectory(Path.Combine(_machines.Module, "2.0.0.0"));
-
-    private FakeProcessRunner Answering(string json, int exitCode = 0) =>
-        new FakeProcessRunner().Replying(_machines.PowerShell, _ => new CommandOutcome(exitCode, json, string.Empty));
+    private void InstallHyperV()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(_machines.Service)!);
+        File.WriteAllBytes(_machines.Service, []);
+    }
 
     private string Disk(string name, int bytes = 4096)
     {
@@ -50,42 +57,40 @@ public sealed class HyperVDiskProviderTests : IDisposable
         return path;
     }
 
-    private static string Json(string text) => text.Replace(@"\", @"\\", StringComparison.Ordinal);
-
     private static string Text(CleanupPlan plan) => string.Join("\n", plan.Notes.Select(note => note.Message));
 
     [Fact]
-    public async Task WithoutTheHyperVModuleNothingIsRunAndThereIsNoRow()
+    public async Task WithoutHyperVNothingIsAskedAndThereIsNoRow()
     {
-        var runner = new FakeProcessRunner();
+        var hyperV = new FakeHyperV().Machine("Dev", Off, [Disk("Dev.vhdx")]);
 
-        Assert.False(await Provider(runner).IsPresentAsync());
-        Assert.Empty(runner.Invocations);
+        Assert.False(await Provider(hyperV).IsPresentAsync());
+        Assert.Equal(0, hyperV.Opens);
     }
 
     /// <summary>
     /// <c>Get-VM</c> has been reported (by Altaro) to list nothing, rather than fail, for an account Hyper-V does not
     /// trust, so an account that is neither elevated nor a member of Hyper-V Administrators is told whether it
-    /// has machines is not known, and Windows PowerShell is never started to learn what the token already says.
-    /// Mutation: dropping the role check runs the query, and taking the refusal for no machines leaves no row.
+    /// has machines is not known, and Hyper-V is never asked what the token already says.
+    /// Mutation: dropping the role check asks Hyper-V, and taking the refusal for no machines leaves no row.
     /// </summary>
     [Fact]
-    public async Task AnAccountHyperVWillNotAnswerIsToldItIsNotKnownWithNothingStarted()
+    public async Task AnAccountHyperVWillNotAnswerIsToldItIsNotKnownWithNothingAsked()
     {
-        InstallModule();
-        var runner = new FakeProcessRunner();
-        var provider = Provider(runner, new FakeUserEnvironment(_temp.Path));
+        InstallHyperV();
+        var hyperV = new FakeHyperV();
+        var provider = Provider(hyperV, new FakeUserEnvironment(_temp.Path));
 
         Assert.True(await provider.IsPresentAsync());
 
         var plan = await provider.PlanAsync();
         var refusal = Assert.Single(plan.Notes, note => note.Severity == PlanNoteSeverity.Warning);
 
-        Assert.Contains("elevated PowerShell or a member of the Hyper-V Administrators group", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("elevated program or a member of the Hyper-V Administrators group", refusal.Message, StringComparison.Ordinal);
         Assert.Contains("is not known", refusal.Message, StringComparison.Ordinal);
         Assert.Empty(plan.Steps);
         Assert.Empty(await provider.RegisteredStorageAsync());
-        Assert.Empty(runner.Invocations);
+        Assert.Equal(0, hyperV.Opens);
     }
 
     /// <summary>
@@ -97,51 +102,64 @@ public sealed class HyperVDiskProviderTests : IDisposable
     [InlineData(false)]
     public async Task AnElevatedAccountOrAMemberOfHyperVAdministratorsIsAsked(bool elevated)
     {
-        InstallModule();
+        InstallHyperV();
         var account = new FakeUserEnvironment(_temp.Path);
         var environment = elevated ? account.AsAdministrator() : account.AsHyperVAdministrator();
         var disk = Disk("Dev.vhdx");
-        var runner = Answering(Json(
-            $$"""{"machines":[{"name":"Dev","state":"Off","checkpoints":0,"attached":["{{disk}}"],"kept":[],"unfollowed":[]}]}"""));
+        var hyperV = new FakeHyperV().Machine("Dev", Off, [disk]);
 
-        Assert.Equal(disk, Assert.Single(await Provider(runner, environment).RegisteredStorageAsync()).Path);
-        Assert.Single(runner.Invocations);
+        Assert.Equal(disk, Assert.Single(await Provider(hyperV, environment).RegisteredStorageAsync()).Path);
+        Assert.Equal(1, hyperV.Opens);
+        Assert.Equal(1, hyperV.Disposals);
     }
 
+    /// <summary>
+    /// Each way the namespace can fail to answer is said, with why, and leaves the machines unknown rather
+    /// than none. Mutation: returning an empty inventory for any of them leaves no row.
+    /// </summary>
     [Theory]
-    [InlineData("""{"error":"Hyper-V was unable to find a virtual machine management service."}""", 0, "unable to find a virtual machine management service")]
-    [InlineData("not json", 0, "could not be read")]
-    [InlineData("[]", 0, "could not be read")]
-    [InlineData("""{"machines":3}""", 0, "could not be read")]
-    [InlineData("", 1, "could not ask Hyper-V")]
-    public async Task AHyperVThatDoesNotAnswerIsSaidAndNeverTakenForNoMachines(string answer, int exitCode, string said)
+    [InlineData("open", unchecked((int)0x80041003), "refused to list its virtual machines to this account")]
+    [InlineData("open", unchecked((int)0x8004100E), "would not list its virtual machines (error 0x8004100E)")]
+    [InlineData("systems", unchecked((int)0x80070005), "refused to list its virtual machines to this account")]
+    [InlineData("settings", WbemConnection.Unfinished, "did not list its virtual machines within 2 minutes")]
+    public async Task AHyperVThatDoesNotAnswerIsSaidAndNeverTakenForNoMachines(string failing, int hr, string said)
     {
-        InstallModule();
-        var provider = Provider(Answering(answer, exitCode));
+        InstallHyperV();
+        var hyperV = new FakeHyperV
+        {
+            OpenError = failing == "open" ? hr : WbemConnection.S_OK,
+            SystemsError = failing == "systems" ? hr : WbemConnection.S_OK,
+            SettingsError = failing == "settings" ? hr : WbemConnection.S_OK,
+        }.Machine("Dev", Off, [Disk("Dev.vhdx")]);
+        var provider = Provider(hyperV);
 
         Assert.True(await provider.IsPresentAsync());
-        Assert.Contains(said, Text(await provider.PlanAsync()), StringComparison.Ordinal);
+
+        var text = Text(await provider.PlanAsync());
+        Assert.Contains(said, text, StringComparison.Ordinal);
+        Assert.Contains("is not known", text, StringComparison.Ordinal);
+        Assert.Empty(await provider.RegisteredStorageAsync());
     }
 
-    /// <summary>A module folder Windows will not describe may be there, so Hyper-V is asked anyway.</summary>
+    /// <summary>A service file Windows will not describe may be there, so Hyper-V is asked anyway.</summary>
     [Fact]
-    public async Task AModuleFolderWindowsWillNotDescribeIsAskedRatherThanTakenForAbsent()
+    public async Task AServiceWindowsWillNotDescribeIsAskedRatherThanTakenForAbsent()
     {
-        InstallModule();
-        using var denied = new DeniedDirectory(Path.GetDirectoryName(_machines.Module)!);
-        var runner = Answering("""{"machines":[]}""");
+        InstallHyperV();
+        using var denied = DeniedDirectory.WithUnreadableFile(_machines.Service);
+        var hyperV = new FakeHyperV();
 
-        await Provider(runner).IsPresentAsync();
+        await Provider(hyperV).IsPresentAsync();
 
-        Assert.Single(runner.Invocations);
+        Assert.Equal(1, hyperV.Opens);
     }
 
     [Fact]
     public async Task AnAccountWithNoMachinesHasNoRow()
     {
-        InstallModule();
+        InstallHyperV();
 
-        Assert.False(await Provider(Answering("""{"machines":[]}""")).IsPresentAsync());
+        Assert.False(await Provider(new FakeHyperV()).IsPresentAsync());
     }
 
     /// <summary>
@@ -151,11 +169,11 @@ public sealed class HyperVDiskProviderTests : IDisposable
     [Fact]
     public async Task AMachinesDiskAndItsCheckpointsDiskAreReportedWithHyperVsRouteInOrder()
     {
-        InstallModule();
+        InstallHyperV();
         var current = Disk("Dev_7F3A.avhdx", 8192);
         var base_ = Disk("Dev.vhdx", 4096);
-        var provider = Provider(Answering(Json(
-            $$"""{"machines":[{"name":"Dev","state":"Saved","checkpoints":2,"attached":["{{current}}"],"kept":["{{base_}}","{{current}}"],"unfollowed":[]}]}""")));
+        var hyperV = new FakeHyperV().Disk(current, parent: base_).Machine("Dev", Saved, [current], [base_], [current]);
+        var provider = Provider(hyperV);
 
         var plan = await provider.PlanAsync();
         var text = Text(plan);
@@ -177,6 +195,117 @@ public sealed class HyperVDiskProviderTests : IDisposable
     }
 
     /// <summary>
+    /// The inventory a recorded answer gives: two machines, one with two checkpoints on two branches,
+    /// each built on a chain down to the base disk, one whose chain Hyper-V cuts short. A disk on the
+    /// branch the machine no longer runs from is reached only through its checkpoint's disk. The attached
+    /// disks are the machine's, every checkpoint's disk and every parent are its checkpoints', each once,
+    /// and the first disk Hyper-V would not describe is said. Mutation: following only the attached disks loses the
+    /// other branch's disk, and taking a disk Hyper-V would not describe for one built on nothing hides the cut chain.
+    /// </summary>
+    [Fact]
+    public void TheInventoryFromARecordedAnswerListsEveryDiskOfEveryChainAndSaysWhereOneIsCut()
+    {
+        var root = Path.Combine(_temp.Path, "Hyper-V");
+        string At(string name) => Path.Combine(root, name);
+
+        var hyperV = new FakeHyperV()
+            .Disk(At("Dev_B.avhdx"), parent: At("Dev_A.avhdx"))
+            .Disk(At("Dev_A.avhdx"), parent: At("Dev.vhdx"))
+            .Disk(At("Dev_X.avhdx"), parent: At("Dev_W.avhdx"))
+            .Disk(At("Dev_W.avhdx"), parent: At("Dev.vhdx"))
+            .Disk(At("Dev.vhdx"))
+            .Answering(At("Build_1.avhdx"), new HyperVDiskAnswer(WbemConnection.S_OK, 32769, null))
+            .Machine("Dev", Off, [At("Dev_B.avhdx")], [At("Dev_A.avhdx")], [At("Dev_X.avhdx")])
+            .Machine("Build", Saved, [At("Build_1.avhdx")], [At("Build_1.avhdx")]);
+
+        var inventory = new HyperVMachines(_system, _environment, hyperV).Read(CancellationToken.None);
+
+        var dev = new VirtualMachineRecord("Dev", 2, false);
+        var build = new VirtualMachineRecord("Build", 1, true);
+
+        Assert.Equal(
+            [
+                (At("Build_1.avhdx"), new HyperVDisk(build, MachineDiskRole.Current)),
+                (At("Dev_B.avhdx"), new HyperVDisk(dev, MachineDiskRole.Current)),
+                (At("Dev_A.avhdx"), new HyperVDisk(dev, MachineDiskRole.Checkpoint)),
+                (At("Dev_X.avhdx"), new HyperVDisk(dev, MachineDiskRole.Checkpoint)),
+                (At("Dev.vhdx"), new HyperVDisk(dev, MachineDiskRole.Checkpoint)),
+                (At("Dev_W.avhdx"), new HyperVDisk(dev, MachineDiskRole.Checkpoint)),
+            ],
+            inventory.Disks.Select(disk => (disk.Path, (HyperVDisk)disk.Owner)));
+        Assert.All(inventory.Disks, disk => Assert.Null(disk.Distribution));
+        Assert.Equal(
+            [
+                $"Hyper-V would not describe {At("Build_1.avhdx")}, a disk of the virtual machine 'Build', so the disks it is "
+                + "built on are not listed here.",
+            ],
+            inventory.Problems);
+    }
+
+    /// <summary>
+    /// Only a realized machine is listed, with only its virtual hard disks: the host and a planned
+    /// machine have no realized settings, and a DVD image is the user's file, which
+    /// <c>Get-VMHardDiskDrive</c> does not list. Every kind of checkpoint counts, as <c>Get-VMSnapshot</c>
+    /// counts them. Mutation: dropping the type check lists the planned machine's disk.
+    /// </summary>
+    [Fact]
+    public void OnlyARealizedMachinesHardDisksAreListedAndEveryKindOfCheckpointIsCounted()
+    {
+        var disk = Path.Combine(_temp.Path, "Dev.vhdx");
+        var recovery = Path.Combine(_temp.Path, "Dev_R.avhdx");
+        var planned = Path.Combine(_temp.Path, "Planned.vhdx");
+        var image = Path.Combine(_temp.Path, "setup.iso");
+
+        var hyperV = new FakeHyperV()
+            .Disk(recovery)
+            .Disk(planned)
+            .System(new HyperVSystemRow("HOST", "HOST", 2))
+            .System(new HyperVSystemRow("PLANNED-ID", "Planned", Off))
+            .Settings(new HyperVSettingsRow("PLANNED-ID", "Microsoft:Hyper-V:System:Planned", [new("Microsoft:Hyper-V:Virtual Hard Disk", planned)]))
+            .System(new HyperVSystemRow("DEV-ID", "Dev", 2))
+            .Settings(new HyperVSettingsRow(
+                "DEV-ID",
+                "Microsoft:Hyper-V:System:Realized",
+                [new("Microsoft:Hyper-V:Virtual Hard Disk", disk), new("Microsoft:Hyper-V:Virtual CD/DVD Disk", image)]))
+            .Settings(new HyperVSettingsRow("DEV-ID", "Microsoft:Hyper-V:Snapshot:Recovery", [new("Microsoft:Hyper-V:Virtual Hard Disk", recovery)]))
+            .Settings(new HyperVSettingsRow("DEV-ID", "Microsoft:Hyper-V:Snapshot:Replica:Standard", []))
+            .Disk(disk);
+
+        var inventory = new HyperVMachines(_system, _environment, hyperV).Read(CancellationToken.None);
+
+        Assert.Equal([disk, recovery], inventory.Disks.Select(found => found.Path));
+        Assert.Equal(new VirtualMachineRecord("Dev", 2, false), Assert.IsType<HyperVDisk>(inventory.Disks[0].Owner).Machine);
+        Assert.Empty(inventory.Problems);
+    }
+
+    /// <summary>
+    /// A parent two disks share is described once, and a chain that comes back on itself ends rather than
+    /// holding the reading. Mutation: dropping the record of what was described asks about the base twice,
+    /// and dropping the chain's own set never returns.
+    /// </summary>
+    [Fact]
+    public void EachDiskIsDescribedOnceAndAChainThatComesBackOnItselfEnds()
+    {
+        string At(string name) => Path.Combine(_temp.Path, name);
+
+        var hyperV = new FakeHyperV()
+            .Disk(At("A.avhdx"), parent: At("Base.vhdx"))
+            .Disk(At("B.avhdx"), parent: At("Base.vhdx"))
+            .Disk(At("Base.vhdx"))
+            .Disk(At("Loop1.avhdx"), parent: At("Loop2.avhdx"))
+            .Disk(At("Loop2.avhdx"), parent: At("Loop1.avhdx"))
+            .Machine("One", Off, [At("A.avhdx")])
+            .Machine("Two", Off, [At("B.avhdx"), At("Loop1.avhdx")]);
+
+        var inventory = new HyperVMachines(_system, _environment, hyperV).Read(CancellationToken.None);
+
+        Assert.Single(hyperV.Described, path => path == At("Base.vhdx"));
+        Assert.Equal(hyperV.Described.Count, hyperV.Described.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Contains(inventory.Disks, disk => disk.Path == At("Loop2.avhdx"));
+        Assert.Empty(inventory.Problems);
+    }
+
+    /// <summary>
     /// A path Hyper-V gives with the extended-length prefix is the same disk as its plain form, so it is
     /// named once and compares equal to the path Explore draws.
     /// </summary>
@@ -184,9 +313,9 @@ public sealed class HyperVDiskProviderTests : IDisposable
     public void ADiskHyperVNamesWithTheDevicePrefixIsThePlainPath()
     {
         var plain = Path.Combine(_temp.Path, "Hyper-V", "Dev", "Dev.vhdx");
+        var hyperV = new FakeHyperV().Disk(plain).Disk(@"\\?\" + plain).Machine("Dev", Off, [@"\\?\" + plain], [plain]);
 
-        var inventory = HyperVMachines.Parse(Json(
-            $$"""{"machines":[{"name":"Dev","state":"Off","checkpoints":0,"attached":["\\?\{{plain}}"],"kept":["{{plain}}"],"unfollowed":[]}]}"""));
+        var inventory = new HyperVMachines(_system, _environment, hyperV).Read(CancellationToken.None);
 
         var disk = Assert.Single(inventory.Disks);
         Assert.Equal(plain, disk.Path);
@@ -195,59 +324,60 @@ public sealed class HyperVDiskProviderTests : IDisposable
     }
 
     /// <summary>
-    /// A warning a module writes while it loads goes to standard output ahead of the JSON, so the answer is
-    /// the last line.
+    /// Every way a disk's description can fail cuts its chain, and the cut is said: a call WMI failed, a
+    /// return value that is not completed, and a description with no <c>ParentPath</c> in it. The first two
+    /// carry a readable description beside the failure, so only the failure can cut the chain. Mutation:
+    /// reading any of them as a disk built on nothing leaves no problem.
     /// </summary>
-    [Fact]
-    public async Task AWarningAheadOfTheAnswerIsPassedOver()
-    {
-        InstallModule();
-        var disk = Disk("Dev.vhdx");
-        var runner = Answering(Json(
-            $$"""
-            WARNING: The names of some imported commands from the module 'Hyper-V' include unapproved verbs.
-            {"machines":[{"name":"Dev","state":"Off","checkpoints":0,"attached":["{{disk}}"],"kept":[],"unfollowed":[]}]}
-            """));
-
-        Assert.Equal(disk, Assert.Single(await Provider(runner).RegisteredStorageAsync()).Path);
-    }
-
-    [Fact]
-    public void AParentHyperVWouldNotDescribeIsSaidRatherThanHidden()
+    [Theory]
+    [InlineData(unchecked((int)0x80041010), 0, null)]
+    [InlineData(0, 4096, null)]
+    [InlineData(0, 0, "<INSTANCE CLASSNAME=\"Msvm_VirtualHardDiskSettingData\"></INSTANCE>")]
+    public void AParentHyperVWouldNotDescribeIsSaidRatherThanHidden(int error, int? returnValue, string? settingData)
     {
         var disk = Path.Combine(_temp.Path, "Dev.avhdx");
+        var hyperV = new FakeHyperV()
+            .Answering(disk, new HyperVDiskAnswer(error, returnValue, settingData ?? FakeHyperV.SettingData(disk, null)))
+            .Machine("Dev", Off, [disk]);
 
-        var inventory = HyperVMachines.Parse(Json(
-            $$"""{"machines":[{"name":"Dev","state":"Off","checkpoints":1,"attached":["{{disk}}"],"kept":[],"unfollowed":["{{disk}}"]}]}"""));
+        var inventory = new HyperVMachines(_system, _environment, hyperV).Read(CancellationToken.None);
 
         Assert.Contains(disk, Assert.Single(inventory.Problems), StringComparison.Ordinal);
+        Assert.Equal(disk, Assert.Single(inventory.Disks).Path);
     }
 
-    /// <summary>The query only reads, and reaches Windows PowerShell whole, with nothing for a command line to unquote.</summary>
+    /// <summary>
+    /// A reading cancelled while Hyper-V's service is answering stops waiting at once, and the session is
+    /// still released once the service answers. Mutation: awaiting the work without the token waits for
+    /// the service, which never answers here until the test lets it.
+    /// </summary>
     [Fact]
-    public async Task TheQueryRunsWindowsPowerShellAndChangesNothing()
+    public async Task ACancelledReadingStopsWaitingForHyperVAndStillReleasesTheSession()
     {
-        InstallModule();
-        var runner = Answering("""{"machines":[]}""");
-
-        await Provider(runner).IsPresentAsync();
-
-        var run = Assert.Single(runner.Invocations);
-        Assert.Equal(Path.Combine(_system.WindowsDirectory, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"), run.FileName);
-
-        // Read in the console's OEM code page, a disk under a non-ASCII folder would be registered at a path
-        // that is not there, and protected as absent.
-        Assert.Equal(ToolOutputEncoding.Utf8, run.Run.Output);
-        Assert.StartsWith("-NoProfile -NonInteractive -EncodedCommand ", run.Arguments, StringComparison.Ordinal);
-
-        var query = Encoding.Unicode.GetString(Convert.FromBase64String(run.Arguments.Split(' ')[^1]));
-        Assert.Equal(HyperVMachines.Query, query);
-        Assert.Contains("[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false", query, StringComparison.Ordinal);
-
-        foreach (var verb in (string[])["Remove-", "Optimize-", "Set-", "Stop-", "Start-", "Merge-", "Restore-", "Dismount-", "Mount-"])
+        InstallHyperV();
+        using var answering = new ManualResetEventSlim();
+        using var asked = new ManualResetEventSlim();
+        using var cancel = new CancellationTokenSource();
+        var hyperV = new FakeHyperV
         {
-            Assert.DoesNotContain(verb, query, StringComparison.OrdinalIgnoreCase);
-        }
+            Describing = (_, _) =>
+            {
+                asked.Set();
+                answering.Wait(TimeSpan.FromSeconds(30));
+            },
+        }.Machine("Dev", Off, [Disk("Dev.vhdx")]);
+
+        var held = new HyperVMachines(_system, _environment, hyperV).ReadAsync(cancel.Token);
+
+        Assert.True(asked.Wait(TimeSpan.FromSeconds(30)), "the reading never reached the disk's description");
+        await cancel.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => held);
+        Assert.Equal(0, hyperV.Disposals);
+
+        answering.Set();
+        SpinWait.SpinUntil(() => hyperV.Disposals == 1, TimeSpan.FromSeconds(30));
+        Assert.Equal(1, hyperV.Disposals);
     }
 
     /// <summary>
@@ -257,7 +387,7 @@ public sealed class HyperVDiskProviderTests : IDisposable
     [Fact]
     public async Task ARowWhoseLocationHoldsAHyperVDiskLeavesItAndTheRunProvesIt()
     {
-        InstallModule();
+        InstallHyperV();
         var caches = Path.Combine(_environment.UserProfile, ".gradle", "caches");
         var machines = Path.Combine(caches, "vms");
         Directory.CreateDirectory(machines);
@@ -268,8 +398,7 @@ public sealed class HyperVDiskProviderTests : IDisposable
         var gradle = new GradleCacheProvider(_environment, new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
         Assert.Contains((await gradle.PlanAsync()).TargetedPaths, path => LongPath.Contains(path, disk));
 
-        var report = Provider(Answering(Json(
-            $$"""{"machines":[{"name":"Dev","state":"Off","checkpoints":0,"attached":["{{disk}}"],"kept":[],"unfollowed":[]}]}""")));
+        var report = Provider(new FakeHyperV().Machine("Dev", Off, [disk]));
         var planner = new CleanupPlanner([gradle, report], volumes: new FakeVolumeInventory());
         var cache = Assert.Single(await planner.PlanAsync([gradle]));
 

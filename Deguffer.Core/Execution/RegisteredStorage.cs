@@ -34,8 +34,8 @@ public sealed record RegisteredStorage(IReadOnlyList<RegisteredEntry> Entries)
     /// Asks every row in <paramref name="providers"/> that registers storage, and probes and places each
     /// path once. The entries are in the rows' order, whatever order they answer in.
     ///
-    /// <para><b>Every row at once.</b> A row's reading may start a tool (the Hyper-V row starts Windows
-    /// PowerShell), and each path is probed and followed to its mounts. Asked in turn, every row would wait
+    /// <para><b>Every row at once.</b> A row's reading may wait on a tool (the Hyper-V row waits on Hyper-V's
+    /// own service), and each path is probed and followed to its mounts. Asked in turn, every row would wait
     /// for the slowest before it. Each row's reading is started before any is awaited, so each waits on
     /// its tool beside the others. A planning pass starts this off its own thread
     /// (<see cref="PassStart.Begin{T}"/>).</para>

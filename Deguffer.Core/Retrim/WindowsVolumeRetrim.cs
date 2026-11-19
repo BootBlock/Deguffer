@@ -126,7 +126,7 @@ public sealed class WindowsVolumeRetrim : IVolumeRetrim
         try
         {
             hr = volumeClass.GetMethod(Method, 0, out signature, out var outSignature);
-            Release(outSignature);
+            WbemQuery.Release(outSignature);
 
             if (hr != WbemConnection.S_OK || signature is null)
             {
@@ -160,32 +160,16 @@ public sealed class WindowsVolumeRetrim : IVolumeRetrim
 
             hr = outputs.Get("ReturnValue", 0, out var returned, out _, out _);
 
-            // WMI hands a uint32 over as a signed four-byte VARIANT.
-            int? code = returned switch
-            {
-                int signed => signed,
-                uint unsigned => unchecked((int)unsigned),
-                _ => null,
-            };
-
-            return hr == WbemConnection.S_OK && code is { } returnValue
+            return hr == WbemConnection.S_OK && WbemQuery.Integer(returned) is { } returnValue
                 ? RetrimAnswer.FromReturnValue(returnValue)
                 : RetrimAnswer.FromError(hr);
         }
         finally
         {
-            Release(outputs);
-            Release(inputs);
-            Release(signature);
+            WbemQuery.Release(outputs);
+            WbemQuery.Release(inputs);
+            WbemQuery.Release(signature);
             Marshal.ReleaseComObject(volumeClass);
-        }
-    }
-
-    private static void Release(object? instance)
-    {
-        if (instance is not null)
-        {
-            Marshal.ReleaseComObject(instance);
         }
     }
 }
