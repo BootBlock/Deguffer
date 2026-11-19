@@ -5,8 +5,8 @@ namespace Deguffer.Core.Tests;
 /// <summary>
 /// What each row on screen does as its list changes: a row leaving fades where it stood while the
 /// rows below glide up, a row arriving pushes the rows below down, a row the sort moved glides to
-/// its place, a change that replaces most of the list crossfades, and the row the reader is at keeps
-/// its place unless it is the one that changed.
+/// its place, a change that replaces most of the list crossfades, a list at its top stays at its top,
+/// and partway down the row the reader is at keeps its place unless it is the one that changed.
 /// </summary>
 public sealed class ListMotionTests
 {
@@ -118,6 +118,103 @@ public sealed class ListMotionTests
 
         Assert.True(plan.Crossfade);
         Assert.Equal([Arrive("a"), Arrive("b"), Arrive("c")], plan.Rows);
+    }
+
+    /// <summary>
+    /// The list laid the change out a row further down than the top it stood at. The view goes
+    /// back to the top, with the pointer on the first row.
+    /// </summary>
+    [Fact]
+    public void AListAtItsTopGoesBackToItsTopWhenTheChangeLeftItFurtherDown()
+    {
+        var shift = ListMotion.Keep(
+            new ListPlace(0, Row, false),
+            ["a"],
+            Tops("a", "b", "c"),
+            Placed("a", "b", "c"),
+            Set(),
+            StringComparer.Ordinal);
+
+        Assert.Equal(-Row, shift);
+    }
+
+    /// <summary>
+    /// A row went in at the top and pushed the row under the pointer down. Partway down the list
+    /// that row would be held, but a reader at the top stays at the top.
+    /// </summary>
+    [Fact]
+    public void AListAtItsTopStaysThereRatherThanHoldingTheRowUnderThePointer()
+    {
+        var before = Tops("a", "b");
+        var after = Placed("new", "a", "b");
+
+        Assert.Equal(Row, ListMotion.Hold(["b"], before, after, StringComparer.Ordinal));
+        Assert.Null(ListMotion.Keep(new ListPlace(0, 0, false), ["b"], before, after, Set(), StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void AListScrolledPartwayDownHoldsTheRowUnderThePointer()
+    {
+        var shift = ListMotion.Keep(
+            new ListPlace(5 * Row, 5 * Row, false),
+            ["c"],
+            Tops("a", "b", "c", "d"),
+            Placed("a", "c", "d"),
+            Set("b"),
+            StringComparer.Ordinal);
+
+        Assert.Equal(-Row, shift);
+    }
+
+    /// <summary>
+    /// A new scan's rows replaced the old ones in one reset. The view stood partway down the old
+    /// list and stands at the foot of the few new rows, and goes to the top of the new list.
+    /// </summary>
+    [Fact]
+    public void AListResetToBeAboutSomethingElseGoesToItsTop()
+    {
+        var shift = ListMotion.Keep(
+            new ListPlace(5 * Row, 2 * Row, true),
+            ["x"],
+            Tops("a", "b"),
+            Placed("x", "y"),
+            Set("a", "b"),
+            StringComparer.Ordinal);
+
+        Assert.Equal(-2 * Row, shift);
+    }
+
+    /// <summary>A list view reports a sort's move as a reset, and the rows that stayed keep the reader's place.</summary>
+    [Fact]
+    public void AResetThatLeftARowOnScreenInTheListHoldsTheRowUnderThePointer()
+    {
+        var shift = ListMotion.Keep(
+            new ListPlace(5 * Row, 5 * Row, true),
+            ["c"],
+            Tops("a", "b", "c", "d"),
+            Placed("a", "c", "d"),
+            Set("b"),
+            StringComparer.Ordinal);
+
+        Assert.Equal(-Row, shift);
+    }
+
+    /// <summary>
+    /// Every row on screen removed without a reset is the reader's own removal, as on a page whose
+    /// scroller holds more than the list, so the view stays where it is.
+    /// </summary>
+    [Fact]
+    public void RemovingEveryRowOnScreenWithoutAResetLeavesTheView()
+    {
+        var shift = ListMotion.Keep(
+            new ListPlace(5 * Row, 5 * Row, false),
+            ["a"],
+            Tops("a", "b"),
+            Placed("c", "d"),
+            Set("a", "b"),
+            StringComparer.Ordinal);
+
+        Assert.Null(shift);
     }
 
     [Fact]

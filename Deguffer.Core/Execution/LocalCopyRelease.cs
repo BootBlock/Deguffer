@@ -12,12 +12,6 @@ namespace Deguffer.Core.Execution;
 internal static class LocalCopyRelease
 {
     /// <summary>
-    /// How often a release reports progress, in files: often enough to move the bar, and far less often
-    /// than the hundred thousand posts to the UI thread a large account would otherwise make.
-    /// </summary>
-    private const int ProgressInterval = 256;
-
-    /// <summary>
     /// How many files are asked about at once, the calling thread included. Each request waits on the
     /// disk and on the cloud files filter rather than on a processor, and nothing in one depends on
     /// another's answer, so a step of a large account asked one file after another spent nearly all of
@@ -44,6 +38,7 @@ internal static class LocalCopyRelease
         ReleaseLocalCopiesStep step,
         MinimumAge keep,
         IProgress<double>? progress,
+        TimeProvider time,
         CancellationToken ct)
     {
         if (cloud.ProviderState(step.SyncRoot) is not SyncProviderState.Running)
@@ -71,7 +66,7 @@ internal static class LocalCopyRelease
 
         // On a thread of the run's own, never the pool's: it drives the requests and waits for them all.
         // See ListWorkers.
-        var tally = await WorkerThreads.Shared.RunAsync(() => Request(cloud, step, resolvedRoot, keep, progress, ct), ct)
+        var tally = await WorkerThreads.Shared.RunAsync(() => Request(cloud, step, resolvedRoot, keep, progress, time, ct), ct)
             .ConfigureAwait(false);
 
         progress?.Report(1.0);
@@ -114,12 +109,14 @@ internal static class LocalCopyRelease
         VolumeDevicePath resolvedRoot,
         MinimumAge keep,
         IProgress<double>? progress,
+        TimeProvider time,
         CancellationToken ct)
     {
         var pins = new InheritedPins(cloud, step.SyncRoot);
         var root = LongPath.Display(step.SyncRoot);
         var answers = new ReleaseAnswer[step.Files.Count];
         var forward = new ForwardProgress(progress);
+        var cadence = new ReportCadence(time);
         var finished = 0;
 
         ListWorkers.Run(step.Files.Count, ReleasesAtOnce, index =>
@@ -131,7 +128,8 @@ internal static class LocalCopyRelease
             var resolved = resolvedRoot.Join(LongPath.Relative(root, shown));
             answers[index] = cloud.Release(path, resolved, now => ReleaseRules.Hold(now, inherited, keep) is null);
 
-            if (Interlocked.Increment(ref finished) is var done && done % ProgressInterval == 0)
+            var done = Interlocked.Increment(ref finished);
+            if (cadence.Claim())
             {
                 forward.Report((double)done / answers.Length);
             }

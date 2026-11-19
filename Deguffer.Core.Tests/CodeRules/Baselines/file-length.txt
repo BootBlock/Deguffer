@@ -2,7 +2,7 @@
 # its line is lowered when it does; it never grows. Never add a line: split the file instead.
 590 Deguffer.App/Controls/ExploreLayers.cs
 802 Deguffer.App/Controls/ExploreZoom.cs
-1465 Deguffer.App/ViewModels/CleanViewModel.cs
+1446 Deguffer.App/ViewModels/CleanViewModel.cs
 917 Deguffer.App/ViewModels/ExploreViewModel.cs
 745 Deguffer.App/Views/ExplorePage.xaml.cs
 739 Deguffer.Core/Execution/CleanupPlanner.cs
@@ -10,7 +10,7 @@
 1063 Deguffer.Core/Execution/PlanExecutor.cs
 559 Deguffer.Core/Exploring/Acting/ExploreActionPolicy.cs
 598 Deguffer.Core/Exploring/ExploreTree.cs
-835 Deguffer.Core/Exploring/Layout/TreemapLayout.cs
+738 Deguffer.Core/Exploring/Layout/TreemapLayout.cs
 551 Deguffer.Core/Providers/AffinityModelCacheProvider.cs
 539 Deguffer.Core/Providers/ClaudeCodeDerivedStateProvider.cs
 956 Deguffer.Core/Providers/CleanupProviderBase.cs
@@ -24,7 +24,7 @@
 562 Deguffer.Core/Providers/TempDirectoryProvider.cs
 516 Deguffer.Core/Providers/UnrealDerivedDataCacheProvider.cs
 659 Deguffer.Core/Providers/VcpkgCacheProvider.cs
-889 Deguffer.Core/Safety/FileInformation.cs
+791 Deguffer.Core/Safety/FileInformation.cs
 739 Deguffer.Core/Safety/IUserEnvironment.cs
 593 Deguffer.Core/Scanning/DirectoryScanner.cs
 510 Deguffer.Core/Scanning/Mft/MftReadPass.cs

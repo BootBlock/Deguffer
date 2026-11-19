@@ -85,18 +85,19 @@ internal static class CopyComparison
 
         copyStreams = streams;
 
-        if (streams.FirstOrDefault(stream => !Holds(keptStreams, stream)) is { Name: not null } extra)
+        if (FirstNotIn(streams, keptStreams) is { } extra)
         {
             return (RemovalCheck.StreamsDiffer, $"It holds a named stream, '{Display(extra.Name)}', that the copy kept lacks or holds at another length, so removing it would lose that data.");
         }
 
-        if (keptStreams.FirstOrDefault(stream => !Holds(streams, stream)) is { Name: not null } missing)
+        if (FirstNotIn(keptStreams, streams) is { } missing)
         {
             return (RemovalCheck.StreamsDiffer, $"The copy kept holds a named stream, '{Display(missing.Name)}', that this copy lacks, so the two are not the same file.");
         }
 
-        foreach (var stream in streams)
+        for (var i = 0; i < streams.Count; i++)
         {
+            var stream = streams[i];
             using var keptStream = NamedStreams.Open(kept, stream.Name, shareDelete: false);
             using var copyStream = NamedStreams.Open(copy, stream.Name, shareDelete: true);
 
@@ -119,16 +120,39 @@ internal static class CopyComparison
     /// <c>Zone.Identifier</c> left out, or null where Windows would not list them.
     /// </summary>
     public static IReadOnlyList<NamedStream>? StreamsOf(SafeFileHandle handle) =>
-        FileInformation.StreamsOf(handle) is { } streams
-            ? [.. streams.Where(stream => !stream.Name.Equals(ZoneIdentifier, StringComparison.OrdinalIgnoreCase))]
-            : null;
+        FileInformation.StreamsOf(handle, ZoneIdentifier);
 
-    /// <summary>Whether two listings name the same streams at the same lengths. NTFS names streams without regard to case.</summary>
+    /// <summary>Whether two listings name the same streams at the same lengths.</summary>
     public static bool SameStreams(IReadOnlyList<NamedStream> left, IReadOnlyList<NamedStream> right) =>
-        left.Count == right.Count && left.All(stream => Holds(right, stream));
+        left.Count == right.Count && FirstNotIn(left, right) is null;
 
-    private static bool Holds(IReadOnlyList<NamedStream> streams, NamedStream stream) =>
-        streams.Any(other => other.Length == stream.Length && other.Name.Equals(stream.Name, StringComparison.OrdinalIgnoreCase));
+    /// <summary>The first of <paramref name="streams"/> that <paramref name="others"/> lacks at its length, or null where it lacks none.</summary>
+    private static NamedStream? FirstNotIn(IReadOnlyList<NamedStream> streams, IReadOnlyList<NamedStream> others)
+    {
+        for (var i = 0; i < streams.Count; i++)
+        {
+            if (!Holds(others, streams[i]))
+            {
+                return streams[i];
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Whether <paramref name="streams"/> holds <paramref name="stream"/> at its length. NTFS names streams without regard to case.</summary>
+    private static bool Holds(IReadOnlyList<NamedStream> streams, NamedStream stream)
+    {
+        for (var i = 0; i < streams.Count; i++)
+        {
+            if (streams[i].Length == stream.Length && streams[i].Name.Equals(stream.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// Whether two handles hold the same <paramref name="length"/> bytes, or null where either ended

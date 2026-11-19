@@ -166,9 +166,7 @@ public sealed partial class CleanViewModel : ObservableObject
         TotalSpace = space?.Total;
         FreeSpaceNow = space?.Free;
 
-        // Rows arrive as their providers finish and are cleared wholesale between runs; subscribing
-        // covers both without every mutation site having to remember to bring the drawn rows along.
-        Findings.CollectionChanged += (_, _) => ShowListed();
+        _listed = new StorageListedRows(Findings, NotifyEmptyStateChanged);
 
         // Offered before anything has been scanned, so an elevated preview does not have to be
         // reached through the unelevated one it replaces.
@@ -262,16 +260,10 @@ public sealed partial class CleanViewModel : ObservableObject
 
     public ObservableCollection<FindingViewModel> Findings { get; } = [];
 
-    /// <summary>
-    /// The rows the list draws: every row in <see cref="Findings"/> that the filters let through, in
-    /// the same order.
-    ///
-    /// <para>A row the filters hide leaves this list rather than collapsing where it stood, and a row
-    /// they show again joins it, so the list can show it going and coming (<see cref="ShowListed"/>).
-    /// The commonest case is the end of a clean: a row the clean emptied is re-planned as already
-    /// clear, and leaves the list as the rows below it close up.</para>
-    /// </summary>
-    public ObservableCollection<FindingViewModel> Listed { get; } = [];
+    private readonly StorageListedRows _listed;
+
+    /// <summary>The rows the list draws. See <see cref="StorageListedRows"/>.</summary>
+    public BoundList<FindingViewModel> Listed => _listed.Rows;
 
     public WhenCompleteViewModel WhenComplete { get; }
 
@@ -392,7 +384,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
         // The collection did not change, so the subscription above raises nothing. Without this a
         // filter that empties the list leaves the empty state collapsed behind it.
-        ShowListed();
+        _listed.Show();
     }
 
     /// <summary>A row is drawn unless a filter the user left on hides it. See <see cref="PreviewFilter"/>.</summary>
@@ -555,17 +547,6 @@ public sealed partial class CleanViewModel : ObservableObject
           + "installed” above, or switch on “Show items that are already clear” in Settings."
         : "A scan looks at the locations Deguffer recognises and reports what each one holds. It "
           + "reads only — nothing is removed until you choose to.";
-
-    /// <summary>
-    /// Bring <see cref="Listed"/> up to the rows the filters let through, in place, and say whether
-    /// that leaves the list empty. Asked of every row rather than of the one that changed, because a
-    /// filter changes under rows that are already built.
-    /// </summary>
-    private void ShowListed()
-    {
-        LiveList.Show(Listed, [.. Findings.Where(row => row.IsListed)], row => row);
-        NotifyEmptyStateChanged();
-    }
 
     private void NotifyEmptyStateChanged()
     {
@@ -1065,7 +1046,7 @@ public sealed partial class CleanViewModel : ObservableObject
 
         // Nothing was inserted, so the subscription that follows the list raises nothing, and a row
         // the run emptied is now one the filters may hide.
-        ShowListed();
+        _listed.Show();
         UpdateShares();
         UpdateSelectionTotal();
     }
