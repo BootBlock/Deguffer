@@ -69,17 +69,6 @@ internal sealed unsafe partial class FileInformation
     private const int ErrorInvalidParameter = 87;
     private const int ErrorMoreData = 234;
 
-    /// <summary><c>FILE_NAMED_STREAMS</c>: the volume can hold streams beside a file's content.</summary>
-    private const uint NamedStreamsSupported = 0x0004_0000;
-
-    /// <summary>The most a listing of one file's streams may take before Windows' answer is given up on.</summary>
-    private const int LongestStreamListing = 16 * 1024 * 1024;
-
-    /// <summary><c>FILE_STREAM_INFO</c>'s fixed part: the next entry's offset, the name's length, the stream's size and allocation.</summary>
-    private const int StreamEntryHeader = 24;
-
-    /// <summary>How Windows names a file's main, unnamed stream in a listing of its streams.</summary>
-    private const string MainStream = "::$DATA";
     private static readonly nint InvalidFind = -1;
 
     /// <summary>The longest path Windows accepts in extended-length form.</summary>
@@ -597,93 +586,6 @@ internal sealed unsafe partial class FileInformation
             OpenExisting,
             OpenReparsePoint | SequentialScan,
             templateFile: 0));
-
-    /// <summary>
-    /// Every named stream of the file <paramref name="handle"/> is open on, as Windows names them
-    /// (<c>:name:$DATA</c>) with their lengths, its main stream left out, or null where Windows would
-    /// not list them. Asked through a handle already held, so the streams listed are that file's
-    /// whatever its path names by then. An attributes-only handle answers it too, measured on NTFS.
-    /// </summary>
-    public static IReadOnlyList<NamedStream>? StreamsOf(SafeFileHandle handle)
-    {
-        for (var size = 4096; size <= LongestStreamListing; size *= 2)
-        {
-            var buffer = new byte[size];
-
-            fixed (byte* bytes = buffer)
-            {
-                if (GetFileInformationByHandleEx(handle, FileStreamInfoClass, bytes, size))
-                {
-                    return Streams(bytes, size);
-                }
-
-                var error = Marshal.GetLastPInvokeError();
-
-                switch (error)
-                {
-                    case ErrorHandleEof:
-                        // Nothing holds data: a folder.
-                        return [];
-
-                    case ErrorMoreData:
-                        continue;
-
-                    default:
-                        return StreamsWhereRefused(error, VolumeFlagsOf(handle));
-                }
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// The named streams of a file whose file system refused <c>FileStreamInfo</c> with
-    /// <paramref name="error"/>, given what its volume says it supports: none, where the volume says it
-    /// holds no named streams, which FAT32 and exFAT say and refuse the class with
-    /// <c>ERROR_INVALID_PARAMETER</c> (measured on 2026-10-09). Null everywhere else, because a volume
-    /// that may hold named streams and would not list them may hold one the copy kept lacks.
-    /// </summary>
-    /// <param name="volumeFlags">The volume's <c>FILE_*</c> flags, or null where it would not say.</param>
-    internal static IReadOnlyList<NamedStream>? StreamsWhereRefused(int error, uint? volumeFlags) =>
-        error == ErrorInvalidParameter && volumeFlags is { } flags && (flags & NamedStreamsSupported) == 0 ? [] : null;
-
-    /// <summary>The <c>FILE_*</c> flags of the volume <paramref name="handle"/> is open on, or null where Windows would not say.</summary>
-    private static uint? VolumeFlagsOf(SafeFileHandle handle) =>
-        GetVolumeInformationByHandle(handle, null, 0, null, null, out var flags, null, 0) ? flags : null;
-
-    /// <summary>The entries of a <c>FILE_STREAM_INFO</c> listing, or null where one runs past the buffer.</summary>
-    private static List<NamedStream>? Streams(byte* bytes, int size)
-    {
-        List<NamedStream> streams = [];
-        var offset = 0;
-
-        while (true)
-        {
-            var entry = bytes + offset;
-            var next = *(uint*)entry;
-            var nameBytes = *(uint*)(entry + 4);
-
-            if (offset + StreamEntryHeader + nameBytes > size)
-            {
-                return null;
-            }
-
-            var name = new string((char*)(entry + StreamEntryHeader), 0, (int)nameBytes / sizeof(char));
-
-            if (name != MainStream)
-            {
-                streams.Add(new NamedStream(name, *(long*)(entry + 8)));
-            }
-
-            if (next == 0)
-            {
-                return streams;
-            }
-
-            offset += (int)next;
-        }
-    }
 
     private static FileIdDescriptor Descriptor(FileIdentity identity, IdentityRoute route) =>
         route is IdentityRoute.FileId
