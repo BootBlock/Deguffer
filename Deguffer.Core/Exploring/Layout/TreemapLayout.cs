@@ -22,10 +22,10 @@ namespace Deguffer.Core.Exploring.Layout;
 /// <para>The layout is iterative throughout. A volume's tree can be arbitrarily deep, and a
 /// recursive layout over a real <c>node_modules</c> is a stack overflow in a repaint handler.</para>
 ///
-/// <para>Over 500 lines because the row packing, the aggregate, the blocks beside the volume and the
-/// walk to one shape (<see cref="Locate"/>) are one pass over one rectangle type, and most of the length
-/// is the reasoning behind each rule. Which
-/// limits a space is held to at a zoom is <see cref="TreemapDetail"/>'s (G1).</para>
+/// <para>Over 500 lines because the row packing, the aggregate and the blocks beside the volume are
+/// one pass over one rectangle type, and most of the length is the reasoning behind each rule. Which
+/// limits a space is held to at a zoom is <see cref="TreemapDetail"/>'s, and the walk to one shape
+/// (<see cref="Locate"/>) is <see cref="TreemapWalk"/>'s (G1).</para>
 /// </summary>
 public static class TreemapLayout
 {
@@ -40,10 +40,11 @@ public static class TreemapLayout
     /// <see cref="ExploreChildOrder"/>: a scan still running publishes a tree ordered by name, and
     /// this would lay one out into rectangles that look like a treemap and are not one.</para>
     ///
-    /// <para>An array rather than the list it is built in, because every consumer indexes it and
-    /// <see cref="Rendering.TileRasteriser"/> does so once per rectangle per region of every
-    /// repaint. That is a few million reads a frame on a full canvas, and an interface indexer
-    /// returning a 32-byte struct is not free at that count (G4).</para>
+    /// <para>An array of exactly the shapes laid rather than the <see cref="ShapeBuffer"/> they are
+    /// laid in, because every consumer indexes it and <see cref="Rendering.TileRasteriser"/> does so
+    /// once per rectangle per region of every repaint. That is a few million reads a frame on a full
+    /// canvas, and an interface indexer returning a 48-byte struct is not free at that count
+    /// (G4).</para>
     /// </summary>
     /// <param name="volume">
     /// The volume <paramref name="root"/> is the whole of, whose free space and whose unaccounted use
@@ -99,7 +100,7 @@ public static class TreemapLayout
                 nameof(tree));
         }
 
-        var tiles = new List<ExploreTile>();
+        using var tiles = new ShapeBuffer();
 
         if (width <= 0 || height <= 0 || tree.SizeOf(root) <= 0)
         {
@@ -178,7 +179,9 @@ public static class TreemapLayout
     {
         ArgumentNullException.ThrowIfNull(tree);
 
-        return new Walk(tree, root, width, height, limits, volume, viewport).To(node) is { } reached
+        using var walk = new TreemapWalk(tree, root, width, height, limits, volume, viewport);
+
+        return walk.To(node) is { } reached
             ? Fraction(reached.Frame, width, height)
             : null;
     }
@@ -207,8 +210,8 @@ public static class TreemapLayout
     {
         ArgumentNullException.ThrowIfNull(tree);
 
-        var walk = new Walk(tree, root, width, height, limits, volume, viewport);
-        var blocks = new List<ExploreTile>();
+        using var walk = new TreemapWalk(tree, root, width, height, limits, volume, viewport);
+        using var blocks = new ShapeBuffer();
         var laid = new Stack<(int Node, int Depth, Rectangle Frame, int Level)>();
 
         if (folder is not { } inside)
@@ -216,7 +219,10 @@ public static class TreemapLayout
             if (walk.To(root) is { } whole)
             {
                 laid.Push((root, 0, whole.Frame, 0));
-                blocks.AddRange(walk.Beside);
+                foreach (var block in walk.Beside.Shapes)
+                {
+                    blocks.Add(block);
+                }
             }
         }
         else if (walk.To(inside) is { } reached
@@ -241,7 +247,7 @@ public static class TreemapLayout
         }
 
         // A block is placed in single precision once cut (see Tile), which is as near as one needs.
-        foreach (var block in blocks)
+        foreach (var block in blocks.Shapes)
         {
             shapes.Add(MapShape.Of(block.Node, block.Bytes, block.FrameIn(width, height)));
         }
@@ -251,109 +257,6 @@ public static class TreemapLayout
 
     private static MapFrame Fraction(Rectangle frame, float width, float height) =>
         new(frame.X / width, frame.Y / height, frame.Width / width, frame.Height / height);
-
-    /// <summary>
-    /// One picture's layout kept to the folders above one shape: each laid out as the whole picture lays
-    /// it out, and nothing beside them opened. Its window is the whole picture, so nothing on the way is
-    /// passed over for being off the canvas. What <see cref="Locate"/> and <see cref="Within"/> walk.
-    /// </summary>
-    private sealed class Walk
-    {
-        private readonly ISizedTree _tree;
-        private readonly int _root;
-        private readonly float _width;
-        private readonly float _height;
-        private readonly LayoutLimits _limits;
-        private readonly VolumeSpace _volume;
-        private readonly Rectangle _picture;
-
-        public Walk(ISizedTree tree, int root, float width, float height, LayoutLimits limits, VolumeSpace volume, MapViewport viewport)
-        {
-            _tree = tree;
-            _root = root;
-            _width = width;
-            _height = height;
-            _limits = limits;
-            _volume = volume;
-            _picture = new Rectangle(
-                -viewport.Left * width * viewport.Zoom,
-                -viewport.Top * height * viewport.Zoom,
-                width * viewport.Zoom,
-                height * viewport.Zoom);
-
-            Detail = new TreemapDetail(limits, viewport);
-            Bounds = new Bounds(new Rectangle(0, 0, width, height), _picture);
-        }
-
-        public TreemapDetail Detail { get; }
-
-        public Bounds Bounds { get; }
-
-        /// <summary>The blocks of the volume laid beside the root by the last walk.</summary>
-        public List<ExploreTile> Beside { get; } = [];
-
-        /// <summary>
-        /// Where <paramref name="node"/>'s own shape is laid, how deep it is, and the level of detail
-        /// the folder holding it was laid at; or null where it is not under the root, or the picture
-        /// draws it inside a shape rather than as one of its own.
-        /// </summary>
-        public (Rectangle Frame, int Depth, int Level)? To(int node)
-        {
-            var path = new HashSet<int>();
-
-            for (var at = node; path.Add(at) && at != _root; at = _tree.ParentOf(at))
-            {
-                if (at == _tree.ParentOf(at))
-                {
-                    return null;
-                }
-            }
-
-            if (_tree.ChildOrder != ExploreChildOrder.BySize || _width <= 0 || _height <= 0 || _tree.SizeOf(_root) <= 0)
-            {
-                return null;
-            }
-
-            Beside.Clear();
-
-            // The shapes laid beside the path are laid and dropped.
-            var dropped = new List<ExploreTile>();
-            var pending = new Stack<(int Node, int Depth, Rectangle Frame, int Level)>();
-            pending.Push((_root, 0, BesideTheVolume(_tree.SizeOf(_root), _volume, _picture, Bounds, _limits, Beside), 0));
-
-            while (pending.TryPop(out var next))
-            {
-                var (at, depth, frame, from) = next;
-
-                if (!path.Contains(at))
-                {
-                    continue;
-                }
-
-                if (at == node)
-                {
-                    return (frame, depth, from);
-                }
-
-                var level = Detail.OpeningLevel(_tree, at, depth, frame.Width, frame.Height, from);
-
-                if (level < 0)
-                {
-                    return null;
-                }
-
-                var (header, gap) = Detail.FrameOf(frame.Width, frame.Height, level);
-                var top = header > 0 ? header : gap;
-                var area = new Rectangle(
-                    frame.X + gap, frame.Y + top,
-                    frame.Width - (gap * 2), frame.Height - top - gap);
-
-                Place(_tree, at, depth + 1, area, level, Detail, Bounds, dropped, pending);
-            }
-
-            return null;
-        }
-    }
 
     /// <summary>
     /// Whether any of <paramref name="frame"/> is on <paramref name="window"/>.
@@ -456,7 +359,7 @@ public static class TreemapLayout
     /// will not fit there, the rows go on at the next level of detail that fits, in the space the
     /// aggregate would have taken. See <see cref="TreemapDetail"/>.</para>
     /// </summary>
-    private static void Place(
+    internal static void Place(
         ISizedTree tree,
         int parent,
         int depth,
@@ -464,7 +367,7 @@ public static class TreemapLayout
         int level,
         TreemapDetail detail,
         Bounds canvas,
-        List<ExploreTile> tiles,
+        ShapeBuffer tiles,
         Stack<(int Node, int Depth, Rectangle Frame, int Level)> pending)
     {
         var children = tree.ChildrenOf(parent);
@@ -678,7 +581,7 @@ public static class TreemapLayout
         double scale,
         Bounds canvas,
         int depth,
-        List<ExploreTile> tiles)
+        ShapeBuffer tiles)
     {
         long bytes = 0;
 
@@ -709,13 +612,13 @@ public static class TreemapLayout
     /// the drive picker states the capacity and the free space anyway, and wherever the unaccounted
     /// block is drawn its note states each figure Windows gave.</para>
     /// </summary>
-    private static Rectangle BesideTheVolume(
+    internal static Rectangle BesideTheVolume(
         long usedBytes,
         VolumeSpace volume,
         Rectangle picture,
         Bounds canvas,
         LayoutLimits limits,
-        List<ExploreTile> tiles)
+        ShapeBuffer tiles)
     {
         var remaining = picture;
 
@@ -822,13 +725,13 @@ public static class TreemapLayout
     /// <summary>Stands for the root among the parts <see cref="BesideTheVolume"/> lays out.</summary>
     private const int Root = int.MaxValue;
 
-    private readonly record struct Rectangle(double X, double Y, double Width, double Height);
+    internal readonly record struct Rectangle(double X, double Y, double Width, double Height);
 
     /// <summary>
     /// The canvas a picture is measured against, and the part of it laid out: all of it for a drawing
     /// of the screen, and one tile's worth at its corner for a tile.
     /// </summary>
-    private readonly record struct Bounds(Rectangle Canvas, Rectangle Window)
+    internal readonly record struct Bounds(Rectangle Canvas, Rectangle Window)
     {
         public bool Shows(Rectangle frame) => Visible(frame, Window);
     }
