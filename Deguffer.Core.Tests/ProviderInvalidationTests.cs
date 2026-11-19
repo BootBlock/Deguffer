@@ -10,6 +10,7 @@ using Deguffer.Core.Providers;
 using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.SystemProtection;
+using Deguffer.Core.VirtualDisks;
 using Deguffer.Testing;
 using Xunit.Sdk;
 
@@ -335,6 +336,9 @@ public sealed class ProviderInvalidationTests : IDisposable
 
         // Never the real one: it would read the Delivery Optimization cache of whoever ran the suite.
         : parameter == typeof(IDeliveryOptimizationStatus) ? FakeDeliveryOptimizationStatus.Reporting(0)
+
+        // Never the real one either: it would register the Hyper-V machines of whoever ran the suite.
+        : parameter == typeof(IHyperVManagement) ? new FakeHyperV()
 
         // Never the real one: it would remove the profiles of the machine that ran the suite.
         : parameter == typeof(IUserProfiles) ? new FakeUserProfiles(Path.Combine(_temp.Path, "Users"))

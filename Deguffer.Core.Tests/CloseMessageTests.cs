@@ -193,13 +193,13 @@ public sealed partial class CloseMessageTests
     }
 
     /// <summary>
-    /// The one WMI method called: <c>MSFT_Volume.Optimize</c>, Windows' retrim, which reaches a volume
+    /// The one WMI method that acts: <c>MSFT_Volume.Optimize</c>, Windows' retrim, which reaches a volume
     /// rather than any program. <c>ExecMethod</c> calls any method of any class by name, so the
     /// allowance is held to that file, that class and that method, and a second call there is a second
     /// route and fails.
     /// </summary>
     [Fact]
-    public void TheOnlyWmiMethodCalledIsTheRetrim()
+    public void TheOnlyWmiMethodThatActsIsTheRetrim()
     {
         var code = string.Join('\n', ProductSources.Code(File.ReadAllText(Path.Combine(MarkdownGuide.RepositoryRoot, VolumeRetrim))));
 
@@ -209,14 +209,33 @@ public sealed partial class CloseMessageTests
         Assert.Contains("private const string VolumeClass = \"MSFT_Volume\";", code, StringComparison.Ordinal);
     }
 
-    /// <summary>The one file that calls a WMI method, for the reason <see cref="TheOnlyWmiMethodCalledIsTheRetrim"/> gives.</summary>
+    /// <summary>
+    /// The one other WMI method called: <c>Msvm_ImageManagementService.GetVirtualHardDiskSettingData</c>,
+    /// which describes a disk file and changes nothing, and reaches no program. Held to that file, that
+    /// class and that method on the same reasoning, so a second call there is a second route and fails.
+    /// </summary>
+    [Fact]
+    public void TheOnlyHyperVMethodCalledDescribesADisk()
+    {
+        var code = string.Join('\n', ProductSources.Code(File.ReadAllText(Path.Combine(MarkdownGuide.RepositoryRoot, HyperVDisks))));
+
+        Assert.Single(MethodCall().Matches(code));
+        Assert.Contains("services.ExecMethod(servicePath, Method,", code, StringComparison.Ordinal);
+        Assert.Contains("private const string Method = \"GetVirtualHardDiskSettingData\";", code, StringComparison.Ordinal);
+        Assert.Contains("private const string ImageManagementClass = \"Msvm_ImageManagementService\";", code, StringComparison.Ordinal);
+    }
+
+    /// <summary>The file that calls the retrim, for the reason <see cref="TheOnlyWmiMethodThatActsIsTheRetrim"/> gives.</summary>
     private static readonly string VolumeRetrim = Path.Combine("Deguffer.Core", "Retrim", "WindowsVolumeRetrim.cs");
+
+    /// <summary>The file that describes Hyper-V's disks, for the reason <see cref="TheOnlyHyperVMethodCalledDescribesADisk"/> gives.</summary>
+    private static readonly string HyperVDisks = Path.Combine("Deguffer.Core", "VirtualDisks", "HyperVWmi.cs");
 
     /// <summary>Where <c>ExecMethod</c> is declared, which is the slot and not a call.</summary>
     private static readonly string WmiInterfaces = Path.Combine("Deguffer.Core", "Wmi", "WbemInterfaces.cs");
 
     private static bool WmiMethodAllowance(string route, string file) =>
-        route == "ExecMethod" && (file == VolumeRetrim || file == WmiInterfaces);
+        route == "ExecMethod" && (file == VolumeRetrim || file == HyperVDisks || file == WmiInterfaces);
 
     /// <summary>The one file allowed <c>NativeLibrary</c>, for the reason <see cref="TheOnlyLibraryLoadedByNameRemovesARestorePoint"/> gives.</summary>
     private static readonly string RestorePointCalls = Path.Combine("Deguffer.Core", "SystemProtection", "RestorePointCalls.cs");

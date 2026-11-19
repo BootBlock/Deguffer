@@ -129,13 +129,13 @@ holds "the running state of virtual machines" and is the size of the VM's memory
 ([KB 4056669](https://support.microsoft.com/en-in/help/4056669/hyper-v-vss-backs-up-a-large-vmrs-file-when-you-back-up-a-vm)).
 No primary source was found for `.vmgs`, `.vsv` or `.bin`; all are live state, Tier 4.
 
-✅ done: `HyperVDiskProvider`. One read-only Windows PowerShell query, run only where the Hyper-V
-module is installed and only for an account Deguffer's own token shows is elevated or in Hyper-V
+✅ done: `HyperVDiskProvider`. A read-only, in-process reading of Hyper-V's WMI namespace
+(`root\virtualization\v2`), asked only where Hyper-V's Virtual Machine Management service is
+installed and only for an account Deguffer's own token shows is elevated or in Hyper-V
 Administrators, because a third-party write-up ([Altaro](https://www.altaro.com/hyper-v/?p=21601))
 reports `Get-VM` listing nothing rather than failing for anyone else. It reads each machine's
 attached disks, each checkpoint's disks and each disk's `ParentPath`. Any other answer is said to
-leave the machines unknown. Explore does not describe these disks, because only a run of PowerShell
-can ask Hyper-V.
+leave the machines unknown. Explore does not describe these disks yet.
 
 **Rejected beside it.** Windows Sandbox: "closing it deletes all software, files, and state"
 ([Windows Sandbox](https://learn.microsoft.com/en-us/windows/security/application-security/application-isolation/windows-sandbox/)),

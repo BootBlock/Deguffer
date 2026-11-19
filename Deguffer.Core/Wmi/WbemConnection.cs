@@ -25,6 +25,15 @@ internal static class WbemConnection
     /// </summary>
     public const int TimedOut = 0x40004;
 
+    /// <summary>
+    /// <c>WBEM_E_TIMED_OUT</c>: the failure <see cref="WbemQuery.Rows{T}"/> gives where the provider did
+    /// not finish within <see cref="Safety.ToolRun.QueryLimit"/>, so a caller can say the wait ran out.
+    /// </summary>
+    public const int Unfinished = unchecked((int)0x80043001);
+
+    /// <summary><c>WBEM_E_FAILED</c>: a call that reported success but gave nothing to read.</summary>
+    public const int Failed = unchecked((int)0x80041001);
+
     private const int AccessDenied = unchecked((int)0x80070005);
 
     /// <summary><c>WBEM_E_ACCESS_DENIED</c>.</summary>
