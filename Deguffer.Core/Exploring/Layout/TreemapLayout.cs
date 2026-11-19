@@ -43,7 +43,7 @@ public static class TreemapLayout
     /// <para>An array of exactly the shapes laid rather than the <see cref="ShapeBuffer"/> they are
     /// laid in, because every consumer indexes it and <see cref="Rendering.TileRasteriser"/> does so
     /// once per rectangle per region of every repaint. That is a few million reads a frame on a full
-    /// canvas, and an interface indexer returning a 32-byte struct is not free at that count
+    /// canvas, and an interface indexer returning a 48-byte struct is not free at that count
     /// (G4).</para>
     /// </summary>
     /// <param name="volume">
