@@ -310,7 +310,7 @@ public sealed class PlanExecutor(
             DeleteFileStep delete => await DeleteAsync(delete, plan.Keep, deletions, progress, ct).ConfigureAwait(false),
             EmptyRecycleBinStep empty => await EmptyAsync(empty, plan.Keep, clock, progress, ct).ConfigureAwait(false),
             DiskCleanupStep handler => await DiskCleanupRun.RunAsync(_handlers!, scanner, handler, plan.Keep, clock, progress, ct).ConfigureAwait(false),
-            ReleaseLocalCopiesStep release => await LocalCopyRelease.RunAsync(_cloud!, release, plan.Keep, progress, ct).ConfigureAwait(false),
+            ReleaseLocalCopiesStep release => await LocalCopyRelease.RunAsync(_cloud!, release, plan.Keep, progress, _time, ct).ConfigureAwait(false),
             RemoveRestorePointsStep removal => await RestorePointRun.RunAsync(_protection!, removal, progress, ct).ConfigureAwait(false),
             RemoveProfileStep profile => await ProfileRemovalRun.RunAsync(_profiles!, _environment, scanner, profile, clock, ct).ConfigureAwait(false),
             _ => throw new NotSupportedException($"Unknown step type {step.GetType().Name}."),

@@ -24,7 +24,7 @@ public sealed class PlanExecutorCancellationTests : IDisposable
     /// A removal reports by time, so a clock that moves at every look makes it report within a few
     /// dozen entries, which is where <see cref="CancelOnFirstWork"/> stops it.
     /// </summary>
-    private static SteppingTimeProvider ReportingClock() => new(RemovalProgress.ReportEvery / 50);
+    private static SteppingTimeProvider ReportingClock() => new(ReportCadence.Interval / 50);
 
     /// <summary>
     /// The removal is stopped with most of its tree still to go, the next step never starts, and the

@@ -859,7 +859,7 @@ public sealed class DirectoryRemoverTests : IDisposable
             MinimumAge.Off,
             new CallbackProgress<double>(_ => cts.Cancel()),
             cts.Token,
-            time: new SteppingTimeProvider(RemovalProgress.ReportEvery / 50));
+            time: new SteppingTimeProvider(ReportCadence.Interval / 50));
 
         Assert.True(outcome.Interrupted);
         Assert.False(outcome.RootRemoved);
