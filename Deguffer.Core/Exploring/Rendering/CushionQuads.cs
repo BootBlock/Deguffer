@@ -1,3 +1,4 @@
+using System.Buffers;
 using Deguffer.Core.Exploring.Layout;
 
 namespace Deguffer.Core.Exploring.Rendering;
@@ -34,22 +35,34 @@ public sealed class CushionQuads
         Height = height;
         Finish = finish;
 
-        var quads = new CushionQuad[tiles.Count];
-        var count = 0;
+        // Rented and copied once into an array of exactly the quads that reach the canvas: sized to every
+        // shape, a picture's worth of quads is a large-object-heap array each drawing and each tile of
+        // the map would otherwise allocate, and copy again wherever a shape runs off the canvas (G4).
+        // CushionQuad holds no references, so the rented array needs no clearing when it goes back.
+        var quads = ArrayPool<CushionQuad>.Shared.Rent(tiles.Count);
 
-        // Through the list's own indexer once per shape, which is the one pass made over it (G4).
-        for (var i = 0; i < tiles.Count; i++)
+        try
         {
-            var tile = tiles[i];
-            var quad = CushionQuad.Of(tile, finish);
+            var count = 0;
 
-            if (quad.Reaches(width, height, finish.Borders.ReachFor(quad.Framed)))
+            // Through the list's own indexer once per shape, which is the one pass made over it (G4).
+            for (var i = 0; i < tiles.Count; i++)
             {
-                quads[count++] = quad.Coloured(colourOf(tile), finish);
-            }
-        }
+                var tile = tiles[i];
+                var quad = CushionQuad.Of(tile, finish);
 
-        _quads = count == quads.Length ? quads : quads[..count];
+                if (quad.Reaches(width, height, finish.Borders.ReachFor(quad.Framed)))
+                {
+                    quads[count++] = quad.Coloured(colourOf(tile), finish);
+                }
+            }
+
+            _quads = quads.AsSpan(0, count).ToArray();
+        }
+        finally
+        {
+            ArrayPool<CushionQuad>.Shared.Return(quads);
+        }
     }
 
     public int Width { get; }

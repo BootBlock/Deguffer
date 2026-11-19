@@ -33,9 +33,10 @@ public static class IcicleLayout
     /// scrolled or descended into, and inventing thinner rows to fit would trade the one thing the
     /// layout is good at for the one thing it is not.</para>
     ///
-    /// <para>An array rather than the list it is built in, for the reason
-    /// <see cref="TreemapLayout.Compute"/> gives: both layouts feed the same rasteriser, and it
-    /// indexes what it is given once per rectangle per region of every repaint.</para>
+    /// <para>An array of exactly the shapes laid rather than the <see cref="ShapeBuffer"/> they are
+    /// laid in, for the reason <see cref="TreemapLayout.Compute"/> gives: both layouts feed the same
+    /// rasteriser, and it indexes what it is given once per rectangle per region of every
+    /// repaint.</para>
     /// </summary>
     public static IReadOnlyList<ExploreTile> Compute(
         ISizedTree tree,
@@ -48,7 +49,7 @@ public static class IcicleLayout
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limits.RowHeight);
 
         var rowHeight = limits.RowHeight;
-        var tiles = new List<ExploreTile>();
+        using var tiles = new ShapeBuffer();
 
         if (width <= 0 || height < rowHeight || tree.SizeOf(root) <= 0)
         {
@@ -111,7 +112,7 @@ public static class IcicleLayout
         float width,
         float rowHeight,
         LayoutLimits limits,
-        List<ExploreTile> tiles,
+        ShapeBuffer tiles,
         Stack<(int Node, int Depth, float X, float Width)> pending)
     {
         var children = tree.ChildrenOf(parent);

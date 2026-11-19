@@ -40,10 +40,11 @@ public static class TreemapLayout
     /// <see cref="ExploreChildOrder"/>: a scan still running publishes a tree ordered by name, and
     /// this would lay one out into rectangles that look like a treemap and are not one.</para>
     ///
-    /// <para>An array rather than the list it is built in, because every consumer indexes it and
-    /// <see cref="Rendering.TileRasteriser"/> does so once per rectangle per region of every
-    /// repaint. That is a few million reads a frame on a full canvas, and an interface indexer
-    /// returning a 32-byte struct is not free at that count (G4).</para>
+    /// <para>An array of exactly the shapes laid rather than the <see cref="ShapeBuffer"/> they are
+    /// laid in, because every consumer indexes it and <see cref="Rendering.TileRasteriser"/> does so
+    /// once per rectangle per region of every repaint. That is a few million reads a frame on a full
+    /// canvas, and an interface indexer returning a 32-byte struct is not free at that count
+    /// (G4).</para>
     /// </summary>
     /// <param name="volume">
     /// The volume <paramref name="root"/> is the whole of, whose free space and whose unaccounted use
@@ -99,7 +100,7 @@ public static class TreemapLayout
                 nameof(tree));
         }
 
-        var tiles = new List<ExploreTile>();
+        using var tiles = new ShapeBuffer();
 
         if (width <= 0 || height <= 0 || tree.SizeOf(root) <= 0)
         {
@@ -178,7 +179,9 @@ public static class TreemapLayout
     {
         ArgumentNullException.ThrowIfNull(tree);
 
-        return new Walk(tree, root, width, height, limits, volume, viewport).To(node) is { } reached
+        using var walk = new Walk(tree, root, width, height, limits, volume, viewport);
+
+        return walk.To(node) is { } reached
             ? Fraction(reached.Frame, width, height)
             : null;
     }
@@ -207,8 +210,8 @@ public static class TreemapLayout
     {
         ArgumentNullException.ThrowIfNull(tree);
 
-        var walk = new Walk(tree, root, width, height, limits, volume, viewport);
-        var blocks = new List<ExploreTile>();
+        using var walk = new Walk(tree, root, width, height, limits, volume, viewport);
+        using var blocks = new ShapeBuffer();
         var laid = new Stack<(int Node, int Depth, Rectangle Frame, int Level)>();
 
         if (folder is not { } inside)
@@ -216,7 +219,10 @@ public static class TreemapLayout
             if (walk.To(root) is { } whole)
             {
                 laid.Push((root, 0, whole.Frame, 0));
-                blocks.AddRange(walk.Beside);
+                foreach (var block in walk.Beside.Shapes)
+                {
+                    blocks.Add(block);
+                }
             }
         }
         else if (walk.To(inside) is { } reached
@@ -241,7 +247,7 @@ public static class TreemapLayout
         }
 
         // A block is placed in single precision once cut (see Tile), which is as near as one needs.
-        foreach (var block in blocks)
+        foreach (var block in blocks.Shapes)
         {
             shapes.Add(MapShape.Of(block.Node, block.Bytes, block.FrameIn(width, height)));
         }
@@ -257,7 +263,7 @@ public static class TreemapLayout
     /// it out, and nothing beside them opened. Its window is the whole picture, so nothing on the way is
     /// passed over for being off the canvas. What <see cref="Locate"/> and <see cref="Within"/> walk.
     /// </summary>
-    private sealed class Walk
+    private sealed class Walk : IDisposable
     {
         private readonly ISizedTree _tree;
         private readonly int _root;
@@ -266,6 +272,7 @@ public static class TreemapLayout
         private readonly LayoutLimits _limits;
         private readonly VolumeSpace _volume;
         private readonly Rectangle _picture;
+        private readonly ShapeBuffer _dropped = new();
 
         public Walk(ISizedTree tree, int root, float width, float height, LayoutLimits limits, VolumeSpace volume, MapViewport viewport)
         {
@@ -290,7 +297,7 @@ public static class TreemapLayout
         public Bounds Bounds { get; }
 
         /// <summary>The blocks of the volume laid beside the root by the last walk.</summary>
-        public List<ExploreTile> Beside { get; } = [];
+        public ShapeBuffer Beside { get; } = new();
 
         /// <summary>
         /// Where <paramref name="node"/>'s own shape is laid, how deep it is, and the level of detail
@@ -317,7 +324,7 @@ public static class TreemapLayout
             Beside.Clear();
 
             // The shapes laid beside the path are laid and dropped.
-            var dropped = new List<ExploreTile>();
+            _dropped.Clear();
             var pending = new Stack<(int Node, int Depth, Rectangle Frame, int Level)>();
             pending.Push((_root, 0, BesideTheVolume(_tree.SizeOf(_root), _volume, _picture, Bounds, _limits, Beside), 0));
 
@@ -348,10 +355,16 @@ public static class TreemapLayout
                     frame.X + gap, frame.Y + top,
                     frame.Width - (gap * 2), frame.Height - top - gap);
 
-                Place(_tree, at, depth + 1, area, level, Detail, Bounds, dropped, pending);
+                Place(_tree, at, depth + 1, area, level, Detail, Bounds, _dropped, pending);
             }
 
             return null;
+        }
+
+        public void Dispose()
+        {
+            Beside.Dispose();
+            _dropped.Dispose();
         }
     }
 
@@ -464,7 +477,7 @@ public static class TreemapLayout
         int level,
         TreemapDetail detail,
         Bounds canvas,
-        List<ExploreTile> tiles,
+        ShapeBuffer tiles,
         Stack<(int Node, int Depth, Rectangle Frame, int Level)> pending)
     {
         var children = tree.ChildrenOf(parent);
@@ -678,7 +691,7 @@ public static class TreemapLayout
         double scale,
         Bounds canvas,
         int depth,
-        List<ExploreTile> tiles)
+        ShapeBuffer tiles)
     {
         long bytes = 0;
 
@@ -715,7 +728,7 @@ public static class TreemapLayout
         Rectangle picture,
         Bounds canvas,
         LayoutLimits limits,
-        List<ExploreTile> tiles)
+        ShapeBuffer tiles)
     {
         var remaining = picture;
 
