@@ -190,6 +190,34 @@ public class CleanViewModelScanTests
     }
 
     /// <summary>
+    /// A second scan's rows are another scan's, so the drawn rows are reset once rather than removed
+    /// one at a time. The reset is what tells the list that its scroll position points at rows that
+    /// are gone, so a scan started partway down the list shows the new list from its top.
+    /// </summary>
+    [Fact]
+    public void ASecondScanResetsTheDrawnRowsOnceRatherThanRemovingEach()
+    {
+        FakeCleanupProvider[] providers =
+        [
+            new("a") { Steps = [Rows.Folder("a", 30)] },
+            new("b") { Steps = [Rows.Folder("b", 20)] },
+            new("c") { Steps = [Rows.Folder("c", 10)] },
+        ];
+        using var page = new StoragePage(providers);
+
+        page.Scan();
+
+        var changes = new List<NotifyCollectionChangedAction>();
+        page.ViewModel.Listed.CollectionChanged += (_, e) => changes.Add(e.Action);
+
+        page.Scan();
+
+        Assert.Equal(NotifyCollectionChangedAction.Reset, changes[0]);
+        Assert.DoesNotContain(NotifyCollectionChangedAction.Remove, changes);
+        Assert.Equal(["a", "b", "c"], page.ViewModel.Listed.Select(row => row.Finding.Provider.Id));
+    }
+
+    /// <summary>
     /// An empty list says which kind of empty it is. Before a scan it says what to press; after one
     /// whose every row the filters hide, it says the filters did it. A filter change raises no change
     /// to the list itself, so the page has to announce the empty state on its own.

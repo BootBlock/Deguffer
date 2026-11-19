@@ -34,6 +34,12 @@ public sealed record ListMotionPlan<TKey>(bool Crossfade, IReadOnlyList<RowMotio
     public static ListMotionPlan<TKey> Still { get; } = new(false, []);
 }
 
+/// <summary>Where a list's view stood for one change to the list, as <see cref="ListMotion.Keep"/> reads it.</summary>
+/// <param name="Stood">How far down the list the view stood before the change.</param>
+/// <param name="Stands">How far down it stands once the list has laid the change out.</param>
+/// <param name="Reset">Whether the change included a reset, after which the list may be about something else.</param>
+public readonly record struct ListPlace(double Stood, double Stands, bool Reset);
+
 /// <summary>
 /// How a bound list shows a change to it: an arriving row fades and slides in, a leaving row fades
 /// out where it stood while the rows below glide up into its space, and a row the sort moved glides
@@ -159,9 +165,53 @@ public static class ListMotion
     }
 
     /// <summary>
-    /// The scroll that keeps the reader's place: how far down the list's view must move so that
-    /// the first of <paramref name="anchors"/> that can be held is drawn where it was before the
-    /// change. Null where none can be, and the list keeps its own place.
+    /// The scroll that keeps the reader's place through one change: how far down the list's view
+    /// must move. Null where the view already stands where that place puts it.
+    ///
+    /// <para><b>A reader at the top of the list stays at the top.</b> A row that goes in above the
+    /// first row on screen comes into sight there and pushes the rows below down. Holding the row
+    /// under the pointer instead slid a list filling as a scan finds its rows down under a reader who
+    /// never scrolled, a row's height for every row that went in above.</para>
+    ///
+    /// <para><b>A list about something else starts at its top.</b> That is a reset that left none of
+    /// the rows on screen in the list (<see cref="BoundList{T}"/>), such as a new scan's rows. The old
+    /// scroll position points at rows that are gone, and keeping it left the view at the foot of the
+    /// first few rows to arrive, where it then followed them down.</para>
+    ///
+    /// <para>Anywhere else, the row the reader is at stays where it was drawn (<see cref="Hold"/>).</para>
+    /// </summary>
+    /// <param name="place">Where the view stood and stands, and whether the change included a reset.</param>
+    /// <param name="anchors">The rows the reader is at, most telling first: under the pointer, then with focus.</param>
+    /// <param name="before">The top of each row on screen before the change.</param>
+    /// <param name="after">Each row on screen after it, and its top, from the top of the list down.</param>
+    /// <param name="departed">The rows on screen before the change that left the list (<see cref="Departed"/>).</param>
+    /// <param name="keys">What makes two rows one row, as <paramref name="before"/> is keyed.</param>
+    public static double? Keep<TKey>(
+        ListPlace place,
+        IReadOnlyList<TKey> anchors,
+        IReadOnlyDictionary<TKey, double> before,
+        IReadOnlyList<(TKey Key, double Top)> after,
+        IReadOnlySet<TKey> departed,
+        IEqualityComparer<TKey> keys)
+        where TKey : notnull
+    {
+        ArgumentNullException.ThrowIfNull(before);
+        ArgumentNullException.ThrowIfNull(departed);
+
+        var replaced = place.Reset && before.Count > 0 && before.Keys.All(departed.Contains);
+
+        if (place.Stood <= Tolerance || replaced)
+        {
+            return place.Stands > Tolerance ? -place.Stands : null;
+        }
+
+        return Hold(anchors, before, after, keys);
+    }
+
+    /// <summary>
+    /// The scroll that keeps the place of a reader partway down the list: how far down the list's
+    /// view must move so that the first of <paramref name="anchors"/> that can be held is drawn where
+    /// it was before the change. Null where none can be, and the list keeps its own place.
     ///
     /// <para>A row can be held when it was on screen before and after, and it is not the one that
     /// changed: the same staying row is directly above it, and directly below it, as before. A row

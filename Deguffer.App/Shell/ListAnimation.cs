@@ -22,9 +22,10 @@ namespace Deguffer.App.Shell;
 ///
 /// <para>Only realised rows are read and moved, so a list of thousands animates its window of rows,
 /// and the whole list is read once for a change only when a row has gone from the screen and the
-/// change could have taken one out of the list. The row under the pointer, or failing that the one
-/// with focus, keeps its place on screen unless it is the one that changed
-/// (<see cref="ListMotion.Hold"/>).</para>
+/// change could have taken one out of the list. A list scrolled to its top stays at its top as rows
+/// go in above, and a list reset to be about something else goes to its top. Anywhere else the row
+/// under the pointer, or failing that the one with focus, keeps its place on screen unless it is the
+/// one that changed (<see cref="ListMotion.Keep"/>).</para>
 ///
 /// <para>Where each row goes is read from where the rows stood and stand, not from what kind of
 /// change the list reported, so a list that reports a sort's move as a reset still glides each row
@@ -89,6 +90,9 @@ internal sealed class ListAnimation
     /// from the screen only moved out of sight, and the list's whole contents need not be read.
     /// </summary>
     private bool _removed;
+
+    /// <summary>How far down the list the view stood when the frame's first change arrived.</summary>
+    private double _stoodAt;
 
     private ListAnimation(IListRows rows, IMotionPolicy motion)
     {
@@ -186,6 +190,7 @@ internal sealed class ListAnimation
         if (!_pending)
         {
             _pending = true;
+            _stoodAt = _scroller?.VerticalOffset ?? 0;
             Stand();
             CompositionTarget.Rendering += OnRendering;
         }
@@ -259,9 +264,18 @@ internal sealed class ListAnimation
         var before = _stood.ToDictionary(row => row.Key, row => row.Value.Y, Rows);
         var after = Standing();
 
-        if (Anchors() is { Count: > 0 } anchors
-            && ListMotion.Hold(anchors, before, after.Select(row => (row.Item, row.At.Y)).ToList(), Rows) is { } shift
-            && _scroller is not null)
+        // Read before any scroll below: a row that left the list is not held, so no scroll can
+        // bring it back on screen, and the rows that departed are the same either way.
+        var departed = ListMotion.Departed(before.Keys, after.Select(row => row.Item), _removed, _rows.Held, Rows);
+
+        if (_scroller is not null
+            && ListMotion.Keep(
+                new ListPlace(_stoodAt, _scroller.VerticalOffset, _reset),
+                Anchors(),
+                before,
+                after.Select(row => (row.Item, row.At.Y)).ToList(),
+                departed,
+                Rows) is { } shift)
         {
             _scroller.ChangeView(null, _scroller.VerticalOffset + shift, null, disableAnimation: true);
             _rows.List.UpdateLayout();
@@ -278,8 +292,6 @@ internal sealed class ListAnimation
                 }
             }
         }
-
-        var departed = ListMotion.Departed(before.Keys, after.Select(row => row.Item), _removed, _rows.Held, Rows);
 
         var plan = ListMotion.Plan(
             before,

@@ -563,7 +563,7 @@
                        Text="{x:Bind ViewModel.CsvOutcome, Mode=OneWay}" AutomationProperties.LiveSetting="Polite" />
 
             <!-- Groups arrive while the reader reads, each inserted where its space puts it. Keeping
-                 the items in view holds the rows on screen still while one goes in above them.
+                 the items in view holds the rows still as one goes in above (at the top, ListMotion.Keep).
                  Every copy is a row of its own under its group's heading, handed over as a grouped
                  source from code-behind, so the list realises only the copies on screen however
                  many a group holds. A heading does not stick at the top: it is the top of its card,
