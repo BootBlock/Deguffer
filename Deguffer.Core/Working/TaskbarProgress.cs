@@ -20,8 +20,8 @@ public enum TaskbarState
 /// The taskbar button's progress bar, with its fill in thousandths.
 ///
 /// <para>Thousandths rather than the fraction itself, so two reports that would draw the same bar
-/// compare equal and the button is not written again for them. A clean reports every 256 files, and
-/// a write to the taskbar is a call into another process.</para>
+/// compare equal and the button is not written again for them. Each removal in a clean reports up
+/// to ten times a second, and a write to the taskbar is a call into another process.</para>
 /// </summary>
 public sealed record TaskbarProgress(TaskbarState State, int Thousandths)
 {

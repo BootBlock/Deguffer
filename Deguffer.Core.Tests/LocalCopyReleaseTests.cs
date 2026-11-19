@@ -37,6 +37,21 @@ public sealed class LocalCopyReleaseTests : IDisposable
     private string At(params string[] segments) => Path.Combine([_root, .. segments]);
 
     /// <summary>
+    /// However many files are asked about before the clock moves, the UI thread is posted only the end,
+    /// not one report for every few hundred files.
+    /// </summary>
+    [Fact]
+    public async Task AReleaseOfManyFilesInNoTimeReportsOnlyItsEnd()
+    {
+        var step = Step(4_000);
+        var progress = new ProgressRecorder<double>();
+
+        await Run(step, progress, new ManualTimeProvider());
+
+        Assert.Equal([1.0], progress.Reports);
+    }
+
+    /// <summary>
     /// A step naming <paramref name="files"/> placeholders of 100 bytes each, spread over a few folders that
     /// are really on the disk, as the proof asks of a file it finds missing.
     /// </summary>
@@ -57,8 +72,8 @@ public sealed class LocalCopyReleaseTests : IDisposable
         return new ReleaseLocalCopiesStep(_root, "OneDrive", "Local copies") { Files = named };
     }
 
-    private Task<StepOutcome> Run(ReleaseLocalCopiesStep step, IProgress<double>? progress = null) =>
-        LocalCopyRelease.RunAsync(_cloud, step, MinimumAge.Off, progress, CancellationToken.None);
+    private Task<StepOutcome> Run(ReleaseLocalCopiesStep step, IProgress<double>? progress = null, TimeProvider? time = null) =>
+        LocalCopyRelease.RunAsync(_cloud, step, MinimumAge.Off, progress, time ?? new ManualTimeProvider(), CancellationToken.None);
 
     private static CleanupPlan PlanOf(ReleaseLocalCopiesStep step) => new()
     {
@@ -145,8 +160,9 @@ public sealed class LocalCopyReleaseTests : IDisposable
     }
 
     /// <summary>
-    /// Reported every so often from whichever thread finished a file, and whole at the end. That two
-    /// such reports reach the bar in order is <see cref="ForwardProgress"/>'s, and proved there.
+    /// Reported as time passes from whichever thread finished a file, and whole at the end. That two
+    /// such reports reach the bar in order is <see cref="ForwardProgress"/>'s, and proved there. The
+    /// clock moves at every look, so a report falls due every few dozen files.
     /// </summary>
     [Fact]
     public async Task ReportsProgressAsFilesFinishAndEndsWhole()
@@ -154,7 +170,7 @@ public sealed class LocalCopyReleaseTests : IDisposable
         var step = Step(4_000);
         var progress = new ProgressRecorder<double>();
 
-        await Run(step, progress);
+        await Run(step, progress, new SteppingTimeProvider(ReportCadence.Interval / 50));
 
         var reports = progress.Reports;
         Assert.True(reports.Count > 2, $"Only {reports.Count} report(s) were made.");

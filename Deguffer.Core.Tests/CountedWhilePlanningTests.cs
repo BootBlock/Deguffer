@@ -66,7 +66,7 @@ public sealed class CountedWhilePlanningTests
 
         var provider = new TargetsProvider(
             new FakeUserEnvironment(temp.CreateDirectory("profile")),
-            new ParallelEnumerationScanner(ScanTuner.Shipped, holding, new IntervalPerRead()),
+            new ParallelEnumerationScanner(ScanTuner.Shipped, holding, new SteppingTimeProvider(BoundedFileWalk.ProgressInterval)),
             [.. new[] { a, b, c }.Select(path => new DeletionTarget(path, "Measured"))]);
 
         var pass = new CleanupPlanner([provider]).PlanAllAsync(MinimumAge.Off, status, found);
@@ -155,18 +155,5 @@ public sealed class CountedWhilePlanningTests
 
         Assert.Equal(4000, plan.EstimatedBytes);
         Assert.Equal(4000, counted.Reports[^1].Reclaimable);
-    }
-
-    /// <summary>
-    /// A clock a whole progress interval later at every read, so a walk timed by it finds a report due
-    /// after every folder it reads.
-    /// </summary>
-    private sealed class IntervalPerRead : TimeProvider
-    {
-        private long _ticks;
-
-        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
-
-        public override long GetTimestamp() => Interlocked.Add(ref _ticks, BoundedFileWalk.ProgressInterval.Ticks);
     }
 }

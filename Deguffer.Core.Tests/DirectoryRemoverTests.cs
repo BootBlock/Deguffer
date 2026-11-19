@@ -852,9 +852,14 @@ public sealed class DirectoryRemoverTests : IDisposable
 
         using var cts = new CancellationTokenSource();
 
-        // The first report comes after 256 files, so the removal is stopped with most still to go.
+        // The clock finds a report due within a few dozen looks at it, so the removal is stopped with
+        // most still to go, however fast or loaded the machine.
         var outcome = await DirectoryRemover.RemoveAsync(
-            root, MinimumAge.Off, new CallbackProgress<double>(_ => cts.Cancel()), cts.Token);
+            root,
+            MinimumAge.Off,
+            new CallbackProgress<double>(_ => cts.Cancel()),
+            cts.Token,
+            time: new SteppingTimeProvider(ReportCadence.Interval / 50));
 
         Assert.True(outcome.Interrupted);
         Assert.False(outcome.RootRemoved);

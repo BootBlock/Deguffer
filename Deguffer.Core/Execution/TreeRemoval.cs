@@ -94,7 +94,7 @@ internal sealed class TreeRemoval
     /// cancelled. A tree already gathered is handed over folder by folder.
     /// </param>
     /// <param name="planned">How many entries the plan measured, for progress until the walk is over.</param>
-    /// <param name="time">The clock <see cref="RemovalOutcome.Passes"/> is measured on.</param>
+    /// <param name="time">The clock <see cref="RemovalOutcome.Passes"/> is measured on, and progress is reported by.</param>
     /// <param name="gathered">
     /// The walk that gathered a tree handed over from what it gathered, which is the removal's walk
     /// pass. Null where <paramref name="walk"/> lists the tree, which is then timed as the walk.
@@ -112,7 +112,7 @@ internal sealed class TreeRemoval
         ThreadAllowance deletions,
         CancellationToken ct)
     {
-        var removal = new TreeRemoval(root.FoundAs, bounds, new RemovalProgress(progress, planned), fs, time, deletions, ct);
+        var removal = new TreeRemoval(root.FoundAs, bounds, new RemovalProgress(progress, planned, time), fs, time, deletions, ct);
 
         try
         {

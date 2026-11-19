@@ -793,7 +793,7 @@ public class CleanViewModelCleanTests
 
     /// <summary>
     /// The bar moves in steps of half a percent at least, and always reaches the end. Every report
-    /// that reaches the property re-lays out the bar, and a removal reports every 256 files.
+    /// that reaches the property re-lays out the bar, and each removal reports up to ten times a second.
     /// </summary>
     [Fact]
     public void TheProgressBarMovesOnlyByAVisibleAmountAndReachesTheEnd()
