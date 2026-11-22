@@ -85,16 +85,6 @@ public sealed class PlanExecutor(
     IUserProfiles? profiles = null,
     IFileSystem? fileSystem = null)
 {
-    /// <summary>
-    /// How long a command's tool is given to mark the item it will remove later. LM Studio answers
-    /// <c>lms</c> before it writes its marker, so the first look can come too early, and the write
-    /// itself takes milliseconds. Long enough for a machine under load, and short enough that a tool
-    /// that never marks anything costs the run a few seconds rather than a hang.
-    /// </summary>
-    private static readonly TimeSpan MarkingWait = TimeSpan.FromSeconds(5);
-
-    private static readonly TimeSpan MarkingPoll = TimeSpan.FromMilliseconds(250);
-
     private readonly IRecycleBinEmptier? _emptier = emptier;
     private readonly ICloudFiles? _cloud = cloud;
     private readonly IDiskCleanupHandlers? _handlers = handlers;
@@ -120,6 +110,11 @@ public sealed class PlanExecutor(
     /// and §5.6 then reads — see <see cref="RunResidue"/>. Null means this plan is the whole run, and it is given a
     /// record of its own.
     /// </param>
+    /// <param name="activity">
+    /// What the clean has set acting on the machine, which each step here adds to and each tool's
+    /// measurement reads. See <see cref="RunActivity"/>. Null means this plan is the whole run, and it is
+    /// given a record of its own.
+    /// </param>
     /// <param name="underway">
     /// Each command step's tool as it starts, and null as it returns, so the page can say what a
     /// cancellation would wait for. See <see cref="CommandUnderway"/>.
@@ -134,6 +129,7 @@ public sealed class PlanExecutor(
         CleanupPlan plan,
         RunReach? runReach,
         RunResidue? residue,
+        RunActivity? activity,
         IProgress<double>? progress,
         IProgress<CommandUnderway?>? underway,
         CancellationToken ct)
@@ -147,6 +143,7 @@ public sealed class PlanExecutor(
         }
 
         var runResidue = residue ?? await RunResidue.BeginAsync([plan], scanner.Tuning).ConfigureAwait(false);
+        var runActivity = activity ?? new RunActivity();
         var started = _time.GetTimestamp();
 
         // What each step's use check held back, one list a step so the steps running at once share
@@ -166,7 +163,7 @@ public sealed class PlanExecutor(
             plan.Steps,
             StepOverlap.Of(plan.Steps, _volumes, _fileSystem),
             (index, stepProgress, stop) => RunTimedStepAsync(
-                plan, index, heldAtClean[index] = [], runResidue, deletions, stepProgress, underway, stop),
+                plan, index, heldAtClean[index] = [], runResidue, runActivity, deletions, stepProgress, underway, stop),
             progress,
             ct).ConfigureAwait(false);
 
@@ -209,6 +206,7 @@ public sealed class PlanExecutor(
         int index,
         List<ProtectedPath> heldAtClean,
         RunResidue runResidue,
+        RunActivity runActivity,
         ThreadAllowance deletions,
         IProgress<double>? progress,
         IProgress<CommandUnderway?>? underway,
@@ -218,9 +216,12 @@ public sealed class PlanExecutor(
         var clock = new StepClock(_time);
         StepOutcome outcome;
 
+        // A step that does not act from its start marks the part of itself that does. See ActsFromItsStart.
+        using var acting = step.ActsFromItsStart ? runActivity.Begin() : default;
+
         try
         {
-            outcome = await RunStepAsync(plan, step, heldAtClean, runResidue, deletions, clock, progress, underway, ct)
+            outcome = await RunStepAsync(plan, step, heldAtClean, runResidue, runActivity, deletions, clock, progress, underway, ct)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -250,6 +251,7 @@ public sealed class PlanExecutor(
         CleanupStep step,
         List<ProtectedPath> heldAtClean,
         RunResidue runResidue,
+        RunActivity runActivity,
         ThreadAllowance deletions,
         StepClock clock,
         IProgress<double>? progress,
@@ -302,7 +304,7 @@ public sealed class PlanExecutor(
 
         return step switch
         {
-            RunCommandStep command => await RunCommandAsync(command, clock, underway, ct).ConfigureAwait(false),
+            RunCommandStep command => await RunCommandAsync(command, runActivity, clock, underway, ct).ConfigureAwait(false),
             ClearDirectoryStep clear => await ClearAsync(clear, plan.Keep, runResidue, deletions, progress, ct).ConfigureAwait(false),
             DeleteDirectoryStep delete => await DeleteAsync(delete, plan.Keep, runResidue, deletions, progress, ct).ConfigureAwait(false),
             DeleteFileStep delete => await DeleteAsync(delete, plan.Keep, deletions, progress, ct).ConfigureAwait(false),
@@ -348,6 +350,7 @@ public sealed class PlanExecutor(
 
     private async Task<StepOutcome> RunCommandAsync(
         RunCommandStep step,
+        RunActivity runActivity,
         StepClock clock,
         IProgress<CommandUnderway?>? underway,
         CancellationToken ct)
@@ -420,7 +423,7 @@ public sealed class PlanExecutor(
         // command over the same store. The plan's figure would then credit this command with a reclaim
         // it did not make.
         var measuredBefore = step.MeasuredBy is { } asked
-            ? await asked.MeasureAsync(MeasuredWhen.BeforeCommand, ct).ConfigureAwait(false)
+            ? await asked.MeasureAsync(MeasuredWhen.BeforeCommand, runActivity, ct).ConfigureAwait(false)
             : before;
 
         // Asked again, because the tool's measurement can take a minute, and an update that starts
@@ -448,15 +451,20 @@ public sealed class PlanExecutor(
 
         CommandOutcome outcome;
 
-        try
+        // The command is the whole of what this step writes, so a tool's reading taken before it never
+        // stands for the reading after it.
+        using (runActivity.Begin())
         {
-            outcome = step.ServicingCalls is { } calls
-                ? await calls.MakeAsync(() => runner.RunAsync(step.FileName, step.Arguments, run, ct)).ConfigureAwait(false)
-                : await runner.RunAsync(step.FileName, step.Arguments, run, ct).ConfigureAwait(false);
-        }
-        finally
-        {
-            underway?.Report(null);
+            try
+            {
+                outcome = step.ServicingCalls is { } calls
+                    ? await calls.MakeAsync(() => runner.RunAsync(step.FileName, step.Arguments, run, ct)).ConfigureAwait(false)
+                    : await runner.RunAsync(step.FileName, step.Arguments, run, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                underway?.Report(null);
+            }
         }
 
         // A command that returned has run to its end, whether it was left to finish or ended just as the
@@ -475,9 +483,9 @@ public sealed class PlanExecutor(
 
         if (outcome.Succeeded && step is { Removes: { } item, Scheduled: { } scheduled })
         {
-            switch (await AwaitMarkingAsync(item, scheduled, ct).ConfigureAwait(false))
+            switch (await RemovalMarking.AwaitAsync(item, scheduled, _time, ct).ConfigureAwait(false))
             {
-                case Marking.Marked:
+                case RemovalMark.Marked:
                     return new StepOutcome(
                         step.Description,
                         Succeeded: true,
@@ -486,7 +494,7 @@ public sealed class PlanExecutor(
                         $"{scheduled.Remover} removes it the next time it starts.",
                         BytesScheduled: before);
 
-                case Marking.Neither:
+                case RemovalMark.Neither:
                     return new StepOutcome(
                         step.Description,
                         Succeeded: false,
@@ -495,7 +503,7 @@ public sealed class PlanExecutor(
                         $"{scheduled.Remover} reported success, but it neither removed {LongPath.Display(item)} "
                         + "nor marked it for removal, so nothing will happen to it.");
 
-                case Marking.Unseen:
+                case RemovalMark.Unseen:
                     return new StepOutcome(
                         step.Description,
                         Succeeded: false,
@@ -520,7 +528,7 @@ public sealed class PlanExecutor(
         if (step.MeasuredBy is { } tool)
         {
             var when = outcome.Succeeded ? MeasuredWhen.AfterCommandSucceeded : MeasuredWhen.AfterCommandFailed;
-            measured = await tool.MeasureAsync(when, ct).ConfigureAwait(false);
+            measured = await tool.MeasureAsync(when, runActivity, ct).ConfigureAwait(false);
         }
         else
         {
@@ -572,47 +580,6 @@ public sealed class PlanExecutor(
             BytesReclaimed: Math.Max(0, reclaimed),
             Refusals.None,
             message);
-    }
-
-    /// <summary>
-    /// What the tool did to <paramref name="item"/> in the time it was given.
-    ///
-    /// <para><b>Looked for rather than trusted.</b> <c>lms runtime remove</c> prints that it removed
-    /// the runtime and exits zero once LM Studio has accepted the request, before LM Studio has
-    /// written anything, and a failure after that point never reaches the command. The marker is the
-    /// only evidence the removal will happen.</para>
-    /// </summary>
-    private async Task<Marking> AwaitMarkingAsync(string item, ScheduledRemoval scheduled, CancellationToken ct)
-    {
-        var marker = Path.Combine(item, scheduled.Marker);
-        var deadline = _time.GetUtcNow() + MarkingWait;
-
-        while (true)
-        {
-            // The entry probe, because the directory probe answers Absent for a file at the path too.
-            if (LongPath.ProbeEntry(item) is PathPresence.Absent)
-            {
-                return Marking.Removed;
-            }
-
-            switch (LongPath.ProbeFile(marker))
-            {
-                case PathPresence.Present:
-                    return Marking.Marked;
-
-                // Not polled further: waiting does not make Windows describe it, and reaching the
-                // deadline would say the tool did nothing, which nobody saw.
-                case PathPresence.Refused:
-                    return Marking.Unseen;
-            }
-
-            if (_time.GetUtcNow() >= deadline)
-            {
-                return Marking.Neither;
-            }
-
-            await Task.Delay(MarkingPoll, _time, ct).ConfigureAwait(false);
-        }
     }
 
     /// <summary>
@@ -1046,16 +1013,5 @@ public sealed class PlanExecutor(
         }
 
         return new DiskReading(total, unreached);
-    }
-
-    /// <summary>What a tool that removes later was seen to do. See <see cref="AwaitMarkingAsync"/>.</summary>
-    private enum Marking
-    {
-        Marked,
-        Removed,
-        Neither,
-
-        /// <summary>Windows would not describe the marker, so whether the tool wrote it is unknown.</summary>
-        Unseen,
     }
 }

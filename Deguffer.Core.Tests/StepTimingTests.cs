@@ -185,7 +185,7 @@ public sealed class StepTimingTests : IDisposable
                 ParallelEnumerationScanner.Default,
                 RefusalRecord.For(new FakeUserEnvironment(_temp.Path)),
                 time: clock)
-            .ExecuteAsync(Plan(new DeleteDirectoryStep(obj, "Build output") { UseCheck = check }), null, null, null, null, cts.Token);
+            .ExecuteAsync(Plan(new DeleteDirectoryStep(obj, "Build output") { UseCheck = check }), null, null, null, null, null, cts.Token);
 
         await clock.WhenWaitingAsync(TimeSpan.FromSeconds(10));
         clock.Advance(TimeSpan.FromMilliseconds(250));
@@ -276,7 +276,7 @@ public sealed class StepTimingTests : IDisposable
                 ParallelEnumerationScanner.Default,
                 RefusalRecord.For(new FakeUserEnvironment(_temp.Path)),
                 time: time)
-            .ExecuteAsync(Plan(step), runReach: null, residue: null, progress: null, underway: null, ct: CancellationToken.None);
+            .ExecuteAsync(Plan(step), runReach: null, residue: null, activity: null, progress: null, underway: null, ct: CancellationToken.None);
 
     private static CleanupPlan Plan(CleanupStep step) => new()
     {

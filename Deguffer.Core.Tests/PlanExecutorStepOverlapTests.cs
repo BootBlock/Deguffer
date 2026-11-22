@@ -68,6 +68,7 @@ public sealed class PlanExecutorStepOverlapTests : IDisposable
                 new ProtectedPath(sibling, "The project beside its output.", PathPresence.Present)),
             runReach: null,
             residue: null,
+            activity: null,
             progress: null,
             underway: null,
             CancellationToken.None);
@@ -116,6 +117,7 @@ public sealed class PlanExecutorStepOverlapTests : IDisposable
                 new ProtectedPath(notes, "A file beside the output.", PathPresence.Present)),
             runReach: null,
             residue: null,
+            activity: null,
             progress: null,
             underway: null,
             CancellationToken.None);
@@ -152,6 +154,7 @@ public sealed class PlanExecutorStepOverlapTests : IDisposable
                 [.. projects.Select(project => new ProtectedPath(project, "The project beside its output.", PathPresence.Present))]),
             runReach: null,
             residue: null,
+            activity: null,
             progress: null,
             underway: null,
             CancellationToken.None);
@@ -190,6 +193,7 @@ public sealed class PlanExecutorStepOverlapTests : IDisposable
             Plan([new DeleteDirectoryStep(first, "app"), new DeleteDirectoryStep(held, "lib") { UseCheck = check }]),
             runReach: null,
             residue: null,
+            activity: null,
             progress: null,
             underway: null,
             CancellationToken.None);
@@ -245,6 +249,7 @@ public sealed class PlanExecutorStepOverlapTests : IDisposable
                     new ProtectedPath(settings, "The tool's settings.", PathPresence.Present)),
                 runReach: null,
                 residue: null,
+                activity: null,
                 progress: null,
                 underway: null,
                 cts.Token);

@@ -115,7 +115,7 @@ internal sealed class CleanRoute
 
         try
         {
-            result = _executor.ExecuteAsync(_plan!, runReach: null, residue: null, progress: null, underway: null, ct)
+            result = _executor.ExecuteAsync(_plan!, runReach: null, residue: null, activity: null, progress: null, underway: null, ct)
                 .GetAwaiter().GetResult();
         }
         finally

@@ -138,7 +138,7 @@ public sealed class DiskCleanupStepTests : IDisposable
         Directory.CreateDirectory(Download);
         File.WriteAllBytes(Path.Combine(Download, "update.cab"), new byte[16]);
 
-        var result = await executor.ExecuteAsync(Planning(Installation()), runReach: null, residue: null, progress: null, underway: null, CancellationToken.None);
+        var result = await executor.ExecuteAsync(Planning(Installation()), runReach: null, residue: null, activity: null, progress: null, underway: null, CancellationToken.None);
         var timing = Assert.Single(result.Steps).Timing;
 
         Assert.Single(handlers.Calls);
@@ -164,7 +164,7 @@ public sealed class DiskCleanupStepTests : IDisposable
             Keep = MinimumAge.Within(TimeSpan.FromDays(7), DateTime.UtcNow),
         };
 
-        var result = await executor.ExecuteAsync(plan, runReach: null, residue: null, progress: null, underway: null, CancellationToken.None);
+        var result = await executor.ExecuteAsync(plan, runReach: null, residue: null, activity: null, progress: null, underway: null, CancellationToken.None);
 
         var outcome = Assert.Single(result.Steps);
         Assert.False(outcome.Succeeded);

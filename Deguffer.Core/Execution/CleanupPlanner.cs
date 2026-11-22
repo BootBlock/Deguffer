@@ -631,20 +631,7 @@ public sealed class CleanupPlanner
                 .Select(proof => new Finding(proof.Registrar, IsPresent: true, proof.Proof)),
         ];
 
-        // A finding with nothing to remove and nothing to prove is not part of the run, so it is
-        // dropped here rather than skipped inside the loop. One with nothing to remove and a
-        // survivor to prove stays, because verifying that survivor is the whole of what it is for.
-        //
-        // Those go last, whatever order the selection arrived in: their promise is about what the
-        // whole run leaves standing, and checking it before a later plan has deleted anything would
-        // prove nothing about that plan. OrderBy is stable, so the plans that delete keep the order
-        // they were given.
-        var plans = selected
-            .Select(f => (Finding: f, Plan: f.Plan))
-            .Where(p => p.Plan is { IsEmpty: false } or { HasSomethingToProve: true })
-            .Select(p => (p.Finding, Plan: p.Plan!))
-            .OrderBy(p => p.Plan.IsEmpty)
-            .ToList();
+        var plans = RunOrder.Of(selected);
 
         // §5.6's negative is answered against what the whole run may destroy, not against each
         // plan's own targets. Gathered once, before the first deletion, because a provider that
@@ -659,6 +646,11 @@ public sealed class CleanupPlanner
         // provider promised to leave. Begun before the first deletion, because what had already gone
         // by then is what no removal in the run can have taken. See RunResidue.
         var residue = await RunResidue.BeginAsync([.. plans.Select(p => p.Plan)], _tuning).ConfigureAwait(false);
+
+        // What the run has set acting on the machine, one record for every plan, so a tool's reading one
+        // plan took can stand for the next plan's only where no step of any plan acted between them. See
+        // RunActivity.
+        var activity = new RunActivity();
 
         // §7's extra confirmation, for every plan before the first deletion. Asked inside the loop, the
         // refusal of a later plan arrived after an earlier one had deleted, and threw away that plan's
@@ -700,6 +692,7 @@ public sealed class CleanupPlanner
                     plan,
                     reach,
                     residue,
+                    activity,
                     ScaledProgress.Within(reporters.Progress, done / total, weights[i] / total),
                     reporters.Underway,
                     plan.IsEmpty ? CancellationToken.None : ct)
