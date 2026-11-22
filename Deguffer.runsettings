@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Applied to every test project by Directory.Build.props, so `dotnet test`, Visual Studio and the
+    release workflow all stop a test run that has hung rather than wait on it indefinitely.
+
+    TestTimeout: a test host is ended, and the run reported as aborted, once it has gone this long
+    without finishing a test, which covers a hang between tests as well as one inside a test. The
+    sequence file it leaves under the project's TestResults folder lists every test that started and
+    whether each finished, so a test that never started was waiting on whatever hung. The slowest
+    test took 78 s on a heavily loaded machine, so this is about four times the slowest. No dump is
+    written, because a dump of a test host is hundreds of megabytes. To take one when a hang needs
+    its stacks, set HangDumpType below to Mini for that run. An XML comment cannot hold two hyphens
+    in a row, so the equivalent dotnet test option is not written out here.
+
+    TestSessionTimeout: the whole run is ended after this long, in milliseconds, whatever its tests
+    report. The Core suite takes about three minutes under load.
+-->
+<RunSettings>
+    <RunConfiguration>
+        <TestSessionTimeout>1200000</TestSessionTimeout>
+    </RunConfiguration>
+    <DataCollectionRunSettings>
+        <DataCollectors>
+            <DataCollector friendlyName="blame" enabled="True">
+                <Configuration>
+                    <CollectDumpOnTestSessionHang TestTimeout="5m" HangDumpType="None" />
+                </Configuration>
+            </DataCollector>
+        </DataCollectors>
+    </DataCollectionRunSettings>
+</RunSettings>
