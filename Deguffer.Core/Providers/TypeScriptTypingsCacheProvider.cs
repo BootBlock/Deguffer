@@ -108,6 +108,9 @@ public sealed partial class TypeScriptTypingsCacheProvider : CleanupProviderBase
             name => RecognisedChild().IsMatch(name)),
     ];
 
+    /// <summary>The one root above, at a fixed place in the local profile.</summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(Root);
+
     /// <summary>The cache whole: a version folder is any child named by a version, which no narrower place can name.</summary>
     public override Task<IReadOnlyList<CleanedPlace>> CleanedPlacesAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<CleanedPlace>>([CleanedPlace.Whole(Root)]);

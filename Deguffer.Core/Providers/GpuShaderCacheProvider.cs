@@ -19,10 +19,10 @@ namespace Deguffer.Core.Providers;
 /// cache is the same fact — driver-version-keyed pipeline blobs, rebuilt on demand — so the tier,
 /// the sentence the user reads and the reasoning behind both are identical. A class each would be
 /// several copies of one piece of knowledge, and the copies would drift. What actually differs is
-/// which directory and which child names, and that is data: <see cref="Roots"/> is the table, and
-/// each row carries its own <see cref="DisposableChildSet"/> so §5.2 stays answerable from one
-/// declaration. The user keeps per-vendor control regardless, because selection is per step and
-/// each cache is its own step.</para>
+/// which directory and which child names, and that is data: <see cref="GpuShaderCacheLayout.Roots"/>
+/// is the table, and each row carries its own <see cref="DisposableChildSet"/> so §5.2 stays
+/// answerable from one declaration. The user keeps per-vendor control regardless, because
+/// selection is per step and each cache is its own step.</para>
 ///
 /// <para><b>NVIDIA appears twice, in two application-data tiers.</b> The driver writes one cache
 /// under <c>%LOCALAPPDATA%\NVIDIA</c> and a second under <c>AppData\LocalLow\NVIDIA</c>, and the
@@ -56,129 +56,12 @@ namespace Deguffer.Core.Providers;
 /// would have to name one. A blob held open is skipped by the remover and rebuilt on demand, which
 /// is the same outcome as deleting it.</para>
 ///
-/// <para>Past five hundred lines because the table and the one plan that reads it are a single
-/// rule, and most of the length is the evidence for each row. Finding the packaged roots is the
-/// part that is not this provider's knowledge, and it is <see cref="PackageContainers"/>.</para>
+/// <para>The table, with the evidence for each row, is <see cref="GpuShaderCacheLayout"/>, which
+/// this provider plans from and declares from. Finding the packaged roots is the part that is
+/// not this provider's knowledge, and it is <see cref="PackageContainers"/>.</para>
 /// </summary>
 public sealed class GpuShaderCacheProvider : CleanupProviderBase
 {
-    /// <summary>
-    /// What may be deleted under each vendor's directory. Anything not named here is Tier 4 by
-    /// construction, which is the direction §5.2 requires the unknown case to fail in.
-    ///
-    /// AMD's names come from one published listing of <c>%LOCALAPPDATA%\AMD</c>, excerpted, from a
-    /// Windows machine with AMD graphics whose users play games on it
-    /// (https://gist.github.com/ccae7ef1d1446f4450005de139c601c4, October 2023). It shows five
-    /// folders, and every file it shows in them is a hash-named driver blob: <c>DX9Cache</c> as
-    /// <c>&lt;hash&gt;.bin</c>, and <c>DxCache</c>, <c>DxcCache</c>, <c>OglCache</c> and
-    /// <c>VkCache</c> as <c>&lt;hash&gt;.parc</c>, the <c>OglCache</c> ones stamped by AMD's shader
-    /// compiler. Its author reads the Direct3D names as Direct3D 9, 10 and 11, and 12. AMD's
-    /// AMDVLK documentation names <c>VkCache</c> as the Vulkan pipeline cache on Linux, which
-    /// agrees. <c>GLCache</c>, which third-party cleaners attribute to AMD too, appeared in no
-    /// listing and is Tier 4: it is NVIDIA's name, and borrowing it is the guess §5.2 forbids.
-    ///
-    /// <c>CN</c> is named because it is the one thing beside the caches known to matter: AMD Software
-    /// keeps its settings and per-game profiles there (<c>gmdb.blb</c>). The same listing says the
-    /// root holds other files besides, unnamed, and a file in the root is never a candidate.
-    ///
-    /// A name that has not been seen in a directory is Tier 4 in that directory, so NVIDIA's
-    /// LocalLow row is deliberately thin. Only <c>DXCache</c> was measured there, so
-    /// <c>GLCache</c> is left out rather than assumed to exist in both tiers. Intel's LocalLow row is thin for the
-    /// same reason: only <c>ShaderCache</c> was measured there.
-    /// </summary>
-    public static readonly IReadOnlyList<ShaderCacheRoot> Roots =
-    [
-        new ShaderCacheRoot(ProfileArea.LocalAppData, "NVIDIA", new DisposableChildSet(
-        [
-            new ChildClassification(
-                "DXCache",
-                SafetyTier.RegenerableCache,
-                "Compiled Direct3D shader pipelines. The driver rebuilds each one the first time it is needed again."),
-            new ChildClassification(
-                "GLCache",
-                SafetyTier.RegenerableCache,
-                "Compiled OpenGL and Vulkan program binaries. The driver rebuilds them on demand."),
-        ]),
-        [("accounts", "NVIDIA account and sign-in state. It sits beside the caches and is not one.")]),
-        new ShaderCacheRoot(ProfileArea.LocalLowAppData, "NVIDIA", new DisposableChildSet(
-        [
-            new ChildClassification(
-                "DXCache",
-                SafetyTier.RegenerableCache,
-                "Compiled Direct3D shader pipelines. The driver rebuilds each one the first time it is needed again."),
-        ]),
-        [("accounts", "NVIDIA account and sign-in state. It is not a shader cache, and it is named "
-            + "here whether or not this folder currently holds one.")]),
-        new ShaderCacheRoot(ProfileArea.LocalAppData, "AMD", new DisposableChildSet(
-        [
-            new ChildClassification(
-                "DX9Cache",
-                SafetyTier.RegenerableCache,
-                "Compiled Direct3D 9 shaders. The driver rebuilds each one the first time it is needed again."),
-            new ChildClassification(
-                "DxCache",
-                SafetyTier.RegenerableCache,
-                "Compiled Direct3D shader pipelines. The driver rebuilds each one the first time it is needed again."),
-            new ChildClassification(
-                "DxcCache",
-                SafetyTier.RegenerableCache,
-                "Compiled Direct3D 12 shader pipelines. The driver rebuilds each one the first time it is needed again."),
-            new ChildClassification(
-                "OglCache",
-                SafetyTier.RegenerableCache,
-                "Compiled OpenGL program binaries. The driver rebuilds them on demand."),
-            new ChildClassification(
-                "VkCache",
-                SafetyTier.RegenerableCache,
-                "Compiled Vulkan pipelines. The driver rebuilds them on demand."),
-        ]),
-        [("CN", "AMD Software's settings and per-game profiles. It sits beside the caches and is not one.")]),
-        new ShaderCacheRoot(ProfileArea.LocalAppData, "Intel", new DisposableChildSet(
-        [
-            new ChildClassification(
-                "ShaderCache",
-                SafetyTier.RegenerableCache,
-                "Compiled shader pipelines. The driver rebuilds each one the first time it is needed again."),
-        ]), []),
-        new ShaderCacheRoot(ProfileArea.LocalLowAppData, "Intel", new DisposableChildSet(
-        [
-            new ChildClassification(
-                "ShaderCache",
-                SafetyTier.RegenerableCache,
-                "Compiled shader pipelines. The driver rebuilds each one the first time it is needed again."),
-        ]), []),
-    ];
-
-    /// <summary>
-    /// The vendor folder NVIDIA's driver writes inside a packaged application's container, and what
-    /// may be deleted from it.
-    ///
-    /// <para>The two names the driver writes in the local application data, each measured inside a
-    /// container. Nineteen containers held <c>DXCache</c>, and an OpenGL program linked from inside
-    /// an AppContainer on an NVIDIA card wrote <c>AC\NVIDIA\GLCache</c>, laid out as it is outside
-    /// one. Nothing else has been seen there, and anything else is Tier 4.</para>
-    /// </summary>
-    public static readonly PackagedShaderCacheRoot PackagedNvidia = new(
-        "NVIDIA",
-        new DisposableChildSet(
-        [
-            new ChildClassification(
-                "DXCache",
-                SafetyTier.RegenerableCache,
-                "Compiled Direct3D shader pipelines the driver wrote for this app. It rebuilds each one "
-                + "the first time it is needed again."),
-            new ChildClassification(
-                "GLCache",
-                SafetyTier.RegenerableCache,
-                "Compiled OpenGL and Vulkan program binaries the driver wrote for this app. It rebuilds "
-                + "them on demand."),
-        ]),
-        [("accounts", "NVIDIA account and sign-in state. It is not a shader cache, and it is named "
-            + "here whether or not this folder currently holds one.")]);
-
-    /// <summary>The heading the packaged applications' caches are listed under, so they read as one.</summary>
-    public const string PackagedGroup = "NVIDIA, inside packaged apps";
-
     /// <summary>
     /// Direct3D's own shader cache, which the OS writes rather than any one vendor's driver.
     ///
@@ -264,6 +147,13 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots =>
         [.. KnownRoots().Concat(PackagedRoots(CancellationToken.None)).Select(Declare)];
+
+    /// <summary>
+    /// The vendor folders the table names, and the packages folder, which holds every container the
+    /// search can find. Both come from known folders, so neither needs the listing of the packages.
+    /// </summary>
+    public override ToolRootScope ToolRootScope =>
+        ToolRootScope.Under([.. KnownRoots().Select(root => root.Path), PackageContainers.PackagesFolder(Environment)]);
 
     public override void InvalidateCaches()
     {
@@ -545,12 +435,12 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
     }
 
     /// <summary>
-    /// The rows of <see cref="Roots"/> on this machine. A null path is a tier the platform would not
-    /// locate, which only LocalLow can be, and §5.2 forbids guessing where it is, so that row
-    /// contributes nothing rather than a path assembled by hand.
+    /// The rows of <see cref="GpuShaderCacheLayout.Roots"/> on this machine. A null path is a tier the
+    /// platform would not locate, which only LocalLow can be, and §5.2 forbids guessing where it is,
+    /// so that row contributes nothing rather than a path assembled by hand.
     /// </summary>
     private IEnumerable<LocatedRoot> KnownRoots() =>
-        Roots
+        GpuShaderCacheLayout.Roots
             .Select(row => (Row: row, Path: row.PathIn(Environment)))
             .Where(row => row.Path is not null)
             .Select(row => new LocatedRoot(row.Path!, row.Row.Label, row.Row.Children, row.Row.ProtectedNames));
@@ -560,11 +450,11 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
             found.Path,
             // The package family name, because it is what the folder is called, and every container
             // holds a folder called NVIDIA.
-            $"{PackagedNvidia.DirectoryName} ({found.Package})",
-            PackagedNvidia.Children,
-            PackagedNvidia.ProtectedNames,
+            $"{GpuShaderCacheLayout.PackagedNvidia.DirectoryName} ({found.Package})",
+            GpuShaderCacheLayout.PackagedNvidia.Children,
+            GpuShaderCacheLayout.PackagedNvidia.ProtectedNames,
             found.Container,
-            PackagedGroup));
+            GpuShaderCacheLayout.PackagedGroup));
 
     /// <summary>
     /// The one listing of the packages that presence, the plan and Explore's refusals all read, kept
@@ -572,7 +462,10 @@ public sealed class GpuShaderCacheProvider : CleanupProviderBase
     /// </summary>
     private PackageContainerSearch SearchPackages(CancellationToken ct) =>
         _packaged.Get(() => PackageContainers.Find(
-            Environment, PackagedNvidia.DirectoryName, [.. PackagedNvidia.Children.DisposableNames], ct));
+            Environment,
+            GpuShaderCacheLayout.PackagedNvidia.DirectoryName,
+            [.. GpuShaderCacheLayout.PackagedNvidia.Children.DisposableNames],
+            ct));
 
     /// <summary>One vendor root as it is on this machine, however it was found.</summary>
     /// <param name="Container">

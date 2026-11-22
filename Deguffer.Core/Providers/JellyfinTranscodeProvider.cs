@@ -58,4 +58,10 @@ public sealed class JellyfinTranscodeProvider : MediaServerTranscodeProvider
     protected override IReadOnlyList<string> ConflictingProcessNames => JellyfinServerLayout.ProcessNames;
 
     protected override MediaServerLayout FindLayout() => JellyfinServerLayout.Find(Environment, _system, Volumes);
+
+    /// <summary>
+    /// Anywhere, because a transcoder folder Jellyfin's own <c>encoding.xml</c> or <c>system.xml</c> moves
+    /// may be on any drive, and only reading those files says where.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Anywhere;
 }

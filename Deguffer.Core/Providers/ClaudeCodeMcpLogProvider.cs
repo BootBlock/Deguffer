@@ -103,7 +103,10 @@ public sealed class ClaudeCodeMcpLogProvider : CleanupProviderBase
     /// <c>claude-cli</c>, and the library it uses for per-user folders appends <c>-nodejs</c> and puts
     /// its cache in <c>Cache</c> under <c>%LOCALAPPDATA%</c> on Windows.
     /// </summary>
-    public string CacheFolder => Path.Combine(Environment.LocalAppData, "claude-cli-nodejs", "Cache");
+    public string CacheFolder => Path.Combine(ToolFolder, "Cache");
+
+    /// <summary>The command-line tool's folder under <c>%LOCALAPPDATA%</c>, which holds <see cref="CacheFolder"/>.</summary>
+    private string ToolFolder => Path.Combine(Environment.LocalAppData, "claude-cli-nodejs");
 
     /// <summary>
     /// Presence is a log actually on disk, a folder that refused to be listed, or a cache folder
@@ -137,6 +140,12 @@ public sealed class ClaudeCodeMcpLogProvider : CleanupProviderBase
     /// inside it.</para>
     /// </summary>
     public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots.Get(Declare);
+
+    /// <summary>
+    /// Every root above is the command-line tool's folder or inside it, at a fixed place that
+    /// <see cref="ClaudeCodeHome.ConfigDirectoryVariable"/> does not move.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(ToolFolder);
 
     public override void InvalidateCaches()
     {
@@ -218,7 +227,7 @@ public sealed class ClaudeCodeMcpLogProvider : CleanupProviderBase
 
         return
         [
-            new ToolRoot(Path.GetDirectoryName(CacheFolder)!, ToolFolderReason, static _ => false),
+            new ToolRoot(ToolFolder, ToolFolderReason, static _ => false),
             new ToolRoot(CacheFolder, CacheFolderReason, static _ => false),
             .. (survey?.ProjectFolders ?? []).Select(folder => ToolRoot.Folders(folder, ProjectFolderReason, IsLogFolderName)),
         ];
@@ -250,7 +259,7 @@ public sealed class ClaudeCodeMcpLogProvider : CleanupProviderBase
 
         var survivors = new List<(string Path, string Reason)>
         {
-            (Path.GetDirectoryName(cache)!, ToolFolderReason),
+            (ToolFolder, ToolFolderReason),
             (cache, CacheFolderReason),
         };
 

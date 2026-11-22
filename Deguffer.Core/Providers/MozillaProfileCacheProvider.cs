@@ -105,6 +105,12 @@ public abstract class MozillaProfileCacheProvider : CleanupProviderBase
         _toolRoots.Get(() => _toolRootDeclarations.Declared(Profiles(), LocatedElsewhere()));
 
     /// <summary>
+    /// Anywhere, because a profile the register names by an absolute path is declared where it is,
+    /// on any drive, and only reading <c>profiles.ini</c> says where that is.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Anywhere;
+
+    /// <summary>
     /// A profile at the top of a drive or share. See <see cref="MozillaToolRoots.AtTheTopOfADrive"/>.
     /// </summary>
     public override Task<IReadOnlyList<ToolRoot>> DiscoverToolRootsAsync(CancellationToken ct = default) =>

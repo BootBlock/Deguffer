@@ -83,6 +83,12 @@ public sealed class NpmCacheProvider : CleanupProviderBase
     /// </summary>
     public string DefaultCacheDirectory => Path.Combine(Environment.LocalAppData, "npm-cache");
 
+    /// <summary>The user's npm configuration, which may hold registry authentication tokens.</summary>
+    private string UserConfiguration => Path.Combine(Environment.UserProfile, ".npmrc");
+
+    /// <summary>The packages installed globally, and the commands that run them.</summary>
+    private string GlobalPackages => Path.Combine(Environment.RoamingAppData, "npm");
+
     /// <summary>
     /// §5.2 as §7.1 needs it read from outside. npm has no root to declare: the cache directory
     /// comes from <c>npm config get cache</c>, and the documented default is a cache folder rather
@@ -95,17 +101,23 @@ public sealed class NpmCacheProvider : CleanupProviderBase
     public override IReadOnlyList<ToolRoot> ToolRoots =>
     [
         new ToolRoot(
-            Path.Combine(Environment.UserProfile, ".npmrc"),
+            UserConfiguration,
             "This is your npm configuration, and it may hold registry authentication tokens. "
             + "Deguffer never removes it.",
             static _ => false),
 
         new ToolRoot(
-            Path.Combine(Environment.RoamingAppData, "npm"),
+            GlobalPackages,
             "This is where npm keeps the packages you installed globally, and the commands that run "
             + "them. Deguffer never removes anything here.",
             static _ => false),
     ];
+
+    /// <summary>
+    /// The two roots themselves, neither of which a setting moves. The cache npm reports is never a
+    /// root, so asking npm is not needed to bound them.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(UserConfiguration, GlobalPackages);
 
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(Environment.FindExecutable("npm") is not null);
@@ -225,8 +237,8 @@ public sealed class NpmCacheProvider : CleanupProviderBase
     /// </summary>
     private Task<IReadOnlyList<ProtectedPath>> BuildProtectedPathsAsync(string cacheDirectory, CancellationToken ct) => ProtectAsync(
         [
-            (Path.Combine(Environment.UserProfile, ".npmrc"), "User npm configuration, which may hold registry auth tokens."),
-            (Path.Combine(Environment.RoamingAppData, "npm"), "Globally installed npm packages and their shims."),
+            (UserConfiguration, "User npm configuration, which may hold registry auth tokens."),
+            (GlobalPackages, "Globally installed npm packages and their shims."),
             (cacheDirectory, "npm's cache directory must survive — only the package cache within it is cleared."),
             (Path.Combine(cacheDirectory, NpxCacheName), "Packages npx ran, which npm's clean command leaves."),
         ],

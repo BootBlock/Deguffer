@@ -6,7 +6,7 @@ namespace Deguffer.Core.Providers;
 /// A graphics vendor's directory as its driver writes it inside each packaged application's
 /// container, and the children of it that <see cref="GpuShaderCacheProvider"/> recognises.
 ///
-/// <para>A declaration of its own rather than a row of <see cref="GpuShaderCacheProvider.Roots"/>,
+/// <para>A declaration of its own rather than a row of <see cref="GpuShaderCacheLayout.Roots"/>,
 /// because there is no one place it is in. Each package that has rendered through the driver has its
 /// own copy, so the paths come from <see cref="PackageContainers"/> and only the names are declared
 /// here, once for every container.</para>

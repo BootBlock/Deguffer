@@ -112,6 +112,13 @@ public sealed class PipCacheProvider : CleanupProviderBase
             static _ => false)),
     ];
 
+    /// <summary>
+    /// The roots themselves, each at a fixed place. The cache pip reports and a file
+    /// <c>PIP_CONFIG_FILE</c> names are never roots, so pip is not asked to bound them.
+    /// </summary>
+    public override ToolRootScope ToolRootScope =>
+        ToolRootScope.Under([LocalRoot, .. ConfigurationFiles.Select(static file => file.Path)]);
+
     public override Task<bool> IsPresentAsync(CancellationToken ct = default) =>
         Task.FromResult(FindPip() is not null);
 

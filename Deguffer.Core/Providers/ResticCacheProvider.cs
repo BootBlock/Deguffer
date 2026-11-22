@@ -113,6 +113,15 @@ public sealed class ResticCacheProvider : CleanupProviderBase
         [.. Roots().Select(root => ToolRoot.Folders(root, RootReason, ResticCacheLayout.IsRepositoryCache))];
 
     /// <summary>
+    /// The default folder and whatever the variable holds in either reading, unjudged: judging a value
+    /// asks the disk, and a value this declines only drops a root.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(
+        DefaultRoot,
+        ConfiguredFolder.Read(VariableReading.Current, ResticCacheLayout.CacheVariable, Environment),
+        ConfiguredFolder.Read(VariableReading.Tool, ResticCacheLayout.CacheVariable, Environment));
+
+    /// <summary>
     /// Each repository's cache recognises only the folders restic caches into, and nothing at all while
     /// restic runs.
     /// </summary>

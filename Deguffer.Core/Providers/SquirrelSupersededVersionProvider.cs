@@ -131,6 +131,9 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
         }),
     ]);
 
+    /// <summary>Every root above is an installation the discovery found, and it finds them only directly under one root.</summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(_discovery.InstallationsRoot);
+
     /// <summary>
     /// The superseded builds of an application that is running, each as a root recognising no child.
     ///
@@ -171,15 +174,13 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
                where !version.IsLink
                select new ToolRoot(
                    version.Path,
-                   $"{installation.Name} is running, so Deguffer is leaving the build it replaced "
-                   + "alone: an application that has just updated may still be reading the folder "
-                   + "beside the one it started from. Close it and this can go.",
+                   SquirrelSupersededPlanNotes.RunningBuildReason(installation),
                    static _ => false),
             .. from installation in installations
                where unsure.Contains(installation.Root)
                from version in installation.Superseded
                where !version.IsLink
-               select new ToolRoot(version.Path, UncheckedBuildReason(installation), static _ => false),
+               select new ToolRoot(version.Path, SquirrelSupersededPlanNotes.UncheckedBuildReason(installation), static _ => false),
         ]);
     }
 
@@ -278,7 +279,7 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
 
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
-                $"Left every version of {Join(names)} alone: {WhyUnordered(doubt.Key, names.Count == 1)}"));
+                $"Left every version of {SquirrelSupersededPlanNotes.Join(names)} alone: {SquirrelSupersededPlanNotes.WhyUnordered(doubt.Key, names.Count == 1)}"));
         }
 
         // One candidate per installation, not one per version directory. The question that decides
@@ -318,7 +319,7 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Warning,
-                $"Left the older builds of {Join([.. installations.Where(i => running.Contains(i.Root)).Select(i => i.Name)])} "
+                $"Left the older builds of {SquirrelSupersededPlanNotes.Join([.. installations.Where(i => running.Contains(i.Root)).Select(i => i.Name)])} "
                 + "alone: "
                 + (live.Vetoed.Count == 1 ? "it is" : "they are")
                 + " running. Close "
@@ -330,7 +331,7 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Warning,
-                $"Left the older builds of {Join([.. installations.Where(i => unsure.Contains(i.Root)).Select(i => i.Name)])} "
+                $"Left the older builds of {SquirrelSupersededPlanNotes.Join([.. installations.Where(i => unsure.Contains(i.Root)).Select(i => i.Name)])} "
                 + "alone: Deguffer could not check whether "
                 + (unsure.Count == 1 ? "it is" : "they are")
                 + " running. Scan again to include the builds."));
@@ -419,12 +420,6 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
         };
     }
 
-    /// <summary>Why Explore refuses a build of an installation nothing could check was not running.</summary>
-    private static string UncheckedBuildReason(SquirrelInstallation installation) =>
-        $"Deguffer could not tell whether {installation.Name} is running, so it is leaving the build it "
-        + "replaced alone: an application that has just updated may still be reading the folder beside "
-        + "the one it started from.";
-
     /// <summary>
     /// §5.6 for one installation: the folder, the updater, the packages beside them, and
     /// <em>every build this run is not removing</em>.
@@ -474,56 +469,4 @@ public sealed class SquirrelSupersededVersionProvider : CleanupProviderBase
             $"Deguffer could not read a version number out of '{name}', so it cannot tell whether "
             + "this build is the one in use.")));
     }
-
-    /// <summary>
-    /// The rest of the sentence about installations left alone for <paramref name="doubt"/>, after
-    /// "Left every version of ... alone:".
-    /// </summary>
-    private static string WhyUnordered(SquirrelOrderDoubt doubt, bool one) => doubt switch
-    {
-        SquirrelOrderDoubt.UnreadableVersion => one
-            ? "it has a build whose version number Deguffer could not read, so it cannot tell which "
-              + "one is in use."
-            : "they have a build whose version number Deguffer could not read, so it cannot tell "
-              + "which one is in use.",
-        SquirrelOrderDoubt.AmbiguousBuilds => one
-            ? "it has two builds whose folder names differ only in case, so Deguffer cannot tell "
-              + "which one is in use."
-            : "they each have two builds whose folder names differ only in case, so Deguffer cannot "
-              + "tell which ones are in use.",
-        SquirrelOrderDoubt.UnfinishedUpdate => one
-            ? "an update to it stopped before it finished, so the newest build in its folder may not "
-              + "be the one it starts."
-            : "updates to them stopped before they finished, so the newest build in each folder may "
-              + "not be the one that application starts.",
-        SquirrelOrderDoubt.UnfinishedUnknown => one
-            ? "Windows would not say whether its last update finished, so Deguffer cannot tell which "
-              + "build it starts."
-            : "Windows would not say whether their last updates finished, so Deguffer cannot tell "
-              + "which builds they start.",
-        SquirrelOrderDoubt.IndexBehind => one
-            ? "its record of which build to start does not lead to the newest one, so its last "
-              + "update may not have finished."
-            : "their records of which build to start do not lead to the newest ones, so their last "
-              + "updates may not have finished.",
-        SquirrelOrderDoubt.IndexUnorderable => one
-            ? "its record of which build to start names a version Deguffer cannot order, so it "
-              + "cannot tell which one is in use."
-            : "their records of which build to start name a version Deguffer cannot order, so it "
-              + "cannot tell which ones are in use.",
-        _ => throw new ArgumentOutOfRangeException(
-            nameof(doubt), doubt, "Ordered installations and unread indexes have sentences of their own."),
-    };
-
-    /// <summary>
-    /// Application names for a sentence, in the form a reader expects rather than comma-separated
-    /// throughout. Driving the real window is what catches a sentence that reads correctly only on
-    /// a machine with one of something.
-    /// </summary>
-    private static string Join(IReadOnlyList<string> names) => names.Count switch
-    {
-        0 => string.Empty,
-        1 => names[0],
-        _ => string.Join(", ", names.Take(names.Count - 1)) + " and " + names[^1],
-    };
 }

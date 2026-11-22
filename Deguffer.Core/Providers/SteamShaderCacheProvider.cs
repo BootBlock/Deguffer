@@ -131,6 +131,12 @@ public sealed class SteamShaderCacheProvider : CleanupProviderBase
     public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots.Get(DeclareToolRoots);
 
     /// <summary>
+    /// Anywhere, because a root is declared in every library Steam's <c>libraryfolders.vdf</c>
+    /// lists, on any drive, and only reading that file says where they are.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Anywhere;
+
+    /// <summary>
     /// The shader cache folder of every game library Steam's own list names, beside the program and
     /// elsewhere. Each game's cache is named by its app ID, so the folder is the narrowest place that
     /// holds a game installed after this is asked; the games, their records and the Workshop content

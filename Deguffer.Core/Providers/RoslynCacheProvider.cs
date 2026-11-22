@@ -129,6 +129,9 @@ public sealed class RoslynCacheProvider : CleanupProviderBase
             _ => false),
     ];
 
+    /// <summary>Visual Studio's own folder, the outermost of the three roots above and fixed in the local profile.</summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(_visualStudio);
+
     /// <summary>
     /// The folder holding the sets, because any program's set inside it can go, and nothing above it:
     /// Visual Studio's own folder holds the recovery copies of unsaved documents.

@@ -142,6 +142,12 @@ public sealed partial class VsCodeExtensionLeftoversProvider : CleanupProviderBa
     ];
 
     /// <summary>
+    /// Every root above is an extensions folder the discovery found, and it looks only in the
+    /// profile's dot-folders and the folder its variable names.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(CodeExtensionsFolderDiscovery.Bounds(Environment));
+
+    /// <summary>
     /// The folder <see cref="CodeExtensionsFolderDiscovery.Variable"/> names where it is declined, such as
     /// a drive root, refusing only what the editor writes there: its records, and every extension its
     /// list names. Everything beside them is somebody else's, so nothing else is refused.

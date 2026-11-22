@@ -162,9 +162,16 @@ public sealed class SteamDiscovery(IUserEnvironment environment)
                     + $"{unexamined}. It was neither cleared nor ruled out.");
     }
 
+    /// <summary>
+    /// The install folder as Windows records it, read without touching the disk. Every folder
+    /// <see cref="Install"/> names is this value normalised, so it bounds the install before anything
+    /// has checked that Steam is there.
+    /// </summary>
+    public string? RecordedRoot => environment.UserHive.ReadValue(RegistryKey, InstallPathValue);
+
     private SteamInstall Find()
     {
-        var recorded = environment.UserHive.ReadValue(RegistryKey, InstallPathValue);
+        var recorded = RecordedRoot;
 
         // Steam writes this as "c:/program files (x86)/steam", so it needs normalising before it can
         // be compared with or joined to anything. Configured also refuses a relative value, which

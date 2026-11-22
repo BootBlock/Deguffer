@@ -121,6 +121,13 @@ public sealed class CcacheProvider : CleanupProviderBase
     ];
 
     /// <summary>
+    /// The two documented folders and whatever <see cref="CacheVariable"/> names, taken as it stands:
+    /// the checks that decline a folder read the disk, and covering a declined one is only wider.
+    /// </summary>
+    public override ToolRootScope ToolRootScope =>
+        ToolRootScope.Under(Environment.GetEnvironmentVariable(CacheVariable), LegacyRoot, DefaultRoot);
+
+    /// <summary>
     /// The cache ccache reports, and a folder ccache is set to use that this declines to examine as its
     /// own, where only the configuration file is refused. See <see cref="ToolRoot.Sparing"/>.
     /// </summary>

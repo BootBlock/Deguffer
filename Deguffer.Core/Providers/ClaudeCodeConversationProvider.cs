@@ -164,6 +164,12 @@ public sealed class ClaudeCodeConversationProvider : CleanupProviderBase
     public override IReadOnlyList<ToolRoot> ToolRoots => _toolRoots.Get(Declare);
 
     /// <summary>
+    /// Every root above is Claude Code's folder or inside it, and the folder is one of these
+    /// whichever way the variable is set.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(ClaudeCodeHome.Bounds(Environment));
+
+    /// <summary>
     /// The conversations folder, refused whole, where the scope cannot ask about anything in it.
     ///
     /// <para>Probed rather than declared, so no other row's root inside it can lift the refusal, on the

@@ -104,6 +104,12 @@ public sealed class GoCacheProvider : CleanupProviderBase
     public override IReadOnlyList<ToolRoot> ToolRoots => Declare(DefaultGoPath);
 
     /// <summary>
+    /// The default workspace, which holds both levels above. A workspace <c>go env</c> reports is
+    /// declared only by <see cref="DiscoverToolRootsAsync"/>, which this scope does not bound.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(DefaultGoPath);
+
+    /// <summary>
     /// The workspaces this machine actually has, which <c>GOPATH</c> lists and which move through the
     /// environment and through <c>go env -w</c>. For each, the three paths the plan asserts must
     /// survive: the workspace, the programs <c>go install</c> put in its <c>bin</c>, and the user's

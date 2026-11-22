@@ -57,4 +57,7 @@ public sealed class PlexTranscodeProvider : MediaServerTranscodeProvider
     protected override IReadOnlyList<string> ConflictingProcessNames => PlexServerLayout.ProcessNames;
 
     protected override MediaServerLayout FindLayout() => PlexServerLayout.Find(Environment, Volumes);
+
+    /// <inheritdoc cref="PlexServerLayout.Scope"/>
+    public override ToolRootScope ToolRootScope => PlexServerLayout.Scope(Environment);
 }

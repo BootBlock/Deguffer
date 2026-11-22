@@ -131,6 +131,15 @@ public sealed class PulumiPluginProvider : CleanupProviderBase
     ];
 
     /// <summary>
+    /// The default folder and whatever the variable holds in either reading, unjudged: judging a value
+    /// asks the disk, and a value this declines only drops a root.
+    /// </summary>
+    public override ToolRootScope ToolRootScope => ToolRootScope.Under(
+        DefaultHome,
+        ConfiguredFolder.Read(VariableReading.Tool, HomeVariable, Environment),
+        ConfiguredFolder.Read(VariableReading.Current, HomeVariable, Environment));
+
+    /// <summary>
     /// What Explore must refuse that only the machine as it is now can say: the whole cache while Pulumi
     /// runs or while what runs from it cannot be read in full, each plugin a program runs from, and what
     /// Pulumi keeps in a folder the variable names that this declines.

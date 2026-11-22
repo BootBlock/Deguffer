@@ -116,6 +116,13 @@ public sealed class KopiaCacheProvider : CleanupProviderBase
     ];
 
     /// <summary>
+    /// The two fixed folders above, which are both roots. A cache or connection file a setting moves is
+    /// declared only by <see cref="DiscoverToolRootsAsync"/>, which this scope does not bound.
+    /// </summary>
+    public override ToolRootScope ToolRootScope =>
+        ToolRootScope.Under(KopiaCacheLayout.ConfigFolder(Environment), KopiaCacheLayout.LocalFolder(Environment));
+
+    /// <summary>
     /// Each cache folder recognises only the folders Kopia caches into, and nothing at all while Kopia
     /// runs. Each connection file, and the password file Kopia may keep beside it, is refused wherever
     /// <see cref="KopiaCacheLayout.ConfigVariable"/> put it.
