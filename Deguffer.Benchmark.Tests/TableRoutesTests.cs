@@ -155,8 +155,8 @@ public sealed class TableRoutesTests
     {
         var volumes = new StepTimingSources(FakeMftSourceFactory.Serving(Drive, Volume().WithoutBitmap()));
 
-        var first = TableRoutes.Run(Route.Table, volumes, $@"{Drive}:\", TableTuning.Default, opened: null, CancellationToken.None);
-        var second = TableRoutes.Run(Route.Table, volumes, $@"{Drive}:\", TableTuning.Default, opened: null, CancellationToken.None);
+        var first = TableRoutes.Run(Route.Table, volumes, $@"{Drive}:\", TableTuning.Default, snapshots: false, opened: null, CancellationToken.None);
+        var second = TableRoutes.Run(Route.Table, volumes, $@"{Drive}:\", TableTuning.Default, snapshots: false, opened: null, CancellationToken.None);
 
         Assert.Equal([MftOpenStep.FirstRecord], Assert.IsType<MftOpenTimings>(first.Open).Steps.Select(step => step.Step));
         Assert.NotSame(first.Open, second.Open);
@@ -172,7 +172,7 @@ public sealed class TableRoutesTests
         var volumes = new RememberingSources(FakeMftSourceFactory.Serving(Drive, Volume().WithoutBitmap()));
         var handed = new List<IMftVolume>();
 
-        TableRoutes.Run(Route.Index, volumes, $@"{Drive}:\", TableTuning.Default, handed.Add, CancellationToken.None);
+        TableRoutes.Run(Route.Index, volumes, $@"{Drive}:\", TableTuning.Default, snapshots: false, handed.Add, CancellationToken.None);
 
         Assert.Same(volumes.Opened, Assert.Single(handed));
     }
@@ -184,6 +184,7 @@ public sealed class TableRoutesTests
             FakeMftSourceFactory.Unavailable(FallbackReason.VolumeNotAddressable),
             $@"{Drive}:\",
             TableTuning.Default,
+            snapshots: false,
             opened: null,
             CancellationToken.None));
 
@@ -217,6 +218,43 @@ public sealed class TableRoutesTests
         Assert.Equal(4000, tree.TotalLength);
     }
 
+    /// <summary>
+    /// An Explore read asked for snapshots assembles them as a scan does and reports what they cost,
+    /// and reads and builds the same tree as one asked for none, which reports nothing about
+    /// snapshots it never took.
+    ///
+    /// <para>The table is one report long: the read reports once per
+    /// <see cref="MftPassProgress.Interval"/> records, and the first snapshot is due at the first
+    /// report, so exactly one is started whatever the clock reads. The report that the whole table
+    /// has been dealt with starts none.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("Explore", null)]
+    [InlineData("ExploreFolder", @"C:\folder")]
+    public void AnExploreReadReportsItsSnapshotsOnlyWhereItTookThem(string route, string? target)
+    {
+        static MftFixture OneReportLong() =>
+            Volume().AddFile(MftPassProgress.Interval + 5, 16, "late.bin", allocated: 4096, logical: 10).WithoutBitmap();
+
+        var with = Run(route, OneReportLong(), target, snapshots: true);
+        var without = Run(route, OneReportLong(), target, snapshots: false);
+
+        Assert.Equal(1, with.Snapshots?.Count);
+        Assert.Null(without.Snapshots);
+        Assert.True(with.Complete);
+        Assert.Equal(without.Items, with.Items);
+        Assert.Equal(
+            Assert.IsType<ExploreTree>(without.Kept?.Result).NodeCount,
+            Assert.IsType<ExploreTree>(with.Kept?.Result).NodeCount);
+    }
+
+    /// <summary>The routes that build no Explore tree have no snapshots to take, whatever they are asked.</summary>
+    [Theory]
+    [InlineData("Table")]
+    [InlineData("Index")]
+    public void ARouteThatBuildsNoTreeTakesNoSnapshots(string route) =>
+        Assert.Null(Run(route, Volume().WithoutBitmap(), snapshots: true).Snapshots);
+
     /// <summary>A folder the table does not hold is answered by no tree, so the run is not complete.</summary>
     [Fact]
     public void AFolderTheTableDoesNotHoldIsAnIncompleteRun() =>
@@ -249,12 +287,13 @@ public sealed class TableRoutesTests
         }
     }
 
-    private static RunTally Run(string route, MftFixture volume, string? target = null) =>
+    private static RunTally Run(string route, MftFixture volume, string? target = null, bool snapshots = false) =>
         TableRoutes.Run(
             Enum.Parse<Route>(route),
             FakeMftSourceFactory.Serving(Drive, volume),
             target ?? $@"{Drive}:\",
             TableTuning.Default,
+            snapshots,
             opened: null,
             CancellationToken.None);
 }

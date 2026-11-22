@@ -16,26 +16,21 @@ internal static class ExploreWalkRoute
 {
     public static RunTally Run(string folder, WalkTuning tuning, bool snapshots, CancellationToken ct)
     {
-        // The snapshots are assembled and dropped, as the reports a person never sees would be. Each
-        // is still a whole pass over the tree so far, which is the cost being timed.
+        var timed = snapshots ? new TimedSnapshots(TimeProvider.System) : null;
+
+        // Each snapshot is still a whole pass over the tree so far, which is the cost being timed.
         var tree = WalkExploreReader.Read(
             folder,
             tuning,
             OccupancyProbe.Default,
-            new Discarded(),
+            DiscardedProgress.Instance,
             TimeProvider.System,
             ct,
-            snapshotAssembly: snapshots ? SnapshotAssembly.ByName : null);
+            snapshotAssembly: timed?.Assembly);
 
         // A folder the walk was refused, or a file it could not measure, leaves the root's size
         // unknown, and the run timed less than the folder holds.
-        return new RunTally(tree.NodeCount - 1, BytesRead: 0, Complete: !tree.HasUnknownSizes, Kept: new KeptResult(tree));
-    }
-
-    private sealed class Discarded : IProgress<ExploreProgress>
-    {
-        public void Report(ExploreProgress value)
-        {
-        }
+        return new RunTally(
+            tree.NodeCount - 1, BytesRead: 0, Complete: !tree.HasUnknownSizes, Kept: new KeptResult(tree), Snapshots: timed?.Times);
     }
 }

@@ -7,7 +7,7 @@ namespace Deguffer.Benchmark.Tests;
 /// The Explore walk the benchmark times counts what the walk recorded, and is complete only where
 /// nothing was refused it.
 ///
-/// <para>No test here claims anything about the snapshots. When they are taken is
+/// <para>No test here claims how many snapshots are taken. When they are taken is
 /// <c>ScanSnapshotsTests</c>' subject, on a clock the test moves.</para>
 /// </summary>
 public sealed class ExploreWalkRouteTests : IDisposable
@@ -32,6 +32,7 @@ public sealed class ExploreWalkRouteTests : IDisposable
         Assert.Equal(4, tally.Items);
         Assert.Equal(0, tally.BytesRead);
         Assert.True(tally.Complete);
+        Assert.Equal(snapshots, tally.Snapshots is not null);
     }
 
     [Fact]

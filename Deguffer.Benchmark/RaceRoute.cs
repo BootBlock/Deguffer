@@ -71,7 +71,7 @@ internal sealed class RaceRoute
 
         var (walking, building) = Yielding(
             walker,
-            (opened, ct) => TableRoutes.Run(Route.Index, volumes, $@"{buildDrive}:\", table, opened, ct),
+            (opened, ct) => TableRoutes.Run(Route.Index, volumes, $@"{buildDrive}:\", table, snapshots: false, opened, ct),
             buildYields);
 
         return new RaceRoute(racer, walking, building, beforePart is null ? null : PartCommand.For(beforePart).Run);
