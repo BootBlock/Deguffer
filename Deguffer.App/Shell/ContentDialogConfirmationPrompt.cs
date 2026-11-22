@@ -51,7 +51,7 @@ public sealed class ContentDialogConfirmationPrompt(XamlRoot xamlRoot, ElementTh
             // comparison here is how the dialog and the executor come to disagree.
             dialog.IsPrimaryButtonEnabled = false;
             typed.TextChanged += (_, _) => dialog.IsPrimaryButtonEnabled =
-                requirement.IsSatisfiedBy([new Confirmation(requirement.ProviderId, typed.Text)]);
+                requirement.IsSatisfiedBy((Confirmation[])[new Confirmation(requirement.ProviderId, typed.Text)]);
         }
 
         using var registration = ct.Register(dialog.Hide);

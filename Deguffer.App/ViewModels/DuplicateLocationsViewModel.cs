@@ -43,7 +43,7 @@ public sealed partial class DuplicateLocationsViewModel : ObservableObject
     public partial string Note { get; private set; } = string.Empty;
 
     /// <summary>The locations as the search takes them, in the order they are listed.</summary>
-    public IReadOnlyList<SearchLocation> Chosen => [.. Rows.Select(row => row.Location)];
+    public IReadOnlyList<SearchLocation> Chosen => (SearchLocation[])[.. Rows.Select(row => row.Location)];
 
     /// <summary>Add the folder the picker returned, or say why not.</summary>
     public void AddFolder(string picked) => Add(LocationChoice.WhyNotAdded(Chosen, picked), picked);

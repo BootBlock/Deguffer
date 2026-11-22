@@ -122,7 +122,7 @@ internal sealed class RepeaterRows : IListRows
     private void OnItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         IReadOnlyList<object> arrived = e.Action == NotifyCollectionChangedAction.Add && e.NewItems is { } added
-            ? [.. added.Cast<object>()]
+            ? (object[])[.. added.Cast<object>()]
             : [];
 
         Changed?.Invoke(arrived, Kind(e.Action));

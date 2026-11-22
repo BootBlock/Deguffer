@@ -54,7 +54,7 @@ public sealed partial class DuplicateMarkingViewModel : ObservableObject
 
     /// <summary>The named rules, in the order the rule list offers them (§7.4).</summary>
     public static IReadOnlyList<string> RuleNames { get; } =
-    [
+    (string[])[
         "Keep the newest copy",
         "Keep the oldest copy",
         "Keep the copy with the shortest path",

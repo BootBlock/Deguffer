@@ -187,7 +187,7 @@ public sealed partial class StartupViewModel : ObservableObject
     private void Reorder()
     {
         _comparer = StartupRowOrder.Comparer(_order, _direction);
-        LiveList.Show(Rows, [.. Rows.OrderBy(row => row.Entry, _comparer)], row => row);
+        LiveList.Show(Rows, (StartupRow[])[.. Rows.OrderBy(row => row.Entry, _comparer)], row => row);
     }
 
     partial void OnSelectedRowChanged(StartupRow? value)
@@ -322,7 +322,7 @@ public sealed partial class StartupViewModel : ObservableObject
     {
         LiveList.Show(
             Rows,
-            [.. _view.Reading.Entries.Order(_comparer)],
+            (StartupEntry[])[.. _view.Reading.Entries.Order(_comparer)],
             row => row.Key,
             entry => entry.Key,
             entry => new StartupRow(entry, MarksFor(entry)),

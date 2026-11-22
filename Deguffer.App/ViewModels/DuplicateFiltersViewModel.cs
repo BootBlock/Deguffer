@@ -27,13 +27,13 @@ public sealed partial class DuplicateFiltersViewModel : ObservableObject
     public DuplicatePreferences Current => _preferences.Current.Duplicates;
 
     /// <summary>The checksums this machine offers, by the names other tools print them under, in the order Core lists them.</summary>
-    public IReadOnlyList<string> AlgorithmNames { get; } = [.. ChecksumAlgorithms.Offered.Select(algorithm => algorithm.Name())];
+    public IReadOnlyList<string> AlgorithmNames { get; } = (string[])[.. ChecksumAlgorithms.Offered.Select(algorithm => algorithm.Name())];
 
     /// <summary>The units a size is written in, ordered to match <see cref="SizeUnit"/>.</summary>
-    public IReadOnlyList<string> UnitNames { get; } = [.. Enum.GetValues<SizeUnit>().Select(unit => unit.ToString())];
+    public IReadOnlyList<string> UnitNames { get; } = (string[])[.. Enum.GetValues<SizeUnit>().Select(unit => unit.ToString())];
 
     /// <summary>How the extension list is read, ordered to match <see cref="ExtensionFilterMode"/>.</summary>
-    public IReadOnlyList<string> ExtensionModeNames { get; } = ["Every extension", "Only these extensions", "Every extension but these"];
+    public IReadOnlyList<string> ExtensionModeNames { get; } = (string[])["Every extension", "Only these extensions", "Every extension but these"];
 
     public bool MatchName
     {

@@ -39,7 +39,7 @@ public sealed partial class DuplicateGroupRow : ReadOnlyCollection<DuplicateCopy
         Marks = marks;
 
         var group = marks.Group;
-        var paths = PathDifference.Of([.. group.Files.Select(copy => copy.Path)]);
+        var paths = PathDifference.Of((string[])[.. group.Files.Select(copy => copy.Path)]);
 
         for (var i = 0; i < group.Files.Count; i++)
         {
