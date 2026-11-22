@@ -310,6 +310,32 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
         var live = ChromiumFolderInUse.Find(_liveTrees, [.. applications.Select(a => a.Path)], ct);
         var withheld = 0;
 
+        // Every profile is walked, and its survivors asked, before either is awaited: the measurement
+        // needs only the targets, and the first survivors question in a pass reads every row's declarations.
+        var walks = new Dictionary<string, (LevelWalk Walk, Task<IReadOnlyList<(string Path, string Reason)>> Sparing)>(
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var application in applications.Where(a => !live.IsLive(a.Path) && live.IsAnswered(a.Path)))
+        {
+            var stillUnused = new ChromiumFolderInUse(_liveTrees, application.Path);
+
+            foreach (var profile in application.Profiles)
+            {
+                var walk = CacheLevelWalk.Under(CacheLevels, profile, ct);
+
+                // Listed under the application and the profile, because those are what a reader
+                // knows: nobody chooses between 'Code Cache' folders by name.
+                var heading = profile.Equals(application.Path, StringComparison.OrdinalIgnoreCase)
+                    ? application.Name
+                    : $"{application.Name} — {Path.GetFileName(profile)}";
+
+                targets.AddRange(walk.Targets.Select(target => target with { Group = heading, UseCheck = stillUnused }));
+                walks[profile] = (walk, walk.SurvivorsAsync(_declarations, ct));
+            }
+        }
+
+        var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
+
         foreach (var application in applications)
         {
             ct.ThrowIfCancellationRequested();
@@ -326,8 +352,6 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
                 withheld++;
                 continue;
             }
-
-            var stillUnused = new ChromiumFolderInUse(_liveTrees, application.Path);
 
             if (application.ProfilesIncomplete)
             {
@@ -356,16 +380,9 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
                     survivors.Add((Path.Combine(profile, application.Layout.IdentifyingFile), PartitionFileReason));
                 }
 
-                var walk = CacheLevelWalk.Under(CacheLevels, profile, ct);
-                var spares = await walk.SurvivorsAsync(_declarations, ct).ConfigureAwait(false);
+                var (walk, sparing) = walks[profile];
+                var spares = await sparing.ConfigureAwait(false);
 
-                // Listed under the application and the profile, because those are what a reader
-                // knows: nobody chooses between 'Code Cache' folders by name.
-                var heading = profile.Equals(application.Path, StringComparison.OrdinalIgnoreCase)
-                    ? application.Name
-                    : $"{application.Name} — {Path.GetFileName(profile)}";
-
-                targets.AddRange(walk.Targets.Select(target => target with { Group = heading, UseCheck = stillUnused }));
                 declined.AddRange(walk.Declined);
                 survivors.AddRange(spares);
                 notes.AddRange(walk.Notes);
@@ -414,8 +431,6 @@ public abstract class ChromiumUserDataProvider : CleanupProviderBase
         {
             notes.Add(incomplete);
         }
-
-        var (steps, measured) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
 
         if (measured.Note is { } scanNote)
         {

@@ -316,8 +316,12 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
 
         var notes = new List<PlanNote> { new(PlanNoteSeverity.Information, located.Describe()) };
 
-        var (targets, walk, spared, withheld) = await CollectTargetsAsync(cacheRoot, environments, notes, ct).ConfigureAwait(false);
+        var (targets, walk, withheld, warnings) = CollectTargets(cacheRoot, environments, ct);
+        var sparing = walk.SurvivorsAsync(_declarations, ct);
         var (deletions, deleted) = await PlanDeletionsAsync(targets, keep, ct).ConfigureAwait(false);
+        var spared = await sparing.ConfigureAwait(false);
+
+        notes.AddRange([.. walk.Notes, .. spared.Select(CacheLevelWalk.SparedNote), .. warnings]);
 
         var (commands, cleared, commandDeclined, repositoriesUnreachable) = await PlanRepositoryClearsAsync(
             poetry, cacheRoot, environments, notes, ct).ConfigureAwait(false);
@@ -436,28 +440,20 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
     /// to do properly.</para>
     ///
     /// <para><c>Withheld</c> is a recognised child that holds the configured environments. It is
-    /// spared as surely as a Tier 4 child, so §5.6 names it alongside the walk's own survivors.</para>
+    /// spared as surely as a Tier 4 child, so §5.6 names it alongside the walk's own survivors, and
+    /// <c>Warnings</c> says why each was withheld.</para>
     /// </summary>
-    private async Task<(
+    private (
         IReadOnlyList<DeletionTarget> Targets,
         LevelWalk Walk,
-        IReadOnlyList<(string Path, string Reason)> Spared,
-        IReadOnlyList<(string Path, string Reason)> Withheld)>
-        CollectTargetsAsync(
-        string cacheRoot,
-        string environments,
-        List<PlanNote> notes,
-        CancellationToken ct)
+        IReadOnlyList<(string Path, string Reason)> Withheld,
+        IReadOnlyList<PlanNote> Warnings)
+        CollectTargets(string cacheRoot, string environments, CancellationToken ct)
     {
         var walk = CacheLevelWalk.Under(Levels, cacheRoot, ct);
-
-        var spared = await walk.SurvivorsAsync(_declarations, ct).ConfigureAwait(false);
-
-        notes.AddRange(walk.Notes);
-        notes.AddRange(spared.Select(CacheLevelWalk.SparedNote));
-
         var targets = new List<DeletionTarget>();
         var withheld = new List<(string Path, string Reason)>();
+        var warnings = new List<PlanNote>();
         var environmentsFolder = Reach(environments);
 
         // Poetry nests an artefact under four levels of its URL hash before it reaches a file, so the
@@ -472,7 +468,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
             // cache.
             if (Reach(target.Path).Holds(environmentsFolder))
             {
-                notes.Add(new PlanNote(
+                warnings.Add(new PlanNote(
                     PlanNoteSeverity.Warning,
                     $"Leaving '{Path.GetFileName(target.Path)}' alone: Poetry keeps its virtual "
                     + "environments inside it, and those are never removed."));
@@ -484,7 +480,7 @@ public sealed class PoetryCacheProvider : CleanupProviderBase
             targets.Add(target);
         }
 
-        return (targets, walk, spared, withheld);
+        return (targets, walk, withheld, warnings);
     }
 
     /// <summary>

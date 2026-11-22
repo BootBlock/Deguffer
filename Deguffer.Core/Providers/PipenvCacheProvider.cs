@@ -186,9 +186,7 @@ public sealed class PipenvCacheProvider : CleanupProviderBase
         }
 
         var walk = CacheLevelWalk.Under(Levels, root, ct);
-        var spared = await walk.SurvivorsAsync(_declarations, ct).ConfigureAwait(false);
-
-        List<PlanNote> notes = [.. walk.Notes, .. spared.Select(CacheLevelWalk.SparedNote)];
+        var sparing = walk.SurvivorsAsync(_declarations, ct);
 
         var pip = PipCommand.Find(Environment);
         var pipFolders = walk.Targets.Where(target => PipLayoutTarget.Folders.Contains(Path.GetFileName(target.Path))).ToList();
@@ -198,14 +196,6 @@ public sealed class PipenvCacheProvider : CleanupProviderBase
         var purge = pip is not null
             && pipFolders.Count > 0
             && !walk.Declined.Any(declined => PipLayoutTarget.Folders.Contains(Path.GetFileName(declined.Path)));
-
-        if (pip is null && pipFolders.Count > 0)
-        {
-            notes.Add(new PlanNote(
-                PlanNoteSeverity.Information,
-                "Deguffer cannot find pip, so it removes the part of pipenv's cache that is in pip's format "
-                + "by path rather than with pip's own command."));
-        }
 
         var (deletions, deleted) = await PlanDeletionsAsync(
             purge ? [.. walk.Targets.Where(target => !PipLayoutTarget.Folders.Contains(Path.GetFileName(target.Path)))] : walk.Targets,
@@ -236,6 +226,18 @@ public sealed class PipenvCacheProvider : CleanupProviderBase
             ];
 
             fallback = FallbackReasonText.Prevailing(measured.Fallback, fallback);
+        }
+
+        var spared = await sparing.ConfigureAwait(false);
+
+        List<PlanNote> notes = [.. walk.Notes, .. spared.Select(CacheLevelWalk.SparedNote)];
+
+        if (pip is null && pipFolders.Count > 0)
+        {
+            notes.Add(new PlanNote(
+                PlanNoteSeverity.Information,
+                "Deguffer cannot find pip, so it removes the part of pipenv's cache that is in pip's format "
+                + "by path rather than with pip's own command."));
         }
 
         // Said once for both measurements, which meet the same volume and give the same reason.
