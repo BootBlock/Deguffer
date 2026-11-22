@@ -13,25 +13,36 @@ namespace Deguffer.Core.Exploring;
 ///
 /// <para>One assembling at a time, which <see cref="ScanSnapshots"/> guarantees, and each copy writes
 /// every slot, so nothing an earlier snapshot left is read.</para>
+///
+/// <para>The finished tree reuses <see cref="Scratch"/> too, and it numbers a hard-linked file's
+/// further names after every record, so the room is made for those beside the records, which the
+/// snapshots alone would not need: made again for the finished tree, it would be the very
+/// allocation reusing it avoids (#1083).</para>
 /// </summary>
 internal sealed class MftSnapshotColumns
 {
+    /// <summary>
+    /// Records for each further name of a hard-linked file the room is made for. The system volume
+    /// measured in <see cref="Scanning.AutoTuning"/> held 217,591 such names over 2.78 million
+    /// records, one for every thirteen, so one for every eight leaves room for a volume with more. A
+    /// volume with more still has the room made again for its finished tree
+    /// (<see cref="SnapshotScratch.MakeRoom"/>), so this sets what the read allocates, never what
+    /// it draws.
+    /// </summary>
+    private const int RecordsPerLink = 8;
+
     /// <param name="count">How many slots the read's columns have: one a record.</param>
     public MftSnapshotColumns(int count)
     {
         Flags = new ExploreNodeFlags[count];
         Parents = new int[count];
-        Order = new int[count];
-        Scratch = new SnapshotScratch(count);
+        Scratch = new SnapshotScratch(count + (count / RecordsPerLink));
     }
 
     public ExploreNodeFlags[] Flags { get; }
 
     public int[] Parents { get; }
 
-    /// <summary>Room for the top-down order of every slot.</summary>
-    public int[] Order { get; }
-
-    /// <summary>What <see cref="ExploreTree.Create"/> reuses from one snapshot to the next.</summary>
+    /// <summary>What <see cref="ExploreTree.Create"/> reuses from one tree of the read to the next.</summary>
     public SnapshotScratch Scratch { get; }
 }

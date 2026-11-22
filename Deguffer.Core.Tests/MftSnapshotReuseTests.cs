@@ -7,7 +7,8 @@ namespace Deguffer.Core.Tests;
 
 /// <summary>
 /// A file-table read's snapshots copy only the flags and parents, read every other column where the
-/// parse threads write it, and reuse what they assemble with from one snapshot to the next (#1015).
+/// parse threads write it, and reuse what they assemble with from one snapshot to the next (#1015),
+/// and the finished tree reuses it after them (#1083).
 /// </summary>
 public sealed class MftSnapshotReuseTests
 {
@@ -184,6 +185,178 @@ public sealed class MftSnapshotReuseTests
         }
     }
 
+    /// <summary>
+    /// The finished tree of a read that took snapshots is assembled in the room they kept, and
+    /// allocates nothing sized to the table: only what its tree keeps (#1083). A read that took none
+    /// makes that room afresh, at least the child starts, the order and the renumbering at four bytes
+    /// a slot each, which shows the measure sees what the finished tree allocates.
+    ///
+    /// <para>Measured by the tree-assembly stage of the read's own timings, on a clock that reads the
+    /// bytes the read's thread has allocated in place of the time: every stage ends on that thread.</para>
+    /// </summary>
+    [Fact]
+    public void TheFinishedTreeOfAReadThatTookSnapshotsAllocatesNothingSizedToTheTable()
+    {
+        const uint lastRecord = (4 * MftPassProgress.Interval) + 10;
+
+        var afterSnapshots = FinishedTreeAllocation(lastRecord, takeSnapshots: true);
+        var withoutSnapshots = FinishedTreeAllocation(lastRecord, takeSnapshots: false);
+
+        Assert.InRange(afterSnapshots, 0, lastRecord / 4);
+        Assert.True(withoutSnapshots > 12L * lastRecord, $"A read with no snapshots allocated {withoutSnapshots} bytes for its finished tree.");
+    }
+
+    /// <summary>
+    /// The finished tree assembled in the room a read's snapshots kept is the tree assembled in room
+    /// of its own, slot for slot: the same node numbers, names, totals, dates and children in order.
+    /// Between the last snapshot and the finished tree, records arrive with names never met before,
+    /// and the further names of hard-linked files join as nodes numbered after every record, with
+    /// names of their own: few enough for the room the snapshots made, and more than it holds, which
+    /// the finished tree has to make again.
+    /// </summary>
+    [Theory]
+    [InlineData(6, false)]
+    [InlineData(6, true)]
+    [InlineData(80, false)]
+    [InlineData(80, true)]
+    public void TheFinishedTreeDrawnInTheSnapshotsRoomIsTheOneDrawnInRoomOfItsOwn(int links, bool scoped)
+    {
+        const int count = 400;
+        var (columns, names) = Table(count);
+        var reused = new MftSnapshotColumns(count);
+        string[] components = scoped ? ["Users"] : [];
+        var next = 16;
+
+        Describe(columns, next++, VolumeRoot, names.Intern("Users"), ExploreNodeFlags.Directory, size: 0);
+        var users = next - 1;
+
+        (int Inside, int Outside)[] rounds = [(5, 60), (12, 90), (30, 40)];
+
+        for (var round = 0; round < rounds.Length; round++)
+        {
+            var (inside, outside) = rounds[round];
+
+            for (var i = 0; i < inside; i++, next++)
+            {
+                Describe(columns, next, users, names.Intern(NameFor(next)), ExploreNodeFlags.None, size: 512 * (next % 4), next % 2 == 0 ? Older : Newer);
+            }
+
+            for (var i = 0; i < outside; i++, next++)
+            {
+                Describe(columns, next, VolumeRoot, names.Intern($"{next * 7919 % 1000:D3}-elsewhere-on-the-volume"), ExploreNodeFlags.None, size: 1);
+            }
+
+            // The last round arrives after the last snapshot, as the end of the table does.
+            if (round < rounds.Length - 1)
+            {
+                Snapshot(columns, names, reused, ExploreChildOrder.ByName, components);
+            }
+        }
+
+        var linkColumns = new MftExploreColumns(links);
+
+        for (var i = 0; i < links; i++)
+        {
+            var record = 17 + (i % 40);
+
+            Describe(linkColumns, i, i % 3 == 0 ? VolumeRoot : users, names.Intern(NameFor(count + i)), ExploreNodeFlags.None, columns.Sizes[record], columns.Modified[record]);
+        }
+
+        // Copied first, because the finished read roots by its own columns, and writes the root's parent there.
+        var (ownColumns, ownLinks) = (WholeCopy(columns), WholeCopy(linkColumns));
+        var inReusedRoom = Finished(columns, linkColumns, names, components, reused.Scratch);
+        var inOwnRoom = Finished(ownColumns, ownLinks, names, components, scratch: null);
+
+        Assert.Equal(Slots(inOwnRoom), Slots(inReusedRoom));
+    }
+
+    /// <summary>Names that sort differently by key and by number, and some alike for more than the sixteen characters a key holds.</summary>
+    private static string NameFor(int number) => (number % 3) switch
+    {
+        0 => $"zeta-{1000 - number}",
+        1 => $"a-very-long-shared-prefix-{number}",
+        _ => $"Mid-{number}",
+    };
+
+    private static long FinishedTreeAllocation(uint lastRecord, bool takeSnapshots)
+    {
+        using var source = new MftFixture()
+            .AddDirectory(16, MftRecord.RootRecordNumber, "Users")
+            .AddDirectory(17, 16, "testuser")
+            .AddFile(18, 17, "notes.txt", allocated: 4096, logical: 4000)
+            .AddHardLinkedFile(19, [(17, "music.flac"), (16, "shared.flac")], allocated: 8192, logical: 8000)
+            .AddFile(lastRecord - 1, 17, "arrived-last.txt", allocated: 4096, logical: 4000)
+            .AddUnused(lastRecord)
+            .WithoutBitmap()
+            .Build();
+
+        var snapshots = 0;
+        var clock = new ManualTimeProvider();
+        var progress = new CallbackProgress<ExploreProgress>(report =>
+        {
+            snapshots += report.Snapshot is null ? 0 : 1;
+            clock.Advance(ScanSnapshots.Interval);
+        });
+
+        var assembly = takeSnapshots
+            ? new SnapshotAssembly(assemble => { assemble(); return Task.CompletedTask; }, () => ExploreChildOrder.ByName)
+            : null;
+
+        var timings = new MftStageTimings(new AllocationClock());
+        var read = MftExploreReader.Read(source, Root, [], TableTuning.Default, progress, default, assembly, clock, timings);
+
+        // The linked file is drawn under each of its names, as the walk draws it.
+        Assert.Equal(4096 + (2 * 8192) + 4096, read.Tree?.TotalBytes);
+        Assert.Equal(takeSnapshots, snapshots > 0);
+
+        return timings.Of(MftBuildStage.TreeAssembly).Ticks;
+    }
+
+    private static ExploreTree Finished(
+        MftExploreColumns columns, MftExploreColumns links, NamePool names, string[] components, SnapshotScratch? scratch)
+    {
+        var rootPath = Path.Combine([Root, .. components]);
+        var rootName = names.Intern(rootPath);
+
+        return MftExploreRooting.Assemble(
+            columns,
+            links,
+            names.Freeze(),
+            rootName,
+            rootPath,
+            components,
+            new MftExploreRooting.AssembledAs(ExploreChildOrder.BySize, LowerBound: false, MatchCaseOnly: false, Snapshot: null, scratch),
+            CancellationToken.None).Tree ?? throw new Xunit.Sdk.XunitException("The finished tree found no root.");
+    }
+
+    /// <summary>Every node by its number, each with its figures and its children by number, in order.</summary>
+    private static List<string> Slots(ExploreTree tree) =>
+    [
+        $"root {tree.RootNode} of {tree.NodeCount}",
+        .. Enumerable.Range(0, tree.NodeCount).Select(node => string.Join(
+            ' ',
+            node,
+            tree.PathOf(node),
+            tree.ParentOf(node),
+            tree.SizeOf(node),
+            tree.LengthOf(node),
+            tree.StorageOf(node),
+            tree.ModifiedOf(node),
+            tree.CreatedOf(node),
+            tree.VisibilityOf(node),
+            tree.HasUnknownSizeBelow(node),
+            tree.IsDirectory(node),
+            string.Join('/', tree.ChildrenOf(node).ToArray()))),
+    ];
+
+    /// <summary>A clock whose time is the bytes the thread reading it has allocated, one tick a byte.</summary>
+    private sealed class AllocationClock : TimeProvider
+    {
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
+        public override long GetTimestamp() => GC.GetAllocatedBytesForCurrentThread();
+    }
+
     private static MftExploreColumns WholeCopy(MftExploreColumns columns)
     {
         var copy = new MftExploreColumns(columns.Count);
@@ -231,7 +404,7 @@ public sealed class MftSnapshotReuseTests
             rootName,
             rootPath,
             components,
-            new MftExploreRooting.AssembledAs(order, LowerBound: true, MatchCaseOnly: true, Snapshot: own),
+            new MftExploreRooting.AssembledAs(order, LowerBound: true, MatchCaseOnly: true, Snapshot: own, Scratch: own?.Scratch),
             CancellationToken.None).Tree ?? throw new Xunit.Sdk.XunitException("The snapshot found no root.");
     }
 

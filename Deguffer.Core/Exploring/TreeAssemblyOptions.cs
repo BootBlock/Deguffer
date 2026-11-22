@@ -27,17 +27,20 @@ namespace Deguffer.Core.Exploring;
 /// <param name="Snapshot">Whether the tree is of a scan still running (<see cref="ExploreTree.IsSnapshot"/>).</param>
 /// <param name="OrderBuffer">
 /// Room for the top-down order of every node, reused by a caller that assembles one tree after
-/// another. The tree does not keep it.
+/// another. The tree does not keep it. Unread where <paramref name="Scratch"/> is given, which has
+/// room of its own.
 /// </param>
 /// <param name="DrawnRoot">
 /// What the root is drawn by in place of what its slot holds, written after compaction, so it reaches
 /// only the columns the tree keeps.
 /// </param>
 /// <param name="Scratch">
-/// Says the columns are a reader's that it is still writing, beside the flags and parents, which are
-/// the caller's own. They are then always compacted, so nothing is totalled into them, and read only
-/// at the slots the root reaches, which the flags mark present. See <see cref="SnapshotScratch"/>,
-/// whose buffers take the place of the arrays compaction replaces.
+/// Room reused from one tree to the next of one file-table read, its snapshots and then its finished
+/// tree. Given it, the tree is always compacted, so it keeps none of the room and nothing is totalled
+/// into the reader's columns, which a snapshot's parse threads are still writing beside the flags and
+/// parents it copied: those columns are read only at the slots the root reaches, which the flags mark
+/// present. See <see cref="SnapshotScratch"/>, whose buffers take the place of the arrays compaction
+/// replaces and of the top-down order.
 /// </param>
 internal readonly record struct TreeAssemblyOptions(
     IReadOnlyCollection<int>? ListingRefused = null,

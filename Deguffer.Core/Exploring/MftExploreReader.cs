@@ -121,7 +121,7 @@ internal static class MftExploreReader
         // Nothing is taken on the reporting thread, which is a parse thread holding its slot: the
         // copy of the flags and parents is the assembling's, away from the read. What the snapshots
         // draw from is made by the first, so a read that takes none makes none, and kept for the
-        // rest: one is assembled at a time, after the last has ended.
+        // rest and for the finished tree: one is assembled at a time, after the last has ended.
         MftSnapshotColumns? snapshotColumns = null;
 
         var snapshots = progress is not null && snapshotAssembly is not null
@@ -261,6 +261,10 @@ internal static class MftExploreReader
         //
         // By size, and there is no choice to make here: this is the whole table, and nothing will
         // grow it to rearrange.
+        //
+        // In the room the snapshots assembled in, where any were taken, which they have stopped
+        // using. Made again here, it would put as much again on the large object heap as the
+        // table's child links and node numbers, and key every name the snapshots already keyed.
         var rootName = names.Intern(rootPath);
         var (tree, reason) = MftExploreRooting.Assemble(
             columns,
@@ -269,7 +273,12 @@ internal static class MftExploreReader
             rootName,
             rootPath,
             components,
-            new MftExploreRooting.AssembledAs(ExploreChildOrder.BySize, LowerBound: couldNotReadWholeTable || sawUnreadableRecord, MatchCaseOnly: false, Snapshot: null),
+            new MftExploreRooting.AssembledAs(
+                ExploreChildOrder.BySize,
+                LowerBound: couldNotReadWholeTable || sawUnreadableRecord,
+                MatchCaseOnly: false,
+                Snapshot: null,
+                Scratch: snapshotColumns?.Scratch),
             ct);
         timings?.End(MftBuildStage.TreeAssembly);
 
@@ -324,7 +333,7 @@ internal static class MftExploreReader
             rootName,
             rootPath,
             components,
-            new MftExploreRooting.AssembledAs(order, LowerBound: true, MatchCaseOnly: true, Snapshot: own),
+            new MftExploreRooting.AssembledAs(order, LowerBound: true, MatchCaseOnly: true, Snapshot: own, Scratch: own.Scratch),
             stopped).Tree;
     }
 }
