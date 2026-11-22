@@ -28,7 +28,7 @@ internal sealed class RunningProcessCheck(IProcessInspector inspector, ProcessNa
         inspector.DiscardOlderThan(IUseCheck.ReadingLimit);
 
         return inspector.FindRunning(rule) is { Count: > 0 } running
-            ? [new InUseNow(step.Path, $"{string.Join(", ", running)} {(running.Count == 1 ? "is" : "are")} running now")]
+            ? [new InUseNow(step.Path, $"{string.Join(", ", running)} {Counted.Form(running.Count, "is", "are")} running now")]
             : [];
     }
 }

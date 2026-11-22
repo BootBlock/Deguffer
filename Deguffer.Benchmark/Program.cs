@@ -5,6 +5,7 @@ using Deguffer.Core.Safety;
 using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Media;
 using Deguffer.Core.Scanning.Mft;
+using Deguffer.Core.Text;
 
 // The result goes to standard output and nothing else does, so it can be redirected to a file and
 // pasted as it stands. Progress and errors go to standard error, and name no path either.
@@ -57,9 +58,10 @@ else if (request.Route.Builds())
 }
 else if (request.Folders.Any(folder => LongPath.ProbeDirectory(folder) is not PathPresence.Present))
 {
-    Console.Error.WriteLine(request.Folders.Count == 1
-        ? "The folder does not exist, or it cannot be read."
-        : "A folder does not exist, or it cannot be read.");
+    Console.Error.WriteLine(Counted.Form(
+        request.Folders.Count,
+        "The folder does not exist, or it cannot be read.",
+        "A folder does not exist, or it cannot be read."));
     return 2;
 }
 

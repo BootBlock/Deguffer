@@ -107,13 +107,14 @@ public static class MailStorePlan
         {
             notes.Add(new PlanNote(
                 PlanNoteSeverity.Information,
-                leftByRemovals.Count == 1
-                    ? $"The Outlook data file at {leftByRemovals[0]} is inside what this removes, and is left "
-                      + "where it is, because Deguffer never removes one. The sizes here already exclude it, and "
-                      + "every clean checks that it is still there."
-                    : $"What this removes holds {Every(leftByRemovals)}. They are left where they are, because "
-                      + "Deguffer never removes one. The sizes here already exclude them, and every clean checks "
-                      + "that they are still there."));
+                Counted.Form(
+                    leftByRemovals.Count,
+                    $"The Outlook data file at {leftByRemovals[0]} is inside what this removes, and is left "
+                    + "where it is, because Deguffer never removes one. The sizes here already exclude it, and "
+                    + "every clean checks that it is still there.",
+                    $"What this removes holds {Every(leftByRemovals)}. They are left where they are, because "
+                    + "Deguffer never removes one. The sizes here already exclude them, and every clean checks "
+                    + "that they are still there.")));
         }
 
         return plan with

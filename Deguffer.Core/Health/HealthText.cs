@@ -1,5 +1,4 @@
 using Deguffer.Core.Scanning;
-using Deguffer.Core.Text;
 
 namespace Deguffer.Core.Health;
 
@@ -36,7 +35,7 @@ internal static class HealthText
 
     /// <summary>A run of hours, with the length of time it comes to.</summary>
     internal static string Hours(UInt128 hours) =>
-        Days(hours) is { } span ? $"{Count(hours)} hours ({span})" : $"{Count(hours)} hours";
+        Days(hours) is { } span ? $"{Count(hours)} hours ({span})" : Counted.Of(hours, "hour", "hours");
 
     /// <summary>A run of minutes, with the length of time it comes to.</summary>
     internal static string Minutes(UInt128 minutes)
@@ -61,7 +60,7 @@ internal static class HealthText
         var years = days / DaysPerYear;
 
         return years > 0
-            ? $"{Counted.Of((UInt128)years, "year", "years")} {Counted.Of((UInt128)(days % DaysPerYear), "day", "days")}"
-            : Counted.Of((UInt128)days, "day", "days");
+            ? $"{Counted.Of(years, "year", "years")} {Counted.Of(days % DaysPerYear, "day", "days")}"
+            : Counted.Of(days, "day", "days");
     }
 }

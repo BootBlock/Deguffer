@@ -5,7 +5,7 @@ namespace Deguffer.Core.Providers;
 
 /// <summary>
 /// What <see cref="DriverStoreProvider"/>'s plan tells the user about driver packages: the notes on
-/// what it did not consider or offer, and how it names a package and a count of them.
+/// what it did not consider or offer, and how it names a package.
 /// </summary>
 internal static class DriverPackageNotes
 {
@@ -31,7 +31,7 @@ internal static class DriverPackageNotes
         {
             yield return new PlanNote(
                 PlanNoteSeverity.Information,
-                $"Deguffer could not read what Windows listed about {Count(listing.Unread, "driver package")}, "
+                $"Deguffer could not read what Windows listed about {Counted.Of(listing.Unread, "driver package", "driver packages")}, "
                 + "so none of them is offered.");
         }
 
@@ -39,23 +39,19 @@ internal static class DriverPackageNotes
         {
             yield return new PlanNote(
                 PlanNoteSeverity.Information,
-                $"Leaving {Count(drivers.InUse.Count, "older package")} alone although a newer version is "
-                + (drivers.InUse.Count == 1
-                    ? "here: a device is installed with it."
-                    : "here: a device is installed with each of them."));
+                $"Leaving {Counted.Of(drivers.InUse.Count, "older package", "older packages")} alone although a newer version is "
+                + Counted.Form(drivers.InUse.Count, "here: a device is installed with it.", "here: a device is installed with each of them."));
         }
 
         if (drivers.Unplaced > 0)
         {
             yield return new PlanNote(
                 PlanNoteSeverity.Information,
-                $"Leaving {Count(drivers.Unplaced, "older package")} alone: Windows did not say where in its "
+                $"Leaving {Counted.Of(drivers.Unplaced, "older package", "older packages")} alone: Windows did not say where in its "
                 + "driver store they are.");
         }
     }
 
     public static string Described(DriverPackage package) =>
         $"{package.Provider}'s {package.OriginalName} version {package.Version} of {package.Date:d MMMM yyyy}";
-
-    public static string Count(int count, string what) => count == 1 ? $"1 {what}" : $"{count} {what}s";
 }

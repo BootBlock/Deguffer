@@ -127,10 +127,11 @@ public sealed record DuplicateRemovalReport(
             var did = Removed.Count == 0
                 ? Copies.Any(copy => copy.Check is RemovalCheck.DeletedOutright) ? "Nothing went to the Recycle Bin." : "Nothing was removed."
                 : Mode == ExploreRemovalMode.RecycleBin
-                    ? $"Moved {Count(Removed.Count)} ({FreeSpace.Format(SpaceRemoved)}) to the Recycle Bin. The drive gets the space once the bin is emptied."
-                    : $"Deleted {Count(Removed.Count)} ({FreeSpace.Format(SpaceRemoved)}).";
+                    ? $"Moved {Counted.Of(Removed.Count, "copy", "copies")} ({FreeSpace.Format(SpaceRemoved)}) to the Recycle Bin. "
+                      + "The drive gets the space once the bin is emptied."
+                    : $"Deleted {Counted.Of(Removed.Count, "copy", "copies")} ({FreeSpace.Format(SpaceRemoved)}).";
 
-            var sentence = Kept.Count == 0 ? did : $"{did} {Count(Kept.Count)} stayed, each with its reason.";
+            var sentence = Kept.Count == 0 ? did : $"{did} {Counted.Of(Kept.Count, "copy", "copies")} stayed, each with its reason.";
 
             if (StoppedAt is { } stopped)
             {
@@ -147,6 +148,4 @@ public sealed record DuplicateRemovalReport(
                   + "check(s) on what should have survived did not pass. Look at the folders before doing anything else.";
         }
     }
-
-    private static string Count(int count) => count == 1 ? "1 copy" : $"{count:N0} copies";
 }

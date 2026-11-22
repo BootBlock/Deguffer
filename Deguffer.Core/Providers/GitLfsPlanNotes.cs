@@ -44,9 +44,10 @@ internal static class GitLfsPlanNotes
 
     public static PlanNote NotInstalled(int stores, string said) => new(
         PlanNoteSeverity.Warning,
-        (stores == 1
-            ? "A repository in your source folders keeps files for Git LFS, "
-            : $"{stores} repositories in your source folders keep files for Git LFS, ")
+        Counted.Form(
+            stores,
+            "A repository in your source folders keeps files for Git LFS, ",
+            $"{stores:N0} repositories in your source folders keep files for Git LFS, ")
         + $"but Git LFS did not answer, so it may not be installed, and nothing is offered. It said: {said}");
 
     public static PlanNote DryRunFailed(GitLfsCheckout checkout, string said) => new(

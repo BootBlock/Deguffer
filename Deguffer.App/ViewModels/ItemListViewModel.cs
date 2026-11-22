@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Deguffer.Core.Choosing;
 using Deguffer.Core.Scanning;
+using Deguffer.Core.Text;
 using Deguffer.Core.Viewing;
 
 namespace Deguffer.App.ViewModels;
@@ -94,9 +95,9 @@ public sealed partial class ItemListViewModel : ObservableObject, IDisposable
     /// Said whenever the search hides a ticked item, because every one of them is still in the clean,
     /// and the shorter list on screen is exactly what would let a reader believe otherwise.
     /// </summary>
-    public string HiddenSelectionLabel => HiddenSelected == 1
-        ? "1 selected item is hidden by the search, and it is still in the clean."
-        : $"{HiddenSelected} selected items are hidden by the search, and they are still in the clean.";
+    public string HiddenSelectionLabel =>
+        $"{Counted.Of(HiddenSelected, "selected item is", "selected items are")} hidden by the search, "
+        + $"and {Counted.Form(HiddenSelected, "it is", "they are")} still in the clean.";
 
     public bool HasHiddenSelection => HiddenSelected > 0;
 

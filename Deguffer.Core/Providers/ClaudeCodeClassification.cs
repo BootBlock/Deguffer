@@ -245,8 +245,4 @@ internal sealed class ClaudeCodeClassificationBuilder
         _undated.Count > 0
             ? throw new InvalidOperationException($"{_undated.Count} folders were offered and never dated. Call {nameof(DateOffers)} first.")
             : new(_folders, _targets, _survivors, _recent, _notes, _unreadable, _refused, _listed);
-
-    /// <summary>"1 file" or "3 files", for a sentence that has to read correctly on a machine with one.</summary>
-    public static string Count(int count, string singular, string plural) =>
-        $"{count} {(count == 1 ? singular : plural)}";
 }

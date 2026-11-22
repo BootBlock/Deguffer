@@ -17,13 +17,13 @@ public static class DriveOverview
             return "No drives found.";
         }
 
-        var total = Count(drives, "drive");
+        var total = Counted.Of(drives, "drive", "drives");
         var concerns = read.Count(report => report.Verdict.IsConcern());
         var withoutReport = read.Count(report => report.Verdict is DriveVerdict.Unknown);
 
         if (concerns > 0)
         {
-            return $"{total}, {concerns} {(concerns == 1 ? "needs" : "need")} attention.";
+            return $"{total}, {concerns:N0} {Counted.Form(concerns, "needs", "need")} attention.";
         }
 
         if (read.Count < drives)
@@ -35,6 +35,4 @@ public static class DriveOverview
             ? $"{total}, {withoutReport} with no health report."
             : $"{total}, no concerns reported.";
     }
-
-    private static string Count(int count, string unit) => count == 1 ? $"1 {unit}" : $"{count} {unit}s";
 }

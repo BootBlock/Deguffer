@@ -244,9 +244,9 @@ public static class TempMarkerSurvey
 
                 _notes.Add(new PlanNote(
                     PlanNoteSeverity.Warning,
-                    $"Left {count} {marker.Tool} {(count == 1 ? "entry" : "entries")} alone, because "
-                    + $"{string.Join(", ", running)} {(running.Count == 1 ? "is" : "are")} running and may be "
-                    + $"using {(count == 1 ? "it" : "them")}. Close {(running.Count == 1 ? "it" : "them")} and "
+                    $"Left {count:N0} {marker.Tool} {Counted.Form(count, "entry", "entries")} alone, because "
+                    + $"{string.Join(", ", running)} {Counted.Form(running.Count, "is", "are")} running and may be "
+                    + $"using {Counted.Form(count, "it", "them")}. Close {Counted.Form(running.Count, "it", "them")} and "
                     + "scan again to include them."));
             }
 

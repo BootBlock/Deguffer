@@ -258,16 +258,16 @@ internal static partial class ClaudeCodeProcessFiles
         {
             sorting.Note(
                 PlanNoteSeverity.Information,
-                $"Left {ClaudeCodeClassificationBuilder.Count(running, singular, plural)} alone: the {writer} "
-                + $"that wrote {(running == 1 ? "it" : "each one")} is still running.");
+                $"Left {Counted.Of(running, singular, plural)} alone: the {writer} "
+                + $"that wrote {Counted.Form(running, "it", "each one")} is still running.");
         }
 
         if (unknown > 0)
         {
             sorting.Note(
                 PlanNoteSeverity.Information,
-                $"Left {ClaudeCodeClassificationBuilder.Count(unknown, singular, plural)} alone: Deguffer could "
-                + $"not tell whether the {writer} that wrote {(unknown == 1 ? "it" : "each one")} is still running.");
+                $"Left {Counted.Of(unknown, singular, plural)} alone: Deguffer could "
+                + $"not tell whether the {writer} that wrote {Counted.Form(unknown, "it", "each one")} is still running.");
         }
     }
 }

@@ -33,9 +33,7 @@ public sealed record BuildDirectoryKind
     public required IReadOnlyList<string> DirectoryNames { get; init; }
 
     /// <summary>The names as the user would read them in a sentence.</summary>
-    public string DisplayNames => DirectoryNames.Count == 1
-        ? $"'{DirectoryNames[0]}'"
-        : string.Join(" or ", DirectoryNames.Select(n => $"'{n}'"));
+    public string DisplayNames => string.Join(" or ", DirectoryNames.Select(n => $"'{n}'"));
 
     /// <summary>Entries that must all sit beside the directory, in its project folder.</summary>
     public IReadOnlyList<string> RequiredSiblings { get; init; } = [];

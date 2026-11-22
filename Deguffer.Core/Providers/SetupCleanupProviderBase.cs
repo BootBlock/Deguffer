@@ -256,7 +256,7 @@ public abstract class SetupCleanupProviderBase : CleanupProviderBase
         var offeredFrom = when + window;
         var days = Math.Max(1, (int)Math.Ceiling((offeredFrom - now).TotalDays));
 
-        return $"Leaving {display} alone for another {days} day{(days == 1 ? string.Empty : "s")}: "
+        return $"Leaving {display} alone for another {Counted.Of(days, "day", "days")}: "
             + WhileTheUpgradeCanBeUndone(window.Days);
     }
 
