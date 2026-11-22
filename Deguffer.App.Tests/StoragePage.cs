@@ -33,6 +33,7 @@ internal sealed class StoragePage : IDisposable
     /// only on a volume Windows names.
     /// </param>
     /// <param name="narrowing">How Clean narrows the ticked rows, or null to ask the disk as the app does.</param>
+    /// <param name="time">The clock the planner paces its status line by, or null for the system's.</param>
     public StoragePage(
         IReadOnlyList<FakeCleanupProvider> providers,
         bool isElevated = false,
@@ -40,7 +41,8 @@ internal sealed class StoragePage : IDisposable
         string? storedKeepList = null,
         Func<FakeUserEnvironment, ISelectionStore>? selectionStore = null,
         string? volumeName = null,
-        PlanNarrowing? narrowing = null)
+        PlanNarrowing? narrowing = null,
+        TimeProvider? time = null)
     {
         Environment = new FakeUserEnvironment(_temp.Path);
         VolumeRoot = Path.TrimEndingDirectorySeparator(_temp.Path) + Path.DirectorySeparatorChar;
@@ -57,7 +59,7 @@ internal sealed class StoragePage : IDisposable
         Preferences = new PreferenceService(new PreferenceStore(Environment));
         Sizes = new ProviderSizeHistory(new ProviderSizeStore(Environment));
 
-        var planner = new CleanupPlanner(providers);
+        var planner = new CleanupPlanner(providers, time: time);
         ViewModel = new CleanViewModel(
             planner,
             narrowing ?? new PlanNarrowing(ScanTuner.Shipped),

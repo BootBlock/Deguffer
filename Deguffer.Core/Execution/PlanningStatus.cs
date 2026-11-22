@@ -8,10 +8,17 @@ namespace Deguffer.Core.Execution;
 /// checked now, oldest first, and the bytes each has counted so far, said again each time one starts
 /// or ends or its figure moves.
 ///
-/// <para>Reported under a lock, so the line a caller shows last is the one that describes the pass
-/// last. Without it two providers ending together could report out of order, and the line would go on
+/// <para><b>Reported by time, not by change</b> (<see cref="PacedReport"/>). Every start, end and moved
+/// figure is recorded, but the line is built and posted to the UI thread at most once an interval, and
+/// the latest line always follows the last change within one. A pass changes the line hundreds of times
+/// in a few seconds, and each post sets the line and lays out the bar it is shown in.</para>
+///
+/// <para>Built and reported under a lock, so the line a caller shows last is the one that describes the
+/// pass last. Without it two reports made together could post out of order, and the line would go on
 /// naming a provider that had already finished. A figure reported for a provider that has ended is
-/// dropped for the same reason.</para>
+/// dropped for the same reason. The lock is taken once a change to record it, and the line is built only
+/// when a report is due, so a slot waits on formatting at most once an interval rather than at every
+/// change.</para>
 ///
 /// <para><b>The figure is a count of work done, and is worded as one.</b> §5.5 asks for partial results
 /// rather than a wait on a complete scan, and a walk of a large location is the wait. A running figure
@@ -20,21 +27,32 @@ namespace Deguffer.Core.Execution;
 /// The line is not announced as it changes: the info bar it is shown in speaks when it opens, and a
 /// screen reader reads the current figure when asked, rather than ten times a second.</para>
 /// </summary>
-internal sealed class PlanningStatus(IProgress<string>? status)
+internal sealed class PlanningStatus : IDisposable
 {
+    private readonly IProgress<string>? _status;
+    private readonly PacedReport _paced;
     private readonly Lock _gate = new();
     private readonly List<Underway> _checking = [];
 
     /// <summary>The line last reported, so a figure that moved without changing the line says nothing.</summary>
     private string? _said;
 
+    /// <param name="status">Where the line goes, or null where nobody is watching.</param>
+    /// <param name="time">What times the reports: the seam a test reports through.</param>
+    public PlanningStatus(IProgress<string>? status, TimeProvider time)
+    {
+        _status = status;
+        _paced = new PacedReport(time, Report);
+    }
+
     public void Started(ICleanupProvider provider)
     {
         lock (_gate)
         {
             _checking.Add(new Underway(provider));
-            ReportLocked();
         }
+
+        _paced.Changed();
     }
 
     public void Ended(ICleanupProvider provider)
@@ -42,14 +60,9 @@ internal sealed class PlanningStatus(IProgress<string>? status)
         lock (_gate)
         {
             _checking.RemoveAll(underway => ReferenceEquals(underway.Provider, provider));
-
-            // Nothing is said once the last one ends: the pass is over, and the caller's own sentence
-            // about what it found replaces the line.
-            if (_checking.Count > 0)
-            {
-                ReportLocked();
-            }
         }
+
+        _paced.Changed();
     }
 
     /// <summary>Where <paramref name="provider"/>'s plan reports the bytes it has counted so far.</summary>
@@ -63,26 +76,42 @@ internal sealed class PlanningStatus(IProgress<string>? status)
         _ => $"Checking {checking[0].Text}, {checking[1].Text} and {checking.Count - 2} more…",
     };
 
+    /// <summary>Report nothing more: the pass is over, and the caller's own sentence replaces the line.</summary>
+    public void Dispose() => _paced.Dispose();
+
     private void Count(ICleanupProvider provider, ScanSize counted)
     {
         lock (_gate)
         {
-            if (_checking.Find(underway => ReferenceEquals(underway.Provider, provider)) is { } underway)
+            if (_checking.Find(underway => ReferenceEquals(underway.Provider, provider)) is not { } underway)
             {
-                underway.Counted = counted.Reclaimable;
-                ReportLocked();
+                return;
             }
+
+            underway.Counted = counted.Reclaimable;
         }
+
+        _paced.Changed();
     }
 
-    private void ReportLocked()
+    private void Report()
     {
-        var line = Describe(_checking);
-
-        if (line != _said)
+        lock (_gate)
         {
-            _said = line;
-            status?.Report(line);
+            // Nothing is said once the last one ends: the pass is over, and the caller's own sentence
+            // about what it found replaces the line. A report due as the last one ended finds none.
+            if (_checking.Count == 0)
+            {
+                return;
+            }
+
+            var line = Describe(_checking);
+
+            if (line != _said)
+            {
+                _said = line;
+                _status?.Report(line);
+            }
         }
     }
 
