@@ -2,6 +2,7 @@ using Deguffer.Core.Configuration;
 using Deguffer.Core.Exploring;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
+using Deguffer.Testing;
 
 namespace Deguffer.Core.Tests;
 

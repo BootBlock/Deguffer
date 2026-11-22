@@ -2,6 +2,7 @@ using System.Numerics;
 using Deguffer.App.Shell;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
+using Microsoft.Graphics.Canvas;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Dispatching;
 using Windows.Graphics;
@@ -155,22 +156,24 @@ internal sealed class ExploreLayer : IKeptDrawing
     }
 
     /// <summary>
-    /// Write <paramref name="regions"/> of <paramref name="pixels"/>, a canvas this surface's size,
-    /// and nothing else of it: the rest of the buffer is still being painted.
+    /// Write <paramref name="regions"/> of <paramref name="pixels"/>, a canvas this surface's size, up
+    /// through <paramref name="upload"/>, and nothing else of it: the rest of the buffer is still being
+    /// painted. Returns the GPU canvas the drawing is going up into, as <see cref="PaintUpload.Land"/> does.
     /// </summary>
-    public void Land(byte[] pixels, IReadOnlyList<CanvasRegion> regions)
-    {
-        foreach (var region in regions)
-        {
-            _graphics.Write(_surface, pixels, Size.Width, region);
-        }
-    }
+    public CanvasBitmap? Land(PaintUpload upload, byte[] pixels, IReadOnlyList<CanvasRegion> regions) =>
+        upload.Land(_surface, pixels, Size.Width, Size.Height, regions);
 
-    /// <summary>Shade the whole canvas, a canvas this surface's size, from <paramref name="quads"/> on <paramref name="ground"/>.</summary>
-    public void Shade(CushionQuads quads, TileColour ground)
+    /// <summary>
+    /// Shade the whole canvas, a canvas this surface's size, from <paramref name="quads"/> on
+    /// <paramref name="ground"/>. Returns the GPU canvas it was shaded on, as
+    /// <see cref="MapGraphics.Shade(CompositionDrawingSurface, CushionQuads, TileColour)"/> does.
+    /// </summary>
+    public CanvasBitmap? Shade(CushionQuads quads, TileColour ground)
     {
-        _graphics.Shade(_surface, quads, ground);
+        var shaded = _graphics.Shade(_surface, quads, ground);
         AfterCommit(_light.Shaded(quads, ground));
+
+        return shaded;
     }
 
     /// <summary>

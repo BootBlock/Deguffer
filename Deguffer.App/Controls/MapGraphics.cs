@@ -22,7 +22,9 @@ namespace Deguffer.App.Controls;
 /// <see cref="Shades"/>), in one pass from its quads. Otherwise it is painted on the CPU, by
 /// <see cref="CanvasPainter"/>, and only what each region holds is written to the GPU, a region at a
 /// time as it lands. A whole canvas is 33 MB at 4K, too much to send through the UI thread at every
-/// hand-over for regions a fraction of that size.</para>
+/// hand-over for regions a fraction of that size, and it never goes up whole: a map's drawing goes up
+/// a region at a time into a GPU canvas of its own (see <see cref="PaintUpload"/>), which the
+/// overview is shrunk from once all of it is there.</para>
 /// </summary>
 internal sealed class MapGraphics
 {
@@ -94,6 +96,12 @@ internal sealed class MapGraphics
     /// </summary>
     internal CanvasBitmap? Staging => _staging;
 
+    /// <summary>
+    /// How many bytes of painted pixels have gone up to the GPU through here. Read by a test, which
+    /// proves a drawing painted on the CPU goes up once, overview and all.
+    /// </summary>
+    internal long Uploaded { get; private set; }
+
     /// <summary>The graphics for <paramref name="compositor"/>, made the first time a map asks.</summary>
     public static MapGraphics For(Compositor compositor) =>
         Shared.GetValue(compositor, static compositor => new MapGraphics(CompositionDevice.For(compositor), CushionShaders.Default));
@@ -151,38 +159,89 @@ internal sealed class MapGraphics
                 CompositionDevice.BitmapFormat);
 
             staging.SetPixelBytes(_staged, 0, 0, region.Width, region.Height);
+            Uploaded += PixelBuffer.LengthFor(region.Width, region.Height);
 
             CopyInto(surface, staging, new Point(0, 0), region, flush: false);
         });
     }
 
     /// <summary>
-    /// Shade <paramref name="quads"/> on <paramref name="ground"/> into the corner of
-    /// <paramref name="surface"/> their canvas covers, every pixel of it, and keep the canvas for
-    /// <see cref="ShrinkShaded"/>. Asked only while <see cref="Shades"/> says so.
+    /// <paramref name="spare"/> where it is a canvas <paramref name="width"/> by
+    /// <paramref name="height"/> on the device drawn through now, or else a new one with nothing
+    /// written into it yet, for <see cref="Write(CompositionDrawingSurface, CanvasBitmap, byte[], int, CanvasRegion)"/>.
+    /// A spare that is not returned is disposed. Null where the device was lost on the way.
     /// </summary>
-    public void Shade(CompositionDrawingSurface surface, CushionQuads quads, TileColour ground) =>
+    public CanvasBitmap? Canvas(CanvasBitmap? spare, int width, int height) =>
+        Device.UnlessLost<CanvasBitmap>(device =>
+        {
+            if (spare is not null
+                && ReferenceEquals(spare.Device, device)
+                && spare.SizeInPixels.Width == width
+                && spare.SizeInPixels.Height == height)
+            {
+                return spare;
+            }
+
+            spare?.Dispose();
+
+            // A render target rather than a bitmap made from bytes, so making it sends nothing up: every
+            // pixel of it is written a region at a time as the drawing lands.
+            return new CanvasRenderTarget(device, width, height, 96, CompositionDevice.BitmapFormat, CanvasAlphaMode.Premultiplied);
+        });
+
+    /// <summary>
+    /// Write <paramref name="region"/> of <paramref name="pixels"/>, a canvas <paramref name="width"/>
+    /// pixels across, into the same place on <paramref name="canvas"/>, a GPU bitmap of that canvas's
+    /// size, and from there into the same place on <paramref name="surface"/>, and nothing else of
+    /// either. Once every region is written, all of the canvas is on the GPU for <see cref="Shrink"/>,
+    /// and none of it went up twice.
+    /// </summary>
+    public void Write(CompositionDrawingSurface surface, CanvasBitmap canvas, byte[] pixels, int width, CanvasRegion region)
+    {
+        PixelBuffer.CopyRegion(pixels, width, region, _staged);
+
+        Device.UnlessLost(_ =>
+        {
+            canvas.SetPixelBytes(_staged, region.X, region.Y, region.Width, region.Height);
+            Uploaded += PixelBuffer.LengthFor(region.Width, region.Height);
+
+            CopyInto(surface, canvas, new Point(region.X, region.Y), region, flush: false);
+        });
+    }
+
+    /// <summary>
+    /// Shade <paramref name="quads"/> on <paramref name="ground"/> into the corner of
+    /// <paramref name="surface"/> their canvas covers, every pixel of it. Asked only while
+    /// <see cref="Shades"/> says so.
+    /// </summary>
+    /// <returns>
+    /// The GPU canvas the quads were shaded on, for <see cref="Shrink"/> straight after, before anything
+    /// else is shaded over it; or null where nothing was shaded, on a device lost or unable to run the
+    /// shaders.
+    /// </returns>
+    public CanvasBitmap? Shade(CompositionDrawingSurface surface, CushionQuads quads, TileColour ground) =>
         Shade(surface, quads, ground, new CanvasRegion(0, 0, quads.Width, quads.Height), light: null);
 
     /// <summary>
     /// Shade <paramref name="region"/> of the canvas <paramref name="quads"/> make on
     /// <paramref name="ground"/> into the same place on <paramref name="surface"/>, under
     /// <paramref name="light"/> where there is one, and nothing else of it: the pointer's light moving
-    /// over a canvas shaded whole before.
+    /// over a canvas shaded whole before. Returns the canvas shaded on, as the overload for the whole
+    /// canvas does.
     /// </summary>
-    public void Shade(
+    public CanvasBitmap? Shade(
         CompositionDrawingSurface surface,
         CushionQuads quads,
         TileColour ground,
         CanvasRegion region,
         PointerLight? light) =>
-        Device.UnlessLost(_ =>
+        Device.UnlessLost<CanvasBitmap>(_ =>
         {
             // None where the device was lost as the renderer was made: it is replaced, and every
             // drawing is shaded again on the new one.
             if (_renderer.Value is not { } renderer)
             {
-                return;
+                return null;
             }
 
             var shaded = renderer.Shade(quads, ground, region, light);
@@ -192,36 +251,44 @@ internal sealed class MapGraphics
             // reads, and ending the session leaves the copy queued. Measured: a new drawing landed with
             // the light shaded into the drawing before it, a few milliseconds later, and nothing else.
             CopyInto(surface, shaded, new Point(region.X, region.Y), region, flush: true);
+
+            return shaded;
         });
 
     /// <summary>
-    /// <paramref name="pixels"/>, a canvas <paramref name="width"/> by <paramref name="height"/>,
-    /// drawn small enough to fill <paramref name="into"/> at <paramref name="size"/> pixels across: the
-    /// overview of a whole picture. A surface is made where there is none to draw into, and the one
-    /// drawn into is returned, or null where the device was lost on the way.
+    /// The corner of <paramref name="canvas"/> a canvas <paramref name="width"/> by
+    /// <paramref name="height"/> covers, drawn small enough to fill <paramref name="into"/> at
+    /// <paramref name="size"/> pixels across: the overview of a whole picture. A surface is made where
+    /// there is none to draw into, and the one drawn into is returned, or null where the device was
+    /// lost on the way.
     ///
-    /// <para>Once per whole picture, which is the one time the whole canvas goes up through the UI
-    /// thread, and only once it has been painted. The GPU shrinks it, with a filter that takes every
-    /// pixel into account, so a treemap's fine lines thin out rather than break up as they do when a
-    /// large surface is shown small.</para>
+    /// <para>From the canvas already on the GPU, the one it was shaded on or the one it went up into a
+    /// region at a time (see <see cref="PaintUpload"/>), so nothing more goes up through the UI thread.
+    /// The GPU shrinks it, with a filter that takes every pixel into account, so a treemap's fine lines
+    /// thin out rather than break up as they do when a large surface is shown small.</para>
     /// </summary>
-    public CompositionDrawingSurface? Shrink(CompositionDrawingSurface? into, byte[] pixels, int width, int height, SizeInt32 size) =>
-        Device.UnlessLost(device =>
+    public CompositionDrawingSurface? Shrink(CompositionDrawingSurface? into, CanvasBitmap canvas, int width, int height, SizeInt32 size) =>
+        Device.UnlessLost(_ =>
         {
-            using var bitmap = CanvasBitmap.CreateFromBytes(device, pixels, width, height, CompositionDevice.BitmapFormat);
+            // Resized rather than made again for each whole picture (G5).
+            var surface = Sized(into, size);
 
-            return Shrink(into, bitmap, width, height, size);
+            using var session = CanvasComposition.CreateDrawingSession(surface);
+
+            session.Clear(Microsoft.UI.Colors.Transparent);
+            session.DrawImage(
+                canvas,
+                new Rect(0, 0, size.Width, size.Height),
+                new Rect(0, 0, width, height),
+                1,
+                CanvasImageInterpolation.HighQualityCubic);
+
+            // Before the next shading, or the next drawing's regions, overwrites the canvas this reads,
+            // as Shade does.
+            session.Flush();
+
+            return surface;
         });
-
-    /// <summary>
-    /// The canvas <see cref="Shade(CompositionDrawingSurface, CushionQuads, TileColour)"/> shaded last, <paramref name="width"/> by <paramref name="height"/>,
-    /// drawn small as <see cref="Shrink(CompositionDrawingSurface?, byte[], int, int, SizeInt32)"/> draws
-    /// a painted one. Asked straight after the shading, before anything else is shaded.
-    /// </summary>
-    public CompositionDrawingSurface? ShrinkShaded(CompositionDrawingSurface? into, int width, int height, SizeInt32 size) =>
-        _renderer is { IsValueCreated: true, Value.Shaded: { } shaded }
-            ? Device.UnlessLost(_ => Shrink(into, shaded, width, height, size))
-            : null;
 
     /// <summary>
     /// <paramref name="shape"/>, in a canvas's own pixels, filled opaque on a clear ground into
@@ -272,33 +339,6 @@ internal sealed class MapGraphics
         {
             session.Flush();
         }
-    }
-
-    /// <summary>Draw the corner of <paramref name="canvas"/> a canvas covers into <paramref name="into"/>, small.</summary>
-    private CompositionDrawingSurface Shrink(
-        CompositionDrawingSurface? into,
-        CanvasBitmap canvas,
-        int width,
-        int height,
-        SizeInt32 size)
-    {
-        // Resized rather than made again for each whole picture (G5).
-        var surface = Sized(into, size);
-
-        using var session = CanvasComposition.CreateDrawingSession(surface);
-
-        session.Clear(Microsoft.UI.Colors.Transparent);
-        session.DrawImage(
-            canvas,
-            new Rect(0, 0, size.Width, size.Height),
-            new Rect(0, 0, width, height),
-            1,
-            CanvasImageInterpolation.HighQualityCubic);
-
-        // Before the next shading overwrites the renderer's canvas this may be reading, as Shade does.
-        session.Flush();
-
-        return surface;
     }
 
     /// <summary><paramref name="spare"/> resized to <paramref name="size"/>, or a plain surface of that size where there is none.</summary>

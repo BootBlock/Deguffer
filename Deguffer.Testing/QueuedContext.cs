@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace Deguffer.Core.Tests;
+namespace Deguffer.Testing;
 
 /// <summary>
 /// A stand-in for the UI thread: what is posted to it waits until the test runs it, on the test's
@@ -10,7 +10,7 @@ namespace Deguffer.Core.Tests;
 /// of what a redraw's guarantees are about: what a superseded redraw does with work it posted before
 /// it was superseded, and what the screen shows between two hand-overs.</para>
 /// </summary>
-internal sealed class QueuedContext : SynchronizationContext
+public sealed class QueuedContext : SynchronizationContext
 {
     /// <summary>Long enough for a busy machine, short enough that a hang fails the test rather than the run.</summary>
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(20);

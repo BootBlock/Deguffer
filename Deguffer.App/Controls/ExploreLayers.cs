@@ -3,6 +3,7 @@ using Deguffer.App.Shell;
 using Deguffer.Core.Exploring.Layout;
 using Deguffer.Core.Exploring.Rendering;
 using Deguffer.Core.Viewing;
+using Microsoft.Graphics.Canvas;
 using Microsoft.UI.Composition;
 
 namespace Deguffer.App.Controls;
@@ -155,7 +156,8 @@ internal sealed class ExploreLayers
 
     /// <summary>
     /// Whether the whole picture is missing under a zoomed drawing on top, and is not landing either.
-    /// See <see cref="ExploreMap"/>, which asks for it once the drawing on top is on screen.
+    /// See <see cref="ExploreMap"/>, which asks for it once the drawing on top is on screen, and
+    /// <see cref="ExploreLanding.Underlay"/>, where it lands.
     /// </summary>
     public bool LacksWhole => KeptDrawings.LacksWhole(_layers, _current, _picture);
 
@@ -248,32 +250,11 @@ internal sealed class ExploreLayers
     public MapTile? TileOver(double x, double y) => _tiles.TileOver(x, y);
 
     /// <summary>
-    /// Where a redraw of the picture now lands to replace the drawing the map works from: over
-    /// everything, and the drawing worked from once it has landed, when <paramref name="arrived"/> is
-    /// told.
-    /// </summary>
-    /// <param name="fade">
-    /// How it comes in over the one it replaces. Unseen while it lands and faded in once all of it has,
-    /// for the same picture in a new look, so the old look turns into the new one rather than giving way
-    /// to it a region at a time. <see cref="Motion.Instant"/> lands it as it is painted.
-    /// </param>
-    public ICanvasRedrawTarget Replacement(Action<ExploreSurface> arrived, Motion fade) =>
-        new ExploreLanding(this, onTop: true, arrived, fade);
-
-    /// <summary>
-    /// Where a redraw of the whole picture lands under a zoomed drawing on top: in its place among the
-    /// rest by how far it is zoomed, as it is painted, so a move has something to show wherever it goes.
-    /// See <see cref="LacksWhole"/>.
-    /// </summary>
-    public ICanvasRedrawTarget Underlay() =>
-        new ExploreLanding(this, onTop: false, static _ => { }, Motion.Instant);
-
-    /// <summary>
     /// Start a redraw of <paramref name="drawing"/> landing, on a surface of its own, placed where its part
     /// of the picture lies and stacked with the rest. See <see cref="ExploreLanding"/>.
     /// </summary>
     /// <param name="onTop">Whether it replaces the drawing the map works from.</param>
-    /// <param name="fade">How it comes in, where it replaces it. See <see cref="Replacement"/>.</param>
+    /// <param name="fade">How it comes in, where it replaces it. See <see cref="ExploreLanding.Replacement"/>.</param>
     public ExploreLayer StartLanding(ExploreSurface drawing, bool onTop, Motion fade)
     {
         var viewport = drawing.ShownAt;
@@ -292,16 +273,16 @@ internal sealed class ExploreLayers
     /// for the overview, and one that replaces the drawing worked from takes its place, faded in over it
     /// or covering it at once. See <see cref="ExploreLanding"/>.
     /// </summary>
-    /// <param name="pixels">The drawing as painted on the CPU, or null for one shaded on the GPU.</param>
+    /// <param name="canvas">The GPU canvas the whole of the drawing is on, or null where the device was lost on the way.</param>
     /// <param name="onTop">Whether it replaces the drawing the map works from.</param>
-    /// <param name="fade">How it comes in, where it replaces it. See <see cref="Replacement"/>.</param>
-    public void FinishLanding(ExploreLayer layer, ExploreSurface drawing, byte[]? pixels, bool onTop, Motion fade)
+    /// <param name="fade">How it comes in, where it replaces it. See <see cref="ExploreLanding.Replacement"/>.</param>
+    public void FinishLanding(ExploreLayer layer, ExploreSurface drawing, CanvasBitmap? canvas, bool onTop, Motion fade)
     {
         layer.Arrive(drawing, ++_showings);
 
         if (layer.Viewport.IsWhole)
         {
-            _miniature.Copy(pixels, drawing.Width, drawing.Height, _size.Width, _size.Height);
+            _miniature.Copy(canvas, drawing.Width, drawing.Height, _size.Width, _size.Height);
         }
 
         if (onTop)
