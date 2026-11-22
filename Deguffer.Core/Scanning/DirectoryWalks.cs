@@ -10,7 +10,7 @@ internal readonly record struct DirectoryWalk(WalkTuning Tuning, IReadOnlyList<i
 /// <summary>
 /// Puts the directories a walking scanner measures into walks, and runs them: the walks on each set of
 /// physical disks at the same time as those on every other set, and the walks on one set in turn
-/// (#470). <see cref="ParallelEnumerationScanner"/> and <see cref="HardLinkAwareScanner"/> both walk
+/// (#470). <see cref="ParallelEnumerationScanner"/> and <see cref="SoleLinkWalk"/> both walk
 /// this way, so neither decides it.
 ///
 /// <para><b>Sets by each directory's own disks</b>, by the rules of <see cref="FolderPipelines"/>

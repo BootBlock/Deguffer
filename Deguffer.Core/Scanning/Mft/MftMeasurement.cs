@@ -4,7 +4,7 @@ namespace Deguffer.Core.Scanning.Mft;
 
 /// <summary>
 /// One location measured from the table under several guards in one pass. See
-/// <see cref="MftVolumeIndex.TryMeasure(IReadOnlyList{string}, IReadOnlyList{MinimumAge}, bool, IReadOnlySet{uint})"/>.
+/// <see cref="MftVolumeIndex.TryMeasure(IReadOnlyList{string}, IReadOnlyList{MinimumAge}, bool, IReadOnlySet{uint}, LinkCounting)"/>.
 ///
 /// <para>A guard changes only which entries a removal keeps, so the stores are one list for every
 /// reading: a store stays whatever its age.</para>

@@ -21,7 +21,7 @@ namespace Deguffer.Core.Scanning;
 /// number they feed. Nothing here is a guess, which is why <see cref="ScanSize.FromLengths"/> does
 /// not mark its results approximate.
 /// </summary>
-public sealed partial class ParallelEnumerationScanner : IDirectoryScanner
+public sealed partial class ParallelEnumerationScanner : IDirectoryScanner, IWalkRoute
 {
     /// <summary>The walk at the shipped values, for a scanner built outside the app.</summary>
     public static readonly ParallelEnumerationScanner Default = new(ScanTuner.Shipped);
@@ -93,6 +93,12 @@ public sealed partial class ParallelEnumerationScanner : IDirectoryScanner
 
     /// <summary>Same walk, attributed to whichever reason sent the caller here.</summary>
     public ParallelEnumerationScanner Because(FallbackReason reason) => _byReason[(int)reason];
+
+    IWalkRoute IWalkRoute.Because(FallbackReason reason) => Because(reason);
+
+    Task<ScanResult[][]> IWalkRoute.MeasureEachAsync(
+        IReadOnlyList<ScanRequest> asked, MinimumAge[] keeps, RunningPaths running, CancellationToken ct) =>
+        MeasureEachAsync(asked, keeps, running, ct);
 
     /// <summary>
     /// A file is sized in one read and reported as <see cref="ScanStrategy.DirectRead"/>, dropping

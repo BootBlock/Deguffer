@@ -1832,6 +1832,14 @@ declined rather than built (§6).
    of five each (`Deguffer.Benchmark links`). A machine whose antivirus inspects each open may
    differ, and was not measured.
 
+   **Revisited by #1066.** The walk is still the route at either privilege level, and the only one
+   unelevated. Where an elevated pass builds a volume's index for its other rows anyway, a store's
+   figure is now read from that index: the index records whether each file has a name beside the
+   one it is placed by, from the record's names with 8.3 aliases left out, which is the count
+   `GetFileInformationByHandleEx` reports. A test measures one tree both ways and requires one
+   figure, so the figure still does not depend on elevation, which was the reason above. No build
+   is started for a store alone, and the figure still carries no `FallbackReason`.
+
    **What the answer does not cover, and this is the part to carry forward.** The rule counts a file
    only when it has exactly one link, so a file linked twice *inside* the measured tree is dropped
    even though removing the tree would free it. That under-reports rather than over-reports, which

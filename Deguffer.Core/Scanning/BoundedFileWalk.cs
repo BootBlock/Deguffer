@@ -8,7 +8,7 @@ namespace Deguffer.Core.Scanning;
 ///
 /// <para>This exists because several callers need the same traversal and differ only in what they do
 /// with what it finds — <see cref="ParallelEnumerationScanner"/> adds each file's length,
-/// <see cref="HardLinkAwareScanner"/> asks the file whether anything else links it, and
+/// <see cref="SoleLinkWalk"/> asks the file whether anything else links it, and
 /// <see cref="Exploring.WalkExploreReader"/> records the shape of the tree itself. Written once per
 /// caller, the traversal would carry a copy each of two safety rules: §5.3's "access denied is
 /// normal, skip silently" and the refusal to follow a reparse point into a tree the caller never

@@ -1,5 +1,5 @@
-using System.Collections.Concurrent;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning.Mft;
 
 namespace Deguffer.Core.Scanning;
 
@@ -11,22 +11,19 @@ namespace Deguffer.Core.Scanning;
 /// reported reclaim would be several times what the disk returns, which is §5.4's lesson on a
 /// different subject.
 ///
-/// <para>This walk, and not the MFT, is deliberately the only route. The file record does carry a
-/// hard-link count (at 0x12, which <see cref="Mft.MftRecordHeader.Read"/> leaves unread), but the
-/// table is only readable elevated, and a link-aware figure that existed only under elevation would
-/// disagree with the unelevated one for the same tree. <c>GetFileInformationByHandleEx</c> answers
-/// per file at either privilege level — observed on a real hard link, unelevated, before this was
-/// built — so one route serves both and the number never depends on how the app was launched.
-/// <see cref="ScanResult.Fallback"/> is therefore <see cref="FallbackReason.None"/>: elevating
-/// would not change anything, and the offer would be false.</para>
+/// <para><b>Two routes, one figure.</b> Where a volume's index is being built anyway, for the rows
+/// measured beside this one, the index answers from memory (<see cref="LinkCounting.SoleName"/>),
+/// raced against the walk while it is still read, as <see cref="DirectoryScanner"/> races it
+/// (<see cref="VolumeRoutes"/>). Everywhere else <see cref="SoleLinkWalk"/> walks the tree and asks
+/// each file its link count, which <c>GetFileInformationByHandleEx</c> answers at either privilege
+/// level. The index counts a file's names from its record, 8.3 aliases left out, which is the count
+/// Windows reports, so the figure of a tree does not depend on how the app was launched.</para>
 ///
-/// <para>Each file is read by name, with no handle, where its file system answers that
-/// (<see cref="FileInformation.Standard"/>): over a synthesised store of 100,000 files on NTFS, with
-/// no real-time antivirus scanning, the read by name took about four fifths of the time a handle per
-/// file took (<c>Deguffer.Benchmark links</c>). Both read whatever the listed name is when it is
-/// read, a link as the link, and the walk lists no file numbers to compare it with, so a file
-/// replaced since the listing is measured as the file of this tree it now is. The figure is a
-/// prediction marked approximate either way.</para>
+/// <para><b>Never a build for this figure alone.</b> A build reads the whole volume, 3 to 5 s on a
+/// system volume, where one store's walk costs tens of milliseconds warm, so a volume no other row
+/// asks about is walked. For the same reason the figure never carries a fallback reason: no table was
+/// fallen back from, and an offer of administrator rights beside it would change nothing
+/// (<see cref="ScanResult.ByChoice"/>).</para>
 ///
 /// <para>A file with several links all inside the tree is not counted, though deleting the whole
 /// tree would free it. Telling that case apart means enumerating every link's name per multi-linked
@@ -39,14 +36,19 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
     /// <summary>The walk at the shipped values, for a scanner built outside the app (G5).</summary>
     public static readonly HardLinkAwareScanner Default = new(ScanTuner.Shipped);
 
-    private readonly ScanTuner _tuner;
+    private readonly SoleLinkWalk _walk;
 
-    public ScanTuner Tuning => _tuner;
-    private readonly FileInformation _files;
+    /// <summary>The index or the walk, or null where no index is shared with this scanner.</summary>
+    private readonly VolumeRoutes? _routes;
+
+    /// <summary>The indexes read, kept for a pass while it holds this scanner.</summary>
+    private readonly MftVolumeIndexCache? _volumes;
+
+    public ScanTuner Tuning { get; }
 
     /// <param name="tuner">What each walk runs with, asked as the walk starts.</param>
     public HardLinkAwareScanner(ScanTuner tuner)
-        : this(tuner, FileInformation.Default)
+        : this(tuner, FileInformation.Default, volumes: null)
     {
     }
 
@@ -56,9 +58,26 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
     /// route a file system would leave it.
     /// </param>
     internal HardLinkAwareScanner(ScanTuner tuner, FileInformation files)
+        : this(tuner, files, volumes: null)
     {
-        _tuner = tuner;
-        _files = files;
+    }
+
+    /// <param name="tuner">What each walk runs with, and the route the user allows.</param>
+    /// <param name="volumes">
+    /// The indexes of the scanner whose rows are measured beside this one's. A build it has started
+    /// answers this figure, and this scanner starts none. See <see cref="DirectoryScanner.HardLinks"/>.
+    /// </param>
+    internal HardLinkAwareScanner(ScanTuner tuner, MftVolumeIndexCache volumes)
+        : this(tuner, FileInformation.Default, volumes)
+    {
+    }
+
+    private HardLinkAwareScanner(ScanTuner tuner, FileInformation files, MftVolumeIndexCache? volumes)
+    {
+        Tuning = tuner;
+        _walk = new SoleLinkWalk(tuner, files);
+        _volumes = volumes;
+        _routes = volumes is null ? null : new VolumeRoutes(volumes, tuner, _walk, LinkCounting.SoleName, volumes.Started);
     }
 
     public async ValueTask<ScanResult> MeasureAsync(
@@ -74,8 +93,9 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
     }
 
     /// <summary>
-    /// Every directory among <paramref name="asked"/> in one walk for each set of values, as
-    /// <see cref="RootSetWalk"/> walks them, and every file in a read of its own.
+    /// Every path the index answers in a lookup, and every other directory among
+    /// <paramref name="asked"/> in one walk for each set of values, as <see cref="RootSetWalk"/> walks
+    /// them, and every file in a read of its own.
     /// </summary>
     public async ValueTask<IReadOnlyList<ScanResult>> MeasureManyAsync(
         IReadOnlyList<ScanRequest> asked,
@@ -84,7 +104,7 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
         CancellationToken ct = default) =>
         [.. (await MeasureEachAsync(asked, [keep], RunningTotal.Over(asked, progress), ct).ConfigureAwait(false)).Select(readings => readings[0])];
 
-    /// <summary>One walk, tallied twice. See <see cref="IDirectoryScanner.MeasureAgedAsync"/>.</summary>
+    /// <summary>One reading, tallied twice. See <see cref="IDirectoryScanner.MeasureAgedAsync"/>.</summary>
     public async ValueTask<AgedScan> MeasureAgedAsync(
         string path, MinimumAge age, IProgress<ScanSize>? progress = null, CancellationToken ct = default)
     {
@@ -95,360 +115,42 @@ public sealed class HardLinkAwareScanner : IDirectoryScanner
 
     /// <summary>
     /// Each of <paramref name="asked"/> measured once for each of <paramref name="keeps"/>, in their
-    /// orders, from one reading of it: a file read directly, and every directory walked with the others
-    /// on drives of its kind, the walks on separate disks at the same time
-    /// (<see cref="DirectoryWalks"/>), as <see cref="ParallelEnumerationScanner"/> walks.
+    /// orders, by the index where one is shared with this scanner and being built, and by the walk
+    /// otherwise.
     /// </summary>
-    /// <param name="running">Where each path's first reading goes as it rises.</param>
-    private async Task<ScanResult[][]> MeasureEachAsync(
+    private Task<ScanResult[][]> MeasureEachAsync(
         IReadOnlyList<ScanRequest> asked,
         MinimumAge[] keeps,
         RunningPaths running,
-        CancellationToken ct)
-    {
-        var (results, owns, walks) = await WorkerThreads.Shared.RunAsync(() => Probe(asked, keeps, running, ct), ct).ConfigureAwait(false);
+        CancellationToken ct) =>
+        _routes is { } routes
+            ? routes.MeasureEachAsync(asked, keeps, running, ct)
+            : _walk.MeasureEachAsync(asked, keeps, running, ct);
 
-        // Each walk writes the slots of its own paths, which no other walk writes.
-        await DirectoryWalks.RunAsync(
-            walks,
-            (walk, stop) =>
-            {
-                var each = walk.Indexes;
-                var walked = Measure([.. each.Select(i => asked[i])], [.. each.Select(i => owns[i])], keeps, walk.Tuning, _files, running.Of(each), stop);
-
-                for (var j = 0; j < each.Count; j++)
-                {
-                    results[each[j]] = walked[j];
-                }
-            },
-            ct).ConfigureAwait(false);
-
-        return results;
-    }
-
-    /// <summary>
-    /// Each path asked about that is not a directory, answered, with each directory's slot left for its
-    /// walk, and the walks the directories need. On a worker thread, because it reads each path and
-    /// asks each volume's device.
-    ///
-    /// <para>The directory is asked about first, and the file only where no directory is there, so each
-    /// path costs one attribute read in the ordinary case and a refusal is met once. The read fails
-    /// the same way whichever kind is asked for, so a refused file is answered here as a refused
-    /// directory would be.</para>
-    ///
-    /// <para>One reading for each of <paramref name="keeps"/>, in their order, from one reading of each
-    /// path.</para>
-    /// </summary>
-    private (ScanResult[][] Results, long[] Owns, IReadOnlyList<IReadOnlyList<DirectoryWalk>> Walks) Probe(
-        IReadOnlyList<ScanRequest> asked,
-        MinimumAge[] keeps,
-        RunningPaths running,
-        CancellationToken ct)
-    {
-        var results = new ScanResult[asked.Count][];
-        var directories = new List<int>(asked.Count);
-
-        // Each entry's own time, from the read that found it: a directory's dates it with its listing,
-        // and a file's is the time the guard judges it by.
-        var owns = new long[asked.Count];
-
-        for (var i = 0; i < asked.Count; i++)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            var path = asked[i].Path;
-            var presence = LongPath.ProbeEntry(path, out var isDirectory, out owns[i]);
-
-            if (isDirectory is true)
-            {
-                directories.Add(i);
-                continue;
-            }
-
-            if (presence is PathPresence.Present)
-            {
-                results[i] = MeasureFile(path, owns[i], keeps, _files);
-
-                // A file is read whole, so its reading is final, and it counts before any walk starts.
-                running.Report(i, results[i][0].Size);
-                continue;
-            }
-
-            var nothing = ScanResult.ByChoice(Approximate(0, 0)) with
-            {
-                Root = presence is PathPresence.Refused ? RootReach.NotDescribed : RootReach.Reached,
-            };
-
-            results[i] = [.. keeps.Select(_ => nothing)];
-        }
-
-        return (results, owns, DirectoryWalks.Plan(asked, directories, _tuner));
-    }
-
-    /// <summary>Always null — this scanner holds no index. See <see cref="ParallelEnumerationScanner"/>.</summary>
+    /// <summary>Always null — this figure never searches. See <see cref="ParallelEnumerationScanner"/>.</summary>
     public ValueTask<IReadOnlyList<string>?> TryFindDirectoriesAsync(
         DirectorySearch search,
         string root,
         CancellationToken ct = default) => new((IReadOnlyList<string>?)null);
 
-    /// <summary>Nothing is remembered here, so every reading is already taken from the disk.</summary>
-    public ValueTask<IReadOnlyList<ScanResult>> MeasureFromDiskAsync(IReadOnlyList<ScanRequest> asked, CancellationToken ct = default) =>
-        MeasureManyAsync(asked, MinimumAge.Off, ct: ct);
+    /// <summary>
+    /// Straight to the walk, whatever the index holds, because a figure subtracted from an earlier one
+    /// has to come from the disk. See <see cref="IDirectoryScanner.MeasureFromDiskAsync"/>.
+    /// </summary>
+    public async ValueTask<IReadOnlyList<ScanResult>> MeasureFromDiskAsync(IReadOnlyList<ScanRequest> asked, CancellationToken ct = default) =>
+        [.. (await _walk.MeasureEachAsync(asked, [MinimumAge.Off], RunningPaths.None, ct).ConfigureAwait(false)).Select(readings => readings[0])];
 
-    /// <summary>Nothing is retained between calls, so there is nothing to drop.</summary>
+    /// <summary>
+    /// Nothing to drop here. The indexes this scanner reads belong to the scanner that builds them,
+    /// whose rows drop them at the start of every pass.
+    /// </summary>
     public void Invalidate()
     {
     }
 
-    /// <summary>Nothing is retained between calls, so there is nothing to keep.</summary>
-    public PassHold Hold() => PassHold.Nothing;
-
     /// <summary>
-    /// The walk of every directory in <paramref name="asked"/> Windows describes, at once, each to a
-    /// figure of its own for each of <paramref name="keeps"/>. See <see cref="Probe"/>.
-    ///
-    /// <para>An entry a root's bounds leave out is passed over, neither read nor entered, as the other
-    /// walk passes it. A kept root needs nothing here, because this figure counts no entries.</para>
-    ///
-    /// <para>Each file is read at most once for one root, whichever of its tallies count it. A file
-    /// below a path nested inside another is read once for each of them, which costs a second read of
-    /// each such file and changes no figure. No provider measuring with this scanner asks about a path
-    /// inside another.</para>
+    /// Keep the indexes this scanner reads for the pass, so one built for the rows beside this one is
+    /// still there when this row asks. Nothing where no index is shared.
     /// </summary>
-    /// <param name="owns">
-    /// Each root's own time, from the attribute read that found it, in the order of
-    /// <paramref name="asked"/>. See <see cref="ScanResult.LastWritten"/>.
-    /// </param>
-    private static ScanResult[][] Measure(
-        IReadOnlyList<ScanRequest> asked,
-        IReadOnlyList<long> owns,
-        MinimumAge[] keeps,
-        WalkTuning tuning,
-        FileInformation files,
-        RunningPaths running,
-        CancellationToken ct)
-    {
-        var roots = asked.Select((_, i) => new RootTally(owns[i], keeps)).ToArray();
-        var route = new ByNameRoute();
-
-        // Every name, because each file counted is asked what else links it by its name, relative to
-        // the directory the walk holds open while this reads it.
-        RootSetWalk.Visit<RootTally>(
-            [.. asked.Select(question => WalkRoot.Of(question.Path, question.Bounds))],
-            tuning,
-            FileNames.All,
-            DirectoryHold.DuringCallback,
-            (root, holder, contents, left) =>
-            {
-                var measured = holder ?? roots[root];
-
-                // Added up here and handed to the shared tallies once, so the walk's threads meet on
-                // them once a directory rather than once a file.
-                Span<Sole> sole = stackalloc Sole[measured.Tallies.Length];
-                var withheld = 0;
-
-                // See RootReach for why a folder refused below the root does not count.
-                if (holder is null && contents.WasRefused)
-                {
-                    measured.RootRefused = true;
-                }
-
-                // The root's age, from its own listing alone, every entry included. See ScanResult.LastWritten.
-                if (holder is null)
-                {
-                    measured.Newest = OneLevelAge.Of(measured.Own, contents);
-                }
-
-                foreach (var file in contents.Entries)
-                {
-                    if (file.IsDirectory || left?.Contains(file.Name) == true)
-                    {
-                        continue;
-                    }
-
-                    // §9, named rather than only left out: a store inside a tool's own folder is what
-                    // withholds that tool's command, and the plan can only say which store by its path.
-                    if (file.IsMailStore)
-                    {
-                        measured.Stores.Add(LongPath.Display(file.FullName));
-                        continue;
-                    }
-
-                    // Each guard is asked before the file is read, because the guard is the cheaper
-                    // question and the answer is the same either way: a file it keeps is one this store's
-                    // eviction will not take, so its sole-linked bytes are not reclaimable here. The file is
-                    // read once, for whichever tallies count it, and not at all where every guard keeps it.
-                    var read = false;
-                    FileInformation.FileStandardInfo? info = null;
-
-                    for (var i = 0; i < measured.Tallies.Length; i++)
-                    {
-                        if (measured.Tallies[i].Keep.Protects(file.NewestFileTime))
-                        {
-                            withheld |= 1 << i;
-                            continue;
-                        }
-
-                        if (!read)
-                        {
-                            info = files.Standard(contents.Handle, file, route);
-                            read = true;
-                        }
-
-                        if (info is { NumberOfLinks: 1 } linkedOnce)
-                        {
-                            sole[i].Allocated += linkedOnce.AllocationSize;
-                            sole[i].Logical += linkedOnce.EndOfFile;
-                        }
-                    }
-                }
-
-                for (var i = 0; i < sole.Length; i++)
-                {
-                    measured.Tallies[i].Add(sole[i], (withheld & (1 << i)) != 0);
-                }
-
-                // A file carrying a reparse point holds none of this tree's sole-linked bytes, and one named
-                // like a store is still named: the removal does not read which kind of mark a file carries.
-                foreach (var marked in contents.ReparseFiles)
-                {
-                    if (left?.Contains(marked.Name) != true && marked.IsMailStore)
-                    {
-                        measured.Stores.Add(LongPath.Display(marked.FullName));
-                    }
-                }
-
-                return measured;
-            },
-            // §5.5: stream partial results, at the walk's interval rather than per file.
-            () => running.Report(roots.Length, i => roots[i].Tallies[0].Size),
-            TimeProvider.System,
-            ct);
-
-        return [.. roots.Select(root => root.Results(keeps))];
-    }
-
-    /// <summary>One root's readings, one <see cref="Tally"/> for each guard.</summary>
-    /// <param name="own">The root's own time, from the read that found it. See <see cref="OneLevelAge.Of"/>.</param>
-    private sealed class RootTally(long own, MinimumAge[] keeps)
-    {
-        public readonly long Own = own;
-
-        public readonly Tally[] Tallies = [.. keeps.Select(keep => new Tally(keep))];
-
-        public readonly ConcurrentBag<string> Stores = [];
-
-        public bool RootRefused;
-
-        /// <summary>The root's age, written by its own listing alone, as <see cref="RootRefused"/> is.</summary>
-        public long Newest = OneLevelAge.Unknown;
-
-        /// <summary>The readings, read once the walk has ended.</summary>
-        public ScanResult[] Results(MinimumAge[] keeps)
-        {
-            if (RootRefused)
-            {
-                var unlisted = ScanResult.ByChoice(Approximate(0, 0)) with { Root = RootReach.NotListed };
-                return [.. keeps.Select(_ => unlisted)];
-            }
-
-            IReadOnlyList<string> found = [.. Stores.Order(StringComparer.OrdinalIgnoreCase)];
-
-            var age = OneLevelAge.ToUtc(Newest);
-
-            return [.. Tallies.Select(tally => ScanResult.ByChoice(tally.Size, tally.WithheldRecent) with { MailStores = found, LastWritten = age })];
-        }
-    }
-
-    /// <summary>The sole-linked bytes one directory's files add to one <see cref="Tally"/>.</summary>
-    private struct Sole
-    {
-        public long Allocated;
-        public long Logical;
-    }
-
-    /// <summary>
-    /// The sole-linked bytes one guard's eviction would take from the files a walk lists. Added to from
-    /// several threads at once, so every count moves through <see cref="Interlocked"/> and the flag
-    /// through <see cref="Volatile"/>.
-    /// </summary>
-    private sealed class Tally(MinimumAge keep)
-    {
-        private long _allocated;
-        private long _logical;
-
-        // Only ever moved to true, so a write needs no exchange and no ordering question arises.
-        private bool _withheld;
-
-        public MinimumAge Keep { get; } = keep;
-
-        public ScanSize Size => Approximate(Interlocked.Read(ref _allocated), Interlocked.Read(ref _logical));
-
-        public bool WithheldRecent => Volatile.Read(ref _withheld);
-
-        /// <summary>
-        /// One directory's files: their sole-linked bytes, and whether the guard kept any of them.
-        /// </summary>
-        public void Add(Sole sole, bool withheld)
-        {
-            if (sole.Allocated != 0 || sole.Logical != 0)
-            {
-                Interlocked.Add(ref _allocated, sole.Allocated);
-                Interlocked.Add(ref _logical, sole.Logical);
-            }
-
-            // Read before written, as ParallelEnumerationScanner's tally reads it.
-            if (withheld && !Volatile.Read(ref _withheld))
-            {
-                Volatile.Write(ref _withheld, true);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Both numbers here are read exactly, and the result is still marked approximate, because the
-    /// claim it feeds is a prediction: link counts move whenever a project installs or removes
-    /// dependencies, and the tool's eviction chooses by its own reference records rather than by
-    /// counting links. A figure the next hour can change must not present itself as precise.
-    /// </summary>
-    /// <remarks>
-    /// Counts no entries. What this predicts is what a tool's own eviction frees, and that tool
-    /// decides what it removes, so there is no removal of Deguffer's here whose entries could be
-    /// counted.
-    /// </remarks>
-    private static ScanSize Approximate(long allocated, long logical) =>
-        new(allocated, logical, IsApproximate: true);
-
-    /// <summary>
-    /// The sole-link size of the file at <paramref name="path"/>, mirroring
-    /// <see cref="ParallelEnumerationScanner"/>: a single named file is a legitimate subject, and
-    /// answering zero for one would make its step unofferable.
-    ///
-    /// <para>One reading for each of <paramref name="keeps"/>, with the file opened at most once and
-    /// its age judged from the attribute read that found it, <paramref name="newestFileTime"/>, rather
-    /// than by reading it again for each guard.</para>
-    /// </summary>
-    private static ScanResult[] MeasureFile(
-        string path,
-        long newestFileTime,
-        MinimumAge[] keeps,
-        FileInformation files)
-    {
-        if (MailStore.Is(path))
-        {
-            IReadOnlyList<string> store = [LongPath.Display(path)];
-
-            return [.. keeps.Select(_ => ScanResult.Direct(Approximate(0, 0)) with { MailStores = store })];
-        }
-
-        var sole = new Lazy<ScanSize>(() => files.Standard(LongPath.Extended(path), new ByNameRoute()) is { } info
-            ? Approximate(
-                info.NumberOfLinks == 1 ? info.AllocationSize : 0,
-                info.NumberOfLinks == 1 ? info.EndOfFile : 0)
-            : Approximate(0, 0));
-
-        return [.. keeps.Select(keep => keep.Protects(newestFileTime)
-            ? ScanResult.Direct(Approximate(0, 0), withheldRecent: true) with { FileKept = true }
-            : ScanResult.Direct(sole.Value) with { FileKept = false })];
-    }
+    public PassHold Hold() => _volumes?.Hold() ?? PassHold.Nothing;
 }
