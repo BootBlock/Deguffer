@@ -169,6 +169,38 @@ public class SoleLinkIndexTests
     }
 
     /// <summary>
+    /// A build another row started and that is still reading the table is the one the store reads,
+    /// where the user asked for the table to be waited for: the store waits for it rather than walking
+    /// beside it, and is answered from it once it is read.
+    /// </summary>
+    [Fact]
+    public async Task ABuildStillReadingIsReadWhereTheTableIsWaitedFor()
+    {
+        using var temp = new TempDirectory();
+
+        var (path, fixture) = MirroredTree.Realise(temp, Pnpm());
+        var sources = new HeldMftSourceFactory(path[0], fixture);
+        var volumes = new MftVolumeIndexCache(sources, RouteTuners.Table);
+        var store = new HardLinkAwareScanner(RouteTuners.Table, volumes);
+
+        using var pass = store.Hold();
+
+        // The row beside the store starts the build, which reads nothing until it is released.
+        var building = volumes.Get(path[0]);
+        var measuring = store.MeasureAsync(Path.Combine(path, "store")).AsTask();
+
+        Assert.False(building.IsCompleted);
+        Assert.False(measuring.IsCompleted);
+
+        sources.Release();
+        var indexed = await measuring.WaitAsync(TimeSpan.FromSeconds(30));
+
+        Assert.Equal(1, sources.OpenCount);
+        Assert.Equal(ScanStrategy.MasterFileTable, indexed.Strategy);
+        Assert.Equal(SoleLinked, indexed.Size.Logical);
+    }
+
+    /// <summary>
     /// A file's other name in a directory the table does not hold is dropped from the tree, and is
     /// still a link Windows counts, so the file is not sole-linked. Counting the names the tree placed
     /// would report its bytes as reclaimable.
