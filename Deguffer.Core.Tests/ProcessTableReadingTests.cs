@@ -111,7 +111,7 @@ public sealed class ProcessTableReadingTests : IDisposable
         Assert.False(asking.IsCompleted);
 
         _release.Set();
-        await asking;
+        await asking.WaitAsync(Patience);
         Assert.Equal(1, calls.ListCount);
     }
 
@@ -131,7 +131,7 @@ public sealed class ProcessTableReadingTests : IDisposable
 
         _release.Set();
 
-        Assert.Equal(await first, await second);
+        Assert.Equal(await first.WaitAsync(Patience), await second.WaitAsync(Patience));
         Assert.Equal(1, calls.ListCount);
     }
 
@@ -151,8 +151,8 @@ public sealed class ProcessTableReadingTests : IDisposable
         await stop.CancelAsync();
         _release.Set();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => starter);
-        await other;
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => starter.WaitAsync(Patience));
+        await other.WaitAsync(Patience);
         Assert.Equal(2, calls.ListCount);
     }
 
