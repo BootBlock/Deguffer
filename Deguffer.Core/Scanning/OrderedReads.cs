@@ -61,7 +61,8 @@ internal sealed class OrderedReads : IDisposable
         _idle = new Stack<int>(places);
         _cancelReads = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
-        // Once cancelled no read is claimed, so the read the calling thread waits for may never be made.
+        // A read that ignores the token still lands, and a calling thread woken only by that would hand
+        // it on after the cancellation. Woken by the token, it throws instead.
         _wake = ct.Register(static state => ((OrderedReads)state!).Wake(), this);
 
         for (var place = 0; place < places; place++)

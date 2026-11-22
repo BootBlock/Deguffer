@@ -114,8 +114,8 @@ public sealed class MftAttributeListReadsInFlightTests
     /// <summary>
     /// Cancelled while the oldest read is held, by a disk that ignores the cancellation, the reader hands
     /// nothing on, even once that read lands, and returns only after it has, so no read lands in a
-    /// buffer it released. Once cancelled no read is made, so a reader that waited for the oldest to
-    /// land before looking at the token would hand it on and then wait for a read never made.
+    /// buffer it released. A reader that waited for the oldest to land before looking at the token
+    /// would hand on every list read before the cancellation.
     /// </summary>
     [Fact]
     public async Task CancelledWhileTheOldestIsHeldHandsNothingOnAndWaitsForIt()
