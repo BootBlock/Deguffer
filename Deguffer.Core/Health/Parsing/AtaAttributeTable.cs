@@ -4,7 +4,8 @@ namespace Deguffer.Core.Health.Parsing;
 
 /// <summary>One ATA SMART attribute as the drive holds it.</summary>
 /// <param name="Threshold">The drive's failure threshold for it, or null where the page could not read one.</param>
-internal readonly record struct AtaAttribute(byte Id, bool IsPreFail, byte Value, byte Worst, ulong Raw, byte? Threshold);
+/// <param name="Reserved">The entry's last byte, which the standard reserves and some drives use as a seventh raw byte.</param>
+internal readonly record struct AtaAttribute(byte Id, bool IsPreFail, byte Value, byte Worst, ulong Raw, byte? Threshold, byte Reserved = 0);
 
 /// <summary>Reads the ATA SMART attribute and threshold sectors, which share one layout.</summary>
 internal static class AtaAttributeTable
@@ -21,6 +22,7 @@ internal static class AtaAttributeTable
     private const int WorstOffset = 4;
     private const int RawOffset = 5;
     private const int RawBytes = 6;
+    private const int ReservedOffset = RawOffset + RawBytes;
     private const int ThresholdOffset = 1;
     private const int PreFailFlag = 1;
 
@@ -89,7 +91,8 @@ internal static class AtaAttributeTable
                     entry[ValueOffset],
                     entry[WorstOffset],
                     Raw(entry.Slice(RawOffset, RawBytes)),
-                    Threshold: null));
+                    Threshold: null,
+                    entry[ReservedOffset]));
             }
         }
 

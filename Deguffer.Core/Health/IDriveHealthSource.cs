@@ -1,4 +1,5 @@
 using Deguffer.Core.Health.Parsing;
+using Deguffer.Core.Health.Smartmontools;
 using Deguffer.Core.Scanning.Media;
 
 namespace Deguffer.Core.Health;
@@ -16,15 +17,18 @@ internal sealed record DriveReadout(
     int? TemperatureCelsius,
     bool MoreWhenElevated);
 
+/// <summary>What the reader knows of a drive before its health is read, each asked of the drive once.</summary>
+/// <param name="Sectors">Its sector sizes, by which a reading counted in logical sectors is stated in bytes, where known.</param>
+/// <param name="IncursSeekPenalty">Whether Windows reports it as a spinning disk, or null where it did not say.</param>
+/// <param name="Database">The installed drive database, read at most once for a whole read of the drives, and only where a drive needs it.</param>
+internal sealed record DriveTraits(SectorSizes? Sectors, bool? IncursSeekPenalty, Lazy<DatabaseReading> Database);
+
 /// <summary>Reads a drive's health in the way one storage protocol allows.</summary>
 internal interface IDriveHealthSource
 {
     /// <summary>Whether this source can read a drive on <paramref name="bus"/>.</summary>
     bool Reads(StorageBusType bus);
 
-    /// <summary>
-    /// Reads <paramref name="drive"/>, whose model and firmware decide what some readings mean. A
-    /// reading counted in logical sectors is stated in bytes only where <paramref name="sectors"/> is known.
-    /// </summary>
-    DriveReadout Read(IDriveDevice device, DeviceDescriptor drive, SectorSizes? sectors);
+    /// <summary>Reads <paramref name="drive"/>, whose model and firmware decide what some readings mean.</summary>
+    DriveReadout Read(IDriveDevice device, DeviceDescriptor drive, DriveTraits traits);
 }

@@ -1606,6 +1606,16 @@ explains. It changes nothing on any drive, and it deletes nothing.
   A document's threshold codes and the figures it derives from two attributes, such as write
   amplification, apply on the same key. A count in logical sectors is sized by the sector size Windows
   reports, and stays a count of sectors where Windows does not report one.
+- Where smartmontools is installed, its drive database (`drivedb-add.h`, then `drivedb.h`, from the
+  folder its installer records, or the folder `smartctl` is found in on `PATH`) names and lays out a
+  SATA attribute that no manufacturer's document and no catalogue reading common to every drive
+  covers ([#751](https://github.com/BootBlock/Deguffer/issues/751)). It is read at run time and never
+  shipped, because it is GPL. Only the entry for the drive's own family is used, found as smartctl
+  finds it: entries in order, the first whose patterns match the whole model and firmware. Such a
+  reading carries a mark saying so, and is judged by nothing but the drive's own threshold. The
+  drive's details name the entry used, or say why none was: no entry, an entry that could not be
+  read, a pattern Deguffer cannot translate before the match, or a file that could not be read, in
+  which case none of the database is used.
 - A serial number appears on the page and nowhere else: no record prints it, and a drive's key is a hash.
 
 **Beside the volumes**

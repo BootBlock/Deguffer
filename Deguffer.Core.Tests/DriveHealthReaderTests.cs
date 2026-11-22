@@ -9,14 +9,20 @@ namespace Deguffer.Core.Tests;
 /// §7.6: the two phases, one drive not ending the others, and a drive that does not answer never
 /// being asked twice. Driven through the fakes, so no real disk is asked anything.
 /// </summary>
-public sealed class DriveHealthReaderTests
+public sealed class DriveHealthReaderTests : IDisposable
 {
     private readonly FakeDriveProbe _probe = new();
     private readonly FakeVolumeInventory _volumes = new();
     private readonly FakeStorageQueries _storage = new();
+    private readonly TempDirectory _temp = new();
+    private readonly FakeUserEnvironment _environment;
+
+    public DriveHealthReaderTests() => _environment = new FakeUserEnvironment(_temp.Path);
+
+    public void Dispose() => _temp.Dispose();
 
     private DriveHealthReader Reader(TimeSpan? limit = null) =>
-        new(_probe, _volumes, _storage, limit ?? TimeSpan.FromSeconds(30));
+        new(_probe, _volumes, _storage, _environment, limit ?? TimeSpan.FromSeconds(30));
 
     private sealed class Collected<T> : IProgress<T>
     {
@@ -269,7 +275,7 @@ public sealed class DriveHealthReaderTests
         Nvme(0);
         _volumes.With(@"C:\");
         using var release = new ManualResetEventSlim();
-        var reader = new DriveHealthReader(_probe, _volumes, new StalledStorage(release), TimeSpan.FromMilliseconds(50));
+        var reader = new DriveHealthReader(_probe, _volumes, new StalledStorage(release), _environment, TimeSpan.FromMilliseconds(50));
 
         var report = Assert.Single(await ReadAll(reader));
 
@@ -287,7 +293,7 @@ public sealed class DriveHealthReaderTests
         using var release = new ManualResetEventSlim();
         using var stop = new CancellationTokenSource();
         var collected = new Collected<DriveHealth>();
-        var reader = new DriveHealthReader(_probe, _volumes, new StalledStorage(release), TimeSpan.FromMinutes(5));
+        var reader = new DriveHealthReader(_probe, _volumes, new StalledStorage(release), _environment, TimeSpan.FromMinutes(5));
 
         var reading = reader.ReadAsync(reader.List()!, collected, _placed, stop.Token);
         var waited = System.Diagnostics.Stopwatch.StartNew();
