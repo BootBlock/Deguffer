@@ -54,7 +54,7 @@ each of them for.
 | Issue | Note |
 | --- | --- |
 | #441 | Start DISM's component-store analysis when an elevated pass starts. The largest single gain. |
-| #442 | Hand out planning slots longest first, by remembered cost from #443. |
+| #442 | Hand out planning slots longest first, by remembered cost from #443. Rejected: measured slower than the list's order in every round across two attempts, because rows started together slow one another, and a row's remembered time depends on what runs beside it. An order would have to know which rows share a disk. |
 | #450 | Let a provider start the tool query its plan will wait on when the pass begins. Done: `BeginPass` takes a `PassStart`, which holds the pass's token, bounds the package managers' queries to half the logical processors (`Ask`), and starts a service's or a native tool's long answer without a place (`AskAtOnce`). Every tool row whose plan awaits a query it can ask before its own disk work adopts it, and `EarlyStartProof` holds each to asking once per pass. |
 | #451 | Show each location's check time. Built on #443. |
 
@@ -143,7 +143,7 @@ Each of these changes a recorded design choice or what Deguffer finds, so each i
 | --- | --- |
 | ReadyToRun for the first index build | Every release publish profile already sets `PublishReadyToRun`. The slow first run was the benchmark's, which is not published that way. |
 | One table read shared by Explore and the planner | Decided by #254 (`after-the-scanner.md` item 9) against #172. |
-| PlatformIO and Delivery Optimization start last | The same cause and fix as #442. |
+| PlatformIO and Delivery Optimization start last | Both now start their queries at the top of the pass (#450, #692), which #442 left as the fix. |
 | Hugging Face asks `env` before `cache ls` | `cache ls` needs the hub folder `env` reports. |
 | `ChromiumUserDataDiscovery` blocks on a task | The task is complete in a preview, and #386 designed the wait in Explore. |
 | Shared counters touched per directory | About a tenth as often as the per-file writes #371 removed with no measurable gain. |
@@ -552,10 +552,10 @@ path. In the clean, plans run strictly in turn, each after the last one's verifi
 | Issue | Note |
 | --- | --- |
 | #1057 | Rows wait for every row's declarations before measuring, holding a slot idle. The largest gain for the pass's tail. Done: every row that asks which spared children another row offers starts the question once its walk exists, measures, and awaits the answer only where its plan reads it, and `CodeRuleSweepTests` refuses an `await` written on the question itself. Not timed. |
-| #1060 | The Temporary files row's tenant claims, one at a time, two of them listed after it. Measured 1.49-2.50 s against 0.73-1.59 s at once. |
+| #1060 | The Temporary files row's tenant claims, one at a time, two of them listed after it. Measured 1.49-2.50 s against 0.73-1.59 s at once. Done: `TenantClaims` starts every claim on a worker thread of its own and reads the answers in the tenants' order, and `CreateDefault` lists every tenant ahead of the row. |
 | #1059 | uv and NuGet never adopted the remembered tool answers (#447). NuGet 1.2-1.8 s, uv 0.35-0.70 s per pass. `safety` for NuGet's claim. |
 | #1061 | `RunningTotal` re-adds every path per report: 237 ms for 10,000 paths, measured. |
-| #1062, #1063, #1064, #1065 | The process table read in series under a lock (`safety`), the status line posted per change, two stores written before the pass returns, and volume lookups per path. |
+| #1062, #1063, #1064, #1065 | The process table read in series under a lock (`safety`), the status line posted per change, two stores written before the pass returns, and volume lookups per path. #1063 done: a change to the status line is recorded under its lock, and the line is built and posted at once after a quiet spell and otherwise at most once per 100 ms, with a timer posting the latest line at the interval's end, so a burst of starts, ends and figures costs one post an interval and the last change is never left unsaid. |
 | #1066, #1067, #1068, #1071 | The hard-link scanner without the index, PlatformIO's plan-time walk, Poetry's two measurements in turn, and cloud sync roots walked in turn. |
 | #1073, #1069, #1075 | A second DISM analysis with both component-store rows, synchronous registered-storage readers, and the registered read and the residue probe in turn. #1069 and #1075 are `safety`. |
 | #1070, #1074 | Hyper-V's WMI calls in series, and a Disk Cleanup look beside `GetSpaceUsed` (`safety`). Each is measured before it is built. |
