@@ -516,6 +516,13 @@ Deliberate points, and the traps that come with them:
   opens in. The user can reorder the list by name, or by tier with the largest first in each, and
   the choice is remembered. Reordering is presentation only: it never changes what is offered,
   ticked or removed, and a row that a kept item or a clean shrinks still stays where it stands.
+- **The rows can be ticked or cleared together.** A menu beside the order offers *Select all*, which
+  ticks every row on screen with a size, *Select recommended*, which ticks the rows §3 ticks by
+  default and clears the rest, and *Select none*. It never ticks a row a filter hides, and it waits
+  while a scan or a clean runs. It never ticks a row that already has a tick, because that row may
+  hold items the user unticked one by one to keep. *Select all* takes Tier 3 with the rest, because
+  the tick is the user's own and not a pre-selection. The row still says what is permanent, and
+  whichever confirmation below the user left on still asks.
 - **Every row states what happens on next use, and reaches it without a pointer**: "re-downloads on
   next build (~10 GB)" is more useful than a checkbox. The list has two densities, and the shipped
   one is **Standard**, which writes the sentence out under every name, so the first screen says what

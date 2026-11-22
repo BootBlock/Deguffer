@@ -51,7 +51,7 @@ namespace Deguffer.Core.Execution;
 /// <see cref="ProbedPaths"/>'s to give, and only for the folders above where the tool was sent. What
 /// it does decide is how far the emptied question looks: a tool empties files in place and can leave
 /// every folder standing, which is the shape the deeper question exists for. See
-/// <c>PlanVerifier.WasEmptied</c> for what a run without one is asked, and what that costs.</para>
+/// <c>SurvivalCheck.WasEmptied</c> for what a run without one is asked, and what that costs.</para>
 /// </param>
 public sealed class RunReach(
     IReadOnlyList<string> TargetedPaths,

@@ -1578,7 +1578,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
     [InlineData("maven", "settings-security.xml")]           // the master password
     [InlineData("platformio", "packages")]                   // the installed toolchains
     [InlineData("uv", "something-unrecognised")]             // its roaming folder has a theory of its own
-    [InlineData("pip", "pip.ini")]                           // private index URLs
+    [InlineData("pip", "pip.ini")]                           // pip reads no configuration here, and it is not cache
     [InlineData("poetry", "virtualenvs")]                    // every environment on the machine
     [InlineData("pipenv", "pkgs")]                           // the download destination pipenv names to pip
     [InlineData("go", "src")]                                // the user's own code
@@ -1784,7 +1784,7 @@ public sealed class ExploreActionPolicyTests : IDisposable
         new MavenRepositoryProvider(_environment),
         new PlatformIoCacheProvider(_environment),
         new UvCacheProvider(_environment),
-        new PipCacheProvider(_environment),
+        new PipCacheProvider(_environment, systemDirectories: _system),
         new PoetryCacheProvider(_environment),
         new PipenvCacheProvider(_environment),
         new GoCacheProvider(_environment),

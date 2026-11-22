@@ -33,8 +33,8 @@ open a public issue.
 
 `Deguffer.Benchmark` times the routes a scan takes and the removal a clean makes, so a change to how
 Deguffer reads or removes can be judged by a measurement rather than a guess. Every route but
-`remove`, `clean`, `protect` and `plan` only reads: nothing on the drive is written, moved or deleted.
-The first three write and delete only inside a folder they create. `plan` deletes nothing, and writes
+`remove`, `clean`, `protect`, `verify` and `plan` only reads: nothing on the drive is written, moved or
+deleted. The first four write and delete only inside a folder they create. `plan` deletes nothing, and writes
 only the figures a scan keeps for its first paint, as a scan does. It is not part of `dotnet test`, because a timing
 changes with whatever else the machine is doing.
 
@@ -58,6 +58,7 @@ Deguffer.Benchmark duplicates C:\Users\<user>\Pictures D:\Photos --cache warm
 Deguffer.Benchmark remove D:\benchmark --files 100000 --depth 15 --fanout 2 --read-only
 Deguffer.Benchmark clean D:\benchmark --trees 500 --files-per-tree 100
 Deguffer.Benchmark protect D:\benchmark --folders 5000
+Deguffer.Benchmark verify D:\benchmark --folders 5000
 Deguffer.Benchmark race C:\Users\<user>\source --build D --reads-in-flight 2
 Deguffer.Benchmark scan C:\Users\<user>\source --runs 6
 Deguffer.Benchmark plan --runs 6 > %TEMP%\deguffer-plan.txt
@@ -123,6 +124,11 @@ Deguffer.Benchmark plan --runs 6 > %TEMP%\deguffer-plan.txt
   `--listed on` records the folders from one untimed listing of the folder holding them, as a row
   that listed them while it planned does, so each is asked only whether it holds anything. Timed
   both ways, the difference is what reusing the listing saves.
+- `verify <new folder>` creates the folder, builds `--folders N` empty folders in it once (default
+  5,000), and on every run proves each standing as a clean proves the paths a plan protects after
+  its removals (§5.6), several checked at once with the walk a scan uses for the drive's kind. It
+  reports how many folders were probed at once. The result of a clean that protects one path for
+  each item of the user's data waits on this.
 - `race <folder>` walks a folder while the index of a volume is built, both started at the same
   moment, as Auto races them in a scan, and times each of the two alone as well. Each round walks
   alone, builds alone, then races the two, and every other round runs them in the reverse order,

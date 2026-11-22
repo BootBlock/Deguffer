@@ -614,11 +614,9 @@
                  one location by name, or taking the tiers one at a time, can reorder them here,
                  beside the line that states what the rows below add up to. Presentation only:
                  every row is offered, ticked and removed exactly as before, wherever it stands.
-                 The label is raw for assistive technology for the reason the View label is. -->
-            <StackPanel Grid.Column="1"
-                        Orientation="Horizontal"
-                        Spacing="8"
-                        VerticalAlignment="Center">
+                 The label is raw for assistive technology for the reason the View label is. The
+                 selection menu that ticks or clears every row sits at the end, with the rows. -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                 <TextBlock Text="Sort by"
                            Style="{StaticResource FieldLabel}"
                            VerticalAlignment="Center"
@@ -631,6 +629,7 @@
                     <ComboBoxItem Content="Name" />
                     <ComboBoxItem Content="Safety tier" />
                 </ComboBox>
+                <views:StorageSelectionMenu Selection="{x:Bind ViewModel.Selection}" />
             </StackPanel>
         </Grid>
 
@@ -696,7 +695,7 @@
                               Width="18" Height="18" VerticalAlignment="Center" />
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="Selected" Style="{StaticResource FieldLabel}" />
-                    <TextBlock Text="{x:Bind ViewModel.SelectedTotalLabel, Mode=OneWay}"
+                    <TextBlock Text="{x:Bind ViewModel.Selection.TotalLabel, Mode=OneWay}"
                                Style="{StaticResource Figure}"
                                FontSize="16" />
                 </StackPanel>

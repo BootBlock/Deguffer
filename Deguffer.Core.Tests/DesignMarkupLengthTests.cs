@@ -15,7 +15,7 @@ public sealed class DesignMarkupLengthTests
 
     private static readonly Dictionary<string, int> Budgets = new(StringComparer.Ordinal)
     {
-        ["Deguffer.App/Views/CleanPage.xaml"] = 803,
+        ["Deguffer.App/Views/CleanPage.xaml"] = 802,
         ["Deguffer.App/Views/DuplicatesPage.xaml"] = 627,
         ["Deguffer.App/Views/ExplorePage.xaml"] = 1435,
         ["Deguffer.App/Views/SettingsPage.xaml"] = 649,

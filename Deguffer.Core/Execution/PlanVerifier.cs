@@ -1,6 +1,7 @@
 using Deguffer.Core.Cloud;
 using Deguffer.Core.Profiles;
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 using Deguffer.Core.SystemProtection;
 
 namespace Deguffer.Core.Execution;
@@ -9,7 +10,8 @@ namespace Deguffer.Core.Execution;
 /// §5.6 — assert that the things that should have survived did.
 ///
 /// This is policy, not mechanism: what counts as evidence of survival is a safety decision, and
-/// it lives in one place so it can be read and changed without touching execution.
+/// it is kept apart from execution so it can be read and changed without touching it. This type
+/// decides what a plan is held to; <see cref="SurvivalCheck"/> judges each protected path.
 /// </summary>
 public static class PlanVerifier
 {
@@ -21,453 +23,72 @@ public static class PlanVerifier
     /// What the run's removals have left standing so far, and which spared entries they left alone.
     /// Null means nothing was removed, which is true of a verification with no execution behind it.
     /// </param>
-    /// <param name="cloud">
-    /// What describes the files a <see cref="ReleaseLocalCopiesStep"/> named. Asked only of a plan that
-    /// holds one, and the machine's own where none is given.
-    /// </param>
-    /// <param name="protection">
-    /// What lists the restore points, shadow copies and storage a <see cref="RemoveRestorePointsStep"/>
-    /// must leave, on the terms <paramref name="cloud"/> is given: it only reads.
-    /// </param>
-    /// <param name="profiles">
-    /// What lists the profiles a plan's <see cref="RemoveProfileStep"/>s must leave, on the terms
-    /// <paramref name="cloud"/> is given: it only reads.
-    /// </param>
-    /// <param name="volumes">
-    /// Asked every other path a protected path and each of the run's paths are reachable at, because a
-    /// step may name a folder through a letter <c>subst</c> made, or another mount of its volume, that
-    /// the protected path does not. The machine's own where none is given.
-    /// </param>
+    /// <param name="sources">What the verification reads the machine through. The machine's own where none is given.</param>
     public static VerificationResult Verify(
         CleanupPlan plan,
         RunReach? runReach = null,
         RunResidue? residue = null,
         CancellationToken ct = default,
-        ICloudFiles? cloud = null,
-        ISystemProtection? protection = null,
-        IVolumeInventory? volumes = null,
-        IUserProfiles? profiles = null)
+        VerificationSources? sources = null) =>
+        Verify(plan, runReach, residue, sources ?? VerificationSources.Machine, LongPath.ProbeEntry, ct);
+
+    /// <summary>
+    /// The same, with each protected path's presence after the run given by <paramref name="probe"/>:
+    /// the seam a test blocks or counts the disk's answers through.
+    ///
+    /// <para><b>Several protected paths at once, under the disk's own number</b>
+    /// (<see cref="DiskBoundWork"/>). Each check probes its path and may list it or probe a marker
+    /// inside it, a clean can protect ten thousand paths, and the clean's result waits on them all.
+    /// What each check proves does not depend on another's, and every one is still made, in the plan's
+    /// order, so the report reads as it did when they were made one after another.</para>
+    /// </summary>
+    internal static VerificationResult Verify(
+        CleanupPlan plan,
+        RunReach? runReach,
+        RunResidue? residue,
+        VerificationSources sources,
+        Func<string, PathPresence> probe,
+        CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(plan);
 
-        var inventory = volumes ?? VolumeInventory.Current;
+        var inventory = sources.Volumes ?? VolumeInventory.Current;
         var places = runReach?.PlacesOn(inventory) ?? new RunPlaces(RunReach.Of([plan]), inventory);
-        var checks = new List<VerificationCheck>(plan.ProtectedPaths.Count);
 
         // Read once for the whole verification rather than once for each protected path. A plan is
         // verified once its own removals are over, and the run starts the next plan only after that,
         // so the record does not grow while it is read.
         var enteredRoots = residue?.EnteredRoots ?? [];
 
-        foreach (var protectedPath in plan.ProtectedPaths)
-        {
-            ct.ThrowIfCancellationRequested();
-            checks.Add(Check(protectedPath, places, residue, enteredRoots));
-        }
+        List<VerificationCheck> checks =
+        [
+            .. DiskBoundWork.Each(
+                plan.ProtectedPaths,
+                protectedPath => protectedPath.Path,
+                sources.Tuning ?? ScanTuner.Shipped,
+                ListingBudget.Shared,
+                protectedPath => SurvivalCheck.Of(protectedPath, places, residue, enteredRoots, probe),
+                ct),
+        ];
 
         foreach (var release in plan.Steps.OfType<ReleaseLocalCopiesStep>())
         {
             checks.AddRange(ReleasedFileProof.Checks(
-                release, cloud ?? CloudFiles.Default, missing => Check(missing, places, residue, enteredRoots), ct));
+                release, sources.Cloud ?? CloudFiles.Default, missing => SurvivalCheck.Of(missing, places, residue, enteredRoots, probe), ct));
         }
 
         foreach (var removal in plan.Steps.OfType<RemoveRestorePointsStep>())
         {
             ct.ThrowIfCancellationRequested();
-            checks.AddRange(RestorePointProof.Checks(removal, protection ?? WindowsSystemProtection.Default));
+            checks.AddRange(RestorePointProof.Checks(removal, sources.Protection ?? WindowsSystemProtection.Default));
         }
 
         if (plan.Steps.OfType<RemoveProfileStep>().ToList() is { Count: > 0 } removals)
         {
             ct.ThrowIfCancellationRequested();
-            checks.AddRange(ProfileRemovalProof.Checks(removals, profiles ?? WindowsUserProfiles.Default));
+            checks.AddRange(ProfileRemovalProof.Checks(removals, sources.Profiles ?? WindowsUserProfiles.Default));
         }
 
         return new VerificationResult { Checks = checks };
     }
-
-    private static VerificationCheck Check(
-        ProtectedPath protectedPath, RunPlaces places, RunResidue? residue, IReadOnlyList<string> enteredRoots)
-    {
-        // A path that was never there cannot be evidence of survival. Recording it with an honest
-        // detail keeps the report from overstating what the run actually established.
-        if (protectedPath.PresenceBefore is PathPresence.Absent)
-        {
-            return new VerificationCheck(
-                protectedPath.Path,
-                protectedPath.Reason,
-                VerificationOutcome.NotPresentBefore,
-                "Not present before the clean; nothing to preserve.");
-        }
-
-        var after = LongPath.ProbeEntry(protectedPath.Path);
-
-        if (after is PathPresence.Refused)
-        {
-            return Unmeasured(protectedPath, places, residue, enteredRoots);
-        }
-
-        if (after is PathPresence.Present)
-        {
-            // Asked before the emptied question, because it is the more exact of the two. It names
-            // Deguffer's own removal as the one that went inside, where an emptied folder may still be
-            // a tool's doing in a run that holds a command. And it does not depend on what the folder
-            // still holds, which is the thing a refusal hides.
-            if (WasEntered(protectedPath.Path, places, residue, enteredRoots))
-            {
-                return new VerificationCheck(
-                    protectedPath.Path,
-                    protectedPath.Reason,
-                    VerificationOutcome.Entered,
-                    "ENTERED — the folder is still here, but a removal in this run went inside it and "
-                    + "could not take everything it tried to.");
-            }
-
-            if (protectedPath.Marker is { } marker)
-            {
-                switch (LongPath.ProbeFile(Path.Combine(protectedPath.Path, marker)))
-                {
-                    case PathPresence.Present:
-                        return new VerificationCheck(
-                            protectedPath.Path,
-                            protectedPath.Reason,
-                            VerificationOutcome.Failed,
-                            $"MARKED — the folder is still here, but it now holds {marker}, so the program that owns "
-                            + "it will delete it the next time it starts. Delete that file to keep the folder.");
-
-                    // A refused marker may be there, and the folder then goes at the owner's next
-                    // start. Reading it as unmarked would pass a folder nobody saw kept.
-                    case PathPresence.Refused:
-                        return new VerificationCheck(
-                            protectedPath.Path,
-                            protectedPath.Reason,
-                            VerificationOutcome.Unverified,
-                            $"NOT CHECKED — the folder is still here, but Windows would not say whether it holds "
-                            + $"{marker}, so nothing shows whether the program that owns it will delete it the "
-                            + "next time it starts.");
-                }
-            }
-
-            return WasEmptied(protectedPath, places)
-                ? new VerificationCheck(
-                    protectedPath.Path,
-                    protectedPath.Reason,
-                    VerificationOutcome.Emptied,
-                    "EMPTIED — the folder is still here and everything that was in it has gone. "
-                    + "No step in this run named anything inside it.")
-                : new VerificationCheck(
-                    protectedPath.Path, protectedPath.Reason, VerificationOutcome.Survived, "Still present.");
-        }
-
-        // Asked first, because it is the one answer that needs no reasoning about where the run
-        // reached: nothing can remove what had gone before anything was removed.
-        if (residue?.WasGoneBeforeRun(protectedPath.Path) is true)
-        {
-            return new VerificationCheck(
-                protectedPath.Path,
-                protectedPath.Reason,
-                VerificationOutcome.RemovedFromOutside,
-                "GONE — it had already gone when this clean began, so nothing in the clean removed it. "
-                + "Something else on the machine removed it after the scan ran, such as the program it "
-                + "belongs to.");
-        }
-
-        if (WasBeyondThisRunsReach(protectedPath.Path, places))
-        {
-            return new VerificationCheck(
-                protectedPath.Path,
-                protectedPath.Reason,
-                VerificationOutcome.RemovedFromOutside,
-                "GONE — and so is the folder that held it, which no step in this run named or "
-                + "deleted anything inside. Something else on the machine removed it after the "
-                + "scan ran.");
-        }
-
-        return WasLeftAloneByEveryRemovalReachingIt(protectedPath.Path, places, residue)
-            ? new VerificationCheck(
-                protectedPath.Path,
-                protectedPath.Reason,
-                VerificationOutcome.RemovedFromOutside,
-                "GONE — but this clean left it alone, so something else on the machine removed it "
-                + "after the scan ran. A program that was using it may have removed it when it finished.")
-            : new VerificationCheck(
-                protectedPath.Path,
-                protectedPath.Reason,
-                VerificationOutcome.Failed,
-                protectedPath.PresenceBefore is PathPresence.Present
-                    ? "MISSING — it was there before the clean."
-                    : "MISSING — Windows would not describe it before the clean, and says it is not "
-                      + "there now.");
-    }
-
-    /// <summary>
-    /// A protected path Windows would not describe after the run, which is the one answer that
-    /// establishes nothing about it.
-    ///
-    /// <para><b>Not read as missing.</b> That reading raised an alarm on every run for a user whose
-    /// cache sits behind a directory link Windows declines to follow, and a §5.6 alarm that cries
-    /// wolf is worth less than no alarm. <b>Not read as a survivor either</b>, because nothing saw
-    /// it survive. It is stated as a check that could not be made.</para>
-    ///
-    /// <para><b>A removal of Deguffer's own that went inside it still fails the run.</b>
-    /// <see cref="RunResidue"/> records that from the removal itself rather than from the disk, so a
-    /// refusal afterwards hides nothing it knows.</para>
-    /// </summary>
-    private static VerificationCheck Unmeasured(
-        ProtectedPath protectedPath, RunPlaces places, RunResidue? residue, IReadOnlyList<string> enteredRoots) =>
-        WasEntered(protectedPath.Path, places, residue, enteredRoots)
-            ? new VerificationCheck(
-                protectedPath.Path,
-                protectedPath.Reason,
-                VerificationOutcome.Entered,
-                "ENTERED — a removal in this run went inside it and could not take everything it "
-                + "tried to. Windows would not describe it afterwards.")
-            : new VerificationCheck(
-                protectedPath.Path,
-                protectedPath.Reason,
-                VerificationOutcome.Unverified,
-                protectedPath.PresenceBefore is PathPresence.Present
-                    ? "NOT CHECKED — it was there before the clean, and Windows would not describe it "
-                      + "afterwards, so nothing shows whether it survived."
-                    : "NOT CHECKED — Windows would not describe it before the clean or after it, so "
-                      + "nothing shows whether it survived.");
-
-    /// <summary>
-    /// Whether a protected directory that held something now holds nothing, for a reason this run
-    /// cannot account for.
-    ///
-    /// <para><b>Why existence alone stopped being the whole question.</b> Until a route existed that
-    /// empties a directory in place, an over-broad rule always took the directory with the contents,
-    /// so a protected sibling went missing and the check above caught it. It no longer does.
-    /// <see cref="EmptyRecycleBinStep"/> hands Windows a whole volume and Windows empties one
-    /// account's bin inside it, and the failure worth catching — it reached every account — leaves
-    /// each of those directories exactly where it was, holding nothing. Every protected path is then
-    /// present, the negative passes, and what it passed over is another person's deleted files.
-    /// See <see cref="ProtectedPath.HeldContentBefore"/>.</para>
-    ///
-    /// <para><b>What the run named is the exemption, and it is the reasoning
-    /// <see cref="HoldsAnyOf"/> already carries.</b> A protected path is often the parent of a
-    /// target — a volume's <c>$Recycle.Bin</c> is protected and this account's bin inside it is
-    /// removed — so on a machine with one account that parent legitimately ends the run empty.
-    /// Reading that as an alarm would fire on the ordinary case and teach the reader to ignore it.
-    /// A directory holding nothing this run named, that held something before and holds nothing now,
-    /// has no such explanation.</para>
-    ///
-    /// <para><b>A tool's own command names where it is sent.</b> Its
-    /// <see cref="RunCommandStep.MeasuredPaths"/> are the plan's statement of what the tool will
-    /// clear, so a tool root holding its cache can end the run empty for the reason above, and so can
-    /// the cache itself. See <see cref="RunReach.ProbedPaths"/>.</para>
-    ///
-    /// <para><b>An unbounded reach is not an exemption.</b> §5.1 gives a command a reach nobody can
-    /// state, and that makes an emptied folder the run's to answer for exactly as it makes a missing
-    /// one. Reading it as a reason to excuse every emptied folder would switch this check off on the
-    /// runs where Deguffer controls least, and a File History drive holding other accounts' backups
-    /// is one of them.</para>
-    ///
-    /// <para><b>How far the question looks depends on what ran.</b> A tool's own command empties
-    /// files in place and can leave every folder that held them standing, so in a run holding one the
-    /// question is whether content is left anywhere below. In a run without one, the question is
-    /// whether anything at all is left. A folder holding only empty folders is there most often
-    /// something else's doing: MSBuild's Clean, run while the preview sat on screen, leaves exactly
-    /// that in the <c>bin</c> beside every <c>obj</c> this run removes, and an alarm about it would cry
-    /// wolf about a folder Deguffer never touched.</para>
-    ///
-    /// <para><b>What that costs, and what answers it instead.</b> Deguffer's own removal can leave the
-    /// same shape. Windows refuses to remove a directory a process is working in, so an over-reach
-    /// that meets one leaves a chain of empty folders down to it, and in a run without a command the
-    /// top-level question reads that chain as holding something. A Temp clear that failed to spare a
-    /// live entry, whose process works a few folders below it, is the case. It is not passed over,
-    /// because the removal records what it left standing and <see cref="RunResidue.Entered"/> is asked
-    /// first. What the choice still costs is the outside Clean in a run that holds a command as well,
-    /// which reads as emptied, because nothing here can tell a tool's skeleton from MSBuild's.</para>
-    ///
-    /// <para>What was there before is captured through folders either way (see
-    /// <see cref="DirectoryContent"/>), so a folder that held only empty folders is never the subject.
-    /// Asked only of a directory that held something, so nothing here reads a path that was empty to
-    /// begin with, and nothing reads a file.</para>
-    /// </summary>
-    private static bool WasEmptied(ProtectedPath protectedPath, RunPlaces places) =>
-        protectedPath.HeldContentBefore
-        && !StillHoldsContent(protectedPath.Path, places.Reach)
-        && !HoldsAnyOf(places.At(protectedPath.Path), places.Targets.Select(target => target.Folder))
-        && !HoldsAnyOf(places.At(protectedPath.Path), places.Probed);
-
-    /// <summary>The question <see cref="WasEmptied"/> asks after the run, at the depth what ran calls for.</summary>
-    private static bool StillHoldsContent(string path, RunReach reach) =>
-        reach.Unbounded ? DirectoryContent.IsPresent(path) : DirectoryContent.HoldsAnyEntry(path);
-
-    /// <summary>
-    /// Whether a path that has gone missing went missing for a reason nothing in this run can
-    /// account for.
-    ///
-    /// <para><b>Why the question is worth asking at all.</b> A plan is built when the user presses
-    /// Preview and carried out when they press Clean, and <see cref="ProtectedPath.PresenceBefore"/>
-    /// is a claim about the first of those instants. Anything at all may happen to the disk in
-    /// between — on a machine where build directories are the subject, a removed source checkout is
-    /// an ordinary event. Reading every such disappearance as an over-broad rule tells the user to
-    /// report a fault that is not there, and a §5.6 alarm that cries wolf is worth less than no
-    /// alarm.</para>
-    ///
-    /// <para><b>The evidence is the folder, not the path, and it takes two halves.</b> Deguffer's
-    /// own deletion is confined to the tree under a step's path: <see cref="DirectoryRemover"/>
-    /// removes a link rather than following it, and it never touches its own root's parent. So the
-    /// folder that held a protected path went for one of two reasons. Either this run was working
-    /// inside it, in which case something the run did is the first suspect and the answer is the
-    /// alarming one. Or nothing in the run named that folder, named anything above it, or deleted
-    /// anything inside it — and then no deletion of ours was ever near it. Only the second grants
-    /// the outside reading, and it is asked of the whole run's reach rather than one plan's, because
-    /// a run is many plans and another provider's deletion is not a stranger's.</para>
-    ///
-    /// <para>A missing path whose folder is still standing is what an over-broad rule looks like
-    /// from here, so this answers false for it. Only the run's own record can say otherwise: see
-    /// <see cref="WasLeftAloneByEveryRemovalReachingIt"/>.</para>
-    ///
-    /// <para><b>A target holds a path at any place either is reachable at.</b> A step naming
-    /// <c>T:\run-1</c>, with <c>T:</c> substituted for the temporary folder, removes the same tree as one
-    /// naming that folder's <c>run-1</c>, and so does one naming it through another mount of the
-    /// volume. See <see cref="RunPlaces"/>.</para>
-    ///
-    /// <para><b>What it cannot see.</b> <see cref="LongPath.Extended"/> resolves no junction, so a
-    /// step whose <em>ancestry</em> passes through one deletes a physically different tree, and a
-    /// protected path destroyed that way has a parent no target reaches. That case reads as an outside
-    /// removal and is not detected here. It is not the same as a link at or below a step's own root,
-    /// which <see cref="DirectoryRemover"/> removes rather than descends into, and which therefore
-    /// cannot destroy anything's parent at all.</para>
-    ///
-    /// <para>Every other branch that cannot establish the outside removal answers false, which
-    /// leaves the alarming reading in place. That is the direction to fail in: a false alarm costs
-    /// the user a look at the folder, and a missed one costs them the folder.</para>
-    /// </summary>
-    private static bool WasBeyondThisRunsReach(string path, RunPlaces places)
-    {
-        if (places.Reach.Unbounded || IsTargeted(places.At(path), places))
-        {
-            return false;
-        }
-
-        // A volume or UNC root has nothing above it, so there is no folder whose absence could be
-        // the evidence.
-        //
-        // The folder is not put through IsTargeted as well, and it needs no separate guard: a
-        // targeted folder means a targeted path, which the line above has already answered.
-        //
-        // Absent, not merely undescribed. A folder Windows would not describe is no evidence that
-        // it went, and reading it as gone would grant the outside reading on nothing.
-        return Path.GetDirectoryName(Display(path)) is { Length: > 0 } parent
-            && LongPath.ProbeDirectory(parent) is PathPresence.Absent
-            && !HoldsAnyOf(places.At(parent), places.Targets.Select(target => target.Folder));
-    }
-
-    /// <summary>
-    /// Whether a missing path sits inside what this run removed, and every removal that reached it
-    /// can show it never acted on it.
-    ///
-    /// <para><b>The case <see cref="WasBeyondThisRunsReach"/> cannot see.</b> An entry a running
-    /// program was using is spared from a scratch folder the run empties, so the folder holding it is
-    /// both targeted and still standing. A program that removes its own scratch folder when it
-    /// finishes, which build tools and render scripts routinely do, then leaves exactly the shape an
-    /// over-broad removal leaves, and the alarm asked the user to report a fault that was not
-    /// there.</para>
-    ///
-    /// <para><b>The evidence is the removal's own, and it is positive.</b> Each removal records the
-    /// spared entries its walk met standing and held back, so nothing in the run had taken them by
-    /// then. A path counts only where every target holding it is a removal that recorded it, so a step
-    /// that names the path itself, a removal not yet made, and a spelling the walk failed to match all
-    /// leave the alarm in place. An unbounded reach does as well, because a tool's own command may
-    /// have taken it whatever Deguffer's removal did.</para>
-    ///
-    /// <para><b>An entry gone before the walk reached it stays the alarm here.</b> Its absence shows
-    /// only that this removal did not take it. An earlier removal in the run may have, through a link
-    /// no comparison of paths can see, and the cost of reading it the other way is a hidden over-reach.
-    /// An entry that had gone before the run's first removal is answered before this is asked, by
-    /// <see cref="RunResidue.WasGoneBeforeRun"/>, so what stays the alarm is an entry that went while
-    /// the run was under way.</para>
-    ///
-    /// <para><b>What it cannot see</b> is the blind spot <see cref="WasBeyondThisRunsReach"/>
-    /// records: a later removal in the same plan that reaches the entry through a junction in its
-    /// root's ancestry is not among the targets that hold it, so it is not asked.</para>
-    /// </summary>
-    private static bool WasLeftAloneByEveryRemovalReachingIt(string path, RunPlaces places, RunResidue? residue)
-    {
-        if (residue is null || places.Reach.Unbounded)
-        {
-            return false;
-        }
-
-        var folder = places.At(path);
-
-        // Each removal recorded what it left alone below its root as the root was named, so the path is
-        // asked about in that form, whatever form the plan protected it in.
-        var holding = places.Targets
-            .Select(target => (target.Path, Named: target.Folder.Naming(folder, target.Path)))
-            .Where(target => target.Named is not null)
-            .ToList();
-
-        return holding.Count > 0 && holding.TrueForAll(target => residue.LeftAlone(target.Path, target.Named!));
-    }
-
-    /// <summary>
-    /// Whether a removal in this run went inside <paramref name="path"/> and left something standing
-    /// there: <see cref="RunResidue.Entered"/>, asked as the path is named and as each removal's root
-    /// names it, because a removal records what it left in the form its root was named in.
-    ///
-    /// <para><b>Followed only where a removal left something standing.</b> Following a path asks the
-    /// machine about every folder from its drive root down, and in the ordinary run no removal left
-    /// anything standing, so no root could name it and the answer is already no (G4).</para>
-    /// </summary>
-    /// <param name="enteredRoots"><see cref="RunResidue.EnteredRoots"/>, read once for the verification.</param>
-    private static bool WasEntered(string path, RunPlaces places, RunResidue? residue, IReadOnlyList<string> enteredRoots)
-    {
-        if (residue is null)
-        {
-            return false;
-        }
-
-        if (residue.Entered(path))
-        {
-            return true;
-        }
-
-        if (enteredRoots.Count == 0)
-        {
-            return false;
-        }
-
-        var folder = places.At(path);
-
-        return enteredRoots.Any(root => places.At(root).Naming(folder, root) is { } named && residue.Entered(named));
-    }
-
-    /// <summary>
-    /// Whether this run's own deletion could have reached <paramref name="folder"/>: whether a target
-    /// is it or holds it, at any path either is reachable at.
-    ///
-    /// <para>A step's path may carry the extended-length prefix (§6.3) where a protected path does
-    /// not, and either may name the folder through an alias. <see cref="ReachedFolder"/> compares the
-    /// folders rather than how they were named, because a containment test that answers no about a
-    /// path the run deleted outright reads its loss as somebody else's.</para>
-    /// </summary>
-    private static bool IsTargeted(ReachedFolder folder, RunPlaces places) =>
-        places.Targets.Any(target => target.Folder.Holds(folder));
-
-    /// <summary>
-    /// Whether any of <paramref name="paths"/> sits inside <paramref name="folder"/>, which is the
-    /// question <see cref="IsTargeted"/> asks the other way round. Asked of the run's targets, it is
-    /// whether this run deleted anything inside the folder.
-    ///
-    /// <para>It is what stops the outside reading excusing the plainest over-reach there is:
-    /// execution that goes one directory higher than the plan named. A step targeting
-    /// <c>Proj\obj2</c> that took <c>Proj</c> with it leaves the deselected sibling <c>Proj\obj</c>
-    /// missing, its folder missing, and neither of them under any target — every condition for
-    /// "something else did it", about a directory this run was working inside.</para>
-    /// </summary>
-    private static bool HoldsAnyOf(ReachedFolder folder, IEnumerable<ReachedFolder> paths) =>
-        paths.Any(folder.Holds);
-
-    /// <summary>
-    /// A path without an extended-length prefix or a trailing separator, so its parent is the folder
-    /// that holds it rather than the path itself.
-    /// </summary>
-    private static string Display(string path) =>
-        Path.TrimEndingDirectorySeparator(LongPath.Display(path));
 }

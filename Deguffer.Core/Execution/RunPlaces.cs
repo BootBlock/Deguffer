@@ -21,9 +21,11 @@ namespace Deguffer.Core.Execution;
 /// once for the run too, since nearly every path shares a drive
 /// (<see cref="RememberedMountPoints"/>).</para>
 ///
-/// <para><b>Safe to ask from more than one thread.</b> The planner verifies one plan after another,
-/// but the reach is handed to every provider, and nothing stops a caller verifying two at once. Two
-/// threads asking about one path at once may each follow it, and both answers are the same folder.</para>
+/// <para><b>Safe to ask from more than one thread.</b> A verification checks several protected paths
+/// at once, and the reach is handed to every provider. Two threads asking about one path at once may
+/// each follow it, and both answers are the same folder. The run's targets and probed paths are
+/// followed once, by the first thread that asks, and every other waits for that answer rather than
+/// following each target again.</para>
 /// </summary>
 /// <param name="volumes">Asked every other path each folder is reachable at.</param>
 internal sealed class RunPlaces(RunReach reach, IVolumeInventory volumes)
@@ -33,18 +35,27 @@ internal sealed class RunPlaces(RunReach reach, IVolumeInventory volumes)
     private readonly RememberedMountPoints _volumes = new(volumes);
     private IReadOnlyList<(string Path, ReachedFolder Folder)>? _targets;
     private IReadOnlyList<ReachedFolder>? _probed;
+    private object? _following;
 
     /// <summary>The run's reach this compares against.</summary>
     public RunReach Reach => reach;
 
     /// <summary>Every path the run will destroy outright, each as it was named and as a folder.</summary>
-    public IReadOnlyList<(string Path, ReachedFolder Folder)> Targets =>
-        _targets ??= [.. reach.TargetedPaths.Select(target => (target, At(target)))];
+    public IReadOnlyList<(string Path, ReachedFolder Folder)> Targets => Volatile.Read(ref _targets) ?? FollowTargets();
 
     /// <summary>Every path a tool's own command in the run is sent to clear, as a folder.</summary>
-    public IReadOnlyList<ReachedFolder> Probed => _probed ??= [.. reach.ProbedPaths.Select(At)];
+    public IReadOnlyList<ReachedFolder> Probed => Volatile.Read(ref _probed) ?? FollowProbed();
 
     /// <summary>The folder at <paramref name="path"/>, followed the first time it is asked about.</summary>
     public ReachedFolder At(string path) =>
         _folders.TryGetValue(path, out var folder) ? folder : _folders.GetOrAdd(path, ReachedFolder.At(path, _volumes));
+
+    // Apart from the properties, so the delegate is made only by the asking that follows the paths,
+    // never by each of the thousands that read them afterwards (G4).
+    private IReadOnlyList<(string Path, ReachedFolder Folder)> FollowTargets() =>
+        LazyInitializer.EnsureInitialized(
+            ref _targets, ref _following, () => [.. reach.TargetedPaths.Select(target => (target, At(target)))]);
+
+    private IReadOnlyList<ReachedFolder> FollowProbed() =>
+        LazyInitializer.EnsureInitialized(ref _probed, ref _following, () => [.. reach.ProbedPaths.Select(At)]);
 }

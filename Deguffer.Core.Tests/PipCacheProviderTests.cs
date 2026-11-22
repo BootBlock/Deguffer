@@ -14,8 +14,13 @@ public sealed class PipCacheProviderTests : IDisposable
 {
     private readonly TempDirectory _temp = new();
     private readonly FakeUserEnvironment _environment;
+    private readonly FakeSystemDirectories _system;
 
-    public PipCacheProviderTests() => _environment = new FakeUserEnvironment(_temp.Path);
+    public PipCacheProviderTests()
+    {
+        _environment = new FakeUserEnvironment(_temp.Path);
+        _system = new FakeSystemDirectories(_temp.Path);
+    }
 
     public void Dispose() => _temp.Dispose();
 
@@ -23,7 +28,7 @@ public sealed class PipCacheProviderTests : IDisposable
     private string Pip => _environment.FindExecutable("pip")!;
 
     private PipCacheProvider CreateProvider(FakeProcessRunner? runner = null) =>
-        new(_environment, runner ?? new FakeProcessRunner(), FakeProcessInspector.NothingRunning);
+        new(_environment, runner ?? new FakeProcessRunner(), FakeProcessInspector.NothingRunning, systemDirectories: _system);
 
     /// <summary>Create pip's default cache directory populated, and return its path.</summary>
     private string CreateCache(long bytes = 4096)
@@ -192,27 +197,88 @@ public sealed class PipCacheProviderTests : IDisposable
     }
 
     /// <summary>
-    /// §5.6. pip.ini holds index URLs and may carry credentials for a private index, and it sits in
-    /// the parent of the cache directory pip reports — so the parent is what a careless reclaim
-    /// would take with it.
+    /// §5.6. A careless reclaim of the cache would take the folder that contains it, so that folder is
+    /// asserted to survive.
     /// </summary>
     [Fact]
-    public async Task NeverTargetsThePipRootBecauseConfigurationLivesThere()
+    public async Task NeverTargetsThePipRootAndAssertsItSurvived()
     {
         _environment.WithExecutable("pip");
         CreateCache();
 
         var pipRoot = Path.Combine(_environment.LocalAppData, "pip");
-        var config = Path.Combine(pipRoot, "pip.ini");
-        File.WriteAllText(config, "[global]\nindex-url = https://example.test/simple\n");
 
         var runner = new FakeProcessRunner().Responding(Pip, "cache dir", string.Empty);
         var plan = await CreateProvider(runner).PlanAsync();
 
         Assert.DoesNotContain(pipRoot, plan.TargetedPaths);
-        Assert.DoesNotContain(config, plan.TargetedPaths);
         Assert.Contains(plan.ProtectedPaths, p => p.Path == pipRoot && p.PresenceBefore is PathPresence.Present);
-        Assert.Contains(plan.ProtectedPaths, p => p.Path == config && p.PresenceBefore is PathPresence.Present);
+    }
+
+    /// <summary>
+    /// §5.6. Each configuration file pip reads holds index URLs and may carry credentials for a
+    /// private index, and any one of them may be the one this machine uses, so each is asserted to
+    /// survive: the site-wide file, the legacy one in the profile, and the roaming one.
+    /// </summary>
+    [Fact]
+    public async Task AssertsEveryConfigurationFilePipReadsSurvived()
+    {
+        _environment.WithExecutable("pip");
+        CreateCache();
+
+        string[] configuration =
+        [
+            Path.Combine(_system.ProgramData, "pip", "pip.ini"),
+            Path.Combine(_environment.UserProfile, "pip", "pip.ini"),
+            Path.Combine(_environment.RoamingAppData, "pip", "pip.ini"),
+        ];
+
+        foreach (var file in configuration)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+            File.WriteAllText(file, "[global]\nindex-url = https://example.test/simple\n");
+        }
+
+        var runner = new FakeProcessRunner().Responding(Pip, "cache dir", string.Empty);
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        foreach (var file in configuration)
+        {
+            Assert.DoesNotContain(file, plan.TargetedPaths);
+            Assert.Contains(plan.ProtectedPaths, p => p.Path == file && p.PresenceBefore is PathPresence.Present);
+        }
+    }
+
+    /// <summary>
+    /// §5.6 names only what pip reads: <c>%LOCALAPPDATA%\pip\pip.ini</c> is no configuration of pip's,
+    /// so calling it one would assert a guarantee about a file pip never opens. The folder it is in is
+    /// still asserted to survive.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotNameAFileInTheCacheFolderAsConfiguration()
+    {
+        _environment.WithExecutable("pip");
+        CreateCache();
+
+        var runner = new FakeProcessRunner().Responding(Pip, "cache dir", string.Empty);
+        var plan = await CreateProvider(runner).PlanAsync();
+
+        Assert.DoesNotContain(plan.ProtectedPaths, p => p.Path == Path.Combine(_environment.LocalAppData, "pip", "pip.ini"));
+    }
+
+    /// <summary>
+    /// §5.2 read from outside: the Explore page refuses each configuration file pip reads, because
+    /// each sits in a folder no provider recognises and so would otherwise be the user's to remove.
+    /// </summary>
+    [Fact]
+    public void DeclaresEveryConfigurationFilePipReadsAsARootOfItsOwn()
+    {
+        var roots = CreateProvider().ToolRoots.Select(root => root.Path).ToList();
+
+        Assert.Contains(Path.Combine(_system.ProgramData, "pip", "pip.ini"), roots);
+        Assert.Contains(Path.Combine(_environment.UserProfile, "pip", "pip.ini"), roots);
+        Assert.Contains(Path.Combine(_environment.RoamingAppData, "pip", "pip.ini"), roots);
+        Assert.DoesNotContain(Path.Combine(_environment.LocalAppData, "pip", "pip.ini"), roots);
     }
 
     [Fact]

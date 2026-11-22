@@ -1,4 +1,5 @@
 using Deguffer.Core.Safety;
+using Deguffer.Core.Scanning;
 
 namespace Deguffer.Core.Execution;
 
@@ -12,7 +13,7 @@ namespace Deguffer.Core.Execution;
 /// that folder standing, with every folder above it. Asked afterwards, the protected folder still
 /// holds a folder and reads as a survivor. One refused file does the same to any question about
 /// content, because the folder still holds the file. What neither shape can hide is that a removal was inside the folder at all, and
-/// what it could not take is where it says so. See <see cref="PlanVerifier"/> for how that is
+/// what it could not take is where it says so. See <see cref="SurvivalCheck"/> for how that is
 /// read.</para>
 ///
 /// <para><b>Only what a removal left strictly below its own root.</b> A removal's root is the step's
@@ -32,21 +33,22 @@ namespace Deguffer.Core.Execution;
 /// one a program is using, and a program often removes its own scratch folder when it finishes. The
 /// folder holding it is still standing, so the absence alone reads as a removal that failed to spare
 /// it. What a removal can show it never acted on is recorded against that removal's root, and
-/// <see cref="PlanVerifier"/> asks it of every removal whose root holds the missing path. See
+/// <see cref="SurvivalCheck"/> asks it of every removal whose root holds the missing path. See
 /// <see cref="RemovalOutcome.LeftAlone"/>.</para>
 ///
 /// <para><b>What had already gone when the run began is the evidence a removal cannot give.</b> A
 /// walk records only what it met, so an entry its program removed between the preview and the clean
 /// is not among what the removal left alone, and its absence reads as the removal's doing. Saving an
 /// unsaved Arduino sketch deletes the temporary folder the plan keeps, so the ordinary case is a user
-/// who saves the sketch and then presses Clean. <see cref="Begin"/> reads every path the run will be
-/// held to before the first deletion, and a path absent then is one no removal in the run can have
-/// taken, under any spelling or through any link.</para>
+/// who saves the sketch and then presses Clean.
+/// <see cref="BeginAsync(IReadOnlyList{CleanupPlan}, ScanTuner)"/> reads every path the run will be held to
+/// before the first deletion, and a path absent then is one no removal in the run can have taken,
+/// under any spelling or through any link.</para>
 ///
 /// <para><b>Safe for concurrent use.</b> The steps of a plan that destroy unrelated folders run at
 /// once, and each records its own removal as it ends. What the removals record is read and written
 /// under one lock, which costs nothing a removal would notice: each records once for each tree it removes, and §5.6 reads
-/// once the steps are over. What had gone before the run is written only by <see cref="Begin"/>, before
+/// once the steps are over. What had gone before the run is written only as the record is begun, before
 /// anything else can see the record.</para>
 /// </summary>
 public sealed class RunResidue
@@ -74,14 +76,16 @@ public sealed class RunResidue
 
     /// <summary>
     /// Every path the run is held to that Windows said was not there before the first deletion, in the
-    /// one form compared here. Empty for a record made without <see cref="Begin"/>, which knows of
-    /// nothing gone and so excuses nothing.
+    /// one form compared here. Empty for a record made without
+    /// <see cref="BeginAsync(IReadOnlyList{CleanupPlan}, ScanTuner)"/>, which knows of nothing gone and so excuses
+    /// nothing.
     /// </summary>
     private readonly HashSet<string> _goneBeforeRun = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// A record that read nothing of the disk before the run, so it can say only what the run's own
-    /// removals recorded. A run reads the disk first through <see cref="Begin"/>.
+    /// removals recorded. A run reads the disk first through
+    /// <see cref="BeginAsync(IReadOnlyList{CleanupPlan}, ScanTuner)"/>.
     /// </summary>
     public RunResidue()
     {
@@ -100,18 +104,37 @@ public sealed class RunResidue
     /// the run could take it. Nor can it tell a stranger from an earlier clean of Deguffer's own: a
     /// path gone before this run began reads as removed from outside it whoever removed it, as a path
     /// whose whole folder had gone always has.</para>
+    ///
+    /// <para><b>Several paths at once, under the disk's own number</b> (<see cref="DiskBoundWork"/>).
+    /// The user has pressed Clean and waits on these probes before anything is removed, a clean can
+    /// hold ten thousand paths, and no path's answer depends on another's. The answers are gathered
+    /// first and added afterwards, so the set they fill is written by one thread.</para>
+    ///
+    /// <para><b>Never cancelled.</b> A clean cancelled now still proves every plan it holds, and each
+    /// proof reads this record.</para>
     /// </summary>
-    public static RunResidue Begin(IReadOnlyList<CleanupPlan> plans)
+    /// <param name="tuning">What the walks of each volume run with. See <see cref="IDirectoryScanner.Tuning"/>.</param>
+    public static Task<RunResidue> BeginAsync(IReadOnlyList<CleanupPlan> plans, ScanTuner tuning) =>
+        BeginAsync(plans, tuning, LongPath.ProbeEntry);
+
+    /// <summary>
+    /// The same, with each path's presence given by <paramref name="probe"/>: the seam a test blocks
+    /// or counts the disk's answers through.
+    /// </summary>
+    internal static async Task<RunResidue> BeginAsync(
+        IReadOnlyList<CleanupPlan> plans, ScanTuner tuning, Func<string, PathPresence> probe)
     {
         ArgumentNullException.ThrowIfNull(plans);
 
         var residue = new RunResidue();
+        string[] held = [.. plans.SelectMany(PathsHeldStanding)];
+        var presence = await DiskBoundWork.EachAsync(held, tuning, probe, CancellationToken.None).ConfigureAwait(false);
 
-        foreach (var path in plans.SelectMany(PathsHeldStanding))
+        for (var index = 0; index < held.Length; index++)
         {
-            if (LongPath.ProbeEntry(path) is PathPresence.Absent)
+            if (presence[index] is PathPresence.Absent)
             {
-                residue._goneBeforeRun.Add(Normalised(path));
+                residue._goneBeforeRun.Add(Normalised(held[index]));
             }
         }
 
@@ -120,7 +143,7 @@ public sealed class RunResidue
 
     /// <summary>
     /// Whether <paramref name="path"/> had already gone when the run began, so nothing in the run can
-    /// have removed it. False for a path <see cref="Begin"/> was not asked about.
+    /// have removed it. False for a path the record was not begun with.
     /// </summary>
     public bool WasGoneBeforeRun(string path) => _goneBeforeRun.Contains(Normalised(path));
 

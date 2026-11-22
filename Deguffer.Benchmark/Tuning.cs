@@ -17,7 +17,7 @@ namespace Deguffer.Benchmark;
 internal static class Tuning
 {
     /// <param name="tree">The tree a removal route builds, or each of the clean route's. No other route reads it.</param>
-    /// <param name="trees">How many trees the clean route builds, or folders the protect route records. No other route reads it.</param>
+    /// <param name="trees">How many trees the clean route builds, or folders the protect route records or the verify route proves. No other route reads it.</param>
     public static string Describe(
         Route route, WalkTuning walk, TableTuning table, bool snapshots, LinkRead readBy, TreeShape tree, int trees)
     {
@@ -43,6 +43,13 @@ internal static class Tuning
             return string.Create(
                 CultureInfo.InvariantCulture,
                 $"{trees:N0} empty folders, each recorded as a plan records a protected path, with the walk a scan uses for the drive's kind");
+        }
+
+        if (route is Route.Verify)
+        {
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"{trees:N0} empty folders, each proved standing as a plan's protected paths are after its removals, with the walk a scan uses for the drive's kind");
         }
 
         // The bound is stated because past it a pass is as long as its slowest row plus what ran

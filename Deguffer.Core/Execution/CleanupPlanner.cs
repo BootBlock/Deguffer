@@ -23,6 +23,7 @@ public sealed class CleanupPlanner
     private readonly IVolumeInventory _volumes;
     private readonly RunningAccount _account;
     private readonly TimeProvider _time;
+    private readonly ScanTuner _tuning;
 
     /// <param name="declarations">
     /// The declarations the rows that walk a folder consult, admitted here so that they name every row
@@ -41,17 +42,20 @@ public sealed class CleanupPlanner
     /// <see cref="AnotherAccountPlan"/>.
     /// </param>
     /// <param name="time">The clock each provider's plan is timed on (<see cref="ProviderPlanTime"/>). The system's by default.</param>
+    /// <param name="tuning">What the walks of each volume run with, which bounds the reads a clean makes first (<see cref="RunResidue"/>).</param>
     public CleanupPlanner(
         IEnumerable<ICleanupProvider> providers,
         RowDeclarations? declarations = null,
         IVolumeInventory? volumes = null,
         RunningAccount? account = null,
-        TimeProvider? time = null)
+        TimeProvider? time = null,
+        ScanTuner? tuning = null)
     {
         _providers = [.. providers];
         _volumes = volumes ?? VolumeInventory.Current;
         _account = account ?? RunningAccount.Of(UserEnvironment.Current);
         _time = time ?? TimeProvider.System;
+        _tuning = tuning ?? ScanTuner.Shipped;
         _places = new Dictionary<ICleanupProvider, int>(_providers.Count, ReferenceEqualityComparer.Instance);
         _declarations = declarations;
 
@@ -187,7 +191,8 @@ public sealed class CleanupPlanner
                 scope ?? ProtectionScope.Everything),
         ],
         declarations,
-        account: RunningAccount.Of(environment));
+        account: RunningAccount.Of(environment),
+        tuning: tuning);
     }
 
     /// <summary>
@@ -653,26 +658,12 @@ public sealed class CleanupPlanner
         // reach is one value: a folder one provider's removal went into may be a folder another
         // provider promised to leave. Begun before the first deletion, because what had already gone
         // by then is what no removal in the run can have taken. See RunResidue.
-        var residue = RunResidue.Begin([.. plans.Select(p => p.Plan)]);
+        var residue = await RunResidue.BeginAsync([.. plans.Select(p => p.Plan)], _tuning).ConfigureAwait(false);
 
-        // §7's extra confirmation for anything above Tier 1, for every plan before the first deletion.
-        // The requirement is derived here rather than trusted from the caller: a shell that forgot to
-        // ask, or asked for the wrong subject, must fail closed rather than delete. Asked inside the
-        // loop, the refusal of a later plan arrived after an earlier one had deleted, and threw away
-        // that plan's result and its §5.6 verdict.
-        //
-        // A plan with no steps is not asked about at any tier. It destroys nothing, so there is
-        // nothing to authorise, and failing closed on it would refuse the run over a check that only
-        // reads the disk.
-        foreach (var (_, plan) in plans.Where(p => !p.Plan.IsEmpty))
-        {
-            var requirement = ConfirmationRequirement.For(plan, requireTypedPhrase);
-
-            if (!requirement.IsSatisfiedBy(confirmations))
-            {
-                throw new ConfirmationRequiredException(requirement);
-            }
-        }
+        // §7's extra confirmation, for every plan before the first deletion. Asked inside the loop, the
+        // refusal of a later plan arrived after an earlier one had deleted, and threw away that plan's
+        // result and its §5.6 verdict.
+        ConfirmationRequirement.DemandFor([.. plans.Select(p => p.Plan)], confirmations, requireTypedPhrase);
 
         var weights = ProgressWeights.ForRun([.. plans.Select(p => p.Plan)]);
         var total = weights.Sum();

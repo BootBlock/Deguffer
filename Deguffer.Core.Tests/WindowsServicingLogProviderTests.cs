@@ -85,7 +85,7 @@ public sealed class WindowsServicingLogProviderTests : IDisposable
 
         // The run begins with the container standing, and the deletion stands in for the over-broad
         // rule the negative exists to catch. Gone before the run began, it would be somebody else's.
-        var residue = RunResidue.Begin([plan]);
+        var residue = await RunResidue.BeginAsync([plan], ScanTuner.Shipped);
         Directory.Delete(logFiles, recursive: true);
 
         var result = await provider.ExecuteAsync(plan, residue: residue);
