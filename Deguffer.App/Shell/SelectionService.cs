@@ -32,7 +32,8 @@ public sealed class SelectionService
     public Task<SelectionMemory> Memory { get; }
 
     /// <summary>
-    /// Record one row's choice.
+    /// Record the choices of the rows one action changed: a click on a row or an item, or an entry of the
+    /// selection menu, which records every row it changed with one copy of the memory.
     ///
     /// Applied first and persisted second, which inverts <see cref="SourceRootService"/> and does so
     /// deliberately. The user has already ticked the box: the choice is in effect on screen whether
@@ -48,13 +49,17 @@ public sealed class SelectionService
     /// <para>Applied here, on the window's thread, and written by <see cref="SelectionWriter"/> on a
     /// worker, so a tick costs a copy of the memory rather than a write of the whole file.</para>
     /// </summary>
-    public void Remember(string providerId, RememberedSelection selection)
+    /// <param name="choices">Each row's choice, keyed by its provider's id.</param>
+    public void Remember(IEnumerable<KeyValuePair<string, RememberedSelection>> choices)
     {
         // Only a row records a choice, and the preview builds none until the memory is read, so this
         // never waits.
         var memory = Memory.Result;
 
-        memory.Remember(providerId, selection);
+        foreach (var (providerId, selection) in choices)
+        {
+            memory.Remember(providerId, selection);
+        }
 
         _writer.Write(memory.Snapshot());
     }

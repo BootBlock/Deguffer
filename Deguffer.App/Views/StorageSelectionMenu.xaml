@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The Storage page's selection menu: ticks or clears every row at once, beside the Sort by box that
+    reorders them. Which rows each entry reaches is Core's (BulkSelectionRule). An entry that would
+    change nothing, or that may not run now, is shown disabled rather than hidden, so the menu reads
+    the same every time it opens.
+-->
+<UserControl
+    x:Class="Deguffer.App.Views.StorageSelectionMenu"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Named by its tooltip's words, because the button shows only the glyph. -->
+    <Button x:Name="MenuButton"
+            VerticalAlignment="Stretch"
+            ToolTipService.ToolTip="Selection options"
+            AutomationProperties.Name="Selection options"
+            AutomationProperties.AutomationId="SelectionMenuButton">
+        <!-- The three dots stand on end, so the button reads as a kebab menu beside the box. -->
+        <FontIcon Glyph="&#xE712;" RenderTransformOrigin="0.5,0.5">
+            <FontIcon.RenderTransform>
+                <RotateTransform Angle="90" />
+            </FontIcon.RenderTransform>
+        </FontIcon>
+        <Button.Flyout>
+            <MenuFlyout Placement="BottomEdgeAlignedRight">
+                <MenuFlyoutItem Text="Select all"
+                                Command="{x:Bind Selection.SelectAllCommand, Mode=OneWay}"
+                                ToolTipService.ToolTip="Tick every row shown that has a size and no tick yet"
+                                AutomationProperties.AutomationId="SelectAllMenuItem">
+                    <MenuFlyoutItem.Icon>
+                        <FontIcon Glyph="&#xE8B3;" />
+                    </MenuFlyoutItem.Icon>
+                </MenuFlyoutItem>
+
+                <!-- §3's default selection, for a reader who has ticked and cleared their way away from it. -->
+                <MenuFlyoutItem Text="Select recommended"
+                                Command="{x:Bind Selection.SelectRecommendedCommand, Mode=OneWay}"
+                                ToolTipService.ToolTip="Tick the caches a first scan ticks, and clear every other row"
+                                AutomationProperties.AutomationId="SelectRecommendedMenuItem">
+                    <MenuFlyoutItem.Icon>
+                        <FontIcon Glyph="&#xE8FB;" />
+                    </MenuFlyoutItem.Icon>
+                </MenuFlyoutItem>
+
+                <MenuFlyoutSeparator />
+
+                <MenuFlyoutItem Text="Select none"
+                                Command="{x:Bind Selection.SelectNoneCommand, Mode=OneWay}"
+                                ToolTipService.ToolTip="Clear every row"
+                                AutomationProperties.AutomationId="SelectNoneMenuItem">
+                    <MenuFlyoutItem.Icon>
+                        <FontIcon Glyph="&#xE8E6;" />
+                    </MenuFlyoutItem.Icon>
+                </MenuFlyoutItem>
+            </MenuFlyout>
+        </Button.Flyout>
+    </Button>
+</UserControl>
