@@ -27,6 +27,12 @@ internal static class Stm32CubeFirmwareArchive
 
     private const string ArchiveExtension = ".zip";
 
+    /// <summary>
+    /// The read size for a zip's directory. A package's directory holds tens of thousands of entries,
+    /// and the default 4 KiB buffer reads it in that many more steps.
+    /// </summary>
+    private const int DirectoryReadBytes = 64 * 1024;
+
     /// <summary>Whether a folder in a repository is named as an STM32Cube MCU package.</summary>
     public static bool IsPackageName(string name) =>
         name.Length > PackagePrefix.Length && name.StartsWith(PackagePrefix, StringComparison.OrdinalIgnoreCase);
@@ -47,7 +53,7 @@ internal static class Stm32CubeFirmwareArchive
         try
         {
             using var stream = new FileStream(
-                LongPath.Extended(archive), FileMode.Open, FileAccess.Read, FileShare.Read);
+                LongPath.Extended(archive), FileMode.Open, FileAccess.Read, FileShare.Read, DirectoryReadBytes);
             using var zip = new ZipArchive(stream, ZipArchiveMode.Read);
 
             // The directory at the end of the zip is read, and nothing is unpacked.
@@ -55,10 +61,7 @@ internal static class Stm32CubeFirmwareArchive
 
             foreach (var entry in zip.Entries)
             {
-                var name = entry.FullName.Replace('\\', '/');
-                var separator = name.IndexOf('/', StringComparison.Ordinal);
-
-                if (separator <= 0 || !name[..separator].Equals(package, StringComparison.OrdinalIgnoreCase))
+                if (!IsInFolder(entry.FullName, package))
                 {
                     return ArchiveContents.SomethingElse;
                 }
@@ -74,6 +77,17 @@ internal static class Stm32CubeFirmwareArchive
             // it is the package's download.
             return ArchiveContents.Unread;
         }
+    }
+
+    /// <summary>
+    /// Whether an entry's path starts with <paramref name="folder"/> as its top folder. Zips written on
+    /// Windows can separate with <c>\</c>, so either separator ends the top folder. Run once per entry,
+    /// so the folder's name is compared in place rather than cut out.
+    /// </summary>
+    private static bool IsInFolder(string entry, string folder)
+    {
+        var separator = entry.AsSpan().IndexOfAny('/', '\\');
+        return separator > 0 && entry.AsSpan(0, separator).Equals(folder, StringComparison.OrdinalIgnoreCase);
     }
 }
 
