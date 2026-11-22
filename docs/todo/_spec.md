@@ -1611,7 +1611,9 @@ explains. It changes nothing on any drive, and it deletes nothing.
   SATA attribute that no manufacturer's document and no catalogue reading common to every drive
   covers ([#751](https://github.com/BootBlock/Deguffer/issues/751)). It is read at run time and never
   shipped, because it is GPL. Only the entry for the drive's own family is used, found as smartctl
-  finds it: entries in order, the first whose patterns match the whole model and firmware. Such a
+  finds it: entries in order, the first whose patterns match the whole model and firmware. The model
+  and firmware are IDENTIFY's where an administrator could read them, and else Windows' description
+  of the drive. Such a
   reading carries a mark saying so, and is judged by nothing but the drive's own threshold. The
   drive's details name the entry used, or say why none was: no entry, an entry that could not be
   read, a pattern Deguffer cannot translate before the match, or a file that could not be read, in

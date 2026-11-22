@@ -58,6 +58,22 @@ public sealed class DriveDatabaseReaderTests : IDisposable
     }
 
     [Fact]
+    public async Task IdentifysModelAndFirmwareAreSearchedWhereTheyWereRead()
+    {
+        Install(InventedDriveDatabase.Text);
+
+        // Windows describes the drive in SCSI terms here, as a translating driver does: a vendor, a cut product and revision.
+        _probe
+            .Answer(0, DriveQuestion.Device, DriveBytes.Device(DriveBytes.Sata, "EXAMPLE PINNED", serial: "SATA0", revision: "001", vendor: "ATA"))
+            .Answer(0, DriveQuestion.PredictFailure, DriveBytes.Prediction(false))
+            .Answer(0, DriveQuestion.AtaIdentify, DriveBytes.Ata(DriveBytes.Identify(1, model: InventedDriveDatabase.PinnedModel, firmware: InventedDriveDatabase.PinnedFirmware)));
+
+        var report = Assert.Single(await ReadAll());
+
+        Assert.Contains(report.Facts, fact => fact is { Label: FactLabel, Value: InventedDriveDatabase.FirmwareFamily });
+    }
+
+    [Fact]
     public async Task ADriveNoEntryNamesSaysSo()
     {
         Install(InventedDriveDatabase.Text);

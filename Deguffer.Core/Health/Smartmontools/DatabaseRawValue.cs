@@ -18,7 +18,6 @@ internal static class DatabaseRawValue
     private const ulong Low16 = 0xFFFF;
     private const ulong Low24 = 0xFF_FFFF;
     private const ulong Low32 = 0xFFFF_FFFF;
-    private const int TenthsPerDegree = 10;
 
     internal static string Text(AtaAttribute attribute, AttributePreset preset)
     {
@@ -41,7 +40,7 @@ internal static class DatabaseRawValue
             DatabaseRawFormat.HalfMinutes => HealthText.Minutes(raw / HalfMinutesPerMinute),
             DatabaseRawFormat.HoursAndMilliseconds => HealthText.Hours(raw & Low32),
             DatabaseRawFormat.Celsius => HealthText.Temperature((sbyte)Byte(raw, 0)),
-            DatabaseRawFormat.TenthsCelsius => $"{Word(raw, 0) / TenthsPerDegree}.{Word(raw, 0) % TenthsPerDegree} °C",
+            DatabaseRawFormat.TenthsCelsius => HealthText.TemperatureInTenths((uint)Word(raw, 0)),
             _ => HealthText.Count(raw),
         };
     }

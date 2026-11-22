@@ -9,12 +9,6 @@ namespace Deguffer.Core.Health.Smartmontools;
 /// <param name="Presets">smartctl options, of which <c>-v</c> describes an attribute.</param>
 internal sealed record DriveDatabaseEntry(string Family, string ModelPattern, string FirmwarePattern, string Presets);
 
-/// <summary>What a database file held: its entries in order, or the first line that could not be read.</summary>
-internal sealed record DriveDatabaseText(IReadOnlyList<DriveDatabaseEntry>? Entries, int FailedLine)
-{
-    internal static DriveDatabaseText Failed(int line) => new(null, line);
-}
-
 /// <summary>
 /// Reads the file format smartmontools' <c>drivedb.h</c> and <c>drivedb-add.h</c> share: a C array
 /// initialiser of five-string entries, with comments, and string literals that join when only space or
@@ -28,28 +22,33 @@ internal static class DriveDatabaseFile
 {
     private const int FieldsPerEntry = 5;
 
-    internal static DriveDatabaseText Read(string text)
+    /// <summary>The file's entries in order, or false with the first line that could not be read.</summary>
+    internal static bool TryRead(string text, out IReadOnlyList<DriveDatabaseEntry> entries, out int failedLine)
     {
         var reader = new Cursor(text);
-        var entries = new List<DriveDatabaseEntry>();
+        var read = new List<DriveDatabaseEntry>();
+        entries = read;
+        failedLine = 0;
 
         while (reader.NextToken() is var token && token.Kind is not TokenKind.End)
         {
             if (token.Kind is not TokenKind.Open || ReadFields(ref reader) is not { } fields)
             {
-                return DriveDatabaseText.Failed(reader.Line);
+                failedLine = reader.Line;
+                return false;
             }
 
             // The fourth field is a message smartctl prints about a family's firmware, which this page does not show.
-            entries.Add(new DriveDatabaseEntry(fields[0], fields[1], fields[2], fields[4]));
+            read.Add(new DriveDatabaseEntry(fields[0], fields[1], fields[2], fields[4]));
 
             if (reader.NextToken() is { Kind: not TokenKind.Comma and not TokenKind.End } after)
             {
-                return DriveDatabaseText.Failed(after.Line);
+                failedLine = after.Line;
+                return false;
             }
         }
 
-        return new DriveDatabaseText(entries, FailedLine: 0);
+        return true;
     }
 
     /// <summary>The five strings after an entry's opening brace, through its closing brace.</summary>

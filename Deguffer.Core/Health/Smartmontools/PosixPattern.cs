@@ -16,15 +16,15 @@ namespace Deguffer.Core.Health.Smartmontools;
 ///
 /// <para>Built at run time, because the patterns are the file's, and each is built once for the life
 /// of the database read. The file is not Deguffer's, so each match has a time limit, and a match that
-/// reaches it answers nothing. The non-backtracking engine would need no limit, and was measured in
-/// 2026 to take over a second to build the patterns a search passes on the way to one hard disk's
-/// entry, where this engine took under 50 ms.</para>
+/// reaches it answers nothing. The non-backtracking engine would need no limit, but it builds each
+/// pattern far more slowly, and a search can build hundreds of patterns before it reaches a drive's
+/// entry.</para>
 /// </summary>
 internal static class PosixPattern
 {
     private const RegexOptions Options = RegexOptions.CultureInvariant | RegexOptions.Singleline;
 
-    /// <summary>Thousands of times what a model string takes against any pattern in the file.</summary>
+    /// <summary>A model string is at most 40 characters, so a match that runs this long is not one the file meant.</summary>
     private static readonly TimeSpan MatchLimit = TimeSpan.FromMilliseconds(250);
 
     /// <summary>The pattern as a whole-string matcher, or null where it uses syntax not translated here.</summary>

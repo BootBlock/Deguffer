@@ -13,12 +13,8 @@ public sealed class DriveDatabaseRowsTests
     /// <summary>An invented PM863 part number, which Samsung's own document covers for 177.</summary>
     private const string SamsungCovered = "SAMSUNG MZ7LM999HCTE-00000";
 
-    private static DatabaseFamily Family(DriveMedium medium = DriveMedium.SolidState)
-    {
-        var answer = InventedDriveDatabase.Database().Find(InventedDriveDatabase.Model, "1");
-
-        return new DatabaseFamily(answer.Family!, answer.Presets!, answer.Defaults, medium);
-    }
+    private static DatabaseFamily Family(DriveMedium medium = DriveMedium.SolidState) =>
+        InventedDriveDatabase.Database().Find(InventedDriveDatabase.Model, "1").Family(medium)!;
 
     private static HealthAttribute Row(AtaAttribute attribute, DatabaseFamily? family, string model = InventedDriveDatabase.Model) =>
         Assert.Single(AtaAttributeRows.Of([attribute], AtaDrives.Named(model), logicalSectorBytes: null, family));
@@ -94,9 +90,11 @@ public sealed class DriveDatabaseRowsTests
     [Fact]
     public void AnAttributeTheEntryDoesNotListIsNotTakenFromTheDefaultEntry()
     {
-        // DEFAULT names 9 for every drive, and the entry has no option for 9 or for 100.
-        Assert.Equal(ReadingBasis.Deguffer, Row(Attribute(9, 100), Family()).Basis);
-        Assert.Equal("Vendor-specific attribute 100", Row(Attribute(100, 100), Family()).Name);
+        // DEFAULT names 175 for every drive, the entry has no option for it, and the catalogue does not know it.
+        var row = Row(Attribute(175, 100), Family());
+
+        Assert.Equal("Vendor-specific attribute 175", row.Name);
+        Assert.Equal(ReadingBasis.Deguffer, row.Basis);
     }
 
     [Fact]

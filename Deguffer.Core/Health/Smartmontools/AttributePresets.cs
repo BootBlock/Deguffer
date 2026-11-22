@@ -57,6 +57,16 @@ internal enum DriveMedium
 /// <param name="Name">The database's name for it, or null where the option gives none.</param>
 internal sealed record AttributePreset(DatabaseRawFormat Format, string ByteOrder, string? Name, DriveMedium Only);
 
+/// <summary>Which grammar an entry's options follow: the <c>DEFAULT</c> entry's, or a drive family's.</summary>
+internal enum EntryKind
+{
+    /// <summary>May name the kind of drive a name is for, and may not reorder bytes.</summary>
+    Default,
+
+    /// <summary>May reorder bytes, and may not name a kind of drive.</summary>
+    Family,
+}
+
 /// <summary>An entry's attribute options: by ID, and the one <c>-v N,...</c> gives every other ID.</summary>
 internal sealed record EntryPresets(FrozenDictionary<byte, AttributePreset> ById, AttributePreset? Others)
 {
@@ -121,11 +131,8 @@ internal static class AttributePresets
         ["220,temp"] = "220,tempminmax,Temperature_Celsius",
     }.ToFrozenDictionary(StringComparer.Ordinal);
 
-    /// <summary>
-    /// The attribute options in <paramref name="presets"/>, or null where any option cannot be read.
-    /// A <c>DEFAULT</c> entry may name the kind of drive a name is for, and may not reorder bytes.
-    /// </summary>
-    internal static EntryPresets? Read(string presets, bool isDefault)
+    /// <summary>The attribute options in <paramref name="presets"/>, or null where any option cannot be read.</summary>
+    internal static EntryPresets? Read(string presets, EntryKind kind)
     {
         var byId = new Dictionary<byte, AttributePreset>();
         AttributePreset? others = null;
@@ -147,7 +154,7 @@ internal static class AttributePresets
 
             switch (option)
             {
-                case "-v" when Attribute(argument, isDefault) is ({ } id, { } preset):
+                case "-v" when Attribute(argument, kind) is ({ } id, { } preset):
                     if (id == 0)
                     {
                         // smartctl's rule: an ID's own option outranks N whatever the order, and the first N holds.
@@ -171,11 +178,11 @@ internal static class AttributePresets
     }
 
     /// <summary>One <c>-v</c> argument: <c>ID,FORMAT[:BYTEORDER][,NAME[,HDD|SSD]]</c>, where ID 0 stands for N.</summary>
-    private static (byte? Id, AttributePreset? Preset) Attribute(string argument, bool isDefault)
+    private static (byte? Id, AttributePreset? Preset) Attribute(string argument, EntryKind kind)
     {
         var parts = OldForms.GetValueOrDefault(argument, argument).Split(',');
 
-        if (parts.Length is < 2 or > 4 || (parts.Length == 4 && !isDefault) || Id(parts[0]) is not { } id)
+        if (parts.Length is < 2 or > 4 || (parts.Length == 4 && kind is not EntryKind.Default) || Id(parts[0]) is not { } id)
         {
             return (null, null);
         }
@@ -186,7 +193,7 @@ internal static class AttributePresets
         // smartctl marks two counters that never fall back with a plus; that changes nothing read here.
         format = format.TrimEnd('+');
 
-        if (!Formats.TryGetValue(format, out var known) || (colon >= 0 && !IsByteOrder(order, isDefault)))
+        if (!Formats.TryGetValue(format, out var known) || (colon >= 0 && !IsByteOrder(order, kind)))
         {
             return (null, null);
         }
@@ -213,6 +220,6 @@ internal static class AttributePresets
         : text.Length is > 0 and <= 3 && !text.AsSpan().ContainsAnyExceptInRange('0', '9') && int.Parse(text, null) is >= 1 and <= byte.MaxValue and var id ? (byte)id
         : null;
 
-    private static bool IsByteOrder(string order, bool isDefault) =>
-        !isDefault && order.Length is > 0 and <= LongestByteOrder && !order.AsSpan().ContainsAnyExcept(ByteOrderCharacters);
+    private static bool IsByteOrder(string order, EntryKind kind) =>
+        kind is EntryKind.Family && order.Length is > 0 and <= LongestByteOrder && !order.AsSpan().ContainsAnyExcept(ByteOrderCharacters);
 }

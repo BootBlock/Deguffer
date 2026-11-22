@@ -5,7 +5,7 @@ namespace Deguffer.Core.Tests;
 /// <summary>#751: an entry's <c>-v</c> options, read whole or not at all.</summary>
 public sealed class AttributePresetsTests
 {
-    private static EntryPresets Read(string presets, bool isDefault = false) => AttributePresets.Read(presets, isDefault)!;
+    private static EntryPresets Read(string presets, EntryKind kind = EntryKind.Family) => AttributePresets.Read(presets, kind)!;
 
     [Fact]
     public void ReadsAnIdAFormatAByteOrderAndAName()
@@ -47,9 +47,9 @@ public sealed class AttributePresetsTests
     [Fact]
     public void OnlyTheDefaultEntryNamesTheKindOfDrive()
     {
-        Assert.Equal(DriveMedium.HardDisk, Read("-v 10,raw48,Spin_Retry_Count,HDD", isDefault: true).Of(10)!.Only);
-        Assert.Equal(DriveMedium.SolidState, Read("-v 177,raw48,Wear_Leveling_Count,SSD", isDefault: true).Of(177)!.Only);
-        Assert.Null(AttributePresets.Read("-v 10,raw48,Spin_Retry_Count,HDD", isDefault: false));
+        Assert.Equal(DriveMedium.HardDisk, Read("-v 10,raw48,Spin_Retry_Count,HDD", EntryKind.Default).Of(10)!.Only);
+        Assert.Equal(DriveMedium.SolidState, Read("-v 177,raw48,Wear_Leveling_Count,SSD", EntryKind.Default).Of(177)!.Only);
+        Assert.Null(AttributePresets.Read("-v 10,raw48,Spin_Retry_Count,HDD", EntryKind.Family));
     }
 
     [Theory]
@@ -68,8 +68,8 @@ public sealed class AttributePresetsTests
     [InlineData("-v 9,raw48 -x 1")]
     [InlineData("-v 9,raw48 -v")]
     [InlineData("-v 1,raw48 -v 9,unknownformat,Name")]
-    public void OneOptionNotReadFailsTheWholeEntry(string presets) => Assert.Null(AttributePresets.Read(presets, isDefault: false));
+    public void OneOptionNotReadFailsTheWholeEntry(string presets) => Assert.Null(AttributePresets.Read(presets, EntryKind.Family));
 
     [Fact]
-    public void TheDefaultEntryMayNotReorderBytes() => Assert.Null(AttributePresets.Read("-v 9,raw48:012345,Name", isDefault: true));
+    public void TheDefaultEntryMayNotReorderBytes() => Assert.Null(AttributePresets.Read("-v 9,raw48:012345,Name", EntryKind.Default));
 }

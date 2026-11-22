@@ -55,10 +55,9 @@ public sealed class InstalledDriveDatabaseTests : IDisposable
     {
         Installed(view).Write("drivedb.h", InventedDriveDatabase.Text);
 
-        var reading = Read();
+        var reading = Assert.IsType<DatabaseReading.Loaded>(Read());
 
-        Assert.Equal(DatabaseState.Loaded, reading.State);
-        Assert.Equal(DatabaseVerdict.Found, reading.Database!.Find(InventedDriveDatabase.Model, "1").Verdict);
+        Assert.IsType<DatabaseAnswer.Found>(reading.Database.Find(InventedDriveDatabase.Model, "1"));
     }
 
     [Fact]
@@ -67,7 +66,7 @@ public sealed class InstalledDriveDatabaseTests : IDisposable
         _environment.WithExecutable("smartctl", Path.Combine(_bin, "smartctl.exe"));
         Write("drivedb.h", InventedDriveDatabase.Text);
 
-        Assert.Equal(DatabaseState.Loaded, Read().State);
+        Assert.IsType<DatabaseReading.Loaded>(Read());
     }
 
     [Fact]
@@ -76,7 +75,9 @@ public sealed class InstalledDriveDatabaseTests : IDisposable
         Installed().Write("drivedb.h", InventedDriveDatabase.Text);
         Write("drivedb-add.h", """{ "Example local family", "EXAMPLE SSD .*", "", "", "-v 9,raw48,Local_Hours" },""");
 
-        Assert.Equal("Example local family", Read().Database!.Find(InventedDriveDatabase.Model, "1").Family);
+        var reading = Assert.IsType<DatabaseReading.Loaded>(Read());
+
+        Assert.Equal("Example local family", Assert.IsType<DatabaseAnswer.Found>(reading.Database.Find(InventedDriveDatabase.Model, "1")).Name);
     }
 
     [Fact]
@@ -85,12 +86,7 @@ public sealed class InstalledDriveDatabaseTests : IDisposable
         Installed().Write("drivedb.h", InventedDriveDatabase.Text);
         Write("drivedb-add.h", "{ \"a\", \"b\", \"c\", \"d\", \"e\" }\n\n{ broken");
 
-        var reading = Read();
-
-        Assert.Equal(DatabaseState.Unreadable, reading.State);
-        Assert.Null(reading.Database);
-        Assert.Equal("drivedb-add.h", reading.FailedFile);
-        Assert.Equal(3, reading.FailedLine);
+        Assert.Equal(new DatabaseReading.Unreadable("drivedb-add.h", 3), Read());
     }
 
     [Fact]
@@ -99,7 +95,7 @@ public sealed class InstalledDriveDatabaseTests : IDisposable
         Installed();
         File.WriteAllBytes(Path.Combine(_bin, "drivedb.h"), [0x7B, 0xFF, 0xFE, 0x7D]);
 
-        Assert.Equal(new DatabaseReading(DatabaseState.Unreadable, null, "drivedb.h"), Read());
+        Assert.Equal(new DatabaseReading.Unreadable("drivedb.h"), Read());
     }
 
     [Fact]
@@ -109,7 +105,7 @@ public sealed class InstalledDriveDatabaseTests : IDisposable
 
         using (DeniedDirectory.WithUnreadableFile(Path.Combine(_bin, "drivedb.h")))
         {
-            Assert.Equal(DatabaseState.Unreadable, Read().State);
+            Assert.Equal(new DatabaseReading.Unreadable("drivedb.h"), Read());
         }
     }
 
@@ -125,8 +121,8 @@ public sealed class InstalledDriveDatabaseTests : IDisposable
         Write("drivedb.h", InventedDriveDatabase.Text + """{ "Example appended family", "APPENDED", "", "", "" },""");
         File.SetLastWriteTimeUtc(Path.Combine(_bin, "drivedb.h"), DateTime.UtcNow.AddMinutes(1));
 
-        var second = database.Read();
+        var second = Assert.IsType<DatabaseReading.Loaded>(database.Read());
         Assert.NotSame(first, second);
-        Assert.Equal("Example appended family", second.Database!.Find("APPENDED", string.Empty).Family);
+        Assert.Equal("Example appended family", Assert.IsType<DatabaseAnswer.Found>(second.Database.Find("APPENDED", string.Empty)).Name);
     }
 }

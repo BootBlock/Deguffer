@@ -28,27 +28,25 @@ public sealed class DriveDatabaseFileTests
             },
             """;
 
-        var read = DriveDatabaseFile.Read(text);
+        var entries = InventedDriveDatabase.Entries(text);
 
-        Assert.Equal(0, read.FailedLine);
-        Assert.NotNull(read.Entries);
-        Assert.Equal(2, read.Entries.Count);
-        Assert.Equal("Example \"Quoted\" SSDs", read.Entries[1].Family);
-        Assert.Equal("EXAMPLE SSD [0-9]+GB", read.Entries[1].ModelPattern);
-        Assert.Equal(string.Empty, read.Entries[1].FirmwarePattern);
-        Assert.Equal("-v 9,raw48,Power_On_Hours -v 241,raw48,Total_Written", read.Entries[1].Presets);
+        Assert.Equal(2, entries.Count);
+        Assert.Equal("Example \"Quoted\" SSDs", entries[1].Family);
+        Assert.Equal("EXAMPLE SSD [0-9]+GB", entries[1].ModelPattern);
+        Assert.Equal(string.Empty, entries[1].FirmwarePattern);
+        Assert.Equal("-v 9,raw48,Power_On_Hours -v 241,raw48,Total_Written", entries[1].Presets);
     }
 
     [Fact]
     public void ABackslashAtTheEndOfALineCarriesTheLiteralOn()
     {
-        var read = DriveDatabaseFile.Read("{ \"Fam\\\r\nily\", \"M\", \"\", \"\", \"\" }");
+        var entries = InventedDriveDatabase.Entries("{ \"Fam\\\r\nily\", \"M\", \"\", \"\", \"\" }");
 
-        Assert.Equal("Family", Assert.Single(read.Entries!).Family);
+        Assert.Equal("Family", Assert.Single(entries).Family);
     }
 
     [Fact]
-    public void AnEmptyFileHasNoEntries() => Assert.Empty(DriveDatabaseFile.Read("// nothing but a comment\n").Entries!);
+    public void AnEmptyFileHasNoEntries() => Assert.Empty(InventedDriveDatabase.Entries("// nothing but a comment\n"));
 
     [Theory]
     [InlineData("{ \"a\", \"b\", \"c\", \"d\", \"e\" }\n{ \"a\", \"b\", \"c\", \"d\" }", 2)]
@@ -60,9 +58,7 @@ public sealed class DriveDatabaseFileTests
     [InlineData("\n/* never closed\n{ \"a\", \"b\", \"c\", \"d\", \"e\" }", 2)]
     public void OneFaultFailsTheWholeFileAtItsLine(string text, int line)
     {
-        var read = DriveDatabaseFile.Read(text);
-
-        Assert.Null(read.Entries);
-        Assert.Equal(line, read.FailedLine);
+        Assert.False(DriveDatabaseFile.TryRead(text, out _, out var failedLine));
+        Assert.Equal(line, failedLine);
     }
 }

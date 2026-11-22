@@ -21,6 +21,7 @@ internal static class InventedDriveDatabase
           "-v 10,raw48,Spin_Retry_Count,HDD "
           "-v 168,raw48,Example_General_Name,SSD "
           "-v 170,raw48,Example_Reserve,SSD "
+          "-v 175,raw48,Example_Default_Only "
         },
         { "USB: Example Bridge; Example", "0x1234:0x5678", "", "", "-d sat" },
         { "$Example ignored family", "EXAMPLE SSD .*", "", "", "-v 200,raw48,Ignored" },
@@ -40,6 +41,11 @@ internal static class InventedDriveDatabase
         { "Example catch-all", "EXAMPLE .*", "", "", "-v 200,raw48,Catch_All" },
         """;
 
-    internal static DriveDatabase Database(string? before = null) =>
-        new(DriveDatabaseFile.Read((before ?? string.Empty) + Text).Entries!);
+    internal static DriveDatabase Database(string? before = null) => new(Entries((before ?? string.Empty) + Text));
+
+    internal static IReadOnlyList<DriveDatabaseEntry> Entries(string text)
+    {
+        Assert.True(DriveDatabaseFile.TryRead(text, out var entries, out var failedLine), $"The invented database fails at line {failedLine}.");
+        return entries;
+    }
 }

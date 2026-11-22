@@ -2,37 +2,6 @@ using System.Text.RegularExpressions;
 
 namespace Deguffer.Core.Health.Smartmontools;
 
-/// <summary>What a drive database says about one drive.</summary>
-internal enum DatabaseVerdict
-{
-    /// <summary>An entry names the drive's family, and its options were read.</summary>
-    Found,
-
-    /// <summary>No entry names the drive.</summary>
-    NotListed,
-
-    /// <summary>An entry names the drive, and its options could not be read, so none is used.</summary>
-    EntryUnreadable,
-
-    /// <summary>
-    /// An entry searched before any match has a pattern not translated here, or one that ran out of
-    /// time. The database is searched in order and its first match wins, so a later match could be the
-    /// wrong family.
-    /// </summary>
-    CannotTell,
-}
-
-/// <summary>The database's answer for one drive.</summary>
-/// <param name="Family">The family the matching entry names, where one matched.</param>
-/// <param name="Presets">Its attribute options, where they were read.</param>
-/// <param name="Defaults">The <c>DEFAULT</c> entry's options, which name an attribute an entry's option leaves unnamed.</param>
-internal sealed record DatabaseAnswer(DatabaseVerdict Verdict, string? Family, EntryPresets? Presets, EntryPresets? Defaults)
-{
-    internal static readonly DatabaseAnswer NotListed = new(DatabaseVerdict.NotListed, null, null, null);
-
-    internal static readonly DatabaseAnswer CannotTell = new(DatabaseVerdict.CannotTell, null, null, null);
-}
-
 /// <summary>
 /// The entries of a user's installed smartmontools drive database, searched as smartctl searches them:
 /// in order, the first entry whose patterns match the whole model and firmware winning. The version
@@ -59,8 +28,19 @@ internal sealed class DriveDatabase
         _firmware = [.. _drives.Select(entry => new Lazy<Matcher?>(() => Matcher.Firmware(entry.FirmwarePattern)))];
         // The first DEFAULT entry is the one smartctl uses, so one in drivedb-add.h replaces drivedb.h's.
         _defaults = entries.FirstOrDefault(entry => entry.Family == DefaultMarker) is { } defaults
-            ? AttributePresets.Read(defaults.Presets, isDefault: true)
+            ? AttributePresets.Read(defaults.Presets, EntryKind.Default)
             : null;
+    }
+
+    /// <summary>
+    /// What the database says about <paramref name="drive"/>: its model first, then the other spelling
+    /// of it where there is one and the model is not listed.
+    /// </summary>
+    internal DatabaseAnswer Find(DriveIdentity drive)
+    {
+        var answer = Find(drive.Model, drive.Firmware);
+
+        return answer == DatabaseAnswer.NotListed && drive.OtherModel is { } other ? Find(other, drive.Firmware) : answer;
     }
 
     /// <summary>What the database says about the drive whose model and firmware are given.</summary>
@@ -100,9 +80,9 @@ internal sealed class DriveDatabase
 
             var entry = _drives[i];
 
-            return AttributePresets.Read(entry.Presets, isDefault: false) is { } presets
-                ? new DatabaseAnswer(DatabaseVerdict.Found, entry.Family, presets, _defaults)
-                : new DatabaseAnswer(DatabaseVerdict.EntryUnreadable, entry.Family, null, null);
+            return AttributePresets.Read(entry.Presets, EntryKind.Family) is { } presets
+                ? new DatabaseAnswer.Found(entry.Family, presets, _defaults)
+                : new DatabaseAnswer.EntryUnreadable(entry.Family);
         }
 
         return DatabaseAnswer.NotListed;

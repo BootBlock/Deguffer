@@ -14,8 +14,6 @@ internal sealed class DatabaseFamily(string family, EntryPresets presets, EntryP
 {
     private const string UnnamedInDatabase = "Unknown_Attribute";
 
-    internal string Family => family;
-
     /// <summary>The database's reading of <paramref name="id"/>, where the entry has an option for it.</summary>
     internal DatabaseAttributeDefinition? Of(byte id)
     {
