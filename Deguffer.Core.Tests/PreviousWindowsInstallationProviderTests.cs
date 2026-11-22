@@ -593,7 +593,7 @@ public sealed class PreviousWindowsInstallationProviderTests : IDisposable
 
     /// <summary>
     /// §9 again, at the moment Windows is asked: a store saved into the previous installation while the
-    /// preview sat on screen is found on the disk, and the handler is never run over it.
+    /// preview sat on screen is found on the disk, and the handler never purges over it.
     /// </summary>
     [Fact]
     public async Task AnOutlookDataFileThatArrivesAfterThePreviewStopsTheHandler()
@@ -610,7 +610,7 @@ public sealed class PreviousWindowsInstallationProviderTests : IDisposable
 
         var result = await provider.ExecuteAsync(plan);
 
-        Assert.Empty(handlers.Calls);
+        Assert.Empty(handlers.Purged);
         Assert.True(File.Exists(store));
         var step = Assert.Single(result.Steps);
         Assert.False(step.Succeeded);
@@ -709,7 +709,7 @@ public sealed class PreviousWindowsInstallationProviderTests : IDisposable
 
     /// <summary>
     /// A file the recent-files guard would keep, written since the preview, is found on the disk
-    /// before Windows is asked, because Windows clears the folder whole and the plan's answer is
+    /// before Windows purges, because Windows clears the folder whole and the plan's answer is
     /// minutes old.
     /// </summary>
     [Fact]
@@ -726,7 +726,7 @@ public sealed class PreviousWindowsInstallationProviderTests : IDisposable
         File.WriteAllBytes(arrived, new byte[16]);
         var result = await provider.ExecuteAsync(plan);
 
-        Assert.Empty(handlers.Calls);
+        Assert.Empty(handlers.Purged);
         Assert.True(File.Exists(arrived));
         Assert.Contains("changed in the last", Assert.Single(result.Steps).Message, StringComparison.Ordinal);
     }

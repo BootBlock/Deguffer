@@ -23,19 +23,44 @@ internal static class DiskCleanupRun
         IProgress<double>? progress,
         CancellationToken ct)
     {
-        // Asked of the disk immediately before Windows is, because Windows clears these whole and the
-        // plan's answers are minutes old: an Outlook data file, a file the guard would keep, or a folder
-        // Deguffer cannot look inside, arrived since or missed then, stops it. See WholeTreeLook.
-        var look = await clock.LookAsync(step.Destroys, keep, ct).ConfigureAwait(false);
+        // Windows measures before it purges, by walking the same directories, and only the purge
+        // deletes. So the handler starts measuring now and waits for the look before its purge.
+        // Measured elevated on Windows 11 over an uncached 4 GB Windows.old, the step took less time
+        // this way in five runs of six: the handler measured faster beside the look than alone,
+        // probably because the look's parallel walk reads the tree's metadata ahead of its own.
+        using var mayPurge = new PurgeDecision();
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var stopHandler = stop.Token;
+        var hosted = Task.Run(() => handlers.Run(step.Handler, step.Volume, mayPurge, stopHandler), stopHandler);
 
-        if (look.WhyNot("Nothing was removed", "Windows clears this whole and cannot be told to leave anything", keep) is { } stopped)
+        var passed = false;
+
+        try
         {
-            return NotRun(step, stopped, look.Stores.Count);
+            // Asked of the disk immediately before Windows purges, because Windows clears these whole
+            // and the plan's answers are minutes old: an Outlook data file, a file the guard would
+            // keep, or a folder Deguffer cannot look inside, arrived since or missed then, stops it.
+            // See WholeTreeLook.
+            var look = await clock.LookAsync(step.Destroys, keep, ct).ConfigureAwait(false);
+
+            if (look.WhyNot("Nothing was removed", "Windows clears this whole and cannot be told to leave anything", keep) is { } stopped)
+            {
+                return NotRun(step, stopped, look.Stores.Count);
+            }
+
+            ct.ThrowIfCancellationRequested();
+            passed = true;
+        }
+        finally
+        {
+            if (!passed)
+            {
+                await LetGoAsync(mayPurge, stop, hosted).ConfigureAwait(false);
+            }
         }
 
-        ct.ThrowIfCancellationRequested();
-
-        var outcome = await Task.Run(() => handlers.Run(step.Handler, step.Volume, ct), ct).ConfigureAwait(false);
+        mayPurge.Decide(true);
+        var outcome = await hosted.ConfigureAwait(false);
 
         // From the disk rather than the volume snapshot, for the reason a command step's second
         // reading is: nothing invalidates that snapshot between planning and executing, so it would
@@ -94,6 +119,26 @@ internal static class DiskCleanupRun
             Refusals.None,
             message,
             EntriesRemoved: entriesRemoved);
+    }
+
+    /// <summary>
+    /// Lets the handler go without purging, where the look refused, failed or was cancelled, and waits
+    /// for it to return.
+    ///
+    /// <para><b>Waited for, because no handler may outlive its step.</b> The next step can host a
+    /// second instance of the same class, and nothing on the handler's side says two may run at once.
+    /// Told to stop, it may not: elevated on Windows 11, <em>Previous Installations</em> was told to
+    /// stop 3 s into measuring an uncached <c>Windows.old</c> and returned 22.2 s after it started,
+    /// when its measurement was done. So a refused look can take as long as the handler's measurement.</para>
+    ///
+    /// <para><b>What the handler threw is not the step's answer.</b> Nothing was purged, and the look's
+    /// refusal, failure or cancellation is what the step reports.</para>
+    /// </summary>
+    private static async Task LetGoAsync(PurgeDecision mayPurge, CancellationTokenSource stop, Task hosted)
+    {
+        mayPurge.Decide(false);
+        await stop.CancelAsync().ConfigureAwait(false);
+        await hosted.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
     }
 
     private static StepOutcome NotRun(DiskCleanupStep step, string why, int mailStores) =>

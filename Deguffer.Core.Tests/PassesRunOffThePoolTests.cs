@@ -111,7 +111,7 @@ public sealed class PassesRunOffThePoolTests : IDisposable
     {
         var folder = Tree();
 
-        CrewThreads.AssertOffThePool(await CrewThreads.MadeBy(() => WholeTreeLook.TakeAsync([folder], MinimumAge.Off, default)));
+        CrewThreads.AssertOffThePool(await CrewThreads.MadeBy(() => WholeTreeLook.TakeAsync([folder], MinimumAge.Off, WindowsFileSystem.Default, default)));
     }
 
     /// <summary>The walk a removal makes of a folder before it takes anything from it.</summary>
