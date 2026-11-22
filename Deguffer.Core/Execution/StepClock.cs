@@ -6,7 +6,8 @@ namespace Deguffer.Core.Execution;
 /// Times one step as <see cref="PlanExecutor"/> runs it. Started where the step starts, told where each
 /// wait began, and read once the step has an outcome. See <see cref="StepTiming"/>.
 /// </summary>
-internal sealed class StepClock(TimeProvider time)
+/// <param name="fs">The executor's filesystem, which every look the step takes reads through.</param>
+internal sealed class StepClock(TimeProvider time, IFileSystem fs)
 {
     private readonly long _started = time.GetTimestamp();
     private TimeSpan _useCheck;
@@ -30,7 +31,7 @@ internal sealed class StepClock(TimeProvider time)
 
         try
         {
-            return await WholeTreeLook.TakeAsync(paths, keep, ct).ConfigureAwait(false);
+            return await WholeTreeLook.TakeAsync(paths, keep, fs, ct).ConfigureAwait(false);
         }
         finally
         {

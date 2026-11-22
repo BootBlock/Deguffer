@@ -215,7 +215,7 @@ public sealed class PlanExecutor(
         CancellationToken ct)
     {
         var step = plan.Steps[index];
-        var clock = new StepClock(_time);
+        var clock = new StepClock(_time, _fileSystem);
         StepOutcome outcome;
 
         try
