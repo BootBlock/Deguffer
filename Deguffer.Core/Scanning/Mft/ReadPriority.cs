@@ -11,8 +11,8 @@ public enum ReadPriority
 
     /// <summary>
     /// Asks the storage stack to serve these reads after the reads at normal priority waiting on the
-    /// same disk: for a build nobody waits on alone, while a walk is in flight on its disk
-    /// (<see cref="BuildPriorities"/>).
+    /// same disk: for a build nobody waits on alone, while a walk of another volume is in flight on
+    /// its disk (<see cref="BuildPriorities"/>).
     /// </summary>
     Low,
 }

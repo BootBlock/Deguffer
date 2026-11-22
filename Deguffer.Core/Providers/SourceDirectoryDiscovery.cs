@@ -429,11 +429,11 @@ public sealed class SourceDirectoryDiscovery
 
             if (await FromIndexAsync(search, root, ct).ConfigureAwait(false) is { } indexed)
             {
-                RecordAnswer(root, byTable: true);
+                RecordAnswer(root, ScanStrategy.MasterFileTable);
                 return indexed;
             }
 
-            RecordAnswer(root, byTable: false);
+            RecordAnswer(root, ScanStrategy.ParallelEnumeration);
             return (await WorkerThreads.Shared.RunAsync(() => Walk(search, root, ct), ct).ConfigureAwait(false)) with { FellBack = true };
         }
 
@@ -444,17 +444,17 @@ public sealed class SourceDirectoryDiscovery
             () => _scanner.NeedIndex(root),
             ct).ConfigureAwait(false);
 
-        RecordAnswer(root, byTable: raced.Outcome is RaceOutcome.TableAnswered);
+        RecordAnswer(root, raced.Outcome is RaceOutcome.TableAnswered ? ScanStrategy.MasterFileTable : ScanStrategy.ParallelEnumeration);
 
         return raced.Outcome is RaceOutcome.TableDeclined ? raced.Answer with { FellBack = true } : raced.Answer;
     }
 
     /// <summary>Which route answered the search of <paramref name="root"/>, for the benchmark's <see cref="Diagnostics.IndexBuildLog"/>.</summary>
-    private static void RecordAnswer(string root, bool byTable)
+    private static void RecordAnswer(string root, ScanStrategy answeredBy)
     {
         if (Diagnostics.IndexBuildLog.Current is not null && VolumePath.TryParse(root, out var volume))
         {
-            Diagnostics.IndexBuildLog.Answered(volume.DriveLetter, byTable);
+            Diagnostics.IndexBuildLog.Answered(volume.DriveLetter, answeredBy);
         }
     }
 

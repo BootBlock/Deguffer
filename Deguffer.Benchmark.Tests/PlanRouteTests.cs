@@ -116,9 +116,9 @@ public sealed class PlanRouteTests
         {
             WhilePlanning = () =>
             {
-                IndexBuildLog.Answered('d', byTable: true);
-                IndexBuildLog.Answered('C', byTable: false);
-                IndexBuildLog.Answered('c', byTable: true);
+                IndexBuildLog.Answered('d', ScanStrategy.MasterFileTable);
+                IndexBuildLog.Answered('C', ScanStrategy.ParallelEnumeration);
+                IndexBuildLog.Answered('c', ScanStrategy.MasterFileTable);
             },
         };
         var route = new PlanRoute(new CleanupPlanner([asking])).Timed;

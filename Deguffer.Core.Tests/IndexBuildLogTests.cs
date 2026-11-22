@@ -76,19 +76,19 @@ public sealed class IndexBuildLogTests : IDisposable
         var outer = new IndexBuildLog(_clock);
         var inner = new IndexBuildLog(_clock);
 
-        IndexBuildLog.Answered('c', byTable: true);
+        IndexBuildLog.Answered('c', ScanStrategy.MasterFileTable);
 
         using (outer.RecordIn())
         {
             using (inner.RecordIn())
             {
-                IndexBuildLog.Answered('c', byTable: false);
+                IndexBuildLog.Answered('c', ScanStrategy.ParallelEnumeration);
             }
 
-            IndexBuildLog.Answered('c', byTable: true);
+            IndexBuildLog.Answered('c', ScanStrategy.MasterFileTable);
         }
 
-        IndexBuildLog.Answered('c', byTable: true);
+        IndexBuildLog.Answered('c', ScanStrategy.MasterFileTable);
 
         Assert.Equal((1, 0), Answers(outer, 'C'));
         Assert.Equal((0, 1), Answers(inner, 'C'));

@@ -1,3 +1,4 @@
+using Deguffer.Core.Scanning;
 using Deguffer.Core.Scanning.Mft;
 
 namespace Deguffer.Core.Diagnostics;
@@ -94,12 +95,12 @@ internal sealed class IndexBuildTrace
         }
     }
 
-    /// <summary>One question about the volume, answered by the table where <paramref name="byTable"/> and by a walk otherwise.</summary>
-    public void Answered(bool byTable)
+    /// <summary>One question about the volume, answered by the route <paramref name="answeredBy"/>.</summary>
+    public void Answered(ScanStrategy answeredBy)
     {
         lock (_gate)
         {
-            if (byTable)
+            if (answeredBy is ScanStrategy.MasterFileTable)
             {
                 _byTable++;
             }

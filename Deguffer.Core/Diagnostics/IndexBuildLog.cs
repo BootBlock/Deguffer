@@ -58,11 +58,11 @@ internal sealed class IndexBuildLog
     public FlowScope<IndexBuildLog> RecordIn() => FlowScope<IndexBuildLog>.Enter(Recording, this);
 
     /// <summary>
-    /// One question about <paramref name="driveLetter"/>, answered by the table where
-    /// <paramref name="byTable"/> and by a walk otherwise, for the log recording the current flow.
-    /// Nothing is recorded where no log is.
+    /// One question about <paramref name="driveLetter"/>, answered by the route
+    /// <paramref name="answeredBy"/>, for the log recording the current flow. Nothing is recorded
+    /// where no log is.
     /// </summary>
-    internal static void Answered(char driveLetter, bool byTable) => Current?.Of(driveLetter).Answered(byTable);
+    internal static void Answered(char driveLetter, ScanStrategy answeredBy) => Current?.Of(driveLetter).Answered(answeredBy);
 
     /// <summary>
     /// Which route answered each path of one measurement's <paramref name="pipeline"/> on a drive
@@ -87,7 +87,7 @@ internal sealed class IndexBuildLog
 
             foreach (var folder in volume.Folders)
             {
-                trace.Answered(results[folder.Index][0].Strategy is ScanStrategy.MasterFileTable);
+                trace.Answered(results[folder.Index][0].Strategy);
             }
         }
     }
