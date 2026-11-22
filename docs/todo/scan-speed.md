@@ -54,7 +54,7 @@ each of them for.
 | Issue | Note |
 | --- | --- |
 | #441 | Start DISM's component-store analysis when an elevated pass starts. The largest single gain. |
-| #442 | Hand out planning slots longest first, by remembered cost from #443. |
+| #442 | Hand out planning slots longest first, by remembered cost from #443. Rejected: measured slower than the list's order in every round across two attempts, because rows started together slow one another, and a row's remembered time depends on what runs beside it. An order would have to know which rows share a disk. |
 | #450 | Let a provider start the tool query its plan will wait on when the pass begins. Done: `BeginPass` takes a `PassStart`, which holds the pass's token, bounds the package managers' queries to half the logical processors (`Ask`), and starts a service's or a native tool's long answer without a place (`AskAtOnce`). Every tool row whose plan awaits a query it can ask before its own disk work adopts it, and `EarlyStartProof` holds each to asking once per pass. |
 | #451 | Show each location's check time. Built on #443. |
 
@@ -143,7 +143,7 @@ Each of these changes a recorded design choice or what Deguffer finds, so each i
 | --- | --- |
 | ReadyToRun for the first index build | Every release publish profile already sets `PublishReadyToRun`. The slow first run was the benchmark's, which is not published that way. |
 | One table read shared by Explore and the planner | Decided by #254 (`after-the-scanner.md` item 9) against #172. |
-| PlatformIO and Delivery Optimization start last | The same cause and fix as #442. |
+| PlatformIO and Delivery Optimization start last | Both now start their queries at the top of the pass (#450, #692), which #442 left as the fix. |
 | Hugging Face asks `env` before `cache ls` | `cache ls` needs the hub folder `env` reports. |
 | `ChromiumUserDataDiscovery` blocks on a task | The task is complete in a preview, and #386 designed the wait in Explore. |
 | Shared counters touched per directory | About a tenth as often as the per-file writes #371 removed with no measurable gain. |
