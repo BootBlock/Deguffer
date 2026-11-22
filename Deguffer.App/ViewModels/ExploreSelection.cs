@@ -254,7 +254,7 @@ public sealed partial class ExploreSelection : ObservableObject
 
         // A node the tree on screen no longer holds was removed since the scan, and is never picked
         // again (§7.1).
-        _nodes = [.. nodes.Where(n => _tree is null || _tree.Holds(n))];
+        _nodes = (int[])[.. nodes.Where(n => _tree is null || _tree.Holds(n))];
 
         // Worked out once, here, rather than on each read (G4): a list view selects any number of
         // rows at once.
@@ -388,7 +388,7 @@ public sealed partial class ExploreSelection : ObservableObject
     private IReadOnlyList<ExploreItem> Items() =>
         _tree is not { } tree
             ? []
-            : [.. _nodes.Select(n => new ExploreItem(tree.PathOf(n), tree.IsDirectory(n), tree.SizeOf(n), tree.HasUnknownSizeBelow(n)))];
+            : (ExploreItem[])[.. _nodes.Select(n => new ExploreItem(tree.PathOf(n), tree.IsDirectory(n), tree.SizeOf(n), tree.HasUnknownSizeBelow(n)))];
 
     /// <summary>What is selected, in <see cref="Label"/> and <see cref="Figures"/>. Raises nothing.</summary>
     private void Describe() =>

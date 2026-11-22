@@ -36,7 +36,7 @@ public sealed partial class ItemListViewModel : ObservableObject, IDisposable
         Row = row;
         _ordered = ItemGroups.Of(row.Steps, step => step.Step);
         IsGrouped = _ordered.Any(group => group.Name is not null);
-        _headings = [.. _ordered.Select(group => new ItemGroupViewModel(row, group.Name))];
+        _headings = (ItemGroupViewModel[])[.. _ordered.Select(group => new ItemGroupViewModel(row, group.Name))];
 
         Present();
 
@@ -122,8 +122,8 @@ public sealed partial class ItemListViewModel : ObservableObject, IDisposable
             _headings[at].Show(each[at] ?? []);
         }
 
-        LiveList.Show(ShownItems, [.. each.SelectMany(items => items ?? [])], step => step);
-        LiveList.Show(Shown, [.. _headings.Where((_, at) => each[at] is not null)], heading => heading);
+        LiveList.Show(ShownItems, (StepViewModel[])[.. each.SelectMany(items => items ?? [])], step => step);
+        LiveList.Show(Shown, (ItemGroupViewModel[])[.. _headings.Where((_, at) => each[at] is not null)], heading => heading);
         OnPropertyChanged(nameof(HasNoMatches));
 
         // Each heading works out its own checkbox as it is shown, so what is left is the list's own.

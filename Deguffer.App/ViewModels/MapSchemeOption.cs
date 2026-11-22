@@ -41,7 +41,7 @@ public sealed record MapSchemeOption(
 
     /// <summary>Every scheme, in <see cref="ExploreScheme"/>'s order, built once for the life of the app (G5).</summary>
     public static IReadOnlyList<MapSchemeOption> All { get; } =
-        [.. Enum.GetValues<ExploreScheme>().Select(Option)];
+        (MapSchemeOption[])[.. Enum.GetValues<ExploreScheme>().Select(Option)];
 
     /// <summary>What a screen reader announces for the row, which has no text beside the swatches.</summary>
     public string Spoken => $"{Name}. {Description}";
@@ -59,8 +59,8 @@ public sealed record MapSchemeOption(
         return new(
             name,
             description,
-            [.. SampleHues.Select(hue => new MapSwatch(TilePalette.For(hue, 1, scheme)))],
-            [.. AgePalette.Bands(scheme).SkipLast(1).Select(band => new MapSwatch(band.Colour))]);
+            (MapSwatch[])[.. SampleHues.Select(hue => new MapSwatch(TilePalette.For(hue, 1, scheme)))],
+            (MapSwatch[])[.. AgePalette.Bands(scheme).SkipLast(1).Select(band => new MapSwatch(band.Colour))]);
     }
 }
 

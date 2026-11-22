@@ -323,7 +323,7 @@ public sealed partial class MemoryPage : Page
     /// <summary>Put both screens back in step with what is selected: the outline on the map, and the highlight in the list.</summary>
     private void ShowSelection()
     {
-        Map.Select(ViewModel.Selection.Node is { } node ? [node] : []);
+        Map.Select(ViewModel.Selection.Node is { } node ? (int[])[node] : []);
         ShowSelectedRow();
     }
 

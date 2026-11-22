@@ -761,7 +761,7 @@ public sealed partial class ExploreViewModel : ObservableObject, IMapNavigator, 
     void IMapNavigator.Ascend() => AscendCommand.TryExecute();
 
     /// <summary>A shape picked on the map is the whole selection, and a place with no shape is none.</summary>
-    void IMapNavigator.Pick(int? node) => Selection.Select(node is { } picked ? [picked] : []);
+    void IMapNavigator.Pick(int? node) => Selection.Select(node is { } picked ? (int[])[picked] : []);
 
     [RelayCommand(CanExecute = nameof(CanAscend))]
     private void Ascend()
