@@ -17,7 +17,8 @@ namespace Deguffer.Core.Execution;
 /// pass last. Without it two reports made together could post out of order, and the line would go on
 /// naming a provider that had already finished. A figure reported for a provider that has ended is
 /// dropped for the same reason. The lock is taken once a change to record it, and the line is built only
-/// when a report is due, so the slots do not wait on each other's formatting.</para>
+/// when a report is due, so a slot waits on formatting at most once an interval rather than at every
+/// change.</para>
 ///
 /// <para><b>The figure is a count of work done, and is worded as one.</b> §5.5 asks for partial results
 /// rather than a wait on a complete scan, and a walk of a large location is the wait. A running figure
