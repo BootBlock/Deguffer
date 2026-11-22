@@ -1259,7 +1259,7 @@ public sealed class CleanupPlannerTests
             {
                 ProviderId = id,
                 ProviderName = id,
-                Verification = PlanVerifier.Verify(plan, runReach, residue, ct, volumes: new FakeVolumeInventory()),
+                Verification = PlanVerifier.Verify(plan, runReach, residue, ct, new VerificationSources(Volumes: new FakeVolumeInventory())),
             });
         }
 

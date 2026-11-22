@@ -1355,7 +1355,7 @@ public sealed class PlanExecutorTests : IDisposable
         // The program finishing, after the removal and before the check.
         Directory.Delete(live, recursive: true);
 
-        var verification = PlanVerifier.Verify(plan, runReach: null, residue, volumes: new FakeVolumeInventory());
+        var verification = PlanVerifier.Verify(plan, runReach: null, residue, sources: new VerificationSources(Volumes: new FakeVolumeInventory()));
         var check = Assert.Single(verification.Checks);
 
         Assert.Equal(VerificationOutcome.RemovedFromOutside, check.Outcome);
@@ -1366,7 +1366,7 @@ public sealed class PlanExecutorTests : IDisposable
     /// <summary>
     /// The same, with the program finished before the clean began. The walk cannot meet an entry that
     /// is not there, so the clear records nothing about it, but the run read it gone before its first
-    /// deletion, and nothing in the run can have taken it. See RunResidue.Begin.
+    /// deletion, and nothing in the run can have taken it. See RunResidue.BeginAsync.
     /// </summary>
     [Fact]
     public async Task ASparedEntryGoneBeforeTheClearBeganWasRemovedFromOutside()

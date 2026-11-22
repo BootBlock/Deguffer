@@ -107,6 +107,7 @@ public sealed class PlanExecutor(
     private readonly IUserEnvironment _environment = environment ?? UserEnvironment.Current;
     private readonly ISystemDirectories _system = system ?? SystemDirectories.Current;
     private readonly IVolumeInventory _volumes = volumes ?? VolumeInventory.Current;
+    private readonly VerificationSources _proof = new(cloud, protection, volumes ?? VolumeInventory.Current, profiles, scanner.Tuning);
     private readonly IFileSystem _fileSystem = fileSystem ?? WindowsFileSystem.Default;
 
     /// <param name="runReach">
@@ -145,7 +146,7 @@ public sealed class PlanExecutor(
                 $"The executor for '{plan.ProviderId}' was given no way to carry out a {unroutable.GetType().Name}.");
         }
 
-        var runResidue = residue ?? RunResidue.Begin([plan]);
+        var runResidue = residue ?? await RunResidue.BeginAsync([plan], scanner.Tuning).ConfigureAwait(false);
         var started = _time.GetTimestamp();
 
         // What each step's use check held back, one list a step so the steps running at once share
@@ -194,10 +195,7 @@ public sealed class PlanExecutor(
                     runReach,
                     runResidue,
                     CancellationToken.None,
-                    _cloud,
-                    _protection,
-                    _volumes,
-                    _profiles),
+                    _proof),
                 CancellationToken.None).ConfigureAwait(false),
         };
     }

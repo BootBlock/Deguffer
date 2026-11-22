@@ -85,7 +85,7 @@ public sealed class LocalCopyReleaseTests : IDisposable
     };
 
     private VerificationResult Verify(ReleaseLocalCopiesStep step) =>
-        PlanVerifier.Verify(PlanOf(step), cloud: _cloud, volumes: new FakeVolumeInventory());
+        PlanVerifier.Verify(PlanOf(step), sources: new VerificationSources(Cloud: _cloud, Volumes: new FakeVolumeInventory()));
 
     [Fact]
     public async Task AsksAboutTheBoundsWorthOfFilesAtOnceAndNoMore()

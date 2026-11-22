@@ -41,7 +41,7 @@ namespace Deguffer.Core.Safety;
 /// level. What a protected directory held before a run is always captured with the first. After a run
 /// holding a tool's own command the first is asked again, because a tool empties files in place and
 /// can leave their folders standing. After any other run the second is asked, so that a skeleton an
-/// outside build tool left is not read as the run's doing. <c>PlanVerifier.WasEmptied</c> states what
+/// outside build tool left is not read as the run's doing. <c>SurvivalCheck.WasEmptied</c> states what
 /// that choice passes over.</para>
 /// </summary>
 public static class DirectoryContent

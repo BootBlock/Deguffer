@@ -156,6 +156,32 @@ public sealed record ConfirmationRequirement
     }
 
     /// <summary>
+    /// Throws unless <paramref name="confirmations"/> authorises every one of <paramref name="plans"/>
+    /// that removes anything, for §7's extra confirmation above Tier 1.
+    ///
+    /// <para><b>Derived here rather than trusted from the caller:</b> a shell that forgot to ask, or
+    /// asked for the wrong subject, must fail closed rather than delete.</para>
+    ///
+    /// <para><b>A plan with no steps is not asked about at any tier.</b> It destroys nothing, so there
+    /// is nothing to authorise, and failing closed on it would refuse the run over a check that only
+    /// reads the disk.</para>
+    /// </summary>
+    /// <exception cref="ConfirmationRequiredException">The first plan not authorised.</exception>
+    public static void DemandFor(
+        IEnumerable<CleanupPlan> plans, IReadOnlyList<Confirmation> confirmations, bool requireTypedPhrase)
+    {
+        foreach (var plan in plans.Where(plan => !plan.IsEmpty))
+        {
+            var requirement = For(plan, requireTypedPhrase);
+
+            if (!requirement.IsSatisfiedBy(confirmations))
+            {
+                throw new ConfirmationRequiredException(requirement);
+            }
+        }
+    }
+
+    /// <summary>
     /// Whether <paramref name="confirmations"/> authorises this plan. Absent answers do not
     /// authorise anything, which is what makes the caller's omission fail closed.
     /// </summary>

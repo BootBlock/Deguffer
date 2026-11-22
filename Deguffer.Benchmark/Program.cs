@@ -133,6 +133,7 @@ static async Task<int> BenchmarkAsync(BenchmarkRequest request, ScanTuner tuner,
             Route.Clean => new CleanRoute(
                 site!, request.Trees, request.Tree, UserEnvironment.Current, SystemDirectories.Current, VolumeInventory.Current).Timed,
             Route.Protect => new ProtectRoute(site!, request.Trees, request.Listed, tuner).Timed,
+            Route.Verify => new VerifyRoute(site!, request.Trees, tuner).Timed,
             Route.Race => RaceRoute.On(
                 VolumeMftSourceFactory.Default,
                 request.Path,
@@ -199,8 +200,8 @@ static async Task<int> BenchmarkAsync(BenchmarkRequest request, ScanTuner tuner,
     }
     catch (InvalidOperationException ex) when (site is not null)
     {
-        // A removal route found something gone beside what it removed, or the protect route a record
-        // that does not match the folder it built. Its message names no path.
+        // A removal route found something gone beside what it removed, the protect route a record that
+        // does not match the folder it built, or the verify route a folder it built not proved standing. Its message names no path.
         Console.Error.WriteLine(ex.Message);
         return 4;
     }

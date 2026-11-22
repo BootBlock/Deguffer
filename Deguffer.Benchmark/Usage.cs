@@ -8,7 +8,7 @@ internal static class Usage
         Usage: Deguffer.Benchmark <route> <target> [--runs N] [options]
                Deguffer.Benchmark folders <folder> [<folder>...] [--runs N]
                Deguffer.Benchmark duplicates <folder> [<folder>...] [--runs N] [options]
-               Deguffer.Benchmark remove|clean|protect <new folder> [--runs N] [options]
+               Deguffer.Benchmark remove|clean|protect|verify <new folder> [--runs N] [options]
                Deguffer.Benchmark race <folder> [--build <drive>] [--runs N] [options]
                Deguffer.Benchmark plan [--runs N]
 
@@ -52,6 +52,10 @@ internal static class Usage
                             Create the folder, build many empty folders in it once, and
                             record each as a plan records the paths it protects: whether
                             each is there and holds anything, several asked at once.
+          verify <new folder>
+                            Create the folder, build many empty folders in it once, and
+                            prove each standing as a clean proves the paths a plan protects
+                            after its removals (§5.6), several checked at once.
           race <folder>     Walk the folder while the index of its volume is built, both
                             started at the same moment, as Auto races them in a scan, and
                             each of the two alone, alternating the order every round. The
@@ -91,8 +95,8 @@ internal static class Usage
         --files-per-tree N     Clean only. How many empty files each build folder holds, in
                                seven folders, 0 to 100000, for at most 10000000 files in all.
                                The default is 100.
-        --folders N            Protect only. How many empty folders are built and recorded, 1
-                               to 100000. The default is 5000.
+        --folders N            Protect and verify only. How many empty folders are built and
+                               recorded or proved standing, 1 to 100000. The default is 5000.
         --listed on|off        Protect only. Whether the folders are recorded from one listing
                                of the folder that holds them, as a row that listed them while
                                it planned does, rather than each asked of the disk. The listing
@@ -131,10 +135,10 @@ internal static class Usage
         shipped settings, as the race it reproduces does. The Explore routes also report what
         the finished tree keeps on the managed heap.
 
-        Every route but remove, clean, protect and plan only reads: nothing on the drive is
+        Every route but remove, clean, protect, verify and plan only reads: nothing on the drive is
         written, moved or deleted, but the checksums the duplicates route keeps in a new folder
         of its own in the temporary folder, never the app's, and removes when it finishes.
-        Remove, clean and protect refuse a folder that already exists, create it, write and
+        Remove, clean, protect and verify refuse a folder that already exists, create it, write and
         delete only inside it, and remove it when they finish. Plan deletes nothing, and writes
         only the figures a scan keeps for its first paint, as a scan does.
         """;
